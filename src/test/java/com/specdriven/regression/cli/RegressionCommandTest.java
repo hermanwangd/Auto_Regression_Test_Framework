@@ -33,7 +33,7 @@ class RegressionCommandTest {
     }
 
     @Test
-    void checkReadinessWritesAgentReadableReportWhenRpIdIsProvided() throws Exception {
+    void checkReadinessWritesAgentReadableReportWhenWriteReportIsRequested() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
@@ -43,7 +43,8 @@ class RegressionCommandTest {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
-                "check-readiness", "--root", tempDir.toString(), "--rp-id", "RP-001", "--format", "yaml"},
+                "check-readiness", "--root", tempDir.toString(), "--rp-id", "RP-001", "--format", "yaml",
+                "--write-report"},
                 print(output), print(new ByteArrayOutputStream()));
 
         Path report = tempDir.resolve(
@@ -55,6 +56,25 @@ class RegressionCommandTest {
         assertThat(Files.readString(report)).contains("next_required_step:");
         assertThat(Files.readString(report)).contains("rp_scope_invented: false");
         assertThat(Files.readString(report)).contains("rp_ru_membership_invented: false");
+    }
+
+    @Test
+    void checkReadinessWithRpIdDoesNotCreateReportUnlessWriteReportIsRequested() {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "check-readiness", "--root", tempDir.toString(), "--rp-id", "RP-NOT-CREATED", "--format", "yaml"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path report = tempDir.resolve(
+                "docs/08-release/release-packages/RP-NOT-CREATED/evidence/readiness/readiness.yaml");
+        assertThat(exit).isZero();
+        assertThat(output.toString()).doesNotContain("report_path:");
+        assertThat(Files.exists(report)).isFalse();
+        assertThat(Files.exists(tempDir.resolve("docs/08-release/release-packages/RP-NOT-CREATED"))).isFalse();
     }
 
     @Test
@@ -310,6 +330,34 @@ class RegressionCommandTest {
     }
 
     @Test
+    void blockedRunDoesNotOverwriteExistingRunEvidence() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedTestCase("RP-001", "db_seed");
+        command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeApprovedTestCase("RP-001", "api_payload");
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+
+        Path firstRun = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001/run.yaml");
+        Path blockedRun = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-002/run.yaml");
+        assertThat(exit).isEqualTo(1);
+        assertThat(Files.readString(firstRun)).contains("status: passed");
+        assertThat(Files.readString(blockedRun)).contains("status: blocked");
+    }
+
+    @Test
     void runDryRunBlocksMissingProviderContractBeforeAdapterExecution() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -419,6 +467,72 @@ class RegressionCommandTest {
         assertThat(Files.readString(runDir.resolve("run.yaml"))).contains("environment_ref: ci://pipeline/RP-001");
         assertThat(Files.readString(runDir.resolve("run.yaml"))).contains("ru_refs:");
         assertThat(Files.readString(runDir.resolve("run.yaml"))).contains("exit_code: 0");
+    }
+
+    @Test
+    void runCreatesBatchAndSeparateRunEvidenceForEachApprovedTest() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001", "RP-001-AC-002");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-002");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        writeApprovedTestCase("RP-001", "RP-001-TC-002", "RP-001-AC-002", "db_seed");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        Path batchYaml = packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml");
+        Path firstRun = packageRoot.resolve("evidence/runs/RUN-001/run.yaml");
+        Path secondRun = packageRoot.resolve("evidence/runs/RUN-002/run.yaml");
+        assertThat(exit).isZero();
+        assertThat(output.toString()).contains("batch_id: BATCH-001");
+        assertThat(output.toString()).contains("run_id: RUN-001");
+        assertThat(output.toString()).contains("run_id: RUN-002");
+        assertThat(Files.readString(batchYaml)).contains("batch_id: BATCH-001");
+        assertThat(Files.readString(batchYaml)).contains("env: ci_ephemeral");
+        assertThat(Files.readString(batchYaml)).contains("started_at:");
+        assertThat(Files.readString(batchYaml)).contains("completed_at:");
+        assertThat(Files.readString(batchYaml)).contains("run_id: RUN-001");
+        assertThat(Files.readString(batchYaml)).contains("run_id: RUN-002");
+        assertThat(Files.readString(firstRun)).contains("batch_id: BATCH-001");
+        assertThat(Files.readString(firstRun)).contains("test_case_id: RP-001-TC-001");
+        assertThat(Files.readString(firstRun)).contains("ac_id: RP-001-AC-001");
+        assertThat(Files.readString(secondRun)).contains("batch_id: BATCH-001");
+        assertThat(Files.readString(secondRun)).contains("test_case_id: RP-001-TC-002");
+        assertThat(Files.readString(secondRun)).contains("ac_id: RP-001-AC-002");
+    }
+
+    @Test
+    void runBatchEvidenceUsesResolvedExecutionModeWhenEnvOptionIsOmitted() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedTestCase("RP-001", "db_seed");
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+
+        Path batchYaml = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/evidence/batches/BATCH-001/batch.yaml");
+        assertThat(exit).isZero();
+        assertThat(Files.readString(batchYaml)).contains("env: ci_ephemeral");
+        assertThat(Files.readString(batchYaml)).contains("execution_mode: ci_ephemeral");
     }
 
     @Test
@@ -540,6 +654,102 @@ class RegressionCommandTest {
         assertThat(Files.readString(reviewDir.resolve("failure_summary.yaml"))).contains("unresolved_failures: 1");
         assertThat(Files.readString(reviewDir.resolve("failure_summary.yaml"))).contains("missing_evidence");
         assertThat(Files.readString(reviewDir.resolve("release_review_summary.yaml"))).contains("review_ready: false");
+    }
+
+    @Test
+    void reportAggregatesBatchCoverageForMultiplePassedRuns() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001", "RP-001-AC-002");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-002");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        writeApprovedTestCase("RP-001", "RP-001-TC-002", "RP-001-AC-002", "db_seed");
+        command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "report", "--root", tempDir.toString(), "--rp-id", "RP-001", "--batch-id", "BATCH-001"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path reviewDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/review/BATCH-001");
+        assertThat(exit).isZero();
+        assertThat(output.toString()).contains("report_status: review_ready");
+        assertThat(output.toString()).contains("coverage_percent: 100.0");
+        assertThat(output.toString()).contains("covered: 2");
+        assertThat(output.toString()).contains("total_automatable: 2");
+        assertThat(Files.readString(reviewDir.resolve("coverage_report.yaml"))).contains("batch_id: BATCH-001");
+        assertThat(Files.readString(reviewDir.resolve("traceability_report.yaml"))).contains("RUN-001");
+        assertThat(Files.readString(reviewDir.resolve("traceability_report.yaml"))).contains("RUN-002");
+    }
+
+    @Test
+    void reportCountsOnlyPassedTraceableAcFromBatch() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001", "RP-001-AC-002");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001", "adapter-ok\n");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-002", "different-expected-value\n");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        writeApprovedTestCase("RP-001", "RP-001-TC-002", "RP-001-AC-002", "db_seed");
+        command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "report", "--root", tempDir.toString(), "--rp-id", "RP-001", "--batch-id", "BATCH-001"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path reviewDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/review/BATCH-001");
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("coverage_percent: 50.0");
+        assertThat(output.toString()).contains("covered: 1");
+        assertThat(output.toString()).contains("total_automatable: 2");
+        assertThat(Files.readString(reviewDir.resolve("failure_summary.yaml"))).contains("run_status: failed");
+        assertThat(Files.readString(reviewDir.resolve("failure_summary.yaml"))).contains("uncovered_ac: RP-001-AC-002");
+    }
+
+    @Test
+    void reportDeduplicatesCoverageWhenMultiplePassedRunsCoverSameAc() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001", "RP-001-AC-002");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        writeApprovedTestCase("RP-001", "RP-001-TC-002", "RP-001-AC-001", "db_seed");
+        command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "report", "--root", tempDir.toString(), "--rp-id", "RP-001", "--batch-id", "BATCH-001"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path reviewDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/review/BATCH-001");
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("coverage_percent: 50.0");
+        assertThat(output.toString()).contains("covered: 1");
+        assertThat(output.toString()).contains("total_automatable: 2");
+        assertThat(Files.readString(reviewDir.resolve("failure_summary.yaml"))).contains("uncovered_ac: RP-001-AC-002");
     }
 
     @Test
@@ -667,11 +877,11 @@ class RegressionCommandTest {
         ByteArrayOutputStream reportOutput = new ByteArrayOutputStream();
 
         int reportExit = command.execute(new String[] {
-                "report", "--root", tempDir.toString(), "--rp-id", rpId, "--run-id", "RUN-001"},
+                "report", "--root", tempDir.toString(), "--rp-id", rpId, "--batch-id", "BATCH-001"},
                 print(reportOutput), print(new ByteArrayOutputStream()));
 
         Path packageRoot = tempDir.resolve("docs/08-release/release-packages/" + rpId);
-        Path reviewDir = packageRoot.resolve("evidence/review/RUN-001");
+        Path reviewDir = packageRoot.resolve("evidence/review/BATCH-001");
         String evidenceIndex = Files.readString(reviewDir.resolve("evidence_index.md"));
         assertThat(initProductExit).isZero();
         assertThat(initRpExit).isZero();
@@ -686,6 +896,7 @@ class RegressionCommandTest {
         assertThat(Files.readString(reviewDir.resolve("release_review_summary.yaml"))).contains("review_ready: true");
         assertThat(evidenceIndex).contains(rpId);
         assertThat(evidenceIndex).contains(acId);
+        assertThat(evidenceIndex).contains("BATCH-001");
         assertThat(evidenceIndex).contains(rpId + "-TC-001");
         assertThat(evidenceIndex).contains("RUN-001");
         assertThat(evidenceIndex).contains("evidence/runs/RUN-001");
@@ -714,6 +925,26 @@ class RegressionCommandTest {
                     pass_fail_rule: actual output matches approved expected output
                     status: ready_for_generation
                 """.formatted(acId, rpId));
+    }
+
+    private void writeReadyAcceptanceCriteriaForAcs(String rpId, String... acIds) throws Exception {
+        Path acFile = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/acceptance_criteria.md");
+        StringBuilder builder = new StringBuilder("acceptance_criteria:\n");
+        for (String acId : acIds) {
+            builder.append("""
+                  - ac_id: %s
+                    rp_id: %s
+                    title: Valid input produces output
+                    owner: product_owner
+                    classification: automatable
+                    input: fixture/input/orders.csv
+                    behavior: transform valid orders
+                    expected_output: expected/output/orders.csv
+                    pass_fail_rule: actual output matches approved expected output
+                    status: ready_for_generation
+                """.formatted(acId, rpId));
+        }
+        Files.writeString(acFile, builder.toString());
     }
 
     private void writeCompletePackageYaml(String rpId) throws Exception {
@@ -938,8 +1169,9 @@ class RegressionCommandTest {
 
     private void writeApprovedExpectedResult(String rpId, String acId, String expectedOutput) throws Exception {
         String erId = acId.replace("-AC-", "-ER-");
+        String expectedOutputRef = expectedOutputRef(acId);
         Path expectedOutputPath = tempDir.resolve(
-                "docs/08-release/release-packages/" + rpId + "/expected/output/orders.csv");
+                "docs/08-release/release-packages/" + rpId + "/" + expectedOutputRef);
         Files.createDirectories(expectedOutputPath.getParent());
         Files.writeString(expectedOutputPath, expectedOutput);
         Path expected = tempDir.resolve(
@@ -955,18 +1187,73 @@ class RegressionCommandTest {
                 input_refs:
                   - fixture/input/orders.csv
                 expected_outputs:
-                  output_ref: expected/output/orders.csv
+                  output_ref: %s
                 assumptions: []
                 unresolved_gaps: []
                 approved_by: product_developer
                 approved_at: 2026-06-27T00:00:00+08:00
                 approval_ref: docs/10-change-control/13_issue_template.md#APP-001
                 blocked_reason: null
-                """.formatted(erId, rpId, acId, acId));
+                """.formatted(erId, rpId, acId, acId, expectedOutputRef));
+    }
+
+    private String expectedOutputRef(String acId) {
+        if (acId.endsWith("-AC-001")) {
+            return "expected/output/orders.csv";
+        }
+        return "expected/output/" + acId + ".csv";
     }
 
     private void writeApprovedTestCase(String rpId, String bindingType) throws Exception {
         writeApprovedTestCaseWithOracleType(rpId, bindingType, "expected_result_artifact");
+    }
+
+    private void writeApprovedTestCase(String rpId, String testCaseId, String acId, String bindingType)
+            throws Exception {
+        String expectedResultId = acId.replace("-AC-", "-ER-");
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + testCaseId + ".yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s
+                rp_id: %s
+                ac_id: %s
+                artifact_status: approved_for_regression
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
+                source_fingerprint: sha256:test
+                execution_target:
+                  ru_id: RU-transform-job
+                  adapter: spring_boot_cli
+                  execution_mode: ci_ephemeral
+                  environment_ref: ci://pipeline/%s
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [db_seed, batch_execution, file_assertion]
+                expected:
+                  ref: expected-results/approved/%s.yaml
+                oracles:
+                  normalized_orders:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
+                package_inputs:
+                  inputs:
+                    orders_seed:
+                      ref: fixtures/db/orders_seed.yaml
+                      bind_as: %s
+                steps:
+                  - id: run_pipeline
+                    action: call_ru
+                    target_ru_id: RU-transform-job
+                assertions:
+                  - type: file_diff
+                    oracle: ${oracles.normalized_orders}
+                evidence_required:
+                  - execution_log
+                """.formatted(testCaseId, rpId, acId, acId, rpId, expectedResultId, expectedResultId, bindingType));
     }
 
     private void writeApprovedTestCaseWithOracleType(String rpId, String oracleType) throws Exception {

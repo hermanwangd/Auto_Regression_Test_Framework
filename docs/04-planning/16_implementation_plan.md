@@ -44,6 +44,7 @@ Verification:
 ```bash
 regress init-product-repo --root <tmp-product-repo>
 regress check-readiness --root <tmp-product-repo> --format yaml
+regress check-readiness --root <tmp-product-repo> --rp-id <rp-id> --write-report
 agent product-repo-readiness --report <tmp-product-repo>/docs/08-release/release-packages/<rp-id>/evidence/readiness/readiness.yaml
 ```
 
@@ -259,21 +260,66 @@ regress run --root <product-repo> --rp-id <rp-id>
 
 Done when every execution path produces durable evidence, including failed and blocked runs.
 
+### T014A - Batch Execution Evidence Fix
+
+Related features: F007, F008
+Acceptance: AC-007, AC-009
+Modules: `cli`, `execution`, `evidence`
+
+Fix execution evidence so one RP regression command can run multiple approved test cases without overwriting evidence. `regress run` must create one batch ID per RP execution and one unique run ID per approved test case. Run evidence remains test-case-level; batch evidence summarizes the RP execution.
+
+Required evidence layout:
+
+```text
+evidence/batches/<batch_id>/batch.yaml
+evidence/runs/<run_id>/run.yaml
+```
+
+Minimum `batch.yaml` fields:
+
+```yaml
+batch_id:
+rp_id:
+env:
+started_at:
+completed_at:
+status:
+runs:
+  - run_id:
+    test_case_id:
+    ac_id:
+    status:
+```
+
+Verification:
+
+```bash
+regress run --root <product-repo> --rp-id <rp-id> --env ci_ephemeral
+```
+
+Done when two approved tests in one RP produce two different run directories, no evidence files are overwritten, and CLI output includes the generated `batch_id`.
+
 ### T015 - Coverage and Traceability Reporter
 
 Related feature: F008
 Acceptance: AC-009
 Modules: `report`, `evidence`
 
-Calculate coverage as covered automatable RP-level AC divided by total automatable RP-level AC. Link generated tests and evidence to RP ID, AC ID, test case ID, and run ID. Exclude manual-only or waived AC only with approval records.
+Calculate coverage as covered automatable RP-level AC divided by total automatable RP-level AC. RP release coverage is batch-level, not single-run-level. Link generated tests and evidence to RP ID, AC ID, test case ID, batch ID, and run ID. Exclude manual-only or waived AC only with approval records.
+
+Coverage rules:
+
+- Denominator is distinct RP AC classified as `automatable` or `partial`, plus any unapproved manual/waived exclusion that must still appear as a gap.
+- Numerator is distinct AC IDs with at least one passed, traceable approved test run in the selected batch.
+- Failed, blocked, missing-traceability, manual-only, waived, and duplicate AC coverage must not inflate the numerator.
 
 Verification:
 
 ```bash
-regress report --root <product-repo> --rp-id <rp-id> --run-id <run-id>
+regress report --root <product-repo> --rp-id <rp-id> --batch-id <batch-id>
 ```
 
-Done when coverage, traceability, evidence index, failure summary, and release review summary are review-ready.
+Done when coverage, traceability, evidence index, failure summary, and release review summary are review-ready for the selected batch. `--run-id` may remain available for debugging one test run, but it must not be used to determine RP release coverage.
 
 ### T016 - Pilot RP Validation Harness
 
@@ -290,7 +336,7 @@ regress check-readiness --root <product-repo>
 regress check-rp --root <product-repo> --rp-id RP-AR-M1-data-pipeline
 regress generate-tests --root <product-repo> --rp-id RP-AR-M1-data-pipeline --mode draft
 regress run --root <product-repo> --rp-id RP-AR-M1-data-pipeline --env ci_ephemeral
-regress report --root <product-repo> --rp-id RP-AR-M1-data-pipeline --run-id <run-id>
+regress report --root <product-repo> --rp-id RP-AR-M1-data-pipeline --batch-id <batch-id>
 ```
 
 Done when the pilot RP evidence package shows greater than 80% coverage for automatable RP AC or reports explicit approved exclusions.
@@ -302,7 +348,7 @@ T001 -> T002 -> T003 -> T004
                   |
                   +-> T005 -> T006 -> T007
                   |
-                  +-> T008 -> T009 -> T010 -> T011 -> T012 -> T013 -> T014
+                  +-> T008 -> T009 -> T010 -> T011 -> T012 -> T013 -> T014 -> T014A
                                                                   |
                                                                   v
                                                                  T015 -> T016
@@ -337,7 +383,7 @@ Gate 3 - Execution ready:
 
 Gate 4 - Release evidence ready:
 
-- T014, T015, and T016 complete.
+- T014, T014A, T015, and T016 complete.
 - Coverage, traceability, failures, waivers, and evidence package are review-ready.
 
 ## Risks and Controls
@@ -351,6 +397,8 @@ Gate 4 - Release evidence ready:
 | RP/RU membership is inferred incorrectly | Mapping validator consumes human-authored `rp_ru_mapping.yaml` only. |
 | Expected results become truth without review | Expected-result manager blocks unapproved artifacts. |
 | Evidence cannot support release review | Evidence writer and reporter require RP/AC/test/run traceability. |
+| Multi-test RP execution overwrites evidence | Batch execution creates one batch per RP run and one unique run ID per approved test. |
+| Single-run report is mistaken for RP coverage | RP release coverage is calculated only from batch-level evidence. |
 
 ## Completion Criteria for M1
 
@@ -358,5 +406,5 @@ Gate 4 - Release evidence ready:
 - Pilot RP artifacts are complete and human-authored where required.
 - Agent drafts tests only from ready AC and execution context.
 - Approved tests execute without regeneration by default.
-- Evidence records inputs, outputs, logs, assertions, cleanup, and failures.
+- Evidence records batch summary, run-level inputs, outputs, logs, assertions, cleanup, and failures.
 - Coverage is greater than 80% of automatable RP-level AC or exclusions are approved.

@@ -362,6 +362,8 @@ Execute checked-in approved or execution-eligible package-neutral DSL regression
 
 The framework shall resolve package inputs, bind runtime values, confirm environment readiness, set up fixtures, execute or validate through package adapters, collect actual results, run assertions, clean up fixtures, and emit raw execution evidence.
 
+One RP regression execution is a batch. A batch may contain one or more test runs. Each test run validates one approved DSL test case and produces run-level evidence. The batch produces the RP-level execution summary used by F008 coverage reporting.
+
 The execution process and DSL shall remain package-type-neutral. The M1 adapter implementation may be data-pipeline-specific.
 
 F007 shall not author AC, classify AC readiness, generate tests, regenerate checked-in tests, generate expected results, approve expected results, approve waivers, or decide release readiness.
@@ -374,6 +376,8 @@ F007 shall not author AC, classify AC readiness, generate tests, regenerate chec
 - Check that required expected-result artifacts are `approved_for_regression` or otherwise explicitly allowed by the execution policy.
 - Validate that every DSL section can be consumed by exactly one AP responsibility path before adapter execution starts.
 - Validate that every DSL logical reference to an adapter, binding, fixture, oracle, assertion, or observation has a matching provider contract or supported default.
+- Create one unique batch ID for the RP execution request.
+- Create one unique run ID per approved test case in that batch.
 - Resolve the RP execution mode as `local_fixture`, `ci_ephemeral`, `sit_deployed`, or `evidence_only`.
 - For multi-RU RPs, follow the declared dependency graph and stop downstream execution when a required upstream RU validation fails.
 - Check deployment and environment readiness before running `sit_deployed` tests.
@@ -385,7 +389,8 @@ F007 shall not author AC, classify AC readiness, generate tests, regenerate chec
 - Collect actual outputs, logs, and execution metadata.
 - Run assertions against resolved oracles or inline decision rules.
 - Run cleanup actions and record cleanup evidence.
-- Emit raw execution artifacts such as execution report, execution log, actual results, assertion results, observation results, postcondition results, cleanup evidence, and failure details.
+- Emit run-level artifacts such as execution report, execution log, actual results, assertion results, observation results, postcondition results, cleanup evidence, and failure details.
+- Emit a batch-level summary that lists RP ID, environment, batch status, executed run IDs, test case IDs, AC IDs, and run statuses.
 
 ## F008 — Coverage and Evidence Package
 
@@ -395,18 +400,20 @@ Package RP-level coverage, traceability, raw execution evidence, failures, and a
 
 ### Expected Behavior
 
-The framework shall report coverage against automatable RP-level AC, trace generated tests to RP AC, retain raw execution evidence from F007, identify failures with oracle or inline decision rule results and actual results, and include manual-only or waived AC records where approved.
+The framework shall report coverage against automatable RP-level AC using batch-level evidence, trace generated tests to RP AC, retain raw execution evidence from F007, identify failures with oracle or inline decision rule results and actual results, and include manual-only or waived AC records where approved.
 
 F008 shall not execute tests, generate tests, generate expected results, approve waivers, change the coverage denominator, or decide release Go/No-Go. Product developers own evidence review for implementation correctness. QA or release owners approve waivers, manual-only exclusions, and release decisions through F010 or a human release process.
 
 ### Required Mechanism
 
-- Consume RP AC inventory, AC classification, generated test cases, F007 raw execution evidence, expected-result artifacts, waiver records, manual-only approvals, and traceability links.
-- Calculate coverage as covered automatable RP-level AC divided by total automatable RP-level AC.
+- Consume RP AC inventory, AC classification, approved test cases, F007 batch evidence, run-level evidence, expected-result artifacts, waiver records, manual-only approvals, and traceability links.
+- Calculate coverage as distinct covered automatable RP-level AC divided by distinct total automatable RP-level AC.
+- Count an AC as covered only when at least one run in the selected batch passed and traces to an approved test case for that AC.
+- De-duplicate coverage by AC ID when multiple tests cover the same AC.
 - Exclude manual-only or waived AC only when approval records exist.
 - Keep partial AC in the denominator unless split and reclassified.
 - Keep blocked AC visible in the evidence package instead of silently dropping them.
-- Link each evidence item to RP ID, AC ID, test case ID, and execution run ID.
+- Link each evidence item to RP ID, AC ID, test case ID, execution batch ID, and execution run ID.
 - Include expected result, actual result, failure reason, and source artifact links for failed checks.
 - Produce review-ready artifacts such as coverage report, traceability report, evidence index, failure summary, and release review summary.
 

@@ -150,12 +150,19 @@ public class RegressionCommand {
 
     private int report(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
         String rpId = requiredOption(options, "--rp-id", err);
-        String runId = requiredOption(options, "--run-id", err);
-        if (rpId == null || runId == null) {
+        String batchId = options.get("--batch-id");
+        String runId = options.get("--run-id");
+        if (rpId == null) {
+            return 2;
+        }
+        if ((batchId == null || batchId.isBlank()) && (runId == null || runId.isBlank())) {
+            err.println("Missing required option: --batch-id");
             return 2;
         }
         Path packageRoot = packageRoot(root, rpId);
-        CoverageReportResult result = coverageReportService.generate(packageRoot, runId);
+        CoverageReportResult result = batchId == null || batchId.isBlank()
+                ? coverageReportService.generate(packageRoot, runId)
+                : coverageReportService.generateBatch(packageRoot, batchId);
         out.println("report_status: " + (result.reviewReady() ? "review_ready" : "not_review_ready"));
         out.println("coverage_percent: " + result.coveragePercent());
         out.println("covered: " + result.covered());
@@ -187,7 +194,7 @@ public class RegressionCommand {
             out.println("    owner_action: " + gap.ownerAction());
         }
         String rpId = options.get("--rp-id");
-        if (rpId != null && !rpId.isBlank()) {
+        if (options.containsKey("--write-report") && rpId != null && !rpId.isBlank()) {
             Path relativeReport = Path.of("docs/08-release/release-packages")
                     .resolve(rpId)
                     .resolve("evidence/readiness/readiness.yaml");
@@ -340,17 +347,37 @@ public class RegressionCommand {
             return preflight.blocked() ? 1 : 0;
         }
         if (preflight.blocked()) {
-            evidenceWriter.writeBlockedRun(packageRoot, preflight.approvedTests(), preflight.failureDetails());
+            String batchId = nextAvailableId(packageRoot.resolve("evidence/batches"), "BATCH");
+            String runId = nextAvailableId(packageRoot.resolve("evidence/runs"), "RUN");
+            ExecutionResult blockedRun = evidenceWriter.writeBlockedRun(
+                    packageRoot,
+                    batchId,
+                    runId,
+                    preflight.approvedTests(),
+                    preflight.failureDetails());
+            evidenceWriter.writeExecutionBatch(
+                    packageRoot, batchId, preflight.executionMode(), "blocked", List.of(blockedRun));
             out.println("adapter_execution_started: false");
+            out.println("batch_id: " + batchId);
+            out.println("run_id: " + runId);
             out.println("run_status: blocked");
             return 1;
         }
 
         out.println("adapter_execution_started: true");
+        String batchId = nextAvailableId(packageRoot.resolve("evidence/batches"), "BATCH");
+        int runNumber = nextAvailableNumber(packageRoot.resolve("evidence/runs"), "RUN");
         boolean passed = true;
+        List<ExecutionResult> results = new java.util.ArrayList<>();
+        out.println("batch_id: " + batchId);
         out.println("execution_results:");
         for (Path approvedTest : preflight.approvedTests()) {
-            ExecutionResult result = executionEngine.execute(packageRoot, approvedTest);
+            String runId = formatSequentialId("RUN", runNumber++);
+            while (Files.exists(packageRoot.resolve("evidence/runs").resolve(runId))) {
+                runId = formatSequentialId("RUN", runNumber++);
+            }
+            ExecutionResult result = executionEngine.execute(packageRoot, approvedTest, batchId, runId);
+            results.add(result);
             passed = passed && result.passed();
             out.println("  - test_case_id: " + result.testCaseId());
             out.println("    ac_id: " + result.acId());
@@ -362,8 +389,26 @@ public class RegressionCommand {
             out.println("    stdout: " + result.runDir().relativize(result.stdoutLog()));
             out.println("    stderr: " + result.runDir().relativize(result.stderrLog()));
         }
-        out.println("run_status: " + (passed ? "passed" : "failed"));
+        String runStatus = passed ? "passed" : "failed";
+        evidenceWriter.writeExecutionBatch(packageRoot, batchId, preflight.executionMode(), runStatus, results);
+        out.println("run_status: " + runStatus);
         return passed ? 0 : 1;
+    }
+
+    private String nextAvailableId(Path parent, String prefix) {
+        return formatSequentialId(prefix, nextAvailableNumber(parent, prefix));
+    }
+
+    private int nextAvailableNumber(Path parent, String prefix) {
+        int number = 1;
+        while (Files.exists(parent.resolve(formatSequentialId(prefix, number)))) {
+            number++;
+        }
+        return number;
+    }
+
+    private String formatSequentialId(String prefix, int number) {
+        return "%s-%03d".formatted(prefix, number);
     }
 
     private PreflightResult runPreflight(Path packageRoot, String requestedEnv, boolean dryRun, PrintStream out) {
@@ -480,7 +525,7 @@ public class RegressionCommand {
         if (dryRun) {
             out.println("run_status: " + (blocked ? "blocked" : "dry_run_ready"));
         }
-        return new PreflightResult(blocked, approvedTests, List.copyOf(failureDetails));
+        return new PreflightResult(blocked, approvedTests, List.copyOf(failureDetails), environmentReport.executionMode());
     }
 
     private int draftExpectedResults(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
@@ -598,7 +643,8 @@ public class RegressionCommand {
         return "";
     }
 
-    private record PreflightResult(boolean blocked, List<Path> approvedTests, List<String> failureDetails) {
+    private record PreflightResult(
+            boolean blocked, List<Path> approvedTests, List<String> failureDetails, String executionMode) {
     }
 
     private Map<String, String> parseOptions(String[] args) {

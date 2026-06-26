@@ -2,6 +2,7 @@ package com.specdriven.regression.evidence;
 
 import com.specdriven.regression.adapter.AdapterExecutionResult;
 import com.specdriven.regression.assertion.AssertionEvaluation;
+import com.specdriven.regression.execution.ExecutionResult;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -16,6 +17,7 @@ public class EvidenceWriter {
 
     public Path writeExecutionRun(
             Path runDir,
+            String batchId,
             String runId,
             Map<String, Object> testCase,
             String status,
@@ -27,6 +29,7 @@ public class EvidenceWriter {
             String cleanupResult = writeCleanupEvidence(runDir, testCase);
             Files.writeString(runDir.resolve("run.yaml"), """
                     run_id: %s
+                    batch_id: %s
                     rp_id: %s
                     test_case_id: %s
                     ac_id: %s
@@ -47,6 +50,7 @@ public class EvidenceWriter {
                     cleanup_result: %s
                     """.formatted(
                     runId,
+                    batchId,
                     stringValue(testCase.get("rp_id")),
                     stringValue(testCase.get("test_case_id")),
                     stringValue(testCase.get("ac_id")),
@@ -66,6 +70,51 @@ public class EvidenceWriter {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write execution run evidence.", e);
         }
+    }
+
+    public Path writeExecutionBatch(
+            Path packageRoot, String batchId, String executionMode, String status, List<ExecutionResult> results) {
+        Path batchDir = packageRoot.resolve("evidence/batches").resolve(batchId);
+        try {
+            Files.createDirectories(batchDir);
+            String completedAt = java.time.OffsetDateTime.now().toString();
+            Files.writeString(batchDir.resolve("batch.yaml"), """
+                    batch_id: %s
+                    rp_id: %s
+                    status: %s
+                    env: %s
+                    started_at: %s
+                    completed_at: %s
+                    execution_mode: %s
+                    runs:
+                    %s
+                    """.formatted(
+                    batchId,
+                    packageRoot.getFileName(),
+                    status,
+                    executionMode,
+                    completedAt,
+                    completedAt,
+                    executionMode,
+                    batchRunsYaml(results)));
+            return batchDir;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write execution batch evidence.", e);
+        }
+    }
+
+    private String batchRunsYaml(List<ExecutionResult> results) {
+        if (results.isEmpty()) {
+            return "  []";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (ExecutionResult result : results) {
+            builder.append("  - run_id: ").append(result.runId()).append("\n");
+            builder.append("    test_case_id: ").append(result.testCaseId()).append("\n");
+            builder.append("    ac_id: ").append(result.acId()).append("\n");
+            builder.append("    status: ").append(result.status()).append("\n");
+        }
+        return builder.toString().stripTrailing();
     }
 
     private String writeCleanupEvidence(Path runDir, Map<String, Object> testCase) throws IOException {
@@ -90,14 +139,16 @@ public class EvidenceWriter {
         return runDir.relativize(cleanupPath).toString();
     }
 
-    public Path writeBlockedRun(Path packageRoot, List<Path> approvedTests, List<String> failureDetails) {
-        Path runDir = packageRoot.resolve("evidence/runs/RUN-001");
+    public ExecutionResult writeBlockedRun(
+            Path packageRoot, String batchId, String runId, List<Path> approvedTests, List<String> failureDetails) {
+        Path runDir = packageRoot.resolve("evidence/runs").resolve(runId);
         Map<String, Object> testCase = approvedTests.isEmpty() ? Map.of() : readYamlMap(approvedTests.get(0));
         Map<?, ?> executionTarget = executionTarget(testCase);
         try {
             Files.createDirectories(runDir);
             Files.writeString(runDir.resolve("run.yaml"), """
-                    run_id: RUN-001
+                    run_id: %s
+                    batch_id: %s
                     rp_id: %s
                     test_case_id: %s
                     ac_id: %s
@@ -110,6 +161,8 @@ public class EvidenceWriter {
                     resolved_dependencies: []
                     failure_details: failure_details.yaml
                     """.formatted(
+                    runId,
+                    batchId,
                     stringValue(testCase.get("rp_id")),
                     stringValue(testCase.get("test_case_id")),
                     stringValue(testCase.get("ac_id")),
@@ -117,7 +170,17 @@ public class EvidenceWriter {
                     stringValue(executionTarget.get("environment_ref")),
                     stringValue(executionTarget.get("ru_id"))));
             Files.writeString(runDir.resolve("failure_details.yaml"), failureDetailsYaml(failureDetails));
-            return runDir;
+            return new ExecutionResult(
+                    runId,
+                    stringValue(testCase.get("test_case_id")),
+                    stringValue(testCase.get("ac_id")),
+                    "blocked",
+                    -1,
+                    false,
+                    runDir,
+                    runDir,
+                    runDir,
+                    runDir);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write blocked run evidence.", e);
         }

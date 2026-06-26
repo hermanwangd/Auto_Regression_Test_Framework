@@ -25,6 +25,7 @@ docs/08-release/release-packages/<rp_id>/
   evidence/
     readiness/
     generation/
+    batches/
     runs/
     review/
 ```
@@ -756,8 +757,40 @@ Adapter/provider runtime rules:
 
 ## 6.10 Execution Evidence
 
+One RP regression execution produces one batch summary and one run evidence directory per approved test case executed in that batch.
+
+Batch evidence:
+
+```yaml
+batch_id: BATCH-20260626-001
+rp_id: RP-AR-M1-data-pipeline
+status: passed
+execution_mode: ci_ephemeral
+environment_ref: ci://pipeline/rp-ar-m1-data-pipeline
+started_at: 2026-06-26T10:00:00+08:00
+finished_at: 2026-06-26T10:03:00+08:00
+runs:
+  - run_id: RUN-20260626-001
+    test_case_id: RP-AR-M1-data-pipeline-TC-001
+    ac_id: RP-AR-M1-data-pipeline-AC-001
+    status: passed
+  - run_id: RUN-20260626-002
+    test_case_id: RP-AR-M1-data-pipeline-TC-002
+    ac_id: RP-AR-M1-data-pipeline-AC-002
+    status: passed
+```
+
+Batch evidence is stored under:
+
+```text
+docs/08-release/release-packages/<rp_id>/evidence/batches/<batch_id>/
+```
+
+Run evidence:
+
 ```yaml
 run_id: RUN-20260626-001
+batch_id: BATCH-20260626-001
 rp_id: RP-AR-M1-data-pipeline
 test_case_id: RP-AR-M1-data-pipeline-TC-001
 ac_id: RP-AR-M1-data-pipeline-AC-001
@@ -785,7 +818,7 @@ evidence_refs:
   - evidence/runs/RUN-20260626-001/postconditions.yaml
 ```
 
-Execution evidence is stored under:
+Run evidence is stored under:
 
 ```text
 docs/08-release/release-packages/<rp_id>/evidence/runs/<run_id>/

@@ -66,7 +66,7 @@ CLI Orchestrator
 | Fixture and State Manager | Check preconditions, set up fixtures, seed or publish data, enforce cleanup, and validate postconditions | AC-007 |
 | Execution Engine | Execute planned steps through package adapters, manage execution modes, step outputs, timeout, retry, and adapter result capture | AC-007 |
 | Oracle and Assertion Engine | Resolve oracle truth sources and evaluate actual outputs through assertion decision rules | AC-007 |
-| Evidence and Reporting | Persist run evidence, observations, cleanup results, failures, traceability, coverage, and release-review reports | AC-007, AC-009 |
+| Evidence and Reporting | Persist batch summaries, run evidence, observations, cleanup results, failures, traceability, coverage, and release-review reports | AC-007, AC-009 |
 
 Internal module mapping:
 
@@ -90,7 +90,7 @@ DSL and artifact flow through the 7 AP:
 | Fixture and State Manager | Execution plan fixture sections, environment reference, cleanup policy | Prepared state, fixture evidence, cleanup plan, precondition/postcondition results |
 | Execution Engine | Execution plan steps and adapter contracts | Step results, adapter outputs, runtime metadata, timeout/retry outcomes |
 | Oracle and Assertion Engine | Actual outputs, approved expected results, oracle references, assertion rules | Pass/fail decisions with expected value, actual value, comparison rule, and failure reason |
-| Evidence and Reporting | All AP outputs, traceability, waivers, coverage policy | Durable evidence package, AC coverage report, release-review summary |
+| Evidence and Reporting | All AP outputs, traceability, waivers, coverage policy | Durable batch evidence, run evidence package, AC coverage report, release-review summary |
 
 This flow keeps the DSL stable. New RP/RU behavior should be added through validated mapping, provider contracts, adapters, and enum extensions only when the behavior is reusable across RPs.
 
@@ -118,7 +118,7 @@ For implementation clarity, each AP owns one primary question and one durable ha
 | Fixture and State Manager | Is test state safe to prepare and clean up for this execution mode? | `fixture_plan` and `cleanup_plan` with setup, mutation scope, cleanup, and postcondition evidence refs. |
 | Execution Engine | Can the planned logical steps run through declared providers and adapters in the selected environment? | `execution_result` with step status, adapter outputs, logs, actual result refs, timeout/retry metadata. |
 | Oracle and Assertion Engine | Do approved truth sources or deterministic decision rules prove pass/fail for the actual outputs? | `assertion_result` with oracle refs, expected, actual, comparator, and failure reason. |
-| Evidence and Reporting | Is there enough durable evidence to support coverage and release review without manually reconstructing the run? | `evidence_package`, `coverage_report`, `failure_summary`, and `release_review_summary`. |
+| Evidence and Reporting | Is there enough durable evidence to support coverage and release review without manually reconstructing the RP execution? | `batch_summary`, `evidence_package`, `coverage_report`, `failure_summary`, and `release_review_summary`. |
 
 Provider contracts are configuration artifacts consumed by APs; they are not DSL sections. A provider contract declares a named capability such as a binding resolver, fixture setup action, adapter command, oracle reader, assertion comparator, or observation collector. The DSL references those capabilities by logical name, and the AP validates that the referenced capability exists before execution.
 
@@ -291,25 +291,26 @@ The CLI is the M1 public interface. Commands return non-zero exit codes when rea
 ```bash
 regress init-product-repo --root .
 regress check-readiness --root .
+regress check-readiness --root . --rp-id RP-AR-M1-data-pipeline --write-report
 agent product-repo-readiness --report docs/08-release/release-packages/<rp_id>/evidence/readiness/readiness.yaml
 regress init-rp --root . --rp-id RP-AR-M1-data-pipeline --package-type data_pipeline
 regress check-rp --root . --rp-id RP-AR-M1-data-pipeline
 regress generate-tests --root . --rp-id RP-AR-M1-data-pipeline --mode draft
 regress draft-expected-results --root . --rp-id RP-AR-M1-data-pipeline
 regress run --root . --rp-id RP-AR-M1-data-pipeline --env ci_ephemeral
-regress report --root . --rp-id RP-AR-M1-data-pipeline --run-id RUN-20260626-001
+regress report --root . --rp-id RP-AR-M1-data-pipeline --batch-id BATCH-20260626-001
 ```
 
 CLI contracts:
 
 - `init-product-repo` creates missing lifecycle folders and starter locations only.
-- `check-readiness` reports product and RP readiness in machine-readable form without generating tests.
+- `check-readiness` reports product and RP readiness in machine-readable form without generating tests. It writes a repo-local readiness report only when `--write-report` and `--rp-id` are explicitly provided.
 - `product-repo-readiness` agent skill explains the readiness report, missing items, owner actions, and next steps.
 - `init-rp` creates RP skeleton artifacts and lifecycle folders.
 - `check-rp` validates artifact completeness, RP/RU mapping, and generation readiness.
 - `generate-tests` writes package-neutral DSL drafts to `tests/draft/` and proposes updates when approved tests already exist.
-- `run` reads checked-in package-neutral DSL tests and does not regenerate tests by default.
-- `report` produces coverage, traceability, evidence index, and failure summary.
+- `run` reads checked-in package-neutral DSL tests, creates one batch ID for the RP execution, creates one run ID per approved test case, and does not regenerate tests by default.
+- `report` produces coverage, traceability, evidence index, and failure summary from batch-level evidence. Single-run reports may support debugging, but they are not RP release coverage.
 
 ## 5.7 Data Ownership and Storage
 
@@ -328,6 +329,8 @@ docs/08-release/release-packages/<rp_id>/
   evidence/
     readiness/
     generation/
+    batches/<batch_id>/
+      batch.yaml
     runs/<run_id>/
       run.yaml
       actual/
@@ -342,7 +345,8 @@ Consistency model:
 - Source artifacts are read at command start.
 - Generated drafts record source references and source fingerprints.
 - Approved tests and expected results are immutable within a run.
-- Evidence records the RP ID, AC ID, test case ID, run ID, RU version references, execution mode, and environment reference.
+- Batch evidence records the RP ID, batch ID, execution mode, environment reference, and included run IDs.
+- Run evidence records the RP ID, AC ID, test case ID, run ID, batch ID, RU version references, execution mode, and environment reference.
 
 ## 5.8 Execution Flow
 
@@ -355,12 +359,14 @@ Select RP
 -> resolve execution mode and RU dependency graph
 -> verify environment readiness
 -> resolve inputs and runtime bindings
+-> create RP execution batch
 -> set up fixtures
 -> execute adapter or collect evidence-only input
 -> run assertions
 -> clean up fixtures
--> write raw evidence
--> produce coverage and traceability report
+-> write run evidence
+-> write batch summary
+-> produce batch-level coverage and traceability report
 ```
 
 Execution mode behavior:
@@ -444,9 +450,13 @@ Runtime rules:
 
 ## 5.13 Observability and Evidence
 
-Each run writes:
+Each RP execution writes a batch summary:
 
-- `run.yaml`: run status, timestamps, RP ID, AC IDs, test case IDs, RU refs, execution mode.
+- `batch.yaml`: batch status, timestamps, RP ID, execution mode, environment ref, and included run IDs with test case ID, AC ID, and status.
+
+Each test run writes:
+
+- `run.yaml`: run status, timestamps, RP ID, batch ID, AC ID, test case ID, RU refs, execution mode.
 - `logs/`: adapter logs and framework validation logs.
 - `actual/`: captured actual outputs or evidence references.
 - `assertions.yaml`: assertion results, oracle refs, actual refs, decision rule, diff summary.
@@ -456,6 +466,12 @@ Each run writes:
 - Coverage report, traceability report, evidence index, and failure summary.
 
 M1 alerting is CI/report based. A failed command exits non-zero and writes evidence for review.
+
+Canonical batch evidence path:
+
+```text
+docs/08-release/release-packages/<rp_id>/evidence/batches/<batch_id>/
+```
 
 Canonical run evidence path:
 

@@ -41,13 +41,12 @@ public class ExecutionEngine {
         this.evidenceWriter = evidenceWriter;
     }
 
-    public ExecutionResult execute(Path packageRoot, Path testCasePath) {
+    public ExecutionResult execute(Path packageRoot, Path testCasePath, String batchId, String runId) {
         Map<String, Object> testCase = readYamlMap(testCasePath);
         String testCaseId = stringValue(testCase.get("test_case_id"));
         String acId = stringValue(testCase.get("ac_id"));
         String adapterName = adapterName(testCase);
         Map<String, Object> contract = adapterContract(packageRoot.resolve("rp_ru_mapping.yaml"), adapterName);
-        String runId = "RUN-001";
         Path runDir = packageRoot.resolve("evidence/runs").resolve(runId);
         Path stdoutLog = runDir.resolve(pathValue(contract, "logs", "stdout", "logs/stdout.log"));
         Path stderrLog = runDir.resolve(pathValue(contract, "logs", "stderr", "logs/stderr.log"));
@@ -75,7 +74,7 @@ public class ExecutionEngine {
             passed = assertionEvaluation.passed();
         }
         String status = passed ? "passed" : "failed";
-        evidenceWriter.writeExecutionRun(runDir, runId, testCase, status, adapterResult, assertionEvaluation);
+        evidenceWriter.writeExecutionRun(runDir, batchId, runId, testCase, status, adapterResult, assertionEvaluation);
         return new ExecutionResult(
                 runId,
                 testCaseId,

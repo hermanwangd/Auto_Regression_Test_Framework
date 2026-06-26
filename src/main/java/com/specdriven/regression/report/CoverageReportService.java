@@ -13,6 +13,77 @@ import org.yaml.snakeyaml.Yaml;
 @Service
 public class CoverageReportService {
 
+    public CoverageReportResult generateBatch(Path packageRoot, String batchId) {
+        Path batchDir = packageRoot.resolve("evidence/batches").resolve(batchId);
+        Path batchYaml = batchDir.resolve("batch.yaml");
+        boolean batchMissing = !Files.exists(batchYaml);
+        Map<String, Object> batch = batchMissing
+                ? Map.of("rp_id", packageRoot.getFileName().toString(), "status", "missing_evidence")
+                : readYamlMap(batchYaml);
+        List<RunEvidence> runs = batchMissing ? List.of() : runsFromBatch(packageRoot, batch);
+        List<Map<?, ?>> acceptanceCriteria = acceptanceCriteria(packageRoot.resolve("acceptance_criteria.md"));
+        List<Map<String, Object>> approvedTests = approvedTests(packageRoot.resolve("tests/approved"));
+        List<String> denominatorAcIds = coverageDenominatorAcIds(acceptanceCriteria);
+        int totalAutomatable = denominatorAcIds.size();
+        List<String> coveredAcIds = new ArrayList<>();
+        List<String> gaps = new ArrayList<>();
+        List<String> failureDetails = new ArrayList<>();
+        gaps.addAll(unapprovedExclusionGaps(acceptanceCriteria));
+        if (batchMissing) {
+            gaps.add("missing_evidence: " + packageRoot.relativize(batchYaml));
+        }
+        for (RunEvidence evidence : runs) {
+            Map<String, Object> run = evidence.run();
+            String runStatus = stringValue(run.get("status"));
+            String runAcId = stringValue(run.get("ac_id"));
+            String runTestCaseId = stringValue(run.get("test_case_id"));
+            boolean hasTraceableApprovedTest = approvedTests.stream()
+                    .anyMatch(test -> runTestCaseId.equals(stringValue(test.get("test_case_id")))
+                            && runAcId.equals(stringValue(test.get("ac_id"))));
+            if (evidence.missing()) {
+                gaps.add("missing_evidence: " + packageRoot.relativize(evidence.runDir().resolve("run.yaml")));
+            } else if (!"passed".equals(runStatus)) {
+                gaps.add("run_status: " + runStatus);
+            }
+            if (!evidence.missing() && !hasTraceableApprovedTest) {
+                gaps.add("missing_traceability: " + runTestCaseId + " -> " + runAcId);
+            }
+            if ("passed".equals(runStatus)
+                    && isAutomatable(acceptanceCriteria, runAcId)
+                    && hasTraceableApprovedTest
+                    && !coveredAcIds.contains(runAcId)) {
+                coveredAcIds.add(runAcId);
+            }
+            failureDetails.addAll(assertionFailureDetails(evidence.runDir(), run));
+        }
+        if (!batchMissing) {
+            gaps.addAll(uncoveredAcGaps(denominatorAcIds, coveredAcIds));
+        }
+        int covered = coveredAcIds.size();
+        double coveragePercent = totalAutomatable == 0 ? 0.0 : covered * 100.0 / totalAutomatable;
+        boolean reviewReady = gaps.isEmpty() && totalAutomatable > 0 && covered == totalAutomatable;
+        Path reviewDir = packageRoot.resolve("evidence/review").resolve(batchId);
+        writeBatchReports(
+                reviewDir,
+                packageRoot,
+                batchId,
+                batch,
+                runs,
+                covered,
+                totalAutomatable,
+                coveragePercent,
+                reviewReady,
+                gaps,
+                failureDetails);
+        return new CoverageReportResult(
+                reviewReady,
+                covered,
+                totalAutomatable,
+                coveragePercent,
+                reviewDir,
+                List.copyOf(gaps));
+    }
+
     public CoverageReportResult generate(Path packageRoot, String runId) {
         Path runDir = packageRoot.resolve("evidence/runs").resolve(runId);
         Path runYaml = runDir.resolve("run.yaml");
@@ -154,6 +225,116 @@ public class CoverageReportService {
         }
     }
 
+    private void writeBatchReports(
+            Path reviewDir,
+            Path packageRoot,
+            String batchId,
+            Map<String, Object> batch,
+            List<RunEvidence> runs,
+            int covered,
+            int totalAutomatable,
+            double coveragePercent,
+            boolean reviewReady,
+            List<String> gaps,
+            List<String> failureDetails) {
+        try {
+            Files.createDirectories(reviewDir);
+            Files.writeString(reviewDir.resolve("coverage_report.yaml"), """
+                    rp_id: %s
+                    batch_id: %s
+                    covered: %s
+                    total_automatable: %s
+                    coverage_percent: %.1f
+                    review_ready: %s
+                    """.formatted(
+                    stringValue(batch.get("rp_id")),
+                    batchId,
+                    covered,
+                    totalAutomatable,
+                    coveragePercent,
+                    reviewReady));
+            Files.writeString(
+                    reviewDir.resolve("traceability_report.yaml"),
+                    "traceability:\n" + traceabilityYaml(packageRoot, batchId, runs));
+            Files.writeString(reviewDir.resolve("evidence_index.md"), """
+                    # Evidence Index
+
+                    - RP: `%s`
+                    - Batch: `%s`
+                    - Batch evidence: `%s`
+                    %s
+                    - Coverage: `coverage_report.yaml`
+                    - Traceability: `traceability_report.yaml`
+                    - Failure summary: `failure_summary.yaml`
+                    - Release review summary: `release_review_summary.yaml`
+                    """.formatted(
+                    stringValue(batch.get("rp_id")),
+                    batchId,
+                    packageRoot.relativize(packageRoot.resolve("evidence/batches").resolve(batchId)),
+                    evidenceIndexRuns(packageRoot, runs)));
+            Files.writeString(reviewDir.resolve("failure_summary.yaml"), """
+                    batch_id: %s
+                    unresolved_failures: %s
+                    gaps:
+                    %s
+                    failure_details:
+                    %s
+                    """.formatted(batchId, gaps.size(), gapYaml(gaps), gapYaml(failureDetails)));
+            Files.writeString(reviewDir.resolve("release_review_summary.yaml"), """
+                    rp_id: %s
+                    batch_id: %s
+                    review_ready: %s
+                    coverage_percent: %.1f
+                    unresolved_failures: %s
+                    """.formatted(
+                    stringValue(batch.get("rp_id")),
+                    batchId,
+                    reviewReady,
+                    coveragePercent,
+                    gaps.size()));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write batch coverage report package.", e);
+        }
+    }
+
+    private String traceabilityYaml(Path packageRoot, String batchId, List<RunEvidence> runs) {
+        if (runs.isEmpty()) {
+            return "  []\n";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (RunEvidence evidence : runs) {
+            Map<String, Object> run = evidence.run();
+            builder.append("  - rp_id: ").append(stringValue(run.get("rp_id"))).append("\n");
+            builder.append("    ac_id: ").append(stringValue(run.get("ac_id"))).append("\n");
+            builder.append("    test_case_id: ").append(stringValue(run.get("test_case_id"))).append("\n");
+            builder.append("    batch_id: ").append(batchId).append("\n");
+            builder.append("    run_id: ").append(evidence.runId()).append("\n");
+            builder.append("    evidence_ref: ")
+                    .append(packageRoot.relativize(packageRoot.resolve("evidence/runs").resolve(evidence.runId())))
+                    .append("\n");
+        }
+        return builder.toString();
+    }
+
+    private String evidenceIndexRuns(Path packageRoot, List<RunEvidence> runs) {
+        if (runs.isEmpty()) {
+            return "- Runs: `[]`";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (RunEvidence evidence : runs) {
+            Map<String, Object> run = evidence.run();
+            builder.append("- AC: `").append(stringValue(run.get("ac_id"))).append("`\n");
+            builder.append("                    - Test case: `")
+                    .append(stringValue(run.get("test_case_id")))
+                    .append("`\n");
+            builder.append("                    - Run: `").append(evidence.runId()).append("`\n");
+            builder.append("                    - Run evidence: `")
+                    .append(packageRoot.relativize(packageRoot.resolve("evidence/runs").resolve(evidence.runId())))
+                    .append("`\n");
+        }
+        return builder.toString().stripTrailing();
+    }
+
     private String gapYaml(List<String> gaps) {
         if (gaps.isEmpty()) {
             return "  []";
@@ -198,6 +379,40 @@ public class CoverageReportService {
         return gaps;
     }
 
+    private List<RunEvidence> runsFromBatch(Path packageRoot, Map<String, Object> batch) {
+        Object entries = batch.get("runs");
+        if (!(entries instanceof List<?> list)) {
+            return List.of();
+        }
+        List<RunEvidence> result = new ArrayList<>();
+        for (Object entry : list) {
+            if (!(entry instanceof Map<?, ?> row)) {
+                continue;
+            }
+            String runId = stringValue(row.get("run_id"));
+            if (runId.isBlank()) {
+                continue;
+            }
+            Path runDir = packageRoot.resolve("evidence/runs").resolve(runId);
+            Path runYaml = runDir.resolve("run.yaml");
+            boolean missing = !Files.exists(runYaml);
+            Map<String, Object> run = missing ? missingRunFromBatchRow(batch, row, runId) : readYamlMap(runYaml);
+            result.add(new RunEvidence(runId, runDir, run, missing));
+        }
+        return List.copyOf(result);
+    }
+
+    private Map<String, Object> missingRunFromBatchRow(Map<String, Object> batch, Map<?, ?> row, String runId) {
+        Map<String, Object> run = new java.util.LinkedHashMap<>();
+        run.put("run_id", runId);
+        run.put("batch_id", stringValue(batch.get("batch_id")));
+        run.put("rp_id", stringValue(batch.get("rp_id")));
+        run.put("test_case_id", stringValue(row.get("test_case_id")));
+        run.put("ac_id", stringValue(row.get("ac_id")));
+        run.put("status", "missing_evidence");
+        return run;
+    }
+
     private List<String> assertionFailureDetails(Path runDir, Map<String, Object> run) {
         if (!"failed".equals(stringValue(run.get("assertion_status")))) {
             return List.of();
@@ -240,7 +455,8 @@ public class CoverageReportService {
     private boolean isAutomatable(List<Map<?, ?>> acceptanceCriteria, String acId) {
         return acceptanceCriteria.stream()
                 .anyMatch(item -> acId.equals(stringValue(item.get("ac_id")))
-                        && "automatable".equals(item.get("classification")));
+                        && ("automatable".equals(item.get("classification"))
+                                || "partial".equals(item.get("classification"))));
     }
 
     @SuppressWarnings("unchecked")
@@ -289,5 +505,8 @@ public class CoverageReportService {
 
     private String stringValue(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private record RunEvidence(String runId, Path runDir, Map<String, Object> run, boolean missing) {
     }
 }
