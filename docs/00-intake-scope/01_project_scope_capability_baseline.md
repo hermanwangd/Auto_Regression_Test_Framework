@@ -168,6 +168,42 @@ Rules:
 - Product E2E scenarios may map to one or more RP AC, but they do not replace RP AC.
 - Release unit tests count as evidence only when mapped back to RP AC.
 
+## 1.9.1 DSL and 7 AP Baseline Model
+
+The regression DSL is the checked-in RP-level test contract. In one sentence: it is the durable description of what RP behavior is validated and how the framework shall execute and judge that validation repeatably. It states which RP behavior is validated, which AC it traces to, what input or state is needed, what logical action is performed, what oracle/assertion decides pass/fail, and what evidence must be retained.
+
+The DSL is not a BDD-only story, package-specific script, provider configuration file, secret store, generated run log, or replacement for owner-authored RP AC. Provider-specific details such as endpoints, commands, DB loaders, queue clients, credentials, and adapter implementation settings belong in RP/RU mapping, provider contracts, or environment configuration.
+
+The 7 AP are framework processing areas. In one sentence: they are the lifecycle responsibility boundaries that convert reviewed RP artifacts into executable and reviewable regression evidence. An AP is not necessarily a separate Java package, deployable service, or RP-specific plugin.
+
+The baseline ownership model is:
+
+| Item | Owner | Purpose |
+|---|---|---|
+| RP feature spec and RP AC | Product owner, PM, SA, or RP owner | Define business behavior and acceptance truth. |
+| RP/RU mapping and provider contracts | RP/RU owner or platform owner | Declare release boundary, RU versions, execution modes, provider capabilities, and environment references. |
+| DSL test case | Product developer or agent-assisted reviewer | Preserve reviewed regression validation intent as a repeatable artifact. |
+| Expected result or oracle truth | RP owner or delegated reviewer | Approve the truth source used by assertions. |
+| 7 AP execution flow | Framework | Validate, plan, bind, execute, assert, and report without inventing business truth. |
+
+| AP | Consumes | Produces | Clear Boundary |
+|---|---|---|---|
+| Definition and Validation | Product/RP artifacts, DSL files, expected-result artifacts | Schema, lifecycle, approval, and compatibility findings | Validates; does not infer business truth. |
+| Discovery and Context | Product Repo, RP record, RP/RU mapping, requested env | Resolved RP context, RU list, artifact paths, AC inventory | Finds declared context; does not choose RP membership. |
+| Planning and Binding | DSL tests, parameters, package inputs, provider contracts | Execution plan with resolved bindings and step placeholders | Resolves logical references; does not execute package behavior. |
+| Fixture and State Manager | Preconditions, fixture setup/cleanup, lifecycle policy | Prepared state, cleanup plan, cleanup evidence | Owns state safety; does not hide destructive actions. |
+| Execution Engine | Execution plan, adapter contracts, environment policy | Step results, adapter outputs, logs, runtime metadata | Executes configured actions; does not embed RP-specific logic. |
+| Oracle and Assertion Engine | Actual outputs, approved truth sources, assertion rules | Pass/fail decisions with expected, actual, and reason | Evaluates evidence; does not approve truth. |
+| Evidence and Reporting | Outputs from all APs, traceability, waiver records | Durable evidence, coverage, failure, and release-review reports | Reports readiness; does not decide release approval. |
+
+Ownership split:
+
+- RP owners define feature behavior, RP AC, RP/RU membership, and release decisions.
+- Agent skills may draft DSL tests or expected results only from ready owner-authored context.
+- The DSL owns validation intent and logical references.
+- RP/RU mapping and provider contracts own package-specific execution configuration.
+- The 7 AP own deterministic validation, planning, execution orchestration, assertion evaluation, and evidence production.
+
 ## 1.10 Success Metrics
 
 | Metric | M1 Target | Evidence |

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Product Repo Readiness"
+  short_description: "Explain readiness report next steps."
+  default_prompt: "Use $product-repo-readiness to explain a Product Repo readiness report and list owner-actionable next steps."

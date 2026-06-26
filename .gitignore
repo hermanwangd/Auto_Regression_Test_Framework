@@ -8,3 +8,6 @@
 *.log
 tmp/
 temp/
+target/
+.mvn/wrapper/apache-maven-*/
+.mvn/wrapper/apache-maven-*.zip

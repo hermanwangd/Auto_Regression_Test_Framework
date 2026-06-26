@@ -15,14 +15,12 @@ Do not commit generated outputs, caches, virtual environments, dependency folder
 
 ## Build, Test, and Development Commands
 
-No build system is present yet. When adding one, prefer Maven or Gradle for Spring Boot 3.x and document the canonical commands here.
+This project uses Maven Wrapper with Spring Boot 3.x and Java 17+.
 
-Examples to add when applicable:
-
-- `./mvnw test` or `./gradlew test`: run the full automated test suite.
-- `./mvnw spring-boot:run` or `./gradlew bootRun`: start the CLI/application locally.
-- `./mvnw package` or `./gradlew build`: compile, test, and package the project.
-- `java -jar target/<artifact>.jar --help`: run the packaged CLI when Maven is used.
+- `./mvnw test`: run the full automated test suite.
+- `./mvnw package`: compile, test, and package the Spring Boot jar.
+- `./mvnw spring-boot:run`: start the application locally.
+- `./mvnw test -Dtest=RegressionCommandTest`: run a focused CLI behavior test.
 
 Prefer deterministic scripts that do not require hidden local state.
 

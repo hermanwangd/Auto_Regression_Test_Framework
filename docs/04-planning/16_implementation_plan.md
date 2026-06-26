@@ -150,7 +150,7 @@ Done when only approved expected results are eligible as regression truth.
 ### T008 - Execution Environment Resolver
 
 Related features: F004, F007
-Acceptance: AC-004, AC-007
+Acceptance: AC-004, AC-007, AC-008
 Modules: `environment`
 
 Resolve `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only` execution modes from `rp_ru_mapping.yaml`. Block SIT execution unless deployment and environment readiness evidence exist.
@@ -166,7 +166,7 @@ Done when the command blocks before adapter execution if SIT readiness evidence 
 ### T009 - Planning, Parameter, and Binding Resolver
 
 Related feature: F007
-Acceptance: AC-007
+Acceptance: AC-007, AC-008
 Modules: `binding`
 
 Resolve expected-result refs, data selection strategy, parameterized cases, dependencies, name-keyed package input bindings, runtime paths, environment refs, and step output placeholders from approved test cases. M1 must support pilot binding types `input_file`, `dataset`, and `db_seed`; reserved binding types such as `api_payload`, `message_event`, `config_file`, `env_var`, and `existing_state` must fail as unsupported until providers are implemented.
@@ -182,7 +182,7 @@ Done when unresolved bindings, data selection, parameter cases, or dependencies 
 ### T010 - Provider Contract Registry and Dispatch
 
 Related feature: F007
-Acceptance: AC-007
+Acceptance: AC-007, AC-008
 Modules: `provider`, `schema`
 
 Resolve validated provider contracts from provider defaults, RP-level overrides, and RU-level overrides. Dispatch adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type to the selected contract. Fail before execution when a contract is missing, ambiguous, unsupported, or unsafe.
@@ -198,7 +198,7 @@ Done when provider contract resolution reports provider name, source level, acti
 ### T011 - Fixture Lifecycle Manager
 
 Related feature: F007
-Acceptance: AC-007
+Acceptance: AC-007, AC-008
 Modules: `fixture`
 
 Implement precondition checks, fixture setup and cleanup lifecycle, and postcondition checks for local and CI runs. Use provider contracts for M1 pilot fixture behavior such as file workspace setup and database seed/cleanup. Reserved fixture behavior such as message/event publishing and configuration binding must fail as unsupported until providers are implemented. Record cleanup evidence even when execution fails.
@@ -214,7 +214,7 @@ Done when setup, cleanup, and cleanup failure state are written to run evidence.
 ### T012 - Adapter Runtime and Data Pipeline Pilot Adapter
 
 Related feature: F007
-Acceptance: AC-007
+Acceptance: AC-007, AC-008
 Modules: `execution`, `adapter`
 
 Implement execution of a prepared plan and the first data pipeline adapter using validated adapter/provider contract configuration. The core executor and test case DSL stay package-type-neutral; the adapter owns package-specific command execution and actual-result capture through reusable, configurable contracts.
@@ -246,7 +246,7 @@ Done when failures include oracle ref or inline rule, expected ref when applicab
 ### T014 - Evidence Writer
 
 Related features: F007, F008
-Acceptance: AC-007, AC-008
+Acceptance: AC-007, AC-009
 Modules: `evidence`
 
 Write `evidence/runs/<run_id>/run.yaml`, logs, actual outputs, assertion results, observation results, postcondition results, cleanup evidence, and failure details. Evidence must include RP ID, AC ID, test case ID, run ID, RU refs, execution mode, environment ref, parameter case when applicable, and resolved dependencies.
@@ -262,7 +262,7 @@ Done when every execution path produces durable evidence, including failed and b
 ### T015 - Coverage and Traceability Reporter
 
 Related feature: F008
-Acceptance: AC-008
+Acceptance: AC-009
 Modules: `report`, `evidence`
 
 Calculate coverage as covered automatable RP-level AC divided by total automatable RP-level AC. Link generated tests and evidence to RP ID, AC ID, test case ID, and run ID. Exclude manual-only or waived AC only with approval records.
@@ -278,7 +278,7 @@ Done when coverage, traceability, evidence index, failure summary, and release r
 ### T016 - Pilot RP Validation Harness
 
 Related features: F001-F008
-Acceptance: AC-001 through AC-008
+Acceptance: AC-001 through AC-009
 Modules: all M1 modules
 
 Run the full workflow against the data pipeline pilot RP after owner-provided RP artifacts exist.

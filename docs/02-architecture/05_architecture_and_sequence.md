@@ -66,7 +66,7 @@ CLI Orchestrator
 | Fixture and State Manager | Check preconditions, set up fixtures, seed or publish data, enforce cleanup, and validate postconditions | AC-007 |
 | Execution Engine | Execute planned steps through package adapters, manage execution modes, step outputs, timeout, retry, and adapter result capture | AC-007 |
 | Oracle and Assertion Engine | Resolve oracle truth sources and evaluate actual outputs through assertion decision rules | AC-007 |
-| Evidence and Reporting | Persist run evidence, observations, cleanup results, failures, traceability, coverage, and release-review reports | AC-007, AC-008 |
+| Evidence and Reporting | Persist run evidence, observations, cleanup results, failures, traceability, coverage, and release-review reports | AC-007, AC-009 |
 
 Internal module mapping:
 
@@ -79,6 +79,48 @@ Internal module mapping:
 | Execution Engine | `execution`, `adapter` packages |
 | Oracle and Assertion Engine | `oracle`, `assertion` packages |
 | Evidence and Reporting | `evidence`, `report` packages |
+
+DSL and artifact flow through the 7 AP:
+
+| AP | Main Input | Main Output |
+|---|---|---|
+| Definition and Validation | Product docs, RP records, RP AC, RP/RU mapping, DSL tests, expected-result artifacts | Validated artifact graph, schema errors, lifecycle/status errors |
+| Discovery and Context | Validated artifact graph plus requested RP, environment, and execution mode | RP execution context, RU list, AC inventory, available tests, provider contract references |
+| Planning and Binding | RP execution context, DSL tests, package input catalog, expected-result references, provider contracts | Concrete execution plan with bound inputs, parameters, fixtures, oracles, and step placeholders |
+| Fixture and State Manager | Execution plan fixture sections, environment reference, cleanup policy | Prepared state, fixture evidence, cleanup plan, precondition/postcondition results |
+| Execution Engine | Execution plan steps and adapter contracts | Step results, adapter outputs, runtime metadata, timeout/retry outcomes |
+| Oracle and Assertion Engine | Actual outputs, approved expected results, oracle references, assertion rules | Pass/fail decisions with expected value, actual value, comparison rule, and failure reason |
+| Evidence and Reporting | All AP outputs, traceability, waivers, coverage policy | Durable evidence package, AC coverage report, release-review summary |
+
+This flow keeps the DSL stable. New RP/RU behavior should be added through validated mapping, provider contracts, adapters, and enum extensions only when the behavior is reusable across RPs.
+
+AP boundary contract:
+
+| AP | Must Fail Before | Required Failure Detail |
+|---|---|---|
+| Definition and Validation | Discovery, planning, generation approval, or run start | Artifact path, field path, lifecycle status, supported `dsl_version`, owner action |
+| Discovery and Context | Planning | RP ID, missing artifact, missing RU, requested environment, owner action |
+| Planning and Binding | Fixture setup or adapter/provider execution | Test case ID, AC ID, unresolved binding/oracle/fixture/parameter, provider contract key, owner action |
+| Fixture and State Manager | Adapter execution when setup is unsafe or incomplete | Test case ID, setup action, cleanup requirement, state scope, owner action |
+| Execution Engine | Assertion evaluation when step execution fails | Step ID, adapter, action, exit code or timeout, log refs, owner action |
+| Oracle and Assertion Engine | Pass/fail reporting when truth or comparison rule is missing | Assertion ID, oracle ref, expected-result approval status, actual ref, owner action |
+| Evidence and Reporting | Release-review-ready claim | Missing evidence type, affected AC/test/run, coverage impact, owner action |
+
+APs communicate through structured reports and execution-plan records, not hidden side effects. Each AP output must be durable enough to explain why the next AP did or did not run.
+
+For implementation clarity, each AP owns one primary question and one durable handoff artifact:
+
+| AP | Primary Question | Durable Handoff |
+|---|---|---|
+| Definition and Validation | Are declared artifacts syntactically valid, lifecycle-ready, approved when needed, and compatible with supported versions? | `validation_report` with field paths, lifecycle status, and compatibility result. |
+| Discovery and Context | Which RP, AC, RU repos, artifact paths, execution mode, environment, and provider contract references are in scope? | `rp_execution_context` with resolved artifact and contract references. |
+| Planning and Binding | Can every logical DSL reference be resolved into an executable plan without embedding provider-specific code in the DSL? | `execution_plan` with bound inputs, parameters, fixture intents, oracle refs, and step placeholders. |
+| Fixture and State Manager | Is test state safe to prepare and clean up for this execution mode? | `fixture_plan` and `cleanup_plan` with setup, mutation scope, cleanup, and postcondition evidence refs. |
+| Execution Engine | Can the planned logical steps run through declared providers and adapters in the selected environment? | `execution_result` with step status, adapter outputs, logs, actual result refs, timeout/retry metadata. |
+| Oracle and Assertion Engine | Do approved truth sources or deterministic decision rules prove pass/fail for the actual outputs? | `assertion_result` with oracle refs, expected, actual, comparator, and failure reason. |
+| Evidence and Reporting | Is there enough durable evidence to support coverage and release review without manually reconstructing the run? | `evidence_package`, `coverage_report`, `failure_summary`, and `release_review_summary`. |
+
+Provider contracts are configuration artifacts consumed by APs; they are not DSL sections. A provider contract declares a named capability such as a binding resolver, fixture setup action, adapter command, oracle reader, assertion comparator, or observation collector. The DSL references those capabilities by logical name, and the AP validates that the referenced capability exists before execution.
 
 ## 5.4 Module Boundaries
 
@@ -146,6 +188,21 @@ Boundary rules:
 - `oracle` loads truth sources and decision parameters; `assertion` applies comparison rules against actual outputs.
 - `adapter` is the only package-type-specific execution boundary.
 - `evidence` and `report` write durable evidence under the RP release record.
+
+DSL-to-module responsibility:
+
+| DSL Section | Primary Module | Secondary Module |
+|---|---|---|
+| Identity, lifecycle, `dsl_version`, source fingerprint | `schema`, `testcase` | `evidence` |
+| `scenario`, `parameters`, `dependencies` | `testcase`, `binding` | `mapping` |
+| `execution_target` | `environment`, `mapping` | `adapter`, `provider` |
+| `package_inputs` | `binding` | `provider`, `fixture` |
+| `fixture`, `preconditions`, `postconditions` | `fixture` | `environment`, `evidence` |
+| `steps` | `execution` | `adapter`, `provider` |
+| `expected`, `oracles`, `assertions` | `expectedresult`, `oracle`, `assertion` | `binding` |
+| `observations`, `evidence_required`, `policy` | `evidence`, `report` | `execution`, `fixture` |
+
+If a DSL section cannot be assigned to one of these modules, it is not ready for M1 execution and must be treated as an unsupported DSL extension.
 
 ## 5.5 Extension Model for RP/RU Variants
 
@@ -429,7 +486,8 @@ The architecture should be revisited when multiple RP types require shared servi
 | AC-005 | Agent DSL test drafting only from ready inputs and no silent overwrite | `readiness`, `testcase` |
 | AC-006 | Expected result source references and approval gate | `expectedresult` |
 | AC-007 | RP DSL test execution with inputs, fixtures, adapters, assertions, evidence | `execution`, `binding`, `provider`, `fixture`, `adapter`, `assertion`, `evidence` |
-| AC-008 | Coverage, traceability, failures, and approved exclusions | `report`, `evidence` |
+| AC-008 | Unsafe or incomplete regression execution is blocked | `environment`, `mapping`, `provider`, `execution` |
+| AC-009 | Coverage, traceability, failures, and approved exclusions | `report`, `evidence` |
 
 ## 5.16 Implementation Readiness Gate
 

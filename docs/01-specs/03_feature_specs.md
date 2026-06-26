@@ -113,7 +113,68 @@ Regression test cases are managed as durable RP artifacts. The framework shall n
 
 The framework uses a package-neutral regression test case DSL so different Products and Release Packages can express repeatable auto regression tests through the same artifact model. The DSL describes what RP behavior must be validated, while package-specific execution remains isolated behind adapters.
 
-The DSL required field set should stay minimal but complete enough to execute safely. Required fields cover identity, RP/AC traceability, approval status, source fingerprint, scenario type/scope/capabilities, execution target, logical steps, assertions, and evidence requirements. Conditional fields cover expected-result references, preconditions, data selection and parameterization strategy, parameterized cases, catalog selectors, matrix dimensions, dependencies, name-keyed package inputs, binding type, lifecycle policy, fixture setup/cleanup, environment reference, oracle references, oracle type, assertion decision rules, observations, postconditions, and cleanup policy when the test creates or mutates resources. Optional fields such as BDD context, tags, priority, replacement links, and extra source references improve governance but must not be required for first execution. M1 implements only the DSL v1 subset required for the data-pipeline pilot; additional DSL v1 enum values are reserved until their providers are implemented.
+The DSL is not a BDD story, shell script, provider configuration, or generated run log. It is a versioned test contract with enough structured data for the framework to validate, plan, bind, execute, assert, and report a regression test repeatedly.
+
+The DSL must answer five execution questions in a package-neutral way:
+
+| Question | DSL Responsibility | Not DSL Responsibility |
+|---|---|---|
+| What is being validated? | `rp_id`, `ac_id`, scenario, source refs, source fingerprint | Writing or changing RP feature truth |
+| What data or state is needed? | Logical inputs, parameters, preconditions, fixture intent | Inline secrets, physical DB commands, package-specific loaders |
+| What action is performed? | Logical steps, target RU, adapter name, action names | Shell scripts, endpoint URLs, queue drivers, deployment commands |
+| How is pass/fail decided? | Oracles, assertion type, actual refs, inline decision rules when allowed | Approving expected-result truth or inventing business rules |
+| What must be retained? | Evidence categories, observations, cleanup proof, trace links | Release approval or waiver approval |
+
+| DSL Area | Purpose | Primary AP Consumer |
+|---|---|---|
+| Identity and traceability | Identify DSL version, test ID, RP ID, AC ID, source fingerprint, owner, status, and replacement links. | Definition and Validation |
+| Scenario and parameterization | Describe scenario type, scope, capabilities, data selection, matrix dimensions, and parameterized cases. | Planning and Binding |
+| Inputs and bindings | Reference logical package inputs, catalog selectors, binding names, dependencies, and runtime references. | Discovery and Context / Planning and Binding |
+| Fixtures and state | Declare preconditions, setup, seeded or published data, cleanup, and postconditions. | Fixture and State Manager |
+| Execution steps | Declare logical actions, targets, and expected observable outputs without embedding provider-specific scripts. | Execution Engine |
+| Oracles and assertions | Reference approved expected results or inline decision rules and define comparison/assertion behavior. | Oracle and Assertion Engine |
+| Evidence requirements | Declare logs, observations, artifacts, cleanup proof, coverage links, and release-review evidence to retain. | Evidence and Reporting |
+
+The 7 AP are the framework capability areas behind the DSL lifecycle: Definition and Validation, Discovery and Context, Planning and Binding, Fixture and State Manager, Execution Engine, Oracle and Assertion Engine, and Evidence and Reporting. Provider configuration belongs in RP/RU mapping or provider contracts; DSL tests may reference provider capabilities by logical names only.
+
+Each AP must be independently explainable in readiness and execution reports. A report that says only "DSL invalid" or "execution failed" is not sufficient; it must name the AP, field path or provider contract, affected test case, affected AC, reason, and owner action.
+
+The DSL field set should stay minimal but complete enough to execute safely. M1 shall treat these fields as the required DSL v1 core:
+
+| Required Field | Why It Is Required | Consuming AP |
+|---|---|---|
+| `dsl_version` | Selects supported schema and compatibility rules. | Definition and Validation |
+| `test_case_id`, `rp_id`, `ac_id` | Gives every run stable traceability to RP-level AC. | Definition and Validation / Evidence and Reporting |
+| `status`, `owner`, `source_fingerprint` | Prevents stale, unreviewed, or ownerless tests from running silently. | Definition and Validation |
+| `scenario.type`, `scenario.scope`, `scenario.capabilities` | Tells the framework what kind of behavior and provider capability is needed. | Planning and Binding |
+| `execution.target_ru`, `execution.mode` | Selects the RU boundary and execution mode. | Discovery and Context / Planning and Binding |
+| `steps[]` | Declares logical actions and observable outputs. | Execution Engine |
+| `assertions[]` | Declares how pass/fail is evaluated. | Oracle and Assertion Engine |
+| `evidence.required[]` | Declares what artifacts must be retained for release review. | Evidence and Reporting |
+
+Conditional fields are required only when the scenario needs them:
+
+| Conditional Field | Required When | Not Allowed To Contain |
+|---|---|---|
+| `parameters` or `matrix` | The same AC must run across multiple cases or boundary values. | Runtime secrets or provider-specific scripts. |
+| `data_selection` | Input records are selected from a catalog, generated set, or filtered source. | Physical SQL, endpoint URLs, or environment credentials. |
+| `bindings` | Logical DSL values must resolve to runtime package inputs, files, messages, DB rows, or API payloads. | Hard-coded environment-specific paths unless declared as provider contract outputs. |
+| `fixtures.setup` / `fixtures.cleanup` | The test creates, mutates, seeds, publishes, or deletes state. | Hidden destructive actions without cleanup policy. |
+| `environment_ref` | The run is `ci_ephemeral`, `sit_deployed`, or `evidence_only`. | Deployment commands; deployment is external to M1. |
+| `oracle.ref` or `expected_result_ref` | Assertion truth comes from an approved artifact or external oracle source. | Unapproved expected-result truth. |
+| `inline_decision_rule` | The AC can be judged by a deterministic rule without an external expected-result artifact. | New business truth invented by the agent. |
+| `provider_refs` | The scenario needs a named adapter, fixture, binding, oracle, assertion, or observation capability. | Provider implementation configuration. |
+
+Optional fields such as BDD context, tags, priority, replacement links, and extra source references improve governance but must not be required for first execution.
+
+The DSL shall reject or block these concerns from the test case body:
+
+- Secrets, credentials, tokens, or production data.
+- Physical provider implementation details such as endpoint URLs, shell commands, queue client settings, DB connection strings, or loader code.
+- CD deployment instructions or environment provisioning scripts.
+- New RP feature behavior, AC wording, expected-result approval, waiver approval, or release approval.
+
+M1 implements only the DSL v1 subset required for the data-pipeline pilot; additional DSL v1 enum values are reserved until their providers are implemented.
 
 The lifecycle is:
 
@@ -255,6 +316,8 @@ Product developers own AC clarification and manual expected-result input. QA or 
 - Read `rp_feature_spec.md`, `acceptance_criteria.md`, `rp_ru_mapping.yaml`, package input references, fixture references, adapter references, and validation boundaries.
 - Check AC readiness: AC ID, linked RP feature, observable input, behavior, expected output, and pass/fail condition.
 - Check execution context readiness: scenario type/scope/capabilities, preconditions, data selection strategy, parameterized cases, catalog selectors or matrix dimensions, dependencies, name-keyed package input bindings, binding type, fixture or data source, lifecycle cleanup requirement, target RU, execution mode, deployment requirement, environment reference, adapter or adapter mode, validation boundary, oracle/assertion type, observation requirement, postcondition requirement, and expected-result reference status.
+- Map each generated DSL section to the AP that will consume it: identity to Definition and Validation, inputs to Planning and Binding, fixture fields to Fixture and State Manager, steps to Execution Engine, oracles/assertions to Oracle and Assertion Engine, and evidence fields to Evidence and Reporting.
+- Refuse executable drafting when an AP cannot be selected or when a required AP input would have to be invented by the agent.
 - Mark ambiguous AC as `not_ready_for_generation`.
 - Generate `draft_test_skeleton` using the package-neutral test case DSL only when AC is ready but execution context is incomplete.
 - Generate `draft_executable_test_case` using the package-neutral test case DSL only when AC and execution context are both ready.
@@ -309,6 +372,8 @@ F007 shall not author AC, classify AC readiness, generate tests, regenerate chec
 - Check that test cases declare supported `dsl_version` and include required DSL identity, traceability, scenario, execution target, expected-result, step, oracle or inline decision rule, assertion, and evidence fields.
 - Check that test cases are `approved_for_regression` or explicitly allowed by the execution policy.
 - Check that required expected-result artifacts are `approved_for_regression` or otherwise explicitly allowed by the execution policy.
+- Validate that every DSL section can be consumed by exactly one AP responsibility path before adapter execution starts.
+- Validate that every DSL logical reference to an adapter, binding, fixture, oracle, assertion, or observation has a matching provider contract or supported default.
 - Resolve the RP execution mode as `local_fixture`, `ci_ephemeral`, `sit_deployed`, or `evidence_only`.
 - For multi-RU RPs, follow the declared dependency graph and stop downstream execution when a required upstream RU validation fails.
 - Check deployment and environment readiness before running `sit_deployed` tests.
@@ -330,7 +395,7 @@ Package RP-level coverage, traceability, raw execution evidence, failures, and a
 
 ### Expected Behavior
 
-The framework shall report coverage against automatable RP-level AC, trace generated tests to RP AC, retain raw execution evidence from F007, identify failures with expected and actual results, and include manual-only or waived AC records where approved.
+The framework shall report coverage against automatable RP-level AC, trace generated tests to RP AC, retain raw execution evidence from F007, identify failures with oracle or inline decision rule results and actual results, and include manual-only or waived AC records where approved.
 
 F008 shall not execute tests, generate tests, generate expected results, approve waivers, change the coverage denominator, or decide release Go/No-Go. Product developers own evidence review for implementation correctness. QA or release owners approve waivers, manual-only exclusions, and release decisions through F010 or a human release process.
 
