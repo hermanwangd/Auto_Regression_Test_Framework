@@ -36,6 +36,7 @@ Out of scope:
 | Test lifecycle | Generate separately from execute | Approved tests are checked in and not regenerated on every run. |
 | Test case DSL | Minimal package-neutral DSL with explicit version | Different Products and RPs express regression tests through one artifact model without overfitting to one package type. |
 | Adapter model | Core framework plus package adapters | Execution process is generic; package behavior stays adapter-specific. |
+| Implementation stack | Spring Boot 3.x on Java 17+ | Provides a modern Java runtime, dependency injection, validation, configuration binding, and CLI packaging path. |
 
 ## 5.3 Component Architecture
 
@@ -71,61 +72,80 @@ Internal module mapping:
 
 | AP-Level Component | Internal Modules |
 |---|---|
-| Definition and Validation | `schemas.py`, `test_cases.py`, `expected_results.py` |
-| Discovery and Context | `product_repo.py`, `rp_discovery.py`, `mapping.py`, `environment.py`, `readiness.py` |
-| Planning and Binding | `bindings.py`, `providers.py`, parameter expansion and execution-plan construction in `test_cases.py` |
-| Fixture and State Manager | `fixtures.py` |
-| Execution Engine | `execution.py`, `adapters/` |
-| Oracle and Assertion Engine | `oracles.py`, `assertions.py` |
-| Evidence and Reporting | `evidence.py`, `reports.py` |
+| Definition and Validation | `schema`, `testcase`, `expectedresult` packages |
+| Discovery and Context | `productrepo`, `discovery`, `mapping`, `environment`, `readiness` packages |
+| Planning and Binding | `binding`, `provider`, parameter expansion and execution-plan construction in `testcase` |
+| Fixture and State Manager | `fixture` package |
+| Execution Engine | `execution`, `adapter` packages |
+| Oracle and Assertion Engine | `oracle`, `assertion` packages |
+| Evidence and Reporting | `evidence`, `report` packages |
 
 ## 5.4 Module Boundaries
 
-The implementation should use a small internal module layout. Names may be adjusted to match the final language/runtime, but these boundaries are required.
+The implementation uses Spring Boot 3.x on Java 17+. Package names may be adjusted to match the final Java group ID, but these boundaries are required.
 
 ```text
-src/regress/
-  cli.py
-  product_repo.py
-  rp_discovery.py
-  schemas.py
-  readiness.py
-  mapping.py
-  test_cases.py
-  expected_results.py
-  environment.py
-  bindings.py
-  providers.py
-  fixtures.py
-  execution.py
-  adapters/
-    base.py
-    data_pipeline.py
-  oracles.py
-  assertions.py
-  evidence.py
-  reports.py
+src/main/java/com/specdriven/regression/
+  RegressionApplication.java
+  cli/
+    RegressionCommand.java
+  productrepo/
+    ProductRepoService.java
+  discovery/
+    RpDiscoveryService.java
+  schema/
+    ArtifactSchemaValidator.java
+  readiness/
+    ReadinessService.java
+  mapping/
+    RpRuMappingService.java
+  testcase/
+    TestCaseLifecycleService.java
+  expectedresult/
+    ExpectedResultService.java
+  environment/
+    ExecutionEnvironmentResolver.java
+  binding/
+    BindingResolver.java
+  provider/
+    ProviderRegistry.java
+    ProviderContractResolver.java
+  fixture/
+    FixtureLifecycleService.java
+  execution/
+    ExecutionEngine.java
+  adapter/
+    ExecutionAdapter.java
+    DataPipelineAdapter.java
+  oracle/
+    OracleResolver.java
+  assertion/
+    AssertionEngine.java
+  evidence/
+    EvidenceWriter.java
+  report/
+    CoverageReportService.java
 ```
 
 Boundary rules:
 
-- `cli.py` orchestrates use cases only; it does not embed validation logic.
-- `schemas.py` owns typed parsing and schema validation for RP artifacts.
-- `readiness.py` reports gaps and owner actions; it does not create business truth.
+- `cli` orchestrates use cases only; it does not embed validation logic.
+- `schema` owns typed parsing and schema validation for RP artifacts.
+- `readiness` reports gaps and owner actions; it does not create business truth.
 - F001 readiness agent skill consumes readiness reports; it does not mutate repo artifacts directly.
-- `mapping.py` consumes `rp_ru_mapping.yaml`; it never infers RP membership.
+- `mapping` consumes `rp_ru_mapping.yaml`; it never infers RP membership.
 - The test case DSL describes validation intent, inputs, fixtures, assertions, and evidence requirements; it does not contain package-specific execution logic.
 - `dsl_version` is required so the runner can apply the correct parser and compatibility behavior.
-- `test_cases.py` may create draft artifacts but must not overwrite approved tests.
-- `expected_results.py` enforces source references and approval status.
-- `environment.py` blocks SIT runs unless deployment and readiness evidence exist.
-- `bindings.py` resolves parameters, package inputs, oracles, runtime references, and step placeholders; it does not execute package behavior.
-- `providers.py` resolves provider contract precedence and dispatches provider contracts by adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type.
-- `fixtures.py` owns setup, cleanup, precondition, and postcondition lifecycle coordination.
-- `execution.py` executes a prepared plan and records step results; it does not own schema validation, binding resolution, provider contract resolution, or fixture policy.
-- `oracles.py` loads truth sources and decision parameters; `assertions.py` applies comparison rules against actual outputs.
-- `adapters/` is the only package-type-specific execution boundary.
-- `evidence.py` and `reports.py` write durable evidence under the RP release record.
+- `testcase` may create draft artifacts but must not overwrite approved tests.
+- `expectedresult` enforces source references and approval status.
+- `environment` blocks SIT runs unless deployment and readiness evidence exist.
+- `binding` resolves parameters, package inputs, oracles, runtime references, and step placeholders; it does not execute package behavior.
+- `provider` resolves provider contract precedence and dispatches provider contracts by adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type.
+- `fixture` owns setup, cleanup, precondition, and postcondition lifecycle coordination.
+- `execution` executes a prepared plan and records step results; it does not own schema validation, binding resolution, provider contract resolution, or fixture policy.
+- `oracle` loads truth sources and decision parameters; `assertion` applies comparison rules against actual outputs.
+- `adapter` is the only package-type-specific execution boundary.
+- `evidence` and `report` write durable evidence under the RP release record.
 
 ## 5.5 Extension Model for RP/RU Variants
 
@@ -402,14 +422,14 @@ The architecture should be revisited when multiple RP types require shared servi
 
 | AC | Architecture Support | Implementation Module |
 |---|---|---|
-| AC-001 | Product Repo bootstrap CLI, machine-readable readiness report, and readiness agent explanation | `product_repo.py`, `cli.py`, readiness agent skill |
-| AC-002 | RP skeleton and artifact completeness check | `rp_discovery.py`, `schemas.py` |
-| AC-003 | AC intake preserving owner-authored truth | `readiness.py`, `schemas.py` |
-| AC-004 | RP/RU mapping validation and unsafe execution block | `mapping.py`, `environment.py` |
-| AC-005 | Agent DSL test drafting only from ready inputs and no silent overwrite | `readiness.py`, `test_cases.py` |
-| AC-006 | Expected result source references and approval gate | `expected_results.py` |
-| AC-007 | RP DSL test execution with inputs, fixtures, adapters, assertions, evidence | `execution.py`, `bindings.py`, `fixtures.py`, `adapters/`, `assertions.py`, `evidence.py` |
-| AC-008 | Coverage, traceability, failures, and approved exclusions | `reports.py`, `evidence.py` |
+| AC-001 | Product Repo bootstrap CLI, machine-readable readiness report, and readiness agent explanation | `productrepo`, `cli`, readiness agent skill |
+| AC-002 | RP skeleton and artifact completeness check | `discovery`, `schema` |
+| AC-003 | AC intake preserving owner-authored truth | `readiness`, `schema` |
+| AC-004 | RP/RU mapping validation and unsafe execution block | `mapping`, `environment` |
+| AC-005 | Agent DSL test drafting only from ready inputs and no silent overwrite | `readiness`, `testcase` |
+| AC-006 | Expected result source references and approval gate | `expectedresult` |
+| AC-007 | RP DSL test execution with inputs, fixtures, adapters, assertions, evidence | `execution`, `binding`, `provider`, `fixture`, `adapter`, `assertion`, `evidence` |
+| AC-008 | Coverage, traceability, failures, and approved exclusions | `report`, `evidence` |
 
 ## 5.16 Implementation Readiness Gate
 

@@ -9,7 +9,7 @@ This plan implements the Product/RP/RU baseline without changing product scope o
 - Product, RP, and RU responsibilities are accepted.
 - RP-level AC are the release coverage denominator.
 - Minimum RP artifacts are defined: `package.yaml`, `rp_feature_spec.md`, `rp_ru_mapping.yaml`, `acceptance_criteria.md`, `tests/`, `expected-results/`, `traceability.md`, and `evidence_index.md`.
-- Architecture design defines AP-level components, extension points, internal module boundaries, CLI commands, storage paths, execution modes, failure handling, and AC coverage.
+- Architecture design defines Spring Boot 3.x / Java 17+ AP-level components, extension points, internal package boundaries, CLI commands, storage paths, execution modes, failure handling, and AC coverage.
 
 ## Staged Readiness
 
@@ -35,7 +35,7 @@ Pilot RP owner must supply RP ID, package type, target release, RU repos, versio
 
 Related feature: F001
 Acceptance: AC-001
-Modules: `src/regress/cli.py`, `src/regress/product_repo.py`, readiness agent skill
+Modules: `cli`, `productrepo`, readiness agent skill
 
 Implement `regress init-product-repo --root <path>` to create the agreed lifecycle folders and starter locations. Implement `regress check-readiness --root <path> --format yaml|json` to emit a machine-readable readiness report. Provide a readiness agent skill that reads the report and explains status, missing items, owner actions, and next steps. The CLI must be idempotent and must not overwrite existing content. The agent skill must not mutate repo artifacts or invent RP scope, RP AC, or RP/RU membership.
 
@@ -53,7 +53,7 @@ Done when missing folders are created or reported, readiness output includes pas
 
 Related feature: F002
 Acceptance: AC-002
-Modules: `src/regress/cli.py`, `src/regress/rp_discovery.py`, `src/regress/schemas.py`
+Modules: `cli`, `discovery`, `schema`
 
 Implement `regress init-rp` and `regress check-rp` for the RP folder contract under `docs/08-release/release-packages/<rp_id>/`.
 
@@ -70,7 +70,7 @@ Done when required RP files and folders are present or reported as completeness 
 
 Related features: F002, F003, F004
 Acceptance: AC-002, AC-003, AC-004
-Modules: `src/regress/schemas.py`
+Modules: `schema`
 
 Implement typed parsers for `package.yaml`, `rp_ru_mapping.yaml`, AC entries, DSL test cases, expected results, provider contracts, and evidence records. Start with YAML/Markdown front matter or embedded YAML blocks supported by the artifact contracts. DSL parsing must validate `dsl_version`, required fields, conditionally required fields, and allowed enum values. Provider contract parsing must validate provider type, supported actions, required references, secret refs, cleanup strategy, and unsupported configuration.
 
@@ -86,7 +86,7 @@ Done when schema errors identify file path, field path, severity, owner action, 
 
 Related feature: F004
 Acceptance: AC-004
-Modules: `src/regress/mapping.py`, `src/regress/environment.py`
+Modules: `mapping`, `environment`
 
 Validate that each owner-authored RU entry declares repo, owner, unit type, version reference, validation boundary, execution mode, deployment requirement, environment reference, adapter or adapter mode, evidence responsibility, dependencies, and adapter/provider contracts when execution is required.
 
@@ -102,7 +102,7 @@ Done when missing mapping fields block execution, dependency graph errors are re
 
 Related features: F003, F005
 Acceptance: AC-003, AC-005
-Modules: `src/regress/readiness.py`, `src/regress/schemas.py`
+Modules: `readiness`, `schema`
 
 Read owner-authored RP AC, preserve stable AC IDs, classify each AC as `automatable`, `manual_only`, `partial`, `waived`, or `not_ready_for_generation`, and identify whether inputs, actions, expected outputs, side effects, and pass/fail rules are explicit.
 
@@ -118,7 +118,7 @@ Done when ambiguous AC are blocked from executable test drafting and never rewri
 
 Related feature: F005
 Acceptance: AC-005
-Modules: `src/regress/test_cases.py`
+Modules: `testcase`
 
 Implement draft package-neutral DSL test skeleton and draft executable DSL test artifact writing under `tests/draft/`. Generated executable drafts must include `dsl_version` and all required DSL fields. Detect existing `tests/approved/` artifacts for the same RP AC and create update proposals instead of overwriting.
 
@@ -134,7 +134,7 @@ Done when checked-in approved DSL tests are protected and generated drafts inclu
 
 Related feature: F006
 Acceptance: AC-006
-Modules: `src/regress/expected_results.py`
+Modules: `expectedresult`
 
 Draft expected-result artifacts from explicit RP AC, RP feature spec, package inputs, and source context. Enforce statuses `draft`, `blocked`, and `approved_for_regression`.
 
@@ -151,7 +151,7 @@ Done when only approved expected results are eligible as regression truth.
 
 Related features: F004, F007
 Acceptance: AC-004, AC-007
-Modules: `src/regress/environment.py`
+Modules: `environment`
 
 Resolve `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only` execution modes from `rp_ru_mapping.yaml`. Block SIT execution unless deployment and environment readiness evidence exist.
 
@@ -167,7 +167,7 @@ Done when the command blocks before adapter execution if SIT readiness evidence 
 
 Related feature: F007
 Acceptance: AC-007
-Modules: `src/regress/bindings.py`
+Modules: `binding`
 
 Resolve expected-result refs, data selection strategy, parameterized cases, dependencies, name-keyed package input bindings, runtime paths, environment refs, and step output placeholders from approved test cases. M1 must support pilot binding types `input_file`, `dataset`, and `db_seed`; reserved binding types such as `api_payload`, `message_event`, `config_file`, `env_var`, and `existing_state` must fail as unsupported until providers are implemented.
 
@@ -183,7 +183,7 @@ Done when unresolved bindings, data selection, parameter cases, or dependencies 
 
 Related feature: F007
 Acceptance: AC-007
-Modules: `src/regress/providers.py`, `src/regress/schemas.py`
+Modules: `provider`, `schema`
 
 Resolve validated provider contracts from provider defaults, RP-level overrides, and RU-level overrides. Dispatch adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type to the selected contract. Fail before execution when a contract is missing, ambiguous, unsupported, or unsafe.
 
@@ -199,7 +199,7 @@ Done when provider contract resolution reports provider name, source level, acti
 
 Related feature: F007
 Acceptance: AC-007
-Modules: `src/regress/fixtures.py`
+Modules: `fixture`
 
 Implement precondition checks, fixture setup and cleanup lifecycle, and postcondition checks for local and CI runs. Use provider contracts for M1 pilot fixture behavior such as file workspace setup and database seed/cleanup. Reserved fixture behavior such as message/event publishing and configuration binding must fail as unsupported until providers are implemented. Record cleanup evidence even when execution fails.
 
@@ -215,7 +215,7 @@ Done when setup, cleanup, and cleanup failure state are written to run evidence.
 
 Related feature: F007
 Acceptance: AC-007
-Modules: `src/regress/execution.py`, `src/regress/adapters/base.py`, `src/regress/adapters/data_pipeline.py`
+Modules: `execution`, `adapter`
 
 Implement execution of a prepared plan and the first data pipeline adapter using validated adapter/provider contract configuration. The core executor and test case DSL stay package-type-neutral; the adapter owns package-specific command execution and actual-result capture through reusable, configurable contracts.
 
@@ -231,7 +231,7 @@ Done when a pilot adapter can execute or validate one approved test, preserve st
 
 Related feature: F007
 Acceptance: AC-007
-Modules: `src/regress/oracles.py`, `src/regress/assertions.py`
+Modules: `oracle`, `assertion`
 
 Implement M1 oracle loading and assertion types required by the pilot, starting with `golden_file` and `expected_result_artifact` where approved expected-result artifacts are used. Reserved oracle types such as `schema`, `contract`, `invariant`, `query_result`, `tolerance`, and `absence` must fail as unsupported until providers are implemented. Start assertion execution with file equality/diff, structured value equality, status checks, and evidence-reference checks.
 
@@ -247,7 +247,7 @@ Done when failures include oracle ref or inline rule, expected ref when applicab
 
 Related features: F007, F008
 Acceptance: AC-007, AC-008
-Modules: `src/regress/evidence.py`
+Modules: `evidence`
 
 Write `evidence/runs/<run_id>/run.yaml`, logs, actual outputs, assertion results, observation results, postcondition results, cleanup evidence, and failure details. Evidence must include RP ID, AC ID, test case ID, run ID, RU refs, execution mode, environment ref, parameter case when applicable, and resolved dependencies.
 
@@ -263,7 +263,7 @@ Done when every execution path produces durable evidence, including failed and b
 
 Related feature: F008
 Acceptance: AC-008
-Modules: `src/regress/reports.py`, `src/regress/evidence.py`
+Modules: `report`, `evidence`
 
 Calculate coverage as covered automatable RP-level AC divided by total automatable RP-level AC. Link generated tests and evidence to RP ID, AC ID, test case ID, and run ID. Exclude manual-only or waived AC only with approval records.
 

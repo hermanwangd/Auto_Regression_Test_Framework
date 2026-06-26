@@ -2,10 +2,11 @@
 
 ## Project Structure & Module Organization
 
-This repository is currently a starter workspace. Keep the top level small and use predictable directories:
+This repository is currently a starter workspace for a Spring Boot 3.x / Java 17+ implementation. Keep the top level small and use predictable directories:
 
-- `src/` for application or library source code.
-- `tests/` for automated tests that mirror the `src/` layout.
+- `src/main/java/` for Spring Boot application and framework source code.
+- `src/main/resources/` for configuration templates and classpath resources.
+- `src/test/java/` for automated tests that mirror the main package layout.
 - `specs/` for feature specifications, regression requirements, and acceptance criteria.
 - `scripts/` for repeatable local utilities and maintenance commands.
 - `assets/` for static fixtures, sample data, or generated examples that are safe to commit.
@@ -14,26 +15,26 @@ Do not commit generated outputs, caches, virtual environments, dependency folder
 
 ## Build, Test, and Development Commands
 
-No build system is present yet. When adding one, document the canonical commands here.
+No build system is present yet. When adding one, prefer Maven or Gradle for Spring Boot 3.x and document the canonical commands here.
 
 Examples to add when applicable:
 
-- `make test` or `npm test`: run the full automated test suite.
-- `make lint` or `npm run lint`: check formatting and static issues.
-- `make dev` or `npm run dev`: start a development server or watcher.
-- `python -m pytest tests/`: run Python tests directly if the project uses pytest.
+- `./mvnw test` or `./gradlew test`: run the full automated test suite.
+- `./mvnw spring-boot:run` or `./gradlew bootRun`: start the CLI/application locally.
+- `./mvnw package` or `./gradlew build`: compile, test, and package the project.
+- `java -jar target/<artifact>.jar --help`: run the packaged CLI when Maven is used.
 
 Prefer deterministic scripts that do not require hidden local state.
 
 ## Coding Style & Naming Conventions
 
-Use clear names and keep modules focused on one responsibility. Prefer `snake_case` for Python files and functions, `camelCase` for JavaScript or TypeScript variables, and `PascalCase` for classes and components.
+Use clear names and keep modules focused on one responsibility. Use Java package names in lowercase, `PascalCase` for classes, `camelCase` for methods and variables, and `UPPER_SNAKE_CASE` for constants.
 
-Use project formatters and linters once introduced. Keep configuration in committed files such as `pyproject.toml`, `package.json`, `.prettierrc`, or equivalent.
+Use project formatters and linters once introduced. Keep configuration in committed files such as `pom.xml`, `build.gradle`, Checkstyle, Spotless, or equivalent.
 
 ## Testing Guidelines
 
-Place tests under `tests/`, matching the source module when possible. Use names that describe behavior, for example `test_regression_runner_rejects_missing_spec.py` or `regression-runner.test.ts`.
+Place tests under `src/test/java/`, matching the source package when possible. Use names that describe behavior, for example `RegressionRunnerRejectsMissingSpecTest` or `ProviderContractResolutionTest`.
 
 Regression tests should include the input spec, expected behavior, and at least one failure-path case. Keep fixtures small. If a test needs large data, document how to fetch or regenerate it.
 

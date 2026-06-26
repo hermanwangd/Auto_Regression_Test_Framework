@@ -86,11 +86,11 @@ release_units:
     execution_mode: ci_ephemeral
     deployment_required: false
     environment_ref: ci://pipeline/rp-ar-m1-data-pipeline
-    adapter: data_pipeline_cli
+    adapter: spring_boot_cli
     provider_contracts:
       adapters:
-        data_pipeline_cli:
-          command: python -m pipeline.run
+        spring_boot_cli:
+          command: java -jar ${repo}/target/release-unit.jar --spring.profiles.active=regression
           working_directory: ${repo}
           timeout_seconds: 900
           inputs:
@@ -305,7 +305,7 @@ source_refs:
 source_fingerprint: "sha256:<hash-of-source-contract>"
 execution_target:
   ru_id: RU-transform-job
-  adapter: data_pipeline_cli
+  adapter: spring_boot_cli
   execution_mode: ci_ephemeral
   environment_ref: ci://pipeline/rp-ar-m1-data-pipeline
 scenario:
@@ -705,8 +705,8 @@ Each executable adapter or provider must expose a validated contract through `rp
 ```yaml
 provider_contracts:
   adapters:
-    data_pipeline_cli:
-      command: python -m pipeline.run
+    spring_boot_cli:
+      command: java -jar ${repo}/target/release-unit.jar --spring.profiles.active=regression
       working_directory: ${repo}
       timeout_seconds: 900
       env:
