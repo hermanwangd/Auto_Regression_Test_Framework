@@ -2,11 +2,11 @@
 
 These criteria validate the framework product baseline for M1. Formal release acceptance criteria for downstream product features remain RP-level artifacts inside each Release Package.
 
-## AC-001 Product Repo Bootstrap Is Ready
+## AC-001 Product Repo Bootstrap CLI and Readiness Agent Skill Are Ready
 
 Given an empty or incomplete Product Repo
-When the bootstrap/readiness command or workflow is run
-Then the agreed docs lifecycle folders shall exist, required starter artifact locations shall be present or reported missing, and the readiness report shall list pass/fail status, missing items, owner action, and next required step.
+When the bootstrap command, deterministic readiness check, and readiness agent skill are run
+Then the agreed docs lifecycle folders shall exist, required starter artifact locations shall be present or reported missing, the readiness report shall list pass/fail status, missing items, owner action, and next required step, and the agent skill shall explain the readiness state with owner-actionable next steps without inventing RP scope, RP AC, or RP/RU membership.
 
 ## AC-002 Release Package Can Be Created and Checked
 

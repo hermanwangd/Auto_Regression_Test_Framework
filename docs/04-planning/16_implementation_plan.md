@@ -15,7 +15,7 @@ This plan implements the Product/RP/RU baseline without changing product scope o
 
 Ready to implement now:
 
-- F001 Product Repo Bootstrap and Readiness.
+- F001 Product Repo Bootstrap CLI and Readiness Agent Skill.
 - F002 Release Package Creation Guide and Completeness Check.
 - F004 RP/RU Mapping Intake and Completeness Check, using sample or pilot mappings.
 
@@ -31,22 +31,23 @@ Pilot RP owner must supply RP ID, package type, target release, RU repos, versio
 
 ## Task Backlog
 
-### T001 - Product Repo Bootstrap
+### T001 - Product Repo Bootstrap CLI and Readiness Agent Skill
 
 Related feature: F001
 Acceptance: AC-001
-Modules: `src/regress/cli.py`, `src/regress/product_repo.py`
+Modules: `src/regress/cli.py`, `src/regress/product_repo.py`, readiness agent skill
 
-Implement `regress init-product-repo --root <path>` to create the agreed lifecycle folders and starter locations. The command must be idempotent and must not overwrite existing content.
+Implement `regress init-product-repo --root <path>` to create the agreed lifecycle folders and starter locations. Implement `regress check-readiness --root <path> --format yaml|json` to emit a machine-readable readiness report. Provide a readiness agent skill that reads the report and explains status, missing items, owner actions, and next steps. The CLI must be idempotent and must not overwrite existing content. The agent skill must not mutate repo artifacts or invent RP scope, RP AC, or RP/RU membership.
 
 Verification:
 
 ```bash
 regress init-product-repo --root <tmp-product-repo>
-regress check-readiness --root <tmp-product-repo>
+regress check-readiness --root <tmp-product-repo> --format yaml
+agent product-repo-readiness --report <tmp-product-repo>/docs/08-release/release-packages/<rp-id>/evidence/readiness/readiness.yaml
 ```
 
-Done when missing folders are created or reported, and readiness output includes pass/fail status, missing items, owner action, and next required step.
+Done when missing folders are created or reported, readiness output includes pass/fail status, missing items, owner action, and next required step, and the agent skill translates the readiness report into owner-actionable guidance.
 
 ### T002 - RP Skeleton and Completeness Check
 

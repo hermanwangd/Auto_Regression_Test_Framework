@@ -40,7 +40,7 @@ M1 shall cover:
 
 | Test ID | Feature | Scenario | Level | Priority | Automation |
 |---|---|---|---|---|---|
-| REG-RP-001 | F001 | Product Repo bootstrap/readiness reports missing folders and RP artifacts | Readiness | P1 | Auto |
+| REG-RP-001 | F001 | Product Repo bootstrap CLI emits readiness report and readiness agent skill explains missing folders, RP artifacts, owner actions, and next steps | Readiness | P1 | Auto / Agent |
 | REG-RP-002 | F002 | RP completeness check requires minimum RP artifact set | Readiness | P1 | Auto |
 | REG-RP-003 | F003 | RP feature spec and AC intake preserves owner-authored AC and stable IDs | Readiness | P1 | Auto |
 | REG-RP-004 | F004 | Missing RP/RU mapping fields block execution | Readiness | P1 | Auto |

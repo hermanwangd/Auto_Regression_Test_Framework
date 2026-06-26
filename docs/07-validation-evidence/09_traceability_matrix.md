@@ -2,7 +2,7 @@
 
 | Requirement | Feature | Acceptance Criteria | Test Case | Evidence |
 |---|---|---|---|---|
-| REQ-001 Product Repo readiness | F001 | AC-001 | REG-RP-001 | EVD-001 |
+| REQ-001 Product Repo bootstrap CLI and readiness agent skill | F001 | AC-001 | REG-RP-001 | EVD-001 |
 | REQ-002 RP creation completeness | F002 | AC-002 | REG-RP-002 | EVD-002 |
 | REQ-003 RP feature spec and AC intake | F003 | AC-003 | REG-RP-003 | EVD-003 |
 | REQ-004 RP/RU mapping completeness | F004 | AC-004 | REG-RP-004 | EVD-004 |

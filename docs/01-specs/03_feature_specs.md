@@ -61,7 +61,7 @@ M1 excludes:
 
 | Feature ID | Feature | Purpose | M1 |
 |---|---|---|---:|
-| F001 | Product Repo Bootstrap and Readiness | Initialize the Product Repo structure and check whether it is ready for RP-level regression work | Yes |
+| F001 | Product Repo Bootstrap CLI and Readiness Agent Skill | Initialize the Product Repo structure, produce deterministic readiness reports, and use an agent skill to explain owner-actionable next steps | Yes |
 | F002 | Release Package Creation Guide and Completeness Check | Tell owners how to create an RP and check whether required RP artifacts are complete | Yes |
 | F003 | RP Feature Spec and AC Intake | Consume Product Owner / PM / SA-authored RP feature specs and formal acceptance criteria | Yes |
 | F004 | RP/RU Mapping Intake and Completeness Check | Consume human-authored RP/RU mapping and check whether it is complete for regression execution | Yes |
@@ -126,26 +126,29 @@ Approved or execution-eligible test cases should be stored in the RP `tests/` fo
 
 The agent may propose new or updated test cases when source artifacts change, but it shall not silently overwrite checked-in approved tests.
 
-## F001 — Product Repo Bootstrap and Readiness
+## F001 — Product Repo Bootstrap CLI and Readiness Agent Skill
 
 ### Purpose
 
-Initialize the Product Repo folder structure and check whether required product/RP artifacts are present enough to support RP-level regression generation.
+Initialize the Product Repo folder structure, run deterministic readiness checks, and use an agent skill to explain whether the repo is ready for RP-level regression work.
 
 ### Expected Behavior
 
-The framework shall provide a standard Product Repo skeleton and a readiness check. The skeleton shall create the agreed docs lifecycle folders and starter artifact locations. The readiness check shall report missing folders, missing RP artifacts, missing stable IDs, missing RP/RU mapping, and missing RP AC prerequisites.
+The framework shall provide a standard Product Repo bootstrap command and a machine-readable readiness check. The bootstrap command shall create the agreed docs lifecycle folders and starter artifact locations. The deterministic readiness check shall report missing folders, missing RP artifacts, missing stable IDs, missing RP/RU mapping, and missing RP AC prerequisites.
+
+The readiness agent skill shall read the readiness report, explain the current repo state, classify whether the repo is ready for RP work, and produce owner-actionable next steps. The agent skill may explain and prioritize gaps, but it shall not invent RP scope, RP AC, or RP/RU membership.
 
 ### Required Mechanism
 
 - Initialize the agreed docs lifecycle folders when they do not exist.
 - Create starter placeholders or templates for product baseline, RP specs, RP AC, traceability, evidence, release, operations, and change-control records.
-- Check that required folders exist.
-- Check that at least one RP folder or record can be discovered.
+- Run a deterministic readiness check that required folders exist.
+- Check that at least one RP folder or record can be discovered, or report that RP creation is the next owner action.
 - Check that required RP artifacts exist or are reported missing.
-- Check that RP artifacts reference stable product, RP, and AC identifiers.
+- Check that RP artifacts reference stable product, RP, and AC identifiers when those artifacts exist.
 - Check that RP/RU mapping exists before regression generation.
-- Emit a readiness report with pass/fail status, missing items, owner action, and next required step.
+- Emit a machine-readable readiness report with pass/fail status, missing items, owner action, and next required step.
+- Provide an agent skill that reads the readiness report and returns a human-readable readiness explanation, missing-item summary, owner actions, and next command or document to update.
 
 ## F002 — Release Package Creation Guide and Completeness Check
 

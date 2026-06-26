@@ -213,7 +213,7 @@ Rules:
 
 | Capability ID | Capability | MVP | Owner | Status | Evidence |
 |---|---|---:|---|---|---|
-| CAP-001 | Product Repo Bootstrap and Readiness | M1 | Platform | Planned | Initialized docs lifecycle and readiness report |
+| CAP-001 | Product Repo Bootstrap CLI and Readiness Agent Skill | M1 | Platform / Agent Skill | Planned | Initialized docs lifecycle, machine-readable readiness report, and owner-actionable readiness explanation |
 | CAP-002 | RP Creation Guide and Completeness Check | M1 | Platform | Planned | RP creation checklist and completeness report |
 | CAP-003 | RP Feature Spec and AC Intake | M1 | Platform / Agent Skill | Planned | Parsed RP feature spec and RP AC inventory |
 | CAP-004 | RP/RU Mapping Intake and Completeness Check | M1 | Platform | Planned | Validated RP/RU mapping report |

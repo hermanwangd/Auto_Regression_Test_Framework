@@ -45,6 +45,7 @@ Product Repo Artifact Store
 CLI Orchestrator
         |
         +--> Product Repo Bootstrap
+        +--> Readiness Agent Skill
         +--> RP Discovery and Artifact Validator
         +--> RP/RU Mapping Validator
         +--> AC Intake and Readiness Classifier
@@ -62,7 +63,8 @@ CLI Orchestrator
 | Component | Responsibility | Primary AC |
 |---|---|---|
 | Product Repo Artifact Store | Own versioned docs, RP records, tests, expected results, and evidence | AC-001, AC-002 |
-| Product Repo Bootstrap | Create/check lifecycle folders and starter RP locations | AC-001 |
+| Product Repo Bootstrap | Create/check lifecycle folders and starter RP locations through deterministic CLI behavior | AC-001 |
+| Readiness Agent Skill | Explain readiness report, summarize gaps, and produce owner-actionable next steps without inventing RP truth | AC-001 |
 | RP Discovery and Artifact Validator | Find RP records and validate required files and identifiers | AC-002 |
 | RP/RU Mapping Validator | Validate owner-authored RU repo mapping and block unsafe execution | AC-004 |
 | AC Intake and Readiness Classifier | Preserve AC truth, classify readiness, and report gaps | AC-003, AC-005 |
@@ -107,6 +109,7 @@ Boundary rules:
 - `cli.py` orchestrates use cases only; it does not embed validation logic.
 - `schemas.py` owns typed parsing and schema validation for RP artifacts.
 - `readiness.py` reports gaps and owner actions; it does not create business truth.
+- F001 readiness agent skill consumes readiness reports; it does not mutate repo artifacts directly.
 - `mapping.py` consumes `rp_ru_mapping.yaml`; it never infers RP membership.
 - `test_cases.py` may create draft artifacts but must not overwrite approved tests.
 - `expected_results.py` enforces source references and approval status.
@@ -121,6 +124,7 @@ The CLI is the M1 public interface. Commands return non-zero exit codes when rea
 ```bash
 regress init-product-repo --root .
 regress check-readiness --root .
+agent product-repo-readiness --report docs/08-release/release-packages/<rp_id>/evidence/readiness/readiness.yaml
 regress init-rp --root . --rp-id RP-AR-M1-data-pipeline --package-type data_pipeline
 regress check-rp --root . --rp-id RP-AR-M1-data-pipeline
 regress generate-tests --root . --rp-id RP-AR-M1-data-pipeline --mode draft
@@ -132,7 +136,8 @@ regress report --root . --rp-id RP-AR-M1-data-pipeline --run-id RUN-20260626-001
 CLI contracts:
 
 - `init-product-repo` creates missing lifecycle folders and starter locations only.
-- `check-readiness` reports product and RP readiness without generating tests.
+- `check-readiness` reports product and RP readiness in machine-readable form without generating tests.
+- `product-repo-readiness` agent skill explains the readiness report, missing items, owner actions, and next steps.
 - `init-rp` creates RP skeleton artifacts and lifecycle folders.
 - `check-rp` validates artifact completeness, RP/RU mapping, and generation readiness.
 - `generate-tests` writes drafts to `tests/draft/` and proposes updates when approved tests already exist.
@@ -295,7 +300,7 @@ The architecture should be revisited when multiple RP types require shared servi
 
 | AC | Architecture Support | Implementation Module |
 |---|---|---|
-| AC-001 | Product Repo bootstrap and readiness report | `product_repo.py`, `cli.py` |
+| AC-001 | Product Repo bootstrap CLI, machine-readable readiness report, and readiness agent explanation | `product_repo.py`, `cli.py`, readiness agent skill |
 | AC-002 | RP skeleton and artifact completeness check | `rp_discovery.py`, `schemas.py` |
 | AC-003 | AC intake preserving owner-authored truth | `readiness.py`, `schemas.py` |
 | AC-004 | RP/RU mapping validation and unsafe execution block | `mapping.py`, `environment.py` |
@@ -310,7 +315,7 @@ Architecture gate result: PASS for design readiness and staged implementation re
 
 Ready to implement now:
 
-- F001 Product Repo Bootstrap and Readiness.
+- F001 Product Repo Bootstrap CLI and Readiness Agent Skill.
 - F002 Release Package Creation Guide and Completeness Check.
 - F004 structural RP/RU mapping validator, using placeholder pilot data or fixtures.
 
