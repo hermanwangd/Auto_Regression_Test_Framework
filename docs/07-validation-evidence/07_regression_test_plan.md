@@ -20,7 +20,7 @@ M1 shall cover:
 - RP feature spec and AC intake without invented behavior.
 - Human-authored RP/RU mapping completeness.
 - AC and execution context readiness classification.
-- Package-neutral DSL draft test skeleton and executable test case generation.
+- Package-neutral DSL draft test skeleton and executable test case generation with required field validation.
 - Expected-result drafting with source references and approval status.
 - Release Package DSL execution using package inputs, fixtures, adapter mode, assertions, and cleanup.
 - Execution environment resolution for local, CI-ephemeral, SIT-deployed, and evidence-only modes.
@@ -46,6 +46,7 @@ M1 shall cover:
 | REG-RP-004 | F004 | Missing RP/RU mapping fields block execution | Readiness | P1 | Auto |
 | REG-RP-005 | F005 | Ambiguous AC produces `not_ready_for_generation` instead of executable test | Generation | P1 | Auto |
 | REG-RP-006 | F005 | Ready AC with incomplete execution context produces only package-neutral `draft_test_skeleton` | Generation | P1 | Auto |
+| REG-RP-014 | F005 / F007 | DSL validation rejects unsupported `dsl_version` or missing required fields before execution | Generation / Execution | P1 | Auto |
 | REG-RP-007 | F006 | Expected-result draft includes source references, assumptions, gaps, and approval status | Generation | P1 | Auto |
 | REG-RP-008 | F007 | Pilot RP DSL test executes through adapter and emits raw execution evidence | Execution | P1 | Auto |
 | REG-RP-011 | F007 | Execution reuses checked-in approved RP DSL test cases without regenerating them | Execution | P1 | Auto |

@@ -113,6 +113,8 @@ Regression test cases are managed as durable RP artifacts. The framework shall n
 
 The framework uses a package-neutral regression test case DSL so different Products and Release Packages can express repeatable auto regression tests through the same artifact model. The DSL describes what RP behavior must be validated, while package-specific execution remains isolated behind adapters.
 
+The DSL required field set should stay minimal. Required fields are limited to identity, RP/AC traceability, approval status, source fingerprint, execution target, expected-result reference, logical steps, assertions, and evidence requirements. Optional fields such as BDD context, tags, priority, replacement links, and extra source references improve governance but must not be required for first execution.
+
 The lifecycle is:
 
 ```text
@@ -256,6 +258,7 @@ Product developers own AC clarification and manual expected-result input. QA or 
 - Mark ambiguous AC as `not_ready_for_generation`.
 - Generate `draft_test_skeleton` using the package-neutral test case DSL only when AC is ready but execution context is incomplete.
 - Generate `draft_executable_test_case` using the package-neutral test case DSL only when AC and execution context are both ready.
+- Include `dsl_version` and all required DSL identity, traceability, execution, assertion, and evidence fields in every generated executable draft.
 - Store generated test drafts as reviewable artifacts instead of transient execution state.
 - Detect existing checked-in test cases for the same RP AC before generating replacements.
 - Emit update proposals when RP AC, RP/RU mapping, package input, fixture, adapter, or expected-result references change.
@@ -303,7 +306,7 @@ F007 shall not author AC, classify AC readiness, generate tests, regenerate chec
 ### Required Mechanism
 
 - Read `package.yaml`, `rp_ru_mapping.yaml`, checked-in DSL test cases from the RP `tests/` folder, package input catalog, fixture references, adapter config, and expected-result artifacts.
-- Check that test cases include RP ID, AC ID, test case ID, execution target, and assertion references.
+- Check that test cases declare supported `dsl_version` and include required DSL identity, traceability, execution target, expected-result, step, assertion, and evidence fields.
 - Check that test cases are `approved_for_regression` or explicitly allowed by the execution policy.
 - Check that required expected-result artifacts are `approved_for_regression` or otherwise explicitly allowed by the execution policy.
 - Resolve the RP execution mode as `local_fixture`, `ci_ephemeral`, `sit_deployed`, or `evidence_only`.

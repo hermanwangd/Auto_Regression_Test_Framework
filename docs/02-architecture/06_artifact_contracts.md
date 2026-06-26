@@ -186,18 +186,18 @@ An approved test case may be replaced only by an explicit update proposal that r
 
 The test case artifact is a package-neutral DSL. It describes the RP AC being validated, the execution target, package inputs, fixture lifecycle, logical steps, assertions, and evidence expectations. It must not embed package-specific execution code; package-specific behavior is resolved through the configured adapter.
 
+M1 keeps the required DSL surface small. A field is required only when the framework cannot trace, validate, execute, assert, or collect evidence without it.
+
 ```yaml
+dsl_version: 1
 test_case_id: RP-AR-M1-data-pipeline-TC-001
 rp_id: RP-AR-M1-data-pipeline
 ac_id: RP-AR-M1-data-pipeline-AC-001
 artifact_status: approved_for_regression
 revision: 1
 source_refs:
-  rp_feature_spec: rp_feature_spec.md
   acceptance_criteria: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-001
-  rp_ru_mapping: rp_ru_mapping.yaml#RU-transform-job
 source_fingerprint: "sha256:<hash-of-source-contract>"
-replaces: null
 execution_target:
   ru_id: RU-transform-job
   adapter: data_pipeline_cli
@@ -226,6 +226,46 @@ evidence_required:
 ```
 
 Allowed test case statuses are `draft_test_skeleton`, `draft_executable_test_case`, `approved_for_regression`, `needs_update`, and `retired`.
+
+Required DSL fields:
+
+| Field | Why Required |
+|---|---|
+| `dsl_version` | Selects the parser and compatibility rules. |
+| `test_case_id` | Stable identity for review, execution, evidence, and replacement. |
+| `rp_id` | Binds the test to a Release Package. |
+| `ac_id` | Binds the test to the RP AC coverage denominator. |
+| `artifact_status` | Controls whether the test is draft, approved, update-needed, or retired. |
+| `revision` | Preserves durable test history. |
+| `source_refs.acceptance_criteria` | Proves the test is derived from owner-authored AC. |
+| `source_fingerprint` | Detects drift between the DSL test and source artifacts. |
+| `execution_target.ru_id` | Identifies which RU boundary is validated. |
+| `execution_target.adapter` | Selects package-specific execution behavior. |
+| `execution_target.execution_mode` | Selects local, CI, SIT, or evidence-only execution policy. |
+| `package_inputs.expected_result_ref` | Points to the reviewed expected result used as regression truth. |
+| `steps` | Defines at least one logical validation action. |
+| `assertions` | Defines pass/fail evaluation. |
+| `evidence_required` | Defines minimum evidence expected from the run. |
+
+Conditionally required fields:
+
+| Field | Required When |
+|---|---|
+| `execution_target.environment_ref` | Required for `ci_ephemeral`, `sit_deployed`, and `evidence_only`. |
+| `package_inputs.input_ref` | Required when the test executes against a fixture, generated input, file, payload, or dataset. |
+| `fixture.setup` / `fixture.cleanup` | Required when the test creates local or CI resources that must be prepared or cleaned. |
+
+Optional DSL fields:
+
+| Field | Purpose |
+|---|---|
+| `source_refs.rp_feature_spec` | Improves traceability to feature behavior, but AC remains the formal source. |
+| `source_refs.rp_ru_mapping` | Improves traceability to execution mapping. |
+| `replaces` | Links a new revision to a retired or superseded test. |
+| `bdd` | Preserves Given/When/Then human-readable context. |
+| `tags` | Supports future run selection such as smoke, release-gate, or impacted-RU. |
+| `priority` | Supports future suite policy. |
+| `notes` | Reviewer-facing explanation that is not used for execution. |
 
 DSL responsibility split:
 

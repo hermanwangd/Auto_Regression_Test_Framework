@@ -34,7 +34,7 @@ Out of scope:
 | Release unit | Release Package | Package release is the real release boundary; Product is virtual. |
 | Primary AC level | RP-level AC | Coverage denominator must match release evidence ownership. |
 | Test lifecycle | Generate separately from execute | Approved tests are checked in and not regenerated on every run. |
-| Test case DSL | Package-neutral DSL | Different Products and RPs express regression tests through one artifact model. |
+| Test case DSL | Minimal package-neutral DSL with explicit version | Different Products and RPs express regression tests through one artifact model without overfitting to one package type. |
 | Adapter model | Core framework plus package adapters | Execution process is generic; package behavior stays adapter-specific. |
 
 ## 5.3 Component Architecture
@@ -70,7 +70,7 @@ CLI Orchestrator
 | RP Discovery and Artifact Validator | Find RP records and validate required files and identifiers | AC-002 |
 | RP/RU Mapping Validator | Validate owner-authored RU repo mapping and block unsafe execution | AC-004 |
 | AC Intake and Readiness Classifier | Preserve AC truth, classify readiness, and report gaps | AC-003, AC-005 |
-| Package-Neutral Test Case DSL | Describe RP behavior validation independent of package type | AC-005, AC-007 |
+| Package-Neutral Test Case DSL | Describe RP behavior validation independent of package type with a small required field set | AC-005, AC-007 |
 | Test Case Lifecycle Manager | Detect existing tests, write drafts, protect approved tests | AC-005, AC-007 |
 | Expected Result Manager | Draft, validate, and enforce approval status for expected results | AC-006 |
 | Execution Environment Resolver | Select local, CI, SIT, or evidence-only path from mapping | AC-004, AC-007 |
@@ -115,6 +115,7 @@ Boundary rules:
 - F001 readiness agent skill consumes readiness reports; it does not mutate repo artifacts directly.
 - `mapping.py` consumes `rp_ru_mapping.yaml`; it never infers RP membership.
 - The test case DSL describes validation intent, inputs, fixtures, assertions, and evidence requirements; it does not contain package-specific execution logic.
+- `dsl_version` is required so the runner can apply the correct parser and compatibility behavior.
 - `test_cases.py` may create draft artifacts but must not overwrite approved tests.
 - `expected_results.py` enforces source references and approval status.
 - `environment.py` blocks SIT runs unless deployment and readiness evidence exist.
@@ -251,6 +252,8 @@ Runtime rules:
 | Missing Product Repo folder | Report readiness gap and owner action; do not continue to generation. |
 | Missing RP artifact | Block generation and execution for that RP. |
 | Missing RP/RU mapping field | Block execution and report the exact field. |
+| Unsupported DSL version | Block execution and report supported versions and migration action. |
+| Missing required DSL field | Block generation approval or execution and report the field path. |
 | Ambiguous AC | Mark `not_ready_for_generation`; do not draft executable tests. |
 | Existing approved test | Create update proposal or new draft revision; do not overwrite. |
 | Expected result not approved | Block normal regression execution. |

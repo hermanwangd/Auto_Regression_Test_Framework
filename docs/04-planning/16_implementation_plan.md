@@ -72,7 +72,7 @@ Related features: F002, F003, F004
 Acceptance: AC-002, AC-003, AC-004
 Modules: `src/regress/schemas.py`
 
-Implement typed parsers for `package.yaml`, `rp_ru_mapping.yaml`, AC entries, test cases, expected results, and evidence records. Start with YAML/Markdown front matter or embedded YAML blocks supported by the artifact contracts.
+Implement typed parsers for `package.yaml`, `rp_ru_mapping.yaml`, AC entries, DSL test cases, expected results, and evidence records. Start with YAML/Markdown front matter or embedded YAML blocks supported by the artifact contracts. DSL parsing must validate `dsl_version`, required fields, conditionally required fields, and allowed enum values.
 
 Verification:
 
@@ -80,7 +80,7 @@ Verification:
 regress check-rp --root <product-repo> --rp-id <rp-id> --strict-schema
 ```
 
-Done when schema errors identify file path, field path, severity, and owner action.
+Done when schema errors identify file path, field path, severity, owner action, and whether the error blocks generation, execution, or release evidence.
 
 ### T004 - RP/RU Mapping Validator
 
@@ -120,7 +120,7 @@ Related feature: F005
 Acceptance: AC-005
 Modules: `src/regress/test_cases.py`
 
-Implement draft package-neutral DSL test skeleton and draft executable DSL test artifact writing under `tests/draft/`. Detect existing `tests/approved/` artifacts for the same RP AC and create update proposals instead of overwriting.
+Implement draft package-neutral DSL test skeleton and draft executable DSL test artifact writing under `tests/draft/`. Generated executable drafts must include `dsl_version` and all required DSL fields. Detect existing `tests/approved/` artifacts for the same RP AC and create update proposals instead of overwriting.
 
 Verification:
 
