@@ -113,7 +113,7 @@ Regression test cases are managed as durable RP artifacts. The framework shall n
 
 The framework uses a package-neutral regression test case DSL so different Products and Release Packages can express repeatable auto regression tests through the same artifact model. The DSL describes what RP behavior must be validated, while package-specific execution remains isolated behind adapters.
 
-The DSL required field set should stay minimal. Required fields are limited to identity, RP/AC traceability, approval status, source fingerprint, execution target, expected-result reference, logical steps, assertions, and evidence requirements. Optional fields such as BDD context, tags, priority, replacement links, and extra source references improve governance but must not be required for first execution.
+The DSL required field set should stay minimal but complete enough to execute safely. Required fields cover identity, RP/AC traceability, approval status, source fingerprint, scenario type/scope/capabilities, execution target, logical steps, assertions, and evidence requirements. Conditional fields cover expected-result references, preconditions, data selection and parameterization strategy, parameterized cases, catalog selectors, matrix dimensions, dependencies, name-keyed package inputs, binding type, lifecycle policy, fixture setup/cleanup, environment reference, oracle references, oracle type, assertion decision rules, observations, postconditions, and cleanup policy when the test creates or mutates resources. Optional fields such as BDD context, tags, priority, replacement links, and extra source references improve governance but must not be required for first execution. M1 implements only the DSL v1 subset required for the data-pipeline pilot; additional DSL v1 enum values are reserved until their providers are implemented.
 
 The lifecycle is:
 
@@ -254,11 +254,11 @@ Product developers own AC clarification and manual expected-result input. QA or 
 
 - Read `rp_feature_spec.md`, `acceptance_criteria.md`, `rp_ru_mapping.yaml`, package input references, fixture references, adapter references, and validation boundaries.
 - Check AC readiness: AC ID, linked RP feature, observable input, behavior, expected output, and pass/fail condition.
-- Check execution context readiness: package input reference, fixture or data source, target RU, execution mode, deployment requirement, environment reference, adapter or adapter mode, validation boundary, assertion type, and expected-result reference status.
+- Check execution context readiness: scenario type/scope/capabilities, preconditions, data selection strategy, parameterized cases, catalog selectors or matrix dimensions, dependencies, name-keyed package input bindings, binding type, fixture or data source, lifecycle cleanup requirement, target RU, execution mode, deployment requirement, environment reference, adapter or adapter mode, validation boundary, oracle/assertion type, observation requirement, postcondition requirement, and expected-result reference status.
 - Mark ambiguous AC as `not_ready_for_generation`.
 - Generate `draft_test_skeleton` using the package-neutral test case DSL only when AC is ready but execution context is incomplete.
 - Generate `draft_executable_test_case` using the package-neutral test case DSL only when AC and execution context are both ready.
-- Include `dsl_version` and all required DSL identity, traceability, execution, assertion, and evidence fields in every generated executable draft.
+- Include `dsl_version` and all required DSL identity, traceability, scenario, execution, expected-result, assertion, and evidence fields in every generated executable draft.
 - Store generated test drafts as reviewable artifacts instead of transient execution state.
 - Detect existing checked-in test cases for the same RP AC before generating replacements.
 - Emit update proposals when RP AC, RP/RU mapping, package input, fixture, adapter, or expected-result references change.
@@ -306,21 +306,21 @@ F007 shall not author AC, classify AC readiness, generate tests, regenerate chec
 ### Required Mechanism
 
 - Read `package.yaml`, `rp_ru_mapping.yaml`, checked-in DSL test cases from the RP `tests/` folder, package input catalog, fixture references, adapter config, and expected-result artifacts.
-- Check that test cases declare supported `dsl_version` and include required DSL identity, traceability, execution target, expected-result, step, assertion, and evidence fields.
+- Check that test cases declare supported `dsl_version` and include required DSL identity, traceability, scenario, execution target, expected-result, step, oracle or inline decision rule, assertion, and evidence fields.
 - Check that test cases are `approved_for_regression` or explicitly allowed by the execution policy.
 - Check that required expected-result artifacts are `approved_for_regression` or otherwise explicitly allowed by the execution policy.
 - Resolve the RP execution mode as `local_fixture`, `ci_ephemeral`, `sit_deployed`, or `evidence_only`.
 - For multi-RU RPs, follow the declared dependency graph and stop downstream execution when a required upstream RU validation fails.
 - Check deployment and environment readiness before running `sit_deployed` tests.
-- Reject or mark invalid runs when RP/RU mapping, adapter config, package inputs, fixtures, expected results, required deployment evidence, or environment readiness are missing.
+- Reject or mark invalid runs when RP/RU mapping, adapter config, package inputs, fixtures, expected results, oracle references, required deployment evidence, or environment readiness are missing.
 - Resolve logical package inputs to concrete fixture or generated data.
 - Bind runtime values from package inputs, context, and previous execution steps.
 - Run setup actions needed by the package fixture lifecycle.
 - Execute or validate through the configured release package adapter.
 - Collect actual outputs, logs, and execution metadata.
-- Run assertions against expected results.
+- Run assertions against resolved oracles or inline decision rules.
 - Run cleanup actions and record cleanup evidence.
-- Emit raw execution artifacts such as execution report, execution log, actual results, assertion results, cleanup evidence, and failure details.
+- Emit raw execution artifacts such as execution report, execution log, actual results, assertion results, observation results, postcondition results, cleanup evidence, and failure details.
 
 ## F008 — Coverage and Evidence Package
 

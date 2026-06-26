@@ -9,7 +9,7 @@ This plan implements the Product/RP/RU baseline without changing product scope o
 - Product, RP, and RU responsibilities are accepted.
 - RP-level AC are the release coverage denominator.
 - Minimum RP artifacts are defined: `package.yaml`, `rp_feature_spec.md`, `rp_ru_mapping.yaml`, `acceptance_criteria.md`, `tests/`, `expected-results/`, `traceability.md`, and `evidence_index.md`.
-- Architecture design defines module boundaries, CLI commands, storage paths, execution modes, failure handling, and AC coverage.
+- Architecture design defines AP-level components, extension points, internal module boundaries, CLI commands, storage paths, execution modes, failure handling, and AC coverage.
 
 ## Staged Readiness
 
@@ -27,7 +27,7 @@ Ready after pilot RP artifacts exist:
 - F007 Release Package DSL Test Execution.
 - F008 Coverage and Evidence Package.
 
-Pilot RP owner must supply RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, expected-result approval owner, adapter mode, dependency graph, and adapter command contract.
+Pilot RP owner must supply RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, expected-result approval owner, adapter mode, dependency graph, adapter/provider contracts, and any required binding, fixture, oracle, assertion, or observation provider capability.
 
 ## Task Backlog
 
@@ -72,7 +72,7 @@ Related features: F002, F003, F004
 Acceptance: AC-002, AC-003, AC-004
 Modules: `src/regress/schemas.py`
 
-Implement typed parsers for `package.yaml`, `rp_ru_mapping.yaml`, AC entries, DSL test cases, expected results, and evidence records. Start with YAML/Markdown front matter or embedded YAML blocks supported by the artifact contracts. DSL parsing must validate `dsl_version`, required fields, conditionally required fields, and allowed enum values.
+Implement typed parsers for `package.yaml`, `rp_ru_mapping.yaml`, AC entries, DSL test cases, expected results, provider contracts, and evidence records. Start with YAML/Markdown front matter or embedded YAML blocks supported by the artifact contracts. DSL parsing must validate `dsl_version`, required fields, conditionally required fields, and allowed enum values. Provider contract parsing must validate provider type, supported actions, required references, secret refs, cleanup strategy, and unsupported configuration.
 
 Verification:
 
@@ -88,7 +88,7 @@ Related feature: F004
 Acceptance: AC-004
 Modules: `src/regress/mapping.py`, `src/regress/environment.py`
 
-Validate that each owner-authored RU entry declares repo, owner, unit type, version reference, validation boundary, execution mode, deployment requirement, environment reference, adapter or adapter mode, evidence responsibility, dependencies, and adapter command contract when execution is required.
+Validate that each owner-authored RU entry declares repo, owner, unit type, version reference, validation boundary, execution mode, deployment requirement, environment reference, adapter or adapter mode, evidence responsibility, dependencies, and adapter/provider contracts when execution is required.
 
 Verification:
 
@@ -163,13 +163,13 @@ regress run --root <product-repo> --rp-id <rp-id> --env sit_deployed
 
 Done when the command blocks before adapter execution if SIT readiness evidence is missing.
 
-### T009 - Package Input and Binding Resolver
+### T009 - Planning, Parameter, and Binding Resolver
 
 Related feature: F007
 Acceptance: AC-007
 Modules: `src/regress/bindings.py`
 
-Resolve input refs, expected-result refs, runtime paths, environment refs, and step output placeholders from approved test cases.
+Resolve expected-result refs, data selection strategy, parameterized cases, dependencies, name-keyed package input bindings, runtime paths, environment refs, and step output placeholders from approved test cases. M1 must support pilot binding types `input_file`, `dataset`, and `db_seed`; reserved binding types such as `api_payload`, `message_event`, `config_file`, `env_var`, and `existing_state` must fail as unsupported until providers are implemented.
 
 Verification:
 
@@ -177,15 +177,31 @@ Verification:
 regress run --root <product-repo> --rp-id <rp-id> --dry-run
 ```
 
-Done when unresolved bindings fail fast with file path, test case ID, AC ID, and owner action.
+Done when unresolved bindings, data selection, parameter cases, or dependencies fail fast with file path, test case ID, AC ID, parameter case when applicable, binding or section name, binding type when applicable, and owner action.
 
-### T010 - Fixture Lifecycle Manager
+### T010 - Provider Contract Registry and Dispatch
+
+Related feature: F007
+Acceptance: AC-007
+Modules: `src/regress/providers.py`, `src/regress/schemas.py`
+
+Resolve validated provider contracts from provider defaults, RP-level overrides, and RU-level overrides. Dispatch adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type to the selected contract. Fail before execution when a contract is missing, ambiguous, unsupported, or unsafe.
+
+Verification:
+
+```bash
+regress run --root <product-repo> --rp-id <rp-id> --dry-run
+```
+
+Done when provider contract resolution reports provider name, source level, action/type, test case ID, AC ID, and owner action for unsupported or missing capabilities.
+
+### T011 - Fixture Lifecycle Manager
 
 Related feature: F007
 Acceptance: AC-007
 Modules: `src/regress/fixtures.py`
 
-Implement fixture setup and cleanup lifecycle for local and CI runs. Record cleanup evidence even when execution fails.
+Implement precondition checks, fixture setup and cleanup lifecycle, and postcondition checks for local and CI runs. Use provider contracts for M1 pilot fixture behavior such as file workspace setup and database seed/cleanup. Reserved fixture behavior such as message/event publishing and configuration binding must fail as unsupported until providers are implemented. Record cleanup evidence even when execution fails.
 
 Verification:
 
@@ -195,13 +211,13 @@ regress run --root <product-repo> --rp-id <rp-id> --env local_fixture
 
 Done when setup, cleanup, and cleanup failure state are written to run evidence.
 
-### T011 - Adapter Runtime and Data Pipeline Pilot Adapter
+### T012 - Adapter Runtime and Data Pipeline Pilot Adapter
 
 Related feature: F007
 Acceptance: AC-007
 Modules: `src/regress/execution.py`, `src/regress/adapters/base.py`, `src/regress/adapters/data_pipeline.py`
 
-Implement the adapter interface and the first data pipeline adapter. The core executor and test case DSL stay package-type-neutral; the adapter owns package-specific command execution and actual-result capture using the declared adapter command contract.
+Implement execution of a prepared plan and the first data pipeline adapter using validated adapter/provider contract configuration. The core executor and test case DSL stay package-type-neutral; the adapter owns package-specific command execution and actual-result capture through reusable, configurable contracts.
 
 Verification:
 
@@ -211,13 +227,13 @@ regress run --root <product-repo> --rp-id RP-AR-M1-data-pipeline --env ci_epheme
 
 Done when a pilot adapter can execute or validate one approved test, preserve stdout/stderr/exit code/timeout state, and emit actual outputs under the run evidence directory.
 
-### T012 - Assertion Engine
+### T013 - Oracle and Assertion Engine
 
 Related feature: F007
 Acceptance: AC-007
-Modules: `src/regress/assertions.py`
+Modules: `src/regress/oracles.py`, `src/regress/assertions.py`
 
-Implement M1 assertion types required by the pilot, starting with file equality/diff, structured value equality, status checks, and evidence-reference checks.
+Implement M1 oracle loading and assertion types required by the pilot, starting with `golden_file` and `expected_result_artifact` where approved expected-result artifacts are used. Reserved oracle types such as `schema`, `contract`, `invariant`, `query_result`, `tolerance`, and `absence` must fail as unsupported until providers are implemented. Start assertion execution with file equality/diff, structured value equality, status checks, and evidence-reference checks.
 
 Verification:
 
@@ -225,15 +241,15 @@ Verification:
 regress run --root <product-repo> --rp-id <rp-id> --test-case <tc-id>
 ```
 
-Done when failures include expected ref, actual ref, diff summary, and test case trace.
+Done when failures include oracle ref or inline rule, expected ref when applicable, actual ref, decision rule, diff summary, and test case trace.
 
-### T013 - Evidence Writer
+### T014 - Evidence Writer
 
 Related features: F007, F008
 Acceptance: AC-007, AC-008
 Modules: `src/regress/evidence.py`
 
-Write `evidence/runs/<run_id>/run.yaml`, logs, actual outputs, assertion results, cleanup evidence, and failure details. Evidence must include RP ID, AC ID, test case ID, run ID, RU refs, execution mode, and environment ref.
+Write `evidence/runs/<run_id>/run.yaml`, logs, actual outputs, assertion results, observation results, postcondition results, cleanup evidence, and failure details. Evidence must include RP ID, AC ID, test case ID, run ID, RU refs, execution mode, environment ref, parameter case when applicable, and resolved dependencies.
 
 Verification:
 
@@ -243,7 +259,7 @@ regress run --root <product-repo> --rp-id <rp-id>
 
 Done when every execution path produces durable evidence, including failed and blocked runs.
 
-### T014 - Coverage and Traceability Reporter
+### T015 - Coverage and Traceability Reporter
 
 Related feature: F008
 Acceptance: AC-008
@@ -259,7 +275,7 @@ regress report --root <product-repo> --rp-id <rp-id> --run-id <run-id>
 
 Done when coverage, traceability, evidence index, failure summary, and release review summary are review-ready.
 
-### T015 - Pilot RP Validation Harness
+### T016 - Pilot RP Validation Harness
 
 Related features: F001-F008
 Acceptance: AC-001 through AC-008
@@ -289,7 +305,7 @@ T001 -> T002 -> T003 -> T004
                   +-> T008 -> T009 -> T010 -> T011 -> T012 -> T013 -> T014
                                                                   |
                                                                   v
-                                                                 T015
+                                                                 T015 -> T016
 ```
 
 Parallelizable after T003:
@@ -298,7 +314,7 @@ Parallelizable after T003:
 - T005 AC readiness.
 - T007 expected-result manager.
 - T008 environment resolver.
-- T014 report formatting skeleton.
+- T015 report formatting skeleton.
 
 ## Implementation Gates
 
@@ -321,7 +337,7 @@ Gate 3 - Execution ready:
 
 Gate 4 - Release evidence ready:
 
-- T014 and T015 complete.
+- T014, T015, and T016 complete.
 - Coverage, traceability, failures, waivers, and evidence package are review-ready.
 
 ## Risks and Controls

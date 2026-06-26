@@ -87,19 +87,29 @@ release_units:
     deployment_required: false
     environment_ref: ci://pipeline/rp-ar-m1-data-pipeline
     adapter: data_pipeline_cli
-    adapter_contract:
-      command: python -m pipeline.run
-      working_directory: ${repo}
-      timeout_seconds: 900
-      inputs:
-        input_ref: ${test_case.package_inputs.input_ref}
-      outputs:
-        actual_output_ref: actual/orders_normalized.csv
-      logs:
-        stdout: logs/stdout.log
-        stderr: logs/stderr.log
-      success_exit_codes:
-        - 0
+    provider_contracts:
+      adapters:
+        data_pipeline_cli:
+          command: python -m pipeline.run
+          working_directory: ${repo}
+          timeout_seconds: 900
+          inputs:
+            orders_seed: ${test_case.package_inputs.inputs.orders_seed}
+          outputs:
+            actual_output_ref: actual/orders_normalized.csv
+          logs:
+            stdout: logs/stdout.log
+            stderr: logs/stderr.log
+          success_exit_codes:
+            - 0
+      bindings:
+        db_seed:
+          provider: file_fixture
+          materialize_as: input_file
+      fixtures: {}
+      oracles: {}
+      assertions: {}
+      observations: {}
     evidence_responsibility:
       - execution_log
       - output_dataset
@@ -109,6 +119,8 @@ release_units:
 ```
 
 The framework consumes this mapping. It must not decide RP membership.
+
+`provider_contracts` is the canonical contract container. Contracts may be supplied at reusable defaults, RP level, or RU level. Resolution order is: framework/provider default, then RP-level override, then RU-level override. The most specific declared contract wins, and unsupported or ambiguous overrides fail before execution. Dispatch uses DSL and mapping fields: `execution_target.adapter` and step `action` select adapter contracts; `package_inputs.inputs.<name>.bind_as` selects binding contracts; fixture actions select fixture contracts; `oracles.<name>.type` selects oracle contracts; assertion `type` selects assertion contracts; observation `type` selects observation contracts.
 
 Allowed `execution_mode` values are `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only`.
 
@@ -184,9 +196,102 @@ An approved test case may be replaced only by an explicit update proposal that r
 
 ## 6.7 Package-Neutral Test Case DSL
 
-The test case artifact is a package-neutral DSL. It describes the RP AC being validated, the execution target, package inputs, fixture lifecycle, logical steps, assertions, and evidence expectations. It must not embed package-specific execution code; package-specific behavior is resolved through the configured adapter.
+The test case artifact is a package-neutral DSL. It describes the RP AC being validated, the execution target, test scenario, package inputs, fixture lifecycle, logical steps, assertions, and evidence expectations. It must not embed package-specific execution code; package-specific behavior is resolved through the configured adapter.
 
 M1 keeps the required DSL surface small. A field is required only when the framework cannot trace, validate, execute, assert, or collect evidence without it.
+
+DSL v1 follows a combined reference model: Robot Framework-style setup/teardown and reusable actions, Gherkin-style behavior traceability, Karate-style payload/assertion bindings, and Pact-style interaction boundaries. The DSL remains a regression execution contract, not a BDD-only document.
+
+DSL v1 sections:
+
+| Section | Purpose |
+|---|---|
+| `dsl_version` | Select parser and compatibility rules. |
+| `test_case_id`, `artifact_status`, `revision` | Govern identity, lifecycle, and review state. |
+| `rp_id`, `ac_id`, `source_refs`, `source_fingerprint` | Trace the test to RP AC and source artifacts. |
+| `scenario` | Declare test type, scope, and composed capabilities. |
+| `preconditions` | Declare required state that must already exist before setup starts. |
+| `parameters` | Declare data variants or example rows used to repeat the same logical test. |
+| `dependencies` | Declare required RUs, services, or step ordering constraints. |
+| `execution_target` | Select RU boundary, adapter, execution mode, and environment. |
+| `expected` | Reference reviewed regression truth. |
+| `oracles` | Declare named truth sources and decision rules used by assertions. |
+| `package_inputs` | Declare name-keyed test data, payload, config, state, or seed bindings. |
+| `fixture` | Prepare and clean resources required by the test lifecycle. |
+| `steps` | Declare logical executable actions. |
+| `assertions` | Declare pass/fail evaluation rules. |
+| `observations` | Declare logs, metrics, traces, or events that must be collected or checked. |
+| `postconditions` | Declare state that must hold after execution and cleanup. |
+| `evidence_required` | Declare minimum evidence produced by a run. |
+| `policy` | Declare execution safety rules such as timeout, retry, cleanup, and destructive-action limits. |
+
+The DSL must support multiple regression scenario shapes, not only file-based execution. Supported M1 scenario capabilities are:
+
+| Capability | Example Binding |
+|---|---|
+| `file_input`, `dataset_input` | Bind CSV, JSON, Parquet, or generated dataset into a step. |
+| `api_payload`, `message_event` | Bind a request payload, event, or queue message into an adapter action. |
+| `db_seed` | Insert test rows before execution and clean them after execution. |
+| `config_input`, `env_var` | Bind config files, feature flags, or environment variables for the run. |
+| `existing_state` | Verify pre-existing SIT state before running assertions. |
+| `batch_execution` | Execute a batch, job, pipeline, or scheduled process through an adapter. |
+| `multi_ru_integration` | Bind inputs and expected outputs across more than one RU boundary. |
+| `file_assertion`, `response_assertion`, `db_assertion` | Validate actual outputs, API responses, or database state. |
+
+Each input binding must declare what it is and how it enters the execution lifecycle. Scenario capabilities are composable because real RP regression often combines setup, API calls, queue events, DB checks, and file assertions in one test. The DSL owns the logical binding contract; adapters own the concrete command, API, database, or queue operation.
+
+Oracle and assertion reference model:
+
+| Oracle Type | Purpose |
+|---|---|
+| `golden_file` | Compare actual output with an approved file or snapshot. |
+| `expected_result_artifact` | Resolve truth from the reviewed expected-result artifact. |
+| `schema` | Validate structure, required fields, and allowed values. |
+| `contract` | Validate provider/consumer interaction expectations. |
+| `invariant` | Validate business rules that must always hold. |
+| `query_result` | Validate database state through a reviewed query reference. |
+| `tolerance` | Validate numeric, timing, or aggregate results within a threshold. |
+| `absence` | Validate that an error, event, row, or side effect did not occur. |
+
+Assertions execute comparisons against an oracle. The assertion owns the comparison method and actual reference; the oracle owns the truth source and decision rule. This keeps expected data, business rules, and executable comparison logic separate.
+
+Data selection and parameterization reference model:
+
+| Strategy | Purpose |
+|---|---|
+| `explicit_cases` | Run the same logical test against owner-declared case rows with explicit binding and oracle overrides. |
+| `catalog_query` | Select cases from a test data catalog using tags, attributes, limits, and eligibility rules. |
+| `matrix` | Generate cases from controlled dimension combinations such as region, currency, channel, or feature flag state. |
+
+Parameterized execution must preserve case identity in evidence. A failed case must report the parameter case name, resolved bindings, oracle overrides, and assertion result without hiding other case results.
+
+DSL v1 schema rules:
+
+M1 implementation core is intentionally smaller than the full DSL vocabulary. M1 must implement `scenario.type` values `component` and `integration`, `scenario.scope` values `release_unit` and `release_package`, and the capabilities required by the data-pipeline pilot: `file_input`, `dataset_input`, `db_seed`, `batch_execution`, and `file_assertion`. Other enum values documented below are reserved DSL v1 vocabulary and must fail as unsupported until their providers are implemented.
+
+- `scenario.type` must be one of `component`, `integration`, `contract`, `migration`, or `e2e`.
+- `scenario.scope` must be one of `release_unit`, `release_package`, or `product`.
+- `scenario.capabilities` must list one or more supported capabilities.
+- `preconditions` declare state that must already exist and must not be created by this test.
+- `parameters.strategy` must be one of `explicit_cases`, `catalog_query`, or `matrix` when `parameters` is declared.
+- `parameters.cases` declares named data variants for `explicit_cases`.
+- `parameters.cases[].bindings` overrides one or more `package_inputs.inputs.<name>.ref` values for that case.
+- `parameters.cases[].oracle_overrides` may patch one or more named oracle fields for that case, such as `ref` or `value`.
+- `parameters.selector` defines catalog filters for `catalog_query`, including tags and maximum case count.
+- `parameters.matrix.dimensions` defines combinatorial data variants for `matrix`.
+- `dependencies.requires` lists RUs, services, fixtures, or external state that must be available before execution.
+- `dependencies.step_order` may constrain step order when dependency cannot be inferred from interpolation references.
+- `package_inputs.inputs` is a name-keyed map. References use `${package_inputs.inputs.<name>}`.
+- `package_inputs.inputs.<name>.bind_as` must be one of `input_file`, `dataset`, `api_payload`, `message_event`, `db_seed`, `config_file`, `env_var`, or `existing_state`.
+- `package_inputs.inputs.<name>.lifecycle` is required when a binding creates, mutates, publishes, seeds, or configures shared or persistent resources.
+- `fixture.cleanup` is required whenever setup mutates local, CI, SIT, or shared state.
+- `expected.ref` is required when the test uses an approved expected-result artifact as the reviewed regression truth source.
+- `oracles` is a name-keyed map when assertions need reusable truth sources or decision rules. References use `${oracles.<name>}`.
+- `oracles.<name>.type` must be one of `golden_file`, `expected_result_artifact`, `schema`, `contract`, `invariant`, `query_result`, `tolerance`, or `absence`.
+- Every assertion must define either `oracle` or an inline decision rule. Assertions should not compare directly to `expected.ref`; use an oracle of type `expected_result_artifact` when the expected-result artifact owns the truth source.
+- `observations` declare non-primary signals such as logs, metrics, traces, and emitted events used for evidence or secondary validation.
+- `postconditions` declare required final state after execution and cleanup.
+- `policy.cleanup_required` must be true when any binding lifecycle requires cleanup.
 
 ```yaml
 dsl_version: 1
@@ -203,26 +308,267 @@ execution_target:
   adapter: data_pipeline_cli
   execution_mode: ci_ephemeral
   environment_ref: ci://pipeline/rp-ar-m1-data-pipeline
+scenario:
+  type: integration
+  scope: release_package
+  capabilities:
+    - db_seed
+    - batch_execution
+    - file_assertion
+preconditions:
+  - type: service_available
+    ref: ci://pipeline/rp-ar-m1-data-pipeline
+parameters:
+  strategy: explicit_cases
+  cases:
+    - name: valid_orders
+      bindings:
+        orders_seed: fixtures/db/orders_valid.yaml
+      oracle_overrides:
+        normalized_orders:
+          ref: expected/output/orders_valid_normalized.csv
+    - name: cancelled_orders
+      bindings:
+        orders_seed: fixtures/db/orders_cancelled.yaml
+      oracle_overrides:
+        normalized_orders:
+          ref: expected/output/orders_cancelled_normalized.csv
+dependencies:
+  requires:
+    - RU-transform-job
+  step_order:
+    - run_pipeline
+expected:
+  ref: expected-results/approved/RP-AR-M1-data-pipeline-AC-001.yaml
+oracles:
+  normalized_orders:
+    type: golden_file
+    ref: expected/output/orders_normalized.csv
+    comparison: file_diff
 package_inputs:
-  input_ref: fixture/input/orders.csv
-  expected_result_ref: expected-results/approved/RP-AR-M1-data-pipeline-AC-001.yaml
+  inputs:
+    orders_seed:
+      ref: fixtures/db/orders_seed.yaml
+      bind_as: db_seed
+      required: true
+      checksum: "sha256:<hash-of-seed-data>"
+      lifecycle:
+        isolation_key: test_run_id
+        cleanup_required: true
+        cleanup_on_failure: true
 fixture:
   setup:
-    - create_temp_workspace
+    - action: seed_database
+      input: ${package_inputs.inputs.orders_seed}
+      strategy: tagged_test_run
   cleanup:
-    - remove_temp_workspace
+    - action: cleanup_database
+      strategy: by_test_run_id
 steps:
   - id: run_pipeline
     action: execute
-    input: ${package_inputs.input_ref}
+    input: ${package_inputs.inputs.orders_seed}
 assertions:
   - type: file_diff
     actual: ${steps.run_pipeline.outputs.normalized_orders}
-    expected: ${expected.output_ref}
+    oracle: ${oracles.normalized_orders}
+observations:
+  - type: log_contains
+    source: ${steps.run_pipeline.logs.stdout}
+    pattern: "pipeline completed"
+postconditions:
+  - type: no_seeded_rows_remaining
+    strategy: by_test_run_id
 evidence_required:
   - execution_log
   - assertion_results
   - actual_output
+  - resolved_bindings
+  - cleanup_result
+policy:
+  timeout_seconds: 600
+  retry: 0
+  cleanup_required: true
+  destructive_action_allowed: false
+```
+
+Representative DSL v1 scenario examples:
+
+```yaml
+# Catalog-selected data regression
+parameters:
+  strategy: catalog_query
+  source: testdata://orders
+  selector:
+    tags: [regression, approved]
+    attributes:
+      order_type: standard
+    max_cases: 10
+package_inputs:
+  inputs:
+    orders_seed:
+      ref: ${parameters.selected.ref}
+      bind_as: db_seed
+```
+
+```yaml
+# Matrix parameterization
+parameters:
+  strategy: matrix
+  matrix:
+    dimensions:
+      region: [TW, US]
+      currency: [TWD, USD]
+    exclude:
+      - region: US
+        currency: TWD
+package_inputs:
+  inputs:
+    order_payload:
+      ref: payloads/order_${parameters.region}_${parameters.currency}.json
+      bind_as: api_payload
+```
+
+```yaml
+# File or dataset regression
+scenario:
+  type: component
+  scope: release_unit
+  capabilities: [file_input, file_assertion]
+package_inputs:
+  inputs:
+    source_file:
+      ref: fixtures/input/orders.csv
+      bind_as: input_file
+      checksum: "sha256:<hash>"
+oracles:
+  transformed_file:
+    type: golden_file
+    ref: expected/output/orders_transformed.csv
+    comparison: file_diff
+steps:
+  - id: transform
+    action: execute
+    input: ${package_inputs.inputs.source_file}
+assertions:
+  - type: file_diff
+    actual: ${steps.transform.outputs.result_file}
+    oracle: ${oracles.transformed_file}
+```
+
+```yaml
+# API payload regression
+scenario:
+  type: integration
+  scope: release_package
+  capabilities: [api_payload, response_assertion]
+package_inputs:
+  inputs:
+    submit_order:
+      ref: payloads/submit_order.json
+      bind_as: api_payload
+steps:
+  - id: submit
+    action: call_api
+    input: ${package_inputs.inputs.submit_order}
+assertions:
+  - type: json_path_equals
+    actual: ${steps.submit.response.status}
+    oracle:
+      type: invariant
+      rule: equals
+      value: APPROVED
+```
+
+```yaml
+# Message event regression
+scenario:
+  type: integration
+  scope: release_package
+  capabilities: [message_event, db_assertion]
+package_inputs:
+  inputs:
+    order_event:
+      ref: events/order_created.json
+      bind_as: message_event
+      lifecycle:
+        isolation_key: test_run_id
+        cleanup_required: true
+        cleanup_on_failure: true
+oracles:
+  order_projection:
+    type: query_result
+    ref: queries/order_projection_by_test_run_id.sql
+    comparison: db_row_matches
+fixture:
+  setup:
+    - action: publish_message
+      input: ${package_inputs.inputs.order_event}
+  cleanup:
+    - action: cleanup_messages
+      strategy: by_test_run_id
+steps:
+  - id: consume_order_event
+    action: execute_consumer
+assertions:
+  - type: db_row_matches
+    actual: ${steps.consume_order_event.outputs.order_projection}
+    oracle: ${oracles.order_projection}
+```
+
+```yaml
+# Existing SIT state validation
+scenario:
+  type: e2e
+  scope: release_package
+  capabilities: [existing_state, api_payload]
+package_inputs:
+  inputs:
+    sit_order_state:
+      ref: sit://orders/known-approved-order
+      bind_as: existing_state
+oracles:
+  state_ready:
+    type: invariant
+    rule: state_exists
+    value: true
+steps:
+  - id: verify_state
+    action: validate_state
+    input: ${package_inputs.inputs.sit_order_state}
+assertions:
+  - type: state_exists
+    actual: ${steps.verify_state.result.exists}
+    oracle: ${oracles.state_ready}
+```
+
+```yaml
+# Multi-RU integration
+scenario:
+  type: integration
+  scope: release_package
+  capabilities: [api_payload, multi_ru_integration, file_assertion]
+execution_target:
+  ru_id: RP-ORDER-PACKAGE
+  adapter: rp_orchestrator
+  execution_mode: ci_ephemeral
+oracles:
+  settlement_file:
+    type: golden_file
+    ref: expected/output/settlement_file.csv
+    comparison: file_diff
+steps:
+  - id: create_order
+    action: call_ru
+    target_ru_id: RU-order-api
+  - id: settle_order
+    action: call_ru
+    target_ru_id: RU-settlement-job
+    input: ${steps.create_order.outputs.order_id}
+assertions:
+  - type: file_diff
+    actual: ${steps.settle_order.outputs.settlement_file}
+    oracle: ${oracles.settlement_file}
 ```
 
 Allowed test case statuses are `draft_test_skeleton`, `draft_executable_test_case`, `approved_for_regression`, `needs_update`, and `retired`.
@@ -242,7 +588,9 @@ Required DSL fields:
 | `execution_target.ru_id` | Identifies which RU boundary is validated. |
 | `execution_target.adapter` | Selects package-specific execution behavior. |
 | `execution_target.execution_mode` | Selects local, CI, SIT, or evidence-only execution policy. |
-| `package_inputs.expected_result_ref` | Points to the reviewed expected result used as regression truth. |
+| `scenario.type` | Declares the test shape, such as component, integration, contract, migration, or e2e. |
+| `scenario.scope` | Declares whether the test validates an RU, RP, or product-level behavior. |
+| `scenario.capabilities` | Declares the composed scenario capabilities so binding, fixture, and evidence rules are selected deliberately. |
 | `steps` | Defines at least one logical validation action. |
 | `assertions` | Defines pass/fail evaluation. |
 | `evidence_required` | Defines minimum evidence expected from the run. |
@@ -252,8 +600,26 @@ Conditionally required fields:
 | Field | Required When |
 |---|---|
 | `execution_target.environment_ref` | Required for `ci_ephemeral`, `sit_deployed`, and `evidence_only`. |
-| `package_inputs.input_ref` | Required when the test executes against a fixture, generated input, file, payload, or dataset. |
-| `fixture.setup` / `fixture.cleanup` | Required when the test creates local or CI resources that must be prepared or cleaned. |
+| `preconditions[].type` / `preconditions[].ref` | Required for each declared precondition. |
+| `parameters.strategy` | Required when `parameters` is declared. |
+| `parameters.cases[].name` | Required for each `explicit_cases` case. |
+| `parameters.cases[].bindings` | Required when an `explicit_cases` case overrides package input bindings. |
+| `parameters.source` / `parameters.selector` | Required when `parameters.strategy` is `catalog_query`. |
+| `parameters.matrix.dimensions` | Required when `parameters.strategy` is `matrix`. |
+| `dependencies.requires` | Required when `scenario.capabilities` includes `multi_ru_integration` or an adapter depends on external services. |
+| `dependencies.step_order` | Required when step order cannot be inferred from explicit interpolation references. |
+| `package_inputs.inputs.<name>` | Required for each named input binding used by steps, fixtures, assertions, or adapters. |
+| `package_inputs.inputs.<name>.ref` | Required when the binding resolves from a file, dataset, payload, catalog entry, script, or environment resource. |
+| `package_inputs.inputs.<name>.bind_as` | Required when the binding is not self-evident from the adapter contract; allowed values include `input_file`, `dataset`, `api_payload`, `message_event`, `db_seed`, `config_file`, `env_var`, and `existing_state`. |
+| `package_inputs.inputs.<name>.checksum` | Required for checked-in or approved immutable test data. |
+| `package_inputs.inputs.<name>.lifecycle` | Required when the binding creates, mutates, seeds, publishes, or configures shared or persistent resources. |
+| `expected.ref` | Required when an oracle of type `expected_result_artifact` or approved external expected-result truth is used. |
+| `oracles.<name>` | Required when an assertion references `${oracles.<name>}`. |
+| `oracles.<name>.type` | Required for each declared oracle. |
+| `observations[].type` / `observations[].source` | Required for each declared observation. |
+| `postconditions[].type` | Required for each declared postcondition. |
+| `fixture.setup` / `fixture.cleanup` | Required when the test creates, mutates, seeds, publishes, or configures local, CI, SIT, or shared resources. |
+| `policy.cleanup_required` | Required when the test creates, mutates, seeds, publishes, or configures local, CI, SIT, or shared resources. |
 
 Optional DSL fields:
 
@@ -263,6 +629,7 @@ Optional DSL fields:
 | `source_refs.rp_ru_mapping` | Improves traceability to execution mapping. |
 | `replaces` | Links a new revision to a retired or superseded test. |
 | `bdd` | Preserves Given/When/Then human-readable context. |
+| `package_inputs.inputs.<name>.owner_action` | Explains what the owner must fix when the binding cannot be resolved. |
 | `tags` | Supports future run selection such as smoke, release-gate, or impacted-RU. |
 | `priority` | Supports future suite policy. |
 | `notes` | Reviewer-facing explanation that is not used for execution. |
@@ -272,11 +639,33 @@ DSL responsibility split:
 | DSL Section | Owns | Adapter Owns |
 |---|---|---|
 | `execution_target` | RU ID, adapter name, execution mode, environment ref | How the adapter invokes the RU |
-| `package_inputs` | Logical input and expected-result refs | Resolving adapter-specific argument names |
-| `fixture` | Setup and cleanup intent | Concrete fixture command implementation when adapter-specific |
+| `scenario` | Regression type, scope, composed capabilities, and lifecycle expectations | Package-specific feasibility checks |
+| `preconditions` | Required pre-existing state and readiness checks | Package-specific readiness probing |
+| `parameters` | Named case variants and binding overrides | Adapter-specific expansion limits or unsupported variants |
+| `dependencies` | Required RUs, services, external state, and explicit step ordering | Package-specific dependency health details |
+| `expected` | Reviewed expected-result reference when the test uses an expected-result artifact as truth | Loading package-specific expected output artifacts |
+| `oracles` | Named truth sources, oracle type, comparison rule, and decision parameters | Producing actual values compatible with the oracle |
+| `package_inputs` | Named logical bindings, refs, binding type, checksum, and lifecycle policy | Resolving adapter-specific argument names and concrete resource handles |
+| `fixture` | Setup and cleanup intent, including seed and cleanup strategy | Concrete fixture command implementation when adapter-specific |
 | `steps` | Logical validation actions | Package-specific command execution |
-| `assertions` | Assertion type and expected/actual refs | Producing actual outputs |
+| `assertions` | Assertion type, actual refs, oracle refs, and inline decision rules | Producing actual outputs |
+| `observations` | Required secondary logs, metrics, traces, or events | Producing package-specific observation streams |
+| `postconditions` | Required final state after execution and cleanup | Package-specific final-state probes |
 | `evidence_required` | Required evidence categories | Concrete log/output file production |
+
+DSL extension rules:
+
+- Keep DSL sections and required fields stable across Products, RPs, and RUs.
+- Provider interfaces must be stable and reusable across RPs by default.
+- RP-specific provider behavior belongs in validated provider contract configuration, not test case DSL and not one-off provider code.
+- Provider configuration is not part of the test case DSL. Test cases may reference provider capabilities only by logical type, action, binding, oracle, assertion, observation, or fixture names.
+- Prefer configuring an existing adapter/provider before adding provider code or a new DSL field.
+- Add provider code only when the required behavior cannot be expressed safely by an existing provider contract.
+- Provider contract configuration must be schema-validated before execution.
+- Add new `bind_as`, fixture action, oracle type, assertion type, observation type, or adapter action only for recurring cross-RP concepts.
+- Do not add package-specific commands, URLs, credentials, SQL bodies, queue implementation details, or shell scripts directly to test case DSL.
+- Any incompatible DSL shape change requires a new `dsl_version` and compatibility behavior.
+- Unsupported adapter/provider capabilities must fail fast with test case ID, AC ID, section name, and owner action.
 
 ## 6.8 Expected Result Artifact
 
@@ -309,35 +698,61 @@ Rules:
 - `approved_for_regression` artifacts must include `approved_by`, `approved_at`, and `approval_ref`.
 - Only `approved_for_regression` expected results may be used as regression truth unless an explicit execution policy allows otherwise.
 
-## 6.9 Adapter Command Contract
+## 6.9 Adapter and Provider Contract
 
-Each executable adapter must expose this minimum contract through `rp_ru_mapping.yaml` or adapter defaults:
+Each executable adapter or provider must expose a validated contract through `rp_ru_mapping.yaml`, RP-level provider configuration, or reusable defaults. Command execution is one adapter contract shape; HTTP, DB, queue, oracle, assertion, fixture, and observation providers should also be configured through contracts rather than one-off provider code.
 
 ```yaml
-adapter_contract:
-  command: python -m pipeline.run
-  working_directory: ${repo}
-  timeout_seconds: 900
-  env:
-    PIPELINE_MODE: regression
-  inputs:
-    input_ref: ${test_case.package_inputs.input_ref}
-  outputs:
-    actual_output_ref: actual/orders_normalized.csv
-  logs:
-    stdout: logs/stdout.log
-    stderr: logs/stderr.log
-  success_exit_codes:
-    - 0
+provider_contracts:
+  adapters:
+    data_pipeline_cli:
+      command: python -m pipeline.run
+      working_directory: ${repo}
+      timeout_seconds: 900
+      env:
+        PIPELINE_MODE: regression
+      inputs:
+        orders_seed: ${test_case.package_inputs.inputs.orders_seed}
+      outputs:
+        actual_output_ref: actual/orders_normalized.csv
+      logs:
+        stdout: logs/stdout.log
+        stderr: logs/stderr.log
+      success_exit_codes:
+        - 0
+  bindings:
+    db_seed:
+      provider: file_fixture
+      materialize_as: input_file
+  fixtures:
+    relational_db:
+      connection_ref: secret://sit/order-db
+      seed_actions:
+        seed_orders:
+          input_binding: orders_seed
+          table: orders
+          key_fields: [test_run_id, order_id]
+      cleanup_actions:
+        cleanup_orders:
+          table: orders
+          where:
+            test_run_id: ${run.id}
+  oracles: {}
+  assertions: {}
+  observations: {}
 ```
 
-Adapter runtime rules:
+Adapter/provider runtime rules:
 
+- Contract resolution order is provider default, RP-level override, then RU-level override.
+- Dispatch uses DSL fields and mapping fields: adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type.
 - The framework supplies resolved input paths and run workspace paths.
-- The adapter writes actual outputs under the run evidence directory.
+- Adapters and providers write actual outputs, observation results, and cleanup results under the run evidence directory.
 - Non-success exit codes fail the test case and must preserve stdout, stderr, exit code, and timeout state.
 - Timeouts fail the test case and must trigger fixture cleanup.
 - Adapters must not perform deployment in M1.
+- Provider contracts must reference secrets, SQL, payloads, and environment resources by reference, not inline sensitive values or package-specific implementation bodies.
+- Unsupported provider actions or contract fields must fail before execution with owner action.
 
 ## 6.10 Execution Evidence
 
@@ -357,9 +772,17 @@ actual_results:
 assertion_results:
   - assertion: file_diff
     status: passed
+observation_results:
+  - observation: log_contains
+    status: passed
+postcondition_results:
+  - postcondition: no_seeded_rows_remaining
+    status: passed
 evidence_refs:
   - evidence/runs/RUN-20260626-001/logs/stdout.log
   - evidence/runs/RUN-20260626-001/assertions.yaml
+  - evidence/runs/RUN-20260626-001/observations.yaml
+  - evidence/runs/RUN-20260626-001/postconditions.yaml
 ```
 
 Execution evidence is stored under:

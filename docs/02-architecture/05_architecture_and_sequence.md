@@ -39,47 +39,45 @@ Out of scope:
 
 ## 5.3 Component Architecture
 
+The AP-level architecture follows the common test platform reference model: definition, discovery, planning, fixture/state, execution, oracle/assertion, and reporting. Fine-grained resolvers remain internal modules under these components; they are not separate AP-level components.
+
 ```text
 Product Repo Artifact Store
         |
         v
 CLI Orchestrator
         |
-        +--> Product Repo Bootstrap
-        +--> Readiness Agent Skill
-        +--> RP Discovery and Artifact Validator
-        +--> RP/RU Mapping Validator
-        +--> AC Intake and Readiness Classifier
-        +--> Package-Neutral Test Case DSL
-        +--> Test Case Lifecycle Manager
-        +--> Expected Result Manager
-        +--> Execution Environment Resolver
-        +--> Package Input and Binding Resolver
-        +--> Fixture Lifecycle Manager
-        +--> Adapter Runtime
-        +--> Assertion Engine
-        +--> Evidence Writer
-        +--> Coverage and Traceability Reporter
+        +--> Definition and Validation
+        +--> Discovery and Context
+        +--> Planning and Binding
+        +--> Fixture and State Manager
+        +--> Execution Engine
+        +--> Oracle and Assertion Engine
+        +--> Evidence and Reporting
 ```
 
 | Component | Responsibility | Primary AC |
 |---|---|---|
 | Product Repo Artifact Store | Own versioned docs, RP records, tests, expected results, and evidence | AC-001, AC-002 |
-| Product Repo Bootstrap | Create/check lifecycle folders and starter RP locations through deterministic CLI behavior | AC-001 |
-| Readiness Agent Skill | Explain readiness report, summarize gaps, and produce owner-actionable next steps without inventing RP truth | AC-001 |
-| RP Discovery and Artifact Validator | Find RP records and validate required files and identifiers | AC-002 |
-| RP/RU Mapping Validator | Validate owner-authored RU repo mapping and block unsafe execution | AC-004 |
-| AC Intake and Readiness Classifier | Preserve AC truth, classify readiness, and report gaps | AC-003, AC-005 |
-| Package-Neutral Test Case DSL | Describe RP behavior validation independent of package type with a small required field set | AC-005, AC-007 |
-| Test Case Lifecycle Manager | Detect existing tests, write drafts, protect approved tests | AC-005, AC-007 |
-| Expected Result Manager | Draft, validate, and enforce approval status for expected results | AC-006 |
-| Execution Environment Resolver | Select local, CI, SIT, or evidence-only path from mapping | AC-004, AC-007 |
-| Package Input and Binding Resolver | Resolve fixture, input, expected-result, and runtime references | AC-007 |
-| Fixture Lifecycle Manager | Set up and clean up deterministic test fixtures | AC-007 |
-| Adapter Runtime | Execute package-specific behavior through declared adapter mode | AC-007 |
-| Assertion Engine | Compare actual results with approved expected results | AC-007 |
-| Evidence Writer | Persist run metadata, logs, actuals, assertions, and cleanup evidence | AC-007, AC-008 |
-| Coverage and Traceability Reporter | Calculate RP AC coverage and produce review-ready evidence | AC-008 |
+| Definition and Validation | Parse DSL and RP artifacts, validate schemas, statuses, required and conditional fields, and artifact lifecycle rules | AC-001, AC-002, AC-003, AC-004, AC-005, AC-006, AC-007 |
+| Discovery and Context | Discover Product/RP/RU artifacts, load AC inventory, RP/RU mapping, environment context, and readiness reports | AC-001, AC-002, AC-003, AC-004, AC-005 |
+| Planning and Binding | Expand parameters, resolve dependencies, bind package inputs, expected results, oracles, runtime references, and step placeholders into an execution plan | AC-005, AC-007 |
+| Fixture and State Manager | Check preconditions, set up fixtures, seed or publish data, enforce cleanup, and validate postconditions | AC-007 |
+| Execution Engine | Execute planned steps through package adapters, manage execution modes, step outputs, timeout, retry, and adapter result capture | AC-007 |
+| Oracle and Assertion Engine | Resolve oracle truth sources and evaluate actual outputs through assertion decision rules | AC-007 |
+| Evidence and Reporting | Persist run evidence, observations, cleanup results, failures, traceability, coverage, and release-review reports | AC-007, AC-008 |
+
+Internal module mapping:
+
+| AP-Level Component | Internal Modules |
+|---|---|
+| Definition and Validation | `schemas.py`, `test_cases.py`, `expected_results.py` |
+| Discovery and Context | `product_repo.py`, `rp_discovery.py`, `mapping.py`, `environment.py`, `readiness.py` |
+| Planning and Binding | `bindings.py`, `providers.py`, parameter expansion and execution-plan construction in `test_cases.py` |
+| Fixture and State Manager | `fixtures.py` |
+| Execution Engine | `execution.py`, `adapters/` |
+| Oracle and Assertion Engine | `oracles.py`, `assertions.py` |
+| Evidence and Reporting | `evidence.py`, `reports.py` |
 
 ## 5.4 Module Boundaries
 
@@ -97,11 +95,13 @@ src/regress/
   expected_results.py
   environment.py
   bindings.py
+  providers.py
   fixtures.py
   execution.py
   adapters/
     base.py
     data_pipeline.py
+  oracles.py
   assertions.py
   evidence.py
   reports.py
@@ -119,10 +119,95 @@ Boundary rules:
 - `test_cases.py` may create draft artifacts but must not overwrite approved tests.
 - `expected_results.py` enforces source references and approval status.
 - `environment.py` blocks SIT runs unless deployment and readiness evidence exist.
+- `bindings.py` resolves parameters, package inputs, oracles, runtime references, and step placeholders; it does not execute package behavior.
+- `providers.py` resolves provider contract precedence and dispatches provider contracts by adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type.
+- `fixtures.py` owns setup, cleanup, precondition, and postcondition lifecycle coordination.
+- `execution.py` executes a prepared plan and records step results; it does not own schema validation, binding resolution, provider contract resolution, or fixture policy.
+- `oracles.py` loads truth sources and decision parameters; `assertions.py` applies comparison rules against actual outputs.
 - `adapters/` is the only package-type-specific execution boundary.
 - `evidence.py` and `reports.py` write durable evidence under the RP release record.
 
-## 5.5 CLI Boundary
+## 5.5 Extension Model for RP/RU Variants
+
+The framework must scale across different RP and RU test needs by keeping the DSL semantic core stable and moving package-specific behavior into configurable adapters and providers. A new RP type should normally configure an existing adapter/provider through RP/RU contracts, not change runner orchestration or provider code.
+
+```text
+Stable DSL Core
+        |
+        +--> RP/RU Mapping Contract
+        |
+        +--> Extension Points
+              +--> Execution Adapter
+              +--> Binding Provider
+              +--> Fixture Provider
+              +--> Oracle Provider
+              +--> Assertion Provider
+              +--> Observation Provider
+```
+
+Core runner owns:
+
+- DSL parsing, schema validation, and compatibility rules.
+- Test discovery, parameter expansion, dependency planning, and lifecycle orchestration.
+- Dispatch to adapters/providers by declared `adapter`, `action`, `bind_as`, oracle type, assertion type, observation type, and fixture action.
+- Stable evidence structure and traceability to RP, AC, test case, run, parameter case, RU, and environment.
+
+Adapters and providers own:
+
+- How to call an RU through CLI, HTTP, batch, DB, queue, or package-specific tooling.
+- How to materialize package input bindings such as `db_seed`, `message_event`, `api_payload`, `config_file`, and `existing_state`.
+- How to set up and clean up package-specific state safely.
+- How to load package-specific oracle truth sources and produce actual values compatible with assertions.
+- How to collect package-specific logs, metrics, traces, events, and final-state probes.
+
+Provider implementation must be reusable by default. RP-specific behavior belongs in validated `provider_contracts` configuration, grouped by adapters, bindings, fixtures, oracles, assertions, and observations. Provider configuration is not part of the test case DSL; DSL tests may reference provider capabilities only by logical fields such as `action`, `bind_as`, oracle type, assertion type, observation type, and fixture action. Provider code should know generic actions and resource types, not product business concepts.
+
+Example configurable HTTP adapter contract:
+
+```yaml
+provider_contracts:
+  adapters:
+    http_api:
+      actions:
+        submit_order:
+          method: POST
+          path: /orders
+          request_binding: order_payload
+          response_mapping:
+            order_id: $.id
+```
+
+Example configurable relational DB fixture contract:
+
+```yaml
+provider_contracts:
+  fixtures:
+    relational_db:
+      connection_ref: secret://sit/order-db
+      seed_actions:
+        seed_orders:
+          input_binding: orders_seed
+          table: orders
+          key_fields: [test_run_id, order_id]
+      cleanup_actions:
+        cleanup_orders:
+          table: orders
+          where:
+            test_run_id: ${run.id}
+```
+
+The RP/RU mapping is the primary extension entrypoint. It declares adapter mode, provider contracts, validation boundary, execution mode, environment reference, dependencies, and evidence responsibility. The DSL references those logical capabilities; it must not embed package-specific shell scripts, URLs, credentials, SQL bodies, queue implementation details, or database commands.
+
+Extension governance rules:
+
+- Prefer configuring an existing adapter/provider before adding provider code or a new DSL field.
+- Add provider code only when the required behavior cannot be expressed safely by an existing provider contract.
+- Validate provider contract schemas before execution, including required fields, secret references, cleanup strategy, and unsupported actions.
+- Add a new DSL enum only when a recurring cross-RP concept cannot be represented by existing `bind_as`, fixture action, oracle type, assertion type, observation type, or adapter action.
+- Add or change DSL required fields only through a `dsl_version` compatibility decision.
+- A package adapter must not silently skip unsupported DSL sections; it must fail fast with test case ID, AC ID, section name, and owner action.
+
+## 5.6 CLI Boundary
 
 The CLI is the M1 public interface. Commands return non-zero exit codes when readiness, validation, or execution gates fail.
 
@@ -149,7 +234,7 @@ CLI contracts:
 - `run` reads checked-in package-neutral DSL tests and does not regenerate tests by default.
 - `report` produces coverage, traceability, evidence index, and failure summary.
 
-## 5.6 Data Ownership and Storage
+## 5.7 Data Ownership and Storage
 
 M1 does not require a database. The Product Repo filesystem is the durable store.
 
@@ -182,7 +267,7 @@ Consistency model:
 - Approved tests and expected results are immutable within a run.
 - Evidence records the RP ID, AC ID, test case ID, run ID, RU version references, execution mode, and environment reference.
 
-## 5.7 Execution Flow
+## 5.8 Execution Flow
 
 ```text
 Select RP
@@ -210,7 +295,7 @@ Execution mode behavior:
 | `sit_deployed` | Run against already deployed RU versions in SIT | Missing deployment or readiness evidence |
 | `evidence_only` | Validate mapped RU evidence without direct execution | Missing approved evidence reference |
 
-## 5.8 Multi-RU Execution
+## 5.9 Multi-RU Execution
 
 The framework executes RUs only from the human-authored `rp_ru_mapping.yaml`.
 
@@ -224,11 +309,11 @@ Rules:
 - Never add, remove, or reorder RUs based on agent inference.
 - Treat `dependency_order` as a display hint only; it is not sufficient to express execution dependencies.
 
-## 5.9 Adapter Command Contract
+## 5.10 Adapter and Provider Contract
 
-Executable adapters must define a command contract before F007 execution. The contract may be declared per RU or supplied by the adapter default.
+Executable adapters and providers must define validated contracts before F007 execution. A contract may be declared per RU, per RP, or supplied by a reusable adapter/provider default.
 
-Minimum fields:
+Minimum executable adapter fields:
 
 - Command and working directory.
 - Timeout seconds.
@@ -238,14 +323,22 @@ Minimum fields:
 - Success exit codes.
 - Environment variables required by the adapter.
 
+Minimum provider contract rules:
+
+- A provider contract must declare provider type and supported action names.
+- A provider contract must reference inputs, queries, payloads, secrets, or environment resources by reference, not inline sensitive values.
+- Fixture providers that mutate state must declare cleanup strategy.
+- Oracle providers must declare oracle type, truth source, and comparison or decision rule.
+- Observation providers must declare source and collection rule.
+
 Runtime rules:
 
 - Non-success exit codes fail the test case and preserve exit code, stdout, stderr, and resolved inputs.
 - Timeout fails the test case and still triggers fixture cleanup.
 - Adapter execution must not deploy RU code in M1.
-- Package-type behavior belongs in adapters; DSL, orchestration, evidence, and assertion behavior stay in framework core.
+- Package-type behavior belongs in configurable adapters/providers; DSL, orchestration, evidence format, and assertion lifecycle stay in framework core.
 
-## 5.10 Failure Handling
+## 5.11 Failure Handling
 
 | Failure | Handling |
 |---|---|
@@ -263,7 +356,7 @@ Runtime rules:
 | Adapter failure | Capture command, inputs, outputs, logs, and failure reason. |
 | Fixture cleanup failure | Record cleanup failure and mark run evidence incomplete. |
 
-## 5.11 Security and Data Safety
+## 5.12 Security and Data Safety
 
 - Production data is disallowed unless masked and approved.
 - Secrets must be referenced through environment variables or CI secret stores, never committed.
@@ -272,14 +365,16 @@ Runtime rules:
 - Destructive operations require explicit approval in the RP test case or adapter policy.
 - Local commands should be bounded and avoid memory-heavy execution.
 
-## 5.12 Observability and Evidence
+## 5.13 Observability and Evidence
 
 Each run writes:
 
 - `run.yaml`: run status, timestamps, RP ID, AC IDs, test case IDs, RU refs, execution mode.
 - `logs/`: adapter logs and framework validation logs.
 - `actual/`: captured actual outputs or evidence references.
-- `assertions.yaml`: assertion results, expected refs, actual refs, diff summary.
+- `assertions.yaml`: assertion results, oracle refs, actual refs, decision rule, diff summary.
+- `observations.yaml`: observation collection results such as log, metric, event, or trace checks.
+- `postconditions.yaml`: final-state validation results after execution and cleanup.
 - `cleanup.yaml`: fixture cleanup status and cleanup evidence.
 - Coverage report, traceability report, evidence index, and failure summary.
 
@@ -291,7 +386,7 @@ Canonical run evidence path:
 docs/08-release/release-packages/<rp_id>/evidence/runs/<run_id>/
 ```
 
-## 5.13 Architecture Alternatives
+## 5.14 Architecture Alternatives
 
 | Alternative | Decision | Reason |
 |---|---|---|
@@ -303,7 +398,7 @@ docs/08-release/release-packages/<rp_id>/evidence/runs/<run_id>/
 
 The architecture should be revisited when multiple RP types require shared service workflows, concurrent teams need a central index, or evidence volume becomes too large for repo-based storage.
 
-## 5.14 AC Coverage Matrix
+## 5.15 AC Coverage Matrix
 
 | AC | Architecture Support | Implementation Module |
 |---|---|---|
@@ -316,7 +411,7 @@ The architecture should be revisited when multiple RP types require shared servi
 | AC-007 | RP DSL test execution with inputs, fixtures, adapters, assertions, evidence | `execution.py`, `bindings.py`, `fixtures.py`, `adapters/`, `assertions.py`, `evidence.py` |
 | AC-008 | Coverage, traceability, failures, and approved exclusions | `reports.py`, `evidence.py` |
 
-## 5.15 Implementation Readiness Gate
+## 5.16 Implementation Readiness Gate
 
 Architecture gate result: PASS for design readiness and staged implementation readiness.
 
@@ -330,12 +425,12 @@ Ready after pilot RP artifacts exist:
 
 - F003 RP AC intake against real owner-authored AC.
 - F005/F006 agent draft generation and expected-result drafting.
-- F007 execution path for the data pipeline pilot adapter, using the adapter command contract in the artifact contract.
+- F007 execution path for the data pipeline pilot adapter, using the adapter/provider contract in the artifact contract.
 - F008 final coverage and evidence package using real run evidence.
 
 Implementation must start with F001/F002/F004 foundation tasks, then validate the pilot RP before enabling generation and execution.
 
-## 5.16 Open Decisions
+## 5.17 Open Decisions
 
 Blocking for full F003-F008 implementation:
 
