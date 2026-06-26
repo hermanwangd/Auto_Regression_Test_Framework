@@ -22,9 +22,9 @@ Ready to implement now:
 Ready after pilot RP artifacts exist:
 
 - F003 RP Feature Spec and AC Intake.
-- F005 Agent AC and Execution Context Readiness with Test Drafting.
+- F005 Agent AC and Execution Context Readiness with DSL Test Drafting.
 - F006 Agent Expected Result Drafting.
-- F007 Release Package Test Execution.
+- F007 Release Package DSL Test Execution.
 - F008 Coverage and Evidence Package.
 
 Pilot RP owner must supply RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, expected-result approval owner, adapter mode, dependency graph, and adapter command contract.
@@ -120,7 +120,7 @@ Related feature: F005
 Acceptance: AC-005
 Modules: `src/regress/test_cases.py`
 
-Implement draft test skeleton and draft executable test artifact writing under `tests/draft/`. Detect existing `tests/approved/` artifacts for the same RP AC and create update proposals instead of overwriting.
+Implement draft package-neutral DSL test skeleton and draft executable DSL test artifact writing under `tests/draft/`. Detect existing `tests/approved/` artifacts for the same RP AC and create update proposals instead of overwriting.
 
 Verification:
 
@@ -128,7 +128,7 @@ Verification:
 regress generate-tests --root <product-repo> --rp-id <rp-id> --mode draft
 ```
 
-Done when checked-in approved tests are protected and generated drafts include source refs, source fingerprint, revision, and status.
+Done when checked-in approved DSL tests are protected and generated drafts include source refs, source fingerprint, revision, and status.
 
 ### T007 - Expected Result Manager
 
@@ -201,7 +201,7 @@ Related feature: F007
 Acceptance: AC-007
 Modules: `src/regress/execution.py`, `src/regress/adapters/base.py`, `src/regress/adapters/data_pipeline.py`
 
-Implement the adapter interface and the first data pipeline adapter. The core executor stays package-type-neutral; the adapter owns package-specific command execution and actual-result capture using the declared adapter command contract.
+Implement the adapter interface and the first data pipeline adapter. The core executor and test case DSL stay package-type-neutral; the adapter owns package-specific command execution and actual-result capture using the declared adapter command contract.
 
 Verification:
 
@@ -329,7 +329,7 @@ Gate 4 - Release evidence ready:
 | Risk | Control |
 |---|---|
 | Agent invents AC or business behavior | F003 gate preserves owner-authored AC only. |
-| Tests are regenerated on every run | Execution reads `tests/approved/`; generation is separate. |
+| Tests are regenerated on every run | Execution reads checked-in DSL tests from `tests/approved/`; generation is separate. |
 | SIT run starts before deployment readiness | Environment resolver blocks `sit_deployed` before adapter execution. |
 | Multi-RU order is ambiguous | Mapping validator requires dependency graph and rejects scalar order-only execution planning. |
 | RP/RU membership is inferred incorrectly | Mapping validator consumes human-authored `rp_ru_mapping.yaml` only. |

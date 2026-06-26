@@ -34,6 +34,7 @@ Out of scope:
 | Release unit | Release Package | Package release is the real release boundary; Product is virtual. |
 | Primary AC level | RP-level AC | Coverage denominator must match release evidence ownership. |
 | Test lifecycle | Generate separately from execute | Approved tests are checked in and not regenerated on every run. |
+| Test case DSL | Package-neutral DSL | Different Products and RPs express regression tests through one artifact model. |
 | Adapter model | Core framework plus package adapters | Execution process is generic; package behavior stays adapter-specific. |
 
 ## 5.3 Component Architecture
@@ -49,6 +50,7 @@ CLI Orchestrator
         +--> RP Discovery and Artifact Validator
         +--> RP/RU Mapping Validator
         +--> AC Intake and Readiness Classifier
+        +--> Package-Neutral Test Case DSL
         +--> Test Case Lifecycle Manager
         +--> Expected Result Manager
         +--> Execution Environment Resolver
@@ -68,6 +70,7 @@ CLI Orchestrator
 | RP Discovery and Artifact Validator | Find RP records and validate required files and identifiers | AC-002 |
 | RP/RU Mapping Validator | Validate owner-authored RU repo mapping and block unsafe execution | AC-004 |
 | AC Intake and Readiness Classifier | Preserve AC truth, classify readiness, and report gaps | AC-003, AC-005 |
+| Package-Neutral Test Case DSL | Describe RP behavior validation independent of package type | AC-005, AC-007 |
 | Test Case Lifecycle Manager | Detect existing tests, write drafts, protect approved tests | AC-005, AC-007 |
 | Expected Result Manager | Draft, validate, and enforce approval status for expected results | AC-006 |
 | Execution Environment Resolver | Select local, CI, SIT, or evidence-only path from mapping | AC-004, AC-007 |
@@ -111,6 +114,7 @@ Boundary rules:
 - `readiness.py` reports gaps and owner actions; it does not create business truth.
 - F001 readiness agent skill consumes readiness reports; it does not mutate repo artifacts directly.
 - `mapping.py` consumes `rp_ru_mapping.yaml`; it never infers RP membership.
+- The test case DSL describes validation intent, inputs, fixtures, assertions, and evidence requirements; it does not contain package-specific execution logic.
 - `test_cases.py` may create draft artifacts but must not overwrite approved tests.
 - `expected_results.py` enforces source references and approval status.
 - `environment.py` blocks SIT runs unless deployment and readiness evidence exist.
@@ -140,8 +144,8 @@ CLI contracts:
 - `product-repo-readiness` agent skill explains the readiness report, missing items, owner actions, and next steps.
 - `init-rp` creates RP skeleton artifacts and lifecycle folders.
 - `check-rp` validates artifact completeness, RP/RU mapping, and generation readiness.
-- `generate-tests` writes drafts to `tests/draft/` and proposes updates when approved tests already exist.
-- `run` reads checked-in tests and does not regenerate tests by default.
+- `generate-tests` writes package-neutral DSL drafts to `tests/draft/` and proposes updates when approved tests already exist.
+- `run` reads checked-in package-neutral DSL tests and does not regenerate tests by default.
 - `report` produces coverage, traceability, evidence index, and failure summary.
 
 ## 5.6 Data Ownership and Storage
@@ -183,7 +187,7 @@ Consistency model:
 Select RP
 -> validate package.yaml and RP artifacts
 -> validate rp_ru_mapping.yaml
--> load approved or execution-eligible test cases
+-> load approved or execution-eligible DSL test cases
 -> validate expected-result approval status
 -> resolve execution mode and RU dependency graph
 -> verify environment readiness
@@ -238,7 +242,7 @@ Runtime rules:
 - Non-success exit codes fail the test case and preserve exit code, stdout, stderr, and resolved inputs.
 - Timeout fails the test case and still triggers fixture cleanup.
 - Adapter execution must not deploy RU code in M1.
-- Package-type behavior belongs in adapters; orchestration, evidence, and assertion behavior stay in framework core.
+- Package-type behavior belongs in adapters; DSL, orchestration, evidence, and assertion behavior stay in framework core.
 
 ## 5.10 Failure Handling
 
@@ -304,9 +308,9 @@ The architecture should be revisited when multiple RP types require shared servi
 | AC-002 | RP skeleton and artifact completeness check | `rp_discovery.py`, `schemas.py` |
 | AC-003 | AC intake preserving owner-authored truth | `readiness.py`, `schemas.py` |
 | AC-004 | RP/RU mapping validation and unsafe execution block | `mapping.py`, `environment.py` |
-| AC-005 | Agent test drafting only from ready inputs and no silent overwrite | `readiness.py`, `test_cases.py` |
+| AC-005 | Agent DSL test drafting only from ready inputs and no silent overwrite | `readiness.py`, `test_cases.py` |
 | AC-006 | Expected result source references and approval gate | `expected_results.py` |
-| AC-007 | RP test execution with inputs, fixtures, adapters, assertions, evidence | `execution.py`, `bindings.py`, `fixtures.py`, `adapters/`, `assertions.py`, `evidence.py` |
+| AC-007 | RP DSL test execution with inputs, fixtures, adapters, assertions, evidence | `execution.py`, `bindings.py`, `fixtures.py`, `adapters/`, `assertions.py`, `evidence.py` |
 | AC-008 | Coverage, traceability, failures, and approved exclusions | `reports.py`, `evidence.py` |
 
 ## 5.15 Implementation Readiness Gate

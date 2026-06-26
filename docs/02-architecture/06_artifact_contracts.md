@@ -182,7 +182,9 @@ Test case generation and test case execution are separate actions. Execution sha
 
 An approved test case may be replaced only by an explicit update proposal that records the source change and replacement relationship.
 
-## 6.7 Test Case YAML
+## 6.7 Package-Neutral Test Case DSL
+
+The test case artifact is a package-neutral DSL. It describes the RP AC being validated, the execution target, package inputs, fixture lifecycle, logical steps, assertions, and evidence expectations. It must not embed package-specific execution code; package-specific behavior is resolved through the configured adapter.
 
 ```yaml
 test_case_id: RP-AR-M1-data-pipeline-TC-001
@@ -217,9 +219,24 @@ assertions:
   - type: file_diff
     actual: ${steps.run_pipeline.outputs.normalized_orders}
     expected: ${expected.output_ref}
+evidence_required:
+  - execution_log
+  - assertion_results
+  - actual_output
 ```
 
 Allowed test case statuses are `draft_test_skeleton`, `draft_executable_test_case`, `approved_for_regression`, `needs_update`, and `retired`.
+
+DSL responsibility split:
+
+| DSL Section | Owns | Adapter Owns |
+|---|---|---|
+| `execution_target` | RU ID, adapter name, execution mode, environment ref | How the adapter invokes the RU |
+| `package_inputs` | Logical input and expected-result refs | Resolving adapter-specific argument names |
+| `fixture` | Setup and cleanup intent | Concrete fixture command implementation when adapter-specific |
+| `steps` | Logical validation actions | Package-specific command execution |
+| `assertions` | Assertion type and expected/actual refs | Producing actual outputs |
+| `evidence_required` | Required evidence categories | Concrete log/output file production |
 
 ## 6.8 Expected Result Artifact
 
