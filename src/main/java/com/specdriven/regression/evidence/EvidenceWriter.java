@@ -73,19 +73,25 @@ public class EvidenceWriter {
     }
 
     public Path writeExecutionBatch(
-            Path packageRoot, String batchId, String executionMode, String status, List<ExecutionResult> results) {
+            Path packageRoot,
+            String batchId,
+            String executionMode,
+            String environmentRef,
+            String startedAt,
+            String status,
+            List<ExecutionResult> results) {
         Path batchDir = packageRoot.resolve("evidence/batches").resolve(batchId);
         try {
             Files.createDirectories(batchDir);
-            String completedAt = java.time.OffsetDateTime.now().toString();
+            String finishedAt = java.time.OffsetDateTime.now().toString();
             Files.writeString(batchDir.resolve("batch.yaml"), """
                     batch_id: %s
                     rp_id: %s
                     status: %s
-                    env: %s
-                    started_at: %s
-                    completed_at: %s
                     execution_mode: %s
+                    environment_ref: %s
+                    started_at: %s
+                    finished_at: %s
                     runs:
                     %s
                     """.formatted(
@@ -93,9 +99,9 @@ public class EvidenceWriter {
                     packageRoot.getFileName(),
                     status,
                     executionMode,
-                    completedAt,
-                    completedAt,
-                    executionMode,
+                    environmentRef,
+                    startedAt,
+                    finishedAt,
                     batchRunsYaml(results)));
             return batchDir;
         } catch (IOException e) {

@@ -280,9 +280,10 @@ Minimum `batch.yaml` fields:
 ```yaml
 batch_id:
 rp_id:
-env:
+execution_mode:
+environment_ref:
 started_at:
-completed_at:
+finished_at:
 status:
 runs:
   - run_id:

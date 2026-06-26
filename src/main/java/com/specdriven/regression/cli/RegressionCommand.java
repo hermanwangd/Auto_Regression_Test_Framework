@@ -349,6 +349,7 @@ public class RegressionCommand {
         if (preflight.blocked()) {
             String batchId = nextAvailableId(packageRoot.resolve("evidence/batches"), "BATCH");
             String runId = nextAvailableId(packageRoot.resolve("evidence/runs"), "RUN");
+            String batchStartedAt = java.time.OffsetDateTime.now().toString();
             ExecutionResult blockedRun = evidenceWriter.writeBlockedRun(
                     packageRoot,
                     batchId,
@@ -356,7 +357,13 @@ public class RegressionCommand {
                     preflight.approvedTests(),
                     preflight.failureDetails());
             evidenceWriter.writeExecutionBatch(
-                    packageRoot, batchId, preflight.executionMode(), "blocked", List.of(blockedRun));
+                    packageRoot,
+                    batchId,
+                    preflight.executionMode(),
+                    preflight.environmentRef(),
+                    batchStartedAt,
+                    "blocked",
+                    List.of(blockedRun));
             out.println("adapter_execution_started: false");
             out.println("batch_id: " + batchId);
             out.println("run_id: " + runId);
@@ -366,6 +373,7 @@ public class RegressionCommand {
 
         out.println("adapter_execution_started: true");
         String batchId = nextAvailableId(packageRoot.resolve("evidence/batches"), "BATCH");
+        String batchStartedAt = java.time.OffsetDateTime.now().toString();
         int runNumber = nextAvailableNumber(packageRoot.resolve("evidence/runs"), "RUN");
         boolean passed = true;
         List<ExecutionResult> results = new java.util.ArrayList<>();
@@ -390,7 +398,14 @@ public class RegressionCommand {
             out.println("    stderr: " + result.runDir().relativize(result.stderrLog()));
         }
         String runStatus = passed ? "passed" : "failed";
-        evidenceWriter.writeExecutionBatch(packageRoot, batchId, preflight.executionMode(), runStatus, results);
+        evidenceWriter.writeExecutionBatch(
+                packageRoot,
+                batchId,
+                preflight.executionMode(),
+                preflight.environmentRef(),
+                batchStartedAt,
+                runStatus,
+                results);
         out.println("run_status: " + runStatus);
         return passed ? 0 : 1;
     }
@@ -525,7 +540,12 @@ public class RegressionCommand {
         if (dryRun) {
             out.println("run_status: " + (blocked ? "blocked" : "dry_run_ready"));
         }
-        return new PreflightResult(blocked, approvedTests, List.copyOf(failureDetails), environmentReport.executionMode());
+        return new PreflightResult(
+                blocked,
+                approvedTests,
+                List.copyOf(failureDetails),
+                environmentReport.executionMode(),
+                environmentReport.environmentRef());
     }
 
     private int draftExpectedResults(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
@@ -644,7 +664,11 @@ public class RegressionCommand {
     }
 
     private record PreflightResult(
-            boolean blocked, List<Path> approvedTests, List<String> failureDetails, String executionMode) {
+            boolean blocked,
+            List<Path> approvedTests,
+            List<String> failureDetails,
+            String executionMode,
+            String environmentRef) {
     }
 
     private Map<String, String> parseOptions(String[] args) {

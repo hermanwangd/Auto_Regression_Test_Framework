@@ -497,12 +497,20 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("batch_id: BATCH-001");
         assertThat(output.toString()).contains("run_id: RUN-001");
         assertThat(output.toString()).contains("run_id: RUN-002");
-        assertThat(Files.readString(batchYaml)).contains("batch_id: BATCH-001");
-        assertThat(Files.readString(batchYaml)).contains("env: ci_ephemeral");
-        assertThat(Files.readString(batchYaml)).contains("started_at:");
-        assertThat(Files.readString(batchYaml)).contains("completed_at:");
-        assertThat(Files.readString(batchYaml)).contains("run_id: RUN-001");
-        assertThat(Files.readString(batchYaml)).contains("run_id: RUN-002");
+        String batchEvidence = Files.readString(batchYaml);
+        assertThat(batchEvidence).contains("batch_id: BATCH-001");
+        assertThat(batchEvidence).contains("execution_mode: ci_ephemeral");
+        assertThat(batchEvidence).contains("environment_ref: ci://pipeline/RP-001");
+        assertThat(batchEvidence).contains("started_at:");
+        assertThat(batchEvidence).contains("finished_at:");
+        assertThat(yamlLineValue(batchEvidence, "started_at")).isNotBlank();
+        assertThat(yamlLineValue(batchEvidence, "finished_at")).isNotBlank();
+        assertThat(java.time.OffsetDateTime.parse(yamlLineValue(batchEvidence, "finished_at")))
+                .isAfterOrEqualTo(java.time.OffsetDateTime.parse(yamlLineValue(batchEvidence, "started_at")));
+        assertThat(batchEvidence).doesNotContain("env:");
+        assertThat(batchEvidence).doesNotContain("completed_at:");
+        assertThat(batchEvidence).contains("run_id: RUN-001");
+        assertThat(batchEvidence).contains("run_id: RUN-002");
         assertThat(Files.readString(firstRun)).contains("batch_id: BATCH-001");
         assertThat(Files.readString(firstRun)).contains("test_case_id: RP-001-TC-001");
         assertThat(Files.readString(firstRun)).contains("ac_id: RP-001-AC-001");
@@ -531,8 +539,10 @@ class RegressionCommandTest {
         Path batchYaml = tempDir.resolve(
                 "docs/08-release/release-packages/RP-001/evidence/batches/BATCH-001/batch.yaml");
         assertThat(exit).isZero();
-        assertThat(Files.readString(batchYaml)).contains("env: ci_ephemeral");
-        assertThat(Files.readString(batchYaml)).contains("execution_mode: ci_ephemeral");
+        String batchEvidence = Files.readString(batchYaml);
+        assertThat(batchEvidence).contains("execution_mode: ci_ephemeral");
+        assertThat(batchEvidence).contains("environment_ref: ci://pipeline/RP-001");
+        assertThat(batchEvidence).doesNotContain("env:");
     }
 
     @Test
@@ -925,6 +935,14 @@ class RegressionCommandTest {
                     pass_fail_rule: actual output matches approved expected output
                     status: ready_for_generation
                 """.formatted(acId, rpId));
+    }
+
+    private String yamlLineValue(String yaml, String field) {
+        return yaml.lines()
+                .filter(line -> line.startsWith(field + ":"))
+                .map(line -> line.substring((field + ":").length()).trim())
+                .findFirst()
+                .orElse("");
     }
 
     private void writeReadyAcceptanceCriteriaForAcs(String rpId, String... acIds) throws Exception {
