@@ -74,6 +74,59 @@ class BindingResolverTest {
         assertThat(report.gaps()).isEmpty();
     }
 
+    @Test
+    void blocksUnsupportedParameterStrategyBeforeProviderExecution() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/RP-001-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, executionFocusedTest("""
+                parameters:
+                  strategy: combinatorial
+                  cases:
+                    - case_id: baseline
+                      values:
+                        orders_seed_ref: fixtures/db/orders_seed.yaml
+                """));
+
+        BindingResolutionReport report = new BindingResolver().resolve(testCase);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(BindingGap::fieldPath)
+                .contains("parameters.strategy");
+        assertThat(report.gaps()).extracting(BindingGap::ownerAction)
+                .contains("Use M1-supported parameter strategy explicit_cases.");
+    }
+
+    @Test
+    void blocksMalformedExplicitParameterCasesBeforeProviderExecution() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/RP-001-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, executionFocusedTest("""
+                parameters:
+                  strategy: explicit_cases
+                  cases:
+                    - case_id: baseline
+                      values:
+                        orders_seed_ref: fixtures/db/orders_seed.yaml
+                    - case_id: baseline
+                      values:
+                        orders_seed_ref: fixtures/db/orders_seed_boundary.yaml
+                    - values:
+                        orders_seed_ref: fixtures/db/orders_seed_missing_id.yaml
+                    - case_id: missing_ref
+                      values:
+                        unused_ref: fixtures/db/orders_seed_unused.yaml
+                """));
+
+        BindingResolutionReport report = new BindingResolver().resolve(testCase);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(BindingGap::fieldPath)
+                .contains(
+                        "parameters.cases[1].case_id",
+                        "parameters.cases[2].case_id",
+                        "parameters.cases[3].values.orders_seed_ref");
+    }
+
     private String approvedTest(String bindingType, String expectedRef) {
         String expectedBlock = expectedRef.isBlank() ? "expected: {}\n" : "expected:\n  ref: " + expectedRef + "\n";
         return """
@@ -118,6 +171,13 @@ class BindingResolverTest {
     }
 
     private String executionFocusedTest() {
+        return executionFocusedTest("");
+    }
+
+    private String executionFocusedTest(String parametersBlock) {
+        String fixtureRef = parametersBlock.isBlank()
+                ? "fixtures/db/orders_seed.yaml"
+                : "${parameters.orders_seed_ref}";
         return """
                 dsl_version: v1
                 test_case_id: RP-001-TC-001
@@ -136,11 +196,12 @@ class BindingResolverTest {
                   type: integration
                   scope: release_package
                   capabilities: [db_seed, api_payload, response_assertion]
+                %s\
                 setup:
                   fixtures:
                     orders_seed:
                       type: database_seed
-                      ref: fixtures/db/orders_seed.yaml
+                      ref: %s
                       lifecycle: state_mutating
                 execute:
                   - id: submit_payment
@@ -163,6 +224,6 @@ class BindingResolverTest {
                 runtime:
                   cleanup_required: true
                   destructive_actions_allowed: false
-                """;
+                """.formatted(parametersBlock, fixtureRef);
     }
 }

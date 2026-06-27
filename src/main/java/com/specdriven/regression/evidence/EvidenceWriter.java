@@ -86,6 +86,9 @@ public class EvidenceWriter {
                     rp_id: %s
                     test_case_id: %s
                     ac_id: %s
+                    parameter_case_id: %s
+                    parameter_values:
+                    %s
                     status: %s
                     adapter_execution_started: true
                     execution_mode: %s
@@ -116,6 +119,8 @@ public class EvidenceWriter {
                     stringValue(testCase.get("rp_id")),
                     stringValue(testCase.get("test_case_id")),
                     stringValue(testCase.get("ac_id")),
+                    stringValue(testCase.get("parameter_case_id")),
+                    parameterValuesYaml(testCase.get("resolved_parameters")),
                     status,
                     stringValue(executionTarget.get("execution_mode")),
                     stringValue(executionTarget.get("environment_ref")),
@@ -407,6 +412,19 @@ public class EvidenceWriter {
         return builder.toString().stripTrailing();
     }
 
+    private String parameterValuesYaml(Object parametersValue) {
+        Map<?, ?> parameters = map(parametersValue);
+        if (parameters.isEmpty()) {
+            return "  []";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (Map.Entry<?, ?> entry : parameters.entrySet()) {
+            builder.append("  ").append(stringValue(entry.getKey())).append(": ")
+                    .append(stringValue(entry.getValue())).append("\n");
+        }
+        return builder.toString().stripTrailing();
+    }
+
     private String writeCleanupEvidence(Path runDir, Map<String, Object> testCase) throws IOException {
         Object fixture = testCase.get("fixture");
         if (!(fixture instanceof Map<?, ?> fixtureMap)) {
@@ -479,6 +497,9 @@ public class EvidenceWriter {
                     rp_id: %s
                     test_case_id: %s
                     ac_id: %s
+                    parameter_case_id: %s
+                    parameter_values:
+                    %s
                     status: blocked
                     adapter_execution_started: false
                     execution_mode: %s
@@ -496,6 +517,8 @@ public class EvidenceWriter {
                     stringValue(testCase.get("rp_id")),
                     stringValue(testCase.get("test_case_id")),
                     stringValue(testCase.get("ac_id")),
+                    stringValue(testCase.get("parameter_case_id")),
+                    parameterValuesYaml(testCase.get("resolved_parameters")),
                     resolvedExecutionMode,
                     resolvedEnvironmentRef,
                     stringValue(executionTarget.get("ru_id")),

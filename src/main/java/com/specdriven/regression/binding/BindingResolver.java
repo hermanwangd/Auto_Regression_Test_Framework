@@ -6,8 +6,13 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.yaml.snakeyaml.Yaml;
 
@@ -16,6 +21,7 @@ public class BindingResolver {
 
     private static final List<String> SUPPORTED_M1_BINDINGS =
             List.of("input_file", "dataset", "db_seed", "api_payload", "message_event");
+    private static final Pattern PARAMETER_REFERENCE = Pattern.compile("\\$\\{parameters\\.([A-Za-z0-9_-]+)}");
     private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
 
     public BindingResolutionReport resolve(Path testCasePath) {
@@ -49,10 +55,7 @@ public class BindingResolver {
             }
         }
 
-        if (testCase.containsKey("parameters")) {
-            gaps.add(gap(testCaseId, acId, "parameters", "", "",
-                    "Parameter expansion is not implemented yet; remove parameters or implement explicit case expansion before execution."));
-        }
+        gaps.addAll(parameterGaps(rawTestCase, testCaseId, acId));
 
         if (usesExpectedResultArtifact(testCase) && missingExpectedRef(testCase)) {
             gaps.add(gap(testCaseId, acId, "expected.ref", "", "",
@@ -65,6 +68,87 @@ public class BindingResolver {
                 acId,
                 List.copyOf(resolvedBindings),
                 List.copyOf(gaps));
+    }
+
+    private List<BindingGap> parameterGaps(Map<String, Object> rawTestCase, String testCaseId, String acId) {
+        Object parametersValue = rawTestCase.get("parameters");
+        if (!(parametersValue instanceof Map<?, ?> parameters)) {
+            return List.of();
+        }
+        List<BindingGap> gaps = new ArrayList<>();
+        String strategy = stringValue(parameters.get("strategy"));
+        if (!"explicit_cases".equals(strategy)) {
+            gaps.add(gap(testCaseId, acId, "parameters.strategy", "", strategy,
+                    "Use M1-supported parameter strategy explicit_cases."));
+            return gaps;
+        }
+        Object casesValue = parameters.get("cases");
+        if (!(casesValue instanceof List<?> cases) || cases.isEmpty()) {
+            gaps.add(gap(testCaseId, acId, "parameters.cases", "", "",
+                    "Declare at least one explicit parameter case."));
+            return gaps;
+        }
+        Set<String> caseIds = new HashSet<>();
+        Set<String> references = parameterReferences(rawTestCase);
+        for (int i = 0; i < cases.size(); i++) {
+            Object caseValue = cases.get(i);
+            if (!(caseValue instanceof Map<?, ?> parameterCase)) {
+                gaps.add(gap(testCaseId, acId, "parameters.cases[" + i + "]", "", "",
+                        "Declare each parameter case as a map with case_id and values."));
+                continue;
+            }
+            String caseId = stringValue(parameterCase.get("case_id"));
+            if (caseId.isBlank()) {
+                gaps.add(gap(testCaseId, acId, "parameters.cases[" + i + "].case_id", "", "",
+                        "Declare a stable case_id for each explicit parameter case."));
+            } else if (!caseIds.add(caseId)) {
+                gaps.add(gap(testCaseId, acId, "parameters.cases[" + i + "].case_id", caseId, caseId,
+                        "Use a unique case_id for each explicit parameter case."));
+            }
+            Object valuesValue = parameterCase.get("values");
+            if (!(valuesValue instanceof Map<?, ?> values) || values.isEmpty()) {
+                gaps.add(gap(testCaseId, acId, "parameters.cases[" + i + "].values", caseId, "",
+                        "Declare non-empty values for each explicit parameter case."));
+                continue;
+            }
+            for (String reference : references) {
+                if (!values.containsKey(reference) || isMissing(values.get(reference))) {
+                    gaps.add(gap(testCaseId, acId,
+                            "parameters.cases[" + i + "].values." + reference,
+                            caseId,
+                            reference,
+                            "Declare a value for parameter reference `${parameters." + reference + "}`."));
+                }
+            }
+        }
+        return gaps;
+    }
+
+    private Set<String> parameterReferences(Object value) {
+        Set<String> references = new LinkedHashSet<>();
+        collectParameterReferences(value, references);
+        return references;
+    }
+
+    private void collectParameterReferences(Object value, Set<String> references) {
+        if (value instanceof String text) {
+            Matcher matcher = PARAMETER_REFERENCE.matcher(text);
+            while (matcher.find()) {
+                references.add(matcher.group(1));
+            }
+            return;
+        }
+        if (value instanceof Map<?, ?> map) {
+            for (Object nested : map.values()) {
+                collectParameterReferences(nested, references);
+            }
+            return;
+        }
+        if (value instanceof List<?> list) {
+            for (Object nested : list) {
+                collectParameterReferences(nested, references);
+            }
+        }
     }
 
     private String bindingFieldPath(Map<String, Object> rawTestCase, String bindingName) {

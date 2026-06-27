@@ -416,51 +416,61 @@ public class RegressionCommand {
         out.println("batch_id: " + batchId);
         out.println("execution_results:");
         for (Path approvedTest : executionTests) {
-            String runId = formatSequentialId("RUN", runNumber++);
-            while (Files.exists(packageRoot.resolve("evidence/runs").resolve(runId))) {
-                runId = formatSequentialId("RUN", runNumber++);
+            for (ParameterCase parameterCase : parameterCases(approvedTest)) {
+                String runId = formatSequentialId("RUN", runNumber++);
+                while (Files.exists(packageRoot.resolve("evidence/runs").resolve(runId))) {
+                    runId = formatSequentialId("RUN", runNumber++);
+                }
+                Path executionTest = parameterizedTestCase(approvedTest, parameterCase);
+                try {
+                    String targetRuId = targetRuId(executionTest);
+                    List<String> dependencies = targetDependencies(mappingYaml, targetRuId);
+                    DependencyBlock dependencyBlock =
+                            dependencyBlock(mappingYaml, executionTest, targetRuId, dependencies, ruStatuses);
+                    List<String> preflightFailureDetails = preflight.failureDetails(approvedTest);
+                    ExecutionResult result;
+                    if (!preflightFailureDetails.isEmpty()) {
+                        result = evidenceWriter.writeBlockedRun(
+                                packageRoot,
+                                batchId,
+                                runId,
+                                List.of(executionTest),
+                                preflightFailureDetails,
+                                preflight.executionMode(),
+                                preflight.environmentRef(),
+                                dependencies);
+                    } else if (dependencyBlock.blocked()) {
+                        result = evidenceWriter.writeBlockedRun(
+                                packageRoot,
+                                batchId,
+                                runId,
+                                List.of(executionTest),
+                                List.of(dependencyBlock.failureDetail()),
+                                preflight.executionMode(),
+                                preflight.environmentRef(),
+                                dependencies);
+                    } else {
+                        result = executionEngine.execute(packageRoot, executionTest, batchId, runId);
+                    }
+                    results.add(result);
+                    passed = passed && result.passed();
+                    recordRuStatus(ruStatuses, targetRuId, result.status());
+                    out.println("  - test_case_id: " + result.testCaseId());
+                    out.println("    ac_id: " + result.acId());
+                    if (!parameterCase.caseId().isBlank()) {
+                        out.println("    parameter_case_id: " + parameterCase.caseId());
+                    }
+                    out.println("    run_id: " + result.runId());
+                    out.println("    run_dir: " + packageRoot.relativize(result.runDir()));
+                    out.println("    status: " + result.status());
+                    out.println("    exit_code: " + result.exitCode());
+                    out.println("    timeout: " + result.timeout());
+                    out.println("    stdout: " + result.runDir().relativize(result.stdoutLog()));
+                    out.println("    stderr: " + result.runDir().relativize(result.stderrLog()));
+                } finally {
+                    deleteParameterizedTestCase(approvedTest, executionTest);
+                }
             }
-            String targetRuId = targetRuId(approvedTest);
-            List<String> dependencies = targetDependencies(mappingYaml, targetRuId);
-            DependencyBlock dependencyBlock =
-                    dependencyBlock(mappingYaml, approvedTest, targetRuId, dependencies, ruStatuses);
-            List<String> preflightFailureDetails = preflight.failureDetails(approvedTest);
-            ExecutionResult result;
-            if (!preflightFailureDetails.isEmpty()) {
-                result = evidenceWriter.writeBlockedRun(
-                        packageRoot,
-                        batchId,
-                        runId,
-                        List.of(approvedTest),
-                        preflightFailureDetails,
-                        preflight.executionMode(),
-                        preflight.environmentRef(),
-                        dependencies);
-            } else if (dependencyBlock.blocked()) {
-                result = evidenceWriter.writeBlockedRun(
-                        packageRoot,
-                        batchId,
-                        runId,
-                        List.of(approvedTest),
-                        List.of(dependencyBlock.failureDetail()),
-                        preflight.executionMode(),
-                        preflight.environmentRef(),
-                        dependencies);
-            } else {
-                result = executionEngine.execute(packageRoot, approvedTest, batchId, runId);
-            }
-            results.add(result);
-            passed = passed && result.passed();
-            recordRuStatus(ruStatuses, targetRuId, result.status());
-            out.println("  - test_case_id: " + result.testCaseId());
-            out.println("    ac_id: " + result.acId());
-            out.println("    run_id: " + result.runId());
-            out.println("    run_dir: " + packageRoot.relativize(result.runDir()));
-            out.println("    status: " + result.status());
-            out.println("    exit_code: " + result.exitCode());
-            out.println("    timeout: " + result.timeout());
-            out.println("    stdout: " + result.runDir().relativize(result.stdoutLog()));
-            out.println("    stderr: " + result.runDir().relativize(result.stderrLog()));
         }
         String runStatus = aggregateRunStatus(results);
         evidenceWriter.writeExecutionBatch(
@@ -511,6 +521,89 @@ public class RegressionCommand {
             }
         }
         return false;
+    }
+
+    private List<ParameterCase> parameterCases(Path approvedTest) {
+        Object parametersValue = readYamlMap(approvedTest).get("parameters");
+        if (!(parametersValue instanceof Map<?, ?> parameters)
+                || !"explicit_cases".equals(stringValue(parameters.get("strategy")))
+                || !(parameters.get("cases") instanceof List<?> cases)
+                || cases.isEmpty()) {
+            return List.of(new ParameterCase("", Map.of()));
+        }
+        List<ParameterCase> parameterCases = new java.util.ArrayList<>();
+        for (Object caseValue : cases) {
+            if (!(caseValue instanceof Map<?, ?> parameterCase)) {
+                continue;
+            }
+            String caseId = stringValue(parameterCase.get("case_id"));
+            Object valuesValue = parameterCase.get("values");
+            if (caseId.isBlank() || !(valuesValue instanceof Map<?, ?> values) || values.isEmpty()) {
+                continue;
+            }
+            Map<String, Object> copiedValues = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : values.entrySet()) {
+                copiedValues.put(stringValue(entry.getKey()), entry.getValue());
+            }
+            parameterCases.add(new ParameterCase(caseId, copiedValues));
+        }
+        return parameterCases.isEmpty() ? List.of(new ParameterCase("", Map.of())) : List.copyOf(parameterCases);
+    }
+
+    private Path parameterizedTestCase(Path approvedTest, ParameterCase parameterCase) {
+        if (parameterCase.caseId().isBlank()) {
+            return approvedTest;
+        }
+        Map<String, Object> resolved = new LinkedHashMap<>(readYamlMap(approvedTest));
+        resolved.put("parameter_case_id", parameterCase.caseId());
+        resolved.put("resolved_parameters", parameterCase.values());
+        resolved.replaceAll((key, value) -> resolveParameterReferences(value, parameterCase.values()));
+        // replaceAll will also process parameters; restore resolved metadata after substitution.
+        resolved.put("parameter_case_id", parameterCase.caseId());
+        resolved.put("resolved_parameters", parameterCase.values());
+        try {
+            Path parameterizedTest = Files.createTempFile("regression-parameter-case-", ".yaml");
+            Files.writeString(parameterizedTest, new Yaml().dump(resolved));
+            return parameterizedTest;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to create parameterized test case.", e);
+        }
+    }
+
+    private void deleteParameterizedTestCase(Path approvedTest, Path executionTest) {
+        if (approvedTest.equals(executionTest)) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(executionTest);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to delete parameterized test case.", e);
+        }
+    }
+
+    private Object resolveParameterReferences(Object value, Map<String, Object> parameters) {
+        if (value instanceof String text) {
+            String resolved = text;
+            for (Map.Entry<String, Object> entry : parameters.entrySet()) {
+                resolved = resolved.replace("${parameters." + entry.getKey() + "}", stringValue(entry.getValue()));
+            }
+            return resolved;
+        }
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> resolved = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                resolved.put(stringValue(entry.getKey()), resolveParameterReferences(entry.getValue(), parameters));
+            }
+            return resolved;
+        }
+        if (value instanceof List<?> list) {
+            List<Object> resolved = new java.util.ArrayList<>();
+            for (Object item : list) {
+                resolved.add(resolveParameterReferences(item, parameters));
+            }
+            return resolved;
+        }
+        return value;
     }
 
     private DependencyBlock dependencyBlock(
@@ -1414,6 +1507,9 @@ public class RegressionCommand {
         List<String> failureDetails(Path approvedTest) {
             return blockedTestFailureDetails.getOrDefault(approvedTest, List.of());
         }
+    }
+
+    private record ParameterCase(String caseId, Map<String, Object> values) {
     }
 
     private record DependencyBlock(boolean blocked, String failureDetail) {

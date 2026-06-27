@@ -334,7 +334,7 @@ class RegressionCommandTest {
     }
 
     @Test
-    void runDryRunBlocksParameterizedTestsUntilExpansionIsImplemented() throws Exception {
+    void runExecutesExecutionFocusedDslV1ExplicitParameterCasesAsSeparateRuns() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
@@ -342,24 +342,42 @@ class RegressionCommandTest {
                 "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
         writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
-        writeCompleteCiMapping("RP-001");
+        writeExecutableCiMapping("RP-001");
         writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
         writeApprovedParameterizedTestCase("RP-001");
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ByteArrayOutputStream runOutput = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
-                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
-                print(output), print(new ByteArrayOutputStream()));
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(runOutput), print(new ByteArrayOutputStream()));
 
-        assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("run_status: blocked");
-        assertThat(output.toString()).contains("binding_gaps:");
-        assertThat(output.toString()).contains("test_case_id: RP-001-TC-001");
-        assertThat(output.toString()).contains("ac_id: RP-001-AC-001");
-        assertThat(output.toString()).contains("field_path: parameters");
-        assertThat(output.toString()).contains("reason: parameter_expansion_unsupported");
-        assertThat(output.toString()).contains("owner_action: Parameter expansion is not implemented yet; remove parameters or implement explicit case expansion before execution.");
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        String runOne = Files.readString(packageRoot.resolve("evidence/runs/RUN-001/run.yaml"));
+        String runTwo = Files.readString(packageRoot.resolve("evidence/runs/RUN-002/run.yaml"));
+        assertThat(exit).as(runOutput.toString()).isZero();
+        assertThat(runOutput.toString())
+                .contains("run_status: passed")
+                .contains("run_id: RUN-001")
+                .contains("run_id: RUN-002");
+        assertThat(runOne)
+                .contains("test_case_id: RP-001-TC-001")
+                .contains("ac_id: RP-001-AC-001")
+                .contains("parameter_case_id: baseline")
+                .contains("orders_seed_ref: fixtures/input/orders_seed_baseline.csv");
+        assertThat(runTwo)
+                .contains("test_case_id: RP-001-TC-001")
+                .contains("ac_id: RP-001-AC-001")
+                .contains("parameter_case_id: boundary")
+                .contains("orders_seed_ref: fixtures/input/orders_seed_boundary.csv");
+
+        ByteArrayOutputStream reportOutput = new ByteArrayOutputStream();
+        int reportExit = command.execute(new String[] {
+                "report", "--root", tempDir.toString(), "--rp-id", "RP-001", "--batch-id", "BATCH-001"},
+                print(reportOutput), print(new ByteArrayOutputStream()));
+
+        assertThat(reportExit).isZero();
+        assertThat(reportOutput.toString()).contains("report_status: review_ready");
+        assertThat(reportOutput.toString()).contains("coverage_percent: 100.0");
     }
 
     @Test
@@ -3960,52 +3978,64 @@ class RegressionCommandTest {
         Files.writeString(testCase, """
                 dsl_version: v1
                 test_case_id: %s
-                rp_id: %s
-                ac_id: %s
-                artifact_status: approved_for_regression
+                status: active
                 revision: 1
-                source_refs:
-                  acceptance_criteria: acceptance_criteria.md#%s
-                source_fingerprint: sha256:test
-                execution_target:
-                  ru_id: RU-transform-job
-                  adapter: spring_boot_cli
-                  execution_mode: ci_ephemeral
-                  environment_ref: ci://pipeline/%s
+                traceability:
+                  package_id: %s
+                  acceptance_criteria_id: %s
+                  source: acceptance_criteria.md#%s
+                targets:
+                  RU-transform-job:
+                    type: spring_boot_application
+                    runner: spring_boot_cli
+                    environment: ci://pipeline/%s
                 scenario:
                   type: integration
                   scope: release_package
-                  capabilities: [file_input, batch_execution, file_assertion]
+                  capabilities: [db_seed, batch_execution, file_assertion]
                 parameters:
                   strategy: explicit_cases
                   cases:
-                    - name: baseline
-                      bindings:
-                        orders_seed: fixtures/input/orders_seed_baseline.csv
-                    - name: boundary
-                      bindings:
-                        orders_seed: fixtures/input/orders_seed_boundary.csv
-                expected:
-                  ref: expected-results/approved/%s.yaml
-                oracles:
+                    - case_id: baseline
+                      values:
+                        orders_seed_ref: fixtures/input/orders_seed_baseline.csv
+                    - case_id: boundary
+                      values:
+                        orders_seed_ref: fixtures/input/orders_seed_boundary.csv
+                setup:
+                  fixtures:
+                    orders_seed:
+                      type: db_seed
+                      ref: ${parameters.orders_seed_ref}
+                      cleanup_ref: fixtures/cleanup/orders_seed_cleanup.sql
+                execute:
+                  - id: run_pipeline
+                    operation: run_batch
+                    target: RU-transform-job
+                    with:
+                      orders_seed: ${setup.fixtures.orders_seed}
+                    outputs:
+                      exit_code: ${result.exit_code}
+                      normalized_orders_file: ${result.files.normalized_orders}
+                      execution_log: ${result.logs.execution_log}
+                expected_results:
                   normalized_orders:
                     type: expected_result_artifact
                     ref: expected-results/approved/%s.yaml
-                package_inputs:
-                  inputs:
-                    orders_seed:
-                      ref: fixtures/input/orders_seed.csv
-                      bind_as: input_file
-                steps:
-                  - id: run_pipeline
-                    action: call_ru
-                    target_ru_id: RU-transform-job
-                assertions:
-                  - type: file_diff
-                    oracle: ${oracles.normalized_orders}
-                evidence_required:
-                  - execution_log
-                """.formatted(testCaseId, rpId, acId, acId, rpId, expectedResultId, expectedResultId));
+                verify:
+                  - id: verify_output
+                    type: file_diff
+                    actual: ${execute.run_pipeline.outputs.normalized_orders_file}
+                    expected: ${expected_results.normalized_orders.ref}
+                evidence:
+                  required:
+                    - ${execute.run_pipeline.outputs.execution_log}
+                    - ${verify.verify_output.result}
+                runtime:
+                  timeout: PT10M
+                  retry:
+                    max_attempts: 0
+                """.formatted(testCaseId, rpId, acId, acId, rpId, expectedResultId));
     }
 
     private void writeApprovedExternalRunnerTestCase(String rpId) throws Exception {
