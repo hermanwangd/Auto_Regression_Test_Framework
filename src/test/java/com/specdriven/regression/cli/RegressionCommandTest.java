@@ -91,6 +91,7 @@ class RegressionCommandTest {
 
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString()).contains("status: fail");
+        assertThat(output.toString()).contains("reason: missing_product_repo_path");
         assertThat(output.toString()).contains("owner_action:");
     }
 

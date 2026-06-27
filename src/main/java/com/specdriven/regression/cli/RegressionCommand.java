@@ -200,6 +200,7 @@ public class RegressionCommand {
         out.println("gaps:");
         for (ReadinessGap gap : report.gaps()) {
             out.println("  - path: " + gap.path());
+            out.println("    reason: missing_product_repo_path");
             out.println("    owner_action: " + gap.ownerAction());
         }
         String rpId = options.get("--rp-id");
@@ -261,6 +262,7 @@ public class RegressionCommand {
         StringBuilder builder = new StringBuilder();
         for (ReadinessGap gap : gaps) {
             builder.append("  - path: ").append(gap.path()).append("\n");
+            builder.append("    reason: missing_product_repo_path\n");
             builder.append("    owner_action: ").append(gap.ownerAction()).append("\n");
         }
         return builder.toString().stripTrailing();
