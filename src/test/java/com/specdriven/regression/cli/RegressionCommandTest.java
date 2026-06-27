@@ -1222,6 +1222,70 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksMessagingProviderWithoutTimeoutBeforeInvocation() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-TIMEOUT";
+        String acId = rpId + "-AC-001";
+        String payload = "{\"eventId\":\"EVT-001\",\"status\":\"published\"}\n";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingProviderMappingWithoutTimeout(rpId);
+        writeMessagingEventPayload(rpId, payload);
+        writeApprovedExpectedResult(rpId, acId, payload);
+        writeApprovedMessagingTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: messaging");
+        assertThat(output.toString()).contains("provider_type: local");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.timeout_seconds");
+        assertThat(output.toString()).contains("Declare timeout_seconds as a positive bounded integer for messaging provider `message_bus`");
+    }
+
+    @Test
+    void runDryRunBlocksMessagingProviderWithoutOutputRefBeforeInvocation() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-OUTPUT";
+        String acId = rpId + "-AC-001";
+        String payload = "{\"eventId\":\"EVT-001\",\"status\":\"published\"}\n";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingProviderMappingWithoutOutputRef(rpId);
+        writeMessagingEventPayload(rpId, payload);
+        writeApprovedExpectedResult(rpId, acId, payload);
+        writeApprovedMessagingTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: messaging");
+        assertThat(output.toString()).contains("provider_type: local");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.outputs.actual_output_ref");
+        assertThat(output.toString()).contains("Declare actual_output_ref for messaging provider `message_bus`");
+    }
+
+    @Test
     void runBlocksUnsupportedMessagingProviderTypeBeforeExecution() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-MSG-KAFKA";
@@ -2792,7 +2856,17 @@ class RegressionCommandTest {
 
     private void writeMessagingProviderMappingRequiringCorrelationWithoutId(String rpId) throws Exception {
         writeMessagingProviderMapping(rpId, "local", "mock://payment.events", "payment_event",
-                "publish_payment_event", "", "\n              requires_correlation: true");
+                "publish_payment_event", "", "\n                              requires_correlation: true");
+    }
+
+    private void writeMessagingProviderMappingWithoutTimeout(String rpId) throws Exception {
+        writeMessagingProviderMapping(rpId, "local", "mock://payment.events", "payment_event",
+                "publish_payment_event", "", "", false, true);
+    }
+
+    private void writeMessagingProviderMappingWithoutOutputRef(String rpId) throws Exception {
+        writeMessagingProviderMapping(rpId, "local", "mock://payment.events", "payment_event",
+                "publish_payment_event", "", "", true, false);
     }
 
     private void writeMessagingProviderMapping(
@@ -2803,11 +2877,30 @@ class RegressionCommandTest {
             String actionName,
             String serialization,
             String actionExtraLines) throws Exception {
+        writeMessagingProviderMapping(rpId, providerType, topicRef, payloadBinding, actionName, serialization,
+                actionExtraLines, true, true);
+    }
+
+    private void writeMessagingProviderMapping(
+            String rpId,
+            String providerType,
+            String topicRef,
+            String payloadBinding,
+            String actionName,
+            String serialization,
+            String actionExtraLines,
+            boolean includeTimeout,
+            boolean includeOutputRef) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
         String serializationLine = serialization.isBlank()
                 ? ""
-                : "\n              serialization: " + serialization;
+                : "\n                              serialization: " + serialization;
         String actionLines = serializationLine + actionExtraLines;
+        String timeoutLine = includeTimeout ? "                          timeout_seconds: 10\n" : "";
+        String outputsBlock = includeOutputRef
+                ? "                          outputs:\n"
+                        + "                            actual_output_ref: actual/message.json\n"
+                : "";
         Files.writeString(mapping, """
                 rp_id: %s
                 release_units:
@@ -2827,17 +2920,14 @@ class RegressionCommandTest {
                           provider_family: messaging
                           provider_type: %s
                           topic_ref: %s
-                          timeout_seconds: 10
-                          actions:
+%s                          actions:
                             %s:
                               mode: publish
                               payload_binding: %s%s
                           logs:
                             stdout: logs/message.log
                             stderr: logs/message-error.log
-                          outputs:
-                            actual_output_ref: actual/message.json
-                      bindings:
+%s                      bindings:
                         message_event:
                           provider_family: messaging
                           provider_type: event_payload
@@ -2848,7 +2938,8 @@ class RegressionCommandTest {
                       observations: {}
                     evidence_responsibility: [execution_log, message_event]
                     dependencies: []
-                """.formatted(rpId, providerType, topicRef, actionName, payloadBinding, actionLines));
+                """.formatted(rpId, providerType, topicRef, timeoutLine, actionName, payloadBinding,
+                actionLines, outputsBlock));
     }
 
     private void writeMessagingEventPayload(String rpId, String payload) throws Exception {

@@ -136,10 +136,24 @@ class ProviderCapabilityRegistry {
                         "Declare at least one request/response action for `" + providerName + "`."));
             }
         }
-        if (family.equals("messaging") && (type.equals("local") || type.equals("mock"))
-                && !hasAnyText(contract, "topic_ref", "subject_ref", "stream_ref", "endpoint_ref")) {
-            violations.add(required(".topic_ref",
-                    "Declare topic_ref, subject_ref, stream_ref, or endpoint_ref for `" + providerName + "`."));
+        if (family.equals("messaging") && (type.equals("local") || type.equals("mock"))) {
+            if (!hasAnyText(contract, "topic_ref", "subject_ref", "stream_ref", "endpoint_ref")) {
+                violations.add(required(".topic_ref",
+                        "Declare topic_ref, subject_ref, stream_ref, or endpoint_ref for `" + providerName + "`."));
+            }
+            if (!hasAnyText(contract, "timeout_seconds")) {
+                violations.add(required(".timeout_seconds",
+                        "Declare timeout_seconds as a positive bounded integer for messaging provider `"
+                                + providerName + "`."));
+            } else if (!isPositiveInteger(contract.get("timeout_seconds"))) {
+                violations.add(required(".timeout_seconds",
+                        "Declare timeout_seconds as a positive bounded integer for messaging provider `"
+                                + providerName + "`."));
+            }
+            if (!hasNestedAnyText(contract, "outputs", "actual_output_ref")) {
+                violations.add(required(".outputs.actual_output_ref",
+                        "Declare actual_output_ref for messaging provider `" + providerName + "`."));
+            }
         }
         if (family.equals("deployment_readiness") && (type.equals("local") || type.equals("mock"))) {
             if (!hasAnyText(contract, "readiness_probe")) {

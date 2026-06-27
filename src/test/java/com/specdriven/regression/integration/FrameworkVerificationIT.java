@@ -739,6 +739,9 @@ class FrameworkVerificationIT {
                           provider_family: messaging
                           provider_type: local
                           topic_ref: mock://payment.events
+                          timeout_seconds: 10
+                          outputs:
+                            actual_output_ref: actual/message.json
                       bindings:
                         message_event:
                           provider_family: messaging
