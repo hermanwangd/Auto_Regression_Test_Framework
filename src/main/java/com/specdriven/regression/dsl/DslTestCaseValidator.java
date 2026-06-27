@@ -81,6 +81,9 @@ public class DslTestCaseValidator {
             "file_exists",
             "file_not_empty",
             "json_path_absent");
+    private static final Set<String> VERIFY_TYPES_REQUIRING_SELECTOR = Set.of(
+            "json_path_equals",
+            "json_path_absent");
     private static final Set<String> STATE_VERIFY_TYPES = Set.of("db_record_exists", "db_row_matches");
     private static final Set<String> EVENT_VERIFY_TYPES = Set.of("event_published");
     private static final Set<String> STATE_MUTATING_FIXTURE_TYPES = Set.of(
@@ -379,6 +382,7 @@ public class DslTestCaseValidator {
                         "Declare verify type."));
                 continue;
             }
+            validateSelectorWhenRequired(rule, type, prefix, verifyId, testCaseId, acId, gaps);
             if (VERIFY_TYPES_REQUIRING_ACTUAL_AND_EXPECTED.contains(type)) {
                 requireText(rule, "actual", "verify", testCaseId, acId, gaps,
                         "Declare actual source for verify rule `" + verifyId + "`.", prefix + ".actual", verifyId);
@@ -417,6 +421,23 @@ public class DslTestCaseValidator {
                 gaps.add(gap(testCaseId, acId, "verify", prefix + ".type", verifyId,
                         "Use a supported v1 verify type before assertion evaluation."));
             }
+        }
+    }
+
+    private void validateSelectorWhenRequired(
+            Map<?, ?> rule,
+            String type,
+            String prefix,
+            String verifyId,
+            String testCaseId,
+            String acId,
+            List<DslValidationGap> gaps) {
+        if (VERIFY_TYPES_REQUIRING_SELECTOR.contains(type)
+                && isMissing(rule.get("selector"))
+                && isMissing(rule.get("path"))
+                && isMissing(rule.get("json_path"))) {
+            gaps.add(gap(testCaseId, acId, "verify", prefix + ".selector", verifyId,
+                    "Declare selector for JSON path verify rule `" + verifyId + "`."));
         }
     }
 

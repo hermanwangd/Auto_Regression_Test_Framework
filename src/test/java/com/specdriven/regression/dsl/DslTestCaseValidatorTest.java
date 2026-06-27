@@ -90,6 +90,34 @@ class DslTestCaseValidatorTest {
     }
 
     @Test
+    void blocksJsonPathVerifyRulesWithoutSelector() {
+        String yaml = validExecutionFocusedDsl()
+                .replace("""
+                  - id: verify_output
+                    type: file_diff
+                    actual: ${execute.run_pipeline.outputs.actual_output}
+                    expected: ${expected_results.primary.ref}
+                """, """
+                  - id: verify_status
+                    type: json_path_equals
+                    actual: ${execute.run_pipeline.outputs.actual_output}
+                    expected: NORMALIZED
+                  - id: verify_error_absent
+                    type: json_path_absent
+                    actual: ${execute.run_pipeline.outputs.actual_output}
+                """)
+                .replace("${verify.verify_output.result}", "${verify.verify_status.result}");
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains("verify[0].selector", "verify[1].selector");
+        assertThat(report.gaps()).extracting(DslValidationGap::verifyId)
+                .contains("verify_status", "verify_error_absent");
+    }
+
+    @Test
     void reportsSyntaxGapForInvalidYamlInsteadOfThrowing() {
         DslValidationReport report = new DslTestCaseValidator().validate("""
                 dsl_version: v1

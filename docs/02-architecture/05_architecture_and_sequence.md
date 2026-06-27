@@ -80,7 +80,7 @@ CLI Orchestrator
 | Planning and Binding | Resolve targets, setup fixtures, execute inputs/outputs, expected results, verify references, runtime references, and provider contracts into an execution plan | AC-005, AC-007 |
 | Fixture and State Manager | Check preconditions, set up fixtures, seed or publish data, enforce cleanup, and validate postconditions | AC-007 |
 | Execution Engine | Execute planned operations through provider registry dispatch, manage execution modes, captured outputs, timeout, retry, and adapter/provider result capture | AC-007 |
-| Oracle and Assertion Engine | Resolve expected-result truth sources and evaluate actual outputs through verify rules | AC-007 |
+| Oracle and Assertion Engine | Resolve expected-result truth sources and evaluate actual outputs through verify rules, including selector-based structured output checks | AC-006, AC-007 |
 | Evidence and Reporting | Persist batch summaries, run evidence, observations, cleanup results, failures, traceability, coverage, and release-review reports | AC-007, AC-009 |
 
 Internal module mapping:
@@ -141,7 +141,7 @@ Provider contracts are configuration artifacts consumed by APs; they are not DSL
 
 Execution-focused DSL v1 references provider behavior through `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures`, `expected_results`, and `verify` rules. It must not embed provider configuration, endpoint URLs, connection strings, shell scripts, SQL bodies, release gates, waivers, or approval workflow. Legacy fields such as `execution_target`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, and `policy` are compatibility inputs only until parser/generator migration is complete.
 
-DSL v1 validation is the first F007 architecture gate. Definition and Validation must confirm syntax, required fields, supported execution lifecycle status, forbidden governance fields, and legacy-field migration rules before Discovery, Planning, provider contract binding, fixture setup, or provider dispatch can run. New DSL artifacts that contain `call_ru`, `target_ru_id`, `package_inputs`, `oracles`, release gates, waivers, or approval workflow state are invalid even when equivalent legacy artifacts remain readable during migration.
+DSL v1 validation is the first F007 architecture gate. Definition and Validation must confirm syntax, required fields, supported execution lifecycle status, forbidden governance fields, selector-based verify requirements, and legacy-field migration rules before Discovery, Planning, provider contract binding, fixture setup, or provider dispatch can run. New DSL artifacts that contain `call_ru`, `target_ru_id`, `package_inputs`, `oracles`, release gates, waivers, or approval workflow state are invalid even when equivalent legacy artifacts remain readable during migration.
 
 The gate sequence for execution-focused tests is:
 
@@ -149,7 +149,7 @@ The gate sequence for execution-focused tests is:
 DSL v1 parse and validation
 -> traceability and lifecycle status check
 -> target and scenario resolution
--> setup, execute output, expected_result, verify, evidence, and runtime validation
+-> setup, execute output, expected_result, verify selector/query/event, evidence, and runtime validation
 -> provider contract lookup through RP/RU mapping
 -> execution plan creation
 -> fixture setup and provider dispatch
@@ -246,6 +246,7 @@ Boundary rules:
 - `fixture` owns setup, cleanup, precondition, and postcondition lifecycle coordination.
 - `execution` executes a prepared plan and records operation results; it does not own schema validation, binding resolution, provider contract resolution, or fixture policy.
 - `oracle` loads expected-result sources and decision parameters; `assertion` applies verify rules against actual outputs.
+- `assertion` evaluates structured output selectors declared by DSL verify rules; it must not infer missing JSONPath selectors for `json_path_equals` or `json_path_absent` in new execution-focused DSL artifacts.
 - `adapter` is the legacy shell/file execution boundary. New heterogeneous behavior should enter through provider registry entries before considering adapter-specific or external-runner behavior.
 - `evidence` and `report` write durable evidence under the RP release record.
 

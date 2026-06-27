@@ -247,7 +247,7 @@ The v1 contract separates stable top-level structure from execution-required con
 - Conditionally required: `setup.fixtures` when the scenario needs precondition data, state mutation, mock setup, seed data, or cleanup.
 - Conditionally required: `expected_results` when a verify item references an approved artifact, schema, contract, payload, file, DB state snapshot, or other reusable truth source. Simple deterministic expected values may be declared directly in `verify[].expected`.
 - Conditionally required: `parameters.strategy`, `parameters.cases[].case_id`, and `parameters.cases[].values` when the test uses parameterization. M1 supports only `strategy: explicit_cases`.
-- Required when referenced: `execute[].outputs`, `verify[].selector`, `verify[].target/query/event`, `verify[].options`, and fixture `cleanup_ref`.
+- Required when referenced: `execute[].outputs`, `verify[].selector` for structured output checks, `verify[].target/query/event` for state or event checks, `verify[].options` for polling/tolerance/normalization, and fixture `cleanup_ref`.
 - Prohibited in DSL: provider implementation settings, secrets, endpoint URLs, connection strings, SQL bodies, shell scripts, release gates, waivers, risk approvals, and approval workflow state.
 
 The v1 semantic model is:
@@ -402,19 +402,36 @@ Core `verify[].type` values for v1 are:
 | Group | Verify Types |
 |---|---|
 | Basic | `equals`, `not_equals`, `exists`, `not_exists`, `contains`, `regex_match` |
-| Structure | `schema_match` |
+| Structured output | `json_path_equals`, `json_path_absent`, `response_status_equals` |
+| Structure | `schema_match`, `schema_matches`, `contract_match`, `contract_matches` |
 | Collection | `list_size_equals`, `unordered_list_equals` |
 | Numeric | `numeric_tolerance` |
 | File | `file_exists`, `file_not_empty`, `file_diff` |
-| State | `db_record_exists` |
+| State | `db_record_exists`, `db_row_matches` |
 | Event | `event_published` |
 
-For normal comparison checks, each `verify` item must define explicit `actual` and `expected`. Use `selector` when comparing part of a structured actual result.
+For normal comparison checks, each `verify` item must define explicit `actual` and `expected`. `actual` identifies the captured output or evidence source. Use `selector` when comparing part of a structured actual result. New DSL artifacts must not overload `actual` with a JSONPath expression when a captured output ref is required.
+
+`selector` is the canonical v1 field for JSON/YAML path selection. `path` and `json_path` are accepted only as compatibility aliases while older artifacts migrate. New generator output and new checked-in RP tests must use `selector`.
+
+Required selector rules:
+
+| Verify Type | Required Fields |
+|---|---|
+| `json_path_equals` | `actual`, `selector`, `expected` |
+| `json_path_absent` | `actual`, `selector` |
+| `numeric_tolerance` over structured output | `actual`, `selector`, `expected`, and tolerance in `options.tolerance`, `tolerance`, or `epsilon` |
+| `response_status_equals` | `expected`; `actual` plus `selector` when status is read from a structured captured output, or provider HTTP status metadata when supplied by the request/response provider |
 
 ```yaml
 verify:
   - id: verify_response_status
     type: equals
+    actual: ${execute.create_order.outputs.response_body}
+    selector: $.status
+    expected: CREATED
+  - id: verify_response_body_status
+    type: json_path_equals
     actual: ${execute.create_order.outputs.response_body}
     selector: $.status
     expected: CREATED

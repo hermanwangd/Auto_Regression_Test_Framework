@@ -188,7 +188,7 @@ Conditional fields are required only when the scenario needs them:
 | `setup.fixtures.<name>.cleanup_ref` | The test creates, mutates, seeds, publishes, or deletes state. | Hidden destructive actions without cleanup references. |
 | `execute[].with` | Runtime inputs are passed to the selected operation. | Secrets, endpoint URLs, connection strings, or provider code. |
 | `execute[].outputs` | Later verification or evidence references execution output. | Uncaptured implicit result paths. |
-| `verify[].selector` | Only part of a structured actual result is compared. | Provider-specific parser code. |
+| `verify[].selector` | A verify rule compares or checks a field inside a structured actual result, including `json_path_equals`, `json_path_absent`, and structured `numeric_tolerance` checks. `actual` names the captured output; `selector` names the JSON/YAML path inside it. | Provider-specific parser code, captured-output refs overloaded as JSONPath expressions, or runtime-inferred selectors. |
 | `verify[].target`, `verify[].query`, or `verify[].event` | The check validates DB state or published events. | Inline credentials, physical connection strings, or unreviewed destructive SQL. |
 | `verify[].options` | The check needs timeout, polling, tolerance, normalization, or ignore paths. | Release gate or risk approval policy. |
 | `parameters.strategy`, `parameters.cases[].case_id`, `parameters.cases[].values` | The test uses parameterization. M1 supports only `explicit_cases`. | Dynamic data discovery, combinatorial generation, secrets, or unreviewed runtime-created cases. |
@@ -204,6 +204,7 @@ New execution-focused DSL artifacts must:
 - Use readable operation names such as `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, or `run_application`.
 - Use `targets`, `setup` when needed, `execute`, `expected_results` when needed, `verify`, `evidence`, and `runtime` instead of framework-internal legacy fields.
 - Capture `execute[].outputs` whenever verification or evidence references execution results.
+- For structured output checks, keep `actual` as the captured output reference and declare `selector` as the canonical field path. `path` and `json_path` are compatibility aliases only; new generated DSL must use `selector`.
 - Use `parameters.strategy: explicit_cases` only when the reviewed test artifact must run the same behavior against multiple named input variants.
 - Keep provider implementation details in RP/RU mapping or provider contracts, not inside the test case body.
 - Fail validation before execution when required fields, conditional fields, or supported enum values are missing.

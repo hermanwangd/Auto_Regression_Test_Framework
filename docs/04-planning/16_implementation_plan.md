@@ -151,7 +151,7 @@ Implement the execution-focused DSL v1 validation gate before provider runtime m
 The gate validates:
 
 - Always-required fields: `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime`.
-- Conditional fields: `setup.fixtures` when precondition data or mutated state is needed, `expected_results` when verify rules use approved artifacts or reusable truth sources, `setup.fixtures.<name>.cleanup_ref` for state mutation, `execute[].with`, `execute[].outputs`, `verify[].selector`, `verify[].target/query/event`, and `verify[].options`.
+- Conditional fields: `setup.fixtures` when precondition data or mutated state is needed, `expected_results` when verify rules use approved artifacts or reusable truth sources, `setup.fixtures.<name>.cleanup_ref` for state mutation, `execute[].with`, `execute[].outputs`, `verify[].selector` for `json_path_equals`, `json_path_absent`, and structured `numeric_tolerance` checks, `verify[].target/query/event`, and `verify[].options`.
 - Parameterization fields when used: `parameters.strategy: explicit_cases`, unique `parameters.cases[].case_id`, non-empty `parameters.cases[].values`, and resolvable `${parameters.<name>}` references.
 - Supported operations: `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, and `run_application`.
 - Supported verify rules: basic, structure, collection, numeric, file, state, and event checks defined in the artifact contract.
@@ -165,6 +165,8 @@ Verification:
 ```
 
 Done when valid DSL v1 artifacts pass, invalid DSL blocks before provider dispatch with AP/field/test/AC/owner-action details, generated executable drafts use execution-focused fields, and legacy artifacts remain readable only through compatibility behavior.
+
+The next validation slice shall add a failing test first for missing `verify[].selector` on `json_path_equals` and `json_path_absent`, then implement blocking behavior in the DSL validator before assertion/runtime changes.
 
 ### T003B - Execution-Focused DSL v1 Run and Report Consumption Gate
 
@@ -363,7 +365,7 @@ Related feature: F007
 Acceptance: AC-007
 Modules: `oracle`, `assertion`
 
-Implement M1 expected-result loading and verify types required by the pilot, starting with `file`, `expected_result_artifact`, HTTP/status field checks, JSON path equality and absence checks, numeric tolerance checks, schema/contract checks, and `query_result` DB row count checks where approved expected-result artifacts, reviewed query refs, or inline decision rules are used. For the selected heterogeneous pilot, promote required verify types such as `invariant` only when their provider family and assertion implementation are selected and verified.
+Implement M1 expected-result loading and verify types required by the pilot, starting with `file`, `expected_result_artifact`, HTTP/status field checks, JSON path equality and absence checks, numeric tolerance checks, schema/contract checks, and `query_result` DB row count checks where approved expected-result artifacts, reviewed query refs, or inline decision rules are used. For structured output checks, normalize canonical `selector` into the assertion engine path model while retaining `path` and `json_path` only as compatibility aliases. For the selected heterogeneous pilot, promote required verify types such as `invariant` only when their provider family and assertion implementation are selected and verified.
 
 Expected-result or verify types outside selected or implemented provider families are rejected as unsupported before verify evaluation.
 

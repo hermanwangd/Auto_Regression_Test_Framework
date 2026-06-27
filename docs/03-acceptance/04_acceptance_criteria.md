@@ -28,6 +28,7 @@ Minimum verification rule for DSL/AP clarity:
 - New execution-focused DSL artifacts shall not contain legacy-only fields such as `rp_id`, `ac_id`, `execution_target`, `target_ru_id`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, or `policy`.
 - New execution-focused DSL artifacts shall not contain governance-heavy fields such as `approval_status`, `approved_by`, `approval_required`, `waiver`, `release_gate`, `risk_approval`, or governance workflow state.
 - A missing provider contract, unsupported DSL capability, missing expected result, missing cleanup reference, missing execute output, invalid verify rule, or missing environment readiness shall block before adapter execution starts.
+- A structured verify rule shall keep `actual` as the captured output reference and declare `selector` as the canonical field path. Missing `selector` for `json_path_equals` or `json_path_absent` shall block before provider dispatch or assertion evaluation.
 - Baseline, spec, architecture, and AC documents shall use the same seven AP names and shall not introduce hidden AP-level components.
 - Every required or conditional DSL field shall map to a primary AP consumer and have a clear reason for being required.
 - Before implementation starts for any DSL, AP, provider runtime, evidence, or report change, the feature/spec, architecture design, artifact contract, AC, implementation plan, and test plan shall describe the same behavior, non-goals, required/conditional/prohibited fields, happy/failure/boundary paths, and verification evidence.
@@ -179,7 +180,7 @@ Then the DSL shall reference it through `expected_results` and a `verify` item w
 
 ### Failure Path
 
-Given a missing expected result, missing `actual`, missing `expected`, unresolved selector, unsupported verify type, or missing query/event reference
+Given a missing expected result, missing `actual`, missing `expected`, missing or unresolved `selector` for structured output verification, unsupported verify type, or missing query/event reference
 When normal regression execution is requested
 Then the run shall be blocked before adapter execution or assertion evaluation and report the missing field, verify ID, and owner action.
 
@@ -188,6 +189,10 @@ Then the run shall be blocked before adapter execution or assertion evaluation a
 Given a deterministic verification that does not require an expected-result artifact
 When the DSL test is checked
 Then the `verify` item shall still declare its type, actual source, expected value or state/event expectation, and remain traceable to RP AC.
+
+Given a `json_path_equals` or `json_path_absent` verify rule
+When the DSL test is checked
+Then `actual` shall reference a captured output and `selector` shall declare the JSON/YAML path being evaluated. Compatibility aliases `path` or `json_path` may be read from migrated artifacts, but new generated DSL shall use `selector`.
 
 ## AC-007 Regression Runs Produce Durable Evidence
 
@@ -253,7 +258,7 @@ And blocked run evidence shall preserve enough normalized DSL runtime context to
 
 And when a selected pilot provider family or provider type is missing, unsupported, ambiguous, or only available as an unapproved escape hatch, the dry-run report shall name the provider family, provider type, capability, affected RU, provider contract path, registry status, and required owner action.
 
-Given a new DSL test case uses `call_ru`, `target_ru_id`, `package_inputs`, `oracles`, missing `execute[].outputs`, missing `runtime.timeout`, missing `runtime.retry.max_attempts`, unsupported `verify[].type`, or governance-heavy approval/release fields
+Given a new DSL test case uses `call_ru`, `target_ru_id`, `package_inputs`, `oracles`, missing `execute[].outputs`, missing `runtime.timeout`, missing `runtime.retry.max_attempts`, unsupported `verify[].type`, missing structured verify selector, or governance-heavy approval/release fields
 When dry-run or execution is requested
 Then the framework shall block during Definition and Validation or Planning and Binding before provider dispatch.
 
