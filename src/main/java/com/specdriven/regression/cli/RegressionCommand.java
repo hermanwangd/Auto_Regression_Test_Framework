@@ -841,7 +841,8 @@ public class RegressionCommand {
             out.println("    classification: " + item.classification());
             out.println("    owner_authored_truth_preserved: " + item.ownerAuthoredTruthPreserved());
             for (AcReadinessGap gap : item.gaps()) {
-                out.println("    gap: " + gap.fieldPath());
+                out.println("    field_path: " + gap.fieldPath());
+                out.println("    reason: ac_readiness_gap");
                 out.println("    owner_action: " + gap.ownerAction());
             }
             ready = ready && item.executableDraftAllowed();
@@ -860,7 +861,8 @@ public class RegressionCommand {
             out.println("    eligible: " + eligibility.eligible());
             out.println("    status: " + eligibility.status());
             for (ExpectedResultGap gap : eligibility.gaps()) {
-                out.println("    gap: " + gap.fieldPath());
+                out.println("    field_path: " + gap.fieldPath());
+                out.println("    reason: expected_result_readiness_failed");
                 out.println("    owner_action: " + gap.ownerAction());
             }
             eligible = eligible && eligibility.eligible();

@@ -186,6 +186,8 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("ac_readiness:");
         assertThat(output.toString()).contains("RP-001-AC-001");
         assertThat(output.toString()).contains("not_ready_for_generation");
+        assertThat(output.toString()).contains("field_path: behavior");
+        assertThat(output.toString()).contains("reason: ac_readiness_gap");
         assertThat(output.toString()).contains("Clarify owner-authored AC");
     }
 
