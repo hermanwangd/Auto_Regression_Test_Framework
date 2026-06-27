@@ -241,6 +241,7 @@ public class DslTestCaseNormalizer {
             if (assertion.get("path") == null && assertion.get("json_path") == null) {
                 putIfNotBlank(assertion, "path", firstText(verifyItem, "selector"));
             }
+            addAssertionOptions(assertion, verifyItem);
             if (assertion.get("path") == null && stringValue(verifyItem.get("actual")).startsWith("$.")) {
                 assertion.put("path", verifyItem.get("actual"));
             }
@@ -257,6 +258,16 @@ public class DslTestCaseNormalizer {
             assertions.add(assertion);
         }
         normalized.put("assertions", assertions);
+    }
+
+    private void addAssertionOptions(Map<String, Object> assertion, Map<?, ?> verifyItem) {
+        Map<?, ?> options = map(verifyItem.get("options"));
+        if (assertion.get("tolerance") == null) {
+            putIfNotBlank(assertion, "tolerance", firstText(options, "tolerance"));
+        }
+        if (assertion.get("epsilon") == null) {
+            putIfNotBlank(assertion, "epsilon", firstText(options, "epsilon"));
+        }
     }
 
     private void addEvidenceRequired(Map<String, Object> normalized, Map<?, ?> evidence) {
