@@ -12,8 +12,8 @@ The DSL and 7 AP are validated through these AC rather than as separate, abstrac
 | AC-002 | Definition and Validation / Discovery and Context | RP records must expose the artifact locations where DSL tests, expected results, and evidence live. |
 | AC-003 | Definition and Validation | Owner-authored RP AC remain the source of truth that DSL tests trace to. |
 | AC-004 | Discovery and Context / Planning and Binding | RP/RU mapping defines execution boundary and provider contracts that DSL tests reference logically. |
-| AC-005 | Definition and Validation / Planning and Binding | Agent-created DSL drafts are allowed only when AC and execution context readiness are explicit. |
-| AC-006 | Definition and Validation / Oracle and Assertion Engine | DSL oracles/assertions must point to approved truth sources or explicit decision rules. |
+| AC-005 | Definition and Validation / Planning and Binding | Agent-created execution-focused DSL drafts are allowed only when AC and execution context readiness are explicit. |
+| AC-006 | Definition and Validation / Oracle and Assertion Engine | DSL `expected_results` and `verify` rules must point to explicit truth sources or deterministic decision rules. |
 | AC-007 | Planning and Binding / Fixture and State Manager / Execution Engine / Oracle and Assertion Engine / Evidence and Reporting | Checked-in DSL tests must execute through the full 7 AP flow and produce durable evidence. |
 | AC-008 | Discovery and Context / Planning and Binding / Fixture and State Manager / Execution Engine | Unsafe or incomplete DSL execution is blocked with owner-actionable reasons. |
 | AC-009 | Evidence and Reporting | DSL traceability and run evidence must support RP release review and coverage calculation. |
@@ -22,14 +22,14 @@ The DSL and 7 AP are validated through these AC rather than as separate, abstrac
 Minimum verification rule for DSL/AP clarity:
 
 - Every readiness, generation, dry-run, execution, or evidence report that references DSL behavior shall include `ap`, `field_path` or `contract_path`, `test_case_id` when applicable, `ac_id` when applicable, `reason`, and `owner_action`.
-- DSL validation failures shall identify whether the problem belongs to DSL syntax, lifecycle/approval state, RP/RU mapping, provider contract, fixture policy, oracle/assertion truth, environment readiness, or evidence completeness.
-- A missing provider contract, unsupported DSL capability, unapproved expected result, missing cleanup policy, or missing environment readiness shall block before adapter execution starts.
+- DSL validation failures shall identify whether the problem belongs to DSL syntax, execution lifecycle state, traceability, targets, setup fixtures, execute outputs, expected results, verify rules, RP/RU mapping, provider contract, environment readiness, runtime policy, or evidence completeness.
+- A missing provider contract, unsupported DSL capability, missing expected result, missing cleanup reference, missing execute output, invalid verify rule, or missing environment readiness shall block before adapter execution starts.
 - Baseline, spec, architecture, and AC documents shall use the same seven AP names and shall not introduce hidden AP-level components.
 - Every required or conditional DSL field shall map to a primary AP consumer and have a clear reason for being required.
 - Provider implementation settings shall be validated through RP/RU mapping or provider contracts, not embedded directly inside DSL test cases.
 - Provider contracts shall be validated against a capability registry by explicit `provider_family`, `provider_type`, required fields, supported runtime status, execution mode, and evidence output requirements.
 - External runner use shall require explicit approval metadata and shall be reported as an escape hatch, not as the standard provider extension path.
-- A feature is not implementation-ready when its DSL fields, provider contract paths, assertion/oracle source, fixture lifecycle, or evidence outputs cannot be explained through the 7 AP flow.
+- A feature is not implementation-ready when its DSL fields, provider contract paths, expected-result source, verify rule, setup lifecycle, execute outputs, runtime policy, or evidence outputs cannot be explained through the 7 AP flow.
 - Maven framework verification evidence shall not be treated as downstream Product/RP release evidence.
 - CLI RP regression evidence shall identify the RP, batch, environment, test cases, and AC covered by the selected RP execution.
 
@@ -141,7 +141,7 @@ Given ready RP AC and ready execution context artifacts
 When the agent skill performs readiness and test drafting
 Then the AC may produce a `draft_executable_test_case` artifact.
 
-And the draft shall include the DSL sections needed by the 7 AP: identity/traceability, scenario, execution target, logical inputs, steps, oracle or assertion rule, evidence requirements, and cleanup policy when state is mutated.
+And the draft shall use execution-focused DSL v1 sections needed by the 7 AP: identity/status/revision, traceability, targets, scenario, setup fixtures, execute operations and outputs, expected_results, verify rules, evidence requirements, and runtime policy.
 
 ### Failure Path
 
@@ -157,35 +157,35 @@ Then only a `draft_test_skeleton` may be produced.
 
 Existing checked-in approved tests for the same RP AC shall not be silently overwritten.
 
-## AC-006 Truth Sources Require Explicit Source and Approval
+## AC-006 Expected Results and Verify Rules Are Explicit
 
 ### Happy Path
 
-Given an expected-result artifact or oracle truth source used for regression evaluation
+Given an expected-result artifact, schema, contract, DB query ref, event expectation, or file expectation used for regression evaluation
 When it is checked for regression eligibility
-Then it shall include source references, approval status, and assumptions or unresolved gaps when applicable.
+Then the DSL shall reference it through `expected_results` and a `verify` item with explicit `actual` and `expected`, or with explicit `target` plus `query` or `event` semantics for state and event checks.
 
 ### Failure Path
 
-Given a missing, draft, blocked, or unapproved truth source
+Given a missing expected result, missing `actual`, missing `expected`, unresolved selector, unsupported verify type, or missing query/event reference
 When normal regression execution is requested
-Then the run shall be blocked before assertion evaluation and report the missing approval or source gap.
+Then the run shall be blocked before adapter execution or assertion evaluation and report the missing field, verify ID, and owner action.
 
 ### Boundary Path
 
-Given an inline decision rule that does not require an expected-result artifact
+Given a deterministic verification that does not require an expected-result artifact
 When the DSL test is checked
-Then the assertion shall still declare an oracle or inline decision rule and remain traceable to RP AC.
+Then the `verify` item shall still declare its type, actual source, expected value or state/event expectation, and remain traceable to RP AC.
 
 ## AC-007 Regression Runs Produce Durable Evidence
 
 ### Happy Path
 
-Given approved or execution-eligible DSL test cases for the pilot RP
+Given execution-eligible DSL test cases for the pilot RP
 When regression is run in an allowed execution mode
 Then the RP execution shall produce one batch evidence record with RP ID, batch ID, execution mode, environment reference, included run IDs, test case IDs, AC IDs, and final batch status.
 
-And each executed test case shall produce durable run evidence with RP ID, batch ID, AC ID, test case ID, run ID, execution mode, resolved bindings, provider contracts used, provider family, provider type, registry status, provider contract path, adapter/provider result, assertion result, cleanup result, and final pass/fail status.
+And each executed test case shall produce durable run evidence with RP ID, batch ID, AC ID, test case ID, run ID, execution mode, resolved targets, setup fixture results, execute outputs, expected result refs, verify results, provider contracts used, provider family, provider type, registry status, provider contract path, adapter/provider result, cleanup result, and final pass/fail status.
 
 And the selected heterogeneous pilot shall produce evidence for each registered provider family selected for the RP: request/response, messaging, DB fixture, deployment readiness, and file/batch when the RP uses it. External runner evidence is required only when an approved escape-hatch contract is selected.
 
@@ -205,7 +205,7 @@ Given checked-in tests already exist
 When regression execution runs
 Then checked-in tests shall not be regenerated by default.
 
-Given two approved tests exist in the same RP
+Given two execution-eligible tests exist in the same RP
 When regression execution runs
 Then the tests shall produce two different run IDs and two different run evidence directories.
 
@@ -213,7 +213,7 @@ Then the tests shall produce two different run IDs and two different run evidenc
 
 ### Happy Path
 
-Given all required test artifacts, mappings, provider contracts, provider capability registry entries, truth sources, fixture policy, and environment readiness are available
+Given all required test artifacts, mappings, provider contracts, provider capability registry entries, expected results, setup fixtures, execute output mappings, verify rules, runtime policy, and environment readiness are available
 When regression is requested
 Then execution may proceed according to the declared execution mode.
 
@@ -221,7 +221,7 @@ And dry-run shall show which AP gates passed before real adapter execution is al
 
 ### Failure Path
 
-Given required test artifacts, mappings, provider contracts, provider capability registry entries, truth sources, fixture policy, deployment evidence, or environment readiness are missing or unsupported
+Given required test artifacts, mappings, provider contracts, provider capability registry entries, expected results, setup fixtures, execute output mappings, verify rules, runtime policy, deployment evidence, or environment readiness are missing or unsupported
 When regression is requested
 Then execution shall stop before unsafe adapter/provider execution and report the blocking reason with owner action.
 

@@ -10,7 +10,7 @@ Framework verification shall prove that the framework can:
 
 - Run fast unit/component tests for parsers, validators, resolvers, CLI behavior, evidence writers, and reporting logic.
 - Run an end-to-end framework integration flow against a sample Product Repo fixture.
-- Use sample Product/RP/RU artifacts to validate RP discovery, RP/RU mapping, checked-in DSL test discovery, adapter execution, assertion, batch evidence, run evidence, and coverage report generation.
+- Use sample Product/RP/RU artifacts to validate RP discovery, RP/RU mapping, checked-in execution-focused DSL test discovery, adapter execution, verification, batch evidence, run evidence, and coverage report generation.
 - Verify provider capability registry and provider-family contract behavior required by the selected heterogeneous pilot without treating mock or sample provider evidence as downstream RP release evidence.
 - Keep sample fixture evidence clearly separate from downstream Product/RP release evidence.
 
@@ -35,7 +35,7 @@ They shall cover:
 - Product Repo bootstrap and readiness checks.
 - RP skeleton and artifact completeness checks.
 - RP/RU mapping parser, dependency graph, and missing-field handling.
-- DSL schema validation, lifecycle status checks, and unsupported capability blocking.
+- DSL schema validation for `traceability`, `targets`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`, plus execution lifecycle status checks and unsupported capability blocking.
 - Expected-result approval gating.
 - Environment resolver behavior for `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only`.
 - Binding, provider, fixture, execution, assertion, evidence, and coverage-report behavior.
@@ -75,7 +75,7 @@ The integration suite shall expose AC traceability through `FrameworkVerificatio
 | FWK-IT-002 | AC-002, AC-004, AC-010 | Artifact readiness failure | Package schema and RP/RU mapping gaps are reported before execution evidence is written. |
 | FWK-IT-003 | AC-004, AC-008, AC-010 | Provider contract failure | Missing adapter command blocks before adapter execution and writes blocked run evidence. |
 | FWK-IT-004 | AC-006, AC-008, AC-010 | Truth-source approval failure | Unapproved expected result blocks before adapter execution or assertion evaluation. |
-| FWK-IT-005 | AC-007, AC-008, AC-010 | Test inventory boundary | Missing approved checked-in DSL test case blocks before adapter execution. |
+| FWK-IT-005 | AC-007, AC-008, AC-010 | Test inventory boundary | Missing execution-eligible checked-in DSL test case blocks before adapter execution. |
 | FWK-IT-006 | AC-007, AC-009 | Execution/assertion failure | Adapter execution starts, assertion fails, run evidence is failed, and report is not review-ready. |
 | FWK-IT-007 | AC-001, AC-010 | Product Repo bootstrap and readiness | Bootstrap creates lifecycle folders, readiness changes from fail to pass, rerun is idempotent, and no RP scope is invented. |
 | FWK-IT-008 | AC-003, AC-010 | AC readiness intake | Owner-authored RP AC remains unchanged while readiness output preserves stable AC ID, classification, and owner-authored truth flag. |
@@ -102,6 +102,22 @@ The contract verification suite shall cover:
 
 Every provider-family case must also verify dry-run output. Dry-run must name provider family, provider type, registry status, capability, affected RU, provider contract path, AP gate, and owner action for missing, ambiguous, unsupported, or unapproved escape-hatch capabilities.
 
+## 7.5.1 Execution-Focused DSL v1 Verification
+
+Framework verification must prove the v1 DSL contract before implementation claims runtime completion:
+
+| DSL Area | Positive Verification | Failure Verification |
+|---|---|---|
+| Identity and traceability | Reads `dsl_version`, `test_case_id`, `status`, `revision`, and `traceability.package_id` / `acceptance_criteria_id` / `source` | Missing traceability or unsupported `status` blocks before execution. |
+| Targets | Resolves multiple named `targets` with `type`, `runner`, and `environment` | Missing target or execute step referencing an unknown target blocks before provider dispatch. |
+| Setup | Resolves `setup.fixtures` and `cleanup_ref` for state-mutating fixtures | State-changing fixture without cleanup reference reports a fixture-policy gap. |
+| Execute | Resolves `execute[].operation`, `target`, `with`, and `outputs` | `call_ru`, `target_ru_id`, missing outputs, or unsupported operation blocks before execution. |
+| Expected results | Resolves `expected_results` refs used by verification | Duplicated legacy oracle/expected references or missing expected ref blocks before assertion evaluation. |
+| Verify | Supports explicit actual/expected checks plus `selector`, `db_record_exists`, and `event_published` semantics | Missing `actual`/`expected`, query ref, event ref, or unsupported verify type blocks with verify ID. |
+| Evidence and runtime | Resolves `evidence.required`, `runtime.timeout`, and `runtime.retry.max_attempts` | Evidence refs that do not point to execute/verify outputs or unbounded runtime policy block before execution. |
+
+This verification may initially run against parser/generator tests and compatibility translation tests. It must be green before migrating the sample fixture or changing provider runtime dispatch.
+
 ## 7.6 Required Framework Verification Cases
 
 | Test ID | AC Coverage | Scenario | Command Level | Priority | Automation |
@@ -109,10 +125,11 @@ Every provider-family case must also verify dry-run output. Dry-run must name pr
 | FWK-001 | AC-001 through AC-010 | Unit/component suite validates parsers, readiness checks, CLI behavior, resolvers, execution services, evidence writers, and reporters | `./mvnw test` | P1 | Auto |
 | FWK-002 | AC-001 through AC-010 | Sample Product/RP/RU fixture runs AC-linked framework integration cases through CLI commands without SIT/UAT deployment | `./mvnw verify` | P1 | Auto |
 | FWK-003 | AC-010 | Sample fixture evidence is marked as framework verification evidence and is not counted as downstream RP release evidence | `./mvnw verify` | P1 | Auto |
-| FWK-004 | AC-002, AC-003, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009, AC-010 | Artifact readiness gaps, provider contract gaps, AC readiness gaps, drafting gates, unapproved expected results, missing approved DSL tests, or failed assertions block or fail with actionable evidence | `./mvnw verify` | P1 | Auto |
+| FWK-004 | AC-002, AC-003, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009, AC-010 | Artifact readiness gaps, provider contract gaps, AC readiness gaps, drafting gates, missing expected results, missing execution-eligible DSL tests, or failed verify rules block or fail with actionable evidence | `./mvnw verify` | P1 | Auto |
 | FWK-005 | AC-010 | Packaged jar delegates CLI arguments to the framework command layer and returns meaningful exit codes | `./mvnw test` plus packaged CLI smoke | P1 | Auto / CLI |
 | FWK-006 | AC-004, AC-007, AC-008, AC-009, AC-010 | Provider-family contract verification covers request/response, messaging, DB fixture, deployment readiness, file/batch provider behavior, and escape-hatch contract gating with local/mock fixtures | `./mvnw verify` | P1 | Auto |
 | FWK-007 | AC-007, AC-008, AC-010 | Provider-family negative cases block before unsafe execution and report provider family, provider type, registry status, escape-hatch approval status when applicable, capability, affected RU, provider contract path, AP gate, and owner action | `./mvnw verify` | P1 | Auto |
+| FWK-008 | AC-005, AC-006, AC-007, AC-008 | Execution-focused DSL v1 parser/generator/translator verifies `targets/setup/execute/expected_results/verify/evidence/runtime` and blocks legacy-only or governance-heavy DSL fields in new artifacts | `./mvnw test` | P1 | Auto |
 
 ### 7.6.1 Current Coverage Snapshot
 
@@ -120,7 +137,7 @@ This snapshot records what the current framework verification suite is intended 
 
 | Area | Current Java Evidence | Status | Remaining Pilot Gap |
 |---|---|---|---|
-| Framework CLI, readiness, generation, run, report, batch/run evidence | `RegressionCommandTest`, `ProductRepoServiceTest`, `ReleasePackageServiceTest`, `AcIntakeServiceTest`, `TestCaseLifecycleServiceTest`, `CoverageReportService` tests through CLI flows | Covered by unit/component tests | None for framework behavior; real RP evidence still requires owner artifacts. |
+| Framework CLI, readiness, generation, run, report, batch/run evidence | `RegressionCommandTest`, `ProductRepoServiceTest`, `ReleasePackageServiceTest`, `AcIntakeServiceTest`, `TestCaseLifecycleServiceTest`, `CoverageReportService` tests through CLI flows | Covered by unit/component tests for legacy DSL flow; execution-focused DSL v1 tests must be added before runtime migration | Real RP evidence still requires owner artifacts. |
 | Sample Product Repo integration | `FrameworkVerificationIT`, `PackagedCliSmokeIT` | Covered by `./mvnw verify` | Does not count as downstream RP release evidence. |
 | File/batch provider | `RegressionCommandTest`, `FrameworkVerificationIT`, `ExecutionEngineTest` | Supported with bounded shell/file execution, logs, output refs, timeout, success code, and evidence | Native package-specific adapters are out of scope unless reusable. |
 | REST/gRPC request/response provider | `RegressionCommandTest`, `ProviderCapabilityRegistryTest`, `RequestResponseProviderTest`, and `DefaultGrpcClientInvokerTest` request/response cases | Supported for REST and native descriptor-driven gRPC unary calls with endpoint/service refs, actions, payload binding, timeout, output ref, and evidence | Pilot endpoint validation remains target provider work. |

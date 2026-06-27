@@ -40,7 +40,7 @@ This snapshot separates framework verification progress from pilot acceptance pr
 | Area | Current Status | Evidence / Gate | Next Work |
 |---|---|---|---|
 | Product Repo and RP skeleton | Implemented for framework verification | CLI tests and sample fixture verification | Harden cross-artifact readiness as pilot artifacts arrive. |
-| AC intake and DSL drafting | Implemented for framework readiness/draft flows | Unit/component and integration tests | Apply to owner-provided pilot RP AC. |
+| AC intake and DSL drafting | Implemented for legacy framework readiness/draft flows; execution-focused DSL v1 contract is now documented | Unit/component and integration tests plus DSL v1 contract review | Add parser/generator support for `targets/setup/execute/expected_results/verify/evidence/runtime` before new provider execution slices. |
 | Batch/run evidence and coverage | Implemented for sample and CLI flows | `./mvnw verify` and report tests | Validate against real pilot RP batch evidence. |
 | File/batch runtime | Supported | Provider registry dispatch and shell/file tests | Keep as reusable provider. |
 | REST/gRPC request-response runtime | Supported for REST and native descriptor-driven gRPC unary calls plus HTTP/status field, JSON path equality/absence, numeric tolerance, and schema/contract response assertions | Request/response provider, native gRPC invoker, runtime registry, CLI preflight, response assertion, schema/contract assertion, and evidence tests | Add pilot endpoint evidence when required. |
@@ -158,7 +158,7 @@ Related feature: F005
 Acceptance: AC-005
 Modules: `testcase`
 
-Implement draft package-neutral DSL test skeleton and draft executable DSL test artifact writing under `tests/draft/`. Generated executable drafts must include `dsl_version` and all required DSL fields. Detect existing `tests/approved/` artifacts for the same RP AC and create update proposals instead of overwriting.
+Implement draft package-neutral DSL test skeleton and draft executable DSL test artifact writing under `tests/draft/`. Generated executable drafts must use execution-focused DSL v1 fields: `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`. Detect existing checked-in test artifacts for the same RP AC and create update proposals instead of overwriting.
 
 Verification:
 
@@ -166,7 +166,7 @@ Verification:
 regress generate-tests --root <product-repo> --rp-id <rp-id> --mode draft
 ```
 
-Done when checked-in approved DSL tests are protected and generated drafts include source refs, source fingerprint, revision, and status.
+Done when checked-in DSL tests are protected and generated drafts include traceability source, revision, execution status, targets, execute outputs, expected_results, verify rules, evidence refs, and runtime policy.
 
 ### T007 - Expected Result Manager
 
@@ -207,7 +207,7 @@ Related feature: F007
 Acceptance: AC-007, AC-008
 Modules: `binding`
 
-Resolve expected-result refs, data selection strategy, parameterized cases, dependencies, name-keyed package input bindings, runtime paths, environment refs, and step output placeholders from approved test cases. The initial file/batch path supports `input_file`, `dataset`, and `db_seed`. For the selected heterogeneous pilot, bindings required by selected provider families, such as `api_payload`, `message_event`, `config_file`, `env_var`, and `existing_state`, must become supported when their provider contracts are implemented. Binding types outside the selected or implemented provider families must fail as unsupported before execution.
+Resolve execution-focused DSL v1 `targets`, `setup.fixtures`, `execute[].with`, `execute[].outputs`, `expected_results`, `verify`, `evidence.required`, and `runtime` into an execution plan. The initial compatibility path may still read legacy `package_inputs`, `steps`, `oracles`, `assertions`, `evidence_required`, and `policy`, but new generation and new framework tests must target the execution-focused fields. Binding types or operations outside the selected or implemented provider families must fail as unsupported before execution.
 
 Verification:
 
@@ -215,7 +215,7 @@ Verification:
 regress run --root <product-repo> --rp-id <rp-id> --dry-run
 ```
 
-Done when supported pilot bindings resolve into the execution plan, and unresolved bindings, data selection, parameter cases, or dependencies fail fast with file path, test case ID, AC ID, parameter case when applicable, binding or section name, binding type when applicable, provider family when applicable, and owner action.
+Done when supported pilot targets, setup fixtures, execute inputs/outputs, expected results, verify rules, evidence refs, and runtime policy resolve into the execution plan, and unresolved fields fail fast with file path, test case ID, AC ID, section name, field path, provider family when applicable, and owner action.
 
 ### T010 - Provider Contract Registry and Dispatch
 
@@ -223,7 +223,7 @@ Related feature: F007
 Acceptance: AC-007, AC-008
 Modules: `provider`, `schema`
 
-Introduce the provider capability registry and contract validator before adding more provider runtimes. The registry must define supported `provider_family` and `provider_type` combinations, required fields, supported actions, allowed execution modes, runtime support status, evidence outputs, and safety policy. Resolve validated provider contracts from provider defaults, RP-level overrides, and RU-level overrides. Dispatch adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type through the registry-selected runtime. Fail before execution when a contract is missing, ambiguous, unsupported, unsafe, or only available through an unapproved escape hatch.
+Introduce the provider capability registry and contract validator before adding more provider runtimes. The registry must define supported `provider_family` and `provider_type` combinations, required fields, supported actions, allowed execution modes, runtime support status, evidence outputs, and safety policy. Resolve validated provider contracts from provider defaults, RP-level overrides, and RU-level overrides. Dispatch `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures.<name>.type`, `expected_results.<name>.type`, `verify[].type`, and `evidence.required[]` through the registry-selected runtime. Fail before execution when a contract is missing, ambiguous, unsupported, unsafe, or only available through an unapproved escape hatch.
 
 Verification:
 

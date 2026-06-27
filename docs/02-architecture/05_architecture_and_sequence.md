@@ -77,10 +77,10 @@ CLI Orchestrator
 | Product Repo Artifact Store | Own versioned docs, RP records, tests, expected results, and evidence | AC-001, AC-002 |
 | Definition and Validation | Parse DSL and RP artifacts, validate schemas, statuses, required and conditional fields, and artifact lifecycle rules | AC-001, AC-002, AC-003, AC-004, AC-005, AC-006, AC-007 |
 | Discovery and Context | Discover Product/RP/RU artifacts, load AC inventory, RP/RU mapping, environment context, and readiness reports | AC-001, AC-002, AC-003, AC-004, AC-005 |
-| Planning and Binding | Expand parameters, resolve dependencies, bind package inputs, expected results, oracles, runtime references, and step placeholders into an execution plan | AC-005, AC-007 |
+| Planning and Binding | Resolve targets, setup fixtures, execute inputs/outputs, expected results, verify references, runtime references, and provider contracts into an execution plan | AC-005, AC-007 |
 | Fixture and State Manager | Check preconditions, set up fixtures, seed or publish data, enforce cleanup, and validate postconditions | AC-007 |
-| Execution Engine | Execute planned steps through provider registry dispatch, manage execution modes, step outputs, timeout, retry, and adapter/provider result capture | AC-007 |
-| Oracle and Assertion Engine | Resolve oracle truth sources and evaluate actual outputs through assertion decision rules | AC-007 |
+| Execution Engine | Execute planned operations through provider registry dispatch, manage execution modes, captured outputs, timeout, retry, and adapter/provider result capture | AC-007 |
+| Oracle and Assertion Engine | Resolve expected-result truth sources and evaluate actual outputs through verify rules | AC-007 |
 | Evidence and Reporting | Persist batch summaries, run evidence, observations, cleanup results, failures, traceability, coverage, and release-review reports | AC-007, AC-009 |
 
 Internal module mapping:
@@ -101,11 +101,11 @@ DSL and artifact flow through the 7 AP:
 |---|---|---|
 | Definition and Validation | Product docs, RP records, RP AC, RP/RU mapping, DSL tests, expected-result artifacts | Validated artifact graph, schema errors, lifecycle/status errors |
 | Discovery and Context | Validated artifact graph plus requested RP, environment, and execution mode | RP execution context, RU list, AC inventory, available tests, provider contract references |
-| Planning and Binding | RP execution context, DSL tests, package input catalog, expected-result references, provider contracts | Concrete execution plan with bound inputs, parameters, fixtures, oracles, and step placeholders |
+| Planning and Binding | RP execution context, DSL tests, targets, setup fixtures, expected-result references, verify rules, provider contracts | Concrete execution plan with bound targets, inputs, fixtures, expected results, verify refs, and execute output placeholders |
 | Fixture and State Manager | Execution plan fixture sections, environment reference, cleanup policy | Prepared state, fixture evidence, cleanup plan, precondition/postcondition results |
-| Execution Engine | Execution plan steps and adapter contracts | Step results, adapter outputs, runtime metadata, timeout/retry outcomes |
-| Oracle and Assertion Engine | Actual outputs, approved expected results, oracle references, assertion rules | Pass/fail decisions with expected value, actual value, comparison rule, and failure reason |
-| Evidence and Reporting | All AP outputs, traceability, waivers, coverage policy | Durable batch evidence, run evidence package, AC coverage report, release-review summary |
+| Execution Engine | Execution plan operations and adapter/provider contracts | Operation results, adapter outputs, runtime metadata, timeout/retry outcomes |
+| Oracle and Assertion Engine | Actual outputs, expected results, verify rules | Pass/fail decisions with expected value, actual value, comparison rule, and failure reason |
+| Evidence and Reporting | All AP outputs, traceability, coverage policy | Durable batch evidence, run evidence package, AC coverage report, release-review summary |
 
 This flow keeps the DSL stable. New RP/RU behavior should be added through validated mapping and configurable built-in provider contracts first. New provider code is allowed only for reusable cross-RP behavior; DSL enum extensions require a versioned compatibility decision.
 
@@ -138,6 +138,8 @@ For implementation clarity, each AP owns one primary question and one durable ha
 | Evidence and Reporting | Is there enough durable evidence to support coverage and release review without manually reconstructing the RP execution? | `batch_summary`, `evidence_package`, `coverage_report`, `failure_summary`, and `release_review_summary`. |
 
 Provider contracts are configuration artifacts consumed by APs; they are not DSL sections. A provider contract declares a named capability such as a binding resolver, fixture setup action, adapter command, oracle reader, assertion comparator, or observation collector. The DSL references those capabilities by logical name, and the AP validates that the referenced capability exists before execution.
+
+Execution-focused DSL v1 references provider behavior through `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures`, `expected_results`, and `verify` rules. It must not embed provider configuration, endpoint URLs, connection strings, shell scripts, SQL bodies, release gates, waivers, or approval workflow. Legacy fields such as `execution_target`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, and `policy` are compatibility inputs only until parser/generator migration is complete.
 
 Provider capability registry rules:
 
@@ -220,16 +222,16 @@ Boundary rules:
 - `readiness` reports gaps and owner actions; it does not create business truth.
 - F001 readiness agent skill consumes readiness reports; it does not mutate repo artifacts directly.
 - `mapping` consumes `rp_ru_mapping.yaml`; it never infers RP membership.
-- The test case DSL describes validation intent, inputs, fixtures, assertions, and evidence requirements; it does not contain package-specific execution logic.
+- The test case DSL describes validation intent, targets, setup fixtures, execute operations, expected results, verify rules, evidence, and runtime policy; it does not contain package-specific execution logic.
 - `dsl_version` is required so the runner can apply the correct parser and compatibility behavior.
 - `testcase` may create draft artifacts but must not overwrite approved tests.
 - `expectedresult` enforces source references and approval status.
 - `environment` blocks SIT runs unless deployment and readiness evidence exist.
-- `binding` resolves parameters, package inputs, oracles, runtime references, and step placeholders; it does not execute package behavior.
-- `provider` owns the capability registry, validates provider contract precedence, and dispatches provider contracts by adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type.
+- `binding` resolves targets, setup fixtures, execute inputs, expected results, verify references, runtime references, and output placeholders; it does not execute package behavior.
+- `provider` owns the capability registry, validates provider contract precedence, and dispatches provider contracts by target runner, execute operation, fixture type, expected-result type, verify type, and evidence need.
 - `fixture` owns setup, cleanup, precondition, and postcondition lifecycle coordination.
-- `execution` executes a prepared plan and records step results; it does not own schema validation, binding resolution, provider contract resolution, or fixture policy.
-- `oracle` loads truth sources and decision parameters; `assertion` applies comparison rules against actual outputs.
+- `execution` executes a prepared plan and records operation results; it does not own schema validation, binding resolution, provider contract resolution, or fixture policy.
+- `oracle` loads expected-result sources and decision parameters; `assertion` applies verify rules against actual outputs.
 - `adapter` is the legacy shell/file execution boundary. New heterogeneous behavior should enter through provider registry entries before considering adapter-specific or external-runner behavior.
 - `evidence` and `report` write durable evidence under the RP release record.
 
@@ -237,14 +239,12 @@ DSL-to-module responsibility:
 
 | DSL Section | Primary Module | Secondary Module |
 |---|---|---|
-| Identity, lifecycle, `dsl_version`, source fingerprint | `schema`, `testcase` | `evidence` |
-| `scenario`, `parameters`, `dependencies` | `testcase`, `binding` | `mapping` |
-| `execution_target` | `environment`, `mapping` | `adapter`, `provider` |
-| `package_inputs` | `binding` | `provider`, `fixture` |
-| `fixture`, `preconditions`, `postconditions` | `fixture` | `environment`, `evidence` |
-| `steps` | `execution` | `adapter`, `provider` |
-| `expected`, `oracles`, `assertions` | `expectedresult`, `oracle`, `assertion` | `binding` |
-| `observations`, `evidence_required`, `policy` | `evidence`, `report` | `execution`, `fixture` |
+| `dsl_version`, `test_case_id`, `status`, `revision`, `traceability` | `schema`, `testcase` | `evidence` |
+| `targets`, `scenario` | `testcase`, `binding` | `mapping`, `provider` |
+| `setup.fixtures` | `fixture`, `binding` | `provider`, `environment`, `evidence` |
+| `execute` | `execution` | `adapter`, `provider`, `binding` |
+| `expected_results`, `verify` | `expectedresult`, `oracle`, `assertion` | `binding` |
+| `evidence`, `runtime` | `evidence`, `report`, `execution` | `fixture` |
 
 If a DSL section cannot be assigned to one of these modules, it is not ready for M1 execution and must be treated as an unsupported DSL extension.
 
@@ -270,18 +270,18 @@ Core runner owns:
 
 - DSL parsing, schema validation, and compatibility rules.
 - Test discovery, parameter expansion, dependency planning, and lifecycle orchestration.
-- Dispatch to adapters/providers by declared `adapter`, `action`, `bind_as`, oracle type, assertion type, observation type, and fixture action.
+- Dispatch to adapters/providers by declared target runner, execute operation, fixture type, expected-result type, verify type, and evidence need.
 - Stable evidence structure and traceability to RP, AC, test case, run, parameter case, RU, and environment.
 
 Adapters and providers own:
 
 - How to call an RU through CLI, HTTP, batch, DB, queue, or package-specific tooling.
-- How to materialize package input bindings such as `db_seed`, `message_event`, `api_payload`, `config_file`, and `existing_state`.
+- How to materialize execution inputs and setup fixtures such as `db_seed`, `message_event`, `api_payload`, `config_file`, and `existing_state`.
 - How to set up and clean up package-specific state safely.
-- How to load package-specific oracle truth sources and produce actual values compatible with assertions.
+- How to load package-specific expected-result truth sources and produce actual values compatible with verify rules.
 - How to collect package-specific logs, metrics, traces, events, and final-state probes.
 
-Provider implementation must be reusable by default. RP-specific behavior belongs in validated `provider_contracts` configuration, grouped by adapters, bindings, fixtures, oracles, assertions, and observations. Provider configuration is not part of the test case DSL; DSL tests may reference provider capabilities only by logical fields such as `action`, `bind_as`, oracle type, assertion type, observation type, and fixture action. Provider code should know generic actions and resource types, not product business concepts.
+Provider implementation must be reusable by default. RP-specific behavior belongs in validated `provider_contracts` configuration, grouped by adapters, bindings, fixtures, expected-result readers, verify providers, and evidence collectors. Provider configuration is not part of the test case DSL; DSL tests may reference provider capabilities only through logical fields such as target runner, execute operation, fixture type, expected-result type, verify type, and evidence need. Provider code should know generic actions and resource types, not product business concepts.
 
 Example configurable HTTP adapter contract:
 
@@ -501,7 +501,7 @@ Runtime rules:
 - Secrets must be referenced through environment variables or CI secret stores, never committed.
 - Evidence must not include raw secret values.
 - Test fixtures should be small and reviewable, or generated by a documented command.
-- Destructive operations require explicit approval in the RP test case or adapter policy.
+- Destructive operations are blocked unless a validated provider contract declares safe scope, cleanup behavior, and an allowed non-production execution environment.
 - Local commands should be bounded and avoid memory-heavy execution.
 
 ## 5.13 Observability and Evidence

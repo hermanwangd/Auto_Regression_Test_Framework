@@ -71,7 +71,7 @@ M1 framework delivery is staged. The current framework verification target is no
 | Provider Area | Framework Verification Target | Heterogeneous Pilot Target |
 |---|---|---|
 | Request/response | REST and native descriptor-driven gRPC unary provider contracts with payload binding, timeout, output refs, and evidence. | Pilot endpoint validation remains required for release acceptance. |
-| Messaging | Local/mock plus native Kafka/NATS publish, consume/observe, and bounded cleanup drain behavior with topic/subject refs, publish payload binding, timeout, correlation checks, cleanup strategy/count, and observed output refs. | Pilot broker validation remains required for release acceptance; persistent broker purge is future work only if selected RP acceptance requires it. |
+| Messaging | Local/mock plus native Kafka/NATS publish, NATS request/reply, consume/observe, and bounded cleanup drain behavior with topic/subject refs, publish/request payload binding, timeout, correlation checks, cleanup strategy/count, and observed output refs. | Pilot broker validation remains required for release acceptance; Kafka request/reply and persistent broker purge are future work only if selected RP acceptance requires them. |
 | DB fixture | JDBC setup, verification query, cleanup SQL refs, cleanup strategy, isolation key, and cleanup evidence. | Same contract against the selected pilot DB fixture boundary. |
 | Deployment readiness | Local/mock plus native K8s/VM bounded readiness evidence with deployed version ref, timeout, output ref, K8s `kubectl` or direct API probes, K8s pod log tail bound, VM command refs where configured, and bounded probe behavior. | Owner-provided pilot K8s/VM validation remains required for release acceptance. |
 | External runner | Approved command-runner escape hatch with approval metadata, bounded timeout, inputs, outputs, evidence map, and mapped-artifact checks. | Optional only when no reusable built-in provider can represent the selected boundary. |
@@ -110,7 +110,7 @@ Implementation may start only for slices whose inputs are ready:
 - F001/F002 may start with the agreed Product Repo folder structure and RP artifact checklist.
 - F003/F004 require at least one pilot RP with owner-provided `rp_feature_spec.md`, `acceptance_criteria.md`, and `rp_ru_mapping.yaml`.
 - F005/F006 require RP AC with observable input, behavior, output, and pass/fail expectations.
-- F007 requires checked-in executable or approved DSL test artifacts, package inputs, fixture strategy, adapter mode, provider registry support, provider contract validation, and expected-result policy.
+- F007 requires checked-in execution-eligible DSL test artifacts, targets, setup fixtures, execute operations and outputs, expected_results, verify rules, evidence requirements, runtime policy, provider registry support, and provider contract validation.
 - F008 requires RP AC inventory, execution evidence format, traceability rules, and approval records for exclusions.
 
 Before full M1 implementation, the responsible owner shall supply the pilot RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, adapter/provider modes, required provider families, and any approved escape-hatch provider need.
@@ -138,64 +138,65 @@ The framework uses a package-neutral regression test case DSL so different Produ
 
 The DSL is not a BDD story, shell script, provider configuration, or generated run log. It is a versioned test contract with enough structured data for the framework to validate, plan, bind, execute, assert, and report a regression test repeatedly.
 
-The DSL must answer five execution questions in a package-neutral way:
+The DSL must answer execution questions in a package-neutral, execution-focused way:
 
 | Question | DSL Responsibility | Not DSL Responsibility |
 |---|---|---|
-| What is being validated? | `rp_id`, `ac_id`, scenario, source refs, source fingerprint | Writing or changing RP feature truth |
-| What data or state is needed? | Logical inputs, parameters, preconditions, fixture intent | Inline secrets, physical DB commands, package-specific loaders |
-| What action is performed? | Logical steps, target RU, adapter name, action names | Shell scripts, endpoint URLs, queue drivers, deployment commands |
-| How is pass/fail decided? | Oracles, assertion type, actual refs, inline decision rules when allowed | Approving expected-result truth or inventing business rules |
-| What must be retained? | Evidence categories, observations, cleanup proof, trace links | Release approval or waiver approval |
+| What is being validated? | `traceability.package_id`, `traceability.acceptance_criteria_id`, `traceability.source`, and `scenario` | Writing or changing RP feature truth |
+| What targets are involved? | `targets` and `execute[].target` | Inferring RP/RU membership or deployment topology |
+| What data or state is needed? | `setup.fixtures` and `execute[].with` | Inline secrets, physical DB connection strings, or package-specific loaders |
+| What operation is performed? | `execute[].operation`, target, runtime inputs, and captured outputs | Shell scripts, endpoint URLs, queue drivers, or deployment commands embedded in the test |
+| How is pass/fail decided? | `expected_results` and `verify[]` with explicit actual/expected or target/query/event semantics | Approving expected-result truth or inventing business rules |
+| What must be retained? | `evidence.required` traceable to execution or verification outputs | Release approval or waiver approval |
+| What runtime policy applies? | `runtime.timeout` and `runtime.retry` | Release gate, waiver, or risk approval workflow |
 
 | DSL Area | Purpose | Primary AP Consumer |
 |---|---|---|
-| Identity and traceability | Identify DSL version, test ID, RP ID, AC ID, source fingerprint, owner, status, and replacement links. | Definition and Validation |
-| Scenario and parameterization | Describe scenario type, scope, capabilities, data selection, matrix dimensions, and parameterized cases. | Planning and Binding |
-| Inputs and bindings | Reference logical package inputs, catalog selectors, binding names, dependencies, and runtime references. | Discovery and Context / Planning and Binding |
-| Fixtures and state | Declare preconditions, setup, seeded or published data, cleanup, and postconditions. | Fixture and State Manager |
-| Execution steps | Declare logical actions, targets, and expected observable outputs without embedding provider-specific scripts. | Execution Engine |
-| Oracles and assertions | Reference approved expected results or inline decision rules and define comparison/assertion behavior. | Oracle and Assertion Engine |
-| Evidence requirements | Declare logs, observations, artifacts, cleanup proof, coverage links, and release-review evidence to retain. | Evidence and Reporting |
+| Identity and traceability | Identify DSL version, test ID, execution status, revision, package ID, AC ID, and source reference. | Definition and Validation |
+| Targets and scenario | Describe named targets, scenario type, scope, description, and capabilities. | Discovery and Context / Planning and Binding |
+| Setup and runtime inputs | Reference fixtures, seed data, mock setup, initial state, and operation inputs. | Planning and Binding / Fixture and State Manager |
+| Execution | Declare readable operations, target IDs, runtime inputs, and captured outputs without embedding provider-specific scripts. | Execution Engine |
+| Expected results and verification | Reference expected artifacts and define explicit `verify` checks over captured outputs, DB state, events, or files. | Oracle and Assertion Engine |
+| Evidence and runtime | Declare concrete evidence refs, timeout, and retry. | Evidence and Reporting |
 
 The 7 AP are the framework capability areas behind the DSL lifecycle: Definition and Validation, Discovery and Context, Planning and Binding, Fixture and State Manager, Execution Engine, Oracle and Assertion Engine, and Evidence and Reporting. Provider configuration belongs in RP/RU mapping or provider contracts; DSL tests may reference provider capabilities by logical names only.
 
 Each AP must be independently explainable in readiness and execution reports. A report that says only "DSL invalid" or "execution failed" is not sufficient; it must name the AP, field path or provider contract, affected test case, affected AC, reason, and owner action.
 
-The DSL field set should stay minimal but complete enough to execute safely. M1 shall treat these fields as the required DSL v1 core:
+The DSL field set should stay minimal but complete enough to execute safely. M1 shall treat these fields as the execution-focused DSL v1 core:
 
 | Required Field | Why It Is Required | Consuming AP |
 |---|---|---|
 | `dsl_version` | Selects supported schema and compatibility rules. | Definition and Validation |
-| `test_case_id`, `rp_id`, `ac_id` | Gives every run stable traceability to RP-level AC. | Definition and Validation / Evidence and Reporting |
-| `status`, `owner`, `source_fingerprint` | Prevents stale, unreviewed, or ownerless tests from running silently. | Definition and Validation |
-| `scenario.type`, `scenario.scope`, `scenario.capabilities` | Tells the framework what kind of behavior and provider capability is needed. | Planning and Binding |
-| `execution.target_ru`, `execution.mode` | Selects the RU boundary and execution mode. | Discovery and Context / Planning and Binding |
-| `steps[]` | Declares logical actions and observable outputs. | Execution Engine |
-| `assertions[]` | Declares how pass/fail is evaluated. | Oracle and Assertion Engine |
-| `evidence.required[]` | Declares what artifacts must be retained for release review. | Evidence and Reporting |
+| `test_case_id`, `status`, `revision` | Gives every run stable artifact identity and execution lifecycle state. | Definition and Validation / Evidence and Reporting |
+| `traceability.package_id`, `traceability.acceptance_criteria_id`, `traceability.source` | Gives every run stable traceability to RP-level AC and source. | Definition and Validation / Evidence and Reporting |
+| `targets` | Names the application, database, event bus, file store, batch runner, or external boundary used by the test. | Discovery and Context / Planning and Binding |
+| `scenario.type`, `scenario.scope`, `scenario.description`, `scenario.capabilities` | Tells the framework what kind of behavior and provider capability is needed. | Planning and Binding |
+| `execute[]` | Declares readable operations, target IDs, runtime inputs, and observable outputs. | Execution Engine |
+| `expected_results` | Declares expected artifacts, payloads, schemas, contracts, or state snapshots used by verification. | Oracle and Assertion Engine |
+| `verify[]` | Declares how pass/fail is evaluated. | Oracle and Assertion Engine |
+| `evidence.required[]` | Declares what concrete execution or verification outputs must be retained. | Evidence and Reporting |
+| `runtime.timeout`, `runtime.retry` | Bounds execution duration and retry behavior. | Execution Engine |
 
 Conditional fields are required only when the scenario needs them:
 
 | Conditional Field | Required When | Not Allowed To Contain |
 |---|---|---|
-| `parameters` or `matrix` | The same AC must run across multiple cases or boundary values. | Runtime secrets or provider-specific scripts. |
-| `data_selection` | Input records are selected from a catalog, generated set, or filtered source. | Physical SQL, endpoint URLs, or environment credentials. |
-| `bindings` | Logical DSL values must resolve to runtime package inputs, files, messages, DB rows, or API payloads. | Hard-coded environment-specific paths unless declared as provider contract outputs. |
-| `fixtures.setup` / `fixtures.cleanup` | The test creates, mutates, seeds, publishes, or deletes state. | Hidden destructive actions without cleanup policy. |
-| `environment_ref` | The run is `ci_ephemeral`, `sit_deployed`, or `evidence_only`. | Deployment commands; deployment is external to M1. |
-| `oracle.ref` or `expected_result_ref` | Assertion truth comes from an approved artifact or external oracle source. | Unapproved expected-result truth. |
-| `inline_decision_rule` | The AC can be judged by a deterministic rule without an external expected-result artifact. | New business truth invented by the agent. |
-| `provider_refs` | The scenario needs a named adapter, fixture, binding, oracle, assertion, or observation capability. | Provider implementation configuration. |
+| `setup.fixtures.<name>.cleanup_ref` | The test creates, mutates, seeds, publishes, or deletes state. | Hidden destructive actions without cleanup references. |
+| `execute[].with` | Runtime inputs are passed to the selected operation. | Secrets, endpoint URLs, connection strings, or provider code. |
+| `execute[].outputs` | Later verification or evidence references execution output. | Uncaptured implicit result paths. |
+| `verify[].selector` | Only part of a structured actual result is compared. | Provider-specific parser code. |
+| `verify[].target`, `verify[].query`, or `verify[].event` | The check validates DB state or published events. | Inline credentials, physical connection strings, or unreviewed destructive SQL. |
+| `verify[].options` | The check needs timeout, polling, tolerance, normalization, or ignore paths. | Release gate or risk approval policy. |
 
-Optional fields such as BDD context, tags, priority, replacement links, and extra source references improve governance but must not be required for first execution.
+Optional fields such as tags, notes, or replacement links may improve maintenance, but governance-heavy fields must not be required for first execution.
 
 The DSL shall reject or block these concerns from the test case body:
 
 - Secrets, credentials, tokens, or production data.
 - Physical provider implementation details such as endpoint URLs, shell commands, queue client settings, DB connection strings, or loader code.
 - CD deployment instructions or environment provisioning scripts.
-- New RP feature behavior, AC wording, expected-result approval, waiver approval, or release approval.
+- New RP feature behavior, AC wording, expected-result approval, waiver approval, release approval, release gate, or risk approval.
 
 M1 implements only the DSL v1 subset required for the selected heterogeneous pilot. Additional DSL v1 enum values remain reserved until their providers are implemented and verified.
 
@@ -203,14 +204,14 @@ The lifecycle is:
 
 ```text
 RP AC / execution context ready
--> draft test skeleton or draft executable test case
+-> draft test skeleton or draft executable test case using execution-focused DSL v1
 -> product developer review
 -> checked-in RP test artifact
 -> repeated execution
 -> update or retire when RP AC, mapping, input, fixture, adapter, or expected result changes
 ```
 
-Approved or execution-eligible test cases should be stored in the RP `tests/` folder. In the current Product Repo model this means `docs/08-release/release-packages/<rp_id>/tests/`. If a dedicated RP repository is introduced later, the same `tests/` lifecycle applies inside that repo.
+Execution-eligible test cases should be stored in the RP `tests/` folder. In the current Product Repo model this means `docs/08-release/release-packages/<rp_id>/tests/`. If a dedicated RP repository is introduced later, the same `tests/` lifecycle applies inside that repo.
 
 The agent may propose new or updated test cases when source artifacts change, but it shall not silently overwrite checked-in approved tests.
 
@@ -351,21 +352,21 @@ Product developers own AC clarification and manual expected-result input. QA or 
 
 ### Required Mechanism
 
-- Read `rp_feature_spec.md`, `acceptance_criteria.md`, `rp_ru_mapping.yaml`, package input references, fixture references, adapter references, and validation boundaries.
+- Read `rp_feature_spec.md`, `acceptance_criteria.md`, `rp_ru_mapping.yaml`, target references, setup fixture references, execute operation references, expected-result references, verify rules, and validation boundaries.
 - Check AC readiness: AC ID, linked RP feature, observable input, behavior, expected output, and pass/fail condition.
-- Check execution context readiness: scenario type/scope/capabilities, preconditions, data selection strategy, parameterized cases, catalog selectors or matrix dimensions, dependencies, name-keyed package input bindings, binding type, fixture or data source, lifecycle cleanup requirement, target RU, execution mode, deployment requirement, environment reference, adapter or adapter mode, validation boundary, oracle/assertion type, observation requirement, postcondition requirement, and expected-result reference status.
-- Map each generated DSL section to the AP that will consume it: identity to Definition and Validation, inputs to Planning and Binding, fixture fields to Fixture and State Manager, steps to Execution Engine, oracles/assertions to Oracle and Assertion Engine, and evidence fields to Evidence and Reporting.
+- Check execution context readiness: scenario type/scope/capabilities, named targets, target runner, environment reference, setup fixture or data source, cleanup reference when state is mutated, execute operation, execute input refs, execute output refs, deployment requirement, validation boundary, expected_results refs, verify type, verify actual/expected or target/query/event semantics, evidence refs, and runtime policy.
+- Map each generated DSL section to the AP that will consume it: identity and traceability to Definition and Validation, targets/setup/execute inputs to Planning and Binding, setup fixture fields to Fixture and State Manager, execute operations to Execution Engine, expected_results/verify to Oracle and Assertion Engine, and evidence/runtime fields to Evidence and Reporting.
 - Refuse executable drafting when an AP cannot be selected or when a required AP input would have to be invented by the agent.
 - Mark ambiguous AC as `not_ready_for_generation`.
 - Generate `draft_test_skeleton` using the package-neutral test case DSL only when AC is ready but execution context is incomplete.
 - Generate `draft_executable_test_case` using the package-neutral test case DSL only when AC and execution context are both ready.
-- Include `dsl_version` and all required DSL identity, traceability, scenario, execution, expected-result, assertion, and evidence fields in every generated executable draft.
+- Include `dsl_version` and all required DSL identity/status/revision, traceability, targets, scenario, setup, execute, expected_results, verify, evidence, and runtime fields in every generated executable draft.
 - Store generated test drafts as reviewable artifacts instead of transient execution state.
 - Detect existing checked-in test cases for the same RP AC before generating replacements.
-- Emit update proposals when RP AC, RP/RU mapping, package input, fixture, adapter, or expected-result references change.
-- Preserve approved test history by creating revisions or replacement links instead of silently overwriting checked-in tests.
+- Emit update proposals when RP AC, RP/RU mapping, targets, setup fixtures, execute operations, expected_results, verify rules, evidence refs, or runtime policy change.
+- Preserve checked-in test history by creating revisions or replacement links instead of silently overwriting checked-in tests.
 - Reference expected results as `pending`, `missing`, or linked to F006 output; do not generate expected-result truth in F005.
-- Emit a generation readiness report listing readiness status, generated artifact type, gaps, owner action, and required approval when classification affects coverage.
+- Emit a generation readiness report listing readiness status, generated artifact type, gaps, and owner action.
 
 ## F006 — Agent Skill: Expected Result Drafting
 
@@ -394,13 +395,13 @@ Generated expected results shall remain draft until reviewed. Product developers
 
 ### Purpose
 
-Execute checked-in approved or execution-eligible package-neutral DSL regression test cases against a release package using a generic test execution process. M1 validates this process with one selected heterogeneous release package pilot.
+Execute checked-in execution-eligible package-neutral DSL regression test cases against a release package using a generic test execution process. M1 validates this process with one selected heterogeneous release package pilot.
 
 ### Expected Behavior
 
-The framework shall resolve package inputs, bind runtime values, confirm environment readiness, set up fixtures, execute or validate through package adapters, collect actual results, run assertions, clean up fixtures, and emit raw execution evidence.
+The framework shall resolve targets, setup fixtures, execute inputs, expected_results, verify rules, evidence refs, runtime policy, and provider contracts; confirm environment readiness; set up fixtures; execute operations through package adapters/providers; collect actual results; run verification; clean up fixtures; and emit raw execution evidence.
 
-One RP regression execution is a batch. A batch may contain one or more test runs. Each test run validates one approved DSL test case and produces run-level evidence. The batch produces the RP-level execution summary used by F008 coverage reporting.
+One RP regression execution is a batch. A batch may contain one or more test runs. Each test run validates one execution-eligible DSL test case and produces run-level evidence. The batch produces the RP-level execution summary used by F008 coverage reporting.
 
 The execution process and DSL shall remain package-type-neutral. M1 provider implementations shall prioritize reusable built-in providers for request/response, messaging, DB fixture, deployment readiness, and file/batch execution. External runner support is not the default extension path; it is an approved escape hatch when a legacy or specialized boundary cannot yet be represented by a reusable provider contract.
 
@@ -410,27 +411,27 @@ F007 shall not author AC, classify AC readiness, generate tests, regenerate chec
 
 ### Required Mechanism
 
-- Read `package.yaml`, `rp_ru_mapping.yaml`, checked-in DSL test cases from the RP `tests/` folder, package input catalog, fixture references, adapter config, and expected-result artifacts.
-- Check that test cases declare supported `dsl_version` and include required DSL identity, traceability, scenario, execution target, expected-result, step, oracle or inline decision rule, assertion, and evidence fields.
-- Check that test cases are `approved_for_regression` or explicitly allowed by the execution policy.
-- Check that required expected-result artifacts are `approved_for_regression` or otherwise explicitly allowed by the execution policy.
+- Read `package.yaml`, `rp_ru_mapping.yaml`, checked-in DSL test cases from the RP `tests/` folder, target definitions, setup fixture refs, execute operation refs, expected-result artifacts, verify rules, evidence refs, runtime policy, and provider contracts.
+- Check that test cases declare supported `dsl_version` and include required DSL identity/status/revision, traceability, targets, scenario, setup, execute, expected_results, verify, evidence, and runtime fields.
+- Check that test cases have execution lifecycle status allowed by the selected run policy.
+- Check that required expected-result artifacts are eligible under the expected-result process before they are used by `verify`.
 - Validate that every DSL section can be consumed by exactly one AP responsibility path before adapter execution starts.
-- Validate that every DSL logical reference to an adapter, binding, fixture, oracle, assertion, or observation has a matching provider contract or supported default.
+- Validate that every DSL logical reference to a target runner, execute operation, setup fixture type, expected-result type, verify type, or evidence output has a matching provider contract or supported default.
 - Validate each provider contract against a capability registry by `provider_family`, `provider_type`, required fields, supported runtime status, and execution mode before adapter/provider execution.
 - Reject ambiguous multi-RU provider resolution rather than falling back silently to the first RU.
 - Require explicit approval metadata before using an external runner escape hatch, including reason, owner, bounded command or container ref, timeout, inputs, outputs, and evidence map.
 - Create one unique batch ID for the RP execution request.
-- Create one unique run ID per approved test case in that batch.
+- Create one unique run ID per execution-eligible test case in that batch.
 - Resolve the RP execution mode as `local_fixture`, `ci_ephemeral`, `sit_deployed`, or `evidence_only`.
 - For multi-RU RPs, follow the declared dependency graph and stop downstream execution when a required upstream RU validation fails.
 - Check deployment and environment readiness before running `sit_deployed` tests.
-- Reject or mark invalid runs when RP/RU mapping, adapter config, package inputs, fixtures, expected results, oracle references, required deployment evidence, or environment readiness are missing.
-- Resolve logical package inputs to concrete fixture or generated data.
-- Bind runtime values from package inputs, context, and previous execution steps.
+- Reject or mark invalid runs when RP/RU mapping, target runner, execute operation, setup fixtures, expected_results, verify rules, required deployment evidence, or environment readiness are missing.
+- Resolve logical setup fixtures and execute inputs to concrete fixture or generated data.
+- Bind runtime values from setup fixtures, execute inputs, context, and previous execute outputs.
 - Run setup actions needed by the package fixture lifecycle.
 - Execute or validate through the configured release package adapter.
 - Collect actual outputs, logs, and execution metadata.
-- Run assertions against resolved oracles or inline decision rules.
+- Run verification against resolved expected_results or deterministic verify rules.
 - Run cleanup actions and record cleanup evidence.
 - Emit run-level artifacts such as execution report, execution log, actual results, assertion results, observation results, postcondition results, cleanup evidence, and failure details.
 - Emit a batch-level summary that lists RP ID, environment, batch status, executed run IDs, test case IDs, AC IDs, and run statuses.
