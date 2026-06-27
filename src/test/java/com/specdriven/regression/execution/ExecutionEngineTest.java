@@ -8,7 +8,10 @@ import com.specdriven.regression.assertion.AssertionEngine;
 import com.specdriven.regression.binding.BindingResolver;
 import com.specdriven.regression.evidence.EvidenceWriter;
 import com.specdriven.regression.provider.DatabaseFixtureProvider;
+import com.specdriven.regression.provider.DeploymentReadinessProvider;
+import com.specdriven.regression.provider.MessagingProvider;
 import com.specdriven.regression.provider.ProviderContractResolver;
+import com.specdriven.regression.provider.RequestResponseProvider;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -51,6 +54,63 @@ class ExecutionEngineTest {
         assertThat(runtimeCalled).isTrue();
         assertThat(result.passed()).isTrue();
         assertThat(Files.readString(result.actualOutput())).isEqualTo("registry-runtime\n");
+    }
+
+    @Test
+    void publicConstructorsRemainAvailableForFrameworkComposition() {
+        DataPipelineAdapter adapter = new DataPipelineAdapter();
+        AssertionEngine assertionEngine = new AssertionEngine();
+        EvidenceWriter evidenceWriter = new EvidenceWriter();
+        BindingResolver bindingResolver = new BindingResolver();
+        ProviderContractResolver contractResolver = new ProviderContractResolver();
+        RequestResponseProvider requestResponseProvider = new RequestResponseProvider();
+        DatabaseFixtureProvider databaseFixtureProvider = new DatabaseFixtureProvider();
+        MessagingProvider messagingProvider = new MessagingProvider();
+
+        assertThat(new ExecutionEngine()).isNotNull();
+        assertThat(new ExecutionEngine(adapter)).isNotNull();
+        assertThat(new ExecutionEngine(adapter, assertionEngine)).isNotNull();
+        assertThat(new ExecutionEngine(adapter, assertionEngine, evidenceWriter)).isNotNull();
+        assertThat(new ExecutionEngine(adapter, assertionEngine, evidenceWriter, bindingResolver, contractResolver))
+                .isNotNull();
+        assertThat(new ExecutionEngine(
+                adapter,
+                assertionEngine,
+                evidenceWriter,
+                bindingResolver,
+                contractResolver,
+                requestResponseProvider))
+                .isNotNull();
+        assertThat(new ExecutionEngine(
+                adapter,
+                assertionEngine,
+                evidenceWriter,
+                bindingResolver,
+                contractResolver,
+                requestResponseProvider,
+                databaseFixtureProvider))
+                .isNotNull();
+        assertThat(new ExecutionEngine(
+                adapter,
+                assertionEngine,
+                evidenceWriter,
+                bindingResolver,
+                contractResolver,
+                requestResponseProvider,
+                databaseFixtureProvider,
+                messagingProvider))
+                .isNotNull();
+        assertThat(new ExecutionEngine(
+                adapter,
+                assertionEngine,
+                evidenceWriter,
+                bindingResolver,
+                contractResolver,
+                requestResponseProvider,
+                databaseFixtureProvider,
+                messagingProvider,
+                new DeploymentReadinessProvider()))
+                .isNotNull();
     }
 
     private void writeRuntimeOutput(ProviderRuntimeRequest request) {

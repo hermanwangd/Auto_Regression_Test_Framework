@@ -44,4 +44,9 @@ class RegressionApplicationTest {
         assertThat(output.toString()).contains("status: pass");
         assertThat(Files.isDirectory(productRepo.resolve("docs/08-release"))).isTrue();
     }
+
+    @Test
+    void applicationCanBeConstructedBySpring() {
+        assertThat(new RegressionApplication()).isNotNull();
+    }
 }

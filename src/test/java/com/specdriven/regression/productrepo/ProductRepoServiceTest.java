@@ -1,9 +1,11 @@
 package com.specdriven.regression.productrepo;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -67,5 +69,20 @@ class ProductRepoServiceTest {
 
         assertThat(Files.readString(existing)).isEqualTo("owner content");
         assertThat(result.skippedExistingPaths()).contains(Path.of("docs/00-intake-scope"));
+    }
+
+    @Test
+    void requiredPathsExposeProductRepoLifecycleFoldersAsReadOnlyList() {
+        ProductRepoService service = new ProductRepoService();
+
+        List<Path> requiredPaths = service.requiredPaths();
+
+        assertThat(requiredPaths)
+                .contains(
+                        Path.of("docs/00-intake-scope"),
+                        Path.of("docs/08-release/release-packages"),
+                        Path.of("docs/99-archive"));
+        assertThatThrownBy(() -> requiredPaths.add(Path.of("docs/unplanned")))
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 }

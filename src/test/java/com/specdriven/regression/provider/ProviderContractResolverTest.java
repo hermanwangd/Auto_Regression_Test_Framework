@@ -531,6 +531,33 @@ class ProviderContractResolverTest {
                 });
     }
 
+    @Test
+    void reportsOwnerActionWhenMappingHasNoReleaseUnits() throws Exception {
+        Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
+        Files.writeString(mapping, """
+                rp_id: RP-EMPTY
+                release_units: []
+                """);
+
+        ProviderContractResolutionReport report = new ProviderContractResolver().resolve(
+                mapping,
+                "spring_boot_cli",
+                List.of("db_seed"),
+                List.of("relational_db"));
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.resolvedContracts()).isEmpty();
+        assertThat(report.gaps()).extracting(ProviderContractGap::fieldPath)
+                .containsExactly(
+                        "release_units[0].provider_contracts.adapters.spring_boot_cli",
+                        "release_units[0].provider_contracts.bindings.db_seed",
+                        "release_units[0].provider_contracts.fixtures.relational_db");
+        assertThat(report.gaps()).extracting(ProviderContractGap::registryStatus)
+                .containsOnly("missing");
+        assertThat(report.gaps()).extracting(ProviderContractGap::runtimeStatus)
+                .containsOnly("blocked");
+    }
+
     private String mappingWithContracts(String providerContracts) {
         return """
                 rp_id: RP-001
