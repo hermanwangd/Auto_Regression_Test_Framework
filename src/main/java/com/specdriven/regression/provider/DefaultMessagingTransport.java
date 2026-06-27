@@ -6,21 +6,43 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 
 class DefaultMessagingTransport implements MessagingTransport {
+
+    private final Function<Properties, Consumer<String, String>> kafkaConsumerFactory;
+
+    DefaultMessagingTransport() {
+        this(KafkaConsumer::new);
+    }
+
+    DefaultMessagingTransport(Function<Properties, Consumer<String, String>> kafkaConsumerFactory) {
+        this.kafkaConsumerFactory = kafkaConsumerFactory;
+    }
 
     @Override
     public MessagingTransportResult publish(MessagingTransportRequest request)
@@ -39,6 +61,27 @@ class DefaultMessagingTransport implements MessagingTransport {
                 "published 1 message to " + request.targetRef() + "\n",
                 request.payload(),
                 1);
+    }
+
+    @Override
+    public MessagingTransportResult observe(MessagingTransportRequest request)
+            throws IOException {
+        return switch (request.providerType().toLowerCase(Locale.ROOT)) {
+            case "local", "mock" -> localObserve(request);
+            case "kafka" -> kafkaObserve(request);
+            case "nats" -> natsObserve(request);
+            default -> throw new IOException("Unsupported messaging provider_type `"
+                    + request.providerType() + "` for observe execution.");
+        };
+    }
+
+    private MessagingTransportResult localObserve(MessagingTransportRequest request) throws IOException {
+        int expectedCount = expectedCount(request);
+        String payload = firstText(request.action(), "observed_payload", "expected_payload", "sample_payload");
+        return new MessagingTransportResult(
+                observedStdout(request, expectedCount),
+                payload,
+                expectedCount);
     }
 
     private MessagingTransportResult kafkaPublish(MessagingTransportRequest request)
@@ -67,6 +110,45 @@ class DefaultMessagingTransport implements MessagingTransport {
         } catch (ExecutionException | TimeoutException e) {
             throw new IOException("Kafka publish failed for `" + request.targetRef() + "`.", e);
         }
+    }
+
+    private MessagingTransportResult kafkaObserve(MessagingTransportRequest request) throws IOException {
+        Properties properties = new Properties();
+        int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
+        properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaBootstrapServers(request.connectionRef()));
+        properties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        properties.put(ConsumerConfig.GROUP_ID_CONFIG, consumerGroup(request));
+        properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+        properties.put(ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG, timeoutMs);
+        properties.put(ConsumerConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, timeoutMs);
+
+        int expectedCount = expectedCount(request);
+        List<String> observed = new ArrayList<>();
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Math.max(1, request.timeoutSeconds()));
+        try (Consumer<String, String> consumer = kafkaConsumerFactory.apply(properties)) {
+            consumer.subscribe(Collections.singletonList(stripScheme(request.targetRef(), "kafka")));
+            while (observed.size() < expectedCount && System.nanoTime() < deadline) {
+                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(200));
+                for (ConsumerRecord<String, String> record : records) {
+                    if (matchesCorrelation(record.key(), record.value(), request.correlationId())) {
+                        observed.add(record.value());
+                        if (observed.size() >= expectedCount) {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (observed.size() < expectedCount) {
+            throw new IOException("Kafka " + request.mode() + " expected at least " + expectedCount
+                    + " messages from `" + request.targetRef() + "` but observed " + observed.size() + ".");
+        }
+        return new MessagingTransportResult(
+                observedStdout(request, observed.size()),
+                observedPayload(observed),
+                observed.size());
     }
 
     private String kafkaBootstrapServers(String connectionRef) throws IOException {
@@ -101,6 +183,49 @@ class DefaultMessagingTransport implements MessagingTransport {
                 1);
     }
 
+    private MessagingTransportResult natsObserve(MessagingTransportRequest request)
+            throws IOException {
+        URI uri = natsUri(resolveRef(request.connectionRef()));
+        int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
+        int expectedCount = expectedCount(request);
+        List<String> observed = new ArrayList<>();
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(uri.getHost(), natsPort(uri)), timeoutMs);
+            socket.setSoTimeout(timeoutMs);
+            InputStream input = socket.getInputStream();
+            OutputStream output = socket.getOutputStream();
+            readNatsInfo(input);
+            writeAscii(output, "CONNECT {\"verbose\":false,\"pedantic\":false}\r\n");
+            writeAscii(output, "SUB " + stripScheme(request.targetRef(), "nats") + " 1\r\nPING\r\n");
+            output.flush();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Math.max(1, request.timeoutSeconds()));
+            while (observed.size() < expectedCount && System.nanoTime() < deadline) {
+                String line;
+                try {
+                    line = readLine(input);
+                } catch (SocketTimeoutException e) {
+                    break;
+                }
+                if (line.startsWith("MSG ")) {
+                    String payload = readNatsPayload(input, line);
+                    if (matchesCorrelation("", payload, request.correlationId())) {
+                        observed.add(payload);
+                    }
+                } else if (line.startsWith("-ERR")) {
+                    throw new IOException("NATS " + request.mode() + " failed: " + line);
+                }
+            }
+        }
+        if (observed.size() < expectedCount) {
+            throw new IOException("NATS " + request.mode() + " expected at least " + expectedCount
+                    + " messages from `" + request.targetRef() + "` but observed " + observed.size() + ".");
+        }
+        return new MessagingTransportResult(
+                observedStdout(request, observed.size()),
+                observedPayload(observed),
+                observed.size());
+    }
+
     private URI natsUri(String connectionRef) {
         URI uri = URI.create(connectionRef);
         if (uri.getScheme() == null) {
@@ -130,6 +255,14 @@ class DefaultMessagingTransport implements MessagingTransport {
                 throw new IOException("NATS publish failed: " + line);
             }
         }
+    }
+
+    private String readNatsPayload(InputStream input, String header) throws IOException {
+        String[] parts = header.split(" ");
+        int length = Integer.parseInt(parts[parts.length - 1]);
+        byte[] payload = input.readNBytes(length);
+        readLine(input);
+        return new String(payload, StandardCharsets.UTF_8);
     }
 
     private String readLine(InputStream input) throws IOException {
@@ -165,9 +298,67 @@ class DefaultMessagingTransport implements MessagingTransport {
         return ref;
     }
 
+    private int expectedCount(MessagingTransportRequest request) throws IOException {
+        String expected = firstText(request.action(), "expected_count", "min_count");
+        if (expected.isBlank()) {
+            return 1;
+        }
+        try {
+            int count = Integer.parseInt(expected);
+            if (count > 0) {
+                return count;
+            }
+        } catch (NumberFormatException e) {
+            throw new IOException("Messaging " + request.mode()
+                    + " expected_count/min_count must be a positive integer.", e);
+        }
+        throw new IOException("Messaging " + request.mode()
+                + " expected_count/min_count must be a positive integer.");
+    }
+
+    private String consumerGroup(MessagingTransportRequest request) {
+        String group = firstText(request.action(), "group_id", "group_id_ref", "consumer_group_ref");
+        if (!group.isBlank()) {
+            return group;
+        }
+        return "spec-regression-" + request.providerName() + "-" + request.actionName();
+    }
+
+    private boolean matchesCorrelation(String key, String payload, String correlationId) {
+        return correlationId == null
+                || correlationId.isBlank()
+                || correlationId.equals(key)
+                || (payload != null && payload.contains(correlationId));
+    }
+
+    private String observedPayload(List<String> observed) {
+        if (observed.isEmpty()) {
+            return "";
+        }
+        return String.join("\n", observed) + "\n";
+    }
+
+    private String observedStdout(MessagingTransportRequest request, int observedCount) {
+        return "observed " + observedCount + " native messages from " + request.targetRef() + "\n";
+    }
+
     private String stripScheme(String value, String scheme) {
         String prefix = scheme + "://";
         return value.startsWith(prefix) ? value.substring(prefix.length()) : value;
+    }
+
+    private String firstText(Map<?, ?> map, String... fields) {
+        for (String field : fields) {
+            String value = stringValue(map.get(field));
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? "" : value.toString();
     }
 
     private String blankToNull(String value) {

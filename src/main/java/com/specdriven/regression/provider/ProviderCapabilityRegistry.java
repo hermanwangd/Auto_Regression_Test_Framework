@@ -329,7 +329,14 @@ class ProviderCapabilityRegistry {
             if (!(entry.getValue() instanceof Map<?, ?> action)) {
                 continue;
             }
-            if (firstText(action, "payload_binding", "message_binding", "event_binding").isBlank()) {
+            String mode = messagingActionMode(action);
+            if (!List.of("publish", "consume", "observe").contains(mode)) {
+                violations.add(required(".actions." + actionName + ".mode",
+                        "Use supported messaging action mode `publish`, `consume`, or `observe` before invoking `"
+                                + actionName + "`."));
+            }
+            if ("publish".equals(mode)
+                    && firstText(action, "payload_binding", "message_binding", "event_binding").isBlank()) {
                 violations.add(required(".actions." + actionName + ".payload_binding",
                         "Declare payload_binding, message_binding, or event_binding for native messaging action `"
                                 + actionName + "`."));
@@ -347,6 +354,11 @@ class ProviderCapabilityRegistry {
                                 + "messaging action `" + actionName + "`."));
             }
         }
+    }
+
+    private String messagingActionMode(Map<?, ?> action) {
+        String mode = stringValue(action.get("mode"));
+        return mode.isBlank() ? "publish" : mode.toLowerCase(Locale.ROOT);
     }
 
     private void validateBinding(

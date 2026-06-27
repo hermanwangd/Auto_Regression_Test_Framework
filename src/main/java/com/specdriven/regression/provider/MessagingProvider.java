@@ -34,20 +34,29 @@ public class MessagingProvider {
             Path stdoutLog,
             Path stderrLog,
             Path actualOutput) {
+        String providerType = "";
+        String actionName = "";
+        String connectionRef = "";
+        String targetRef = "";
+        String targetField = "";
+        String mode = "";
+        String correlationId = "";
+        String payloadBinding = "";
         try {
             Files.createDirectories(stdoutLog.getParent());
             Files.createDirectories(stderrLog.getParent());
             Files.createDirectories(actualOutput.getParent());
 
-            String providerType = stringValue(contract.get("provider_type"));
-            String actionName = firstStepAction(testCase);
+            providerType = stringValue(contract.get("provider_type"));
+            actionName = firstStepAction(testCase);
             Map<?, ?> action = selectedAction(contract, actionName);
-            String connectionRef = connectionRef(contract);
-            String targetRef = targetRef(contract);
-            String targetField = targetField(contract);
-            String correlationId = firstText(action, "correlation_id", "correlation_id_ref", "correlation_key");
-            String payloadBinding = firstText(action, "payload_binding", "message_binding", "event_binding");
-            if (payloadBinding.isBlank()) {
+            connectionRef = connectionRef(contract);
+            targetRef = targetRef(contract);
+            targetField = targetField(contract);
+            mode = mode(action);
+            correlationId = firstText(action, "correlation_id", "correlation_id_ref", "correlation_key");
+            payloadBinding = firstText(action, "payload_binding", "message_binding", "event_binding");
+            if (requiresPayload(mode) && payloadBinding.isBlank()) {
                 payloadBinding = firstMessageBinding(resolvedBindings);
             }
             if (!isSupportedProvider(providerType)) {
@@ -62,12 +71,12 @@ public class MessagingProvider {
                         targetRef,
                         targetField,
                         actionName,
-                        stringValue(action.get("mode")),
+                        mode,
                         payloadBinding,
                         correlationId,
                         "Unsupported messaging provider_type `" + providerType + "` for local execution.");
             }
-            if (!hasResolvedBinding(resolvedBindings, payloadBinding)) {
+            if (requiresPayload(mode) && !hasResolvedBinding(resolvedBindings, payloadBinding)) {
                 return fail(
                         runDir,
                         stdoutLog,
@@ -79,21 +88,21 @@ public class MessagingProvider {
                         targetRef,
                         targetField,
                         actionName,
-                        stringValue(action.get("mode")),
+                        mode,
                         payloadBinding,
                         correlationId,
                         "Cannot resolve messaging payload binding `" + payloadBinding + "`.");
             }
 
-            String payload = payload(packageRoot, resolvedBindings, payloadBinding);
-            MessagingTransportResult transportResult = transport.publish(new MessagingTransportRequest(
+            String payload = requiresPayload(mode) ? payload(packageRoot, resolvedBindings, payloadBinding) : "";
+            MessagingTransportResult transportResult = transport.execute(new MessagingTransportRequest(
                     providerName,
                     providerType,
                     connectionRef,
                     targetRef,
                     targetField,
                     actionName,
-                    stringValue(action.get("mode")),
+                    mode,
                     payloadBinding,
                     correlationId,
                     payload,
@@ -111,7 +120,7 @@ public class MessagingProvider {
                     targetRef,
                     targetField,
                     actionName,
-                    stringValue(action.get("mode")),
+                    mode,
                     payloadBinding,
                     correlationId,
                     actualOutput,
@@ -133,14 +142,14 @@ public class MessagingProvider {
                         stderrLog,
                         actualOutput,
                         providerName,
-                        stringValue(contract.get("provider_type")),
-                        connectionRef(contract),
-                        targetRef(contract),
-                        targetField(contract),
-                        firstStepAction(testCase),
-                        "",
-                        "",
-                        "",
+                        providerType,
+                        connectionRef,
+                        targetRef,
+                        targetField,
+                        actionName,
+                        mode,
+                        payloadBinding,
+                        correlationId,
                         e.getMessage() == null ? "Failed to execute messaging provider." : e.getMessage());
             } catch (IOException writeFailure) {
                 throw new UncheckedIOException("Failed to execute messaging provider.", writeFailure);
@@ -213,7 +222,9 @@ public class MessagingProvider {
         builder.append("actions:\n");
         builder.append("  - action: ").append(actionName).append("\n");
         builder.append("    mode: ").append(mode.isBlank() ? "publish" : mode).append("\n");
-        builder.append("    payload_binding: ").append(payloadBinding).append("\n");
+        if (!payloadBinding.isBlank()) {
+            builder.append("    payload_binding: ").append(payloadBinding).append("\n");
+        }
         if (!correlationId.isBlank()) {
             builder.append("    correlation_id: ").append(correlationId).append("\n");
         }
@@ -300,6 +311,15 @@ public class MessagingProvider {
                 || normalized.equals("mock")
                 || normalized.equals("kafka")
                 || normalized.equals("nats");
+    }
+
+    private String mode(Map<?, ?> action) {
+        String mode = stringValue(action.get("mode"));
+        return mode.isBlank() ? "publish" : mode.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean requiresPayload(String mode) {
+        return mode.isBlank() || "publish".equals(mode);
     }
 
     private int intValue(Object value, int fallback) {

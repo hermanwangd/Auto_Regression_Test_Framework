@@ -70,13 +70,13 @@ M1 framework delivery is staged. The current framework verification target is no
 
 | Provider Area | Framework Verification Target | Heterogeneous Pilot Target |
 |---|---|---|
-| Request/response | REST provider contracts with payload binding, timeout, output refs, and evidence. | REST or native gRPC, depending on the selected RP. |
-| Messaging | Local/mock publish or observe behavior with topic/subject refs, payload binding, timeout, correlation checks, and observed output refs. | Native Kafka and/or NATS only when required by the selected RP. |
+| Request/response | REST and native descriptor-driven gRPC unary provider contracts with payload binding, timeout, output refs, and evidence. | Pilot endpoint validation remains required for release acceptance. |
+| Messaging | Local/mock plus native Kafka/NATS publish and consume/observe behavior with topic/subject refs, publish payload binding, timeout, correlation checks, and observed output refs. | Pilot broker validation remains required for release acceptance. |
 | DB fixture | JDBC setup, verification query, cleanup SQL refs, cleanup strategy, isolation key, and cleanup evidence. | Same contract against the selected pilot DB fixture boundary. |
 | Deployment readiness | Local/mock readiness evidence with deployed version ref, timeout, output ref, and bounded probe behavior. | Native K8s and VM readiness when the selected RP uses deployed-environment validation. |
 | External runner | Approved command-runner escape hatch with approval metadata, bounded timeout, inputs, outputs, evidence map, and mapped-artifact checks. | Optional only when no reusable built-in provider can represent the selected boundary. |
 
-The product shall not claim native gRPC, Kafka, NATS, K8s, or VM support merely because framework verification passes with local/mock providers. Those provider paths become accepted only after their reusable runtime, contract validation, evidence mapping, and verification cases are implemented.
+The product shall not claim downstream RP release readiness merely because framework verification passes with local/mock providers or simulated broker tests. Native provider paths become release-accepted only after their reusable runtime, contract validation, evidence mapping, verification cases, and owner-provided pilot environment evidence are present.
 
 ## 3.4 Feature List
 

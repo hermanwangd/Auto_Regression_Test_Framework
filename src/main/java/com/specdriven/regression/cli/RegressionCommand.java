@@ -863,8 +863,23 @@ public class RegressionCommand {
                                 + "` before invocation or update the DSL step action."));
                 continue;
             }
+            String mode = messagingActionMode(action);
+            if (!List.of("publish", "consume", "observe").contains(mode)) {
+                gaps.add(new ProviderContractGap(
+                        context.contractPath() + ".actions." + actionName + ".mode",
+                        "adapter",
+                        context.providerName(),
+                        context.providerFamily(),
+                        context.providerType(),
+                        "unsupported",
+                        "blocked",
+                        context.ruId(),
+                        context.providerName(),
+                        "Use supported messaging action mode `publish`, `consume`, or `observe` before invoking `"
+                                + actionName + "`."));
+            }
             String payloadBinding = firstText(action, "payload_binding", "message_binding", "event_binding");
-            if (payloadBinding.isBlank()) {
+            if ("publish".equals(mode) && payloadBinding.isBlank()) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName + ".payload_binding",
                         "adapter",
@@ -877,7 +892,7 @@ public class RegressionCommand {
                         context.providerName(),
                         "Declare payload_binding, message_binding, or event_binding for messaging action `"
                                 + actionName + "` before invocation."));
-            } else if (!bindingNames.contains(payloadBinding)) {
+            } else if ("publish".equals(mode) && !bindingNames.contains(payloadBinding)) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName + ".payload_binding",
                         "adapter",
@@ -923,6 +938,11 @@ public class RegressionCommand {
             }
         }
         return gaps;
+    }
+
+    private String messagingActionMode(Map<?, ?> action) {
+        String mode = stringValue(action.get("mode"));
+        return mode.isBlank() ? "publish" : mode.toLowerCase(java.util.Locale.ROOT);
     }
 
     private List<String> stepActions(Path approvedTest) {
