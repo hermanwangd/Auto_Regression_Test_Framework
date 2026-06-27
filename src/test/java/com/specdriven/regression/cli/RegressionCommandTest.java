@@ -559,6 +559,53 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runBlocksDownstreamRuWhenRequiredUpstreamRunFails() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001", "RP-001-AC-002");
+        writeDependencyFailureMultiRuMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001", "expected-upstream\n");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-002", "downstream-ok\n");
+        writeApprovedDependencyTestCase(
+                "RP-001", "RP-001-TC-001", "RP-001-AC-001", "RU-upstream-job", "upstream_cli");
+        writeApprovedDependencyTestCase(
+                "RP-001", "RP-001-TC-002", "RP-001-AC-002", "RU-downstream-job", "downstream_cli");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        Path upstreamRun = packageRoot.resolve("evidence/runs/RUN-001/run.yaml");
+        Path downstreamRun = packageRoot.resolve("evidence/runs/RUN-002/run.yaml");
+        String downstreamEvidence = Files.readString(downstreamRun);
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("run_status: failed");
+        assertThat(Files.readString(upstreamRun)).contains("status: failed");
+        assertThat(downstreamEvidence)
+                .contains("status: blocked")
+                .contains("adapter_execution_started: false")
+                .contains("resolved_dependencies:")
+                .contains("RU-upstream-job")
+                .contains("failure_details: failure_details.yaml");
+        assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-002/failure_details.yaml")))
+                .contains("blocked_dependency_ru: RU-upstream-job")
+                .contains("test_case_id: RP-001-TC-002")
+                .contains("ac_id: RP-001-AC-002");
+        assertThat(Files.exists(packageRoot.resolve("evidence/runs/RUN-002/logs/stdout.log"))).isFalse();
+        assertThat(Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml")))
+                .contains("run_id: RUN-001")
+                .contains("status: failed")
+                .contains("run_id: RUN-002")
+                .contains("status: blocked");
+    }
+
+    @Test
     void runExecutesRestRequestResponseProviderAndWritesEvidence() throws Exception {
         AtomicReference<String> requestBody = new AtomicReference<>("");
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -1618,6 +1665,76 @@ class RegressionCommandTest {
                 """.formatted(rpId, rpId, rpId));
     }
 
+    private void writeDependencyFailureMultiRuMapping(String rpId) throws Exception {
+        Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        Files.writeString(mapping, """
+                rp_id: %s
+                release_units:
+                  - ru_id: RU-upstream-job
+                    repo: /repo/upstream
+                    unit_type: data_pipeline
+                    owner: product_developer
+                    version_ref: main
+                    validation_boundary: execute_pipeline_with_fixture
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://pipeline/%s/upstream
+                    adapter: upstream_cli
+                    provider_contracts:
+                      adapters:
+                        upstream_cli:
+                          provider_family: file_batch
+                          provider_type: shell
+                          command: /bin/sh -c 'echo upstream-actual'
+                          working_directory: .
+                          timeout_seconds: 10
+                          success_exit_codes: [0]
+                          logs:
+                            stdout: logs/stdout.log
+                            stderr: logs/stderr.log
+                          outputs:
+                            actual_output_ref: actual/output.txt
+                      bindings: {}
+                      fixtures: {}
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                  - ru_id: RU-downstream-job
+                    repo: /repo/downstream
+                    unit_type: data_pipeline
+                    owner: product_developer
+                    version_ref: main
+                    validation_boundary: execute_pipeline_with_fixture
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://pipeline/%s/downstream
+                    adapter: downstream_cli
+                    provider_contracts:
+                      adapters:
+                        downstream_cli:
+                          provider_family: file_batch
+                          provider_type: shell
+                          command: /bin/sh -c 'echo downstream-ok'
+                          working_directory: .
+                          timeout_seconds: 10
+                          success_exit_codes: [0]
+                          logs:
+                            stdout: logs/stdout.log
+                            stderr: logs/stderr.log
+                          outputs:
+                            actual_output_ref: actual/output.txt
+                      bindings: {}
+                      fixtures: {}
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [execution_log]
+                    dependencies: [RU-upstream-job]
+                """.formatted(rpId, rpId, rpId));
+    }
+
     private void writeRestProviderMapping(String rpId, int port) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
         Files.writeString(mapping, """
@@ -2037,6 +2154,65 @@ class RegressionCommandTest {
                 evidence_required:
                   - execution_log
                 """.formatted(testCaseId, rpId, acId, acId, rpId, expectedResultId, expectedResultId, bindingType));
+    }
+
+    private void writeApprovedDependencyTestCase(
+            String rpId,
+            String testCaseId,
+            String acId,
+            String ruId,
+            String adapter) throws Exception {
+        String expectedResultId = acId.replace("-AC-", "-ER-");
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + testCaseId + ".yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s
+                rp_id: %s
+                ac_id: %s
+                artifact_status: approved_for_regression
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
+                source_fingerprint: sha256:test
+                execution_target:
+                  ru_id: %s
+                  adapter: %s
+                  execution_mode: ci_ephemeral
+                  environment_ref: ci://pipeline/%s
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [batch_execution, file_assertion]
+                expected:
+                  ref: expected-results/approved/%s.yaml
+                oracles:
+                  normalized_output:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
+                package_inputs:
+                  inputs: {}
+                steps:
+                  - id: run_ru
+                    action: call_ru
+                    target_ru_id: %s
+                assertions:
+                  - type: file_diff
+                    oracle: ${oracles.normalized_output}
+                evidence_required:
+                  - execution_log
+                """.formatted(
+                testCaseId,
+                rpId,
+                acId,
+                acId,
+                ruId,
+                adapter,
+                rpId,
+                expectedResultId,
+                expectedResultId,
+                ruId));
     }
 
     private void writeApprovedRestTestCase(String rpId, String acId) throws Exception {

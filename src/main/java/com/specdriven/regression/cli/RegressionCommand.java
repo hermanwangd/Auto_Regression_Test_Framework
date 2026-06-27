@@ -379,16 +379,37 @@ public class RegressionCommand {
         int runNumber = nextAvailableNumber(packageRoot.resolve("evidence/runs"), "RUN");
         boolean passed = true;
         List<ExecutionResult> results = new java.util.ArrayList<>();
+        Map<String, String> ruStatuses = new LinkedHashMap<>();
+        Path mappingYaml = packageRoot.resolve("rp_ru_mapping.yaml");
+        List<Path> executionTests = dependencyOrderedApprovedTests(packageRoot, preflight.approvedTests());
         out.println("batch_id: " + batchId);
         out.println("execution_results:");
-        for (Path approvedTest : preflight.approvedTests()) {
+        for (Path approvedTest : executionTests) {
             String runId = formatSequentialId("RUN", runNumber++);
             while (Files.exists(packageRoot.resolve("evidence/runs").resolve(runId))) {
                 runId = formatSequentialId("RUN", runNumber++);
             }
-            ExecutionResult result = executionEngine.execute(packageRoot, approvedTest, batchId, runId);
+            String targetRuId = targetRuId(approvedTest);
+            List<String> dependencies = targetDependencies(mappingYaml, targetRuId);
+            DependencyBlock dependencyBlock =
+                    dependencyBlock(mappingYaml, approvedTest, targetRuId, dependencies, ruStatuses);
+            ExecutionResult result;
+            if (dependencyBlock.blocked()) {
+                result = evidenceWriter.writeBlockedRun(
+                        packageRoot,
+                        batchId,
+                        runId,
+                        List.of(approvedTest),
+                        List.of(dependencyBlock.failureDetail()),
+                        preflight.executionMode(),
+                        preflight.environmentRef(),
+                        dependencies);
+            } else {
+                result = executionEngine.execute(packageRoot, approvedTest, batchId, runId);
+            }
             results.add(result);
             passed = passed && result.passed();
+            recordRuStatus(ruStatuses, targetRuId, result.status());
             out.println("  - test_case_id: " + result.testCaseId());
             out.println("    ac_id: " + result.acId());
             out.println("    run_id: " + result.runId());
@@ -410,6 +431,60 @@ public class RegressionCommand {
                 results);
         out.println("run_status: " + runStatus);
         return passed ? 0 : 1;
+    }
+
+    private List<Path> dependencyOrderedApprovedTests(Path packageRoot, List<Path> approvedTests) {
+        Map<String, Integer> ruOrder = new LinkedHashMap<>();
+        RpRuMappingValidationReport mappingReport = rpRuMappingService.validate(packageRoot.resolve("rp_ru_mapping.yaml"));
+        for (int index = 0; index < mappingReport.releaseUnits().size(); index++) {
+            ruOrder.put(mappingReport.releaseUnits().get(index).ruId(), index);
+        }
+        return approvedTests.stream()
+                .sorted((left, right) -> {
+                    int leftOrder = ruOrder.getOrDefault(targetRuId(left), Integer.MAX_VALUE);
+                    int rightOrder = ruOrder.getOrDefault(targetRuId(right), Integer.MAX_VALUE);
+                    int orderComparison = Integer.compare(leftOrder, rightOrder);
+                    if (orderComparison != 0) {
+                        return orderComparison;
+                    }
+                    return left.getFileName().toString().compareTo(right.getFileName().toString());
+                })
+                .toList();
+    }
+
+    private DependencyBlock dependencyBlock(
+            Path mappingYaml,
+            Path approvedTest,
+            String targetRuId,
+            List<String> dependencies,
+            Map<String, String> ruStatuses) {
+        for (String dependency : dependencies) {
+            String dependencyStatus = ruStatuses.get(dependency);
+            if (dependencyStatus != null && !"passed".equals(dependencyStatus)) {
+                String failureDetail = failureDetail(
+                        "Planning and Binding",
+                        dependencyFieldPath(mappingYaml, targetRuId, dependency),
+                        "Resolve failed or blocked upstream RU `" + dependency
+                                + "` before running dependent RU `" + targetRuId + "`.",
+                        "test_case_id: " + testCaseId(approvedTest),
+                        "ac_id: " + acId(approvedTest),
+                        "affected_ru: " + targetRuId,
+                        "blocked_dependency_ru: " + dependency,
+                        "dependency_status: " + dependencyStatus);
+                return new DependencyBlock(true, failureDetail);
+            }
+        }
+        return new DependencyBlock(false, "");
+    }
+
+    private void recordRuStatus(Map<String, String> ruStatuses, String targetRuId, String status) {
+        if (targetRuId.isBlank()) {
+            return;
+        }
+        String existing = ruStatuses.get(targetRuId);
+        if (existing == null || !"passed".equals(status)) {
+            ruStatuses.put(targetRuId, status);
+        }
     }
 
     private String nextAvailableId(Path parent, String prefix) {
@@ -727,12 +802,83 @@ public class RegressionCommand {
         return "";
     }
 
+    private String targetRuId(Path testCasePath) {
+        Object executionTarget = readYamlMap(testCasePath).get("execution_target");
+        if (executionTarget instanceof Map<?, ?> target) {
+            return stringValue(target.get("ru_id"));
+        }
+        return "";
+    }
+
+    private String testCaseId(Path testCasePath) {
+        return stringValue(readYamlMap(testCasePath).get("test_case_id"));
+    }
+
+    private String acId(Path testCasePath) {
+        return stringValue(readYamlMap(testCasePath).get("ac_id"));
+    }
+
+    private List<String> targetDependencies(Path mappingYaml, String targetRuId) {
+        if (targetRuId.isBlank()) {
+            return List.of();
+        }
+        Object unitsValue = readYamlMap(mappingYaml).get("release_units");
+        if (!(unitsValue instanceof List<?> units)) {
+            return List.of();
+        }
+        for (Object entry : units) {
+            if (!(entry instanceof Map<?, ?> unit) || !targetRuId.equals(stringValue(unit.get("ru_id")))) {
+                continue;
+            }
+            Object dependenciesValue = unit.get("dependencies");
+            if (!(dependenciesValue instanceof List<?> dependencyValues)) {
+                return List.of();
+            }
+            return dependencyValues.stream()
+                    .map(this::stringValue)
+                    .filter(dependency -> !dependency.isBlank())
+                    .toList();
+        }
+        return List.of();
+    }
+
+    private String dependencyFieldPath(Path mappingYaml, String targetRuId, String dependencyRuId) {
+        Object unitsValue = readYamlMap(mappingYaml).get("release_units");
+        if (!(unitsValue instanceof List<?> units)) {
+            return "release_units.dependencies";
+        }
+        for (int unitIndex = 0; unitIndex < units.size(); unitIndex++) {
+            Object entry = units.get(unitIndex);
+            if (!(entry instanceof Map<?, ?> unit) || !targetRuId.equals(stringValue(unit.get("ru_id")))) {
+                continue;
+            }
+            Object dependenciesValue = unit.get("dependencies");
+            if (!(dependenciesValue instanceof List<?> dependencies)) {
+                return "release_units[" + unitIndex + "].dependencies";
+            }
+            for (int dependencyIndex = 0; dependencyIndex < dependencies.size(); dependencyIndex++) {
+                if (dependencyRuId.equals(stringValue(dependencies.get(dependencyIndex)))) {
+                    return "release_units[" + unitIndex + "].dependencies[" + dependencyIndex + "]";
+                }
+            }
+            return "release_units[" + unitIndex + "].dependencies";
+        }
+        return "release_units.dependencies";
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? "" : value.toString();
+    }
+
     private record PreflightResult(
             boolean blocked,
             List<Path> approvedTests,
             List<String> failureDetails,
             String executionMode,
             String environmentRef) {
+    }
+
+    private record DependencyBlock(boolean blocked, String failureDetail) {
     }
 
     private Map<String, String> parseOptions(String[] args) {

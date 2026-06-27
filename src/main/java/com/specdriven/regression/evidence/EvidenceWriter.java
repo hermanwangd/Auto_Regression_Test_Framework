@@ -257,6 +257,26 @@ public class EvidenceWriter {
             List<String> failureDetails,
             String executionMode,
             String environmentRef) {
+        return writeBlockedRun(
+                packageRoot,
+                batchId,
+                runId,
+                approvedTests,
+                failureDetails,
+                executionMode,
+                environmentRef,
+                List.of());
+    }
+
+    public ExecutionResult writeBlockedRun(
+            Path packageRoot,
+            String batchId,
+            String runId,
+            List<Path> approvedTests,
+            List<String> failureDetails,
+            String executionMode,
+            String environmentRef,
+            List<String> resolvedDependencies) {
         Path runDir = packageRoot.resolve("evidence/runs").resolve(runId);
         Map<String, Object> testCase = approvedTests.isEmpty() ? Map.of() : readYamlMap(approvedTests.get(0));
         Map<?, ?> executionTarget = executionTarget(testCase);
@@ -280,7 +300,8 @@ public class EvidenceWriter {
                     environment_ref: %s
                     ru_refs:
                       - %s
-                    resolved_dependencies: []
+                    resolved_dependencies:
+                    %s
                     failure_details: failure_details.yaml
                     """.formatted(
                     runId,
@@ -290,7 +311,8 @@ public class EvidenceWriter {
                     stringValue(testCase.get("ac_id")),
                     resolvedExecutionMode,
                     resolvedEnvironmentRef,
-                    stringValue(executionTarget.get("ru_id"))));
+                    stringValue(executionTarget.get("ru_id")),
+                    resolvedDependenciesYaml(resolvedDependencies)));
             Files.writeString(runDir.resolve("failure_details.yaml"), failureDetailsYaml(failureDetails));
             return new ExecutionResult(
                     runId,
