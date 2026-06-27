@@ -176,6 +176,10 @@ class ProviderCapabilityRegistry {
         if (!hasAnyText(contract, "timeout_seconds")) {
             violations.add(escapeHatch(".timeout_seconds",
                     "Declare a bounded timeout for external runner `" + providerName + "`."));
+        } else if (!isPositiveInteger(contract.get("timeout_seconds"))) {
+            violations.add(escapeHatch(".timeout_seconds",
+                    "Declare timeout_seconds as a positive bounded integer for external runner `"
+                            + providerName + "`."));
         }
         if (!hasMap(contract, "inputs")) {
             violations.add(escapeHatch(".inputs",
@@ -238,6 +242,18 @@ class ProviderCapabilityRegistry {
                 || normalized.contains("/../")
                 || normalized.endsWith("/..")
                 || normalized.matches("^[A-Za-z]:.*");
+    }
+
+    private boolean isPositiveInteger(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue() > 0;
+        }
+        String text = stringValue(value);
+        try {
+            return Integer.parseInt(text) > 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private String stringValue(Object value) {
