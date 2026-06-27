@@ -44,12 +44,13 @@ public class RequestResponseProvider {
             Path stdoutLog,
             Path stderrLog,
             Path actualOutput) {
+        Map<?, ?> action = Map.of();
         try {
             Files.createDirectories(stdoutLog.getParent());
             Files.createDirectories(stderrLog.getParent());
             Files.createDirectories(actualOutput.getParent());
 
-            Map<?, ?> action = selectedAction(contract, testCase);
+            action = selectedAction(contract, testCase);
             if ("grpc".equalsIgnoreCase(stringValue(contract.get("provider_type")))) {
                 return executeGrpc(
                         packageRoot,
@@ -70,17 +71,29 @@ public class RequestResponseProvider {
             Files.writeString(stdoutLog, response.body());
             Files.writeString(stderrLog, "");
             Files.writeString(actualOutput, response.body());
+            boolean success = response.statusCode() >= 200 && response.statusCode() < 300;
+            writeRequestResponseEvidence(
+                    runDir,
+                    contract,
+                    action,
+                    success ? "passed" : "failed",
+                    false,
+                    "",
+                    actualOutput,
+                    response.statusCode());
             return new AdapterExecutionResult(
-                    response.statusCode() >= 200 && response.statusCode() < 300 ? 0 : 1,
+                    success ? 0 : 1,
                     false,
                     stdoutLog,
                     stderrLog,
                     actualOutput);
         } catch (HttpTimeoutException e) {
             writeFailure(stdoutLog, stderrLog, actualOutput, e);
+            writeRequestResponseEvidence(runDir, contract, action, "failed", true, e.getMessage(), actualOutput, null);
             return new AdapterExecutionResult(-1, true, stdoutLog, stderrLog, actualOutput);
         } catch (IOException e) {
             writeFailure(stdoutLog, stderrLog, actualOutput, e);
+            writeRequestResponseEvidence(runDir, contract, action, "failed", false, e.getMessage(), actualOutput, null);
             return new AdapterExecutionResult(1, false, stdoutLog, stderrLog, actualOutput);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -111,15 +124,15 @@ public class RequestResponseProvider {
             Files.writeString(stdoutLog, response.responseBody());
             Files.writeString(stderrLog, "");
             Files.writeString(actualOutput, response.responseBody());
-            writeRequestResponseEvidence(runDir, contract, action, "passed", false, "", actualOutput);
+            writeRequestResponseEvidence(runDir, contract, action, "passed", false, "", actualOutput, null);
             return new AdapterExecutionResult(0, false, stdoutLog, stderrLog, actualOutput);
         } catch (GrpcClientException e) {
             writeFailure(stdoutLog, stderrLog, actualOutput, e);
-            writeRequestResponseEvidence(runDir, contract, action, "failed", e.timeout(), e.getMessage(), actualOutput);
+            writeRequestResponseEvidence(runDir, contract, action, "failed", e.timeout(), e.getMessage(), actualOutput, null);
             return new AdapterExecutionResult(e.timeout() ? -1 : 1, e.timeout(), stdoutLog, stderrLog, actualOutput);
         } catch (IOException e) {
             writeFailure(stdoutLog, stderrLog, actualOutput, e);
-            writeRequestResponseEvidence(runDir, contract, action, "failed", false, e.getMessage(), actualOutput);
+            writeRequestResponseEvidence(runDir, contract, action, "failed", false, e.getMessage(), actualOutput, null);
             return new AdapterExecutionResult(1, false, stdoutLog, stderrLog, actualOutput);
         }
     }
@@ -199,7 +212,8 @@ public class RequestResponseProvider {
             String status,
             boolean timeout,
             String error,
-            Path actualOutput) {
+            Path actualOutput,
+            Integer httpStatus) {
         try {
             Files.createDirectories(runDir);
             StringBuilder builder = new StringBuilder();
@@ -207,6 +221,9 @@ public class RequestResponseProvider {
             builder.append("provider_type: ").append(stringValue(contract.get("provider_type"))).append("\n");
             builder.append("status: ").append(status).append("\n");
             builder.append("timeout: ").append(timeout).append("\n");
+            if (httpStatus != null) {
+                builder.append("http_status: ").append(httpStatus).append("\n");
+            }
             builder.append("endpoint_ref: ")
                     .append(firstText(contract, "endpoint_ref", "base_url_ref", "service_ref"))
                     .append("\n");

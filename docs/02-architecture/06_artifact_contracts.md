@@ -642,6 +642,17 @@ Conditionally required fields:
 | `fixture.setup` / `fixture.cleanup` | Required when the test creates, mutates, seeds, publishes, or configures local, CI, SIT, or shared resources. |
 | `policy.cleanup_required` | Required when the test creates, mutates, seeds, publishes, or configures local, CI, SIT, or shared resources. |
 
+Framework-tested assertion types:
+
+| Assertion Type | Required Fields | Notes |
+|---|---|---|
+| `file_diff` | `oracle` | Compares actual output with an approved expected-result artifact or golden file. |
+| `response_status_equals` | `expected_status`; optional `path` | Compares HTTP status from request-response evidence, or a status field in provider actual-output JSON/YAML when `path` is provided or auto-detected. |
+| `json_path_equals` | `path`, `expected_value` | Compares a scalar JSON/YAML value at a dot path such as `$.status`. |
+| `json_path_absent` | `path` | Passes only when the JSON/YAML path is absent. |
+| `numeric_tolerance` | `path`, `expected_value`, `tolerance` | Compares numeric values using absolute tolerance. |
+| `db_row_matches` | `oracle` with `type: query_result` | Executes a reviewed SQL query ref through the named JDBC fixture provider and compares row count. |
+
 Optional DSL fields:
 
 | Field | Purpose |

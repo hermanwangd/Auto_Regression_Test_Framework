@@ -71,7 +71,7 @@ M1 is delivered through two gates:
 | Framework Verification | The framework can validate artifacts, block unsafe execution, run local/mock provider paths, write evidence, and calculate sample coverage through `./mvnw test` and `./mvnw verify`. | Real downstream RP release readiness or native technology certification. |
 | Heterogeneous Pilot Validation | An owner-provided Product Repo and RP can achieve greater than 80% automatable RP AC coverage using the selected provider contracts. | Broad support for every package type or every native provider. |
 
-The framework verification fixture may use local or mock providers for Kafka/NATS-like messaging and K8s/VM-like readiness. Native Kafka, NATS, gRPC, K8s, and VM providers are pilot-target provider work and must not be claimed as complete until their provider contracts, runtimes, evidence, and tests exist.
+Framework verification may use local mocks, stub endpoints, fake brokers, local JDBC fixtures, and command/API stubs to prove reusable provider behavior. Native Kafka, NATS, gRPC, K8s, and VM provider runtimes are framework-verified where listed in the capability matrix, but downstream pilot acceptance still requires owner-provided RP artifacts, selected provider contracts, and real environment evidence.
 
 ## 1.6 Product Repo Definition
 
@@ -261,10 +261,10 @@ Current framework verification can be accepted only for the framework capabiliti
 | Area | Current Framework Status | Pilot Acceptance Requirement |
 |---|---|---|
 | File/batch execution | Supported through bounded shell/file provider contracts. | Use when selected RP has file, CLI, batch, or pipeline-style validation. |
-| REST request/response | Supported through configurable REST provider contracts. | Add native gRPC only if the selected pilot requires it. |
-| Messaging | Supported through local/mock messaging provider contracts with topic/subject refs, payload binding, timeout, correlation checks, and output refs. | Native Kafka/NATS provider path must be implemented or explicitly replaced by approved external runner evidence. |
-| DB fixture | Supported through JDBC setup, verification query, cleanup SQL refs, cleanup strategy, and isolation key evidence. | Pilot must prove state isolation and cleanup on real selected DB fixture boundary. |
-| Deployment readiness | Supported through local/mock readiness evidence with version ref, timeout, output ref, and `file_exists` probe. | Native K8s and VM readiness checks are required only when the selected pilot needs deployed-environment validation. |
+| REST/gRPC request/response | Supported through configurable REST contracts and native descriptor-driven gRPC unary contracts. | Pilot must prove selected endpoint behavior against owner-provided RP artifacts and environment refs. |
+| Messaging | Supported through local/mock messaging plus native Kafka/NATS publish, consume/observe, and bounded cleanup drain contracts. | Pilot must prove selected broker behavior against owner-provided Kafka/NATS environment refs. |
+| DB fixture | Supported through JDBC setup, verification query, cleanup SQL refs, cleanup strategy, isolation key evidence, and DB row count assertions. | Pilot must prove state isolation and cleanup on real selected DB fixture boundary. |
+| Deployment readiness | Supported through local/mock readiness plus native K8s and VM bounded readiness probes, K8s direct API availability, pod log capture, and VM SSH/WinRM command probes. | Pilot must prove selected K8s/VM readiness against owner-provided environments. |
 | External runner | Supported as an approved escape hatch with approval metadata, timeout, inputs, outputs, evidence map, and mapped-artifact checks. | Use only when built-in providers cannot safely represent the selected legacy or specialized boundary. |
 
 ## 1.14 Capability Baseline
@@ -281,8 +281,8 @@ Current framework verification can be accepted only for the framework capabiliti
 | CAP-008 | Execution Environment Resolver | M1 | Platform | Framework verified | Execution mode and environment readiness report |
 | CAP-009 | Package Input Catalog | M1 | Platform | Partial | Supported binding types are `input_file`, `dataset`, `db_seed`, `api_payload`, and `message_event`; `config_file`, `env_var`, and `existing_state` remain pending |
 | CAP-010 | Package Binding Resolver | M1 | Platform | Partial | Binding unit tests and dry-run gaps for supported types; additional pilot bindings pending |
-| CAP-011 | Release Package Adapter | M1 | Platform | Framework verified | File/batch, REST, local/mock messaging, JDBC fixture, local/mock readiness, and approved external runner evidence |
-| CAP-012 | Package Output Assertion Library | M1 | Platform | Partial | File diff, expected-result artifact checks, JSON path equality checks, and DB row count assertions are framework-tested; schema, contract, absence, and tolerance remain pending |
+| CAP-011 | Release Package Adapter | M1 | Platform | Framework verified | File/batch, REST/gRPC unary, local/mock plus Kafka/NATS messaging, JDBC fixture, local/mock plus K8s/VM readiness, and approved external runner evidence |
+| CAP-012 | Package Output Assertion Library | M1 | Platform | Partial | File diff, expected-result artifact checks, HTTP/status field checks, JSON path equality and absence checks, numeric tolerance checks, and DB row count assertions are framework-tested; schema and contract assertions remain pending |
 | CAP-013 | Package Fixture Lifecycle | M1 | Platform | Framework verified | DB setup/query/cleanup evidence and cleanup policy checks |
 | CAP-014 | Release Package Test Execution | M1 | Platform | Framework verified | Batch/run execution report and raw evidence for current provider set |
 | CAP-015 | Coverage Reporter | M1 | Platform | Framework verified | Batch-level AC coverage report; real pilot >80% remains pending owner artifacts |

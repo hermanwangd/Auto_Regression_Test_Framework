@@ -102,6 +102,63 @@ class ExecutionEngineTest {
     }
 
     @Test
+    void evaluatesAllResponseAssertionsAgainstProviderActualOutput() throws Exception {
+        writeCompositeResponseAssertionPackage();
+        ProviderRuntime fakeRuntime = request -> {
+            try {
+                Files.createDirectories(request.stdoutLog().getParent());
+                Files.createDirectories(request.stderrLog().getParent());
+                Files.createDirectories(request.actualOutput().getParent());
+                Files.writeString(request.stdoutLog(), "response captured\n");
+                Files.writeString(request.stderrLog(), "");
+                Files.writeString(request.actualOutput(), """
+                        {"status":"ACCEPTED","riskScore":0.049}
+                        """);
+                Files.writeString(request.runDir().resolve("request_response.yaml"), """
+                        provider_family: request_response
+                        provider_type: rest
+                        status: passed
+                        http_status: 202
+                        actual_output: actual/response.json
+                        """);
+                return new AdapterExecutionResult(0, false, request.stdoutLog(), request.stderrLog(), request.actualOutput());
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to write fake composite JSON response.", e);
+            }
+        };
+        ExecutionEngine engine = new ExecutionEngine(
+                new DataPipelineAdapter(),
+                new AssertionEngine(),
+                new EvidenceWriter(),
+                new BindingResolver(),
+                new ProviderContractResolver(),
+                new DatabaseFixtureProvider(),
+                new ProviderRuntimeRegistry(Map.of("request_response/rest", fakeRuntime)));
+
+        ExecutionResult result = engine.execute(
+                tempDir,
+                tempDir.resolve("tests/approved/TC-RESPONSE-ASSERTIONS-001.yaml"),
+                "BATCH-RESPONSE-ASSERTIONS",
+                "RUN-RESPONSE-ASSERTIONS");
+
+        Path runDir = tempDir.resolve("evidence/runs/RUN-RESPONSE-ASSERTIONS");
+        String assertionEvidence = Files.readString(runDir.resolve("assertions.yaml"));
+        assertThat(result.passed()).isTrue();
+        assertThat(assertionEvidence)
+                .contains("type: response_status_equals")
+                .contains("response status `http_status` matched `202`")
+                .contains("type: json_path_equals")
+                .contains("json path `$.status` matched `ACCEPTED`")
+                .contains("type: json_path_absent")
+                .contains("json path `$.error` was absent")
+                .contains("type: numeric_tolerance")
+                .contains("numeric path `$.riskScore` matched `0.05` within tolerance `0.005`");
+        assertThat(Files.readString(runDir.resolve("run.yaml")))
+                .contains("assertion_status: passed")
+                .contains("assertions: assertions.yaml");
+    }
+
+    @Test
     void evaluatesDbRowMatchesAssertionAgainstFixtureDatabase() throws Exception {
         String jdbcUrl = "jdbc:h2:mem:execution_db_assertion_" + System.nanoTime() + ";DB_CLOSE_DELAY=-1";
         writeDbRowAssertionPackage(jdbcUrl);
@@ -540,6 +597,84 @@ class ExecutionEngineTest {
                 """);
         Files.writeString(tempDir.resolve("rp_ru_mapping.yaml"), """
                 rp_id: RP-JSON-PATH
+                release_units:
+                  - ru_id: RU-api
+                    repo: /repo/api
+                    unit_type: service
+                    owner: product_developer
+                    version_ref: main
+                    validation_boundary: request_response_api
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://api
+                    adapter: request_response
+                    provider_contracts:
+                      adapters:
+                        request_response:
+                          provider_family: request_response
+                          provider_type: rest
+                          endpoint_ref: http://127.0.0.1:1
+                          timeout_seconds: 1
+                          success_exit_codes: [0]
+                          logs:
+                            stdout: logs/stdout.log
+                            stderr: logs/stderr.log
+                          outputs:
+                            actual_output_ref: actual/response.json
+                          actions:
+                            submit:
+                              method: POST
+                              path: /submit
+                              request_binding: api_payload
+                      bindings:
+                        api_payload:
+                          provider_family: request_response
+                          provider_type: request_body
+                          bind_as: request_body
+                      fixtures: {}
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                """);
+    }
+
+    private void writeCompositeResponseAssertionPackage() throws IOException {
+        Files.createDirectories(tempDir.resolve("tests/approved"));
+        Files.createDirectories(tempDir.resolve("fixtures"));
+        Files.writeString(tempDir.resolve("fixtures/request.json"), "{\"request\":\"ok\"}\n");
+        Files.writeString(tempDir.resolve("tests/approved/TC-RESPONSE-ASSERTIONS-001.yaml"), """
+                test_case_id: TC-RESPONSE-ASSERTIONS-001
+                ac_id: AC-RESPONSE-ASSERTIONS-001
+                rp_id: RP-RESPONSE-ASSERTIONS
+                title: Composite response assertions
+                status: approved
+                execution_target:
+                  ru_id: RU-api
+                  adapter: request_response
+                  execution_mode: ci_ephemeral
+                  environment_ref: ci://api
+                package_inputs:
+                  inputs:
+                    api_payload:
+                      bind_as: api_payload
+                      ref: fixtures/request.json
+                steps:
+                  - action: submit
+                    input: ${inputs.api_payload}
+                assertions:
+                  - type: response_status_equals
+                    expected_status: 202
+                  - type: json_path_equals
+                    path: $.status
+                    expected_value: ACCEPTED
+                  - type: json_path_absent
+                    path: $.error
+                  - type: numeric_tolerance
+                    path: $.riskScore
+                    expected_value: 0.05
+                    tolerance: 0.005
+                """);
+        Files.writeString(tempDir.resolve("rp_ru_mapping.yaml"), """
+                rp_id: RP-RESPONSE-ASSERTIONS
                 release_units:
                   - ru_id: RU-api
                     repo: /repo/api

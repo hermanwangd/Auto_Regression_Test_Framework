@@ -64,6 +64,11 @@ class RequestResponseProviderTest {
             assertThat(Files.readString(result.stdoutLog())).isEqualTo("{\"error\":\"duplicate\"}");
             assertThat(Files.readString(result.actualOutput())).isEqualTo("{\"error\":\"duplicate\"}");
             assertThat(Files.readString(result.stderrLog())).isEmpty();
+            assertThat(Files.readString(tempDir.resolve("run/request_response.yaml")))
+                    .contains("provider_family: request_response")
+                    .contains("status: failed")
+                    .contains("http_status: 409")
+                    .contains("actual_output: actual/response.json");
         } finally {
             server.stop(0);
         }
@@ -125,6 +130,12 @@ class RequestResponseProviderTest {
             assertThat(Files.readString(result.stdoutLog())).isEqualTo("{\"status\":\"updated\"}");
             assertThat(Files.readString(result.stderrLog())).isEmpty();
             assertThat(Files.readString(result.actualOutput())).isEqualTo("{\"status\":\"updated\"}");
+            assertThat(Files.readString(tempDir.resolve("run/request_response.yaml")))
+                    .contains("provider_family: request_response")
+                    .contains("status: passed")
+                    .contains("http_status: 200")
+                    .contains("method: PATCH")
+                    .contains("actual_output: actual/response.json");
         } finally {
             server.stop(0);
         }
