@@ -361,6 +361,7 @@ class RegressionCommandTest {
         assertThat(runEvidence).contains("adapter_execution_started: false");
         assertThat(runEvidence).contains("execution_mode: ci_ephemeral");
         assertThat(runEvidence).contains("environment_ref: ci://pipeline/RP-001");
+        assertThat(failureDetails).contains("reason: binding_resolution_failed");
         assertThat(failureDetails).contains("package_inputs.inputs.orders_seed.bind_as");
         assertThat(failureDetails).contains("existing_state");
     }

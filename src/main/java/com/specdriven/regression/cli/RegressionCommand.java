@@ -753,6 +753,7 @@ public class RegressionCommand {
         StringBuilder builder = new StringBuilder();
         builder.append("ap: ").append(ap).append("\n");
         builder.append("field_path: ").append(fieldPath).append("\n");
+        builder.append("reason: ").append(failureReason(ap, fieldPath)).append("\n");
         for (String extraLine : extraLines) {
             if (extraLine != null && !extraLine.isBlank()) {
                 builder.append(extraLine).append("\n");
@@ -760,6 +761,31 @@ public class RegressionCommand {
         }
         builder.append("owner_action: ").append(ownerAction);
         return builder.toString();
+    }
+
+    private String failureReason(String ap, String fieldPath) {
+        if (fieldPath.startsWith("package_inputs.")) {
+            return "binding_resolution_failed";
+        }
+        if (fieldPath.contains("provider_contracts")) {
+            return "provider_contract_resolution_failed";
+        }
+        if (fieldPath.startsWith("tests/approved")) {
+            return "approved_test_case_missing";
+        }
+        if (fieldPath.contains(".deployment.") || "Discovery and Context".equals(ap)) {
+            return "environment_readiness_failed";
+        }
+        if ("Fixture and State Manager".equals(ap)) {
+            return "fixture_policy_failed";
+        }
+        if ("Oracle and Assertion Engine".equals(ap)) {
+            return "oracle_or_truth_source_readiness_failed";
+        }
+        if ("Definition and Validation".equals(ap)) {
+            return "definition_validation_failed";
+        }
+        return "readiness_gate_failed";
     }
 
     private void addTestFailure(
