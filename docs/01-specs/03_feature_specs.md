@@ -71,7 +71,7 @@ M1 framework delivery is staged. The current framework verification target is no
 | Provider Area | Framework Verification Target | Heterogeneous Pilot Target |
 |---|---|---|
 | Request/response | REST and native descriptor-driven gRPC unary provider contracts with payload binding, timeout, output refs, and evidence. | Pilot endpoint validation remains required for release acceptance. |
-| Messaging | Local/mock plus native Kafka/NATS publish and consume/observe behavior with topic/subject refs, publish payload binding, timeout, correlation checks, and observed output refs. | Pilot broker validation remains required for release acceptance. |
+| Messaging | Local/mock plus native Kafka/NATS publish, consume/observe, and bounded cleanup drain behavior with topic/subject refs, publish payload binding, timeout, correlation checks, cleanup strategy/count, and observed output refs. | Pilot broker validation remains required for release acceptance; persistent broker purge is future work only if selected RP acceptance requires it. |
 | DB fixture | JDBC setup, verification query, cleanup SQL refs, cleanup strategy, isolation key, and cleanup evidence. | Same contract against the selected pilot DB fixture boundary. |
 | Deployment readiness | Local/mock readiness evidence with deployed version ref, timeout, output ref, and bounded probe behavior. | Native K8s and VM readiness when the selected RP uses deployed-environment validation. |
 | External runner | Approved command-runner escape hatch with approval metadata, bounded timeout, inputs, outputs, evidence map, and mapped-artifact checks. | Optional only when no reusable built-in provider can represent the selected boundary. |

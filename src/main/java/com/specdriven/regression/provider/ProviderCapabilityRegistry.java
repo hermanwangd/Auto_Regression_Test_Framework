@@ -330,16 +330,33 @@ class ProviderCapabilityRegistry {
                 continue;
             }
             String mode = messagingActionMode(action);
-            if (!List.of("publish", "consume", "observe").contains(mode)) {
+            if (!List.of("publish", "consume", "observe", "cleanup").contains(mode)) {
                 violations.add(required(".actions." + actionName + ".mode",
-                        "Use supported messaging action mode `publish`, `consume`, or `observe` before invoking `"
-                                + actionName + "`."));
+                        "Use supported messaging action mode `publish`, `consume`, `observe`, or `cleanup` "
+                                + "before invoking `" + actionName + "`."));
             }
             if ("publish".equals(mode)
                     && firstText(action, "payload_binding", "message_binding", "event_binding").isBlank()) {
                 violations.add(required(".actions." + actionName + ".payload_binding",
                         "Declare payload_binding, message_binding, or event_binding for native messaging action `"
                                 + actionName + "`."));
+            }
+            if ("cleanup".equals(mode)) {
+                String cleanupStrategy = stringValue(action.get("cleanup_strategy"));
+                if (cleanupStrategy.isBlank()) {
+                    violations.add(required(".actions." + actionName + ".cleanup_strategy",
+                            "Declare cleanup_strategy for native messaging cleanup action `"
+                                    + actionName + "`."));
+                } else if (!"drain".equalsIgnoreCase(cleanupStrategy)) {
+                    violations.add(required(".actions." + actionName + ".cleanup_strategy",
+                            "Use supported messaging cleanup_strategy `drain` before invoking native messaging "
+                                    + "cleanup action `" + actionName + "`."));
+                }
+                if (!isPositiveInteger(action.get("max_count"))) {
+                    violations.add(required(".actions." + actionName + ".max_count",
+                            "Declare max_count as a positive bounded integer for native messaging cleanup action `"
+                                    + actionName + "`."));
+                }
             }
             String serialization = stringValue(action.get("serialization"));
             if (!serialization.isBlank() && !"json".equalsIgnoreCase(serialization)) {

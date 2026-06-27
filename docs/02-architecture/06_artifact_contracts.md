@@ -134,12 +134,13 @@ Current provider contract minimums enforced by the framework verification build:
 |---|---|
 | `file_batch/shell` | `command`, positive `timeout_seconds`, `outputs.actual_output_ref` |
 | `request_response/rest` | `endpoint_ref`, `base_url_ref`, or `service_ref`; `actions`; positive `timeout_seconds`; `outputs.actual_output_ref` |
-| `messaging/local` or `messaging/mock` | `topic_ref`, `subject_ref`, `stream_ref`, or `endpoint_ref`; positive `timeout_seconds`; `outputs.actual_output_ref`; supported action; payload binding when action requires input; correlation id when required |
+| `messaging/local` or `messaging/mock` | `topic_ref`, `subject_ref`, `stream_ref`, or `endpoint_ref`; positive `timeout_seconds`; `outputs.actual_output_ref`; supported action; payload binding when publishing; cleanup strategy and positive max count when cleaning; correlation id when required |
+| `messaging/kafka` or `messaging/nats` | `bootstrap_servers_ref`, `server_ref`, or `connection_ref`; `topic_ref` or `subject_ref`; positive `timeout_seconds`; `outputs.actual_output_ref`; supported action; payload binding when publishing; `cleanup_strategy: drain` and positive `max_count` when cleaning; correlation id when required |
 | `db_fixture/jdbc` | `connection_ref`, `isolation_key`, `cleanup_strategy`, setup/cleanup SQL by `sql_ref`, verification SQL by `sql_ref` |
 | `deployment_readiness/local` or `deployment_readiness/mock` | `readiness_probe`, deployment/service/target ref, `deployed_version_ref`, positive `timeout_seconds`, `outputs.actual_output_ref` |
 | `external_runner/command_runner` | approval metadata, reason, command/container ref, inputs, outputs, positive timeout, evidence map, safe evidence paths |
 
-Examples in this document must use those fields when they describe current runtime-supported provider contracts. Examples that mention target providers such as native gRPC, Kafka, NATS, K8s, or VM readiness are target contract sketches until a runtime and verification case exist.
+Examples in this document must use those fields when they describe current runtime-supported provider contracts. Native gRPC, Kafka, NATS, bounded K8s readiness, and bounded VM readiness examples are runtime-supported only within the verification boundaries stated in the architecture and validation plan.
 
 Allowed `execution_mode` values are `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only`.
 
@@ -778,7 +779,8 @@ Adapter/provider runtime rules:
 - Dispatch uses DSL fields and mapping fields: adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type.
 - The framework supplies resolved input paths and run workspace paths.
 - Adapters and providers write actual outputs, observation results, and cleanup results under the run evidence directory.
-- Messaging actions that declare `requires_correlation: true` must also declare `correlation_id`, `correlation_id_ref`, or `correlation_key` before publish, consume, or observe dispatch.
+- Messaging actions that declare `requires_correlation: true` must also declare `correlation_id`, `correlation_id_ref`, or `correlation_key` before publish, consume, observe, or cleanup dispatch.
+- Messaging cleanup actions must declare `mode: cleanup`, `cleanup_strategy: drain`, and a positive bounded `max_count`. Current cleanup is bounded drain behavior for test-owned topics, subjects, or consumer groups, not broker administrator purge.
 - Non-success exit codes fail the test case and must preserve stdout, stderr, exit code, and timeout state.
 - Timeouts fail the test case and must trigger fixture cleanup.
 - Adapters must not perform deployment in M1.

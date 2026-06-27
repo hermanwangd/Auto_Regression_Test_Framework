@@ -143,6 +143,50 @@ class MessagingProviderTest {
     }
 
     @Test
+    void cleansKafkaThroughNativeTransportWithoutPayloadBindingAndWritesEvidence() throws Exception {
+        RecordingMessagingTransport transport = new RecordingMessagingTransport(
+                new MessagingTransportResult(
+                        "cleaned 3 native messages from payment.events\n",
+                        "",
+                        3));
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "payment_events",
+                Map.of(
+                        "provider_type", "kafka",
+                        "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
+                        "topic_ref", "payment.events",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-events.json"),
+                        "actions", Map.of(
+                                "cleanup_payment_event", Map.of(
+                                        "mode", "cleanup",
+                                        "cleanup_strategy", "drain",
+                                        "max_count", 25,
+                                        "serialization", "json"))),
+                Map.of("steps", List.of(Map.of("action", "cleanup_payment_event"))),
+                List.of());
+
+        Path runDir = tempDir.resolve("run");
+        assertThat(result.exitCode()).isZero();
+        assertThat(transport.request.providerType()).isEqualTo("kafka");
+        assertThat(transport.request.mode()).isEqualTo("cleanup");
+        assertThat(transport.request.payloadBinding()).isEmpty();
+        assertThat(transport.request.payload()).isEmpty();
+        assertThat(Files.readString(result.stdoutLog()))
+                .isEqualTo("cleaned 3 native messages from payment.events\n");
+        assertThat(Files.readString(runDir.resolve("messaging.yaml")))
+                .contains("status: passed")
+                .contains("provider_type: kafka")
+                .contains("action: cleanup_payment_event")
+                .contains("mode: cleanup")
+                .contains("cleanup_strategy: drain")
+                .contains("message_count: 3")
+                .doesNotContain("payload_binding:");
+    }
+
+    @Test
     void preservesObservationContextWhenTransportFails() throws Exception {
         MessagingTransport transport = new RecordingMessagingTransport() {
             @Override

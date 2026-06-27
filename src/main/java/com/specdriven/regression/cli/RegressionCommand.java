@@ -864,7 +864,7 @@ public class RegressionCommand {
                 continue;
             }
             String mode = messagingActionMode(action);
-            if (!List.of("publish", "consume", "observe").contains(mode)) {
+            if (!List.of("publish", "consume", "observe", "cleanup").contains(mode)) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName + ".mode",
                         "adapter",
@@ -875,8 +875,8 @@ public class RegressionCommand {
                         "blocked",
                         context.ruId(),
                         context.providerName(),
-                        "Use supported messaging action mode `publish`, `consume`, or `observe` before invoking `"
-                                + actionName + "`."));
+                        "Use supported messaging action mode `publish`, `consume`, `observe`, or `cleanup` "
+                                + "before invoking `" + actionName + "`."));
             }
             String payloadBinding = firstText(action, "payload_binding", "message_binding", "event_binding");
             if ("publish".equals(mode) && payloadBinding.isBlank()) {
@@ -905,6 +905,50 @@ public class RegressionCommand {
                         context.providerName(),
                         "Add package input binding `" + payloadBinding
                                 + "` before invoking messaging action `" + actionName + "`."));
+            }
+            if ("cleanup".equals(mode)) {
+                String cleanupStrategy = stringValue(action.get("cleanup_strategy"));
+                if (cleanupStrategy.isBlank()) {
+                    gaps.add(new ProviderContractGap(
+                            context.contractPath() + ".actions." + actionName + ".cleanup_strategy",
+                            "adapter",
+                            context.providerName(),
+                            context.providerFamily(),
+                            context.providerType(),
+                            "incomplete",
+                            "blocked",
+                            context.ruId(),
+                            context.providerName(),
+                            "Declare cleanup_strategy for messaging cleanup action `" + actionName
+                                    + "` before invocation."));
+                } else if (!"drain".equalsIgnoreCase(cleanupStrategy)) {
+                    gaps.add(new ProviderContractGap(
+                            context.contractPath() + ".actions." + actionName + ".cleanup_strategy",
+                            "adapter",
+                            context.providerName(),
+                            context.providerFamily(),
+                            context.providerType(),
+                            "unsupported",
+                            "blocked",
+                            context.ruId(),
+                            context.providerName(),
+                            "Use supported messaging cleanup_strategy `drain` before invoking messaging cleanup action `"
+                                    + actionName + "`."));
+                }
+                if (!isPositiveInteger(action.get("max_count"))) {
+                    gaps.add(new ProviderContractGap(
+                            context.contractPath() + ".actions." + actionName + ".max_count",
+                            "adapter",
+                            context.providerName(),
+                            context.providerFamily(),
+                            context.providerType(),
+                            "incomplete",
+                            "blocked",
+                            context.ruId(),
+                            context.providerName(),
+                            "Declare max_count as a positive bounded integer for messaging cleanup action `"
+                                    + actionName + "` before invocation."));
+                }
             }
             String serialization = stringValue(action.get("serialization"));
             if (!serialization.isBlank() && !"json".equalsIgnoreCase(serialization)) {
@@ -943,6 +987,20 @@ public class RegressionCommand {
     private String messagingActionMode(Map<?, ?> action) {
         String mode = stringValue(action.get("mode"));
         return mode.isBlank() ? "publish" : mode.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private boolean isPositiveInteger(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue() > 0;
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return Integer.parseInt(text) > 0;
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+        return false;
     }
 
     private List<String> stepActions(Path approvedTest) {

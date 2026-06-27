@@ -153,6 +153,76 @@ class ProviderCapabilityRegistryTest {
     }
 
     @Test
+    void acceptsNativeKafkaAndNatsCleanupContractsWithoutPayloadBinding() {
+        ProviderCapabilityRegistry.ProviderContractValidation kafka = registry.validate(
+                "adapters",
+                "payment_events",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "kafka",
+                        "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
+                        "topic_ref", "payment.events",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-events.json"),
+                        "actions", Map.of(
+                                "cleanup_payment_event", Map.of(
+                                        "mode", "cleanup",
+                                        "cleanup_strategy", "drain",
+                                        "max_count", 25,
+                                        "serialization", "json"))),
+                "ci_ephemeral");
+        ProviderCapabilityRegistry.ProviderContractValidation nats = registry.validate(
+                "adapters",
+                "payment_events",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "nats",
+                        "server_ref", "nats://127.0.0.1:4222",
+                        "subject_ref", "payment.events",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-events.json"),
+                        "actions", Map.of(
+                                "cleanup_payment_event", Map.of(
+                                        "mode", "cleanup",
+                                        "cleanup_strategy", "drain",
+                                        "max_count", 25,
+                                        "serialization", "json"))),
+                "ci_ephemeral");
+
+        assertThat(kafka.ready()).isTrue();
+        assertThat(kafka.registryStatus()).isEqualTo("supported");
+        assertThat(kafka.runtimeStatus()).isEqualTo("supported");
+        assertThat(nats.ready()).isTrue();
+        assertThat(nats.registryStatus()).isEqualTo("supported");
+        assertThat(nats.runtimeStatus()).isEqualTo("supported");
+    }
+
+    @Test
+    void blocksNativeMessagingCleanupWithoutStrategyOrBound() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_events",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "kafka",
+                        "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
+                        "topic_ref", "payment.events",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-events.json"),
+                        "actions", Map.of(
+                                "cleanup_payment_event", Map.of(
+                                        "mode", "cleanup",
+                                        "max_count", 0))),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .contains(
+                        ".actions.cleanup_payment_event.cleanup_strategy",
+                        ".actions.cleanup_payment_event.max_count");
+    }
+
+    @Test
     void blocksNativeMessagingContractWithUnsupportedActionMode() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
                 "adapters",

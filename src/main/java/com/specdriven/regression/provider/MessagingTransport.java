@@ -12,6 +12,7 @@ interface MessagingTransport {
         return switch (mode) {
             case "publish" -> publish(request);
             case "consume", "observe" -> observe(request);
+            case "cleanup" -> cleanup(request);
             default -> throw new IOException("Unsupported messaging action mode `" + request.mode() + "`.");
         };
     }
@@ -21,6 +22,12 @@ interface MessagingTransport {
     default MessagingTransportResult observe(MessagingTransportRequest request)
             throws IOException, InterruptedException {
         throw new IOException("Unsupported messaging observe mode for provider_type `"
+                + request.providerType() + "`.");
+    }
+
+    default MessagingTransportResult cleanup(MessagingTransportRequest request)
+            throws IOException, InterruptedException {
+        throw new IOException("Unsupported messaging cleanup mode for provider_type `"
                 + request.providerType() + "`.");
     }
 }

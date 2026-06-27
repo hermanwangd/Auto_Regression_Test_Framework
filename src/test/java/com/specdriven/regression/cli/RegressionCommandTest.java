@@ -1419,6 +1419,32 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunAllowsMessagingCleanupWithoutPayloadBinding() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-CLEANUP";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingCleanupProviderMapping(rpId);
+        writeApprovedExpectedResult(rpId, acId, "");
+        writeApprovedMessagingCleanupTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isZero();
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: dry_run_ready");
+        assertThat(output.toString()).doesNotContain("payload_binding");
+    }
+
+    @Test
     void runDryRunBlocksMessagingProviderWithUnsupportedActionBeforeInvocation() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-MSG-ACTION";
@@ -3190,6 +3216,50 @@ class RegressionCommandTest {
                 """.formatted(rpId));
     }
 
+    private void writeMessagingCleanupProviderMapping(String rpId) throws Exception {
+        Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        Files.writeString(mapping, """
+                rp_id: %s
+                release_units:
+                  - ru_id: RU-payment-events
+                    repo: /repo/payment-events
+                    unit_type: service_event
+                    owner: product_developer
+                    version_ref: build-456
+                    validation_boundary: event_observation
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://payment/events
+                    adapter: message_bus
+                    provider_contracts:
+                      adapters:
+                        message_bus:
+                          provider_family: messaging
+                          provider_type: kafka
+                          bootstrap_servers_ref: env://KAFKA_BOOTSTRAP_SERVERS
+                          topic_ref: payment.events
+                          timeout_seconds: 10
+                          actions:
+                            cleanup_payment_event:
+                              mode: cleanup
+                              cleanup_strategy: drain
+                              max_count: 25
+                              serialization: json
+                          logs:
+                            stdout: logs/message.log
+                            stderr: logs/message-error.log
+                          outputs:
+                            actual_output_ref: actual/message.json
+                      bindings: {}
+                      fixtures: {}
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [execution_log, cleanup_result]
+                    dependencies: []
+                """.formatted(rpId));
+    }
+
     private void writeMessagingEventPayload(String rpId, String payload) throws Exception {
         Path eventPayload = tempDir.resolve(
                 "docs/08-release/release-packages/" + rpId + "/fixtures/events/payment_event.json");
@@ -3921,6 +3991,51 @@ class RegressionCommandTest {
                 evidence_required:
                   - execution_log
                   - message_event
+                """.formatted(rpId, rpId, acId, acId, expectedResultId, expectedResultId));
+    }
+
+    private void writeApprovedMessagingCleanupTestCase(String rpId, String acId) throws Exception {
+        String expectedResultId = acId.replace("-AC-", "-ER-");
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s-TC-001
+                rp_id: %s
+                ac_id: %s
+                artifact_status: approved_for_regression
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
+                source_fingerprint: sha256:test
+                execution_target:
+                  ru_id: RU-payment-events
+                  adapter: message_bus
+                  execution_mode: ci_ephemeral
+                  environment_ref: ci://payment/events
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [messaging, cleanup, file_assertion]
+                expected:
+                  ref: expected-results/approved/%s.yaml
+                oracles:
+                  cleanup_result:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
+                package_inputs:
+                  inputs: {}
+                steps:
+                  - id: cleanup_payment_event
+                    action: cleanup_payment_event
+                    target_ru_id: RU-payment-events
+                assertions:
+                  - type: file_diff
+                    oracle: ${oracles.cleanup_result}
+                evidence_required:
+                  - execution_log
+                  - cleanup_result
                 """.formatted(rpId, rpId, acId, acId, expectedResultId, expectedResultId));
     }
 

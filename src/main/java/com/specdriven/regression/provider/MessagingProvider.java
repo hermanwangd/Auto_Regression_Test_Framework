@@ -42,6 +42,7 @@ public class MessagingProvider {
         String mode = "";
         String correlationId = "";
         String payloadBinding = "";
+        String cleanupStrategy = "";
         try {
             Files.createDirectories(stdoutLog.getParent());
             Files.createDirectories(stderrLog.getParent());
@@ -56,6 +57,7 @@ public class MessagingProvider {
             mode = mode(action);
             correlationId = firstText(action, "correlation_id", "correlation_id_ref", "correlation_key");
             payloadBinding = firstText(action, "payload_binding", "message_binding", "event_binding");
+            cleanupStrategy = firstText(action, "cleanup_strategy");
             if (requiresPayload(mode) && payloadBinding.isBlank()) {
                 payloadBinding = firstMessageBinding(resolvedBindings);
             }
@@ -74,6 +76,7 @@ public class MessagingProvider {
                         mode,
                         payloadBinding,
                         correlationId,
+                        cleanupStrategy,
                         "Unsupported messaging provider_type `" + providerType + "` for local execution.");
             }
             if (requiresPayload(mode) && !hasResolvedBinding(resolvedBindings, payloadBinding)) {
@@ -91,6 +94,7 @@ public class MessagingProvider {
                         mode,
                         payloadBinding,
                         correlationId,
+                        cleanupStrategy,
                         "Cannot resolve messaging payload binding `" + payloadBinding + "`.");
             }
 
@@ -123,6 +127,7 @@ public class MessagingProvider {
                     mode,
                     payloadBinding,
                     correlationId,
+                    cleanupStrategy,
                     actualOutput,
                     "passed",
                     "",
@@ -150,6 +155,7 @@ public class MessagingProvider {
                         mode,
                         payloadBinding,
                         correlationId,
+                        cleanupStrategy,
                         e.getMessage() == null ? "Failed to execute messaging provider." : e.getMessage());
             } catch (IOException writeFailure) {
                 throw new UncheckedIOException("Failed to execute messaging provider.", writeFailure);
@@ -171,6 +177,7 @@ public class MessagingProvider {
             String mode,
             String payloadBinding,
             String correlationId,
+            String cleanupStrategy,
             String message) throws IOException {
         Files.writeString(stdoutLog, "");
         Files.writeString(stderrLog, message);
@@ -186,6 +193,7 @@ public class MessagingProvider {
                 mode,
                 payloadBinding,
                 correlationId,
+                cleanupStrategy,
                 actualOutput,
                 "failed",
                 message,
@@ -204,6 +212,7 @@ public class MessagingProvider {
             String mode,
             String payloadBinding,
             String correlationId,
+            String cleanupStrategy,
             Path actualOutput,
             String status,
             String error,
@@ -227,6 +236,9 @@ public class MessagingProvider {
         }
         if (!correlationId.isBlank()) {
             builder.append("    correlation_id: ").append(correlationId).append("\n");
+        }
+        if (!cleanupStrategy.isBlank()) {
+            builder.append("    cleanup_strategy: ").append(cleanupStrategy).append("\n");
         }
         builder.append("    message_count: ").append(messageCount).append("\n");
         builder.append("    actual_output: ").append(runDir.relativize(actualOutput)).append("\n");

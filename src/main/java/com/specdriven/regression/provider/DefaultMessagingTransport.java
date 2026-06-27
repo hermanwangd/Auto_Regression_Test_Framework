@@ -84,6 +84,26 @@ class DefaultMessagingTransport implements MessagingTransport {
                 expectedCount);
     }
 
+    @Override
+    public MessagingTransportResult cleanup(MessagingTransportRequest request)
+            throws IOException {
+        return switch (request.providerType().toLowerCase(Locale.ROOT)) {
+            case "local", "mock" -> localCleanup(request);
+            case "kafka" -> kafkaCleanup(request);
+            case "nats" -> natsCleanup(request);
+            default -> throw new IOException("Unsupported messaging provider_type `"
+                    + request.providerType() + "` for cleanup execution.");
+        };
+    }
+
+    private MessagingTransportResult localCleanup(MessagingTransportRequest request) throws IOException {
+        int cleanedCount = optionalNonNegativeCount(request, "cleanup_count", "cleaned_count");
+        return new MessagingTransportResult(
+                cleanupStdout(request, cleanedCount),
+                "",
+                cleanedCount);
+    }
+
     private MessagingTransportResult kafkaPublish(MessagingTransportRequest request)
             throws IOException, InterruptedException {
         Properties properties = new Properties();
@@ -151,6 +171,45 @@ class DefaultMessagingTransport implements MessagingTransport {
                 observed.size());
     }
 
+    private MessagingTransportResult kafkaCleanup(MessagingTransportRequest request) throws IOException {
+        Properties properties = new Properties();
+        int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
+        properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaBootstrapServers(request.connectionRef()));
+        properties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        properties.put(ConsumerConfig.GROUP_ID_CONFIG, consumerGroup(request));
+        properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+        properties.put(ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG, timeoutMs);
+        properties.put(ConsumerConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, timeoutMs);
+
+        int maxCount = cleanupLimit(request);
+        List<String> cleaned = new ArrayList<>();
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Math.max(1, request.timeoutSeconds()));
+        try (Consumer<String, String> consumer = kafkaConsumerFactory.apply(properties)) {
+            consumer.subscribe(Collections.singletonList(stripScheme(request.targetRef(), "kafka")));
+            while (cleaned.size() < maxCount && System.nanoTime() < deadline) {
+                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(200));
+                if (records.isEmpty()) {
+                    continue;
+                }
+                for (ConsumerRecord<String, String> record : records) {
+                    if (matchesCorrelation(record.key(), record.value(), request.correlationId())) {
+                        cleaned.add(record.value());
+                        if (cleaned.size() >= maxCount) {
+                            break;
+                        }
+                    }
+                }
+            }
+            consumer.commitSync();
+        }
+        return new MessagingTransportResult(
+                cleanupStdout(request, cleaned.size()),
+                observedPayload(cleaned),
+                cleaned.size());
+    }
+
     private String kafkaBootstrapServers(String connectionRef) throws IOException {
         String resolved = resolveRef(connectionRef);
         if (resolved.startsWith("kafka://")) {
@@ -205,6 +264,12 @@ class DefaultMessagingTransport implements MessagingTransport {
                     line = readLine(input);
                 } catch (SocketTimeoutException e) {
                     break;
+                } catch (IOException e) {
+                    if (e.getMessage() != null
+                            && e.getMessage().startsWith("Connection closed while reading messaging protocol")) {
+                        break;
+                    }
+                    throw e;
                 }
                 if (line.startsWith("MSG ")) {
                     String payload = readNatsPayload(input, line);
@@ -224,6 +289,51 @@ class DefaultMessagingTransport implements MessagingTransport {
                 observedStdout(request, observed.size()),
                 observedPayload(observed),
                 observed.size());
+    }
+
+    private MessagingTransportResult natsCleanup(MessagingTransportRequest request)
+            throws IOException {
+        URI uri = natsUri(resolveRef(request.connectionRef()));
+        int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
+        int maxCount = cleanupLimit(request);
+        List<String> cleaned = new ArrayList<>();
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(uri.getHost(), natsPort(uri)), timeoutMs);
+            socket.setSoTimeout(timeoutMs);
+            InputStream input = socket.getInputStream();
+            OutputStream output = socket.getOutputStream();
+            readNatsInfo(input);
+            writeAscii(output, "CONNECT {\"verbose\":false,\"pedantic\":false}\r\n");
+            writeAscii(output, "SUB " + stripScheme(request.targetRef(), "nats") + " 1\r\nPING\r\n");
+            output.flush();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Math.max(1, request.timeoutSeconds()));
+            while (cleaned.size() < maxCount && System.nanoTime() < deadline) {
+                String line;
+                try {
+                    line = readLine(input);
+                } catch (SocketTimeoutException e) {
+                    break;
+                } catch (IOException e) {
+                    if (e.getMessage() != null
+                            && e.getMessage().startsWith("Connection closed while reading messaging protocol")) {
+                        break;
+                    }
+                    throw e;
+                }
+                if (line.startsWith("MSG ")) {
+                    String payload = readNatsPayload(input, line);
+                    if (matchesCorrelation("", payload, request.correlationId())) {
+                        cleaned.add(payload);
+                    }
+                } else if (line.startsWith("-ERR")) {
+                    throw new IOException("NATS " + request.mode() + " failed: " + line);
+                }
+            }
+        }
+        return new MessagingTransportResult(
+                cleanupStdout(request, cleaned.size()),
+                observedPayload(cleaned),
+                cleaned.size());
     }
 
     private URI natsUri(String connectionRef) {
@@ -316,6 +426,38 @@ class DefaultMessagingTransport implements MessagingTransport {
                 + " expected_count/min_count must be a positive integer.");
     }
 
+    private int cleanupLimit(MessagingTransportRequest request) throws IOException {
+        String limit = firstText(request.action(), "max_count", "drain_count");
+        if (limit.isBlank()) {
+            return 100;
+        }
+        try {
+            int count = Integer.parseInt(limit);
+            if (count > 0) {
+                return count;
+            }
+        } catch (NumberFormatException e) {
+            throw new IOException("Messaging cleanup max_count/drain_count must be a positive integer.", e);
+        }
+        throw new IOException("Messaging cleanup max_count/drain_count must be a positive integer.");
+    }
+
+    private int optionalNonNegativeCount(MessagingTransportRequest request, String... fields) throws IOException {
+        String countText = firstText(request.action(), fields);
+        if (countText.isBlank()) {
+            return 0;
+        }
+        try {
+            int count = Integer.parseInt(countText);
+            if (count >= 0) {
+                return count;
+            }
+        } catch (NumberFormatException e) {
+            throw new IOException("Messaging cleanup_count/cleaned_count must be a non-negative integer.", e);
+        }
+        throw new IOException("Messaging cleanup_count/cleaned_count must be a non-negative integer.");
+    }
+
     private String consumerGroup(MessagingTransportRequest request) {
         String group = firstText(request.action(), "group_id", "group_id_ref", "consumer_group_ref");
         if (!group.isBlank()) {
@@ -340,6 +482,10 @@ class DefaultMessagingTransport implements MessagingTransport {
 
     private String observedStdout(MessagingTransportRequest request, int observedCount) {
         return "observed " + observedCount + " native messages from " + request.targetRef() + "\n";
+    }
+
+    private String cleanupStdout(MessagingTransportRequest request, int cleanedCount) {
+        return "cleaned " + cleanedCount + " native messages from " + request.targetRef() + "\n";
     }
 
     private String stripScheme(String value, String scheme) {
