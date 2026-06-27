@@ -4,7 +4,7 @@ Status: Implementation-Ready Draft for M1 staged delivery
 
 This plan implements the Product/RP/RU baseline without changing product scope or authoring RP acceptance criteria. It starts with the framework foundation, then enables generation, execution, and evidence once pilot RP artifacts exist.
 
-This is an implementation plan, not the verification strategy itself. Framework Verification and RP Regression Execution strategy is defined in `docs/07-validation-evidence/07_regression_test_plan.md`. This plan owns the work needed to make that strategy executable.
+This is an implementation plan, not the framework verification strategy itself. Framework Verification is defined in `docs/07-validation-evidence/07_regression_test_plan.md`, including unit/component tests and sample Product/RP/RU integration verification. Real downstream RP regression execution remains a release-package validation flow after owner-provided RP artifacts exist.
 
 ## Entry Criteria
 

@@ -8,7 +8,7 @@
 | SPEC-003 | `docs/03-acceptance/04_acceptance_criteria.md` | Acceptance Criteria | QA | Design-Ready Draft | F001-F008 |
 | SPEC-004 | `docs/02-architecture/05_architecture_and_sequence.md` | Architecture Design | Platform | Implementation-Ready Draft | F001-F011 |
 | SPEC-005 | `docs/02-architecture/06_artifact_contracts.md` | Artifact Contracts | Platform | Design-Ready Draft | F002-F008 |
-| SPEC-006 | `docs/07-validation-evidence/07_regression_test_plan.md` | Framework Verification and RP Regression Test Plan | QA | Design-Ready Draft | F001-F008 |
+| SPEC-006 | `docs/07-validation-evidence/07_regression_test_plan.md` | Framework Verification Test Plan | QA | Design-Ready Draft | F001-F008 |
 | SPEC-007 | `docs/05-decisions-adr/08_adrs.md` | Architecture Decision Records | Tech Lead | Design-Ready Draft | All |
 | SPEC-008 | `docs/07-validation-evidence/09_traceability_matrix.md` | Traceability Matrix | QA | Design-Ready Draft | All |
 | SPEC-009 | `docs/07-validation-evidence/10_evidence_matrix.md` | Evidence Matrix | QA / Release | Design-Ready Draft | F008-F010 |

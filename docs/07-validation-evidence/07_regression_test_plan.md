@@ -1,95 +1,105 @@
-# 07. Framework Verification and RP Regression Test Plan
+# 07. Framework Verification Test Plan
 
-This plan defines two execution lines:
+This plan defines how to verify the regression test framework itself. It covers unit/component verification and sample Product/RP/RU integration verification.
 
-- Framework Verification proves this regression framework works correctly.
-- RP Regression Execution uses the framework to validate a downstream Product Release Package.
+It does not define downstream product-feature release AC and does not replace a real RP release regression plan. Real Product/RP regression evidence is produced later by `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` against owner-provided RP artifacts.
 
-It does not define downstream product-feature release AC. Formal product-feature acceptance remains in RP artifacts.
+## 7.1 Verification Objective
 
-## 7.1 Execution Lines
+Framework verification shall prove that the framework can:
 
-| Execution Line | Subject Under Test | Command | Evidence |
-|---|---|---|---|
-| Framework unit/component verification | Framework modules and CLI behavior | `./mvnw test` | Surefire reports and local test fixtures. |
-| Framework integration verification | Framework end-to-end behavior with a sample Product Repo fixture | `./mvnw verify` | Failsafe reports and sample fixture evidence. |
-| RP regression execution | A selected downstream Product/RP | `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` | RP batch/run evidence under the Product Repo. |
-| SIT/UAT RP regression | A deployed downstream Product/RP | Release package pipeline invokes `regress run --env sit_deployed` | RP release evidence plus deployment/readiness references. |
+- Run fast unit/component tests for parsers, validators, resolvers, CLI behavior, evidence writers, and reporting logic.
+- Run an end-to-end framework integration flow against a sample Product Repo fixture.
+- Use sample Product/RP/RU artifacts to validate RP discovery, RP/RU mapping, checked-in DSL test discovery, adapter execution, assertion, batch evidence, run evidence, and coverage report generation.
+- Keep sample fixture evidence clearly separate from downstream Product/RP release evidence.
 
-Framework verification evidence must not be counted as downstream RP release evidence. Sample Product Repo fixture evidence proves the framework, not a real Product/RP release.
+## 7.2 Verification Levels
 
-## 7.2 Framework Verification Scope
+| Level | Subject Under Test | Command | Fixture Source | Evidence |
+|---|---|---|---|---|
+| Unit/component framework verification | Framework modules and CLI behavior | `./mvnw test` | Temp directories and small local test data | Maven Surefire reports. |
+| Sample Product/RP/RU integration verification | Framework end-to-end behavior | `./mvnw verify` | `src/test/resources/framework-verification/sample-product-repo/` | Maven Failsafe reports and generated temporary sample evidence. |
+| Packaged CLI smoke verification | Spring Boot jar CLI entrypoint | `java -jar target/spec-driven-auto-regression-0.1.0-SNAPSHOT.jar check-readiness --root .` | Current repository Product Repo structure | CLI output and exit code. |
 
-Framework verification shall cover:
+`./mvnw test` must stay fast and deterministic. `./mvnw verify` may execute a local shell adapter through the sample fixture, but must not require SIT/UAT deployment.
 
-- Product Repo bootstrap and readiness behavior.
+## 7.3 Unit and Component Verification
+
+Unit/component tests live in `src/test/java` and use the `*Test` suffix so Maven Surefire runs them during `./mvnw test`.
+
+They shall cover:
+
+- Product Repo bootstrap and readiness checks.
 - RP skeleton and artifact completeness checks.
 - RP/RU mapping parser, dependency graph, and missing-field handling.
 - DSL schema validation, lifecycle status checks, and unsupported capability blocking.
 - Expected-result approval gating.
 - Environment resolver behavior for `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only`.
-- Batch/run evidence writing without overwrites.
-- Coverage calculation from batch-level evidence.
+- Binding, provider, fixture, execution, assertion, evidence, and coverage-report behavior.
+- Packaged CLI delegation behavior through `RegressionApplication.runCli(...)`.
 
-`./mvnw test` should remain fast and deterministic. `./mvnw verify` may use a sample Product Repo fixture and local/mock adapters, but must not require SIT/UAT deployment.
+## 7.4 Sample Product/RP/RU Integration Verification
 
-## 7.3 RP Regression Execution Scope
+The sample integration fixture is a miniature Product Repo used only to verify the framework. It must include:
 
-RP regression execution shall cover:
+- A sample Product Repo root marker that says fixture evidence is not downstream Product/RP release evidence.
+- One sample RP, currently `RP-FWK-SAMPLE`.
+- One sample RU mapping, currently `RU-framework-sample-adapter`.
+- One checked-in approved DSL test case.
+- One approved expected-result artifact.
+- One provider contract using a bounded local shell adapter.
+- Sample input data and expected output data.
 
-- RP selection by `--rp-id`.
-- Approved checked-in DSL test discovery without regeneration.
-- RP/RU mapping and provider contract resolution.
-- Data selection, parameterization, bindings, fixtures, adapters, oracles, assertions, observations, and cleanup.
-- Environment readiness blocking before unsafe adapter/provider execution.
-- One batch record per RP execution and one run record per executed test case.
-- Coverage, traceability, failure summary, and release-review evidence from the selected batch.
+The integration flow shall:
 
-## 7.4 Out of M1 Scope
+```text
+copy sample Product Repo fixture to temp directory
+-> check-rp --strict-schema
+-> run --rp-id RP-FWK-SAMPLE --env ci_ephemeral
+-> report --batch-id BATCH-001
+-> assert batch evidence, run evidence, and coverage evidence
+```
 
-- Product-level formal AC as release denominator.
-- RU repo-owned primary specs or primary AC.
-- Cross-package orchestration.
-- Full dashboard-driven governance.
-- Fully automated release approval.
-- Broad package-type plugin support.
-- Framework-owned SIT/UAT deployment orchestration.
+Generated sample evidence must stay in the test temp directory. It shall not be committed and shall not count as real Product/RP release evidence.
 
-## 7.5 Standard Framework Verification Cases
+## 7.5 Required Framework Verification Cases
 
 | Test ID | Scenario | Command Level | Priority | Automation |
 |---|---|---|---|---|
-| FWK-001 | Framework unit/component suite validates parsers, readiness checks, CLI behavior, resolvers, and evidence writers | `./mvnw test` | P1 | Auto |
-| FWK-002 | Framework integration suite validates a sample Product Repo fixture through check, dry-run/run, and report flow | `./mvnw verify` | P1 | Auto |
-| FWK-003 | Framework integration fixture evidence is marked as sample evidence and is not counted as downstream RP release evidence | `./mvnw verify` | P1 | Auto |
-| FWK-004 | Missing sample fixture, unsupported provider, or invalid DSL blocks framework integration verification with actionable failure | `./mvnw verify` | P1 | Auto |
+| FWK-001 | Unit/component suite validates parsers, readiness checks, CLI behavior, resolvers, execution services, evidence writers, and reporters | `./mvnw test` | P1 | Auto |
+| FWK-002 | Sample Product/RP/RU fixture runs through `check-rp`, `run`, and `report` without SIT/UAT deployment | `./mvnw verify` | P1 | Auto |
+| FWK-003 | Sample fixture evidence is marked as framework verification evidence and is not counted as downstream RP release evidence | `./mvnw verify` | P1 | Auto |
+| FWK-004 | Missing sample fixture, unsupported provider, invalid DSL, or failed adapter blocks framework integration verification with actionable failure | `./mvnw verify` | P1 | Auto |
+| FWK-005 | Packaged jar delegates CLI arguments to the framework command layer and returns meaningful exit codes | `./mvnw test` plus packaged CLI smoke | P1 | Auto / CLI |
 
-## 7.6 Standard RP Regression Cases
+## 7.6 Downstream RP Regression Boundary
 
-| Test ID | Feature | Scenario | Level | Priority | Automation |
-|---|---|---|---|---|---|
-| REG-RP-001 | F001 | Product Repo bootstrap CLI emits readiness report and readiness agent skill explains missing folders, RP artifacts, owner actions, and next steps | Readiness | P1 | Auto / Agent |
-| REG-RP-002 | F002 | RP completeness check requires minimum RP artifact set | Readiness | P1 | Auto |
-| REG-RP-003 | F003 | RP feature spec and AC intake preserves owner-authored AC and stable IDs | Readiness | P1 | Auto |
-| REG-RP-004 | F004 | Missing RP/RU mapping fields block execution | Readiness | P1 | Auto |
-| REG-RP-005 | F005 | Ambiguous AC produces `not_ready_for_generation` instead of executable test | Generation | P1 | Auto |
-| REG-RP-006 | F005 | Ready AC with incomplete execution context produces only package-neutral `draft_test_skeleton` | Generation | P1 | Auto |
-| REG-RP-014 | F005 / F007 | DSL validation rejects unsupported `dsl_version` or missing required fields before execution | Generation / Execution | P1 | Auto |
-| REG-RP-007 | F006 | Expected-result draft includes source references, assumptions, gaps, and approval status | Generation | P1 | Auto |
-| REG-RP-008 | F007 | Pilot RP DSL test executes through adapter and emits raw execution evidence | Execution | P1 | Auto |
-| REG-RP-011 | F007 | Execution reuses checked-in approved RP DSL test cases without regenerating them | Execution | P1 | Auto |
-| REG-RP-012 | F007 | SIT-deployed execution is blocked until deployment and environment readiness evidence exists | Execution | P1 | Auto |
-| REG-RP-013 | F007 | Multi-RU execution follows the declared dependency graph and stops downstream execution on required upstream validation failure | Execution | P1 | Auto |
-| REG-RP-009 | F008 | Coverage and evidence package trace to RP ID, batch ID, run ID, AC ID, and test case ID | Evidence | P1 | Auto |
-| REG-RP-010 | F008 | Manual-only or waived AC require approval record before exclusion | Evidence | P1 | Auto |
+Downstream Product/RP regression is a framework capability, but it is not the primary subject of this framework verification test plan.
+
+When owner-provided Product/RP artifacts exist, release package regression shall be verified by a separate RP validation flow:
+
+```bash
+regress run --root <product-repo> --rp-id <rp-id> --env <mode>
+regress report --root <product-repo> --rp-id <rp-id> --batch-id <batch-id>
+```
+
+That flow produces real RP batch/run evidence under the Product Repo. It may use `local_fixture`, `ci_ephemeral`, `sit_deployed`, or `evidence_only` depending on the RP validation boundary. SIT/UAT runs require deployed RU versions and environment readiness evidence.
 
 ## 7.7 CI/CD Execution Policy
 
 | Pipeline Stage | Required Command | Purpose |
 |---|---|---|
-| Pull request | `./mvnw test` | Fast framework verification. |
-| Main or release branch | `./mvnw verify` | Framework integration verification with sample fixture. |
-| RP release pipeline | `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` | Downstream RP regression execution. |
-| SIT/UAT release gate | `regress run --root <product-repo> --rp-id <rp-id> --env sit_deployed` | Validate already deployed RU versions when SIT/UAT is required. |
+| Pull request | `./mvnw test` | Fast framework unit/component verification. |
+| Main or release branch | `./mvnw verify` | Framework integration verification with sample Product/RP/RU fixture. |
+| Packaged CLI smoke | `java -jar target/spec-driven-auto-regression-0.1.0-SNAPSHOT.jar check-readiness --root .` | Verify packaged command delegation. |
+| RP release pipeline | `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` | Downstream RP regression execution, outside this framework verification plan. |
 
 All commands should be bounded and avoid memory-heavy execution. Local and CI runs should stay under the repository guidance of 8 GB RAM.
+
+## 7.8 Out of Scope
+
+- Formal downstream product-feature AC definition.
+- Treating sample fixture evidence as real Product/RP release evidence.
+- Framework-owned SIT/UAT deployment orchestration.
+- Real pilot RP validation before owner-provided RP artifacts exist.
+- Broad package-type plugin certification beyond the sample fixture.
