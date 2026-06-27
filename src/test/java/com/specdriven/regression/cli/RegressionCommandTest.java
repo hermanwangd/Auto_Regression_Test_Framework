@@ -306,6 +306,35 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksParameterizedTestsUntilExpansionIsImplemented() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeCompleteCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedParameterizedTestCase("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("binding_gaps:");
+        assertThat(output.toString()).contains("test_case_id: RP-001-TC-001");
+        assertThat(output.toString()).contains("ac_id: RP-001-AC-001");
+        assertThat(output.toString()).contains("field_path: parameters");
+        assertThat(output.toString()).contains("reason: parameter_expansion_unsupported");
+        assertThat(output.toString()).contains("owner_action: Parameter expansion is not implemented yet; remove parameters or implement explicit case expansion before execution.");
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+    }
+
+    @Test
     void runDryRunReportsPassedApGatesBeforeAdapterExecution() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -2427,6 +2456,64 @@ class RegressionCommandTest {
                 evidence_required:
                   - execution_log
                 """.formatted(testCaseId, rpId, acId, acId, rpId, expectedResultId, expectedResultId, bindingType));
+    }
+
+    private void writeApprovedParameterizedTestCase(String rpId) throws Exception {
+        String testCaseId = rpId + "-TC-001";
+        String acId = rpId + "-AC-001";
+        String expectedResultId = rpId + "-ER-001";
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + testCaseId + ".yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s
+                rp_id: %s
+                ac_id: %s
+                artifact_status: approved_for_regression
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
+                source_fingerprint: sha256:test
+                execution_target:
+                  ru_id: RU-transform-job
+                  adapter: spring_boot_cli
+                  execution_mode: ci_ephemeral
+                  environment_ref: ci://pipeline/%s
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [file_input, batch_execution, file_assertion]
+                parameters:
+                  strategy: explicit_cases
+                  cases:
+                    - name: baseline
+                      bindings:
+                        orders_seed: fixtures/input/orders_seed_baseline.csv
+                    - name: boundary
+                      bindings:
+                        orders_seed: fixtures/input/orders_seed_boundary.csv
+                expected:
+                  ref: expected-results/approved/%s.yaml
+                oracles:
+                  normalized_orders:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
+                package_inputs:
+                  inputs:
+                    orders_seed:
+                      ref: fixtures/input/orders_seed.csv
+                      bind_as: input_file
+                steps:
+                  - id: run_pipeline
+                    action: call_ru
+                    target_ru_id: RU-transform-job
+                assertions:
+                  - type: file_diff
+                    oracle: ${oracles.normalized_orders}
+                evidence_required:
+                  - execution_log
+                """.formatted(testCaseId, rpId, acId, acId, rpId, expectedResultId, expectedResultId));
     }
 
     private void writeApprovedDependencyTestCase(

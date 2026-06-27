@@ -45,6 +45,11 @@ public class BindingResolver {
             }
         }
 
+        if (testCase.containsKey("parameters")) {
+            gaps.add(gap(testCaseId, acId, "parameters", "", "",
+                    "Parameter expansion is not implemented yet; remove parameters or implement explicit case expansion before execution."));
+        }
+
         if (usesExpectedResultArtifact(testCase) && missingExpectedRef(testCase)) {
             gaps.add(gap(testCaseId, acId, "expected.ref", "", "",
                     "Reference approved expected-result artifact when oracle type is expected_result_artifact."));

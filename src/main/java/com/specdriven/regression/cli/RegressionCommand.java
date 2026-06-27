@@ -787,6 +787,9 @@ public class RegressionCommand {
     }
 
     private String failureReason(String ap, String fieldPath) {
+        if ("parameters".equals(fieldPath) || fieldPath.startsWith("parameters.")) {
+            return "parameter_expansion_unsupported";
+        }
         if (fieldPath.startsWith("package_inputs.")) {
             return "binding_resolution_failed";
         }
