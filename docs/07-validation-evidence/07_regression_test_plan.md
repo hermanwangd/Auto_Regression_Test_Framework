@@ -60,6 +60,14 @@ copy sample Product Repo fixture to temp directory
 -> assert batch evidence, run evidence, and coverage evidence
 ```
 
+The integration suite shall cover at least these sample Product/RP/RU scenarios:
+
+- Happy path: `check-rp`, `run`, and `report` complete with 100% sample coverage.
+- Artifact readiness failure: package schema and RP/RU mapping gaps block before execution evidence is written.
+- Provider contract failure: missing adapter command blocks before adapter execution and writes blocked run evidence.
+- Test inventory boundary: missing approved DSL test case blocks before adapter execution.
+- Execution/assertion failure: adapter execution starts, assertion fails, run evidence is failed, and report is not review-ready.
+
 Generated sample evidence must stay in the test temp directory. It shall not be committed and shall not count as real Product/RP release evidence.
 
 ## 7.5 Required Framework Verification Cases
@@ -67,9 +75,9 @@ Generated sample evidence must stay in the test temp directory. It shall not be 
 | Test ID | Scenario | Command Level | Priority | Automation |
 |---|---|---|---|---|
 | FWK-001 | Unit/component suite validates parsers, readiness checks, CLI behavior, resolvers, execution services, evidence writers, and reporters | `./mvnw test` | P1 | Auto |
-| FWK-002 | Sample Product/RP/RU fixture runs through `check-rp`, `run`, and `report` without SIT/UAT deployment | `./mvnw verify` | P1 | Auto |
+| FWK-002 | Sample Product/RP/RU fixture runs happy path through `check-rp`, `run`, and `report` without SIT/UAT deployment | `./mvnw verify` | P1 | Auto |
 | FWK-003 | Sample fixture evidence is marked as framework verification evidence and is not counted as downstream RP release evidence | `./mvnw verify` | P1 | Auto |
-| FWK-004 | Missing sample fixture, unsupported provider, invalid DSL, or failed adapter blocks framework integration verification with actionable failure | `./mvnw verify` | P1 | Auto |
+| FWK-004 | Artifact readiness gaps, provider contract gaps, missing approved DSL tests, or failed assertions block or fail with actionable evidence | `./mvnw verify` | P1 | Auto |
 | FWK-005 | Packaged jar delegates CLI arguments to the framework command layer and returns meaningful exit codes | `./mvnw test` plus packaged CLI smoke | P1 | Auto / CLI |
 
 ## 7.6 Downstream RP Regression Boundary
