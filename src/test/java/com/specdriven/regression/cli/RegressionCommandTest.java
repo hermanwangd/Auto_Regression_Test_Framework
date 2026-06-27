@@ -468,6 +468,64 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksFileBatchShellWithoutOutputRefBeforeAdapterExecution() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeExecutableCiMappingWithoutOutputRef("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedTestCase("RP-001", "db_seed");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("ap: Planning and Binding");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli.outputs.actual_output_ref");
+        assertThat(output.toString()).contains("provider_family: file_batch");
+        assertThat(output.toString()).contains("provider_type: shell");
+        assertThat(output.toString()).contains("Declare actual_output_ref for executable adapter `spring_boot_cli`");
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).doesNotContain("run_status: dry_run_ready");
+    }
+
+    @Test
+    void runDryRunBlocksFileBatchShellWithoutTimeoutBeforeAdapterExecution() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeExecutableCiMappingWithoutTimeout("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedTestCase("RP-001", "db_seed");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("ap: Planning and Binding");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli.timeout_seconds");
+        assertThat(output.toString()).contains("provider_family: file_batch");
+        assertThat(output.toString()).contains("provider_type: shell");
+        assertThat(output.toString()).contains("Declare timeout_seconds as a positive bounded integer");
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).doesNotContain("run_status: dry_run_ready");
+    }
+
+    @Test
     void runDryRunBlocksMutatingFixtureWithoutCleanupBeforeAdapterExecution() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -1994,6 +2052,12 @@ class RegressionCommandTest {
                           provider_family: file_batch
                           provider_type: shell
                           command: java -jar ${repo}/target/release-unit.jar
+                          timeout_seconds: 10
+                          logs:
+                            stdout: logs/stdout.log
+                            stderr: logs/stderr.log
+                          outputs:
+                            actual_output_ref: actual/output.txt
                       bindings:
                         db_seed:
                           provider_family: file_batch
@@ -2034,7 +2098,28 @@ class RegressionCommandTest {
     }
 
     private void writeExecutableCiMapping(String rpId, String stdoutValue) throws Exception {
+        writeExecutableCiMapping(rpId, stdoutValue, true, true);
+    }
+
+    private void writeExecutableCiMappingWithoutOutputRef(String rpId) throws Exception {
+        writeExecutableCiMapping(rpId, "adapter-ok", true, false);
+    }
+
+    private void writeExecutableCiMappingWithoutTimeout(String rpId) throws Exception {
+        writeExecutableCiMapping(rpId, "adapter-ok", false, true);
+    }
+
+    private void writeExecutableCiMapping(
+            String rpId,
+            String stdoutValue,
+            boolean includeTimeout,
+            boolean includeOutputRef) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        String timeoutField = includeTimeout ? "                          timeout_seconds: 10\n" : "";
+        String outputField = includeOutputRef
+                ? "                          outputs:\n"
+                        + "                            actual_output_ref: actual/output.txt\n"
+                : "                          outputs: {}\n";
         Files.writeString(mapping, """
                 rp_id: %s
                 release_units:
@@ -2055,14 +2140,11 @@ class RegressionCommandTest {
                           provider_type: shell
                           command: /bin/sh -c 'echo %s; echo adapter-warn >&2'
                           working_directory: .
-                          timeout_seconds: 10
-                          success_exit_codes: [0]
+%s                          success_exit_codes: [0]
                           logs:
                             stdout: logs/stdout.log
                             stderr: logs/stderr.log
-                          outputs:
-                            actual_output_ref: actual/output.txt
-                      bindings:
+%s                      bindings:
                         db_seed:
                           provider_family: file_batch
                           provider_type: file_fixture
@@ -2073,7 +2155,7 @@ class RegressionCommandTest {
                       observations: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []
-                """.formatted(rpId, rpId, stdoutValue));
+                """.formatted(rpId, rpId, stdoutValue, timeoutField, outputField));
     }
 
     private void writeApprovedExternalRunnerMapping(String rpId) throws Exception {

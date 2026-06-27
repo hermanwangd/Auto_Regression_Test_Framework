@@ -71,7 +71,7 @@ Status meanings:
 | DB fixture provider | Prepare and validate state | SQL/NoSQL DBs | Connection ref, schema/table or query refs, seed input, isolation key, cleanup strategy |
 | Deployment readiness provider | Block execution until deployed targets are ready | K8s, VM | Environment ref, target selector, readiness probe, version/deployment ref, log/evidence refs |
 | External runner provider | Governed escape hatch for existing tools or legacy runtimes that cannot yet use built-in providers | JUnit, Newman, Robot, C++ or VB.NET harness | Approval ref, command or container ref, inputs, outputs, success codes, timeout, evidence artifact map |
-| File/batch provider | Run file, CLI, batch, or data-pipeline style tests | Spring Boot CLI, scripts, scheduled jobs | Command, working directory, inputs, output refs, logs, success codes |
+| File/batch provider | Run file, CLI, batch, or data-pipeline style tests | Spring Boot CLI, scripts, scheduled jobs | Command, working directory, inputs, output refs, logs, success codes, bounded timeout |
 
 Provider configuration must reference secrets and environment resources by name or secret ref. It must not inline credentials, production data, or destructive commands without explicit policy approval. External runner contracts must also explain why an existing built-in provider cannot be used.
 

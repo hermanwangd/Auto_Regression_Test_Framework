@@ -831,6 +831,12 @@ class FrameworkVerificationIT {
                           provider_family: file_batch
                           provider_type: shell
                           command: java -jar batch.jar
+                          timeout_seconds: 60
+                          logs:
+                            stdout: logs/batch-stdout.log
+                            stderr: logs/batch-stderr.log
+                          outputs:
+                            actual_output_ref: actual/batch-output.txt
                       bindings:
                         db_seed:
                           provider_family: file_batch

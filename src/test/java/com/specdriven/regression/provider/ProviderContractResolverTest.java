@@ -23,6 +23,9 @@ class ProviderContractResolverTest {
                       provider_family: file_batch
                       provider_type: shell
                       command: java -jar ${repo}/target/release-unit.jar
+                      timeout_seconds: 10
+                      outputs:
+                        actual_output_ref: actual/output.txt
                   bindings:
                     db_seed:
                       provider_family: file_batch
@@ -74,6 +77,9 @@ class ProviderContractResolverTest {
                     spring_boot_cli:
                       provider_family: file_batch
                       provider_type: shell
+                      timeout_seconds: 10
+                      outputs:
+                        actual_output_ref: actual/output.txt
                   bindings:
                     db_seed:
                       provider_family: file_batch
@@ -104,6 +110,9 @@ class ProviderContractResolverTest {
                       provider_family: file_batch
                       provider_type: shell
                       command: java -jar ${repo}/target/release-unit.jar
+                      timeout_seconds: 10
+                      outputs:
+                        actual_output_ref: actual/output.txt
                   bindings:
                     db_seed:
                       provider_family: file_batch

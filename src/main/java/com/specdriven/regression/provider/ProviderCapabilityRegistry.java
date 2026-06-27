@@ -95,8 +95,23 @@ class ProviderCapabilityRegistry {
             String providerName,
             Map<String, Object> contract,
             List<ProviderContractViolation> violations) {
-        if (family.equals("file_batch") && type.equals("shell") && !hasAnyText(contract, "command")) {
-            violations.add(required(".command", "Declare executable adapter command for `" + providerName + "`."));
+        if (family.equals("file_batch") && type.equals("shell")) {
+            if (!hasAnyText(contract, "command")) {
+                violations.add(required(".command", "Declare executable adapter command for `" + providerName + "`."));
+            }
+            if (!hasAnyText(contract, "timeout_seconds")) {
+                violations.add(required(".timeout_seconds",
+                        "Declare timeout_seconds as a positive bounded integer for executable adapter `"
+                                + providerName + "`."));
+            } else if (!isPositiveInteger(contract.get("timeout_seconds"))) {
+                violations.add(required(".timeout_seconds",
+                        "Declare timeout_seconds as a positive bounded integer for executable adapter `"
+                                + providerName + "`."));
+            }
+            if (!hasNestedAnyText(contract, "outputs", "actual_output_ref")) {
+                violations.add(required(".outputs.actual_output_ref",
+                        "Declare actual_output_ref for executable adapter `" + providerName + "`."));
+            }
         }
         if (family.equals("request_response") && type.equals("rest")) {
             if (!hasAnyText(contract, "endpoint_ref", "base_url_ref", "service_ref")) {
@@ -239,6 +254,19 @@ class ProviderCapabilityRegistry {
 
     private boolean hasMap(Map<String, Object> map, String field) {
         return map.get(field) instanceof Map<?, ?> nested && !nested.isEmpty();
+    }
+
+    private boolean hasNestedAnyText(Map<String, Object> map, String field, String... nestedFields) {
+        if (!(map.get(field) instanceof Map<?, ?> nested)) {
+            return false;
+        }
+        for (String nestedField : nestedFields) {
+            String value = stringValue(nested.get(nestedField));
+            if (!value.isBlank()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isUnsafeRelativeOutputPath(String path) {
