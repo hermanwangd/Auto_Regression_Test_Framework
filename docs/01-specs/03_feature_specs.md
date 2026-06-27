@@ -191,6 +191,21 @@ Approved or execution-eligible test cases should be stored in the RP `tests/` fo
 
 The agent may propose new or updated test cases when source artifacts change, but it shall not silently overwrite checked-in approved tests.
 
+## 3.8 Framework Verification and RP Regression Execution Boundary
+
+This document uses two different execution terms:
+
+| Execution Line | Subject Under Test | Primary Command | Evidence Meaning |
+|---|---|---|---|
+| Framework Verification | This regression framework product | `./mvnw test` and `./mvnw verify` | Proves framework code, contracts, and sample fixture flows behave correctly. |
+| RP Regression Execution | A downstream Product Release Package | `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` | Produces Product Repo RP evidence for release review. |
+
+`./mvnw test` is the fast framework unit/component verification layer. `./mvnw verify` is the framework integration verification layer and should use a sample Product Repo fixture with local or mock adapters. Neither Maven command requires SIT/UAT deployment, and neither command by itself produces downstream product release evidence.
+
+RP Regression Execution is the runtime capability delivered by F007. It reads checked-in RP DSL tests and RP/RU mapping from a Product Repo, resolves the requested environment, executes or validates the RP, and writes batch/run evidence under that RP.
+
+SIT/UAT regression is a release package pipeline concern. The framework may verify SIT/UAT readiness and run against an already deployed environment, but M1 does not deploy release units as part of Maven framework verification.
+
 ## F001 — Product Repo Bootstrap CLI and Readiness Agent Skill
 
 ### Purpose
@@ -365,6 +380,8 @@ The framework shall resolve package inputs, bind runtime values, confirm environ
 One RP regression execution is a batch. A batch may contain one or more test runs. Each test run validates one approved DSL test case and produces run-level evidence. The batch produces the RP-level execution summary used by F008 coverage reporting.
 
 The execution process and DSL shall remain package-type-neutral. The M1 adapter implementation may be data-pipeline-specific.
+
+F007 defines RP Regression Execution. Framework Verification tests may exercise F007 through a sample Product Repo fixture, but that fixture evidence is not downstream Product/RP release evidence.
 
 F007 shall not author AC, classify AC readiness, generate tests, regenerate checked-in tests, generate expected results, approve expected results, approve waivers, or decide release readiness.
 

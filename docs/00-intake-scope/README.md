@@ -11,7 +11,7 @@ This repo-ready development document set follows the existing spec template stru
 4. Acceptance Criteria
 5. Architecture Design
 6. Artifact Contracts
-7. Regression Test Plan
+7. Framework Verification and RP Regression Test Plan
 8. ADR
 9. Traceability Matrix
 10. Evidence Matrix

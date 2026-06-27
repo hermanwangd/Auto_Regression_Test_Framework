@@ -37,6 +37,20 @@ Out of scope:
 | Test case DSL | Minimal package-neutral DSL with explicit version | Different Products and RPs express regression tests through one artifact model without overfitting to one package type. |
 | Adapter model | Core framework plus package adapters | Execution process is generic; package behavior stays adapter-specific. |
 | Implementation stack | Spring Boot 3.x on Java 17+ | Provides a modern Java runtime, dependency injection, validation, configuration binding, and CLI packaging path. |
+| Verification boundary | Separate framework verification from RP regression execution | Maven validates this framework; CLI `run` validates downstream Product/RP packages and writes RP release evidence. |
+
+### Framework Verification vs RP Regression Execution
+
+| Concern | Framework Verification | RP Regression Execution |
+|---|---|---|
+| Subject under test | This framework codebase and its contracts | A downstream Product Release Package |
+| Primary command | `./mvnw test` or `./mvnw verify` | `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` |
+| Test runner | Surefire for unit/component tests; Failsafe for integration tests | Framework CLI execution engine |
+| Fixture source | Sample Product Repo fixture and local/mock adapters | Real Product Repo RP artifacts and configured RP/RU providers |
+| SIT/UAT dependency | Not required | Required only for `sit_deployed` RP validation boundary |
+| Evidence meaning | Framework build/CI evidence | Downstream RP release review evidence |
+
+Framework integration tests may exercise the same CLI flows used by RP Regression Execution, but the fixture scope remains framework verification. The architecture must not treat sample fixture evidence as product release evidence.
 
 ## 5.3 Component Architecture
 
@@ -288,6 +302,8 @@ Extension governance rules:
 
 The CLI is the M1 public interface. Commands return non-zero exit codes when readiness, validation, or execution gates fail.
 
+Maven commands are not the RP public execution interface. `./mvnw test` and `./mvnw verify` validate this framework. `regress run` validates a selected downstream RP and writes Product Repo evidence.
+
 ```bash
 regress init-product-repo --root .
 regress check-readiness --root .
@@ -504,6 +520,7 @@ The architecture should be revisited when multiple RP types require shared servi
 | AC-007 | RP DSL test execution with inputs, fixtures, adapters, assertions, evidence | `execution`, `binding`, `provider`, `fixture`, `adapter`, `assertion`, `evidence` |
 | AC-008 | Unsafe or incomplete regression execution is blocked | `environment`, `mapping`, `provider`, `execution` |
 | AC-009 | Coverage, traceability, failures, and approved exclusions | `report`, `evidence` |
+| AC-010 | Framework verification and RP regression execution remain separate | Maven Surefire/Failsafe configuration, sample Product Repo fixture, `cli`, `evidence` |
 
 ## 5.16 Implementation Readiness Gate
 

@@ -17,6 +17,7 @@ The DSL and 7 AP are validated through these AC rather than as separate, abstrac
 | AC-007 | Planning and Binding / Fixture and State Manager / Execution Engine / Oracle and Assertion Engine / Evidence and Reporting | Checked-in DSL tests must execute through the full 7 AP flow and produce durable evidence. |
 | AC-008 | Discovery and Context / Planning and Binding / Fixture and State Manager / Execution Engine | Unsafe or incomplete DSL execution is blocked with owner-actionable reasons. |
 | AC-009 | Evidence and Reporting | DSL traceability and run evidence must support RP release review and coverage calculation. |
+| AC-010 | Definition and Validation / Evidence and Reporting | Framework Verification and RP Regression Execution must remain separate execution lines with separate commands and evidence meaning. |
 
 Minimum verification rule for DSL/AP clarity:
 
@@ -27,6 +28,8 @@ Minimum verification rule for DSL/AP clarity:
 - Every required or conditional DSL field shall map to a primary AP consumer and have a clear reason for being required.
 - Provider implementation settings shall be validated through RP/RU mapping or provider contracts, not embedded directly inside DSL test cases.
 - A feature is not implementation-ready when its DSL fields, provider contract paths, assertion/oracle source, fixture lifecycle, or evidence outputs cannot be explained through the 7 AP flow.
+- Maven framework verification evidence shall not be treated as downstream Product/RP release evidence.
+- CLI RP regression evidence shall identify the RP, batch, environment, test cases, and AC covered by the selected RP execution.
 
 ## AC-001 Product Repo Bootstrap and Readiness Are Deterministic
 
@@ -245,3 +248,39 @@ Then that AC shall be counted once.
 Given a single run report exists
 When RP release coverage is calculated
 Then the framework shall use batch-level evidence rather than single-run evidence.
+
+## AC-010 Framework Verification and RP Regression Execution Are Separated
+
+### Happy Path
+
+Given a framework code change
+When `./mvnw test` is run
+Then the result shall verify framework unit/component behavior only, using Maven Surefire reports and local test fixtures.
+
+Given a framework integration verification run
+When `./mvnw verify` is run
+Then the result shall verify framework behavior against a sample Product Repo fixture without requiring SIT/UAT deployment.
+
+Given a downstream Product Release Package needs regression validation
+When `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` is run
+Then the framework shall produce RP batch/run evidence under that Product Repo.
+
+### Failure Path
+
+Given a missing or unsupported sample fixture
+When framework integration verification is run
+Then `./mvnw verify` shall fail as framework verification failure and shall not create or claim downstream release evidence.
+
+Given a missing RP environment reference, provider contract, approved test, or readiness evidence
+When RP Regression Execution is requested
+Then the CLI shall block or fail the RP run with owner-actionable evidence according to AC-008.
+
+### Boundary Path
+
+Given sample Product Repo fixture evidence produced during framework verification
+When release coverage is calculated for a real Product/RP
+Then fixture evidence shall not count toward the downstream Product/RP release denominator or numerator.
+
+Given SIT/UAT validation is required for an RP
+When no deployed RU versions or environment readiness evidence exist
+Then framework Maven tests may still pass, but RP Regression Execution in `sit_deployed` mode shall not start.

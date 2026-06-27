@@ -77,3 +77,30 @@ Human approval is required before generated expected results become `approved_fo
 ### Consequences
 
 Approval records are required before generated expected results are used as regression truth or before exclusions affect coverage and release review.
+
+---
+
+## ADR-005 Separate Framework Verification from RP Regression Execution
+
+### Status
+
+Accepted
+
+### Context
+
+The phrase "test execution" can mean two different things in this repository: testing the regression framework itself, or using the framework to test a downstream Product Release Package. Mixing these meanings causes confusion about Maven lifecycle, CI responsibilities, SIT/UAT dependencies, and what evidence can be used for release review.
+
+### Decision
+
+Use two explicit execution lines:
+
+- Framework Verification validates this framework product. `./mvnw test` runs unit and component tests through Maven Surefire. `./mvnw verify` runs framework integration tests through Maven Failsafe against a sample Product Repo fixture and local/mock adapters.
+- RP Regression Execution validates a downstream Product Release Package. It is invoked through the framework CLI, for example `regress run --root <product-repo> --rp-id <rp-id> --env <mode>`.
+
+Framework Verification must not depend on SIT/UAT deployment and must not claim downstream RP release evidence. RP Regression Execution may run in `local_fixture`, `ci_ephemeral`, `sit_deployed`, or `evidence_only` mode depending on the RP validation boundary. SIT/UAT regression is triggered by a release package pipeline after required RU versions are deployed; it is not part of Maven unit/component testing for this framework.
+
+The Test Plan belongs under validation evidence and defines verification strategy. The Implementation Plan remains under planning and defines the work required to implement or extend that strategy.
+
+### Consequences
+
+CI can run fast framework checks with `./mvnw test`, deeper framework integration checks with `./mvnw verify`, and product-specific RP regression through release package pipelines. Sample Product Repo fixtures can prove framework behavior, but only real Product Repo RP evidence can support downstream release review.

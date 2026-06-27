@@ -4,10 +4,13 @@ Status: Implementation-Ready Draft for M1 staged delivery
 
 This plan implements the Product/RP/RU baseline without changing product scope or authoring RP acceptance criteria. It starts with the framework foundation, then enables generation, execution, and evidence once pilot RP artifacts exist.
 
+This is an implementation plan, not the verification strategy itself. Framework Verification and RP Regression Execution strategy is defined in `docs/07-validation-evidence/07_regression_test_plan.md`. This plan owns the work needed to make that strategy executable.
+
 ## Entry Criteria
 
 - Product, RP, and RU responsibilities are accepted.
 - RP-level AC are the release coverage denominator.
+- ADR-005 is accepted: Framework Verification and RP Regression Execution are separate execution lines.
 - Minimum RP artifacts are defined: `package.yaml`, `rp_feature_spec.md`, `rp_ru_mapping.yaml`, `acceptance_criteria.md`, `tests/`, `expected-results/`, `traceability.md`, and `evidence_index.md`.
 - Architecture design defines Spring Boot 3.x / Java 17+ AP-level components, extension points, internal package boundaries, CLI commands, storage paths, execution modes, failure handling, and AC coverage.
 
@@ -30,6 +33,22 @@ Ready after pilot RP artifacts exist:
 Pilot RP owner must supply RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, expected-result approval owner, adapter mode, dependency graph, adapter/provider contracts, and any required binding, fixture, oracle, assertion, or observation provider capability.
 
 ## Task Backlog
+
+### T000 - Test Boundary and Verification Plan Alignment
+
+Related feature: Cross-cutting verification governance
+Acceptance: AC-010
+Modules: docs, build lifecycle
+
+Keep ADR, spec, AC, architecture, test plan, and implementation plan aligned on the difference between Framework Verification and RP Regression Execution.
+
+Verification:
+
+```bash
+rg "Framework Verification|RP Regression Execution|mvnw test|mvnw verify|regress run" docs
+```
+
+Done when the docs consistently state that `./mvnw test` and `./mvnw verify` validate this framework, while `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` validates a downstream Product/RP and writes RP evidence.
 
 ### T001 - Product Repo Bootstrap CLI and Readiness Agent Skill
 
@@ -322,10 +341,27 @@ regress report --root <product-repo> --rp-id <rp-id> --batch-id <batch-id>
 
 Done when coverage, traceability, evidence index, failure summary, and release review summary are review-ready for the selected batch. `--run-id` may remain available for debugging one test run, but it must not be used to determine RP release coverage.
 
-### T016 - Pilot RP Validation Harness
+### T016 - Maven Verify Framework Integration Harness
 
 Related features: F001-F008
-Acceptance: AC-001 through AC-009
+Acceptance: AC-010 plus AC-001 through AC-009 as exercised through sample fixtures
+Modules: Maven build, integration tests, sample Product Repo fixture
+
+Add the framework integration verification layer. Configure Maven Failsafe to run `*IT.java` tests during `./mvnw verify`. The integration tests shall use a sample Product Repo fixture, local/mock adapters, and deterministic data. They shall exercise representative check, dry-run/run, and report flows without requiring SIT/UAT deployment.
+
+Verification:
+
+```bash
+./mvnw test
+./mvnw verify
+```
+
+Done when `./mvnw test` remains the fast unit/component framework suite, `./mvnw verify` runs the sample Product Repo integration suite, and fixture evidence is not presented as downstream Product/RP release evidence.
+
+### T017 - Pilot RP Validation Harness
+
+Related features: F001-F008
+Acceptance: AC-001 through AC-010
 Modules: all M1 modules
 
 Run the full workflow against the data pipeline pilot RP after owner-provided RP artifacts exist.
@@ -345,14 +381,14 @@ Done when the pilot RP evidence package shows greater than 80% coverage for auto
 ## Dependency Order
 
 ```text
-T001 -> T002 -> T003 -> T004
+T000 -> T001 -> T002 -> T003 -> T004
                   |
                   +-> T005 -> T006 -> T007
                   |
                   +-> T008 -> T009 -> T010 -> T011 -> T012 -> T013 -> T014 -> T014A
                                                                   |
                                                                   v
-                                                                 T015 -> T016
+                                                                 T015 -> T016 -> T017
 ```
 
 Parallelizable after T003:
@@ -367,7 +403,7 @@ Parallelizable after T003:
 
 Gate 1 - Foundation ready:
 
-- T001, T002, T003, and T004 complete.
+- T000, T001, T002, T003, and T004 complete.
 - F001/F002/F004 can be used to initialize and check Product Repo and RP readiness.
 
 Gate 2 - Generation ready:
@@ -384,7 +420,7 @@ Gate 3 - Execution ready:
 
 Gate 4 - Release evidence ready:
 
-- T014, T014A, T015, and T016 complete.
+- T014, T014A, T015, T016, and T017 complete.
 - Coverage, traceability, failures, waivers, and evidence package are review-ready.
 
 ## Risks and Controls
@@ -400,10 +436,12 @@ Gate 4 - Release evidence ready:
 | Evidence cannot support release review | Evidence writer and reporter require RP/AC/test/run traceability. |
 | Multi-test RP execution overwrites evidence | Batch execution creates one batch per RP run and one unique run ID per approved test. |
 | Single-run report is mistaken for RP coverage | RP release coverage is calculated only from batch-level evidence. |
+| Maven framework verification is mistaken for downstream RP release evidence | AC-010, ADR-005, and T016 separate Surefire/Failsafe evidence from Product Repo RP evidence. |
 
 ## Completion Criteria for M1
 
 - Product developer can initialize/check the Product Repo and RP.
+- Framework verification passes through `./mvnw test` and `./mvnw verify` without SIT/UAT deployment.
 - Pilot RP artifacts are complete and human-authored where required.
 - Agent drafts tests only from ready AC and execution context.
 - Approved tests execute without regeneration by default.

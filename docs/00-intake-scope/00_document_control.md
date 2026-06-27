@@ -18,5 +18,5 @@
 - Use `feature_specs.md` and `acceptance_criteria.md` as the main implementation contract.
 - Use `architecture_and_sequence.md` for M1 component design, module boundaries, execution flow, and implementation readiness gates.
 - Use `artifact_contracts.md` to design or implement RP artifacts, test case YAML, expected-result artifacts, readiness reports, and evidence records.
-- Use `regression_test_plan.md`, `traceability_matrix.md`, and `evidence_matrix.md` for QA and release governance.
+- Use `regression_test_plan.md`, `traceability_matrix.md`, and `evidence_matrix.md` for framework verification, RP regression execution, QA, and release governance.
 - Use ADRs to lock key architecture decisions.

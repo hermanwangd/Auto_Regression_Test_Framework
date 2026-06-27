@@ -1,33 +1,51 @@
-# 07. Regression Test Plan
+# 07. Framework Verification and RP Regression Test Plan
 
-This plan validates the framework M1 behavior for one pilot Release Package. It does not define downstream product-feature release AC.
+This plan defines two execution lines:
 
-## 7.1 Validation Levels
+- Framework Verification proves this regression framework works correctly.
+- RP Regression Execution uses the framework to validate a downstream Product Release Package.
 
-| Level | Purpose | Timing |
-|---|---|---|
-| Readiness | Validate Product Repo, RP artifacts, and RP/RU mapping completeness | Before generation |
-| Generation | Validate agent readiness classification, test drafting, and expected-result drafting | Before execution |
-| Execution | Validate package input binding, execution mode, environment readiness, fixture lifecycle, adapter execution, assertions, and raw evidence | Local, CI, or SIT pilot run |
-| Evidence | Validate coverage, traceability, exclusions, and review package | Before M1 pilot review |
+It does not define downstream product-feature release AC. Formal product-feature acceptance remains in RP artifacts.
 
-## 7.2 M1 Test Scope
+## 7.1 Execution Lines
 
-M1 shall cover:
+| Execution Line | Subject Under Test | Command | Evidence |
+|---|---|---|---|
+| Framework unit/component verification | Framework modules and CLI behavior | `./mvnw test` | Surefire reports and local test fixtures. |
+| Framework integration verification | Framework end-to-end behavior with a sample Product Repo fixture | `./mvnw verify` | Failsafe reports and sample fixture evidence. |
+| RP regression execution | A selected downstream Product/RP | `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` | RP batch/run evidence under the Product Repo. |
+| SIT/UAT RP regression | A deployed downstream Product/RP | Release package pipeline invokes `regress run --env sit_deployed` | RP release evidence plus deployment/readiness references. |
 
-- Product Repo folder readiness.
-- RP creation and artifact completeness.
-- RP feature spec and AC intake without invented behavior.
-- Human-authored RP/RU mapping completeness.
-- AC and execution context readiness classification.
-- Package-neutral DSL draft test skeleton and executable test case generation with required field validation.
-- Expected-result drafting with source references and approval status.
-- Release Package DSL execution using package inputs, fixtures, adapter mode, assertions, and cleanup.
-- Execution environment resolution for local, CI-ephemeral, SIT-deployed, and evidence-only modes.
-- Multi-RU dependency graph and environment readiness validation.
-- Coverage and evidence package generation against automatable RP-level AC.
+Framework verification evidence must not be counted as downstream RP release evidence. Sample Product Repo fixture evidence proves the framework, not a real Product/RP release.
 
-## 7.3 Out of M1 Scope
+## 7.2 Framework Verification Scope
+
+Framework verification shall cover:
+
+- Product Repo bootstrap and readiness behavior.
+- RP skeleton and artifact completeness checks.
+- RP/RU mapping parser, dependency graph, and missing-field handling.
+- DSL schema validation, lifecycle status checks, and unsupported capability blocking.
+- Expected-result approval gating.
+- Environment resolver behavior for `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only`.
+- Batch/run evidence writing without overwrites.
+- Coverage calculation from batch-level evidence.
+
+`./mvnw test` should remain fast and deterministic. `./mvnw verify` may use a sample Product Repo fixture and local/mock adapters, but must not require SIT/UAT deployment.
+
+## 7.3 RP Regression Execution Scope
+
+RP regression execution shall cover:
+
+- RP selection by `--rp-id`.
+- Approved checked-in DSL test discovery without regeneration.
+- RP/RU mapping and provider contract resolution.
+- Data selection, parameterization, bindings, fixtures, adapters, oracles, assertions, observations, and cleanup.
+- Environment readiness blocking before unsafe adapter/provider execution.
+- One batch record per RP execution and one run record per executed test case.
+- Coverage, traceability, failure summary, and release-review evidence from the selected batch.
+
+## 7.4 Out of M1 Scope
 
 - Product-level formal AC as release denominator.
 - RU repo-owned primary specs or primary AC.
@@ -35,8 +53,18 @@ M1 shall cover:
 - Full dashboard-driven governance.
 - Fully automated release approval.
 - Broad package-type plugin support.
+- Framework-owned SIT/UAT deployment orchestration.
 
-## 7.4 Standard Regression Cases
+## 7.5 Standard Framework Verification Cases
+
+| Test ID | Scenario | Command Level | Priority | Automation |
+|---|---|---|---|---|
+| FWK-001 | Framework unit/component suite validates parsers, readiness checks, CLI behavior, resolvers, and evidence writers | `./mvnw test` | P1 | Auto |
+| FWK-002 | Framework integration suite validates a sample Product Repo fixture through check, dry-run/run, and report flow | `./mvnw verify` | P1 | Auto |
+| FWK-003 | Framework integration fixture evidence is marked as sample evidence and is not counted as downstream RP release evidence | `./mvnw verify` | P1 | Auto |
+| FWK-004 | Missing sample fixture, unsupported provider, or invalid DSL blocks framework integration verification with actionable failure | `./mvnw verify` | P1 | Auto |
+
+## 7.6 Standard RP Regression Cases
 
 | Test ID | Feature | Scenario | Level | Priority | Automation |
 |---|---|---|---|---|---|
@@ -52,5 +80,16 @@ M1 shall cover:
 | REG-RP-011 | F007 | Execution reuses checked-in approved RP DSL test cases without regenerating them | Execution | P1 | Auto |
 | REG-RP-012 | F007 | SIT-deployed execution is blocked until deployment and environment readiness evidence exists | Execution | P1 | Auto |
 | REG-RP-013 | F007 | Multi-RU execution follows the declared dependency graph and stops downstream execution on required upstream validation failure | Execution | P1 | Auto |
-| REG-RP-009 | F008 | Coverage and evidence package trace to RP ID, AC ID, test case ID, and run ID | Evidence | P1 | Auto |
+| REG-RP-009 | F008 | Coverage and evidence package trace to RP ID, batch ID, run ID, AC ID, and test case ID | Evidence | P1 | Auto |
 | REG-RP-010 | F008 | Manual-only or waived AC require approval record before exclusion | Evidence | P1 | Auto |
+
+## 7.7 CI/CD Execution Policy
+
+| Pipeline Stage | Required Command | Purpose |
+|---|---|---|
+| Pull request | `./mvnw test` | Fast framework verification. |
+| Main or release branch | `./mvnw verify` | Framework integration verification with sample fixture. |
+| RP release pipeline | `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` | Downstream RP regression execution. |
+| SIT/UAT release gate | `regress run --root <product-repo> --rp-id <rp-id> --env sit_deployed` | Validate already deployed RU versions when SIT/UAT is required. |
+
+All commands should be bounded and avoid memory-heavy execution. Local and CI runs should stay under the repository guidance of 8 GB RAM.

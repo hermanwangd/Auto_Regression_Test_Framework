@@ -2,6 +2,7 @@
 
 | Requirement | Feature | Acceptance Criteria | Test Case | Evidence |
 |---|---|---|---|---|
+| REQ-000 Framework verification and RP regression execution boundary | Cross-cutting | AC-010 | FWK-001 / FWK-002 / FWK-003 / FWK-004 | EVD-000 |
 | REQ-001 Product Repo bootstrap CLI and readiness agent skill | F001 | AC-001 | REG-RP-001 | EVD-001 |
 | REQ-002 RP creation completeness | F002 | AC-002 | REG-RP-002 | EVD-002 |
 | REQ-003 RP feature spec and AC intake | F003 | AC-003 | REG-RP-003 | EVD-003 |
@@ -9,6 +10,7 @@
 | REQ-005 AC readiness and test drafting | F005 | AC-005 | REG-RP-005 / REG-RP-006 | EVD-005 |
 | REQ-006 Expected-result drafting and approval | F006 | AC-006 | REG-RP-007 | EVD-006 |
 | REQ-007 Release Package execution | F007 | AC-007 | REG-RP-008 / REG-RP-011 / REG-RP-012 / REG-RP-013 | EVD-007 |
-| REQ-008 Coverage and evidence package | F008 | AC-008 | REG-RP-009 / REG-RP-010 | EVD-008 |
+| REQ-008 Unsafe or incomplete regression execution block | F007 | AC-008 | REG-RP-012 / REG-RP-013 / REG-RP-014 | EVD-007 |
+| REQ-009 Coverage and evidence package | F008 | AC-009 | REG-RP-009 / REG-RP-010 | EVD-008 |
 
 Every generated test case and evidence item shall also trace to RP ID and AC ID inside the pilot RP evidence package.
