@@ -2183,6 +2183,35 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runExecutesExecutionFocusedDslV1JsonPathSelectorVerify() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001", "{\\\"status\\\":\\\"ACCEPTED\\\"}");
+        writeApprovedExecutionFocusedJsonSelectorTestCase("RP-001");
+        ByteArrayOutputStream runOutput = new ByteArrayOutputStream();
+
+        int runExit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(runOutput), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001");
+        assertThat(runExit).as(runOutput.toString()).isZero();
+        assertThat(Files.readString(runDir.resolve("run.yaml")))
+                .contains("status: passed")
+                .contains("type: json_path_equals")
+                .contains("selector: $.status");
+        assertThat(Files.readString(runDir.resolve("assertions.yaml")))
+                .contains("type: json_path_equals")
+                .contains("decision_rule: json_path_equals")
+                .contains("json path `$.status` matched `ACCEPTED`");
+    }
+
+    @Test
     void runWritesCleanupEvidenceForMutatingFixtureWithCleanupPolicy() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -3996,6 +4025,61 @@ class RegressionCommandTest {
                   retry:
                     max_attempts: 0
                 """.formatted(rpId, rpId, acId, acId, rpId, fixtureType, expectedResultId));
+    }
+
+    private void writeApprovedExecutionFocusedJsonSelectorTestCase(String rpId) throws Exception {
+        String acId = rpId + "-AC-001";
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s-TC-001
+                status: active
+                revision: 1
+                traceability:
+                  package_id: %s
+                  acceptance_criteria_id: %s
+                  source: acceptance_criteria.md#%s
+                targets:
+                  RU-transform-job:
+                    type: batch_runner
+                    runner: spring_boot_cli
+                    environment: ci://pipeline/%s
+                scenario:
+                  type: integration
+                  scope: release_package
+                  description: Run the transform job and verify a structured output field.
+                  capabilities: [batch_execution, response_assertion]
+                setup:
+                  fixtures: {}
+                execute:
+                  - id: run_pipeline
+                    target: RU-transform-job
+                    operation: run_batch
+                    with: {}
+                    outputs:
+                      actual_output:
+                        ref: actual/output.txt
+                      execution_log:
+                        ref: logs/stdout.log
+                expected_results: {}
+                verify:
+                  - id: verify_status
+                    type: json_path_equals
+                    actual: ${execute.run_pipeline.outputs.actual_output}
+                    selector: $.status
+                    expected: ACCEPTED
+                evidence:
+                  required:
+                    - ${execute.run_pipeline.outputs.execution_log}
+                    - ${execute.run_pipeline.outputs.actual_output}
+                    - ${verify.verify_status.result}
+                runtime:
+                  timeout: PT10M
+                  retry:
+                    max_attempts: 0
+                """.formatted(rpId, rpId, acId, acId, rpId));
     }
 
     private void writeApprovedTestCase(String rpId, String testCaseId, String acId, String bindingType)

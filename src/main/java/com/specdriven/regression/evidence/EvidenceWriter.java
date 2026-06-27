@@ -247,6 +247,7 @@ public class EvidenceWriter {
             builder.append("    - verify_id: ").append(stringValue(rule.get("id"))).append("\n");
             appendField(builder, "      ", "type", rule.get("type"));
             appendField(builder, "      ", "actual", rule.get("actual"));
+            appendField(builder, "      ", "selector", rule.get("selector"));
             appendField(builder, "      ", "expected", rule.get("expected"));
             appendField(builder, "      ", "target", rule.get("target"));
         }

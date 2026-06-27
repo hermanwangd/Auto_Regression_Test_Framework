@@ -768,8 +768,10 @@ public class RegressionCommand {
                         "binding_name: " + gap.bindingName(),
                         "binding_type: " + gap.bindingType()));
             }
-            ExpectedResultEligibilityReport eligibility =
-                    expectedResultService.checkEligibility(packageRoot, bindingReport.acId());
+            ExpectedResultEligibilityReport eligibility = expectedResultEligibility(
+                    packageRoot,
+                    approvedTest,
+                    bindingReport.acId());
             blocked = blocked || !eligibility.eligible();
             out.println("expected_result_eligibility:");
             out.println("  - ap: Oracle and Assertion Engine");
@@ -1457,6 +1459,29 @@ public class RegressionCommand {
 
     private Map<String, Object> testCaseMap(Path testCasePath) {
         return dslTestCaseNormalizer.normalize(readYamlMap(testCasePath));
+    }
+
+    private ExpectedResultEligibilityReport expectedResultEligibility(Path packageRoot, Path testCasePath, String acId) {
+        if (approvedExpectedResultRequired(testCasePath)) {
+            return expectedResultService.checkEligibility(packageRoot, acId);
+        }
+        return new ExpectedResultEligibilityReport(true, "not_required", null, List.of());
+    }
+
+    private boolean approvedExpectedResultRequired(Path testCasePath) {
+        Object oracles = testCaseMap(testCasePath).get("oracles");
+        if (!(oracles instanceof Map<?, ?> oracleMap)) {
+            return false;
+        }
+        for (Object value : oracleMap.values()) {
+            if (value instanceof Map<?, ?> oracle) {
+                String type = stringValue(oracle.get("type"));
+                if ("expected_result_artifact".equals(type) || "golden_file".equals(type)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private List<String> targetDependencies(Path mappingYaml, String targetRuId) {
