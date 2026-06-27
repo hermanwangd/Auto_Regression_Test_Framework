@@ -996,6 +996,68 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksRestProviderWithUnsupportedActionBeforeInvocation() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-REST-ACTION";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_api"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeRestProviderMapping(rpId, 65535);
+        writeRestPayload(rpId);
+        writeApprovedExpectedResult(rpId, acId, "{\"status\":\"accepted\",\"paymentId\":\"PAY-001\"}\n");
+        writeApprovedRestTestCase(rpId, acId, "authorize_payment");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: request_response");
+        assertThat(output.toString()).contains("provider_type: rest");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.request_response.actions.authorize_payment");
+        assertThat(output.toString()).contains("Declare request/response action `authorize_payment` before invocation");
+    }
+
+    @Test
+    void runDryRunBlocksRestProviderWithMissingPayloadBindingBeforeInvocation() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-REST-BINDING";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_api"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeRestProviderMapping(rpId, 65535, "submit_payment", "missing_payload");
+        writeRestPayload(rpId);
+        writeApprovedExpectedResult(rpId, acId, "{\"status\":\"accepted\",\"paymentId\":\"PAY-001\"}\n");
+        writeApprovedRestTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: request_response");
+        assertThat(output.toString()).contains("provider_type: rest");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.request_response.actions.submit_payment.request_binding");
+        assertThat(output.toString()).contains("Add package input binding `missing_payload` before invoking request/response action `submit_payment`");
+    }
+
+    @Test
     void runExecutesLocalMessagingProviderAndWritesEvidence() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-MSG";
@@ -2310,6 +2372,14 @@ class RegressionCommandTest {
     }
 
     private void writeRestProviderMapping(String rpId, int port) throws Exception {
+        writeRestProviderMapping(rpId, port, "submit_payment", "payment_payload");
+    }
+
+    private void writeRestProviderMapping(
+            String rpId,
+            int port,
+            String actionName,
+            String requestBinding) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
         Files.writeString(mapping, """
                 rp_id: %s
@@ -2332,10 +2402,10 @@ class RegressionCommandTest {
                           endpoint_ref: http://127.0.0.1:%s
                           timeout_seconds: 10
                           actions:
-                            submit_payment:
+                            %s:
                               method: POST
                               path: /payments
-                              request_binding: payment_payload
+                              request_binding: %s
                           logs:
                             stdout: logs/response.log
                             stderr: logs/error.log
@@ -2352,7 +2422,7 @@ class RegressionCommandTest {
                       observations: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []
-                """.formatted(rpId, port));
+                """.formatted(rpId, port, actionName, requestBinding));
     }
 
     private void writeRestPayload(String rpId) throws Exception {
@@ -2959,6 +3029,10 @@ class RegressionCommandTest {
     }
 
     private void writeApprovedRestTestCase(String rpId, String acId) throws Exception {
+        writeApprovedRestTestCase(rpId, acId, "submit_payment");
+    }
+
+    private void writeApprovedRestTestCase(String rpId, String acId, String actionName) throws Exception {
         String expectedResultId = acId.replace("-AC-", "-ER-");
         Path testCase = tempDir.resolve(
                 "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
@@ -2995,14 +3069,14 @@ class RegressionCommandTest {
                       bind_as: api_payload
                 steps:
                   - id: submit_payment
-                    action: submit_payment
+                    action: %s
                     target_ru_id: RU-payment-api
                 assertions:
                   - type: file_diff
                     oracle: ${oracles.payment_response}
                 evidence_required:
                   - execution_log
-                """.formatted(rpId, rpId, acId, acId, expectedResultId, expectedResultId));
+                """.formatted(rpId, rpId, acId, acId, expectedResultId, expectedResultId, actionName));
     }
 
     private void writeApprovedMessagingTestCase(String rpId, String acId) throws Exception {

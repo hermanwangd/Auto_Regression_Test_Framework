@@ -678,7 +678,12 @@ public class RegressionCommand {
                     adapterName(approvedTest),
                     bindingReport.resolvedBindings().stream().map(ResolvedBinding::bindingType).toList(),
                     fixtureReport.fixtureProviders());
-            blocked = blocked || !providerReport.ready();
+            List<ProviderContractGap> providerGaps = new java.util.ArrayList<>(providerReport.gaps());
+            providerGaps.addAll(requestResponseTestContextGaps(
+                    packageRoot.resolve("rp_ru_mapping.yaml"),
+                    approvedTest,
+                    bindingReport));
+            blocked = blocked || !providerGaps.isEmpty();
             out.println("provider_contracts_used:");
             for (ResolvedProviderContract contract : providerReport.resolvedContracts()) {
                 out.println("  - ap: Planning and Binding");
@@ -696,7 +701,7 @@ public class RegressionCommand {
                 out.println("    source_level: " + contract.sourceLevel());
             }
             out.println("provider_contract_gaps:");
-            for (ProviderContractGap gap : providerReport.gaps()) {
+            for (ProviderContractGap gap : providerGaps) {
                 out.println("  - ap: Planning and Binding");
                 out.println("    test_case_id: " + bindingReport.testCaseId());
                 out.println("    ac_id: " + bindingReport.acId());
@@ -744,6 +749,140 @@ public class RegressionCommand {
                 Map.copyOf(blockedTestFailureDetails),
                 environmentReport.executionMode(),
                 environmentReport.environmentRef());
+    }
+
+    private List<ProviderContractGap> requestResponseTestContextGaps(
+            Path mappingYaml,
+            Path approvedTest,
+            BindingResolutionReport bindingReport) {
+        AdapterContractContext context =
+                adapterContractContext(mappingYaml, targetRuId(approvedTest), adapterName(approvedTest));
+        if (!"request_response".equals(context.providerFamily()) || !"rest".equals(context.providerType())) {
+            return List.of();
+        }
+        Object actionsValue = context.contract().get("actions");
+        if (!(actionsValue instanceof Map<?, ?> actions) || actions.isEmpty()) {
+            return List.of();
+        }
+        List<String> bindingNames = bindingReport.resolvedBindings().stream()
+                .map(ResolvedBinding::bindingName)
+                .toList();
+        List<ProviderContractGap> gaps = new java.util.ArrayList<>();
+        for (String actionName : stepActions(approvedTest)) {
+            if (actionName.isBlank()) {
+                continue;
+            }
+            Object actionValue = actions.get(actionName);
+            if (!(actionValue instanceof Map<?, ?> action)) {
+                gaps.add(new ProviderContractGap(
+                        context.contractPath() + ".actions." + actionName,
+                        "adapter",
+                        context.providerName(),
+                        context.providerFamily(),
+                        context.providerType(),
+                        "incomplete",
+                        "blocked",
+                        context.ruId(),
+                        context.providerName(),
+                        "Declare request/response action `" + actionName
+                                + "` before invocation or update the DSL step action."));
+                continue;
+            }
+            String requestBinding = stringValue(action.get("request_binding"));
+            if (requestBinding.isBlank()) {
+                gaps.add(new ProviderContractGap(
+                        context.contractPath() + ".actions." + actionName + ".request_binding",
+                        "adapter",
+                        context.providerName(),
+                        context.providerFamily(),
+                        context.providerType(),
+                        "incomplete",
+                        "blocked",
+                        context.ruId(),
+                        context.providerName(),
+                        "Declare request_binding for request/response action `" + actionName
+                                + "` before invocation."));
+            } else if (!bindingNames.contains(requestBinding)) {
+                gaps.add(new ProviderContractGap(
+                        context.contractPath() + ".actions." + actionName + ".request_binding",
+                        "adapter",
+                        context.providerName(),
+                        context.providerFamily(),
+                        context.providerType(),
+                        "incomplete",
+                        "blocked",
+                        context.ruId(),
+                        context.providerName(),
+                        "Add package input binding `" + requestBinding
+                                + "` before invoking request/response action `" + actionName + "`."));
+            }
+        }
+        return gaps;
+    }
+
+    private List<String> stepActions(Path approvedTest) {
+        Object stepsValue = readYamlMap(approvedTest).get("steps");
+        if (!(stepsValue instanceof List<?> steps)) {
+            return List.of();
+        }
+        return steps.stream()
+                .filter(Map.class::isInstance)
+                .map(Map.class::cast)
+                .map(step -> stringValue(step.get("action")))
+                .filter(action -> !action.isBlank())
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private AdapterContractContext adapterContractContext(Path mappingYaml, String targetRuId, String adapter) {
+        Object unitsValue = readYamlMap(mappingYaml).get("release_units");
+        if (!(unitsValue instanceof List<?> units)) {
+            return AdapterContractContext.empty(adapter);
+        }
+        AdapterContractContext adapterMatch = AdapterContractContext.empty(adapter);
+        for (int index = 0; index < units.size(); index++) {
+            Object entry = units.get(index);
+            if (!(entry instanceof Map<?, ?> unit)) {
+                continue;
+            }
+            String ruId = stringValue(unit.get("ru_id"));
+            String unitAdapter = stringValue(unit.get("adapter"));
+            Map<String, Object> adapterContract = adapterContract(unit, adapter);
+            if (adapterContract.isEmpty()) {
+                continue;
+            }
+            AdapterContractContext context = new AdapterContractContext(
+                    index,
+                    ruId,
+                    adapter,
+                    stringValue(adapterContract.get("provider_family")),
+                    stringValue(adapterContract.get("provider_type")),
+                    adapterContract);
+            if (!targetRuId.isBlank() && targetRuId.equals(ruId)) {
+                return context;
+            }
+            if (unitAdapter.equals(adapter)) {
+                adapterMatch = context;
+            }
+        }
+        return adapterMatch;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> adapterContract(Map<?, ?> unit, String adapter) {
+        Object contractsValue = unit.get("provider_contracts");
+        if (!(contractsValue instanceof Map<?, ?> contracts)) {
+            return Map.of();
+        }
+        Object adaptersValue = contracts.get("adapters");
+        if (!(adaptersValue instanceof Map<?, ?> adapters)) {
+            return Map.of();
+        }
+        Object adapterValue = adapters.get(adapter);
+        if (adapterValue instanceof Map<?, ?> adapterMap) {
+            return (Map<String, Object>) adapterMap;
+        }
+        return Map.of();
     }
 
     private void printApGateStatus(PrintStream out, List<String> failureDetails) {
@@ -1022,6 +1161,25 @@ public class RegressionCommand {
     }
 
     private record DependencyBlock(boolean blocked, String failureDetail) {
+    }
+
+    private record AdapterContractContext(
+            int index,
+            String ruId,
+            String providerName,
+            String providerFamily,
+            String providerType,
+            Map<String, Object> contract) {
+
+        static AdapterContractContext empty(String providerName) {
+            return new AdapterContractContext(-1, "", providerName, "", "", Map.of());
+        }
+
+        String contractPath() {
+            return index < 0
+                    ? "release_units.provider_contracts.adapters." + providerName
+                    : "release_units[" + index + "].provider_contracts.adapters." + providerName;
+        }
     }
 
     private Map<String, String> parseOptions(String[] args) {

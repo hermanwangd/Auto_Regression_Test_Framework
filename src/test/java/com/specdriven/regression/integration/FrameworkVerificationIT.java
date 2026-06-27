@@ -711,6 +711,7 @@ class FrameworkVerificationIT {
                             submit_payment:
                               method: POST
                               path: /payments
+                              request_binding: payment_payload
                       bindings:
                         api_payload:
                           provider_family: request_response
