@@ -59,6 +59,15 @@ import org.yaml.snakeyaml.Yaml;
 @Component
 public class RegressionCommand {
 
+    private static final List<String> AP_GATE_NAMES = List.of(
+            "Discovery and Context",
+            "Definition and Validation",
+            "Planning and Binding",
+            "Fixture and State Manager",
+            "Execution Engine",
+            "Oracle and Assertion Engine",
+            "Evidence and Reporting");
+
     private final ProductRepoService productRepoService;
     private final ReleasePackageService releasePackageService;
     private final AcIntakeService acIntakeService;
@@ -701,6 +710,7 @@ public class RegressionCommand {
         }
 
         if (dryRun) {
+            printApGateStatus(out, failureDetails);
             out.println("run_status: " + (blocked ? "blocked" : "dry_run_ready"));
         }
         return new PreflightResult(
@@ -711,6 +721,32 @@ public class RegressionCommand {
                 Map.copyOf(blockedTestFailureDetails),
                 environmentReport.executionMode(),
                 environmentReport.environmentRef());
+    }
+
+    private void printApGateStatus(PrintStream out, List<String> failureDetails) {
+        List<String> blockedAps = blockedAps(failureDetails);
+        out.println("ap_gate_status:");
+        for (String ap : AP_GATE_NAMES) {
+            boolean blocked = blockedAps.contains(ap)
+                    || ("Execution Engine".equals(ap) && !failureDetails.isEmpty());
+            out.println("  - ap: " + ap);
+            out.println("    status: " + (blocked ? "blocked" : "passed"));
+        }
+    }
+
+    private List<String> blockedAps(List<String> failureDetails) {
+        List<String> aps = new java.util.ArrayList<>();
+        for (String failureDetail : failureDetails) {
+            for (String line : failureDetail.split("\\R")) {
+                if (line.startsWith("ap: ")) {
+                    String ap = line.substring("ap: ".length());
+                    if (!aps.contains(ap)) {
+                        aps.add(ap);
+                    }
+                }
+            }
+        }
+        return aps;
     }
 
     private String failureDetail(String ap, String fieldPath, String ownerAction, String... extraLines) {

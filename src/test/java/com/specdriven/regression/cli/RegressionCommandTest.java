@@ -297,6 +297,38 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunReportsPassedApGatesBeforeAdapterExecution() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeCompleteCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedTestCase("RP-001", "db_seed");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isZero();
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: dry_run_ready");
+        assertThat(output.toString())
+                .contains("ap_gate_status:")
+                .contains("ap: Discovery and Context\n    status: passed")
+                .contains("ap: Definition and Validation\n    status: passed")
+                .contains("ap: Planning and Binding\n    status: passed")
+                .contains("ap: Fixture and State Manager\n    status: passed")
+                .contains("ap: Execution Engine\n    status: passed")
+                .contains("ap: Oracle and Assertion Engine\n    status: passed")
+                .contains("ap: Evidence and Reporting\n    status: passed");
+    }
+
+    @Test
     void runWritesBlockedEvidenceWhenPreflightFailsBeforeAdapterExecution() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
