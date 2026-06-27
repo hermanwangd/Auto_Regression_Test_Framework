@@ -369,6 +369,9 @@ class RegressionCommandTest {
                 .contains("ac_id: RP-001-AC-001")
                 .contains("parameter_case_id: boundary")
                 .contains("orders_seed_ref: fixtures/input/orders_seed_boundary.csv");
+        assertThat(Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml")))
+                .contains("parameter_case_id: baseline")
+                .contains("parameter_case_id: boundary");
 
         ByteArrayOutputStream reportOutput = new ByteArrayOutputStream();
         int reportExit = command.execute(new String[] {

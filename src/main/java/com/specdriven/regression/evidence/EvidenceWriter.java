@@ -407,6 +407,7 @@ public class EvidenceWriter {
             builder.append("  - run_id: ").append(result.runId()).append("\n");
             builder.append("    test_case_id: ").append(result.testCaseId()).append("\n");
             builder.append("    ac_id: ").append(result.acId()).append("\n");
+            appendField(builder, "    ", "parameter_case_id", result.parameterCaseId());
             builder.append("    status: ").append(result.status()).append("\n");
         }
         return builder.toString().stripTrailing();
@@ -535,7 +536,8 @@ public class EvidenceWriter {
                     runDir,
                     runDir,
                     runDir,
-                    runDir);
+                    runDir,
+                    stringValue(testCase.get("parameter_case_id")));
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write blocked run evidence.", e);
         }

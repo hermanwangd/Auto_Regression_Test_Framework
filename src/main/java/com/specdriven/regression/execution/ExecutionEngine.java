@@ -222,7 +222,8 @@ public class ExecutionEngine {
                 runDir,
                 adapterResult.stdoutLog(),
                 adapterResult.stderrLog(),
-                adapterResult.actualOutput());
+                adapterResult.actualOutput(),
+                stringValue(testCase.get("parameter_case_id")));
     }
 
     private ExternalRunnerEvidenceResult writeExternalRunnerEvidence(
