@@ -210,6 +210,10 @@ class ProviderCapabilityRegistry {
                 violations.add(required(".cleanup_strategy",
                         "Declare cleanup_strategy for fixture `" + providerName + "`."));
             }
+            if (!hasAnyText(contract, "isolation_key")) {
+                violations.add(required(".isolation_key",
+                        "Declare isolation_key for DB fixture `" + providerName + "` before setup."));
+            }
             validateDbFixtureSqlReferences(providerName, contract, violations);
         }
     }

@@ -771,6 +771,7 @@ class FrameworkVerificationIT {
                           provider_family: db_fixture
                           provider_type: jdbc
                           connection_ref: secret://ci/payment-db
+                          isolation_key: test_run_id
                           cleanup_strategy: by_test_run_id
                     evidence_responsibility: [cleanup_result]
                     dependencies: []

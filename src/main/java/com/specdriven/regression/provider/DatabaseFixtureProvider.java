@@ -35,7 +35,8 @@ public class DatabaseFixtureProvider {
                 Map<String, Object> contract = fixtureContracts.get(action.provider());
                 try (Connection connection = connection(contract)) {
                     executeActionSql(packageRoot, connection, contract, "setup_actions", action);
-                    actionEvidence.add(new ActionEvidence(action.provider(), action.action(), "passed"));
+                    actionEvidence.add(new ActionEvidence(
+                            action.provider(), action.action(), isolationKey(contract), "passed"));
                     verificationRows.putAll(verificationRows(packageRoot, connection, contract));
                 }
             }
@@ -63,7 +64,8 @@ public class DatabaseFixtureProvider {
                 Map<String, Object> contract = fixtureContracts.get(action.provider());
                 try (Connection connection = connection(contract)) {
                     executeActionSql(packageRoot, connection, contract, "cleanup_actions", action);
-                    actionEvidence.add(new ActionEvidence(action.provider(), action.action(), "passed"));
+                    actionEvidence.add(new ActionEvidence(
+                            action.provider(), action.action(), isolationKey(contract), "passed"));
                 }
             }
             writeCleanupEvidence(runDir.resolve("cleanup.yaml"), actionEvidence);
@@ -196,8 +198,13 @@ public class DatabaseFixtureProvider {
         for (ActionEvidence action : actionEvidence) {
             builder.append("  - provider: ").append(action.provider()).append("\n");
             builder.append("    action: ").append(action.action()).append("\n");
+            builder.append("    isolation_key: ").append(action.isolationKey()).append("\n");
             builder.append("    status: ").append(action.status()).append("\n");
         }
+    }
+
+    private String isolationKey(Map<String, Object> contract) {
+        return stringValue(contract.get("isolation_key"));
     }
 
     private Map<?, ?> nestedMap(Map<String, Object> root, String section, String name) {
@@ -225,6 +232,6 @@ public class DatabaseFixtureProvider {
     private record FixtureAction(String provider, String action) {
     }
 
-    private record ActionEvidence(String provider, String action, String status) {
+    private record ActionEvidence(String provider, String action, String isolationKey, String status) {
     }
 }
