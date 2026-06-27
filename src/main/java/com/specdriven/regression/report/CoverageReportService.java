@@ -119,8 +119,11 @@ public class CoverageReportService {
         if (!runMissing) {
             gaps.addAll(uncoveredAcGaps(denominatorAcIds, coveredAcIds));
         }
+        if (!runMissing && gaps.isEmpty() && totalAutomatable > 0 && covered == totalAutomatable) {
+            gaps.add("batch_required_for_release_coverage: " + runId);
+        }
         List<String> failureDetails = runMissing ? List.of() : assertionFailureDetails(runDir, run);
-        boolean reviewReady = gaps.isEmpty() && totalAutomatable > 0 && covered == totalAutomatable;
+        boolean reviewReady = false;
         Path reviewDir = packageRoot.resolve("evidence/review").resolve(runId);
         writeReports(
                 reviewDir,
