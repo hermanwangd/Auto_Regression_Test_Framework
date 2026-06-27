@@ -600,6 +600,41 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runExecutesApprovedExternalRunnerAndWritesEvidenceMap() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "service"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeApprovedExternalRunnerMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001", "runner-ok\n");
+        writeApprovedExternalRunnerTestCase("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001");
+        assertThat(exit).isZero();
+        assertThat(output.toString()).contains("adapter_execution_started: true");
+        assertThat(output.toString()).contains("run_status: passed");
+        String runEvidence = Files.readString(runDir.resolve("run.yaml"));
+        assertThat(runEvidence).contains("provider_family: external_runner");
+        assertThat(runEvidence).contains("provider_type: command_runner");
+        assertThat(runEvidence).contains("provider_evidence:");
+        assertThat(runEvidence).contains("external_runner: external_runner.yaml");
+        String externalRunnerEvidence = Files.readString(runDir.resolve("external_runner.yaml"));
+        assertThat(externalRunnerEvidence).contains("escape_hatch_status: approved");
+        assertThat(externalRunnerEvidence).contains("approval_ref: docs/10-change-control/runner-approval.md");
+        assertThat(externalRunnerEvidence).contains("approved_by: qa_lead");
+        assertThat(externalRunnerEvidence).contains("runner_stdout: logs/stdout.log");
+        assertThat(externalRunnerEvidence).contains("runner_actual_output: actual/output.txt");
+    }
+
+    @Test
     void runUsesProviderContractForExecutionTargetRuInMultiRuMapping() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -1759,6 +1794,43 @@ class RegressionCommandTest {
                 """.formatted(rpId, rpId, stdoutValue));
     }
 
+    private void writeApprovedExternalRunnerMapping(String rpId) throws Exception {
+        Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        Files.writeString(mapping, """
+                rp_id: %s
+                release_units:
+                  - ru_id: RU-legacy-runner
+                    repo: /repo/legacy-runner
+                    unit_type: external_test_runner
+                    owner: qa
+                    version_ref: runner-42
+                    validation_boundary: external_runner
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://runner/%s
+                    adapter: external_runner
+                    provider_contracts:
+                      adapters:
+                        external_runner:
+                          provider_family: external_runner
+                          provider_type: command_runner
+                          approval_ref: docs/10-change-control/runner-approval.md
+                          approved_by: qa_lead
+                          reason: Legacy RP-owned harness is required until a reusable provider exists.
+                          command: printf 'runner-ok\\n'
+                          timeout_seconds: 30
+                          inputs:
+                            test_case: ${test_case.test_case_id}
+                          outputs:
+                            actual_output_ref: actual/output.txt
+                          evidence_map:
+                            runner_stdout: logs/stdout.log
+                            runner_actual_output: actual/output.txt
+                    evidence_responsibility: [runner_result]
+                    dependencies: []
+                """.formatted(rpId, rpId));
+    }
+
     private void writeExecutableMultiRuMapping(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
         Files.writeString(mapping, """
@@ -2513,6 +2585,53 @@ class RegressionCommandTest {
                     oracle: ${oracles.normalized_orders}
                 evidence_required:
                   - execution_log
+                """.formatted(testCaseId, rpId, acId, acId, rpId, expectedResultId, expectedResultId));
+    }
+
+    private void writeApprovedExternalRunnerTestCase(String rpId) throws Exception {
+        String testCaseId = rpId + "-TC-001";
+        String acId = rpId + "-AC-001";
+        String expectedResultId = rpId + "-ER-001";
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + testCaseId + ".yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s
+                rp_id: %s
+                ac_id: %s
+                artifact_status: approved_for_regression
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
+                source_fingerprint: sha256:test
+                execution_target:
+                  ru_id: RU-legacy-runner
+                  adapter: external_runner
+                  execution_mode: ci_ephemeral
+                  environment_ref: ci://runner/%s
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [batch_execution, file_assertion]
+                expected:
+                  ref: expected-results/approved/%s.yaml
+                oracles:
+                  legacy_runner_expected:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
+                package_inputs:
+                  inputs: {}
+                steps:
+                  - id: run_legacy_harness
+                    action: call_ru
+                    target_ru_id: RU-legacy-runner
+                assertions:
+                  - type: file_diff
+                    oracle: ${oracles.legacy_runner_expected}
+                evidence_required:
+                  - execution_log
+                  - runner_result
                 """.formatted(testCaseId, rpId, acId, acId, rpId, expectedResultId, expectedResultId));
     }
 

@@ -181,6 +181,7 @@ public class ExecutionEngine {
                     stdoutLog,
                     stderrLog,
                     actualOutput);
+            writeExternalRunnerEvidence(adapterProviderContract, contract, runDir);
             passed = !adapterResult.timeout()
                     && successExitCodes(contract.get("success_exit_codes")).contains(adapterResult.exitCode());
             if (passed) {
@@ -217,6 +218,48 @@ public class ExecutionEngine {
                 adapterResult.stdoutLog(),
                 adapterResult.stderrLog(),
                 adapterResult.actualOutput());
+    }
+
+    private void writeExternalRunnerEvidence(
+            ResolvedProviderContract providerContract,
+            Map<String, Object> contract,
+            Path runDir) {
+        if (!"external_runner".equals(providerContract.providerFamily())) {
+            return;
+        }
+        try {
+            Files.createDirectories(runDir);
+            StringBuilder builder = new StringBuilder();
+            builder.append("escape_hatch_status: approved\n");
+            builder.append("approval_ref: ").append(stringValue(contract.get("approval_ref"))).append("\n");
+            builder.append("approved_by: ").append(stringValue(contract.get("approved_by"))).append("\n");
+            builder.append("reason: ").append(stringValue(contract.get("reason"))).append("\n");
+            builder.append("runner_ref: ").append(runnerRef(contract)).append("\n");
+            builder.append("evidence_map:\n");
+            Object evidenceMap = contract.get("evidence_map");
+            if (evidenceMap instanceof Map<?, ?> entries && !entries.isEmpty()) {
+                for (Map.Entry<?, ?> entry : entries.entrySet()) {
+                    builder.append("  ")
+                            .append(entry.getKey())
+                            .append(": ")
+                            .append(stringValue(entry.getValue()))
+                            .append("\n");
+                }
+            } else {
+                builder.append("  {}\n");
+            }
+            Files.writeString(runDir.resolve("external_runner.yaml"), builder.toString());
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write external runner evidence.", e);
+        }
+    }
+
+    private String runnerRef(Map<String, Object> contract) {
+        String command = stringValue(contract.get("command"));
+        if (!command.isBlank()) {
+            return command;
+        }
+        return stringValue(contract.get("container_ref"));
     }
 
     private AdapterExecutionResult executeProvider(

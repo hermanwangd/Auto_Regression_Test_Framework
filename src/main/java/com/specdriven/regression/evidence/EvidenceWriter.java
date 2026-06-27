@@ -180,6 +180,7 @@ public class EvidenceWriter {
         List<ProviderEvidenceRef> refs = List.of(
                 new ProviderEvidenceRef("messaging", "messaging.yaml"),
                 new ProviderEvidenceRef("deployment_readiness", "readiness.yaml"),
+                new ProviderEvidenceRef("external_runner", "external_runner.yaml"),
                 new ProviderEvidenceRef("fixture_setup", "fixture_setup.yaml"),
                 new ProviderEvidenceRef("cleanup", "cleanup.yaml"));
         StringBuilder builder = new StringBuilder();
