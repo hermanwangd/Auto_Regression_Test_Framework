@@ -497,24 +497,51 @@ public class CoverageReportService {
         }
         String assertionRef = stringValue(run.get("assertions"));
         if (assertionRef.isBlank()) {
-            return List.of("assertion_status: failed", "assertion_evidence: missing");
+            return List.of(assertionFailureDetail(
+                    "assertions",
+                    "Review assertion configuration and ensure failed runs write assertion evidence.",
+                    "assertion_status: failed",
+                    "assertion_evidence: missing"));
         }
         Path assertionPath = runDir.resolve(assertionRef).normalize();
         if (!Files.exists(assertionPath)) {
-            return List.of("assertion_status: failed", "assertion_evidence: " + assertionRef + " missing");
+            return List.of(assertionFailureDetail(
+                    assertionRef,
+                    "Restore or regenerate the missing assertion evidence before release review.",
+                    "assertion_status: failed",
+                    "assertion_evidence: " + assertionRef + " missing"));
         }
         Object entries = readYamlMap(assertionPath).get("assertions");
         if (!(entries instanceof List<?> list) || list.isEmpty() || !(list.get(0) instanceof Map<?, ?> assertion)) {
-            return List.of("assertion_status: failed", "assertion_evidence: " + assertionRef + " unreadable");
+            return List.of(assertionFailureDetail(
+                    assertionRef,
+                    "Fix assertion evidence format so release review can inspect the failure.",
+                    "assertion_status: failed",
+                    "assertion_evidence: " + assertionRef + " unreadable"));
         }
-        List<String> details = new ArrayList<>();
-        details.add("assertion_status: " + stringValue(assertion.get("status")));
-        details.add("assertion_evidence: " + assertionRef);
-        details.add("expected_ref: " + stringValue(assertion.get("expected_ref")));
-        details.add("actual_ref: " + stringValue(assertion.get("actual_ref")));
-        details.add("decision_rule: " + stringValue(assertion.get("decision_rule")));
-        details.add("diff_summary: " + stringValue(assertion.get("diff_summary")));
-        return details;
+        return List.of(assertionFailureDetail(
+                assertionRef,
+                "Review assertion evidence, fix the product behavior or approve updated expected results, then rerun.",
+                "assertion_status: " + stringValue(assertion.get("status")),
+                "assertion_evidence: " + assertionRef,
+                "expected_ref: " + stringValue(assertion.get("expected_ref")),
+                "actual_ref: " + stringValue(assertion.get("actual_ref")),
+                "decision_rule: " + stringValue(assertion.get("decision_rule")),
+                "diff_summary: " + stringValue(assertion.get("diff_summary"))));
+    }
+
+    private String assertionFailureDetail(String fieldPath, String ownerAction, String... extraLines) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("ap: Oracle and Assertion Engine\n");
+        builder.append("    field_path: ").append(fieldPath).append("\n");
+        builder.append("    reason: assertion_failed\n");
+        for (String line : extraLines) {
+            if (line != null && !line.isBlank()) {
+                builder.append("    ").append(line).append("\n");
+            }
+        }
+        builder.append("    owner_action: ").append(ownerAction);
+        return builder.toString();
     }
 
     private boolean isUnapprovedExclusion(Map<?, ?> item) {

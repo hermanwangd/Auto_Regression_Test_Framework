@@ -1368,6 +1368,9 @@ class RegressionCommandTest {
         assertThat(reportExit).isEqualTo(1);
         assertThat(output.toString()).contains("report_status: not_review_ready");
         assertThat(failureSummary).contains("run_status: failed");
+        assertThat(failureSummary).contains("ap: Oracle and Assertion Engine");
+        assertThat(failureSummary).contains("reason: assertion_failed");
+        assertThat(failureSummary).contains("owner_action: Review assertion evidence");
         assertThat(failureSummary).contains("assertion_status: failed");
         assertThat(failureSummary).contains("expected_ref: expected/output/orders.csv");
         assertThat(failureSummary).contains("actual_ref: actual/output.txt");
