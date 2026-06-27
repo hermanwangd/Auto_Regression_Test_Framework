@@ -31,6 +31,7 @@ Minimum verification rule for DSL/AP clarity:
 - A structured verify rule shall keep `actual` as the captured output reference and declare `selector` as the canonical field path. Missing `selector` for `json_path_equals` or `json_path_absent` shall block before provider dispatch or assertion evaluation.
 - Baseline, spec, architecture, and AC documents shall use the same seven AP names and shall not introduce hidden AP-level components.
 - Every required or conditional DSL field shall map to a primary AP consumer and have a clear reason for being required.
+- A verify rule shall declare the truth source required by its type: captured-output `actual` and `expected`, provider metadata plus `expected`, or target/query/event semantics.
 - Before implementation starts for any DSL, AP, provider runtime, evidence, or report change, the feature/spec, architecture design, artifact contract, AC, implementation plan, and test plan shall describe the same behavior, non-goals, required/conditional/prohibited fields, happy/failure/boundary paths, and verification evidence.
 - Provider implementation settings shall be validated through RP/RU mapping or provider contracts, not embedded directly inside DSL test cases.
 - Provider contracts shall be validated against a capability registry by explicit `provider_family`, `provider_type`, required fields, supported runtime status, execution mode, and evidence output requirements.
@@ -174,13 +175,13 @@ Existing checked-in approved tests for the same RP AC shall not be silently over
 
 ### Happy Path
 
-Given an expected-result artifact, schema, contract, DB query ref, event expectation, or file expectation used for regression evaluation
+Given an expected-result artifact, schema, contract, DB query ref, event expectation, file expectation, deterministic inline expectation, or provider metadata expectation used for regression evaluation
 When it is checked for regression eligibility
-Then the DSL shall reference it through `expected_results` and a `verify` item with explicit `actual` and `expected`, or with explicit `target` plus `query` or `event` semantics for state and event checks.
+Then the DSL shall reference reusable truth through `expected_results` when needed and a `verify` item with explicit captured-output `actual` and `expected`, provider metadata plus `expected`, or explicit `target` plus `query` or `event` semantics for state and event checks.
 
 ### Failure Path
 
-Given a missing expected result, missing `actual`, missing `expected`, missing or unresolved `selector` for structured output verification, unsupported verify type, or missing query/event reference
+Given a missing expected result, missing required captured-output `actual`, missing `expected`, missing provider metadata required by the verify type, missing or unresolved `selector` for structured output verification, unsupported verify type, or missing query/event reference
 When normal regression execution is requested
 Then the run shall be blocked before adapter execution or assertion evaluation and report the missing field, verify ID, and owner action.
 
@@ -193,6 +194,10 @@ Then the `verify` item shall still declare its type, actual source, expected val
 Given a `json_path_equals` or `json_path_absent` verify rule
 When the DSL test is checked
 Then `actual` shall reference a captured output and `selector` shall declare the JSON/YAML path being evaluated. Compatibility aliases `path` or `json_path` may be read from migrated artifacts, but new generated DSL shall use `selector`.
+
+Given a `response_status_equals` verify rule
+When the DSL test is checked
+Then it shall declare `expected`, and it may omit `actual` only when the selected request/response provider supplies HTTP status metadata in execution evidence.
 
 ## AC-007 Regression Runs Produce Durable Evidence
 

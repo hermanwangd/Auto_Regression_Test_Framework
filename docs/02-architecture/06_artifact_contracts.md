@@ -402,7 +402,7 @@ Core `verify[].type` values for v1 are:
 | Group | Verify Types |
 |---|---|
 | Basic | `equals`, `not_equals`, `exists`, `not_exists`, `contains`, `regex_match` |
-| Structured output | `json_path_equals`, `json_path_absent`, `response_status_equals` |
+| Response and structured output | `json_path_equals`, `json_path_absent`, `response_status_equals` |
 | Structure | `schema_match`, `schema_matches`, `contract_match`, `contract_matches` |
 | Collection | `list_size_equals`, `unordered_list_equals` |
 | Numeric | `numeric_tolerance` |
@@ -410,11 +410,13 @@ Core `verify[].type` values for v1 are:
 | State | `db_record_exists`, `db_row_matches` |
 | Event | `event_published` |
 
-For normal comparison checks, each `verify` item must define explicit `actual` and `expected`. `actual` identifies the captured output or evidence source. Use `selector` when comparing part of a structured actual result. New DSL artifacts must not overload `actual` with a JSONPath expression when a captured output ref is required.
+For captured-output comparison checks, each `verify` item must define explicit `actual` and `expected`. `actual` identifies the captured output or evidence source. Use `selector` when comparing part of a structured actual result. New DSL artifacts must not overload `actual` with a JSONPath expression when a captured output ref is required.
+
+Some verify types consume provider metadata instead of a captured output body. `response_status_equals` may declare only `expected` when the selected request/response provider writes HTTP status metadata into provider evidence. It shall declare `actual` plus `selector` only when the status is read from a structured captured output.
 
 `selector` is the canonical v1 field for JSON/YAML path selection. `path` and `json_path` are accepted only as compatibility aliases while older artifacts migrate. New generator output and new checked-in RP tests must use `selector`.
 
-Required selector rules:
+Required verify source rules:
 
 | Verify Type | Required Fields |
 |---|---|
@@ -425,6 +427,9 @@ Required selector rules:
 
 ```yaml
 verify:
+  - id: verify_http_status
+    type: response_status_equals
+    expected: 202
   - id: verify_response_status
     type: equals
     actual: ${execute.create_order.outputs.response_body}

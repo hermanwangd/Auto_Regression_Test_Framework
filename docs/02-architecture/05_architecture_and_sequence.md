@@ -80,7 +80,7 @@ CLI Orchestrator
 | Planning and Binding | Resolve targets, setup fixtures, execute inputs/outputs, expected results, verify references, runtime references, and provider contracts into an execution plan | AC-005, AC-007 |
 | Fixture and State Manager | Check preconditions, set up fixtures, seed or publish data, enforce cleanup, and validate postconditions | AC-007 |
 | Execution Engine | Execute planned operations through provider registry dispatch, manage execution modes, captured outputs, timeout, retry, and adapter/provider result capture | AC-007 |
-| Oracle and Assertion Engine | Resolve expected-result truth sources and evaluate actual outputs through verify rules, including selector-based structured output checks | AC-006, AC-007 |
+| Oracle and Assertion Engine | Resolve expected-result truth sources and evaluate actual outputs or provider metadata through verify rules, including selector-based structured output checks | AC-006, AC-007 |
 | Evidence and Reporting | Persist batch summaries, run evidence, observations, cleanup results, failures, traceability, coverage, and release-review reports | AC-007, AC-009 |
 
 Internal module mapping:
@@ -120,7 +120,7 @@ AP boundary contract:
 | Planning and Binding | Fixture setup or adapter/provider execution | Test case ID, AC ID, unresolved target, setup fixture, execute input, expected-result ref, verify ref, evidence ref, runtime policy, provider contract key, owner action |
 | Fixture and State Manager | Adapter execution when setup is unsafe or incomplete | Test case ID, setup action, cleanup requirement, state scope, owner action |
 | Execution Engine | Verify evaluation when an execute operation fails | Execute step ID, provider or adapter, operation, exit code or timeout, log refs, owner action |
-| Oracle and Assertion Engine | Pass/fail reporting when truth or comparison rule is missing | Verify ID, expected-result ref, expected-result approval status when applicable, actual ref, owner action |
+| Oracle and Assertion Engine | Pass/fail reporting when truth or comparison rule is missing | Verify ID, expected-result ref, expected-result approval status when applicable, actual ref or provider metadata source, owner action |
 | Evidence and Reporting | Release-review-ready claim | Missing evidence type, affected AC/test/run, coverage impact, owner action |
 
 APs communicate through structured reports and execution-plan records, not hidden side effects. Each AP output must be durable enough to explain why the next AP did or did not run.
@@ -246,7 +246,7 @@ Boundary rules:
 - `fixture` owns setup, cleanup, precondition, and postcondition lifecycle coordination.
 - `execution` executes a prepared plan and records operation results; it does not own schema validation, binding resolution, provider contract resolution, or fixture policy.
 - `oracle` loads expected-result sources and decision parameters; `assertion` applies verify rules against actual outputs.
-- `assertion` evaluates structured output selectors declared by DSL verify rules; it must not infer missing JSONPath selectors for `json_path_equals` or `json_path_absent` in new execution-focused DSL artifacts.
+- `assertion` evaluates structured output selectors declared by DSL verify rules; it must not infer missing JSONPath selectors for `json_path_equals` or `json_path_absent` in new execution-focused DSL artifacts. Provider metadata checks, such as `response_status_equals`, may use request/response provider evidence without a DSL `actual` field when the provider contract supplies HTTP status metadata.
 - `adapter` is the legacy shell/file execution boundary. New heterogeneous behavior should enter through provider registry entries before considering adapter-specific or external-runner behavior.
 - `evidence` and `report` write durable evidence under the RP release record.
 
@@ -486,7 +486,7 @@ Minimum provider contract rules:
 - A provider contract must reference inputs, queries, payloads, secrets, or environment resources by reference, not inline sensitive values.
 - Fixture providers that mutate state must declare cleanup strategy.
 - Expected-result readers must declare truth source type, source reference, and allowed usage.
-- Verify providers must declare verify type, actual/expected requirements, selector/query/event requirements, and comparison or decision rule.
+- Verify providers must declare verify type, actual/expected requirements, provider metadata requirements when applicable, selector/query/event requirements, and comparison or decision rule.
 - Evidence collectors must declare source and collection rule.
 
 Runtime rules:

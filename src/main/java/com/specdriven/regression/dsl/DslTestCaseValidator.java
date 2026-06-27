@@ -73,8 +73,7 @@ public class DslTestCaseValidator {
             "schema_matches",
             "contract_match",
             "contract_matches",
-            "json_path_equals",
-            "response_status_equals");
+            "json_path_equals");
     private static final Set<String> VERIFY_TYPES_REQUIRING_ACTUAL_ONLY = Set.of(
             "exists",
             "not_exists",
@@ -392,6 +391,15 @@ public class DslTestCaseValidator {
                         "Declare expected source or value for verify rule `" + verifyId + "`.", prefix + ".expected", verifyId);
                 validateReference(rule.get("actual"), prefix + ".actual", "verify", verifyId, expectedNames,
                         executeOutputs, Set.of(), testCaseId, acId, gaps);
+                validateExpectedReference(rule.get("expected"), prefix + ".expected", verifyId, expectedNames,
+                        testCaseId, acId, gaps);
+            } else if ("response_status_equals".equals(type)) {
+                requirePresent(rule, "expected", "verify", testCaseId, acId, gaps,
+                        "Declare expected status for verify rule `" + verifyId + "`.", prefix + ".expected", verifyId);
+                if (!isMissing(rule.get("actual"))) {
+                    validateReference(rule.get("actual"), prefix + ".actual", "verify", verifyId, expectedNames,
+                            executeOutputs, Set.of(), testCaseId, acId, gaps);
+                }
                 validateExpectedReference(rule.get("expected"), prefix + ".expected", verifyId, expectedNames,
                         testCaseId, acId, gaps);
             } else if (VERIFY_TYPES_REQUIRING_ACTUAL_ONLY.contains(type)) {

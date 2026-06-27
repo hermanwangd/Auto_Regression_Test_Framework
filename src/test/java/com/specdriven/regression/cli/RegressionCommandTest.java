@@ -2241,6 +2241,60 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runExecutesExecutionFocusedDslV1ResponseStatusFromProviderMetadata() throws Exception {
+        AtomicReference<String> requestBody = new AtomicReference<>("");
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/payments", exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+            String response = "{\"status\":\"accepted\",\"paymentId\":\"PAY-001\"}\n";
+            exchange.sendResponseHeaders(202, response.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
+            exchange.getResponseBody().write(response.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            exchange.close();
+        });
+        server.start();
+        try {
+            RegressionCommand command = command();
+            String rpId = "RP-REST-STATUS";
+            String acId = rpId + "-AC-001";
+            command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                    print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+            command.execute(new String[] {
+                    "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_api"},
+                    print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+            writeReadyAcceptanceCriteria(rpId, acId);
+            writeRestProviderMapping(rpId, server.getAddress().getPort(), "call_api", "payment_payload");
+            writeRestPayload(rpId);
+            writeApprovedExecutionFocusedRestStatusTestCase(rpId, acId);
+            ByteArrayOutputStream runOutput = new ByteArrayOutputStream();
+
+            int runExit = command.execute(new String[] {
+                    "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral"},
+                    print(runOutput), print(new ByteArrayOutputStream()));
+
+            Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
+            assertThat(runExit).as(runOutput.toString()).isZero();
+            assertThat(requestBody.get()).isEqualTo("{\"amount\":100,\"currency\":\"USD\"}\n");
+            assertThat(Files.readString(runDir.resolve("request_response.yaml")))
+                    .contains("provider_family: request_response")
+                    .contains("http_status: 202")
+                    .contains("actual_output: actual/response.json");
+            assertThat(Files.readString(runDir.resolve("run.yaml")))
+                    .contains("status: passed")
+                    .contains("dsl_runtime:")
+                    .contains("type: response_status_equals")
+                    .contains("expected: 202")
+                    .contains("provider_family: request_response")
+                    .contains("assertion_status: passed");
+            assertThat(Files.readString(runDir.resolve("assertions.yaml")))
+                    .contains("type: response_status_equals")
+                    .contains("decision_rule: response_status_equals")
+                    .contains("response status `http_status` matched `202`");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void runWritesCleanupEvidenceForMutatingFixtureWithCleanupPolicy() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -4166,6 +4220,61 @@ class RegressionCommandTest {
                   retry:
                     max_attempts: 0
                 """.formatted(rpId, rpId, acId, acId, rpId));
+    }
+
+    private void writeApprovedExecutionFocusedRestStatusTestCase(String rpId, String acId) throws Exception {
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s-TC-001
+                status: active
+                revision: 1
+                traceability:
+                  package_id: %s
+                  acceptance_criteria_id: %s
+                  source: acceptance_criteria.md#%s
+                targets:
+                  RU-payment-api:
+                    type: application
+                    runner: request_response
+                    environment: ci://payment/api
+                scenario:
+                  type: integration
+                  scope: release_package
+                  description: Submit a payment request and verify the HTTP status from provider metadata.
+                  capabilities: [api_payload, request_response, response_assertion]
+                setup:
+                  fixtures: {}
+                execute:
+                  - id: submit_payment
+                    target: RU-payment-api
+                    operation: call_api
+                    with:
+                      payment_payload:
+                        type: api_payload
+                        ref: fixtures/api/payment_payload.json
+                    outputs:
+                      actual_response:
+                        ref: actual/response.json
+                      execution_log:
+                        ref: logs/response.log
+                expected_results: {}
+                verify:
+                  - id: verify_http_status
+                    type: response_status_equals
+                    expected: 202
+                evidence:
+                  required:
+                    - ${execute.submit_payment.outputs.execution_log}
+                    - ${execute.submit_payment.outputs.actual_response}
+                    - ${verify.verify_http_status.result}
+                runtime:
+                  timeout: PT10M
+                  retry:
+                    max_attempts: 0
+                """.formatted(rpId, rpId, acId, acId));
     }
 
     private void writeApprovedTestCase(String rpId, String testCaseId, String acId, String bindingType)

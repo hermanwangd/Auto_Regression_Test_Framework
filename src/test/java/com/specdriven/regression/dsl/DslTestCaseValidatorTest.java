@@ -143,6 +143,27 @@ class DslTestCaseValidatorTest {
     }
 
     @Test
+    void acceptsResponseStatusVerifyWithoutActualWhenProviderMetadataIsUsed() {
+        String yaml = validExecutionFocusedDsl()
+                .replace("""
+                  - id: verify_output
+                    type: file_diff
+                    actual: ${execute.run_pipeline.outputs.actual_output}
+                    expected: ${expected_results.primary.ref}
+                """, """
+                  - id: verify_http_status
+                    type: response_status_equals
+                    expected: 202
+                """)
+                .replace("${verify.verify_output.result}", "${verify.verify_http_status.result}");
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.gaps()).isEmpty();
+    }
+
+    @Test
     void reportsSyntaxGapForInvalidYamlInsteadOfThrowing() {
         DslValidationReport report = new DslTestCaseValidator().validate("""
                 dsl_version: v1

@@ -146,7 +146,7 @@ The DSL must answer execution questions in a package-neutral, execution-focused 
 | What targets are involved? | `targets` and `execute[].target` | Inferring RP/RU membership or deployment topology |
 | What data or state is needed? | `setup.fixtures` and `execute[].with` | Inline secrets, physical DB connection strings, or package-specific loaders |
 | What operation is performed? | `execute[].operation`, target, runtime inputs, and captured outputs | Shell scripts, endpoint URLs, queue drivers, or deployment commands embedded in the test |
-| How is pass/fail decided? | `expected_results` and `verify[]` with explicit actual/expected or target/query/event semantics | Approving expected-result truth or inventing business rules |
+| How is pass/fail decided? | `expected_results` and `verify[]` with explicit captured-output actual/expected, provider-metadata expected, or target/query/event semantics | Approving expected-result truth or inventing business rules |
 | What must be retained? | `evidence.required` traceable to execution or verification outputs | Release approval or waiver approval |
 | What runtime policy applies? | `runtime.timeout` and `runtime.retry` | Release gate, waiver, or risk approval workflow |
 
@@ -188,7 +188,8 @@ Conditional fields are required only when the scenario needs them:
 | `setup.fixtures.<name>.cleanup_ref` | The test creates, mutates, seeds, publishes, or deletes state. | Hidden destructive actions without cleanup references. |
 | `execute[].with` | Runtime inputs are passed to the selected operation. | Secrets, endpoint URLs, connection strings, or provider code. |
 | `execute[].outputs` | Later verification or evidence references execution output. | Uncaptured implicit result paths. |
-| `verify[].selector` | A verify rule compares or checks a field inside a structured actual result, including `json_path_equals`, `json_path_absent`, and structured `numeric_tolerance` checks. `actual` names the captured output; `selector` names the JSON/YAML path inside it. | Provider-specific parser code, captured-output refs overloaded as JSONPath expressions, or runtime-inferred selectors. |
+| `verify[].actual` | A verify rule reads a captured output file or captured execution value. It is not required when the verify type consumes provider metadata, such as HTTP status supplied by the request/response provider. | Hidden provider lookup rules or JSONPath expressions overloaded into the actual ref. |
+| `verify[].selector` | A verify rule compares or checks a field inside a structured actual result, including `json_path_equals`, `json_path_absent`, and structured `numeric_tolerance` checks. `actual` names the captured output; `selector` names the JSON/YAML path inside it. It is not required for provider metadata checks that do not read a structured actual body. | Provider-specific parser code, captured-output refs overloaded as JSONPath expressions, or runtime-inferred selectors. |
 | `verify[].target`, `verify[].query`, or `verify[].event` | The check validates DB state or published events. | Inline credentials, physical connection strings, or unreviewed destructive SQL. |
 | `verify[].options` | The check needs timeout, polling, tolerance, normalization, or ignore paths. | Release gate or risk approval policy. |
 | `parameters.strategy`, `parameters.cases[].case_id`, `parameters.cases[].values` | The test uses parameterization. M1 supports only `explicit_cases`. | Dynamic data discovery, combinatorial generation, secrets, or unreviewed runtime-created cases. |
@@ -205,6 +206,7 @@ New execution-focused DSL artifacts must:
 - Use `targets`, `setup` when needed, `execute`, `expected_results` when needed, `verify`, `evidence`, and `runtime` instead of framework-internal legacy fields.
 - Capture `execute[].outputs` whenever verification or evidence references execution results.
 - For structured output checks, keep `actual` as the captured output reference and declare `selector` as the canonical field path. `path` and `json_path` are compatibility aliases only; new generated DSL must use `selector`.
+- For provider metadata checks such as `response_status_equals`, declare the deterministic `expected` value and let request/response provider evidence supply the HTTP status. Declare `actual` plus `selector` only when the status is read from a captured structured output.
 - Use `parameters.strategy: explicit_cases` only when the reviewed test artifact must run the same behavior against multiple named input variants.
 - Keep provider implementation details in RP/RU mapping or provider contracts, not inside the test case body.
 - Fail validation before execution when required fields, conditional fields, or supported enum values are missing.
@@ -387,7 +389,7 @@ Product developers own AC clarification and manual expected-result input. QA or 
 
 - Read `rp_feature_spec.md`, `acceptance_criteria.md`, `rp_ru_mapping.yaml`, target references, setup fixture references, execute operation references, expected-result references, verify rules, and validation boundaries.
 - Check AC readiness: AC ID, linked RP feature, observable input, behavior, expected output, and pass/fail condition.
-- Check execution context readiness: scenario type/scope/capabilities, named targets, target runner, environment reference, setup fixture or data source, cleanup reference when state is mutated, execute operation, execute input refs, execute output refs, deployment requirement, validation boundary, expected_results refs, verify type, verify actual/expected or target/query/event semantics, evidence refs, and runtime policy.
+- Check execution context readiness: scenario type/scope/capabilities, named targets, target runner, environment reference, setup fixture or data source, cleanup reference when state is mutated, execute operation, execute input refs, execute output refs, deployment requirement, validation boundary, expected_results refs, verify type, captured-output actual/expected, provider-metadata expected, or target/query/event semantics, evidence refs, and runtime policy.
 - Map each generated DSL section to the AP that will consume it: identity and traceability to Definition and Validation, targets/setup/execute inputs to Planning and Binding, setup fixture fields to Fixture and State Manager, execute operations to Execution Engine, expected_results/verify to Oracle and Assertion Engine, and evidence/runtime fields to Evidence and Reporting.
 - Refuse executable drafting when an AP cannot be selected or when a required AP input would have to be invented by the agent.
 - Mark ambiguous AC as `not_ready_for_generation`.
