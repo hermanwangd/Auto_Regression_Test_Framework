@@ -10,6 +10,7 @@ import com.specdriven.regression.binding.BindingResolver;
 import com.specdriven.regression.binding.ResolvedBinding;
 import com.specdriven.regression.evidence.EvidenceWriter;
 import com.specdriven.regression.provider.DatabaseFixtureProvider;
+import com.specdriven.regression.provider.DeploymentReadinessProvider;
 import com.specdriven.regression.provider.MessagingProvider;
 import com.specdriven.regression.provider.ProviderContractResolutionReport;
 import com.specdriven.regression.provider.ProviderContractResolver;
@@ -37,6 +38,7 @@ public class ExecutionEngine {
     private final RequestResponseProvider requestResponseProvider;
     private final DatabaseFixtureProvider databaseFixtureProvider;
     private final MessagingProvider messagingProvider;
+    private final DeploymentReadinessProvider deploymentReadinessProvider;
 
     public ExecutionEngine() {
         this(new DataPipelineAdapter(), new AssertionEngine(), new EvidenceWriter());
@@ -61,7 +63,8 @@ public class ExecutionEngine {
             BindingResolver bindingResolver,
             ProviderContractResolver providerContractResolver) {
         this(adapter, assertionEngine, evidenceWriter, bindingResolver, providerContractResolver,
-                new RequestResponseProvider(), new DatabaseFixtureProvider(), new MessagingProvider());
+                new RequestResponseProvider(), new DatabaseFixtureProvider(), new MessagingProvider(),
+                new DeploymentReadinessProvider());
     }
 
     public ExecutionEngine(
@@ -72,7 +75,8 @@ public class ExecutionEngine {
             ProviderContractResolver providerContractResolver,
             RequestResponseProvider requestResponseProvider) {
         this(adapter, assertionEngine, evidenceWriter, bindingResolver, providerContractResolver,
-                requestResponseProvider, new DatabaseFixtureProvider(), new MessagingProvider());
+                requestResponseProvider, new DatabaseFixtureProvider(), new MessagingProvider(),
+                new DeploymentReadinessProvider());
     }
 
     public ExecutionEngine(
@@ -84,7 +88,8 @@ public class ExecutionEngine {
             RequestResponseProvider requestResponseProvider,
             DatabaseFixtureProvider databaseFixtureProvider) {
         this(adapter, assertionEngine, evidenceWriter, bindingResolver, providerContractResolver,
-                requestResponseProvider, databaseFixtureProvider, new MessagingProvider());
+                requestResponseProvider, databaseFixtureProvider, new MessagingProvider(),
+                new DeploymentReadinessProvider());
     }
 
     public ExecutionEngine(
@@ -96,6 +101,21 @@ public class ExecutionEngine {
             RequestResponseProvider requestResponseProvider,
             DatabaseFixtureProvider databaseFixtureProvider,
             MessagingProvider messagingProvider) {
+        this(adapter, assertionEngine, evidenceWriter, bindingResolver, providerContractResolver,
+                requestResponseProvider, databaseFixtureProvider, messagingProvider,
+                new DeploymentReadinessProvider());
+    }
+
+    public ExecutionEngine(
+            DataPipelineAdapter adapter,
+            AssertionEngine assertionEngine,
+            EvidenceWriter evidenceWriter,
+            BindingResolver bindingResolver,
+            ProviderContractResolver providerContractResolver,
+            RequestResponseProvider requestResponseProvider,
+            DatabaseFixtureProvider databaseFixtureProvider,
+            MessagingProvider messagingProvider,
+            DeploymentReadinessProvider deploymentReadinessProvider) {
         this.adapter = adapter;
         this.assertionEngine = assertionEngine;
         this.evidenceWriter = evidenceWriter;
@@ -104,6 +124,7 @@ public class ExecutionEngine {
         this.requestResponseProvider = requestResponseProvider;
         this.databaseFixtureProvider = databaseFixtureProvider;
         this.messagingProvider = messagingProvider;
+        this.deploymentReadinessProvider = deploymentReadinessProvider;
     }
 
     public ExecutionResult execute(Path packageRoot, Path testCasePath, String batchId, String runId) {
@@ -210,6 +231,16 @@ public class ExecutionEngine {
                     contract,
                     testCase,
                     resolvedBindings,
+                    runDir,
+                    stdoutLog,
+                    stderrLog,
+                    actualOutput);
+        }
+        if ("deployment_readiness".equals(providerFamily)) {
+            return deploymentReadinessProvider.execute(
+                    adapterName(testCase),
+                    packageRoot,
+                    contract,
                     runDir,
                     stdoutLog,
                     stderrLog,

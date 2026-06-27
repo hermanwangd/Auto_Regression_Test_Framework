@@ -681,6 +681,78 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runExecutesLocalDeploymentReadinessProviderAndWritesEvidence() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-READY";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "deployment"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeDeploymentReadinessMapping(rpId);
+        writeDeploymentReadyMarker(rpId);
+        writeApprovedExpectedResult(rpId, acId, "ready\n");
+        writeApprovedDeploymentReadinessTestCase(rpId, acId);
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
+        String runEvidence = Files.readString(runDir.resolve("run.yaml"));
+        assertThat(exit).isZero();
+        assertThat(Files.readString(runDir.resolve("readiness.yaml")))
+                .contains("status: passed")
+                .contains("provider: k8s_readiness")
+                .contains("provider_type: local")
+                .contains("readiness_probe: file_exists")
+                .contains("deployment_ref: fixtures/readiness/payment-api.ready")
+                .contains("check_count: 1");
+        assertThat(Files.readString(runDir.resolve("actual/readiness.txt"))).isEqualTo("ready\n");
+        assertThat(runEvidence)
+                .contains("status: passed")
+                .contains("provider_family: deployment_readiness")
+                .contains("contract_path: release_units[0].provider_contracts.adapters.k8s_readiness")
+                .contains("actual_output: actual/readiness.txt")
+                .contains("assertion_status: passed");
+    }
+
+    @Test
+    void runFailsDeploymentReadinessWhenMarkerIsMissing() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-READY-MISSING";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "deployment"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeDeploymentReadinessMapping(rpId);
+        writeApprovedExpectedResult(rpId, acId, "ready\n");
+        writeApprovedDeploymentReadinessTestCase(rpId, acId);
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
+        assertThat(exit).isEqualTo(1);
+        assertThat(Files.readString(runDir.resolve("readiness.yaml")))
+                .contains("status: failed")
+                .contains("provider: k8s_readiness")
+                .contains("deployment_ref: fixtures/readiness/payment-api.ready")
+                .contains("check_count: 0")
+                .contains("Deployment readiness marker not found");
+        assertThat(Files.readString(runDir.resolve("run.yaml")))
+                .contains("status: failed")
+                .contains("provider_family: deployment_readiness")
+                .contains("assertion_status: not_run");
+    }
+
+    @Test
     void runExecutesDbFixtureSetupAndCleanupWithEvidence() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-DB";
@@ -1608,6 +1680,52 @@ class RegressionCommandTest {
         Files.writeString(eventPayload, payload);
     }
 
+    private void writeDeploymentReadinessMapping(String rpId) throws Exception {
+        Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        Files.writeString(mapping, """
+                rp_id: %s
+                release_units:
+                  - ru_id: RU-payment-k8s
+                    repo: /repo/payment-k8s
+                    unit_type: deployment
+                    owner: platform
+                    version_ref: deploy-123
+                    validation_boundary: deployed_service
+                    execution_mode: ci_ephemeral
+                    deployment_required: true
+                    environment_ref: ci://payment/k8s
+                    adapter: k8s_readiness
+                    provider_contracts:
+                      adapters:
+                        k8s_readiness:
+                          provider_family: deployment_readiness
+                          provider_type: local
+                          readiness_probe: file_exists
+                          target_selector: deployment/payment-api
+                          deployment_ref: fixtures/readiness/payment-api.ready
+                          timeout_seconds: 10
+                          logs:
+                            stdout: logs/readiness.log
+                            stderr: logs/readiness-error.log
+                          outputs:
+                            actual_output_ref: actual/readiness.txt
+                      bindings: {}
+                      fixtures: {}
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [readiness_result]
+                    dependencies: []
+                """.formatted(rpId));
+    }
+
+    private void writeDeploymentReadyMarker(String rpId) throws Exception {
+        Path marker = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/fixtures/readiness/payment-api.ready");
+        Files.createDirectories(marker.getParent());
+        Files.writeString(marker, "ready\n");
+    }
+
     private void writeDbFixtureMapping(String rpId, String jdbcUrl) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
         Files.writeString(mapping, """
@@ -1904,6 +2022,51 @@ class RegressionCommandTest {
                 evidence_required:
                   - execution_log
                   - message_event
+                """.formatted(rpId, rpId, acId, acId, expectedResultId, expectedResultId));
+    }
+
+    private void writeApprovedDeploymentReadinessTestCase(String rpId, String acId) throws Exception {
+        String expectedResultId = acId.replace("-AC-", "-ER-");
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s-TC-001
+                rp_id: %s
+                ac_id: %s
+                artifact_status: approved_for_regression
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
+                source_fingerprint: sha256:test
+                execution_target:
+                  ru_id: RU-payment-k8s
+                  adapter: k8s_readiness
+                  execution_mode: ci_ephemeral
+                  environment_ref: ci://payment/k8s
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [deployment_readiness, file_assertion]
+                expected:
+                  ref: expected-results/approved/%s.yaml
+                oracles:
+                  readiness_result:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
+                package_inputs:
+                  inputs: {}
+                steps:
+                  - id: check_deployment
+                    action: check_readiness
+                    target_ru_id: RU-payment-k8s
+                assertions:
+                  - type: file_diff
+                    oracle: ${oracles.readiness_result}
+                evidence_required:
+                  - execution_log
+                  - readiness_result
                 """.formatted(rpId, rpId, acId, acId, expectedResultId, expectedResultId));
     }
 
