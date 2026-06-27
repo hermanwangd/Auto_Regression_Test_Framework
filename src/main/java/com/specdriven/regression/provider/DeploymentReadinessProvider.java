@@ -12,6 +12,16 @@ import org.springframework.stereotype.Component;
 @Component
 public class DeploymentReadinessProvider {
 
+    private final DeploymentReadinessProbe readinessProbe;
+
+    public DeploymentReadinessProvider() {
+        this(new DefaultDeploymentReadinessProbe());
+    }
+
+    DeploymentReadinessProvider(DeploymentReadinessProbe readinessProbe) {
+        this.readinessProbe = readinessProbe;
+    }
+
     public AdapterExecutionResult execute(
             String providerName,
             Path packageRoot,
@@ -26,8 +36,29 @@ public class DeploymentReadinessProvider {
             Files.createDirectories(actualOutput.getParent());
 
             String providerType = stringValue(contract.get("provider_type"));
-            String readinessProbe = stringValue(contract.get("readiness_probe"));
+            String readinessProbeName = stringValue(contract.get("readiness_probe"));
             String deploymentRef = firstText(contract, "deployment_ref", "service_ref", "target_selector");
+            if (isNativeProvider(providerType)) {
+                DeploymentReadinessProbeResult probeResult = readinessProbe.check(new DeploymentReadinessProbeRequest(
+                        providerName,
+                        providerType,
+                        readinessProbeName,
+                        stringValue(contract.get("kube_context_ref")),
+                        stringValue(contract.get("namespace_ref")),
+                        stringValue(contract.get("deployment_ref")),
+                        stringValue(contract.get("service_ref")),
+                        stringValue(contract.get("target_selector")),
+                        stringValue(contract.get("host_ref")),
+                        intValue(contract.get("port"), 0),
+                        stringValue(contract.get("deployed_version_ref")),
+                        intValue(contract.get("timeout_seconds"), 300),
+                        contract));
+                Files.writeString(stdoutLog, probeResult.stdout());
+                Files.writeString(stderrLog, "");
+                Files.writeString(actualOutput, probeResult.actualOutput());
+                writeReadinessEvidence(runDir, providerName, contract, "passed", "", probeResult.checkCount());
+                return new AdapterExecutionResult(0, false, stdoutLog, stderrLog, actualOutput);
+            }
             if (!isLocalProvider(providerType)) {
                 return fail(
                         runDir,
@@ -38,7 +69,7 @@ public class DeploymentReadinessProvider {
                         contract,
                         "Unsupported deployment readiness provider_type `" + providerType + "` for local execution.");
             }
-            if (!"file_exists".equals(readinessProbe)) {
+            if (!"file_exists".equals(readinessProbeName)) {
                 return fail(
                         runDir,
                         stdoutLog,
@@ -46,7 +77,7 @@ public class DeploymentReadinessProvider {
                         actualOutput,
                         providerName,
                         contract,
-                        "Unsupported local readiness_probe `" + readinessProbe + "`.");
+                        "Unsupported local readiness_probe `" + readinessProbeName + "`.");
             }
             if (deploymentRef.isBlank() || !Files.exists(packageRoot.resolve(deploymentRef))) {
                 return fail(
@@ -62,10 +93,24 @@ public class DeploymentReadinessProvider {
             Files.writeString(stdoutLog, "readiness passed for " + deploymentRef + "\n");
             Files.writeString(stderrLog, "");
             Files.writeString(actualOutput, "ready\n");
-            writeReadinessEvidence(runDir, providerName, contract, "passed", "");
+            writeReadinessEvidence(runDir, providerName, contract, "passed", "", 1);
             return new AdapterExecutionResult(0, false, stdoutLog, stderrLog, actualOutput);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Deployment readiness provider interrupted.", e);
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to execute deployment readiness provider.", e);
+            try {
+                return fail(
+                        runDir,
+                        stdoutLog,
+                        stderrLog,
+                        actualOutput,
+                        providerName,
+                        contract,
+                        e.getMessage() == null ? "Failed to execute deployment readiness provider." : e.getMessage());
+            } catch (IOException writeFailure) {
+                throw new UncheckedIOException("Failed to execute deployment readiness provider.", writeFailure);
+            }
         }
     }
 
@@ -80,7 +125,7 @@ public class DeploymentReadinessProvider {
         Files.writeString(stdoutLog, "");
         Files.writeString(stderrLog, message);
         Files.writeString(actualOutput, "");
-        writeReadinessEvidence(runDir, providerName, contract, "failed", message);
+        writeReadinessEvidence(runDir, providerName, contract, "failed", message, 0);
         return new AdapterExecutionResult(1, false, stdoutLog, stderrLog, actualOutput);
     }
 
@@ -89,21 +134,27 @@ public class DeploymentReadinessProvider {
             String providerName,
             Map<String, Object> contract,
             String status,
-            String error) throws IOException {
+            String error,
+            int checkCount) throws IOException {
         Files.createDirectories(runDir);
         StringBuilder builder = new StringBuilder();
         builder.append("status: ").append(status).append("\n");
         builder.append("provider: ").append(providerName).append("\n");
         appendIfPresent(builder, "provider_type", stringValue(contract.get("provider_type")));
         appendIfPresent(builder, "readiness_probe", stringValue(contract.get("readiness_probe")));
+        appendIfPresent(builder, "kube_context_ref", stringValue(contract.get("kube_context_ref")));
+        appendIfPresent(builder, "namespace_ref", stringValue(contract.get("namespace_ref")));
         appendIfPresent(builder, "target_selector", stringValue(contract.get("target_selector")));
         appendIfPresent(builder, "deployment_ref", stringValue(contract.get("deployment_ref")));
         appendIfPresent(builder, "service_ref", stringValue(contract.get("service_ref")));
+        appendIfPresent(builder, "host_ref", stringValue(contract.get("host_ref")));
+        appendIfPresent(builder, "port", stringValue(contract.get("port")));
+        appendIfPresent(builder, "health_url_ref", stringValue(contract.get("health_url_ref")));
         appendIfPresent(builder, "deployed_version_ref", stringValue(contract.get("deployed_version_ref")));
         builder.append("checks:\n");
         builder.append("  - name: ").append(stringValue(contract.get("readiness_probe"))).append("\n");
         builder.append("    status: ").append(status).append("\n");
-        builder.append("check_count: ").append("passed".equals(status) ? 1 : 0).append("\n");
+        builder.append("check_count: ").append(checkCount).append("\n");
         if (!error.isBlank()) {
             builder.append("error: ").append(error).append("\n");
         }
@@ -129,6 +180,21 @@ public class DeploymentReadinessProvider {
     private boolean isLocalProvider(String providerType) {
         String normalized = providerType.toLowerCase(Locale.ROOT);
         return normalized.equals("local") || normalized.equals("mock");
+    }
+
+    private boolean isNativeProvider(String providerType) {
+        String normalized = providerType.toLowerCase(Locale.ROOT);
+        return normalized.equals("k8s") || normalized.equals("vm");
+    }
+
+    private int intValue(Object value, int fallback) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            return Integer.parseInt(text);
+        }
+        return fallback;
     }
 
     private String stringValue(Object value) {

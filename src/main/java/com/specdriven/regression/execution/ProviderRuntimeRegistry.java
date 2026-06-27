@@ -91,6 +91,8 @@ public class ProviderRuntimeRegistry {
         runtimes.put(key("messaging", "nats"), messagingRuntime);
         runtimes.put(key("deployment_readiness", "local"), readinessRuntime);
         runtimes.put(key("deployment_readiness", "mock"), readinessRuntime);
+        runtimes.put(key("deployment_readiness", "k8s"), readinessRuntime);
+        runtimes.put(key("deployment_readiness", "vm"), readinessRuntime);
         return runtimes;
     }
 

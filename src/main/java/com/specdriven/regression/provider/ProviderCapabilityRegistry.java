@@ -71,7 +71,10 @@ class ProviderCapabilityRegistry {
                     || type.equals("kafka")
                     || type.equals("nats");
             case "db_fixture" -> type.equals("jdbc") || type.equals("relational_db");
-            case "deployment_readiness" -> type.equals("local") || type.equals("mock");
+            case "deployment_readiness" -> type.equals("local")
+                    || type.equals("mock")
+                    || type.equals("k8s")
+                    || type.equals("vm");
             case "external_runner" -> section.equals("adapters") && type.equals("command_runner");
             default -> false;
         };
@@ -143,34 +146,92 @@ class ProviderCapabilityRegistry {
         if (family.equals("messaging") && List.of("local", "mock", "kafka", "nats").contains(type)) {
             validateMessagingAdapter(type, providerName, contract, violations);
         }
-        if (family.equals("deployment_readiness") && (type.equals("local") || type.equals("mock"))) {
-            if (!hasAnyText(contract, "readiness_probe")) {
-                violations.add(required(".readiness_probe", "Declare readiness_probe for `" + providerName + "`."));
-            }
-            if (!hasAnyText(contract, "deployment_ref", "service_ref", "target_selector")) {
-                violations.add(required(".deployment_ref",
-                        "Declare deployment_ref, service_ref, or target_selector for `" + providerName + "`."));
-            }
-            if (!hasAnyText(contract, "deployed_version_ref")) {
-                violations.add(required(".deployed_version_ref",
-                        "Declare deployed_version_ref for `" + providerName + "` before execution."));
-            }
-            if (!hasAnyText(contract, "timeout_seconds")) {
-                violations.add(required(".timeout_seconds",
-                        "Declare timeout_seconds as a positive bounded integer for deployment readiness provider `"
-                                + providerName + "`."));
-            } else if (!isPositiveInteger(contract.get("timeout_seconds"))) {
-                violations.add(required(".timeout_seconds",
-                        "Declare timeout_seconds as a positive bounded integer for deployment readiness provider `"
-                                + providerName + "`."));
-            }
-            if (!hasNestedAnyText(contract, "outputs", "actual_output_ref")) {
-                violations.add(required(".outputs.actual_output_ref",
-                        "Declare actual_output_ref for deployment readiness provider `" + providerName + "`."));
-            }
+        if (family.equals("deployment_readiness") && List.of("local", "mock", "k8s", "vm").contains(type)) {
+            validateDeploymentReadinessAdapter(type, providerName, contract, violations);
         }
         if (family.equals("external_runner")) {
             validateExternalRunner(providerName, contract, violations);
+        }
+    }
+
+    private void validateDeploymentReadinessAdapter(
+            String type,
+            String providerName,
+            Map<String, Object> contract,
+            List<ProviderContractViolation> violations) {
+        if (!hasAnyText(contract, "readiness_probe")) {
+            violations.add(required(".readiness_probe", "Declare readiness_probe for `" + providerName + "`."));
+        }
+        if (!hasAnyText(contract, "deployed_version_ref")) {
+            violations.add(required(".deployed_version_ref",
+                    "Declare deployed_version_ref for `" + providerName + "` before execution."));
+        }
+        if (!hasAnyText(contract, "timeout_seconds")) {
+            violations.add(required(".timeout_seconds",
+                    "Declare timeout_seconds as a positive bounded integer for deployment readiness provider `"
+                            + providerName + "`."));
+        } else if (!isPositiveInteger(contract.get("timeout_seconds"))) {
+            violations.add(required(".timeout_seconds",
+                    "Declare timeout_seconds as a positive bounded integer for deployment readiness provider `"
+                            + providerName + "`."));
+        }
+        if (!hasNestedAnyText(contract, "outputs", "actual_output_ref")) {
+            violations.add(required(".outputs.actual_output_ref",
+                    "Declare actual_output_ref for deployment readiness provider `" + providerName + "`."));
+        }
+        if (type.equals("k8s")) {
+            validateK8sReadiness(providerName, contract, violations);
+        } else if (type.equals("vm")) {
+            validateVmReadiness(providerName, contract, violations);
+        } else if (!hasAnyText(contract, "deployment_ref", "service_ref", "target_selector")) {
+            violations.add(required(".deployment_ref",
+                    "Declare deployment_ref, service_ref, or target_selector for `" + providerName + "`."));
+        }
+    }
+
+    private void validateK8sReadiness(
+            String providerName,
+            Map<String, Object> contract,
+            List<ProviderContractViolation> violations) {
+        if (!hasAnyText(contract, "kube_context_ref", "connection_ref")) {
+            violations.add(required(".kube_context_ref",
+                    "Declare kube_context_ref or connection_ref for native K8s readiness provider `"
+                            + providerName + "`."));
+        }
+        if (!hasAnyText(contract, "namespace_ref")) {
+            violations.add(required(".namespace_ref",
+                    "Declare namespace_ref for native K8s readiness provider `" + providerName + "`."));
+        }
+        if (!hasAnyText(contract, "deployment_ref", "service_ref", "target_selector")) {
+            violations.add(required(".deployment_ref",
+                    "Declare deployment_ref, service_ref, or target_selector for native K8s readiness provider `"
+                            + providerName + "`."));
+        }
+    }
+
+    private void validateVmReadiness(
+            String providerName,
+            Map<String, Object> contract,
+            List<ProviderContractViolation> violations) {
+        String readinessProbe = stringValue(contract.get("readiness_probe"));
+        if ("http_get".equals(readinessProbe)) {
+            if (!hasAnyText(contract, "health_url_ref", "endpoint_ref")) {
+                violations.add(required(".health_url_ref",
+                        "Declare health_url_ref or endpoint_ref for native VM HTTP readiness provider `"
+                                + providerName + "`."));
+            }
+            return;
+        }
+        if (!hasAnyText(contract, "host_ref")) {
+            violations.add(required(".host_ref",
+                    "Declare host_ref for native VM readiness provider `" + providerName + "`."));
+        }
+        if (!hasAnyText(contract, "port")) {
+            violations.add(required(".port",
+                    "Declare port for native VM readiness provider `" + providerName + "`."));
+        } else if (!isPositiveInteger(contract.get("port"))) {
+            violations.add(required(".port",
+                    "Declare port as a positive integer for native VM readiness provider `" + providerName + "`."));
         }
     }
 

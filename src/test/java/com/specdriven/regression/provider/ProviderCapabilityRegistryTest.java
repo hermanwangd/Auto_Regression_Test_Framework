@@ -108,6 +108,83 @@ class ProviderCapabilityRegistryTest {
     }
 
     @Test
+    void acceptsNativeK8sAndVmDeploymentReadinessContracts() {
+        ProviderCapabilityRegistry.ProviderContractValidation k8s = registry.validate(
+                "adapters",
+                "payment_k8s",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "k8s",
+                        "readiness_probe", "rollout_status",
+                        "kube_context_ref", "env://KUBE_CONTEXT",
+                        "namespace_ref", "payment",
+                        "deployment_ref", "deployment/payment-api",
+                        "deployed_version_ref", "build-42",
+                        "timeout_seconds", 30,
+                        "outputs", Map.of("actual_output_ref", "actual/readiness.txt")),
+                "sit_deployed");
+        ProviderCapabilityRegistry.ProviderContractValidation vm = registry.validate(
+                "adapters",
+                "payment_vm",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "vm",
+                        "readiness_probe", "tcp_connect",
+                        "host_ref", "10.0.0.15",
+                        "port", 8443,
+                        "service_ref", "payment-api",
+                        "deployed_version_ref", "build-43",
+                        "timeout_seconds", 15,
+                        "outputs", Map.of("actual_output_ref", "actual/readiness.txt")),
+                "sit_deployed");
+
+        assertThat(k8s.ready()).isTrue();
+        assertThat(k8s.registryStatus()).isEqualTo("supported");
+        assertThat(k8s.runtimeStatus()).isEqualTo("supported");
+        assertThat(vm.ready()).isTrue();
+        assertThat(vm.registryStatus()).isEqualTo("supported");
+        assertThat(vm.runtimeStatus()).isEqualTo("supported");
+    }
+
+    @Test
+    void blocksNativeDeploymentReadinessContractsWithoutRequiredTargetFields() {
+        ProviderCapabilityRegistry.ProviderContractValidation k8s = registry.validate(
+                "adapters",
+                "payment_k8s",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "k8s",
+                        "readiness_probe", "rollout_status",
+                        "deployed_version_ref", "build-42",
+                        "timeout_seconds", 30,
+                        "outputs", Map.of("actual_output_ref", "actual/readiness.txt")),
+                "sit_deployed");
+        ProviderCapabilityRegistry.ProviderContractValidation vm = registry.validate(
+                "adapters",
+                "payment_vm",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "vm",
+                        "readiness_probe", "tcp_connect",
+                        "deployed_version_ref", "build-43",
+                        "timeout_seconds", 15,
+                        "outputs", Map.of("actual_output_ref", "actual/readiness.txt")),
+                "sit_deployed");
+
+        assertThat(k8s.ready()).isFalse();
+        assertThat(k8s.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .contains(
+                        ".kube_context_ref",
+                        ".namespace_ref",
+                        ".deployment_ref");
+        assertThat(vm.ready()).isFalse();
+        assertThat(vm.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .contains(
+                        ".host_ref",
+                        ".port");
+    }
+
+    @Test
     void blocksNativeMessagingContractsWithoutConnectionActionOrCorrelation() {
         ProviderCapabilityRegistry.ProviderContractValidation kafka = registry.validate(
                 "adapters",

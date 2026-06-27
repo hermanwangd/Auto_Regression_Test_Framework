@@ -127,6 +127,8 @@ class ExecutionEngineTest {
 
         assertThat(registry.runtimeFor(resolvedAdapter("messaging", "kafka"))).isNotNull();
         assertThat(registry.runtimeFor(resolvedAdapter("messaging", "nats"))).isNotNull();
+        assertThat(registry.runtimeFor(resolvedAdapter("deployment_readiness", "k8s"))).isNotNull();
+        assertThat(registry.runtimeFor(resolvedAdapter("deployment_readiness", "vm"))).isNotNull();
     }
 
     @Test
