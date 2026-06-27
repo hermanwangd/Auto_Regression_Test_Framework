@@ -364,11 +364,19 @@ public class CoverageReportService {
             builder.append("    test_case_id: ").append(stringValue(run.get("test_case_id"))).append("\n");
             builder.append("    batch_id: ").append(batchId).append("\n");
             builder.append("    run_id: ").append(evidence.runId()).append("\n");
+            appendIfPresent(builder, "    ", "parameter_case_id", run.get("parameter_case_id"));
             builder.append("    evidence_ref: ")
                     .append(packageRoot.relativize(packageRoot.resolve("evidence/runs").resolve(evidence.runId())))
                     .append("\n");
         }
         return builder.toString();
+    }
+
+    private void appendIfPresent(StringBuilder builder, String indent, String key, Object value) {
+        String text = stringValue(value);
+        if (!text.isBlank()) {
+            builder.append(indent).append(key).append(": ").append(text).append("\n");
+        }
     }
 
     private String evidenceIndexRuns(Path packageRoot, List<RunEvidence> runs) {

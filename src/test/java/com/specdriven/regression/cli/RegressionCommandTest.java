@@ -378,6 +378,9 @@ class RegressionCommandTest {
         assertThat(reportExit).isZero();
         assertThat(reportOutput.toString()).contains("report_status: review_ready");
         assertThat(reportOutput.toString()).contains("coverage_percent: 100.0");
+        assertThat(Files.readString(packageRoot.resolve("evidence/review/BATCH-001/traceability_report.yaml")))
+                .contains("parameter_case_id: baseline")
+                .contains("parameter_case_id: boundary");
     }
 
     @Test
