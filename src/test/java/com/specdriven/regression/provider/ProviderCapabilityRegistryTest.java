@@ -61,6 +61,95 @@ class ProviderCapabilityRegistryTest {
     }
 
     @Test
+    void acceptsNativeKafkaAndNatsMessagingContracts() {
+        ProviderCapabilityRegistry.ProviderContractValidation kafka = registry.validate(
+                "adapters",
+                "payment_events",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "kafka",
+                        "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
+                        "topic_ref", "payment.events",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-events.json"),
+                        "actions", Map.of(
+                                "publish_payment_event", Map.of(
+                                        "mode", "publish",
+                                        "payload_binding", "payment_event",
+                                        "serialization", "json",
+                                        "requires_correlation", true,
+                                        "correlation_id", "PAY-001"))),
+                "ci_ephemeral");
+        ProviderCapabilityRegistry.ProviderContractValidation nats = registry.validate(
+                "adapters",
+                "payment_events",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "nats",
+                        "server_ref", "nats://127.0.0.1:4222",
+                        "subject_ref", "payment.events",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-events.json"),
+                        "actions", Map.of(
+                                "publish_payment_event", Map.of(
+                                        "mode", "publish",
+                                        "payload_binding", "payment_event",
+                                        "serialization", "json",
+                                        "requires_correlation", true,
+                                        "correlation_key", "paymentId"))),
+                "ci_ephemeral");
+
+        assertThat(kafka.ready()).isTrue();
+        assertThat(kafka.registryStatus()).isEqualTo("supported");
+        assertThat(kafka.runtimeStatus()).isEqualTo("supported");
+        assertThat(nats.ready()).isTrue();
+        assertThat(nats.registryStatus()).isEqualTo("supported");
+        assertThat(nats.runtimeStatus()).isEqualTo("supported");
+    }
+
+    @Test
+    void blocksNativeMessagingContractsWithoutConnectionActionOrCorrelation() {
+        ProviderCapabilityRegistry.ProviderContractValidation kafka = registry.validate(
+                "adapters",
+                "payment_events",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "kafka",
+                        "topic_ref", "payment.events",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-events.json"),
+                        "actions", Map.of(
+                                "publish_payment_event", Map.of(
+                                        "mode", "publish",
+                                        "payload_binding", "payment_event",
+                                        "serialization", "xml",
+                                        "requires_correlation", true))),
+                "ci_ephemeral");
+        ProviderCapabilityRegistry.ProviderContractValidation nats = registry.validate(
+                "adapters",
+                "payment_events",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "nats",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-events.json")),
+                "ci_ephemeral");
+
+        assertThat(kafka.ready()).isFalse();
+        assertThat(kafka.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .contains(
+                        ".bootstrap_servers_ref",
+                        ".actions.publish_payment_event.serialization",
+                        ".actions.publish_payment_event.correlation_id_ref");
+        assertThat(nats.ready()).isFalse();
+        assertThat(nats.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .contains(
+                        ".server_ref",
+                        ".subject_ref",
+                        ".actions");
+    }
+
+    @Test
     void blocksInvalidTimeoutAndMissingActionMapForRequestResponseProvider() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
                 "adapters",

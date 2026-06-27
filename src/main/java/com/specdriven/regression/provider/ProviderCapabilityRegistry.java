@@ -65,7 +65,11 @@ class ProviderCapabilityRegistry {
         return switch (family) {
             case "file_batch" -> type.equals("shell") || type.equals("file_fixture");
             case "request_response" -> type.equals("rest") || type.equals("request_body");
-            case "messaging" -> type.equals("local") || type.equals("mock") || type.equals("event_payload");
+            case "messaging" -> type.equals("local")
+                    || type.equals("mock")
+                    || type.equals("event_payload")
+                    || type.equals("kafka")
+                    || type.equals("nats");
             case "db_fixture" -> type.equals("jdbc") || type.equals("relational_db");
             case "deployment_readiness" -> type.equals("local") || type.equals("mock");
             case "external_runner" -> section.equals("adapters") && type.equals("command_runner");
@@ -136,24 +140,8 @@ class ProviderCapabilityRegistry {
                         "Declare at least one request/response action for `" + providerName + "`."));
             }
         }
-        if (family.equals("messaging") && (type.equals("local") || type.equals("mock"))) {
-            if (!hasAnyText(contract, "topic_ref", "subject_ref", "stream_ref", "endpoint_ref")) {
-                violations.add(required(".topic_ref",
-                        "Declare topic_ref, subject_ref, stream_ref, or endpoint_ref for `" + providerName + "`."));
-            }
-            if (!hasAnyText(contract, "timeout_seconds")) {
-                violations.add(required(".timeout_seconds",
-                        "Declare timeout_seconds as a positive bounded integer for messaging provider `"
-                                + providerName + "`."));
-            } else if (!isPositiveInteger(contract.get("timeout_seconds"))) {
-                violations.add(required(".timeout_seconds",
-                        "Declare timeout_seconds as a positive bounded integer for messaging provider `"
-                                + providerName + "`."));
-            }
-            if (!hasNestedAnyText(contract, "outputs", "actual_output_ref")) {
-                violations.add(required(".outputs.actual_output_ref",
-                        "Declare actual_output_ref for messaging provider `" + providerName + "`."));
-            }
+        if (family.equals("messaging") && List.of("local", "mock", "kafka", "nats").contains(type)) {
+            validateMessagingAdapter(type, providerName, contract, violations);
         }
         if (family.equals("deployment_readiness") && (type.equals("local") || type.equals("mock"))) {
             if (!hasAnyText(contract, "readiness_probe")) {
@@ -183,6 +171,81 @@ class ProviderCapabilityRegistry {
         }
         if (family.equals("external_runner")) {
             validateExternalRunner(providerName, contract, violations);
+        }
+    }
+
+    private void validateMessagingAdapter(
+            String type,
+            String providerName,
+            Map<String, Object> contract,
+            List<ProviderContractViolation> violations) {
+        if (type.equals("kafka") && !hasAnyText(contract, "bootstrap_servers_ref", "connection_ref")) {
+            violations.add(required(".bootstrap_servers_ref",
+                    "Declare bootstrap_servers_ref or connection_ref for native Kafka provider `"
+                            + providerName + "`."));
+        }
+        if (type.equals("nats") && !hasAnyText(contract, "server_ref", "connection_ref")) {
+            violations.add(required(".server_ref",
+                    "Declare server_ref or connection_ref for native NATS provider `" + providerName + "`."));
+        }
+        if (type.equals("nats") && !hasAnyText(contract, "subject_ref")) {
+            violations.add(required(".subject_ref",
+                    "Declare subject_ref for native NATS provider `" + providerName + "`."));
+        }
+        if (!type.equals("nats") && !hasAnyText(contract, "topic_ref", "subject_ref", "stream_ref", "endpoint_ref")) {
+            violations.add(required(".topic_ref",
+                    "Declare topic_ref, subject_ref, stream_ref, or endpoint_ref for `" + providerName + "`."));
+        }
+        if (!hasAnyText(contract, "timeout_seconds")) {
+            violations.add(required(".timeout_seconds",
+                    "Declare timeout_seconds as a positive bounded integer for messaging provider `"
+                            + providerName + "`."));
+        } else if (!isPositiveInteger(contract.get("timeout_seconds"))) {
+            violations.add(required(".timeout_seconds",
+                    "Declare timeout_seconds as a positive bounded integer for messaging provider `"
+                            + providerName + "`."));
+        }
+        if (!hasNestedAnyText(contract, "outputs", "actual_output_ref")) {
+            violations.add(required(".outputs.actual_output_ref",
+                    "Declare actual_output_ref for messaging provider `" + providerName + "`."));
+        }
+        if (type.equals("kafka") || type.equals("nats")) {
+            validateNativeMessagingActions(type, providerName, contract, violations);
+        }
+    }
+
+    private void validateNativeMessagingActions(
+            String type,
+            String providerName,
+            Map<String, Object> contract,
+            List<ProviderContractViolation> violations) {
+        if (!(contract.get("actions") instanceof Map<?, ?> actions) || actions.isEmpty()) {
+            violations.add(required(".actions",
+                    "Declare at least one native " + type + " messaging action for `" + providerName + "`."));
+            return;
+        }
+        for (Map.Entry<?, ?> entry : actions.entrySet()) {
+            String actionName = stringValue(entry.getKey());
+            if (!(entry.getValue() instanceof Map<?, ?> action)) {
+                continue;
+            }
+            if (firstText(action, "payload_binding", "message_binding", "event_binding").isBlank()) {
+                violations.add(required(".actions." + actionName + ".payload_binding",
+                        "Declare payload_binding, message_binding, or event_binding for native messaging action `"
+                                + actionName + "`."));
+            }
+            String serialization = stringValue(action.get("serialization"));
+            if (!serialization.isBlank() && !"json".equalsIgnoreCase(serialization)) {
+                violations.add(required(".actions." + actionName + ".serialization",
+                        "Use supported messaging serialization `json` before invoking native messaging action `"
+                                + actionName + "`."));
+            }
+            if (isTruthy(action.get("requires_correlation"))
+                    && firstText(action, "correlation_id", "correlation_id_ref", "correlation_key").isBlank()) {
+                violations.add(required(".actions." + actionName + ".correlation_id_ref",
+                        "Declare correlation_id, correlation_id_ref, or correlation_key before invoking native "
+                                + "messaging action `" + actionName + "`."));
+            }
         }
     }
 
@@ -378,6 +441,23 @@ class ProviderCapabilityRegistry {
             }
         }
         return false;
+    }
+
+    private String firstText(Map<?, ?> map, String... fields) {
+        for (String field : fields) {
+            String value = stringValue(map.get(field));
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private boolean isTruthy(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return "true".equalsIgnoreCase(stringValue(value));
     }
 
     private boolean isUnsafeRelativeOutputPath(String path) {

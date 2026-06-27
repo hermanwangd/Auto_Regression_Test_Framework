@@ -1311,11 +1311,11 @@ class RegressionCommandTest {
         Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.provider_type")
+                .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.bootstrap_servers_ref")
                 .contains("provider_family: messaging")
                 .contains("provider_type: kafka")
-                .contains("registry_status: unsupported")
-                .contains("Unsupported provider_type `kafka`");
+                .contains("registry_status: incomplete")
+                .contains("Declare bootstrap_servers_ref or connection_ref");
         assertThat(Files.exists(runDir.resolve("messaging.yaml"))).isFalse();
         assertThat(Files.readString(runDir.resolve("run.yaml")))
                 .contains("status: blocked")

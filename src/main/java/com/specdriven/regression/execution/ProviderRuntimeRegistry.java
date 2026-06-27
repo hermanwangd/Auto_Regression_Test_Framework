@@ -87,6 +87,8 @@ public class ProviderRuntimeRegistry {
         runtimes.put(key("request_response", "rest"), requestResponseRuntime);
         runtimes.put(key("messaging", "local"), messagingRuntime);
         runtimes.put(key("messaging", "mock"), messagingRuntime);
+        runtimes.put(key("messaging", "kafka"), messagingRuntime);
+        runtimes.put(key("messaging", "nats"), messagingRuntime);
         runtimes.put(key("deployment_readiness", "local"), readinessRuntime);
         runtimes.put(key("deployment_readiness", "mock"), readinessRuntime);
         return runtimes;

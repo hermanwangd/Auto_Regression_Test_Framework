@@ -14,6 +14,16 @@ import org.springframework.stereotype.Component;
 @Component
 public class MessagingProvider {
 
+    private final MessagingTransport transport;
+
+    public MessagingProvider() {
+        this(new DefaultMessagingTransport());
+    }
+
+    MessagingProvider(MessagingTransport transport) {
+        this.transport = transport;
+    }
+
     public AdapterExecutionResult execute(
             String providerName,
             Path packageRoot,
@@ -32,11 +42,15 @@ public class MessagingProvider {
             String providerType = stringValue(contract.get("provider_type"));
             String actionName = firstStepAction(testCase);
             Map<?, ?> action = selectedAction(contract, actionName);
+            String connectionRef = connectionRef(contract);
+            String targetRef = targetRef(contract);
+            String targetField = targetField(contract);
+            String correlationId = firstText(action, "correlation_id", "correlation_id_ref", "correlation_key");
             String payloadBinding = firstText(action, "payload_binding", "message_binding", "event_binding");
             if (payloadBinding.isBlank()) {
                 payloadBinding = firstMessageBinding(resolvedBindings);
             }
-            if (!isLocalProvider(providerType)) {
+            if (!isSupportedProvider(providerType)) {
                 return fail(
                         runDir,
                         stdoutLog,
@@ -44,10 +58,13 @@ public class MessagingProvider {
                         actualOutput,
                         providerName,
                         providerType,
-                        topicRef(contract),
+                        connectionRef,
+                        targetRef,
+                        targetField,
                         actionName,
                         stringValue(action.get("mode")),
                         payloadBinding,
+                        correlationId,
                         "Unsupported messaging provider_type `" + providerType + "` for local execution.");
             }
             if (!hasResolvedBinding(resolvedBindings, payloadBinding)) {
@@ -58,31 +75,76 @@ public class MessagingProvider {
                         actualOutput,
                         providerName,
                         providerType,
-                        topicRef(contract),
+                        connectionRef,
+                        targetRef,
+                        targetField,
                         actionName,
                         stringValue(action.get("mode")),
                         payloadBinding,
+                        correlationId,
                         "Cannot resolve messaging payload binding `" + payloadBinding + "`.");
             }
 
             String payload = payload(packageRoot, resolvedBindings, payloadBinding);
-            Files.writeString(stdoutLog, "published 1 message to " + topicRef(contract) + "\n");
+            MessagingTransportResult transportResult = transport.publish(new MessagingTransportRequest(
+                    providerName,
+                    providerType,
+                    connectionRef,
+                    targetRef,
+                    targetField,
+                    actionName,
+                    stringValue(action.get("mode")),
+                    payloadBinding,
+                    correlationId,
+                    payload,
+                    intValue(contract.get("timeout_seconds"), 300),
+                    contract,
+                    action));
+            Files.writeString(stdoutLog, transportResult.stdout());
             Files.writeString(stderrLog, "");
-            Files.writeString(actualOutput, payload);
+            Files.writeString(actualOutput, transportResult.actualOutput());
             writeMessagingEvidence(
                     runDir,
                     providerName,
                     providerType,
-                    topicRef(contract),
+                    connectionRef,
+                    targetRef,
+                    targetField,
                     actionName,
                     stringValue(action.get("mode")),
                     payloadBinding,
+                    correlationId,
                     actualOutput,
                     "passed",
-                    "");
+                    "",
+                    transportResult.messageCount());
             return new AdapterExecutionResult(0, false, stdoutLog, stderrLog, actualOutput);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Messaging provider interrupted.", e);
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to execute messaging provider.", e);
+            try {
+                Files.createDirectories(stdoutLog.getParent());
+                Files.createDirectories(stderrLog.getParent());
+                Files.createDirectories(actualOutput.getParent());
+                return fail(
+                        runDir,
+                        stdoutLog,
+                        stderrLog,
+                        actualOutput,
+                        providerName,
+                        stringValue(contract.get("provider_type")),
+                        connectionRef(contract),
+                        targetRef(contract),
+                        targetField(contract),
+                        firstStepAction(testCase),
+                        "",
+                        "",
+                        "",
+                        e.getMessage() == null ? "Failed to execute messaging provider." : e.getMessage());
+            } catch (IOException writeFailure) {
+                throw new UncheckedIOException("Failed to execute messaging provider.", writeFailure);
+            }
         }
     }
 
@@ -93,10 +155,13 @@ public class MessagingProvider {
             Path actualOutput,
             String providerName,
             String providerType,
-            String topicRef,
+            String connectionRef,
+            String targetRef,
+            String targetField,
             String actionName,
             String mode,
             String payloadBinding,
+            String correlationId,
             String message) throws IOException {
         Files.writeString(stdoutLog, "");
         Files.writeString(stderrLog, message);
@@ -105,13 +170,17 @@ public class MessagingProvider {
                 runDir,
                 providerName,
                 providerType,
-                topicRef,
+                connectionRef,
+                targetRef,
+                targetField,
                 actionName,
                 mode,
                 payloadBinding,
+                correlationId,
                 actualOutput,
                 "failed",
-                message);
+                message,
+                0);
         return new AdapterExecutionResult(1, false, stdoutLog, stderrLog, actualOutput);
     }
 
@@ -119,26 +188,36 @@ public class MessagingProvider {
             Path runDir,
             String providerName,
             String providerType,
-            String topicRef,
+            String connectionRef,
+            String targetRef,
+            String targetField,
             String actionName,
             String mode,
             String payloadBinding,
+            String correlationId,
             Path actualOutput,
             String status,
-            String error) throws IOException {
+            String error,
+            int messageCount) throws IOException {
         Files.createDirectories(runDir);
         StringBuilder builder = new StringBuilder();
         builder.append("status: ").append(status).append("\n");
         builder.append("provider: ").append(providerName).append("\n");
         builder.append("provider_type: ").append(providerType).append("\n");
-        if (!topicRef.isBlank()) {
-            builder.append("topic_ref: ").append(topicRef).append("\n");
+        if (!connectionRef.isBlank()) {
+            builder.append("connection_ref: ").append(connectionRef).append("\n");
+        }
+        if (!targetRef.isBlank()) {
+            builder.append(targetField).append(": ").append(targetRef).append("\n");
         }
         builder.append("actions:\n");
         builder.append("  - action: ").append(actionName).append("\n");
         builder.append("    mode: ").append(mode.isBlank() ? "publish" : mode).append("\n");
         builder.append("    payload_binding: ").append(payloadBinding).append("\n");
-        builder.append("    message_count: ").append("passed".equals(status) ? 1 : 0).append("\n");
+        if (!correlationId.isBlank()) {
+            builder.append("    correlation_id: ").append(correlationId).append("\n");
+        }
+        builder.append("    message_count: ").append(messageCount).append("\n");
         builder.append("    actual_output: ").append(runDir.relativize(actualOutput)).append("\n");
         if (!error.isBlank()) {
             builder.append("error: ").append(error).append("\n");
@@ -194,13 +273,43 @@ public class MessagingProvider {
         return "";
     }
 
-    private String topicRef(Map<String, Object> contract) {
+    private String targetRef(Map<String, Object> contract) {
         return firstText(contract, "topic_ref", "subject_ref", "stream_ref", "endpoint_ref");
     }
 
-    private boolean isLocalProvider(String providerType) {
+    private String targetField(Map<String, Object> contract) {
+        if (!stringValue(contract.get("topic_ref")).isBlank()) {
+            return "topic_ref";
+        }
+        if (!stringValue(contract.get("subject_ref")).isBlank()) {
+            return "subject_ref";
+        }
+        if (!stringValue(contract.get("stream_ref")).isBlank()) {
+            return "stream_ref";
+        }
+        return "endpoint_ref";
+    }
+
+    private String connectionRef(Map<String, Object> contract) {
+        return firstText(contract, "bootstrap_servers_ref", "server_ref", "connection_ref", "endpoint_ref");
+    }
+
+    private boolean isSupportedProvider(String providerType) {
         String normalized = providerType.toLowerCase(Locale.ROOT);
-        return normalized.equals("local") || normalized.equals("mock");
+        return normalized.equals("local")
+                || normalized.equals("mock")
+                || normalized.equals("kafka")
+                || normalized.equals("nats");
+    }
+
+    private int intValue(Object value, int fallback) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            return Integer.parseInt(text);
+        }
+        return fallback;
     }
 
     private String firstText(Map<?, ?> map, String... fields) {

@@ -14,6 +14,7 @@ import com.specdriven.regression.provider.MessagingProvider;
 import com.specdriven.regression.provider.ProviderContractResolutionReport;
 import com.specdriven.regression.provider.ProviderContractResolver;
 import com.specdriven.regression.provider.RequestResponseProvider;
+import com.specdriven.regression.provider.ResolvedProviderContract;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -117,6 +118,18 @@ class ExecutionEngineTest {
     }
 
     @Test
+    void defaultProviderRuntimeRegistryResolvesNativeMessagingRuntimes() {
+        ProviderRuntimeRegistry registry = new ProviderRuntimeRegistry(
+                new DataPipelineAdapter(),
+                new RequestResponseProvider(),
+                new MessagingProvider(),
+                new DeploymentReadinessProvider());
+
+        assertThat(registry.runtimeFor(resolvedAdapter("messaging", "kafka"))).isNotNull();
+        assertThat(registry.runtimeFor(resolvedAdapter("messaging", "nats"))).isNotNull();
+    }
+
+    @Test
     void blocksExecutionWhenProviderResolverDoesNotReturnAdapterContract() throws Exception {
         writeMinimalTestCase("TC-NO-ADAPTER");
         ExecutionEngine engine = new ExecutionEngine(
@@ -135,6 +148,20 @@ class ExecutionEngineTest {
                 "RUN-NO-ADAPTER"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("No resolved adapter provider contract available");
+    }
+
+    private ResolvedProviderContract resolvedAdapter(String providerFamily, String providerType) {
+        return new ResolvedProviderContract(
+                "adapter",
+                providerFamily,
+                "ru",
+                providerFamily,
+                providerType,
+                "supported",
+                "supported",
+                "RU-native",
+                providerFamily,
+                "release_units[0].provider_contracts.adapters." + providerFamily);
     }
 
     @Test

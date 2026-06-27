@@ -448,7 +448,7 @@ class ProviderContractResolverTest {
     }
 
     @Test
-    void blocksUnsupportedProviderTypeBeforeExecution() throws Exception {
+    void blocksIncompleteNativeMessagingContractBeforeExecution() throws Exception {
         Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
         Files.writeString(mapping, heterogeneousMapping("""
                   - ru_id: RU-payment-events
@@ -481,11 +481,11 @@ class ProviderContractResolverTest {
         assertThat(report.gaps())
                 .anySatisfy(gap -> {
                     assertThat(gap.fieldPath())
-                            .isEqualTo("release_units[0].provider_contracts.adapters.message_bus.provider_type");
+                            .isEqualTo("release_units[0].provider_contracts.adapters.message_bus.bootstrap_servers_ref");
                     assertThat(gap.providerFamily()).isEqualTo("messaging");
                     assertThat(gap.providerType()).isEqualTo("kafka");
-                    assertThat(gap.registryStatus()).isEqualTo("unsupported");
-                    assertThat(gap.ownerAction()).contains("Unsupported provider_type `kafka`");
+                    assertThat(gap.registryStatus()).isEqualTo("incomplete");
+                    assertThat(gap.ownerAction()).contains("Declare bootstrap_servers_ref or connection_ref");
                 });
     }
 

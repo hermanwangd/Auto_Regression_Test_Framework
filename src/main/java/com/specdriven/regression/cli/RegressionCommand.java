@@ -831,7 +831,7 @@ public class RegressionCommand {
         AdapterContractContext context =
                 adapterContractContext(mappingYaml, targetRuId(approvedTest), adapterName(approvedTest));
         if (!"messaging".equals(context.providerFamily())
-                || !List.of("local", "mock").contains(context.providerType())) {
+                || !List.of("local", "mock", "kafka", "nats").contains(context.providerType())) {
             return List.of();
         }
         Object actionsValue = context.contract().get("actions");
