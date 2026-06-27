@@ -29,11 +29,20 @@ public class ProviderContractResolver {
             String adapter,
             List<String> bindingTypes,
             List<String> fixtureProviders) {
+        return resolve(mappingYaml, "", adapter, bindingTypes, fixtureProviders);
+    }
+
+    public ProviderContractResolutionReport resolve(
+            Path mappingYaml,
+            String targetRuId,
+            String adapter,
+            List<String> bindingTypes,
+            List<String> fixtureProviders) {
         List<ReleaseUnitContracts> releaseUnits = releaseUnits(mappingYaml);
         List<ResolvedProviderContract> resolved = new ArrayList<>();
         List<ProviderContractGap> gaps = new ArrayList<>();
 
-        ReleaseUnitContracts adapterOwner = ownerForAdapter(releaseUnits, adapter);
+        ReleaseUnitContracts adapterOwner = ownerForAdapter(releaseUnits, targetRuId, adapter);
         if (hasContract(adapterOwner.contracts(), "adapters", adapter)) {
             resolveContract(resolved, gaps, adapterOwner, "adapters", "adapter", adapter);
         } else {
@@ -169,7 +178,16 @@ public class ProviderContractResolver {
         return ownerAction + " Affected RU: `" + owner.ruId() + "`.";
     }
 
-    private ReleaseUnitContracts ownerForAdapter(List<ReleaseUnitContracts> releaseUnits, String adapter) {
+    private ReleaseUnitContracts ownerForAdapter(
+            List<ReleaseUnitContracts> releaseUnits,
+            String targetRuId,
+            String adapter) {
+        if (!targetRuId.isBlank()) {
+            ReleaseUnitContracts targetOwner = ownerByRuId(releaseUnits, targetRuId);
+            if (targetOwner != null) {
+                return targetOwner;
+            }
+        }
         for (ReleaseUnitContracts unit : releaseUnits) {
             if (unit.adapter().equals(adapter)) {
                 return unit;
@@ -178,11 +196,23 @@ public class ProviderContractResolver {
         return ownerFor(releaseUnits, "adapters", adapter, fallbackUnit(releaseUnits));
     }
 
+    private ReleaseUnitContracts ownerByRuId(List<ReleaseUnitContracts> releaseUnits, String targetRuId) {
+        for (ReleaseUnitContracts unit : releaseUnits) {
+            if (unit.ruId().equals(targetRuId)) {
+                return unit;
+            }
+        }
+        return null;
+    }
+
     private ReleaseUnitContracts ownerFor(
             List<ReleaseUnitContracts> releaseUnits,
             String section,
             String name,
             ReleaseUnitContracts fallback) {
+        if (hasContract(fallback.contracts(), section, name)) {
+            return fallback;
+        }
         for (ReleaseUnitContracts unit : releaseUnits) {
             if (hasContract(unit.contracts(), section, name)) {
                 return unit;

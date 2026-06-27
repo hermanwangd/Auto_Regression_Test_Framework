@@ -610,6 +610,7 @@ public class RegressionCommand {
 
             ProviderContractResolutionReport providerReport = providerContractResolver.resolve(
                     packageRoot.resolve("rp_ru_mapping.yaml"),
+                    targetRuId(approvedTest),
                     adapterName(approvedTest),
                     bindingReport.resolvedBindings().stream().map(ResolvedBinding::bindingType).toList(),
                     fixtureReport.fixtureProviders());

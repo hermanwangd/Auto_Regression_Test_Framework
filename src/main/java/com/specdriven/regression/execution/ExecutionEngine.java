@@ -152,6 +152,7 @@ public class ExecutionEngine {
         BindingResolutionReport bindingReport = bindingResolver.resolve(testCasePath);
         ProviderContractResolutionReport providerReport = providerContractResolver.resolve(
                 mappingYaml,
+                targetRuId,
                 adapterName,
                 bindingReport.resolvedBindings().stream().map(ResolvedBinding::bindingType).toList(),
                 fixtureProviders(testCase));

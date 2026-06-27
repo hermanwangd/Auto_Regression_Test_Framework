@@ -559,6 +559,39 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runResolvesProviderContractsFromTargetRuWhenAdapterNameRepeats() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeSameAdapterMultiRuMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001", "downstream-ok\n");
+        writeApprovedTargetRuTestCaseWithBinding(
+                "RP-001", "RP-001-TC-001", "RP-001-AC-001", "RU-downstream-job", "spring_boot_cli", "db_seed");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001");
+        String runEvidence = Files.readString(runDir.resolve("run.yaml"));
+        assertThat(exit).isZero();
+        assertThat(Files.readString(runDir.resolve("logs/stdout.log"))).contains("downstream-ok");
+        assertThat(runEvidence)
+                .contains("contract_path: release_units[1].provider_contracts.adapters.spring_boot_cli")
+                .contains("contract_path: release_units[1].provider_contracts.bindings.db_seed")
+                .contains("affected_ru: RU-downstream-job");
+        assertThat(runEvidence)
+                .doesNotContain("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli")
+                .doesNotContain("contract_path: release_units[0].provider_contracts.bindings.db_seed")
+                .doesNotContain("affected_ru: RU-upstream-job");
+    }
+
+    @Test
     void runBlocksDownstreamRuWhenRequiredUpstreamRunFails() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -1665,6 +1698,84 @@ class RegressionCommandTest {
                 """.formatted(rpId, rpId, rpId));
     }
 
+    private void writeSameAdapterMultiRuMapping(String rpId) throws Exception {
+        Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        Files.writeString(mapping, """
+                rp_id: %s
+                release_units:
+                  - ru_id: RU-upstream-job
+                    repo: /repo/upstream
+                    unit_type: data_pipeline
+                    owner: product_developer
+                    version_ref: main
+                    validation_boundary: execute_pipeline_with_fixture
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://pipeline/%s/upstream
+                    adapter: spring_boot_cli
+                    provider_contracts:
+                      adapters:
+                        spring_boot_cli:
+                          provider_family: file_batch
+                          provider_type: shell
+                          command: /bin/sh -c 'echo upstream-wrong'
+                          working_directory: .
+                          timeout_seconds: 10
+                          success_exit_codes: [0]
+                          logs:
+                            stdout: logs/stdout.log
+                            stderr: logs/stderr.log
+                          outputs:
+                            actual_output_ref: actual/output.txt
+                      bindings:
+                        db_seed:
+                          provider_family: file_batch
+                          provider_type: file_fixture
+                          materialize_as: input_file
+                      fixtures: {}
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                  - ru_id: RU-downstream-job
+                    repo: /repo/downstream
+                    unit_type: data_pipeline
+                    owner: product_developer
+                    version_ref: main
+                    validation_boundary: execute_pipeline_with_fixture
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://pipeline/%s/downstream
+                    adapter: spring_boot_cli
+                    provider_contracts:
+                      adapters:
+                        spring_boot_cli:
+                          provider_family: file_batch
+                          provider_type: shell
+                          command: /bin/sh -c 'echo downstream-ok'
+                          working_directory: .
+                          timeout_seconds: 10
+                          success_exit_codes: [0]
+                          logs:
+                            stdout: logs/stdout.log
+                            stderr: logs/stderr.log
+                          outputs:
+                            actual_output_ref: actual/output.txt
+                      bindings:
+                        db_seed:
+                          provider_family: file_batch
+                          provider_type: file_fixture
+                          materialize_as: input_file
+                      fixtures: {}
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                """.formatted(rpId, rpId, rpId));
+    }
+
     private void writeDependencyFailureMultiRuMapping(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
         Files.writeString(mapping, """
@@ -2212,6 +2323,70 @@ class RegressionCommandTest {
                 rpId,
                 expectedResultId,
                 expectedResultId,
+                ruId));
+    }
+
+    private void writeApprovedTargetRuTestCaseWithBinding(
+            String rpId,
+            String testCaseId,
+            String acId,
+            String ruId,
+            String adapter,
+            String bindingType) throws Exception {
+        String expectedResultId = acId.replace("-AC-", "-ER-");
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + testCaseId + ".yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s
+                rp_id: %s
+                ac_id: %s
+                artifact_status: approved_for_regression
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
+                source_fingerprint: sha256:test
+                execution_target:
+                  ru_id: %s
+                  adapter: %s
+                  execution_mode: ci_ephemeral
+                  environment_ref: ci://pipeline/%s
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [db_seed, batch_execution, file_assertion]
+                expected:
+                  ref: expected-results/approved/%s.yaml
+                oracles:
+                  normalized_output:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
+                package_inputs:
+                  inputs:
+                    orders_seed:
+                      ref: fixtures/db/orders_seed.yaml
+                      bind_as: %s
+                steps:
+                  - id: run_ru
+                    action: call_ru
+                    target_ru_id: %s
+                assertions:
+                  - type: file_diff
+                    oracle: ${oracles.normalized_output}
+                evidence_required:
+                  - execution_log
+                """.formatted(
+                testCaseId,
+                rpId,
+                acId,
+                acId,
+                ruId,
+                adapter,
+                rpId,
+                expectedResultId,
+                expectedResultId,
+                bindingType,
                 ruId));
     }
 
