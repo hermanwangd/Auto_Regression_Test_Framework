@@ -191,7 +191,9 @@ Conditional fields are required only when the scenario needs them:
 
 Optional fields such as tags, notes, or replacement links may improve maintenance, but governance-heavy fields must not be required for first execution.
 
-The DSL v1 contract is a pre-implementation gate for F007 provider runtime work. Before provider dispatch, sample fixture migration, or native runtime expansion can be claimed complete, the framework must validate the execution-focused DSL shape, generator output, and compatibility behavior described in `docs/02-architecture/06_artifact_contracts.md`.
+The DSL v1 contract is a pre-implementation gate for F007 provider runtime work. Before provider dispatch, sample fixture migration, or native runtime expansion can be claimed complete, the framework must validate the execution-focused DSL shape, generator output, compatibility behavior, and CLI run/report consumption described in `docs/02-architecture/06_artifact_contracts.md`.
+
+Validation alone is not enough. At least one checked-in `tests/approved/` execution-focused DSL v1 artifact with `status: active` must be accepted by `run`, produce run and batch evidence, and be accepted by `report --batch-id` as review-ready coverage before provider runtime expansion can claim execution-focused DSL support.
 
 New execution-focused DSL artifacts must:
 
@@ -420,7 +422,7 @@ F007 defines RP Regression Execution. Framework Verification tests may exercise 
 
 F007 shall not author AC, classify AC readiness, generate tests, regenerate checked-in tests, generate expected results, approve expected results, approve waivers, or decide release readiness.
 
-F007 implementation must not proceed directly to provider runtime expansion until the DSL v1 contract gate is green. The gate requires parser validation, generator output, dry-run blocking, and compatibility behavior for execution-focused fields, legacy-only fields, and prohibited governance fields.
+F007 implementation must not proceed directly to provider runtime expansion until the DSL v1 contract gate is green. The gate requires parser validation, generator output, dry-run blocking, compatibility behavior for execution-focused fields, legacy-only fields, and prohibited governance fields, plus a CLI run/report proof using the same execution-focused DSL v1 test artifact.
 
 ### Required Mechanism
 
@@ -433,6 +435,7 @@ F007 implementation must not proceed directly to provider runtime expansion unti
 - Validate that every DSL section can be consumed by exactly one AP responsibility path before adapter execution starts.
 - Validate that every DSL logical reference to a target runner, execute operation, setup fixture type, expected-result type, verify type, or evidence output has a matching provider contract or supported default.
 - Validate each provider contract against a capability registry by `provider_family`, `provider_type`, required fields, supported runtime status, and execution mode before adapter/provider execution.
+- Normalize execution-focused DSL v1 traceability into internal run/report metadata without requiring legacy `rp_id`, `ac_id`, `execution_target`, `package_inputs`, `oracles`, `assertions`, or `policy` fields in new test artifacts.
 - Reject ambiguous multi-RU provider resolution rather than falling back silently to the first RU.
 - Require explicit approval metadata before using an external runner escape hatch, including reason, owner, bounded command or container ref, timeout, inputs, outputs, and evidence map.
 - Create one unique batch ID for the RP execution request.
@@ -466,6 +469,8 @@ F008 shall not execute tests, generate tests, generate expected results, approve
 ### Required Mechanism
 
 - Consume RP AC inventory, AC classification, approved test cases, F007 batch evidence, run-level evidence, expected-result artifacts, waiver records, manual-only approvals, and traceability links.
+- Treat `tests/approved/` location plus an allowed DSL lifecycle status such as `active` as execution eligibility; do not treat DSL `status` as expected-result approval, waiver approval, or release approval.
+- Read coverage traceability from execution-focused DSL v1 `traceability.*` fields and normalized run evidence, not from legacy-only test case fields.
 - Calculate coverage as distinct covered automatable RP-level AC divided by distinct total automatable RP-level AC.
 - Count an AC as covered only when at least one run in the selected batch passed and traces to an approved test case for that AC.
 - De-duplicate coverage by AC ID when multiple tests cover the same AC.

@@ -35,6 +35,7 @@ Minimum verification rule for DSL/AP clarity:
 - A feature is not implementation-ready when its DSL fields, provider contract paths, expected-result source, verify rule, setup lifecycle, execute outputs, runtime policy, or evidence outputs cannot be explained through the 7 AP flow.
 - Maven framework verification evidence shall not be treated as downstream Product/RP release evidence.
 - CLI RP regression evidence shall identify the RP, batch, environment, test cases, and AC covered by the selected RP execution.
+- Execution-focused DSL v1 support is not accepted until one `tests/approved/` artifact with `status: active` can pass `run` and then produce a review-ready `report --batch-id` using v1 traceability.
 
 Acceptance is split by evidence source:
 
@@ -196,6 +197,8 @@ Then the RP execution shall produce one batch evidence record with RP ID, batch 
 
 And each executed test case shall produce durable run evidence with RP ID, batch ID, AC ID, test case ID, run ID, execution mode, resolved targets, setup fixture results, execute outputs, expected result refs, verify results, provider contracts used, provider family, provider type, registry status, provider contract path, adapter/provider result, cleanup result, and final pass/fail status.
 
+And an execution-focused DSL v1 test case stored under `tests/approved/` with `status: active` shall run without requiring legacy-only fields in the test case body.
+
 And the selected heterogeneous pilot shall produce evidence for each registered provider family selected for the RP: request/response, messaging, DB fixture, deployment readiness, and file/batch when the RP uses it. External runner evidence is required only when an approved escape-hatch contract is selected.
 
 For framework verification, local/mock provider-family evidence may satisfy the framework behavior portion of this AC. It does not satisfy native Kafka/NATS/gRPC/K8s/VM pilot acceptance unless those native runtimes are implemented and selected by the pilot RP.
@@ -268,6 +271,8 @@ Given RP AC inventory, approved tests, batch execution evidence, run evidence, t
 When the evidence package is produced for a selected batch
 Then coverage shall be calculated against automatable RP-level AC, and every approved test and evidence item shall trace to RP ID, batch ID, run ID, test case ID, and AC ID.
 
+And execution-focused DSL v1 `traceability.package_id` and `traceability.acceptance_criteria_id` shall be sufficient for coverage reporting when normalized run evidence exists.
+
 Given two automatable AC and two approved tests in one batch
 When both runs pass and each run traces to a different AC
 Then coverage shall be 100%.
@@ -277,6 +282,10 @@ Then coverage shall be 100%.
 Given missing evidence, missing traceability, unapproved exclusions, or unresolved failures
 When the evidence package is produced
 Then the package shall report the gap and shall not claim review-ready coverage.
+
+Given a v1 test execution passes but the selected batch report cannot resolve the test case to RP ID and AC ID from v1 traceability
+When the evidence package is produced
+Then the package shall not be review-ready and shall report the traceability normalization gap.
 
 Given two automatable AC and two approved tests in one batch
 When one run passes and one run fails

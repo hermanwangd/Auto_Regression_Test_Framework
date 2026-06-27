@@ -7,11 +7,13 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import com.specdriven.regression.dsl.DslTestCaseNormalizer;
 import org.springframework.stereotype.Service;
 import org.yaml.snakeyaml.Yaml;
 
 @Service
 public class CoverageReportService {
+    private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
 
     public CoverageReportResult generateBatch(Path packageRoot, String batchId) {
         Path batchDir = packageRoot.resolve("evidence/batches").resolve(batchId);
@@ -589,6 +591,7 @@ public class CoverageReportService {
             return paths.filter(path -> path.getFileName().toString().endsWith(".yaml"))
                     .sorted()
                     .map(this::readYamlMap)
+                    .map(dslTestCaseNormalizer::normalize)
                     .toList();
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read approved tests for report.", e);

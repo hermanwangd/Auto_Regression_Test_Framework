@@ -426,6 +426,7 @@ Select RP
 -> validate rp_ru_mapping.yaml
 -> load approved or execution-eligible DSL test cases
 -> validate execution-focused DSL v1 contract and block invalid legacy/governance fields
+-> normalize v1 traceability and execution sections for run/report metadata
 -> validate expected-result approval status
 -> resolve execution mode and RU dependency graph
 -> resolve provider contracts from DSL logical references
@@ -502,6 +503,7 @@ Runtime rules:
 | Missing RP/RU mapping field | Block execution and report the exact field. |
 | Unsupported DSL version | Block execution and report supported versions and migration action. |
 | Missing required DSL field | Block generation approval or execution and report the field path. |
+| V1 DSL traceability cannot be normalized for run/report | Block execution or review-ready reporting and report the affected test case, AC, and field path. |
 | Ambiguous AC | Mark `not_ready_for_generation`; do not draft executable tests. |
 | Existing approved test | Create update proposal or new draft revision; do not overwrite. |
 | Expected result not approved | Block normal regression execution. |
@@ -525,6 +527,7 @@ Runtime rules:
 Each RP execution writes a batch summary:
 
 - `batch.yaml`: batch status, timestamps, RP ID, execution mode, environment ref, and included run IDs with test case ID, AC ID, and status.
+- Batch reporting consumes normalized traceability from execution-focused DSL v1 and run evidence. It must not require new tests to carry legacy-only fields such as `rp_id` or `ac_id`.
 
 Each test run writes:
 

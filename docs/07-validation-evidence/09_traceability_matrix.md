@@ -12,6 +12,7 @@
 | REQ-006 Expected-result drafting and approval | F006 | AC-006 | REG-RP-007 | EVD-006 |
 | REQ-007 Release Package execution | F007 | AC-007 | REG-RP-008 / REG-RP-011 / REG-RP-012 / REG-RP-013 | EVD-007 |
 | REQ-007A Heterogeneous provider-family execution support | F007 | AC-004 / AC-007 / AC-008 / AC-009 | FWK-006 / FWK-007 / FWK-IT-010 / FWK-IT-011 / REG-RP-015 / REG-RP-016 | EVD-007 / EVD-009 |
+| REQ-007B Execution-focused DSL v1 run/report consumption | F007 / F008 | AC-007 / AC-009 | FWK-008 | EVD-000 / EVD-007 / EVD-008 |
 | REQ-008 Unsafe or incomplete regression execution block | F007 | AC-008 | REG-RP-012 / REG-RP-013 / REG-RP-014 | EVD-007 |
 | REQ-009 Coverage and evidence package | F008 | AC-009 | REG-RP-009 / REG-RP-010 | EVD-008 |
 

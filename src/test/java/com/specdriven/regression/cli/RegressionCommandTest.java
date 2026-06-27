@@ -1982,6 +1982,53 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runExecutesExecutionFocusedDslV1AndProducesReviewReadyBatchReport() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExecutionFocusedTestCase("RP-001");
+        ByteArrayOutputStream runOutput = new ByteArrayOutputStream();
+
+        int runExit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(runOutput), print(new ByteArrayOutputStream()));
+
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        Path runDir = packageRoot.resolve("evidence/runs/RUN-001");
+        assertThat(runExit).isZero();
+        assertThat(runOutput.toString()).contains("adapter_execution_started: true");
+        assertThat(runOutput.toString()).contains("run_status: passed");
+        assertThat(Files.readString(runDir.resolve("run.yaml")))
+                .contains("test_case_id: RP-001-TC-001")
+                .contains("ac_id: RP-001-AC-001")
+                .contains("status: passed")
+                .contains("provider_family: file_batch")
+                .contains("provider_type: shell")
+                .contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli");
+        assertThat(Files.readString(runDir.resolve("actual/output.txt"))).isEqualTo("adapter-ok\n");
+        assertThat(Files.readString(runDir.resolve("assertions.yaml"))).contains("status: passed");
+
+        ByteArrayOutputStream reportOutput = new ByteArrayOutputStream();
+        int reportExit = command.execute(new String[] {
+                "report", "--root", tempDir.toString(), "--rp-id", "RP-001", "--batch-id", "BATCH-001"},
+                print(reportOutput), print(new ByteArrayOutputStream()));
+
+        assertThat(reportExit).isZero();
+        assertThat(reportOutput.toString()).contains("report_status: review_ready");
+        assertThat(reportOutput.toString()).contains("coverage_percent: 100.0");
+        assertThat(Files.readString(packageRoot.resolve("evidence/review/BATCH-001/traceability_report.yaml")))
+                .contains("RP-001-TC-001")
+                .contains("RP-001-AC-001")
+                .contains("RUN-001");
+    }
+
+    @Test
     void runWritesCleanupEvidenceForMutatingFixtureWithCleanupPolicy() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -3722,6 +3769,69 @@ class RegressionCommandTest {
                     expected: ${expected_results.normalized_orders.ref}
                 evidence:
                   required:
+                    - ${verify.verify_output.result}
+                runtime:
+                  timeout: PT10M
+                  retry:
+                    max_attempts: 0
+                """.formatted(rpId, rpId, acId, acId, rpId, expectedResultId));
+    }
+
+    private void writeApprovedExecutionFocusedTestCase(String rpId) throws Exception {
+        String acId = rpId + "-AC-001";
+        String expectedResultId = acId.replace("-AC-", "-ER-");
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s-TC-001
+                status: active
+                revision: 1
+                traceability:
+                  package_id: %s
+                  acceptance_criteria_id: %s
+                  source: acceptance_criteria.md#%s
+                targets:
+                  RU-transform-job:
+                    type: batch_runner
+                    runner: spring_boot_cli
+                    environment: ci://pipeline/%s
+                scenario:
+                  type: integration
+                  scope: release_package
+                  description: Run the transform job and compare output to the approved expected result.
+                  capabilities: [db_seed, batch_execution, file_assertion]
+                setup:
+                  fixtures:
+                    orders_seed:
+                      type: db_seed
+                      ref: fixtures/db/orders_seed.yaml
+                      cleanup_ref: fixtures/db/orders_cleanup.yaml
+                execute:
+                  - id: run_pipeline
+                    target: RU-transform-job
+                    operation: run_batch
+                    with:
+                      orders_seed: ${setup.fixtures.orders_seed}
+                    outputs:
+                      actual_output:
+                        ref: actual/output.txt
+                      execution_log:
+                        ref: logs/stdout.log
+                expected_results:
+                  normalized_orders:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
+                verify:
+                  - id: verify_output
+                    type: file_diff
+                    actual: ${execute.run_pipeline.outputs.actual_output}
+                    expected: ${expected_results.normalized_orders.ref}
+                evidence:
+                  required:
+                    - ${execute.run_pipeline.outputs.execution_log}
+                    - ${execute.run_pipeline.outputs.actual_output}
                     - ${verify.verify_output.result}
                 runtime:
                   timeout: PT10M

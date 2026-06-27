@@ -14,7 +14,7 @@ This is an implementation plan, not the framework verification strategy itself. 
 - ADR-006 is accepted: heterogeneous RP support is handled through provider contracts, a provider capability registry, reusable built-in providers, and a governed external runner escape hatch.
 - Minimum RP artifacts are defined: `package.yaml`, `rp_feature_spec.md`, `rp_ru_mapping.yaml`, `acceptance_criteria.md`, `tests/`, `expected-results/`, `traceability.md`, and `evidence_index.md`.
 - Architecture design defines Spring Boot 3.x / Java 17+ AP-level components, extension points, provider families, internal package boundaries, CLI commands, storage paths, execution modes, failure handling, and AC coverage.
-- Execution-focused DSL v1 is defined in the artifact contracts and must be validated before F007 provider runtime expansion.
+- Execution-focused DSL v1 is defined in the artifact contracts and must be validated and proven through CLI `run` plus `report --batch-id` before F007 provider runtime expansion.
 
 ## Staged Readiness
 
@@ -23,7 +23,7 @@ Ready to implement now:
 - F001 Product Repo Bootstrap CLI and Readiness Agent Skill.
 - F002 Release Package Creation Guide and Completeness Check.
 - F004 RP/RU Mapping Intake and Completeness Check, using sample or pilot mappings.
-- Execution-focused DSL v1 parser/validator and generator guard before provider runtime migration.
+- Execution-focused DSL v1 parser/validator, generator guard, and run/report consumption gate before provider runtime migration.
 
 Ready after pilot RP artifacts exist:
 
@@ -42,7 +42,7 @@ This snapshot separates framework verification progress from pilot acceptance pr
 | Area | Current Status | Evidence / Gate | Next Work |
 |---|---|---|---|
 | Product Repo and RP skeleton | Implemented for framework verification | CLI tests and sample fixture verification | Harden cross-artifact readiness as pilot artifacts arrive. |
-| AC intake and DSL drafting | Implemented for legacy framework readiness/draft flows; execution-focused DSL v1 contract is now documented | Unit/component and integration tests plus DSL v1 contract review | Complete T003A parser/generator/dry-run validation for `targets/setup/execute/expected_results/verify/evidence/runtime` before new provider execution slices. |
+| AC intake and DSL drafting | Implemented for legacy framework readiness/draft flows; execution-focused DSL v1 contract is now documented | Unit/component and integration tests plus DSL v1 contract review | Complete T003A parser/generator/dry-run validation and T003B run/report consumption for `targets/setup/execute/expected_results/verify/evidence/runtime` before new provider execution slices. |
 | Batch/run evidence and coverage | Implemented for sample and CLI flows | `./mvnw verify` and report tests | Validate against real pilot RP batch evidence. |
 | File/batch runtime | Supported | Provider registry dispatch and shell/file tests | Keep as reusable provider. |
 | REST/gRPC request-response runtime | Supported for REST and native descriptor-driven gRPC unary calls plus HTTP/status field, JSON path equality/absence, numeric tolerance, and schema/contract response assertions | Request/response provider, native gRPC invoker, runtime registry, CLI preflight, response assertion, schema/contract assertion, and evidence tests | Add pilot endpoint evidence when required. |
@@ -146,6 +146,31 @@ Verification:
 ```
 
 Done when valid DSL v1 artifacts pass, invalid DSL blocks before provider dispatch with AP/field/test/AC/owner-action details, generated executable drafts use execution-focused fields, and legacy artifacts remain readable only through compatibility behavior.
+
+### T003B - Execution-Focused DSL v1 Run and Report Consumption Gate
+
+Related features: F007, F008
+Acceptance: AC-007, AC-009
+Modules: `cli`, `execution`, `evidence`, `report`
+
+Prove that the same execution-focused DSL v1 artifact can be consumed by execution and reporting before provider runtime expansion. The test artifact must live under `tests/approved/`, use `status: active`, and contain only v1 sections: `traceability`, `targets`, `scenario`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`.
+
+Required behavior:
+
+- `run` derives RP ID and AC ID from v1 `traceability.*` fields.
+- `run` resolves v1 targets, setup fixtures, execute outputs, expected-result refs, verify rules, evidence refs, timeout, and retry into durable run and batch evidence.
+- `report --batch-id` calculates coverage from the selected batch using v1 traceability and normalized run evidence.
+- The selected batch becomes review-ready when the v1 test passes and covers the automatable RP AC.
+- A passing run that cannot be reported as review-ready is treated as an incomplete F007/F008 implementation.
+
+Verification:
+
+```bash
+./mvnw -q -Dtest='RegressionCommandTest#runExecutesExecutionFocusedDslV1AndProducesReviewReadyBatchReport' test
+./mvnw -q -Dtest='RegressionCommandTest,DslTestCaseValidatorTest,TestCaseLifecycleServiceTest' test
+```
+
+Done when an active v1 approved test can pass CLI `run`, write run and batch evidence, and pass CLI `report --batch-id` with review-ready traceability to RP ID, AC ID, test case ID, batch ID, and run ID.
 
 ### T004 - RP/RU Mapping Validator
 
@@ -434,7 +459,7 @@ Done when the pilot RP evidence package shows greater than 80% coverage for auto
 ```text
 T000 -> T001 -> T002 -> T003
                   |
-                  +-> T003A -> T004 -> T008 -> T009 -> T010 -> T011 -> T012 -> T013 -> T014 -> T014A
+                  +-> T003A -> T003B -> T004 -> T008 -> T009 -> T010 -> T011 -> T012 -> T013 -> T014 -> T014A
                   |                                                                                 |
                   |                                                                                 v
                   |                                                                                T015 -> T016 -> T017
@@ -442,7 +467,7 @@ T000 -> T001 -> T002 -> T003
                   +-> T005 -> T006 -> T007
 ```
 
-Parallelizable after T003, while execution runtime remains blocked until T003A is green:
+Parallelizable after T003, while execution runtime remains blocked until T003A and T003B are green:
 
 - T005 AC readiness.
 - T007 expected-result manager.
@@ -452,8 +477,8 @@ Parallelizable after T003, while execution runtime remains blocked until T003A i
 
 Gate 1 - Foundation ready:
 
-- T000, T001, T002, T003, T003A, and T004 complete.
-- F001/F002/F004 can be used to initialize and check Product Repo and RP readiness, and DSL v1 artifacts can be validated before execution.
+- T000, T001, T002, T003, T003A, T003B, and T004 complete.
+- F001/F002/F004 can be used to initialize and check Product Repo and RP readiness, and DSL v1 artifacts can be validated and consumed by run/report before provider runtime expansion.
 
 Gate 2 - Generation ready:
 
@@ -464,7 +489,7 @@ Gate 2 - Generation ready:
 Gate 3 - Execution ready:
 
 - T008 through T013 complete.
-- T003A remains green after any generator, sample fixture, or provider runtime change.
+- T003A and T003B remain green after any generator, sample fixture, report, or provider runtime change.
 - Approved tests and expected results exist.
 - Environment readiness and deployment evidence exist where required.
 
@@ -479,7 +504,7 @@ Gate 4 - Release evidence ready:
 |---|---|
 | Agent invents AC or business behavior | F003 gate preserves owner-authored AC only. |
 | Tests are regenerated on every run | Execution reads checked-in DSL tests from `tests/approved/`; generation is separate. |
-| Provider runtime is implemented before the DSL contract is stable | T003A blocks provider runtime migration until execution-focused DSL validation, generator output, and dry-run reporting are verified. |
+| Provider runtime is implemented before the DSL contract is stable | T003A and T003B block provider runtime migration until execution-focused DSL validation, generator output, dry-run reporting, and CLI run/report consumption are verified. |
 | SIT run starts before deployment readiness | Environment resolver blocks `sit_deployed` before adapter execution. |
 | Multi-RU order is ambiguous | Mapping validator requires dependency graph and rejects scalar order-only execution planning. |
 | RP/RU membership is inferred incorrectly | Mapping validator consumes human-authored `rp_ru_mapping.yaml` only. |

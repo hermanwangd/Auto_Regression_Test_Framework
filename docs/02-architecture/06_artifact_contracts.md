@@ -437,7 +437,19 @@ runtime:
 
 Allowed DSL execution statuses are `draft_skeleton`, `draft_executable`, `active`, `needs_update`, and `retired`. These are not approval states and must not be used as release gates.
 
-### 6.7.6 Compatibility and Migration
+An execution-focused DSL v1 artifact is execution-eligible only when it is stored under the RP `tests/approved/` lifecycle location and has an allowed executable status such as `active`. Expected-result approval remains on expected-result artifacts, not on the DSL status field.
+
+### 6.7.6 Run and Report Consumption
+
+The same execution-focused DSL v1 artifact must be consumed consistently by validation, binding, execution evidence, and coverage reporting:
+
+- `run` must derive RP ID and AC ID from `traceability.package_id` and `traceability.acceptance_criteria_id`.
+- `run` must derive target runner, fixture type, operation, expected-result reader, verify type, evidence refs, timeout, and retry from v1 sections.
+- `run` must write normalized evidence fields needed by existing reporting, including RP ID, AC ID, test case ID, batch ID, run ID, provider family/type, provider contract path, final status, and actual-output refs.
+- `report --batch-id` must calculate coverage from batch/run evidence and approved v1 test artifacts without requiring legacy-only fields.
+- A v1 test that passes execution but cannot be included in a review-ready batch report is not complete F007/F008 support.
+
+### 6.7.7 Compatibility and Migration
 
 The current implementation still contains legacy v1 field readers in some framework modules. The migration target is:
 
@@ -463,6 +475,7 @@ Implementation sequencing rule:
 - First implement DSL v1 parsing and validation for the execution-focused field set.
 - Then update generation so new drafts emit only execution-focused fields.
 - Then keep legacy artifacts readable through compatibility behavior until migrated.
+- Then prove one active execution-focused DSL v1 artifact can pass `run` and `report --batch-id` with review-ready coverage.
 - Only after those checks pass may provider runtime dispatch or sample fixture migration claim execution-focused DSL support.
 - A new artifact that mixes execution-focused DSL with legacy-only or governance-heavy fields must be blocked before execution.
 
