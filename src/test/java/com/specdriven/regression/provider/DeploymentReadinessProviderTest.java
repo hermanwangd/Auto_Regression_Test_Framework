@@ -307,6 +307,88 @@ class DeploymentReadinessProviderTest {
         }
     }
 
+    @Test
+    void defaultProbeRunsBoundedVmSshCommandAndCapturesOutput() throws Exception {
+        Path argsFile = tempDir.resolve("ssh-readiness.args");
+        Path ssh = executable("ssh-readiness.sh", """
+                #!/bin/sh
+                printf '%%s\\n' "$@" > "%s"
+                echo "active"
+                exit 0
+                """.formatted(argsFile));
+
+        AdapterExecutionResult result = executeProvider(
+                new DeploymentReadinessProvider(),
+                "payment_vm",
+                Map.of(
+                        "provider_type", "vm",
+                        "readiness_probe", "ssh_command",
+                        "ssh_ref", ssh.toString(),
+                        "host_ref", "10.0.0.15",
+                        "user_ref", "deploy",
+                        "port", 2222,
+                        "command_ref", "systemctl is-active payment-api",
+                        "service_ref", "payment-api",
+                        "deployed_version_ref", "build-43",
+                        "timeout_seconds", 2));
+
+        Path runDir = tempDir.resolve("run");
+        assertThat(result.exitCode()).isZero();
+        assertThat(Files.readString(argsFile))
+                .contains("-o\nBatchMode=yes")
+                .contains("-o\nConnectTimeout=2")
+                .contains("-p\n2222")
+                .contains("deploy@10.0.0.15")
+                .contains("systemctl is-active payment-api");
+        assertThat(Files.readString(result.stdoutLog())).isEqualTo("active\n");
+        assertThat(Files.readString(result.actualOutput())).isEqualTo("active\n");
+        assertThat(Files.readString(runDir.resolve("readiness.yaml")))
+                .contains("readiness_probe: ssh_command")
+                .contains("ssh_ref: " + ssh)
+                .contains("host_ref: 10.0.0.15")
+                .contains("user_ref: deploy")
+                .contains("command_ref: systemctl is-active payment-api")
+                .contains("check_count: 1");
+    }
+
+    @Test
+    void defaultProbeRunsBoundedVmWinrmCommandAndCapturesOutput() throws Exception {
+        Path argsFile = tempDir.resolve("winrm-readiness.args");
+        Path winrm = executable("winrm-readiness.sh", """
+                #!/bin/sh
+                printf '%%s\\n' "$@" > "%s"
+                echo "Running"
+                exit 0
+                """.formatted(argsFile));
+
+        AdapterExecutionResult result = executeProvider(
+                new DeploymentReadinessProvider(),
+                "payment_vm",
+                Map.of(
+                        "provider_type", "vm",
+                        "readiness_probe", "winrm_command",
+                        "winrm_ref", winrm.toString(),
+                        "host_ref", "10.0.0.16",
+                        "command_ref", "Get-Service payment-api",
+                        "service_ref", "payment-api",
+                        "deployed_version_ref", "build-44",
+                        "timeout_seconds", 2));
+
+        Path runDir = tempDir.resolve("run");
+        assertThat(result.exitCode()).isZero();
+        assertThat(Files.readString(argsFile))
+                .contains("-r:10.0.0.16")
+                .contains("Get-Service payment-api");
+        assertThat(Files.readString(result.stdoutLog())).isEqualTo("Running\n");
+        assertThat(Files.readString(result.actualOutput())).isEqualTo("Running\n");
+        assertThat(Files.readString(runDir.resolve("readiness.yaml")))
+                .contains("readiness_probe: winrm_command")
+                .contains("winrm_ref: " + winrm)
+                .contains("host_ref: 10.0.0.16")
+                .contains("command_ref: Get-Service payment-api")
+                .contains("check_count: 1");
+    }
+
     private AdapterExecutionResult executeProvider(
             DeploymentReadinessProvider provider,
             String providerName,

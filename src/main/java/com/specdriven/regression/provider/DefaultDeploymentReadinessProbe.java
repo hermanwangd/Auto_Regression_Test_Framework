@@ -135,6 +135,12 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
         if ("tcp_connect".equals(request.readinessProbe())) {
             return checkVmTcp(request);
         }
+        if ("ssh_command".equals(request.readinessProbe())) {
+            return checkVmCommand(request, vmSshCommand(request), "ssh_command");
+        }
+        if ("winrm_command".equals(request.readinessProbe())) {
+            return checkVmCommand(request, vmWinrmCommand(request), "winrm_command");
+        }
         throw new IOException("Unsupported VM readiness_probe `" + request.readinessProbe() + "`.");
     }
 
@@ -165,6 +171,84 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
                 "vm http readiness passed for " + uri + "\n",
                 response.body().isBlank() ? "ready\n" : response.body(),
                 1);
+    }
+
+    private DeploymentReadinessProbeResult checkVmCommand(
+            DeploymentReadinessProbeRequest request,
+            List<String> command,
+            String probeName) throws IOException, InterruptedException {
+        Process process = new ProcessBuilder(command).start();
+        boolean completed = process.waitFor(Math.max(1, request.timeoutSeconds()), TimeUnit.SECONDS);
+        if (!completed) {
+            process.destroyForcibly();
+            throw new IOException("VM " + probeName + " readiness probe timed out for `"
+                    + request.hostRef() + "`.");
+        }
+        String stdout = new String(process.getInputStream().readAllBytes());
+        String stderr = new String(process.getErrorStream().readAllBytes());
+        if (process.exitValue() != 0) {
+            throw new IOException("VM " + probeName + " readiness probe failed for `"
+                    + request.hostRef() + "`: " + stderr.strip());
+        }
+        String output = stdout.isBlank() ? "ready\n" : stdout;
+        return new DeploymentReadinessProbeResult(output, output, 1);
+    }
+
+    private List<String> vmSshCommand(DeploymentReadinessProbeRequest request) throws IOException {
+        String executable = firstText(request.contract(), "ssh_ref");
+        if (executable.isBlank()) {
+            executable = "ssh";
+        }
+        List<String> command = new ArrayList<>();
+        command.add(resolveRef(executable));
+        command.add("-o");
+        command.add("BatchMode=yes");
+        command.add("-o");
+        command.add("ConnectTimeout=" + Math.max(1, request.timeoutSeconds()));
+        if (request.port() > 0) {
+            command.add("-p");
+            command.add(Integer.toString(request.port()));
+        }
+        command.add(vmLoginTarget(request));
+        command.add(vmCommandRef(request));
+        return command;
+    }
+
+    private List<String> vmWinrmCommand(DeploymentReadinessProbeRequest request) throws IOException {
+        String executable = firstText(request.contract(), "winrm_ref");
+        if (executable.isBlank()) {
+            executable = "winrs";
+        }
+        List<String> command = new ArrayList<>();
+        command.add(resolveRef(executable));
+        String host = resolveRef(request.hostRef());
+        if (request.port() > 0) {
+            host = host + ":" + request.port();
+        }
+        command.add("-r:" + host);
+        String user = firstText(request.contract(), "user_ref");
+        if (!user.isBlank()) {
+            command.add("-u:" + resolveRef(user));
+        }
+        command.add(vmCommandRef(request));
+        return command;
+    }
+
+    private String vmLoginTarget(DeploymentReadinessProbeRequest request) throws IOException {
+        String host = resolveRef(request.hostRef());
+        String user = firstText(request.contract(), "user_ref");
+        if (user.isBlank()) {
+            return host;
+        }
+        return resolveRef(user) + "@" + host;
+    }
+
+    private String vmCommandRef(DeploymentReadinessProbeRequest request) throws IOException {
+        String command = firstText(request.contract(), "command_ref");
+        if (command.isBlank()) {
+            throw new IOException("VM command readiness probe requires command_ref.");
+        }
+        return resolveRef(command);
     }
 
     private String resolveRef(String ref) throws IOException {

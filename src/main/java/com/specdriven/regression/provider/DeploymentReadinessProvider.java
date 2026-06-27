@@ -151,6 +151,10 @@ public class DeploymentReadinessProvider {
         appendIfPresent(builder, "log_tail_lines", stringValue(contract.get("log_tail_lines")));
         appendIfPresent(builder, "host_ref", stringValue(contract.get("host_ref")));
         appendIfPresent(builder, "port", stringValue(contract.get("port")));
+        appendIfPresent(builder, "ssh_ref", stringValue(contract.get("ssh_ref")));
+        appendIfPresent(builder, "winrm_ref", stringValue(contract.get("winrm_ref")));
+        appendIfPresent(builder, "user_ref", stringValue(contract.get("user_ref")));
+        appendIfPresent(builder, "command_ref", stringValue(contract.get("command_ref")));
         appendIfPresent(builder, "health_url_ref", stringValue(contract.get("health_url_ref")));
         appendIfPresent(builder, "deployed_version_ref", stringValue(contract.get("deployed_version_ref")));
         builder.append("checks:\n");

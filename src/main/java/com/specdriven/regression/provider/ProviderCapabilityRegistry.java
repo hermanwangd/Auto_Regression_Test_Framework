@@ -275,6 +275,22 @@ class ProviderCapabilityRegistry {
             }
             return;
         }
+        if (readinessProbe.equals("ssh_command") || readinessProbe.equals("winrm_command")) {
+            if (!hasAnyText(contract, "host_ref")) {
+                violations.add(required(".host_ref",
+                        "Declare host_ref for native VM command readiness provider `" + providerName + "`."));
+            }
+            if (!hasAnyText(contract, "command_ref")) {
+                violations.add(required(".command_ref",
+                        "Declare command_ref for native VM command readiness provider `" + providerName + "`."));
+            }
+            if (hasAnyText(contract, "port") && !isPositiveInteger(contract.get("port"))) {
+                violations.add(required(".port",
+                        "Declare port as a positive integer for native VM command readiness provider `"
+                                + providerName + "`."));
+            }
+            return;
+        }
         if (!hasAnyText(contract, "host_ref")) {
             violations.add(required(".host_ref",
                     "Declare host_ref for native VM readiness provider `" + providerName + "`."));

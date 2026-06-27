@@ -379,6 +379,67 @@ class ProviderCapabilityRegistryTest {
     }
 
     @Test
+    void acceptsNativeVmSshAndWinrmCommandReadinessContracts() {
+        ProviderCapabilityRegistry.ProviderContractValidation ssh = registry.validate(
+                "adapters",
+                "payment_vm",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "vm",
+                        "readiness_probe", "ssh_command",
+                        "ssh_ref", "tools/ssh-readiness.sh",
+                        "host_ref", "10.0.0.15",
+                        "user_ref", "deploy",
+                        "command_ref", "systemctl is-active payment-api",
+                        "deployed_version_ref", "build-43",
+                        "timeout_seconds", 15,
+                        "outputs", Map.of("actual_output_ref", "actual/vm-ssh.txt")),
+                "sit_deployed");
+        ProviderCapabilityRegistry.ProviderContractValidation winrm = registry.validate(
+                "adapters",
+                "payment_vm",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "vm",
+                        "readiness_probe", "winrm_command",
+                        "winrm_ref", "tools/winrm-readiness.sh",
+                        "host_ref", "10.0.0.16",
+                        "command_ref", "Get-Service payment-api",
+                        "deployed_version_ref", "build-44",
+                        "timeout_seconds", 15,
+                        "outputs", Map.of("actual_output_ref", "actual/vm-winrm.txt")),
+                "sit_deployed");
+
+        assertThat(ssh.ready()).isTrue();
+        assertThat(ssh.registryStatus()).isEqualTo("supported");
+        assertThat(ssh.runtimeStatus()).isEqualTo("supported");
+        assertThat(winrm.ready()).isTrue();
+        assertThat(winrm.registryStatus()).isEqualTo("supported");
+        assertThat(winrm.runtimeStatus()).isEqualTo("supported");
+    }
+
+    @Test
+    void blocksNativeVmCommandReadinessWithoutHostOrCommand() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_vm",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "vm",
+                        "readiness_probe", "ssh_command",
+                        "deployed_version_ref", "build-43",
+                        "timeout_seconds", 15,
+                        "outputs", Map.of("actual_output_ref", "actual/vm-ssh.txt")),
+                "sit_deployed");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .contains(
+                        ".host_ref",
+                        ".command_ref");
+    }
+
+    @Test
     void blocksNativeDeploymentReadinessContractsWithoutRequiredTargetFields() {
         ProviderCapabilityRegistry.ProviderContractValidation k8s = registry.validate(
                 "adapters",
