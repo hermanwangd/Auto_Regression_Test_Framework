@@ -151,6 +151,7 @@ class RegressionCommandTest {
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString()).contains("mapping_gaps:");
         assertThat(output.toString()).contains("release_units[0].unit_type");
+        assertThat(output.toString()).contains("reason: rp_ru_mapping_readiness_failed");
         assertThat(output.toString()).contains("owner_action:");
     }
 

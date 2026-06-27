@@ -291,17 +291,20 @@ public class RegressionCommand {
         out.println("gaps:");
         for (ReleasePackageGap gap : report.gaps()) {
             out.println("  - path: " + gap.path());
+            out.println("    reason: missing_required_rp_artifact");
             out.println("    owner_action: " + gap.ownerAction());
         }
         out.println("package_schema_errors:");
         for (ArtifactValidationError error : report.packageSchemaErrors()) {
             out.println("  - field_path: " + error.fieldPath());
+            out.println("    reason: artifact_schema_validation_failed");
             out.println("    blocks: " + error.blocks());
             out.println("    owner_action: " + error.ownerAction());
         }
         out.println("mapping_gaps:");
         for (RpRuMappingGap gap : report.mappingGaps()) {
             out.println("  - field_path: " + gap.fieldPath());
+            out.println("    reason: rp_ru_mapping_readiness_failed");
             out.println("    blocks_execution: " + gap.blocksExecution());
             out.println("    owner_action: " + gap.ownerAction());
         }
