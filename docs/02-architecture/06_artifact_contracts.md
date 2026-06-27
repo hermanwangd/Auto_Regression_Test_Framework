@@ -497,11 +497,8 @@ steps:
     input: ${package_inputs.inputs.submit_order}
 assertions:
   - type: json_path_equals
-    actual: ${steps.submit.response.status}
-    oracle:
-      type: invariant
-      rule: equals
-      value: APPROVED
+    path: $.status
+    expected_value: APPROVED
 ```
 
 ```yaml
