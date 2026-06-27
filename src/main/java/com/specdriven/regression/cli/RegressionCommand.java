@@ -683,6 +683,10 @@ public class RegressionCommand {
                     packageRoot.resolve("rp_ru_mapping.yaml"),
                     approvedTest,
                     bindingReport));
+            providerGaps.addAll(messagingTestContextGaps(
+                    packageRoot.resolve("rp_ru_mapping.yaml"),
+                    approvedTest,
+                    bindingReport));
             blocked = blocked || !providerGaps.isEmpty();
             out.println("provider_contracts_used:");
             for (ResolvedProviderContract contract : providerReport.resolvedContracts()) {
@@ -820,6 +824,76 @@ public class RegressionCommand {
         return gaps;
     }
 
+    private List<ProviderContractGap> messagingTestContextGaps(
+            Path mappingYaml,
+            Path approvedTest,
+            BindingResolutionReport bindingReport) {
+        AdapterContractContext context =
+                adapterContractContext(mappingYaml, targetRuId(approvedTest), adapterName(approvedTest));
+        if (!"messaging".equals(context.providerFamily())
+                || !List.of("local", "mock").contains(context.providerType())) {
+            return List.of();
+        }
+        Object actionsValue = context.contract().get("actions");
+        if (!(actionsValue instanceof Map<?, ?> actions) || actions.isEmpty()) {
+            return List.of();
+        }
+        List<String> bindingNames = bindingReport.resolvedBindings().stream()
+                .map(ResolvedBinding::bindingName)
+                .toList();
+        List<ProviderContractGap> gaps = new java.util.ArrayList<>();
+        for (String actionName : stepActions(approvedTest)) {
+            if (actionName.isBlank()) {
+                continue;
+            }
+            Object actionValue = actions.get(actionName);
+            if (!(actionValue instanceof Map<?, ?> action)) {
+                gaps.add(new ProviderContractGap(
+                        context.contractPath() + ".actions." + actionName,
+                        "adapter",
+                        context.providerName(),
+                        context.providerFamily(),
+                        context.providerType(),
+                        "incomplete",
+                        "blocked",
+                        context.ruId(),
+                        context.providerName(),
+                        "Declare messaging action `" + actionName
+                                + "` before invocation or update the DSL step action."));
+                continue;
+            }
+            String payloadBinding = firstText(action, "payload_binding", "message_binding", "event_binding");
+            if (payloadBinding.isBlank()) {
+                gaps.add(new ProviderContractGap(
+                        context.contractPath() + ".actions." + actionName + ".payload_binding",
+                        "adapter",
+                        context.providerName(),
+                        context.providerFamily(),
+                        context.providerType(),
+                        "incomplete",
+                        "blocked",
+                        context.ruId(),
+                        context.providerName(),
+                        "Declare payload_binding, message_binding, or event_binding for messaging action `"
+                                + actionName + "` before invocation."));
+            } else if (!bindingNames.contains(payloadBinding)) {
+                gaps.add(new ProviderContractGap(
+                        context.contractPath() + ".actions." + actionName + ".payload_binding",
+                        "adapter",
+                        context.providerName(),
+                        context.providerFamily(),
+                        context.providerType(),
+                        "incomplete",
+                        "blocked",
+                        context.ruId(),
+                        context.providerName(),
+                        "Add package input binding `" + payloadBinding
+                                + "` before invoking messaging action `" + actionName + "`."));
+            }
+        }
+        return gaps;
+    }
+
     private List<String> stepActions(Path approvedTest) {
         Object stepsValue = readYamlMap(approvedTest).get("steps");
         if (!(stepsValue instanceof List<?> steps)) {
@@ -883,6 +957,16 @@ public class RegressionCommand {
             return (Map<String, Object>) adapterMap;
         }
         return Map.of();
+    }
+
+    private String firstText(Map<?, ?> map, String... fields) {
+        for (String field : fields) {
+            String value = stringValue(map.get(field));
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private void printApGateStatus(PrintStream out, List<String> failureDetails) {

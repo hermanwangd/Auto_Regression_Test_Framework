@@ -1139,7 +1139,7 @@ class RegressionCommandTest {
     }
 
     @Test
-    void runFailsMessagingProviderWhenPayloadBindingIsUnresolved() throws Exception {
+    void runBlocksMessagingProviderWhenPayloadBindingIsUnresolvedBeforeExecution() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-MSG-MISSING-BINDING";
         String acId = rpId + "-AC-001";
@@ -1155,20 +1155,58 @@ class RegressionCommandTest {
         writeApprovedExpectedResult(rpId, acId, payload);
         writeApprovedMessagingTestCase(rpId, acId);
 
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
         int exit = command.execute(new String[] {
                 "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral"},
-                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+                print(output), print(new ByteArrayOutputStream()));
 
         Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
         assertThat(exit).isEqualTo(1);
-        assertThat(Files.readString(runDir.resolve("messaging.yaml")))
-                .contains("status: failed")
-                .contains("payload_binding: missing_event")
-                .contains("message_count: 0")
-                .contains("Cannot resolve messaging payload binding `missing_event`");
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("run_status: blocked")
+                .contains("provider_contract_gaps:")
+                .contains("provider_family: messaging")
+                .contains("provider_type: local")
+                .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.publish_payment_event.payload_binding")
+                .contains("Add package input binding `missing_event` before invoking messaging action `publish_payment_event`");
+        assertThat(Files.exists(runDir.resolve("messaging.yaml"))).isFalse();
         assertThat(Files.readString(runDir.resolve("run.yaml")))
-                .contains("status: failed")
-                .contains("assertion_status: not_run");
+                .contains("status: blocked")
+                .contains("adapter_execution_started: false");
+    }
+
+    @Test
+    void runDryRunBlocksMessagingProviderWithUnsupportedActionBeforeInvocation() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-ACTION";
+        String acId = rpId + "-AC-001";
+        String payload = "{\"eventId\":\"EVT-001\",\"status\":\"published\"}\n";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingProviderMapping(rpId);
+        writeMessagingEventPayload(rpId, payload);
+        writeApprovedExpectedResult(rpId, acId, payload);
+        writeApprovedMessagingTestCase(rpId, acId, "consume_payment_event");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: messaging");
+        assertThat(output.toString()).contains("provider_type: local");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.consume_payment_event");
+        assertThat(output.toString()).contains("Declare messaging action `consume_payment_event` before invocation");
     }
 
     @Test
@@ -3080,6 +3118,10 @@ class RegressionCommandTest {
     }
 
     private void writeApprovedMessagingTestCase(String rpId, String acId) throws Exception {
+        writeApprovedMessagingTestCase(rpId, acId, "publish_payment_event");
+    }
+
+    private void writeApprovedMessagingTestCase(String rpId, String acId, String actionName) throws Exception {
         String expectedResultId = acId.replace("-AC-", "-ER-");
         Path testCase = tempDir.resolve(
                 "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
@@ -3116,7 +3158,7 @@ class RegressionCommandTest {
                       bind_as: message_event
                 steps:
                   - id: publish_payment_event
-                    action: publish_payment_event
+                    action: %s
                     target_ru_id: RU-payment-events
                 assertions:
                   - type: file_diff
@@ -3124,7 +3166,7 @@ class RegressionCommandTest {
                 evidence_required:
                   - execution_log
                   - message_event
-                """.formatted(rpId, rpId, acId, acId, expectedResultId, expectedResultId));
+                """.formatted(rpId, rpId, acId, acId, expectedResultId, expectedResultId, actionName));
     }
 
     private void writeApprovedDeploymentReadinessTestCase(String rpId, String acId) throws Exception {
