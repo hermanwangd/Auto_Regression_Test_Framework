@@ -10,6 +10,7 @@ import com.specdriven.regression.binding.BindingResolver;
 import com.specdriven.regression.binding.ResolvedBinding;
 import com.specdriven.regression.evidence.EvidenceWriter;
 import com.specdriven.regression.provider.DatabaseFixtureProvider;
+import com.specdriven.regression.provider.MessagingProvider;
 import com.specdriven.regression.provider.ProviderContractResolutionReport;
 import com.specdriven.regression.provider.ProviderContractResolver;
 import com.specdriven.regression.provider.RequestResponseProvider;
@@ -35,6 +36,7 @@ public class ExecutionEngine {
     private final ProviderContractResolver providerContractResolver;
     private final RequestResponseProvider requestResponseProvider;
     private final DatabaseFixtureProvider databaseFixtureProvider;
+    private final MessagingProvider messagingProvider;
 
     public ExecutionEngine() {
         this(new DataPipelineAdapter(), new AssertionEngine(), new EvidenceWriter());
@@ -59,7 +61,7 @@ public class ExecutionEngine {
             BindingResolver bindingResolver,
             ProviderContractResolver providerContractResolver) {
         this(adapter, assertionEngine, evidenceWriter, bindingResolver, providerContractResolver,
-                new RequestResponseProvider(), new DatabaseFixtureProvider());
+                new RequestResponseProvider(), new DatabaseFixtureProvider(), new MessagingProvider());
     }
 
     public ExecutionEngine(
@@ -70,7 +72,7 @@ public class ExecutionEngine {
             ProviderContractResolver providerContractResolver,
             RequestResponseProvider requestResponseProvider) {
         this(adapter, assertionEngine, evidenceWriter, bindingResolver, providerContractResolver,
-                requestResponseProvider, new DatabaseFixtureProvider());
+                requestResponseProvider, new DatabaseFixtureProvider(), new MessagingProvider());
     }
 
     public ExecutionEngine(
@@ -81,6 +83,19 @@ public class ExecutionEngine {
             ProviderContractResolver providerContractResolver,
             RequestResponseProvider requestResponseProvider,
             DatabaseFixtureProvider databaseFixtureProvider) {
+        this(adapter, assertionEngine, evidenceWriter, bindingResolver, providerContractResolver,
+                requestResponseProvider, databaseFixtureProvider, new MessagingProvider());
+    }
+
+    public ExecutionEngine(
+            DataPipelineAdapter adapter,
+            AssertionEngine assertionEngine,
+            EvidenceWriter evidenceWriter,
+            BindingResolver bindingResolver,
+            ProviderContractResolver providerContractResolver,
+            RequestResponseProvider requestResponseProvider,
+            DatabaseFixtureProvider databaseFixtureProvider,
+            MessagingProvider messagingProvider) {
         this.adapter = adapter;
         this.assertionEngine = assertionEngine;
         this.evidenceWriter = evidenceWriter;
@@ -88,6 +103,7 @@ public class ExecutionEngine {
         this.providerContractResolver = providerContractResolver;
         this.requestResponseProvider = requestResponseProvider;
         this.databaseFixtureProvider = databaseFixtureProvider;
+        this.messagingProvider = messagingProvider;
     }
 
     public ExecutionResult execute(Path packageRoot, Path testCasePath, String batchId, String runId) {
@@ -175,8 +191,21 @@ public class ExecutionEngine {
             Path stdoutLog,
             Path stderrLog,
             Path actualOutput) {
-        if ("request_response".equals(adapterProviderFamily(providerReport))) {
+        String providerFamily = adapterProviderFamily(providerReport);
+        if ("request_response".equals(providerFamily)) {
             return requestResponseProvider.execute(
+                    packageRoot,
+                    contract,
+                    testCase,
+                    resolvedBindings,
+                    runDir,
+                    stdoutLog,
+                    stderrLog,
+                    actualOutput);
+        }
+        if ("messaging".equals(providerFamily)) {
+            return messagingProvider.execute(
+                    adapterName(testCase),
                     packageRoot,
                     contract,
                     testCase,

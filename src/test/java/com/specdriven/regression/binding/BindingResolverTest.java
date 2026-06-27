@@ -32,15 +32,15 @@ class BindingResolverTest {
     void blocksReservedBindingTypesBeforeProviderExecution() throws Exception {
         Path testCase = tempDir.resolve("tests/approved/RP-001-TC-001.yaml");
         Files.createDirectories(testCase.getParent());
-        Files.writeString(testCase, approvedTest("message_event", "expected-results/approved/RP-001-ER-001.yaml"));
+        Files.writeString(testCase, approvedTest("existing_state", "expected-results/approved/RP-001-ER-001.yaml"));
 
         BindingResolutionReport report = new BindingResolver().resolve(testCase);
 
         assertThat(report.ready()).isFalse();
         assertThat(report.gaps()).extracting(BindingGap::bindingName).contains("orders_seed");
-        assertThat(report.gaps()).extracting(BindingGap::bindingType).contains("message_event");
+        assertThat(report.gaps()).extracting(BindingGap::bindingType).contains("existing_state");
         assertThat(report.gaps()).extracting(BindingGap::ownerAction)
-                .contains("Use supported M1 binding type input_file, dataset, db_seed, or api_payload; or implement provider support.");
+                .contains("Use supported M1 binding type input_file, dataset, db_seed, api_payload, or message_event; or implement provider support.");
     }
 
     @Test

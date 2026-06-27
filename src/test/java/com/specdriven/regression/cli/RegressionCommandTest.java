@@ -282,7 +282,7 @@ class RegressionCommandTest {
         writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
         writeCompleteCiMapping("RP-001");
         writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
-        writeApprovedTestCase("RP-001", "message_event");
+        writeApprovedTestCase("RP-001", "existing_state");
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
@@ -292,7 +292,7 @@ class RegressionCommandTest {
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("binding_gaps:");
-        assertThat(output.toString()).contains("message_event");
+        assertThat(output.toString()).contains("existing_state");
         assertThat(output.toString()).contains("adapter_execution_started: false");
     }
 
@@ -307,7 +307,7 @@ class RegressionCommandTest {
         writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
         writeCompleteCiMapping("RP-001");
         writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
-        writeApprovedTestCase("RP-001", "message_event");
+        writeApprovedTestCase("RP-001", "existing_state");
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
@@ -330,7 +330,7 @@ class RegressionCommandTest {
         assertThat(runEvidence).contains("execution_mode: ci_ephemeral");
         assertThat(runEvidence).contains("environment_ref: ci://pipeline/RP-001");
         assertThat(failureDetails).contains("package_inputs.inputs.orders_seed.bind_as");
-        assertThat(failureDetails).contains("message_event");
+        assertThat(failureDetails).contains("existing_state");
     }
 
     @Test
@@ -567,6 +567,117 @@ class RegressionCommandTest {
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    void runExecutesLocalMessagingProviderAndWritesEvidence() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG";
+        String acId = rpId + "-AC-001";
+        String payload = "{\"eventId\":\"EVT-001\",\"status\":\"published\"}\n";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingProviderMapping(rpId);
+        writeMessagingEventPayload(rpId, payload);
+        writeApprovedExpectedResult(rpId, acId, payload);
+        writeApprovedMessagingTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
+        String runEvidence = Files.readString(runDir.resolve("run.yaml"));
+        assertThat(exit).isZero();
+        assertThat(Files.readString(runDir.resolve("messaging.yaml")))
+                .contains("provider: message_bus")
+                .contains("provider_type: local")
+                .contains("topic_ref: mock://payment.events")
+                .contains("action: publish_payment_event")
+                .contains("message_count: 1")
+                .contains("status: passed");
+        assertThat(Files.readString(runDir.resolve("actual/message.json"))).isEqualTo(payload);
+        assertThat(runEvidence)
+                .contains("status: passed")
+                .contains("binding_type: message_event")
+                .contains("provider_family: messaging")
+                .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus")
+                .contains("actual_output: actual/message.json")
+                .contains("assertion_status: passed");
+    }
+
+    @Test
+    void runFailsUnsupportedMessagingProviderTypeWithEvidence() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-KAFKA";
+        String acId = rpId + "-AC-001";
+        String payload = "{\"eventId\":\"EVT-001\",\"status\":\"published\"}\n";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingProviderMapping(rpId, "kafka", "kafka://payment.events");
+        writeMessagingEventPayload(rpId, payload);
+        writeApprovedExpectedResult(rpId, acId, payload);
+        writeApprovedMessagingTestCase(rpId, acId);
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
+        assertThat(exit).isEqualTo(1);
+        assertThat(Files.readString(runDir.resolve("messaging.yaml")))
+                .contains("status: failed")
+                .contains("provider: message_bus")
+                .contains("provider_type: kafka")
+                .contains("topic_ref: kafka://payment.events")
+                .contains("message_count: 0")
+                .contains("Unsupported messaging provider_type `kafka`");
+        assertThat(Files.readString(runDir.resolve("run.yaml")))
+                .contains("status: failed")
+                .contains("provider_family: messaging")
+                .contains("assertion_status: not_run");
+    }
+
+    @Test
+    void runFailsMessagingProviderWhenPayloadBindingIsUnresolved() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-MISSING-BINDING";
+        String acId = rpId + "-AC-001";
+        String payload = "{\"eventId\":\"EVT-001\",\"status\":\"published\"}\n";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingProviderMapping(rpId, "local", "mock://payment.events", "missing_event");
+        writeMessagingEventPayload(rpId, payload);
+        writeApprovedExpectedResult(rpId, acId, payload);
+        writeApprovedMessagingTestCase(rpId, acId);
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
+        assertThat(exit).isEqualTo(1);
+        assertThat(Files.readString(runDir.resolve("messaging.yaml")))
+                .contains("status: failed")
+                .contains("payload_binding: missing_event")
+                .contains("message_count: 0")
+                .contains("Cannot resolve messaging payload binding `missing_event`");
+        assertThat(Files.readString(runDir.resolve("run.yaml")))
+                .contains("status: failed")
+                .contains("assertion_status: not_run");
     }
 
     @Test
@@ -1434,6 +1545,69 @@ class RegressionCommandTest {
         Files.writeString(payload, "{\"amount\":100,\"currency\":\"USD\"}\n");
     }
 
+    private void writeMessagingProviderMapping(String rpId) throws Exception {
+        writeMessagingProviderMapping(rpId, "local", "mock://payment.events", "payment_event");
+    }
+
+    private void writeMessagingProviderMapping(String rpId, String providerType, String topicRef) throws Exception {
+        writeMessagingProviderMapping(rpId, providerType, topicRef, "payment_event");
+    }
+
+    private void writeMessagingProviderMapping(
+            String rpId,
+            String providerType,
+            String topicRef,
+            String payloadBinding) throws Exception {
+        Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        Files.writeString(mapping, """
+                rp_id: %s
+                release_units:
+                  - ru_id: RU-payment-events
+                    repo: /repo/payment-events
+                    unit_type: service_event
+                    owner: product_developer
+                    version_ref: build-456
+                    validation_boundary: event_observation
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://payment/events
+                    adapter: message_bus
+                    provider_contracts:
+                      adapters:
+                        message_bus:
+                          provider_family: messaging
+                          provider_type: %s
+                          topic_ref: %s
+                          timeout_seconds: 10
+                          actions:
+                            publish_payment_event:
+                              mode: publish
+                              payload_binding: %s
+                          logs:
+                            stdout: logs/message.log
+                            stderr: logs/message-error.log
+                          outputs:
+                            actual_output_ref: actual/message.json
+                      bindings:
+                        message_event:
+                          provider_family: messaging
+                          bind_as: event_payload
+                      fixtures: {}
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [execution_log, message_event]
+                    dependencies: []
+                """.formatted(rpId, providerType, topicRef, payloadBinding));
+    }
+
+    private void writeMessagingEventPayload(String rpId, String payload) throws Exception {
+        Path eventPayload = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/fixtures/events/payment_event.json");
+        Files.createDirectories(eventPayload.getParent());
+        Files.writeString(eventPayload, payload);
+    }
+
     private void writeDbFixtureMapping(String rpId, String jdbcUrl) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
         Files.writeString(mapping, """
@@ -1682,6 +1856,54 @@ class RegressionCommandTest {
                     oracle: ${oracles.payment_response}
                 evidence_required:
                   - execution_log
+                """.formatted(rpId, rpId, acId, acId, expectedResultId, expectedResultId));
+    }
+
+    private void writeApprovedMessagingTestCase(String rpId, String acId) throws Exception {
+        String expectedResultId = acId.replace("-AC-", "-ER-");
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s-TC-001
+                rp_id: %s
+                ac_id: %s
+                artifact_status: approved_for_regression
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
+                source_fingerprint: sha256:test
+                execution_target:
+                  ru_id: RU-payment-events
+                  adapter: message_bus
+                  execution_mode: ci_ephemeral
+                  environment_ref: ci://payment/events
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [message_event, messaging, file_assertion]
+                expected:
+                  ref: expected-results/approved/%s.yaml
+                oracles:
+                  payment_event:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
+                package_inputs:
+                  inputs:
+                    payment_event:
+                      ref: fixtures/events/payment_event.json
+                      bind_as: message_event
+                steps:
+                  - id: publish_payment_event
+                    action: publish_payment_event
+                    target_ru_id: RU-payment-events
+                assertions:
+                  - type: file_diff
+                    oracle: ${oracles.payment_event}
+                evidence_required:
+                  - execution_log
+                  - message_event
                 """.formatted(rpId, rpId, acId, acId, expectedResultId, expectedResultId));
     }
 
