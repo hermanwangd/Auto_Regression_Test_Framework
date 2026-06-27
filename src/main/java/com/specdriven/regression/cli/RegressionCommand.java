@@ -9,6 +9,9 @@ import com.specdriven.regression.discovery.ReleasePackageGap;
 import com.specdriven.regression.discovery.ReleasePackageResult;
 import com.specdriven.regression.discovery.ReleasePackageService;
 import com.specdriven.regression.dsl.DslTestCaseNormalizer;
+import com.specdriven.regression.dsl.DslTestCaseValidator;
+import com.specdriven.regression.dsl.DslValidationGap;
+import com.specdriven.regression.dsl.DslValidationReport;
 import com.specdriven.regression.environment.ExecutionEnvironmentGap;
 import com.specdriven.regression.environment.ExecutionEnvironmentReport;
 import com.specdriven.regression.environment.ExecutionEnvironmentResolver;
@@ -84,6 +87,7 @@ public class RegressionCommand {
     private final EvidenceWriter evidenceWriter;
     private final CoverageReportService coverageReportService;
     private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
+    private final DslTestCaseValidator dslTestCaseValidator = new DslTestCaseValidator();
 
     public RegressionCommand(ProductRepoService productRepoService, ReleasePackageService releasePackageService) {
         this(
@@ -596,8 +600,44 @@ public class RegressionCommand {
                     "Add approved_for_regression DSL test cases before run."));
         }
 
+        Map<Path, DslValidationReport> dslReports = new LinkedHashMap<>();
+        out.println("dsl_gaps:");
+        for (Path approvedTest : approvedTests) {
+            List<String> testFailureDetails = new java.util.ArrayList<>();
+            DslValidationReport dslReport = dslTestCaseValidator.validate(approvedTest);
+            dslReports.put(approvedTest, dslReport);
+            blocked = blocked || !dslReport.ready();
+            for (DslValidationGap gap : dslReport.gaps()) {
+                out.println("  - ap: Definition and Validation");
+                out.println("    test_case_id: " + gap.testCaseId());
+                out.println("    ac_id: " + gap.acId());
+                out.println("    section: " + gap.section());
+                out.println("    field_path: " + gap.fieldPath());
+                out.println("    reason: " + failureReason("Definition and Validation", gap.fieldPath()));
+                if (!gap.verifyId().isBlank()) {
+                    out.println("    verify_id: " + gap.verifyId());
+                }
+                out.println("    owner_action: " + gap.ownerAction());
+                addTestFailure(failureDetails, testFailureDetails, failureDetail(
+                        "Definition and Validation",
+                        gap.fieldPath(),
+                        gap.ownerAction(),
+                        "test_case_id: " + gap.testCaseId(),
+                        "ac_id: " + gap.acId(),
+                        "section: " + gap.section(),
+                        gap.verifyId().isBlank() ? "" : "verify_id: " + gap.verifyId()));
+            }
+            if (!testFailureDetails.isEmpty()) {
+                blockedTestFailureDetails.put(approvedTest, List.copyOf(testFailureDetails));
+            }
+        }
+
         out.println("binding_gaps:");
         for (Path approvedTest : approvedTests) {
+            if (!dslReports.getOrDefault(approvedTest,
+                    new DslValidationReport(true, "", "", List.of())).ready()) {
+                continue;
+            }
             List<String> testFailureDetails = new java.util.ArrayList<>();
             BindingResolutionReport bindingReport = bindingResolver.resolve(approvedTest);
             blocked = blocked || !bindingReport.ready();

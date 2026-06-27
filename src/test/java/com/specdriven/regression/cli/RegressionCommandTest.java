@@ -306,6 +306,34 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksInvalidExecutionFocusedDslBeforeAdapterExecution() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeCompleteCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeInvalidExecutionFocusedDslTestCase("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("dsl_gaps:");
+        assertThat(output.toString()).contains("ap: Definition and Validation");
+        assertThat(output.toString()).contains("field_path: execute[0].operation");
+        assertThat(output.toString()).contains("field_path: execute[0].outputs");
+        assertThat(output.toString()).contains("Use operation `run_batch`");
+        assertThat(output.toString()).contains("run_status: blocked");
+    }
+
+    @Test
     void runDryRunBlocksParameterizedTestsUntilExpansionIsImplemented() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -3646,6 +3674,60 @@ class RegressionCommandTest {
 
     private void writeApprovedTestCase(String rpId, String bindingType) throws Exception {
         writeApprovedTestCaseWithOracleType(rpId, bindingType, "expected_result_artifact");
+    }
+
+    private void writeInvalidExecutionFocusedDslTestCase(String rpId) throws Exception {
+        String acId = rpId + "-AC-001";
+        String expectedResultId = acId.replace("-AC-", "-ER-");
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s-TC-001
+                status: active
+                revision: 1
+                traceability:
+                  package_id: %s
+                  acceptance_criteria_id: %s
+                  source: acceptance_criteria.md#%s
+                targets:
+                  RU-transform-job:
+                    type: batch_runner
+                    runner: spring_boot_cli
+                    environment: ci://pipeline/%s
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [db_seed, batch_execution, file_assertion]
+                setup:
+                  fixtures:
+                    orders_seed:
+                      type: db_seed
+                      ref: fixtures/db/orders_seed.yaml
+                execute:
+                  - id: run_pipeline
+                    target: RU-transform-job
+                    operation: call_ru
+                    with:
+                      orders_seed: ${setup.fixtures.orders_seed}
+                expected_results:
+                  normalized_orders:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
+                verify:
+                  - id: verify_output
+                    type: file_diff
+                    actual: ${execute.run_pipeline.outputs.actual_output}
+                    expected: ${expected_results.normalized_orders.ref}
+                evidence:
+                  required:
+                    - ${verify.verify_output.result}
+                runtime:
+                  timeout: PT10M
+                  retry:
+                    max_attempts: 0
+                """.formatted(rpId, rpId, acId, acId, rpId, expectedResultId));
     }
 
     private void writeApprovedTestCase(String rpId, String testCaseId, String acId, String bindingType)

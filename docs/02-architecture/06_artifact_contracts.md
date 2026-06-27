@@ -458,6 +458,14 @@ The current implementation still contains legacy v1 field readers in some framew
 
 Implementation work after this documentation baseline must first add validation and execution support for this execution-focused DSL shape, while keeping legacy samples readable until the sample fixture is migrated.
 
+Implementation sequencing rule:
+
+- First implement DSL v1 parsing and validation for the execution-focused field set.
+- Then update generation so new drafts emit only execution-focused fields.
+- Then keep legacy artifacts readable through compatibility behavior until migrated.
+- Only after those checks pass may provider runtime dispatch or sample fixture migration claim execution-focused DSL support.
+- A new artifact that mixes execution-focused DSL with legacy-only or governance-heavy fields must be blocked before execution.
+
 ## 6.8 Expected Result Artifact
 
 ```yaml

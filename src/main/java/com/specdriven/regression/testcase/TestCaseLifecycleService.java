@@ -81,12 +81,14 @@ public class TestCaseLifecycleService {
                 execute:
                   - id: execute_rp_behavior
                     target: %s
-                    operation: call_ru
+                    operation: %s
                     with:
                       primary_input: ${setup.fixtures.primary_input}
                     outputs:
                       actual_output:
                         ref: actual/output.txt
+                      execution_log:
+                        ref: logs/execution.log
                 expected_results:
                   owner_approved_expected:
                     type: expected_result_artifact
@@ -94,14 +96,19 @@ public class TestCaseLifecycleService {
                     ref: pending_owner_approved_expected_result
                     owner_action: Approve expected result before regression execution.
                 verify:
-                  - type: file_diff
+                  - id: verify_expected_output
+                    type: file_diff
                     actual: ${execute.execute_rp_behavior.outputs.actual_output}
                     expected: ${expected_results.owner_approved_expected.ref}
                 evidence:
                   required:
-                    - execution_log
-                    - assertion_result
+                    - ${execute.execute_rp_behavior.outputs.execution_log}
+                    - ${execute.execute_rp_behavior.outputs.actual_output}
+                    - ${verify.verify_expected_output.result}
                 runtime:
+                  timeout: PT10M
+                  retry:
+                    max_attempts: 0
                   cleanup_required: %s
                   destructive_actions_allowed: false
                 """.formatted(
@@ -118,6 +125,7 @@ public class TestCaseLifecycleService {
                 executionContext.environmentRef(),
                 fixtureYaml(executionContext.capabilities()),
                 executionContext.ruId(),
+                operation(executionContext.capabilities()),
                 requiresCleanup(executionContext.capabilities()));
     }
 
@@ -163,6 +171,19 @@ public class TestCaseLifecycleService {
         return "application";
     }
 
+    private String operation(List<String> capabilities) {
+        if (capabilities.contains("batch_execution")) {
+            return "run_batch";
+        }
+        if (capabilities.contains("api_payload")) {
+            return "call_api";
+        }
+        if (capabilities.contains("message_event")) {
+            return "publish_message";
+        }
+        return "run_application";
+    }
+
     private boolean requiresCleanup(List<String> capabilities) {
         return capabilities.contains("db_seed")
                 || capabilities.contains("message_event")
@@ -171,7 +192,19 @@ public class TestCaseLifecycleService {
     }
 
     private String fixtureYaml(List<String> capabilities) {
-        String setup = """
+        if (!requiresCleanup(capabilities)) {
+            return """
+                    setup:
+                      fixtures:
+                        primary_input:
+                          type: %s
+                          lifecycle: %s
+                          ref: pending_owner_selected_input
+                          owner_action: Select checked-in or cataloged logical input data for this AC.
+                      cleanup: []
+                    """.formatted(inputBindAs(capabilities), inputLifecycle(capabilities));
+        }
+        return """
                 setup:
                   fixtures:
                     primary_input:
@@ -179,15 +212,12 @@ public class TestCaseLifecycleService {
                       lifecycle: %s
                       ref: pending_owner_selected_input
                       owner_action: Select checked-in or cataloged logical input data for this AC.
-                """.formatted(inputBindAs(capabilities), inputLifecycle(capabilities));
-        if (!requiresCleanup(capabilities)) {
-            return setup + "  cleanup: []";
-        }
-        return setup + """
+                      cleanup_ref: pending_owner_cleanup_ref
                   cleanup:
                     - id: cleanup_primary_input
                       action: cleanup_bound_input
-                      input: ${setup.fixtures.primary_input}""";
+                      input: ${setup.fixtures.primary_input}
+                """.formatted(inputBindAs(capabilities), inputLifecycle(capabilities));
     }
 
     private String skeletonDraftContent(

@@ -191,12 +191,23 @@ Conditional fields are required only when the scenario needs them:
 
 Optional fields such as tags, notes, or replacement links may improve maintenance, but governance-heavy fields must not be required for first execution.
 
+The DSL v1 contract is a pre-implementation gate for F007 provider runtime work. Before provider dispatch, sample fixture migration, or native runtime expansion can be claimed complete, the framework must validate the execution-focused DSL shape, generator output, and compatibility behavior described in `docs/02-architecture/06_artifact_contracts.md`.
+
+New execution-focused DSL artifacts must:
+
+- Use readable operation names such as `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, or `run_application`.
+- Use `targets`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime` instead of framework-internal legacy fields.
+- Capture `execute[].outputs` whenever verification or evidence references execution results.
+- Keep provider implementation details in RP/RU mapping or provider contracts, not inside the test case body.
+- Fail validation before execution when required fields, conditional fields, or supported enum values are missing.
+
 The DSL shall reject or block these concerns from the test case body:
 
 - Secrets, credentials, tokens, or production data.
 - Physical provider implementation details such as endpoint URLs, shell commands, queue client settings, DB connection strings, or loader code.
 - CD deployment instructions or environment provisioning scripts.
 - New RP feature behavior, AC wording, expected-result approval, waiver approval, release approval, release gate, or risk approval.
+- Governance-heavy fields such as `approval_status`, `approved_by`, `approval_required`, `waiver`, `release_gate`, `risk_approval`, or governance workflow state.
 
 M1 implements only the DSL v1 subset required for the selected heterogeneous pilot. Additional DSL v1 enum values remain reserved until their providers are implemented and verified.
 
@@ -409,10 +420,14 @@ F007 defines RP Regression Execution. Framework Verification tests may exercise 
 
 F007 shall not author AC, classify AC readiness, generate tests, regenerate checked-in tests, generate expected results, approve expected results, approve waivers, or decide release readiness.
 
+F007 implementation must not proceed directly to provider runtime expansion until the DSL v1 contract gate is green. The gate requires parser validation, generator output, dry-run blocking, and compatibility behavior for execution-focused fields, legacy-only fields, and prohibited governance fields.
+
 ### Required Mechanism
 
 - Read `package.yaml`, `rp_ru_mapping.yaml`, checked-in DSL test cases from the RP `tests/` folder, target definitions, setup fixture refs, execute operation refs, expected-result artifacts, verify rules, evidence refs, runtime policy, and provider contracts.
 - Check that test cases declare supported `dsl_version` and include required DSL identity/status/revision, traceability, targets, scenario, setup, execute, expected_results, verify, evidence, and runtime fields.
+- Reject new execution-focused DSL artifacts that still use legacy-only fields such as `rp_id`, `ac_id`, `execution_target`, `target_ru_id`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, or `policy`.
+- Reject new execution-focused DSL artifacts that contain governance-heavy fields such as approval, waiver, release gate, or risk approval state.
 - Check that test cases have execution lifecycle status allowed by the selected run policy.
 - Check that required expected-result artifacts are eligible under the expected-result process before they are used by `verify`.
 - Validate that every DSL section can be consumed by exactly one AP responsibility path before adapter execution starts.

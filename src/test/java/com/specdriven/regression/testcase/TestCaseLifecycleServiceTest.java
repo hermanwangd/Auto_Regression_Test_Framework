@@ -2,6 +2,8 @@ package com.specdriven.regression.testcase;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.specdriven.regression.dsl.DslTestCaseValidator;
+import com.specdriven.regression.dsl.DslValidationReport;
 import com.specdriven.regression.readiness.AcReadinessItem;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -50,7 +52,8 @@ class TestCaseLifecycleServiceTest {
         assertThat(yaml).contains("primary_input:");
         assertThat(yaml).contains("type: input_file");
         assertThat(yaml).contains("lifecycle: read_only");
-        assertThat(yaml).contains("operation: call_ru");
+        assertThat(yaml).contains("operation: run_batch");
+        assertThat(yaml).doesNotContain("operation: call_ru");
         assertThat(yaml).contains("expected_results:");
         assertThat(yaml).contains("verify:");
         assertThat(yaml).contains("evidence:");
@@ -67,6 +70,9 @@ class TestCaseLifecycleServiceTest {
                 .doesNotContain("assertions:")
                 .doesNotContain("evidence_required:")
                 .doesNotContain("policy:");
+        DslValidationReport validation = new DslTestCaseValidator().validate(yaml);
+        assertThat(validation.ready()).isTrue();
+        assertThat(validation.gaps()).isEmpty();
     }
 
     @Test
@@ -95,6 +101,9 @@ class TestCaseLifecycleServiceTest {
         assertThat(yaml).contains("- id: cleanup_primary_input");
         assertThat(yaml).contains("action: cleanup_bound_input");
         assertThat(yaml).contains("input: ${setup.fixtures.primary_input}");
+        DslValidationReport validation = new DslTestCaseValidator().validate(yaml);
+        assertThat(validation.gaps()).isEmpty();
+        assertThat(validation.ready()).isTrue();
     }
 
     @Test

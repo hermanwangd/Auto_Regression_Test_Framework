@@ -141,6 +141,20 @@ Provider contracts are configuration artifacts consumed by APs; they are not DSL
 
 Execution-focused DSL v1 references provider behavior through `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures`, `expected_results`, and `verify` rules. It must not embed provider configuration, endpoint URLs, connection strings, shell scripts, SQL bodies, release gates, waivers, or approval workflow. Legacy fields such as `execution_target`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, and `policy` are compatibility inputs only until parser/generator migration is complete.
 
+DSL v1 validation is the first F007 architecture gate. Definition and Validation must confirm syntax, required fields, supported execution lifecycle status, forbidden governance fields, and legacy-field migration rules before Discovery, Planning, provider contract binding, fixture setup, or provider dispatch can run. New DSL artifacts that contain `call_ru`, `target_ru_id`, `package_inputs`, `oracles`, release gates, waivers, or approval workflow state are invalid even when equivalent legacy artifacts remain readable during migration.
+
+The gate sequence for execution-focused tests is:
+
+```text
+DSL v1 parse and validation
+-> traceability and lifecycle status check
+-> target and scenario resolution
+-> setup, execute output, expected_result, verify, evidence, and runtime validation
+-> provider contract lookup through RP/RU mapping
+-> execution plan creation
+-> fixture setup and provider dispatch
+```
+
 Provider capability registry rules:
 
 - The registry is the canonical source for supported `provider_family` and `provider_type` combinations.
@@ -411,8 +425,10 @@ Select RP
 -> validate package.yaml and RP artifacts
 -> validate rp_ru_mapping.yaml
 -> load approved or execution-eligible DSL test cases
+-> validate execution-focused DSL v1 contract and block invalid legacy/governance fields
 -> validate expected-result approval status
 -> resolve execution mode and RU dependency graph
+-> resolve provider contracts from DSL logical references
 -> verify environment readiness
 -> resolve inputs and runtime bindings
 -> create RP execution batch
@@ -572,12 +588,13 @@ Ready to implement now:
 - F001 Product Repo Bootstrap CLI and Readiness Agent Skill.
 - F002 Release Package Creation Guide and Completeness Check.
 - F004 structural RP/RU mapping validator, using placeholder pilot data or fixtures.
+- Execution-focused DSL v1 validation and generator guard, before expanding provider runtime dispatch.
 
 Ready after pilot RP artifacts exist:
 
 - F003 RP AC intake against real owner-authored AC.
 - F005/F006 agent draft generation and expected-result drafting.
-- F007 execution path for the selected heterogeneous pilot provider set, using the adapter/provider contract model in the artifact contracts and capability matrix.
+- F007 execution path for the selected heterogeneous pilot provider set, after the DSL v1 validation gate is green and using the adapter/provider contract model in the artifact contracts and capability matrix.
 - F008 final coverage and evidence package using real run evidence.
 
 Implementation must start with F001/F002/F004 foundation tasks, then validate the pilot RP before enabling generation and execution.

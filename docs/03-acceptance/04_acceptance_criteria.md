@@ -23,6 +23,9 @@ Minimum verification rule for DSL/AP clarity:
 
 - Every readiness, generation, dry-run, execution, or evidence report that references DSL behavior shall include `ap`, `field_path` or `contract_path`, `test_case_id` when applicable, `ac_id` when applicable, `reason`, and `owner_action`.
 - DSL validation failures shall identify whether the problem belongs to DSL syntax, execution lifecycle state, traceability, targets, setup fixtures, execute outputs, expected results, verify rules, RP/RU mapping, provider contract, environment readiness, runtime policy, or evidence completeness.
+- New execution-focused DSL artifacts shall use `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime` as the core contract before F007 provider runtime execution.
+- New execution-focused DSL artifacts shall not contain legacy-only fields such as `rp_id`, `ac_id`, `execution_target`, `target_ru_id`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, or `policy`.
+- New execution-focused DSL artifacts shall not contain governance-heavy fields such as `approval_status`, `approved_by`, `approval_required`, `waiver`, `release_gate`, `risk_approval`, or governance workflow state.
 - A missing provider contract, unsupported DSL capability, missing expected result, missing cleanup reference, missing execute output, invalid verify rule, or missing environment readiness shall block before adapter execution starts.
 - Baseline, spec, architecture, and AC documents shall use the same seven AP names and shall not introduce hidden AP-level components.
 - Every required or conditional DSL field shall map to a primary AP consumer and have a clear reason for being required.
@@ -143,11 +146,17 @@ Then the AC may produce a `draft_executable_test_case` artifact.
 
 And the draft shall use execution-focused DSL v1 sections needed by the 7 AP: identity/status/revision, traceability, targets, scenario, setup fixtures, execute operations and outputs, expected_results, verify rules, evidence requirements, and runtime policy.
 
+And the draft shall use readable operations such as `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, or `run_application`, not `call_ru` or `target_ru_id`.
+
 ### Failure Path
 
 Given ambiguous AC
 When the agent skill performs readiness and test drafting
 Then the AC shall be marked `not_ready_for_generation` and no executable test shall be produced.
+
+Given a generated executable draft contains legacy-only fields or governance-heavy fields
+When the draft is checked for execution readiness
+Then it shall be rejected before it can be promoted to an execution-eligible test case.
 
 ### Boundary Path
 
@@ -219,6 +228,8 @@ Then execution may proceed according to the declared execution mode.
 
 And dry-run shall show which AP gates passed before real adapter execution is allowed.
 
+And dry-run shall show that the DSL v1 validation gate passed before provider contract binding and adapter/provider dispatch.
+
 ### Failure Path
 
 Given required test artifacts, mappings, provider contracts, provider capability registry entries, expected results, setup fixtures, execute output mappings, verify rules, runtime policy, deployment evidence, or environment readiness are missing or unsupported
@@ -228,6 +239,10 @@ Then execution shall stop before unsafe adapter/provider execution and report th
 And the blocking report shall include the AP name and DSL field or provider contract path that caused the stop.
 
 And when a selected pilot provider family or provider type is missing, unsupported, ambiguous, or only available as an unapproved escape hatch, the dry-run report shall name the provider family, provider type, capability, affected RU, provider contract path, registry status, and required owner action.
+
+Given a new DSL test case uses `call_ru`, `target_ru_id`, `package_inputs`, `oracles`, missing `execute[].outputs`, missing `runtime.timeout`, missing `runtime.retry.max_attempts`, unsupported `verify[].type`, or governance-heavy approval/release fields
+When dry-run or execution is requested
+Then the framework shall block during Definition and Validation or Planning and Binding before provider dispatch.
 
 ### Boundary Path
 

@@ -14,6 +14,7 @@ This is an implementation plan, not the framework verification strategy itself. 
 - ADR-006 is accepted: heterogeneous RP support is handled through provider contracts, a provider capability registry, reusable built-in providers, and a governed external runner escape hatch.
 - Minimum RP artifacts are defined: `package.yaml`, `rp_feature_spec.md`, `rp_ru_mapping.yaml`, `acceptance_criteria.md`, `tests/`, `expected-results/`, `traceability.md`, and `evidence_index.md`.
 - Architecture design defines Spring Boot 3.x / Java 17+ AP-level components, extension points, provider families, internal package boundaries, CLI commands, storage paths, execution modes, failure handling, and AC coverage.
+- Execution-focused DSL v1 is defined in the artifact contracts and must be validated before F007 provider runtime expansion.
 
 ## Staged Readiness
 
@@ -22,6 +23,7 @@ Ready to implement now:
 - F001 Product Repo Bootstrap CLI and Readiness Agent Skill.
 - F002 Release Package Creation Guide and Completeness Check.
 - F004 RP/RU Mapping Intake and Completeness Check, using sample or pilot mappings.
+- Execution-focused DSL v1 parser/validator and generator guard before provider runtime migration.
 
 Ready after pilot RP artifacts exist:
 
@@ -40,7 +42,7 @@ This snapshot separates framework verification progress from pilot acceptance pr
 | Area | Current Status | Evidence / Gate | Next Work |
 |---|---|---|---|
 | Product Repo and RP skeleton | Implemented for framework verification | CLI tests and sample fixture verification | Harden cross-artifact readiness as pilot artifacts arrive. |
-| AC intake and DSL drafting | Implemented for legacy framework readiness/draft flows; execution-focused DSL v1 contract is now documented | Unit/component and integration tests plus DSL v1 contract review | Add parser/generator support for `targets/setup/execute/expected_results/verify/evidence/runtime` before new provider execution slices. |
+| AC intake and DSL drafting | Implemented for legacy framework readiness/draft flows; execution-focused DSL v1 contract is now documented | Unit/component and integration tests plus DSL v1 contract review | Complete T003A parser/generator/dry-run validation for `targets/setup/execute/expected_results/verify/evidence/runtime` before new provider execution slices. |
 | Batch/run evidence and coverage | Implemented for sample and CLI flows | `./mvnw verify` and report tests | Validate against real pilot RP batch evidence. |
 | File/batch runtime | Supported | Provider registry dispatch and shell/file tests | Keep as reusable provider. |
 | REST/gRPC request-response runtime | Supported for REST and native descriptor-driven gRPC unary calls plus HTTP/status field, JSON path equality/absence, numeric tolerance, and schema/contract response assertions | Request/response provider, native gRPC invoker, runtime registry, CLI preflight, response assertion, schema/contract assertion, and evidence tests | Add pilot endpoint evidence when required. |
@@ -119,6 +121,31 @@ regress check-rp --root <product-repo> --rp-id <rp-id> --strict-schema
 ```
 
 Done when schema errors identify file path, field path, severity, owner action, and whether the error blocks generation, execution, or release evidence.
+
+### T003A - Execution-Focused DSL v1 Validation Gate
+
+Related features: F005, F006, F007
+Acceptance: AC-005, AC-006, AC-007, AC-008
+Modules: `schema`, `testcase`, `cli`
+
+Implement the execution-focused DSL v1 validation gate before provider runtime migration. The validator must accept the v1 semantic field set from `docs/02-architecture/06_artifact_contracts.md`, preserve legacy sample readability through an explicit compatibility path, and block new execution-focused artifacts that contain legacy-only fields or governance-heavy fields.
+
+The gate validates:
+
+- Required fields: `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`.
+- Conditional fields: `setup.fixtures.<name>.cleanup_ref` for state mutation, `execute[].with`, `execute[].outputs`, `verify[].selector`, `verify[].target/query/event`, and `verify[].options`.
+- Supported operations: `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, and `run_application`.
+- Supported verify rules: basic, structure, collection, numeric, file, state, and event checks defined in the artifact contract.
+- Prohibited fields: legacy-only fields such as `call_ru`, `target_ru_id`, `package_inputs`, and `oracles`, plus approval, waiver, release gate, and risk approval fields.
+
+Verification:
+
+```bash
+./mvnw -q -Dtest='DslTestCaseValidatorTest,TestCaseLifecycleServiceTest,RegressionCommandTest' test
+./mvnw test
+```
+
+Done when valid DSL v1 artifacts pass, invalid DSL blocks before provider dispatch with AP/field/test/AC/owner-action details, generated executable drafts use execution-focused fields, and legacy artifacts remain readable only through compatibility behavior.
 
 ### T004 - RP/RU Mapping Validator
 
@@ -405,30 +432,28 @@ Done when the pilot RP evidence package shows greater than 80% coverage for auto
 ## Dependency Order
 
 ```text
-T000 -> T001 -> T002 -> T003 -> T004
+T000 -> T001 -> T002 -> T003
+                  |
+                  +-> T003A -> T004 -> T008 -> T009 -> T010 -> T011 -> T012 -> T013 -> T014 -> T014A
+                  |                                                                                 |
+                  |                                                                                 v
+                  |                                                                                T015 -> T016 -> T017
                   |
                   +-> T005 -> T006 -> T007
-                  |
-                  +-> T008 -> T009 -> T010 -> T011 -> T012 -> T013 -> T014 -> T014A
-                                                                  |
-                                                                  v
-                                                                 T015 -> T016 -> T017
 ```
 
-Parallelizable after T003:
+Parallelizable after T003, while execution runtime remains blocked until T003A is green:
 
-- T004 mapping validation.
 - T005 AC readiness.
 - T007 expected-result manager.
-- T008 environment resolver.
 - T015 report formatting skeleton.
 
 ## Implementation Gates
 
 Gate 1 - Foundation ready:
 
-- T000, T001, T002, T003, and T004 complete.
-- F001/F002/F004 can be used to initialize and check Product Repo and RP readiness.
+- T000, T001, T002, T003, T003A, and T004 complete.
+- F001/F002/F004 can be used to initialize and check Product Repo and RP readiness, and DSL v1 artifacts can be validated before execution.
 
 Gate 2 - Generation ready:
 
@@ -439,6 +464,7 @@ Gate 2 - Generation ready:
 Gate 3 - Execution ready:
 
 - T008 through T013 complete.
+- T003A remains green after any generator, sample fixture, or provider runtime change.
 - Approved tests and expected results exist.
 - Environment readiness and deployment evidence exist where required.
 
@@ -453,6 +479,7 @@ Gate 4 - Release evidence ready:
 |---|---|
 | Agent invents AC or business behavior | F003 gate preserves owner-authored AC only. |
 | Tests are regenerated on every run | Execution reads checked-in DSL tests from `tests/approved/`; generation is separate. |
+| Provider runtime is implemented before the DSL contract is stable | T003A blocks provider runtime migration until execution-focused DSL validation, generator output, and dry-run reporting are verified. |
 | SIT run starts before deployment readiness | Environment resolver blocks `sit_deployed` before adapter execution. |
 | Multi-RU order is ambiguous | Mapping validator requires dependency graph and rejects scalar order-only execution planning. |
 | RP/RU membership is inferred incorrectly | Mapping validator consumes human-authored `rp_ru_mapping.yaml` only. |
