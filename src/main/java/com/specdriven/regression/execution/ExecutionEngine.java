@@ -11,6 +11,8 @@ import com.specdriven.regression.binding.ResolvedBinding;
 import com.specdriven.regression.evidence.EvidenceWriter;
 import com.specdriven.regression.provider.ProviderContractResolutionReport;
 import com.specdriven.regression.provider.ProviderContractResolver;
+import com.specdriven.regression.provider.RequestResponseProvider;
+import com.specdriven.regression.provider.ResolvedProviderContract;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -29,6 +31,7 @@ public class ExecutionEngine {
     private final EvidenceWriter evidenceWriter;
     private final BindingResolver bindingResolver;
     private final ProviderContractResolver providerContractResolver;
+    private final RequestResponseProvider requestResponseProvider;
 
     public ExecutionEngine() {
         this(new DataPipelineAdapter(), new AssertionEngine(), new EvidenceWriter());
@@ -52,11 +55,23 @@ public class ExecutionEngine {
             EvidenceWriter evidenceWriter,
             BindingResolver bindingResolver,
             ProviderContractResolver providerContractResolver) {
+        this(adapter, assertionEngine, evidenceWriter, bindingResolver, providerContractResolver,
+                new RequestResponseProvider());
+    }
+
+    public ExecutionEngine(
+            DataPipelineAdapter adapter,
+            AssertionEngine assertionEngine,
+            EvidenceWriter evidenceWriter,
+            BindingResolver bindingResolver,
+            ProviderContractResolver providerContractResolver,
+            RequestResponseProvider requestResponseProvider) {
         this.adapter = adapter;
         this.assertionEngine = assertionEngine;
         this.evidenceWriter = evidenceWriter;
         this.bindingResolver = bindingResolver;
         this.providerContractResolver = providerContractResolver;
+        this.requestResponseProvider = requestResponseProvider;
     }
 
     public ExecutionResult execute(Path packageRoot, Path testCasePath, String batchId, String runId) {
@@ -78,15 +93,17 @@ public class ExecutionEngine {
         Path actualOutput = runDir.resolve(pathValue(contract, "outputs", "actual_output_ref", "actual/output.txt"));
         Path workingDirectory = workingDirectory(packageRoot, contract);
 
-        AdapterExecutionResult adapterResult = adapter.execute(new AdapterExecutionRequest(
-                stringValue(contract.get("command")),
+        AdapterExecutionResult adapterResult = executeProvider(
+                providerReport,
+                packageRoot,
+                contract,
+                testCase,
+                bindingReport.resolvedBindings(),
                 workingDirectory,
-                intValue(contract.get("timeout_seconds"), 300),
-                successExitCodes(contract.get("success_exit_codes")),
                 runDir,
                 stdoutLog,
                 stderrLog,
-                actualOutput));
+                actualOutput);
         boolean passed = !adapterResult.timeout()
                 && successExitCodes(contract.get("success_exit_codes")).contains(adapterResult.exitCode());
         AssertionEvaluation assertionEvaluation = null;
@@ -120,6 +137,48 @@ public class ExecutionEngine {
                 adapterResult.stdoutLog(),
                 adapterResult.stderrLog(),
                 adapterResult.actualOutput());
+    }
+
+    private AdapterExecutionResult executeProvider(
+            ProviderContractResolutionReport providerReport,
+            Path packageRoot,
+            Map<String, Object> contract,
+            Map<String, Object> testCase,
+            List<ResolvedBinding> resolvedBindings,
+            Path workingDirectory,
+            Path runDir,
+            Path stdoutLog,
+            Path stderrLog,
+            Path actualOutput) {
+        if ("request_response".equals(adapterProviderFamily(providerReport))) {
+            return requestResponseProvider.execute(
+                    packageRoot,
+                    contract,
+                    testCase,
+                    resolvedBindings,
+                    runDir,
+                    stdoutLog,
+                    stderrLog,
+                    actualOutput);
+        }
+        return adapter.execute(new AdapterExecutionRequest(
+                stringValue(contract.get("command")),
+                workingDirectory,
+                intValue(contract.get("timeout_seconds"), 300),
+                successExitCodes(contract.get("success_exit_codes")),
+                runDir,
+                stdoutLog,
+                stderrLog,
+                actualOutput));
+    }
+
+    private String adapterProviderFamily(ProviderContractResolutionReport providerReport) {
+        for (ResolvedProviderContract contract : providerReport.resolvedContracts()) {
+            if ("adapter".equals(contract.contractType())) {
+                return contract.providerFamily();
+            }
+        }
+        return "";
     }
 
     @SuppressWarnings("unchecked")

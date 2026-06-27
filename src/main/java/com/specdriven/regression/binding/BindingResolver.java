@@ -13,7 +13,7 @@ import org.yaml.snakeyaml.Yaml;
 @Service
 public class BindingResolver {
 
-    private static final List<String> SUPPORTED_M1_BINDINGS = List.of("input_file", "dataset", "db_seed");
+    private static final List<String> SUPPORTED_M1_BINDINGS = List.of("input_file", "dataset", "db_seed", "api_payload");
 
     public BindingResolutionReport resolve(Path testCasePath) {
         Map<String, Object> testCase = readYamlMap(testCasePath);
@@ -36,7 +36,7 @@ public class BindingResolver {
                     } else if (!SUPPORTED_M1_BINDINGS.contains(bindingType)) {
                         gaps.add(gap(testCaseId, acId, "package_inputs.inputs." + bindingName + ".bind_as",
                                 bindingName, bindingType,
-                                "Use supported M1 binding type input_file, dataset, or db_seed; or implement provider support."));
+                                "Use supported M1 binding type input_file, dataset, db_seed, or api_payload; or implement provider support."));
                     } else {
                         resolvedBindings.add(new ResolvedBinding(bindingName, bindingType, ref));
                     }

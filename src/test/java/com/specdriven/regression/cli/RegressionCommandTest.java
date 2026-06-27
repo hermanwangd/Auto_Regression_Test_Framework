@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.specdriven.regression.discovery.ReleasePackageService;
 import com.specdriven.regression.productrepo.ProductRepoService;
+import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -278,7 +281,7 @@ class RegressionCommandTest {
         writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
         writeCompleteCiMapping("RP-001");
         writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
-        writeApprovedTestCase("RP-001", "api_payload");
+        writeApprovedTestCase("RP-001", "message_event");
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
@@ -288,7 +291,7 @@ class RegressionCommandTest {
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("binding_gaps:");
-        assertThat(output.toString()).contains("api_payload");
+        assertThat(output.toString()).contains("message_event");
         assertThat(output.toString()).contains("adapter_execution_started: false");
     }
 
@@ -303,7 +306,7 @@ class RegressionCommandTest {
         writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
         writeCompleteCiMapping("RP-001");
         writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
-        writeApprovedTestCase("RP-001", "api_payload");
+        writeApprovedTestCase("RP-001", "message_event");
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
@@ -326,7 +329,7 @@ class RegressionCommandTest {
         assertThat(runEvidence).contains("execution_mode: ci_ephemeral");
         assertThat(runEvidence).contains("environment_ref: ci://pipeline/RP-001");
         assertThat(failureDetails).contains("package_inputs.inputs.orders_seed.bind_as");
-        assertThat(failureDetails).contains("api_payload");
+        assertThat(failureDetails).contains("message_event");
     }
 
     @Test
@@ -512,6 +515,57 @@ class RegressionCommandTest {
                 .contains("status: passed")
                 .contains("contract_path: release_units[1].provider_contracts.adapters.spring_boot_cli")
                 .contains("affected_ru: RU-transform-job");
+    }
+
+    @Test
+    void runExecutesRestRequestResponseProviderAndWritesEvidence() throws Exception {
+        AtomicReference<String> requestBody = new AtomicReference<>("");
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/payments", exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+            String response = "{\"status\":\"accepted\",\"paymentId\":\"PAY-001\"}\n";
+            exchange.sendResponseHeaders(200, response.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
+            exchange.getResponseBody().write(response.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            exchange.close();
+        });
+        server.start();
+        try {
+            RegressionCommand command = command();
+            String rpId = "RP-REST";
+            String acId = rpId + "-AC-001";
+            command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                    print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+            command.execute(new String[] {
+                    "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_api"},
+                    print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+            writeReadyAcceptanceCriteria(rpId, acId);
+            writeRestProviderMapping(rpId, server.getAddress().getPort());
+            writeRestPayload(rpId);
+            writeApprovedExpectedResult(rpId, acId, "{\"status\":\"accepted\",\"paymentId\":\"PAY-001\"}\n");
+            writeApprovedRestTestCase(rpId, acId);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+            int exit = command.execute(new String[] {
+                    "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral"},
+                    print(output), print(new ByteArrayOutputStream()));
+
+            Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
+            String runEvidence = Files.readString(runDir.resolve("run.yaml"));
+            assertThat(exit).isZero();
+            assertThat(requestBody.get()).isEqualTo("{\"amount\":100,\"currency\":\"USD\"}\n");
+            assertThat(output.toString()).contains("adapter_execution_started: true");
+            assertThat(Files.readString(runDir.resolve("actual/response.json")))
+                    .isEqualTo("{\"status\":\"accepted\",\"paymentId\":\"PAY-001\"}\n");
+            assertThat(runEvidence)
+                    .contains("status: passed")
+                    .contains("binding_type: api_payload")
+                    .contains("provider_family: request_response")
+                    .contains("contract_path: release_units[0].provider_contracts.adapters.request_response")
+                    .contains("actual_output: actual/response.json")
+                    .contains("assertion_status: passed");
+        } finally {
+            server.stop(0);
+        }
     }
 
     @Test
@@ -1252,6 +1306,58 @@ class RegressionCommandTest {
                 """.formatted(rpId, rpId, rpId));
     }
 
+    private void writeRestProviderMapping(String rpId, int port) throws Exception {
+        Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        Files.writeString(mapping, """
+                rp_id: %s
+                release_units:
+                  - ru_id: RU-payment-api
+                    repo: /repo/payment-api
+                    unit_type: service_api
+                    owner: product_developer
+                    version_ref: build-123
+                    validation_boundary: request_response_api
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://payment/api
+                    adapter: request_response
+                    provider_contracts:
+                      adapters:
+                        request_response:
+                          provider_family: request_response
+                          provider_type: rest
+                          endpoint_ref: http://127.0.0.1:%s
+                          timeout_seconds: 10
+                          actions:
+                            submit_payment:
+                              method: POST
+                              path: /payments
+                              request_binding: payment_payload
+                          logs:
+                            stdout: logs/response.log
+                            stderr: logs/error.log
+                          outputs:
+                            actual_output_ref: actual/response.json
+                      bindings:
+                        api_payload:
+                          provider_family: request_response
+                          bind_as: request_body
+                      fixtures: {}
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                """.formatted(rpId, port));
+    }
+
+    private void writeRestPayload(String rpId) throws Exception {
+        Path payload = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/fixtures/api/payment_payload.json");
+        Files.createDirectories(payload.getParent());
+        Files.writeString(payload, "{\"amount\":100,\"currency\":\"USD\"}\n");
+    }
+
     private void writeExecutableCiMappingWithFixtureProvider(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
         Files.writeString(mapping, """
@@ -1386,6 +1492,53 @@ class RegressionCommandTest {
                 evidence_required:
                   - execution_log
                 """.formatted(testCaseId, rpId, acId, acId, rpId, expectedResultId, expectedResultId, bindingType));
+    }
+
+    private void writeApprovedRestTestCase(String rpId, String acId) throws Exception {
+        String expectedResultId = acId.replace("-AC-", "-ER-");
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s-TC-001
+                rp_id: %s
+                ac_id: %s
+                artifact_status: approved_for_regression
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
+                source_fingerprint: sha256:test
+                execution_target:
+                  ru_id: RU-payment-api
+                  adapter: request_response
+                  execution_mode: ci_ephemeral
+                  environment_ref: ci://payment/api
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [api_payload, request_response, file_assertion]
+                expected:
+                  ref: expected-results/approved/%s.yaml
+                oracles:
+                  payment_response:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
+                package_inputs:
+                  inputs:
+                    payment_payload:
+                      ref: fixtures/api/payment_payload.json
+                      bind_as: api_payload
+                steps:
+                  - id: submit_payment
+                    action: submit_payment
+                    target_ru_id: RU-payment-api
+                assertions:
+                  - type: file_diff
+                    oracle: ${oracles.payment_response}
+                evidence_required:
+                  - execution_log
+                """.formatted(rpId, rpId, acId, acId, expectedResultId, expectedResultId));
     }
 
     private void writeApprovedTestCaseWithOracleType(String rpId, String oracleType) throws Exception {
