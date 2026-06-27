@@ -562,7 +562,7 @@ class RegressionCommandTest {
         writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
         writeCompleteCiMapping("RP-001");
         writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
-        writeApprovedTestCaseWithOracleType("RP-001", "schema");
+        writeApprovedTestCaseWithOracleType("RP-001", "invariant");
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
@@ -573,7 +573,7 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("oracle_gaps:");
         assertThat(output.toString()).contains("ap: Oracle and Assertion Engine");
         assertThat(output.toString()).contains("oracles.normalized_orders.type");
-        assertThat(output.toString()).contains("schema");
+        assertThat(output.toString()).contains("invariant");
         assertThat(output.toString()).contains("adapter_execution_started: false");
     }
 

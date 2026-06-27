@@ -88,6 +88,12 @@ public class AssertionEngine {
         if ("response_status_equals".equals(assertionType)) {
             return evaluateResponseStatusEquals(testCase, assertion, actualOutput, runDir);
         }
+        if ("schema_matches".equals(assertionType)) {
+            return evaluateSchemaMatches(packageRoot, testCase, assertion, actualOutput, runDir);
+        }
+        if ("contract_matches".equals(assertionType)) {
+            return evaluateContractMatches(packageRoot, testCase, assertion, actualOutput, runDir);
+        }
         if ("db_row_matches".equals(assertionType)) {
             return evaluateDbRowMatches(packageRoot, testCase, assertion, runDir, dbFixtureContracts);
         }
@@ -274,6 +280,74 @@ public class AssertionEngine {
                 diffSummary);
     }
 
+    private AssertionDetail evaluateSchemaMatches(
+            Path packageRoot,
+            Map<String, Object> testCase,
+            Map<?, ?> assertion,
+            Path actualOutput,
+            Path runDir) {
+        String oracleReference = stringValue(assertion.get("oracle"));
+        String oracleName = oracleName(oracleReference);
+        Map<?, ?> oracle = oracleDefinition(testCase, oracleName);
+        String schemaRef = firstText(oracle, "ref", "schema_ref");
+        Map<String, Object> schema = readYamlMap(packageRoot, schemaRef, "schema assertion");
+        Object actualRoot = readYamlMap(actualOutput);
+        List<Map<?, ?>> rules = ruleMaps(schema.get("fields"));
+        List<String> failures = new ArrayList<>();
+        for (Map<?, ?> rule : rules) {
+            evaluateRule(actualRoot, rule, failures);
+        }
+        boolean passed = failures.isEmpty();
+        String status = passed ? "passed" : "failed";
+        String actualRef = runDir.relativize(actualOutput).toString();
+        String diffSummary = passed
+                ? "schema `%s` matched %s rule(s)".formatted(oracleName, rules.size())
+                : "schema `%s` failed: %s".formatted(oracleName, String.join("; ", failures));
+        return new AssertionDetail(
+                passed,
+                status,
+                "schema_matches",
+                oracleReference,
+                schemaRef,
+                actualRef,
+                "schema_matches",
+                diffSummary);
+    }
+
+    private AssertionDetail evaluateContractMatches(
+            Path packageRoot,
+            Map<String, Object> testCase,
+            Map<?, ?> assertion,
+            Path actualOutput,
+            Path runDir) {
+        String oracleReference = stringValue(assertion.get("oracle"));
+        String oracleName = oracleName(oracleReference);
+        Map<?, ?> oracle = oracleDefinition(testCase, oracleName);
+        String contractRef = firstText(oracle, "ref", "contract_ref");
+        Map<String, Object> contract = readYamlMap(packageRoot, contractRef, "contract assertion");
+        Object actualRoot = readYamlMap(actualOutput);
+        List<Map<?, ?>> expectations = contractExpectations(contract);
+        List<String> failures = new ArrayList<>();
+        for (Map<?, ?> expectation : expectations) {
+            evaluateRule(actualRoot, expectation, failures);
+        }
+        boolean passed = failures.isEmpty();
+        String status = passed ? "passed" : "failed";
+        String actualRef = runDir.relativize(actualOutput).toString();
+        String diffSummary = passed
+                ? "contract `%s` matched %s expectation(s)".formatted(oracleName, expectations.size())
+                : "contract `%s` failed: %s".formatted(oracleName, String.join("; ", failures));
+        return new AssertionDetail(
+                passed,
+                status,
+                "contract_matches",
+                oracleReference,
+                contractRef,
+                actualRef,
+                "contract_matches",
+                diffSummary);
+    }
+
     private AssertionEvaluation aggregate(List<AssertionDetail> details, Path evidencePath) {
         boolean passed = details.stream().allMatch(AssertionDetail::passed);
         String status = passed ? "passed" : "failed";
@@ -379,6 +453,15 @@ public class AssertionEngine {
         return Files.readString(sqlPath);
     }
 
+    private Path packageRef(Path packageRoot, String ref, String context) {
+        Path normalizedRoot = packageRoot.toAbsolutePath().normalize();
+        Path refPath = normalizedRoot.resolve(ref).normalize();
+        if (!refPath.startsWith(normalizedRoot)) {
+            throw new IllegalArgumentException(context + " ref must stay under the RP package: " + ref);
+        }
+        return refPath;
+    }
+
     private String oracleName(String oracleReference) {
         String prefix = "${oracles.";
         if (oracleReference.startsWith(prefix) && oracleReference.endsWith("}")) {
@@ -421,6 +504,10 @@ public class AssertionEngine {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read assertion actual output.", e);
         }
+    }
+
+    private Map<String, Object> readYamlMap(Path packageRoot, String ref, String context) {
+        return readYamlMap(packageRef(packageRoot, ref, context));
     }
 
     private Object valueAtPath(Object root, String path) {
@@ -485,6 +572,107 @@ public class AssertionEngine {
         return paths.length == 0 ? "" : paths[0];
     }
 
+    private List<Map<?, ?>> contractExpectations(Map<String, Object> contract) {
+        List<Map<?, ?>> expectations = ruleMaps(contract.get("expectations"));
+        if (!expectations.isEmpty()) {
+            return expectations;
+        }
+        Object interactions = contract.get("interactions");
+        if (!(interactions instanceof List<?> list)) {
+            return List.of();
+        }
+        List<Map<?, ?>> collected = new ArrayList<>();
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> interaction) {
+                collected.addAll(ruleMaps(interaction.get("expectations")));
+            }
+        }
+        return collected;
+    }
+
+    private List<Map<?, ?>> ruleMaps(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        List<Map<?, ?>> rules = new ArrayList<>();
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> rule) {
+                rules.add(rule);
+            }
+        }
+        return rules;
+    }
+
+    private void evaluateRule(Object actualRoot, Map<?, ?> rule, List<String> failures) {
+        String path = firstText(rule, "path", "actual");
+        boolean absentExpected = booleanValue(rule.get("absent"), false);
+        boolean exists = pathExists(actualRoot, path);
+        if (absentExpected) {
+            if (exists) {
+                failures.add("path `%s` must be absent".formatted(path));
+            }
+            return;
+        }
+        boolean required = booleanValue(rule.get("required"), true);
+        if (required && !exists) {
+            failures.add("required path `%s` is missing".formatted(path));
+            return;
+        }
+        if (!exists) {
+            return;
+        }
+        Object actualValue = valueAtPath(actualRoot, path);
+        String expectedType = firstText(rule, "type");
+        if (!expectedType.isBlank() && !matchesType(actualValue, expectedType)) {
+            failures.add("path `%s` expected type `%s` but was `%s`"
+                    .formatted(path, expectedType, valueType(actualValue)));
+        }
+        if (rule.containsKey("equals") && !stringValue(rule.get("equals")).equals(stringValue(actualValue))) {
+            failures.add("path `%s` expected `%s` but was `%s`"
+                    .formatted(path, stringValue(rule.get("equals")), stringValue(actualValue)));
+        }
+        Object enumValue = rule.containsKey("enum") ? rule.get("enum") : rule.get("values");
+        if (enumValue instanceof List<?> allowedValues
+                && allowedValues.stream().map(this::stringValue).noneMatch(stringValue(actualValue)::equals)) {
+            failures.add("path `%s` value `%s` is outside allowed values `%s`"
+                    .formatted(path, stringValue(actualValue), allowedValues));
+        }
+    }
+
+    private boolean matchesType(Object value, String expectedType) {
+        return switch (expectedType) {
+            case "string" -> value instanceof String;
+            case "number" -> value instanceof Number;
+            case "integer" -> value instanceof Integer || value instanceof Long;
+            case "boolean" -> value instanceof Boolean;
+            case "object" -> value instanceof Map<?, ?>;
+            case "array" -> value instanceof List<?>;
+            default -> false;
+        };
+    }
+
+    private String valueType(Object value) {
+        if (value instanceof String) {
+            return "string";
+        }
+        if (value instanceof Integer || value instanceof Long) {
+            return "integer";
+        }
+        if (value instanceof Number) {
+            return "number";
+        }
+        if (value instanceof Boolean) {
+            return "boolean";
+        }
+        if (value instanceof Map<?, ?>) {
+            return "object";
+        }
+        if (value instanceof List<?>) {
+            return "array";
+        }
+        return "missing";
+    }
+
     private String requestResponseHttpStatus(Path runDir) {
         Path evidencePath = runDir.resolve("request_response.yaml");
         if (!Files.exists(evidencePath)) {
@@ -532,6 +720,17 @@ public class AssertionEngine {
         } catch (NumberFormatException e) {
             return fallback;
         }
+    }
+
+    private boolean booleanValue(Object value, boolean fallback) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        String text = stringValue(value);
+        if (text.isBlank()) {
+            return fallback;
+        }
+        return Boolean.parseBoolean(text);
     }
 
     private boolean isInteger(String value) {

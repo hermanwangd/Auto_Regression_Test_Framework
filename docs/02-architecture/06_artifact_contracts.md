@@ -651,6 +651,8 @@ Framework-tested assertion types:
 | `json_path_equals` | `path`, `expected_value` | Compares a scalar JSON/YAML value at a dot path such as `$.status`. |
 | `json_path_absent` | `path` | Passes only when the JSON/YAML path is absent. |
 | `numeric_tolerance` | `path`, `expected_value`, `tolerance` | Compares numeric values using absolute tolerance. |
+| `schema_matches` | `oracle` with `type: schema` | Validates required paths, value types, and allowed values from a checked-in schema ref. |
+| `contract_matches` | `oracle` with `type: contract` | Validates provider/consumer expectations from a checked-in contract ref. |
 | `db_row_matches` | `oracle` with `type: query_result` | Executes a reviewed SQL query ref through the named JDBC fixture provider and compares row count. |
 
 Optional DSL fields:

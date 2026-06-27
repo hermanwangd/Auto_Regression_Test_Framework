@@ -16,6 +16,8 @@ public class OracleReadinessService {
     private static final List<String> SUPPORTED_M1_ORACLES = List.of(
             "expected_result_artifact",
             "golden_file",
+            "schema",
+            "contract",
             "query_result");
 
     public OracleReadinessReport check(Path testCasePath) {

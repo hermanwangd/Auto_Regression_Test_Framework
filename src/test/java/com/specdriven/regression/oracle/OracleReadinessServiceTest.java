@@ -35,4 +35,30 @@ class OracleReadinessServiceTest {
         assertThat(report.ready()).isTrue();
         assertThat(report.gaps()).isEmpty();
     }
+
+    @Test
+    void acceptsSchemaAndContractOraclesForResponseAssertions() throws Exception {
+        Path testCase = tempDir.resolve("TC-SCHEMA-CONTRACT.yaml");
+        Files.writeString(testCase, """
+                test_case_id: TC-SCHEMA-CONTRACT
+                ac_id: AC-SCHEMA-CONTRACT
+                oracles:
+                  payment_response_schema:
+                    type: schema
+                    ref: schemas/payment-response-schema.yaml
+                  payment_submit_contract:
+                    type: contract
+                    ref: contracts/payment-submit-contract.yaml
+                assertions:
+                  - type: schema_matches
+                    oracle: ${oracles.payment_response_schema}
+                  - type: contract_matches
+                    oracle: ${oracles.payment_submit_contract}
+                """);
+
+        OracleReadinessReport report = new OracleReadinessService().check(testCase);
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.gaps()).isEmpty();
+    }
 }
