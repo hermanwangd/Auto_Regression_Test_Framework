@@ -141,7 +141,7 @@ Provider contracts are configuration artifacts consumed by APs; they are not DSL
 
 Execution-focused DSL v1 references provider behavior through `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures`, `expected_results`, and `verify` rules. It must not embed provider configuration, endpoint URLs, connection strings, shell scripts, SQL bodies, release gates, waivers, or approval workflow. Legacy fields such as `execution_target`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, and `policy` are compatibility inputs only until parser/generator migration is complete.
 
-DSL v1 validation is the first F007 architecture gate. Definition and Validation must confirm syntax, required fields, supported execution lifecycle status, forbidden governance fields, selector-based verify requirements, and legacy-field migration rules before Discovery, Planning, provider contract binding, fixture setup, or provider dispatch can run. New DSL artifacts that contain `call_ru`, `target_ru_id`, `package_inputs`, `oracles`, release gates, waivers, or approval workflow state are invalid even when equivalent legacy artifacts remain readable during migration.
+DSL v1 validation is the first F007 architecture gate. Definition and Validation must confirm syntax, required fields, supported execution lifecycle status, the M1 single-execute-step runtime boundary, forbidden governance fields, selector-based verify requirements, and legacy-field migration rules before Discovery, Planning, provider contract binding, fixture setup, or provider dispatch can run. New DSL artifacts that contain multiple executable `execute[]` operations, `call_ru`, `target_ru_id`, `package_inputs`, `oracles`, release gates, waivers, or approval workflow state are invalid even when equivalent legacy artifacts remain readable during migration.
 
 The gate sequence for execution-focused tests is:
 
@@ -149,7 +149,7 @@ The gate sequence for execution-focused tests is:
 DSL v1 parse and validation
 -> traceability and lifecycle status check
 -> target and scenario resolution
--> setup, execute output, expected_result, verify selector/query/event, evidence, and runtime validation
+-> setup, single execute step, execute output, expected_result, verify selector/query/event, evidence, and runtime validation
 -> provider contract lookup through RP/RU mapping
 -> execution plan creation
 -> fixture setup and provider dispatch

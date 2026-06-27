@@ -114,7 +114,7 @@ This is a pre-provider-runtime gate. FWK-008 must be green before sample fixture
 | Targets | Resolves multiple named `targets` with `type`, `runner`, and `environment` | Missing target or execute step referencing an unknown target blocks before provider dispatch. |
 | Parameters | Expands `parameters.strategy: explicit_cases` into separate run IDs and run evidence with `parameter_case_id` | Unsupported strategy, duplicate case ID, missing values, or unresolved `${parameters.<name>}` blocks before provider dispatch. |
 | Setup | Resolves `setup.fixtures` and `cleanup_ref` for state-mutating fixtures | State-changing fixture without cleanup reference reports a fixture-policy gap. |
-| Execute | Resolves `execute[].operation`, `target`, `with`, and `outputs` | `call_ru`, `target_ru_id`, missing outputs, or unsupported operation blocks before execution. |
+| Execute | Resolves one M1 `execute[].operation`, `target`, `with`, and `outputs` while allowing multiple named targets for context or verification | Multiple executable steps, `call_ru`, `target_ru_id`, missing outputs, or unsupported operation blocks before execution. |
 | Expected results | Resolves `expected_results` refs used by verification | Duplicated legacy oracle/expected references or missing expected ref blocks before assertion evaluation. |
 | Verify | Supports captured-output actual/expected checks, provider-metadata `response_status_equals`, canonical `selector`, `db_record_exists`, and `event_published` semantics. `json_path_equals` and `json_path_absent` must keep `actual` as the captured output ref and use `selector` for the JSON/YAML path. | Missing required `actual`, missing `expected`, missing provider metadata, missing selector for JSON path verification, query ref, event ref, or unsupported verify type blocks with verify ID. |
 | Evidence and runtime | Resolves `evidence.required`, `runtime.timeout`, and `runtime.retry.max_attempts` | Evidence refs that do not point to execute/verify outputs or unbounded runtime policy block before execution. |
@@ -126,6 +126,7 @@ Minimum FWK-008 test cases:
 
 - Valid execution-focused DSL with multiple targets, setup fixture, `run_batch`, captured outputs, expected result, verify rules, evidence refs, timeout, and retry passes validation.
 - Missing traceability, unsupported status, missing target, unknown execute target, missing execute outputs, missing expected result ref, invalid verify rule, invalid evidence ref, or unbounded runtime policy blocks before provider dispatch.
+- Multiple executable `execute[]` steps block before provider dispatch so the runtime cannot silently execute only the primary step.
 - `json_path_equals` without `selector` and `json_path_absent` without `selector` block during DSL validation before provider dispatch or assertion evaluation. Migrated artifacts may use compatibility aliases `path` or `json_path`, but new generated DSL must use `selector`.
 - `response_status_equals` with provider HTTP status metadata passes without `actual`; the same verify type blocks when neither provider metadata nor a captured `actual`/`selector` source is available.
 - Legacy operation/field names such as `call_ru`, `target_ru_id`, `package_inputs`, and `oracles` are rejected in new execution-focused artifacts.

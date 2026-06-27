@@ -175,7 +175,7 @@ The DSL field set should stay minimal but complete enough to execute safely. M1 
 | `scenario.type`, `scenario.scope`, `scenario.description`, `scenario.capabilities` | Always required | Tells the framework what kind of behavior and provider capability is needed. | Planning and Binding |
 | `parameters` | Optional; required only when one test case must run multiple explicit input variants | Declares reviewed explicit cases without regenerating or duplicating test artifacts. | Planning and Binding / Evidence and Reporting |
 | `setup.fixtures` | Required when the scenario needs precondition data, mutated state, mock setup, seed data, or cleanup | Declares fixture lifecycle before and after execution. | Fixture and State Manager |
-| `execute[]` | Always required | Declares readable operations, target IDs, runtime inputs, and observable outputs. | Execution Engine |
+| `execute[]` | Always required; M1 runtime supports exactly one execute step per test case | Declares the readable operation, target ID, runtime inputs, and observable outputs. Multiple RP operations should be modeled as multiple approved test cases in one batch until multi-step orchestration is implemented. | Execution Engine |
 | `expected_results` | Required when `verify[]` uses approved artifacts, payloads, schemas, contracts, or state snapshots | Declares reusable truth references used by verification. Inline deterministic expected values may live directly under `verify[].expected`. | Oracle and Assertion Engine |
 | `verify[]` | Always required | Declares how pass/fail is evaluated. | Oracle and Assertion Engine |
 | `evidence.required[]` | Always required | Declares what concrete execution or verification outputs must be retained. | Evidence and Reporting |
@@ -204,6 +204,7 @@ New execution-focused DSL artifacts must:
 
 - Use readable operation names such as `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, or `run_application`.
 - Use `targets`, `setup` when needed, `execute`, `expected_results` when needed, `verify`, `evidence`, and `runtime` instead of framework-internal legacy fields.
+- Use one `execute[]` item per M1 test case. Multiple targets may be declared for context, state, or verify targets, but multiple executable operations in one DSL artifact are blocked until multi-step orchestration is explicitly designed and verified.
 - Capture `execute[].outputs` whenever verification or evidence references execution results.
 - For structured output checks, keep `actual` as the captured output reference and declare `selector` as the canonical field path. `path` and `json_path` are compatibility aliases only; new generated DSL must use `selector`.
 - For provider metadata checks such as `response_status_equals`, declare the deterministic `expected` value and let request/response provider evidence supply the HTTP status. Declare `actual` plus `selector` only when the status is read from a captured structured output.
@@ -449,7 +450,7 @@ F007 implementation must not proceed directly to provider runtime expansion unti
 ### Required Mechanism
 
 - Read `package.yaml`, `rp_ru_mapping.yaml`, checked-in DSL test cases from the RP `tests/` folder, target definitions, setup fixture refs, execute operation refs, expected-result artifacts, verify rules, evidence refs, runtime policy, and provider contracts.
-- Check that test cases declare supported `dsl_version` and include the v1 core contract: identity/status/revision, traceability, targets, scenario, execute, verify, evidence, and runtime fields, with setup and expected-results content required when referenced or needed by the scenario.
+- Check that test cases declare supported `dsl_version` and include the v1 core contract: identity/status/revision, traceability, targets, scenario, one M1 execute step, verify, evidence, and runtime fields, with setup and expected-results content required when referenced or needed by the scenario.
 - Reject new execution-focused DSL artifacts that still use legacy-only fields such as `rp_id`, `ac_id`, `execution_target`, `target_ru_id`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, or `policy`.
 - Reject new execution-focused DSL artifacts that contain governance-heavy fields such as approval, waiver, release gate, or risk approval state.
 - Check that test cases have execution lifecycle status allowed by the selected run policy.

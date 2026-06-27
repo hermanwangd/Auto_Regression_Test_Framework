@@ -293,6 +293,10 @@ public class DslTestCaseValidator {
                     "Declare at least one execute operation before execution."));
             return;
         }
+        if (execute.size() > 1) {
+            gaps.add(gap(testCaseId, acId, "execute", "execute", "",
+                    "Use exactly one execute step per M1 test case; split additional operations into separate approved tests in the same batch."));
+        }
         Map<?, ?> targets = map(document.get("targets"));
         for (int index = 0; index < execute.size(); index++) {
             Map<?, ?> step = execute.get(index);

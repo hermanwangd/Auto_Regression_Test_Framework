@@ -367,6 +367,8 @@ Legacy v1 artifacts may still be read through a compatibility adapter during mig
 
 Every execute step must declare an `outputs` map when later verification or evidence depends on the result. Normal actions such as API calls, SQL queries, batch runs, or command execution belong in `execute`, not `verify`.
 
+M1 runtime supports exactly one executable `execute[]` item per test case. The array shape is retained for DSL version stability, and a test may declare multiple named `targets` for context or verification, but multiple executable operations in one artifact must block before provider dispatch. When an RP needs multiple operations, use multiple approved test cases in the same batch until multi-step orchestration is designed and verified.
+
 ### 6.7.3 Setup, Inputs, and Cleanup
 
 Use `setup.fixtures` for precondition data or state that must exist before the operation runs, such as database seeds, file seeds, mock setup, queue seed messages, or initial state. A fixture that changes system state should include `cleanup_ref` when possible.

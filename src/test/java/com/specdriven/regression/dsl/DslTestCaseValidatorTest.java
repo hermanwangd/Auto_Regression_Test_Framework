@@ -68,6 +68,43 @@ class DslTestCaseValidatorTest {
     }
 
     @Test
+    void blocksMultipleExecuteStepsUntilMultiStepOrchestrationIsSupported() {
+        String yaml = validExecutionFocusedDsl()
+                .replace("""
+                  - id: run_pipeline
+                    target: RU-transform-job
+                    operation: run_batch
+                    with: {}
+                    outputs:
+                      actual_output:
+                        ref: actual/output.txt
+                """, """
+                  - id: run_pipeline
+                    target: RU-transform-job
+                    operation: run_batch
+                    with: {}
+                    outputs:
+                      actual_output:
+                        ref: actual/output.txt
+                  - id: run_postcheck
+                    target: RU-transform-job
+                    operation: run_batch
+                    with: {}
+                    outputs:
+                      actual_output:
+                        ref: actual/postcheck.txt
+                """);
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains("execute");
+        assertThat(report.gaps()).extracting(DslValidationGap::ownerAction)
+                .contains("Use exactly one execute step per M1 test case; split additional operations into separate approved tests in the same batch.");
+    }
+
+    @Test
     void blocksVerifyRuleWithoutExpectedOrActualSource() {
         String yaml = validExecutionFocusedDsl()
                 .replace("""

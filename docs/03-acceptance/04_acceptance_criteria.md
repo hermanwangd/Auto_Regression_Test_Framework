@@ -24,6 +24,7 @@ Minimum verification rule for DSL/AP clarity:
 - Every readiness, generation, dry-run, execution, or evidence report that references DSL behavior shall include `ap`, `field_path` or `contract_path`, `test_case_id` when applicable, `ac_id` when applicable, `reason`, and `owner_action`.
 - DSL validation failures shall identify whether the problem belongs to DSL syntax, execution lifecycle state, traceability, targets, setup fixtures, execute outputs, expected results, verify rules, RP/RU mapping, provider contract, environment readiness, runtime policy, or evidence completeness.
 - New execution-focused DSL artifacts shall use `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime` as the always-required core contract before F007 provider runtime execution. `setup` and `expected_results` content is required when the scenario or verify rules need it.
+- M1 execution-focused DSL artifacts shall contain exactly one executable `execute[]` item. Multiple operations shall be represented as multiple approved test cases in the same batch until multi-step orchestration is designed and verified.
 - New execution-focused DSL artifacts may use `parameters.strategy: explicit_cases` when the same reviewed test case must run with multiple named input variants. Other parameterization strategies are unsupported in M1.
 - New execution-focused DSL artifacts shall not contain legacy-only fields such as `rp_id`, `ac_id`, `execution_target`, `target_ru_id`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, or `policy`.
 - New execution-focused DSL artifacts shall not contain governance-heavy fields such as `approval_status`, `approved_by`, `approval_required`, `waiver`, `release_gate`, `risk_approval`, or governance workflow state.
@@ -263,7 +264,7 @@ And blocked run evidence shall preserve enough normalized DSL runtime context to
 
 And when a selected pilot provider family or provider type is missing, unsupported, ambiguous, or only available as an unapproved escape hatch, the dry-run report shall name the provider family, provider type, capability, affected RU, provider contract path, registry status, and required owner action.
 
-Given a new DSL test case uses `call_ru`, `target_ru_id`, `package_inputs`, `oracles`, missing `execute[].outputs`, missing `runtime.timeout`, missing `runtime.retry.max_attempts`, unsupported `verify[].type`, missing structured verify selector, or governance-heavy approval/release fields
+Given a new DSL test case uses multiple executable `execute[]` steps, `call_ru`, `target_ru_id`, `package_inputs`, `oracles`, missing `execute[].outputs`, missing `runtime.timeout`, missing `runtime.retry.max_attempts`, unsupported `verify[].type`, missing structured verify selector, or governance-heavy approval/release fields
 When dry-run or execution is requested
 Then the framework shall block during Definition and Validation or Planning and Binding before provider dispatch.
 
