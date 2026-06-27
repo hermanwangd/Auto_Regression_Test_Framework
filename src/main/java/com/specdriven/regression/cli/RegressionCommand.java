@@ -346,7 +346,7 @@ public class RegressionCommand {
         if (dryRun) {
             return preflight.blocked() ? 1 : 0;
         }
-        if (preflight.blocked()) {
+        if (preflight.globalBlocked()) {
             String batchId = nextAvailableId(packageRoot.resolve("evidence/batches"), "BATCH");
             String runId = nextAvailableId(packageRoot.resolve("evidence/runs"), "RUN");
             String batchStartedAt = java.time.OffsetDateTime.now().toString();
@@ -373,7 +373,6 @@ public class RegressionCommand {
             return 1;
         }
 
-        out.println("adapter_execution_started: true");
         String batchId = nextAvailableId(packageRoot.resolve("evidence/batches"), "BATCH");
         String batchStartedAt = java.time.OffsetDateTime.now().toString();
         int runNumber = nextAvailableNumber(packageRoot.resolve("evidence/runs"), "RUN");
@@ -382,6 +381,7 @@ public class RegressionCommand {
         Map<String, String> ruStatuses = new LinkedHashMap<>();
         Path mappingYaml = packageRoot.resolve("rp_ru_mapping.yaml");
         List<Path> executionTests = dependencyOrderedApprovedTests(packageRoot, preflight.approvedTests());
+        out.println("adapter_execution_started: " + hasPreflightRunnableTest(preflight, executionTests));
         out.println("batch_id: " + batchId);
         out.println("execution_results:");
         for (Path approvedTest : executionTests) {
@@ -393,8 +393,19 @@ public class RegressionCommand {
             List<String> dependencies = targetDependencies(mappingYaml, targetRuId);
             DependencyBlock dependencyBlock =
                     dependencyBlock(mappingYaml, approvedTest, targetRuId, dependencies, ruStatuses);
+            List<String> preflightFailureDetails = preflight.failureDetails(approvedTest);
             ExecutionResult result;
-            if (dependencyBlock.blocked()) {
+            if (!preflightFailureDetails.isEmpty()) {
+                result = evidenceWriter.writeBlockedRun(
+                        packageRoot,
+                        batchId,
+                        runId,
+                        List.of(approvedTest),
+                        preflightFailureDetails,
+                        preflight.executionMode(),
+                        preflight.environmentRef(),
+                        dependencies);
+            } else if (dependencyBlock.blocked()) {
                 result = evidenceWriter.writeBlockedRun(
                         packageRoot,
                         batchId,
@@ -420,7 +431,7 @@ public class RegressionCommand {
             out.println("    stdout: " + result.runDir().relativize(result.stdoutLog()));
             out.println("    stderr: " + result.runDir().relativize(result.stderrLog()));
         }
-        String runStatus = passed ? "passed" : "failed";
+        String runStatus = aggregateRunStatus(results);
         evidenceWriter.writeExecutionBatch(
                 packageRoot,
                 batchId,
@@ -431,6 +442,16 @@ public class RegressionCommand {
                 results);
         out.println("run_status: " + runStatus);
         return passed ? 0 : 1;
+    }
+
+    private String aggregateRunStatus(List<ExecutionResult> results) {
+        if (results.stream().allMatch(ExecutionResult::passed)) {
+            return "passed";
+        }
+        if (!results.isEmpty() && results.stream().allMatch(result -> "blocked".equals(result.status()))) {
+            return "blocked";
+        }
+        return "failed";
     }
 
     private List<Path> dependencyOrderedApprovedTests(Path packageRoot, List<Path> approvedTests) {
@@ -450,6 +471,15 @@ public class RegressionCommand {
                     return left.getFileName().toString().compareTo(right.getFileName().toString());
                 })
                 .toList();
+    }
+
+    private boolean hasPreflightRunnableTest(PreflightResult preflight, List<Path> executionTests) {
+        for (Path approvedTest : executionTests) {
+            if (preflight.failureDetails(approvedTest).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private DependencyBlock dependencyBlock(
@@ -508,7 +538,9 @@ public class RegressionCommand {
                 executionEnvironmentResolver.resolve(packageRoot.resolve("rp_ru_mapping.yaml"), requestedEnv);
         List<Path> approvedTests = approvedTests(packageRoot);
         List<String> failureDetails = new java.util.ArrayList<>();
-        boolean blocked = !environmentReport.ready() || approvedTests.isEmpty();
+        Map<Path, List<String>> blockedTestFailureDetails = new LinkedHashMap<>();
+        boolean globalBlocked = !environmentReport.ready() || approvedTests.isEmpty();
+        boolean blocked = globalBlocked;
 
         if (dryRun) {
             out.println("adapter_execution_started: false");
@@ -537,6 +569,7 @@ public class RegressionCommand {
 
         out.println("binding_gaps:");
         for (Path approvedTest : approvedTests) {
+            List<String> testFailureDetails = new java.util.ArrayList<>();
             BindingResolutionReport bindingReport = bindingResolver.resolve(approvedTest);
             blocked = blocked || !bindingReport.ready();
             for (BindingGap gap : bindingReport.gaps()) {
@@ -547,7 +580,7 @@ public class RegressionCommand {
                 out.println("    binding_name: " + gap.bindingName());
                 out.println("    binding_type: " + gap.bindingType());
                 out.println("    owner_action: " + gap.ownerAction());
-                failureDetails.add(failureDetail(
+                addTestFailure(failureDetails, testFailureDetails, failureDetail(
                         "Planning and Binding",
                         gap.fieldPath(),
                         gap.ownerAction(),
@@ -567,7 +600,7 @@ public class RegressionCommand {
             for (ExpectedResultGap gap : eligibility.gaps()) {
                 out.println("    field_path: " + gap.fieldPath());
                 out.println("    owner_action: " + gap.ownerAction());
-                failureDetails.add(failureDetail(
+                addTestFailure(failureDetails, testFailureDetails, failureDetail(
                         "Oracle and Assertion Engine",
                         gap.fieldPath(),
                         gap.ownerAction(),
@@ -583,7 +616,7 @@ public class RegressionCommand {
                 out.println("    field_path: " + gap.fieldPath());
                 out.println("    oracle_type: " + gap.oracleType());
                 out.println("    owner_action: " + gap.ownerAction());
-                failureDetails.add(failureDetail(
+                addTestFailure(failureDetails, testFailureDetails, failureDetail(
                         "Oracle and Assertion Engine",
                         gap.fieldPath(),
                         gap.ownerAction(),
@@ -600,7 +633,7 @@ public class RegressionCommand {
                 out.println("    ac_id: " + bindingReport.acId());
                 out.println("    field_path: " + gap.fieldPath());
                 out.println("    owner_action: " + gap.ownerAction());
-                failureDetails.add(failureDetail(
+                addTestFailure(failureDetails, testFailureDetails, failureDetail(
                         "Fixture and State Manager",
                         gap.fieldPath(),
                         gap.ownerAction(),
@@ -646,7 +679,7 @@ public class RegressionCommand {
                 out.println("    affected_ru: " + gap.affectedRu());
                 out.println("    capability: " + gap.capability());
                 out.println("    owner_action: " + gap.ownerAction());
-                failureDetails.add(failureDetail(
+                addTestFailure(failureDetails, testFailureDetails, failureDetail(
                         "Planning and Binding",
                         gap.fieldPath(),
                         gap.ownerAction(),
@@ -662,6 +695,9 @@ public class RegressionCommand {
                         "affected_ru: " + gap.affectedRu(),
                         "capability: " + gap.capability()));
             }
+            if (!testFailureDetails.isEmpty()) {
+                blockedTestFailureDetails.put(approvedTest, List.copyOf(testFailureDetails));
+            }
         }
 
         if (dryRun) {
@@ -669,8 +705,10 @@ public class RegressionCommand {
         }
         return new PreflightResult(
                 blocked,
+                globalBlocked,
                 approvedTests,
                 List.copyOf(failureDetails),
+                Map.copyOf(blockedTestFailureDetails),
                 environmentReport.executionMode(),
                 environmentReport.environmentRef());
     }
@@ -686,6 +724,14 @@ public class RegressionCommand {
         }
         builder.append("owner_action: ").append(ownerAction);
         return builder.toString();
+    }
+
+    private void addTestFailure(
+            List<String> failureDetails,
+            List<String> testFailureDetails,
+            String failureDetail) {
+        failureDetails.add(failureDetail);
+        testFailureDetails.add(failureDetail);
     }
 
     private int draftExpectedResults(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
@@ -873,10 +919,16 @@ public class RegressionCommand {
 
     private record PreflightResult(
             boolean blocked,
+            boolean globalBlocked,
             List<Path> approvedTests,
             List<String> failureDetails,
+            Map<Path, List<String>> blockedTestFailureDetails,
             String executionMode,
             String environmentRef) {
+
+        List<String> failureDetails(Path approvedTest) {
+            return blockedTestFailureDetails.getOrDefault(approvedTest, List.of());
+        }
     }
 
     private record DependencyBlock(boolean blocked, String failureDetail) {

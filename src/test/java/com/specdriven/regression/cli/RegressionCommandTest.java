@@ -592,6 +592,56 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runExecutesIndependentRuWhenAnotherRuIsBlockedByProviderGap() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001", "RP-001-AC-002");
+        writePartialBlockMultiRuMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001", "adapter-ok\n");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-002", "blocked-ru-should-not-run\n");
+        writeApprovedTargetRuTestCaseWithBinding(
+                "RP-001", "RP-001-TC-001", "RP-001-AC-001", "RU-ready-job", "ready_cli", "db_seed");
+        writeApprovedDependencyTestCase(
+                "RP-001", "RP-001-TC-002", "RP-001-AC-002", "RU-missing-provider-job", "missing_cli");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        Path readyRun = packageRoot.resolve("evidence/runs/RUN-001/run.yaml");
+        Path blockedRun = packageRoot.resolve("evidence/runs/RUN-002/run.yaml");
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("test_case_id: RP-001-TC-001");
+        assertThat(output.toString()).contains("test_case_id: RP-001-TC-002");
+        assertThat(Files.readString(readyRun))
+                .contains("test_case_id: RP-001-TC-001")
+                .contains("status: passed")
+                .contains("adapter_execution_started: true");
+        assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/logs/stdout.log")))
+                .contains("adapter-ok");
+        assertThat(Files.readString(blockedRun))
+                .contains("test_case_id: RP-001-TC-002")
+                .contains("status: blocked")
+                .contains("adapter_execution_started: false")
+                .contains("failure_details: failure_details.yaml");
+        assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-002/failure_details.yaml")))
+                .contains("release_units[1].provider_contracts.adapters.missing_cli")
+                .contains("affected_ru: RU-missing-provider-job");
+        assertThat(Files.exists(packageRoot.resolve("evidence/runs/RUN-002/logs/stdout.log"))).isFalse();
+        assertThat(Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml")))
+                .contains("run_id: RUN-001")
+                .contains("status: passed")
+                .contains("run_id: RUN-002")
+                .contains("status: blocked");
+    }
+
+    @Test
     void runBlocksDownstreamRuWhenRequiredUpstreamRunFails() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -1773,6 +1823,62 @@ class RegressionCommandTest {
                       oracles: {}
                       assertions: {}
                       observations: {}
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                """.formatted(rpId, rpId, rpId));
+    }
+
+    private void writePartialBlockMultiRuMapping(String rpId) throws Exception {
+        Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        Files.writeString(mapping, """
+                rp_id: %s
+                release_units:
+                  - ru_id: RU-ready-job
+                    repo: /repo/ready
+                    unit_type: data_pipeline
+                    owner: product_developer
+                    version_ref: main
+                    validation_boundary: execute_pipeline_with_fixture
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://pipeline/%s/ready
+                    adapter: ready_cli
+                    provider_contracts:
+                      adapters:
+                        ready_cli:
+                          provider_family: file_batch
+                          provider_type: shell
+                          command: /bin/sh -c 'echo adapter-ok'
+                          working_directory: .
+                          timeout_seconds: 10
+                          success_exit_codes: [0]
+                          logs:
+                            stdout: logs/stdout.log
+                            stderr: logs/stderr.log
+                          outputs:
+                            actual_output_ref: actual/output.txt
+                      bindings:
+                        db_seed:
+                          provider_family: file_batch
+                          provider_type: file_fixture
+                          materialize_as: input_file
+                      fixtures: {}
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                  - ru_id: RU-missing-provider-job
+                    repo: /repo/missing-provider
+                    unit_type: data_pipeline
+                    owner: product_developer
+                    version_ref: main
+                    validation_boundary: execute_pipeline_with_fixture
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://pipeline/%s/missing-provider
+                    adapter: missing_cli
+                    provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []
                 """.formatted(rpId, rpId, rpId));
