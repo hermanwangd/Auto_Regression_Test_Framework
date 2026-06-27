@@ -95,6 +95,57 @@ class MessagingProviderTest {
     }
 
     @Test
+    void requestsNatsReplyThroughNativeTransportAndWritesEvidence() throws Exception {
+        writePayload("fixtures/requests/payment-authorization.json", "{\"paymentId\":\"PAY-REQ-001\"}\n");
+        RecordingMessagingTransport transport = new RecordingMessagingTransport(
+                new MessagingTransportResult(
+                        "requested 1 native reply from payment.authorization\n",
+                        "{\"approved\":true,\"paymentId\":\"PAY-REQ-001\"}\n",
+                        1));
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "payment_authorization",
+                Map.of(
+                        "provider_type", "nats",
+                        "server_ref", "nats://127.0.0.1:4222",
+                        "subject_ref", "payment.authorization",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-authorization.json"),
+                        "actions", Map.of(
+                                "request_payment_authorization", Map.of(
+                                        "mode", "request_reply",
+                                        "payload_binding", "authorization_request",
+                                        "serialization", "json",
+                                        "correlation_id", "PAY-REQ-001"))),
+                Map.of("steps", List.of(Map.of("action", "request_payment_authorization"))),
+                List.of(new ResolvedBinding(
+                        "authorization_request",
+                        "message_event",
+                        "fixtures/requests/payment-authorization.json")));
+
+        Path runDir = tempDir.resolve("run");
+        assertThat(result.exitCode()).isZero();
+        assertThat(transport.request.providerType()).isEqualTo("nats");
+        assertThat(transport.request.mode()).isEqualTo("request_reply");
+        assertThat(transport.request.payloadBinding()).isEqualTo("authorization_request");
+        assertThat(transport.request.payload()).isEqualTo("{\"paymentId\":\"PAY-REQ-001\"}\n");
+        assertThat(Files.readString(result.stdoutLog()))
+                .isEqualTo("requested 1 native reply from payment.authorization\n");
+        assertThat(Files.readString(result.actualOutput()))
+                .isEqualTo("{\"approved\":true,\"paymentId\":\"PAY-REQ-001\"}\n");
+        assertThat(Files.readString(runDir.resolve("messaging.yaml")))
+                .contains("status: passed")
+                .contains("provider_type: nats")
+                .contains("subject_ref: payment.authorization")
+                .contains("action: request_payment_authorization")
+                .contains("mode: request_reply")
+                .contains("payload_binding: authorization_request")
+                .contains("correlation_id: PAY-REQ-001")
+                .contains("message_count: 1");
+    }
+
+    @Test
     void observesKafkaThroughNativeTransportWithoutPayloadBindingAndWritesEvidence() throws Exception {
         RecordingMessagingTransport transport = new RecordingMessagingTransport(
                 new MessagingTransportResult(

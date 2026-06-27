@@ -327,11 +327,14 @@ public class MessagingProvider {
 
     private String mode(Map<?, ?> action) {
         String mode = stringValue(action.get("mode"));
-        return mode.isBlank() ? "publish" : mode.toLowerCase(Locale.ROOT);
+        return mode.isBlank() ? "publish" : mode.toLowerCase(Locale.ROOT).replace('-', '_');
     }
 
     private boolean requiresPayload(String mode) {
-        return mode.isBlank() || "publish".equals(mode);
+        return mode.isBlank()
+                || "publish".equals(mode)
+                || "request".equals(mode)
+                || "request_reply".equals(mode);
     }
 
     private int intValue(Object value, int fallback) {

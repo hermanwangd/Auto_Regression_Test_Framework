@@ -85,6 +85,30 @@ class DefaultMessagingTransport implements MessagingTransport {
     }
 
     @Override
+    public MessagingTransportResult requestReply(MessagingTransportRequest request)
+            throws IOException {
+        return switch (request.providerType().toLowerCase(Locale.ROOT)) {
+            case "local", "mock" -> localRequestReply(request);
+            case "nats" -> natsRequestReply(request);
+            default -> throw new IOException("Unsupported messaging request/reply mode for provider_type `"
+                    + request.providerType() + "`.");
+        };
+    }
+
+    private MessagingTransportResult localRequestReply(MessagingTransportRequest request) {
+        String payload = firstText(
+                request.action(),
+                "reply_payload",
+                "response_payload",
+                "expected_payload",
+                "sample_payload");
+        return new MessagingTransportResult(
+                requestReplyStdout(request),
+                payload,
+                1);
+    }
+
+    @Override
     public MessagingTransportResult cleanup(MessagingTransportRequest request)
             throws IOException {
         return switch (request.providerType().toLowerCase(Locale.ROOT)) {
@@ -242,6 +266,49 @@ class DefaultMessagingTransport implements MessagingTransport {
                 1);
     }
 
+    private MessagingTransportResult natsRequestReply(MessagingTransportRequest request)
+            throws IOException {
+        URI uri = natsUri(resolveRef(request.connectionRef()));
+        int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
+        byte[] payload = request.payload().getBytes(StandardCharsets.UTF_8);
+        String subject = stripScheme(request.targetRef(), "nats");
+        String replySubject = natsReplySubject(request);
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(uri.getHost(), natsPort(uri)), timeoutMs);
+            socket.setSoTimeout(timeoutMs);
+            InputStream input = socket.getInputStream();
+            OutputStream output = socket.getOutputStream();
+            readNatsInfo(input);
+            writeAscii(output, "CONNECT {\"verbose\":false,\"pedantic\":false}\r\n");
+            writeAscii(output, "SUB " + replySubject + " 1\r\n");
+            writeAscii(output, "PUB " + subject + " " + replySubject + " " + payload.length + "\r\n");
+            output.write(payload);
+            writeAscii(output, "\r\nPING\r\n");
+            output.flush();
+
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Math.max(1, request.timeoutSeconds()));
+            while (System.nanoTime() < deadline) {
+                String line;
+                try {
+                    line = readLine(input);
+                } catch (SocketTimeoutException e) {
+                    break;
+                }
+                if (line.startsWith("MSG ")) {
+                    String replyPayload = readNatsPayload(input, line);
+                    return new MessagingTransportResult(
+                            requestReplyStdout(request),
+                            observedPayload(List.of(replyPayload)),
+                            1);
+                } else if (line.startsWith("-ERR")) {
+                    throw new IOException("NATS " + request.mode() + " failed: " + line);
+                }
+            }
+        }
+        throw new IOException("NATS " + request.mode() + " expected a reply from `"
+                + request.targetRef() + "` but observed 0.");
+    }
+
     private MessagingTransportResult natsObserve(MessagingTransportRequest request)
             throws IOException {
         URI uri = natsUri(resolveRef(request.connectionRef()));
@@ -348,10 +415,23 @@ class DefaultMessagingTransport implements MessagingTransport {
         return uri.getPort() > 0 ? uri.getPort() : 4222;
     }
 
+    private String natsReplySubject(MessagingTransportRequest request) {
+        String configured = firstText(
+                request.action(),
+                "reply_subject",
+                "reply_subject_ref",
+                "inbox_subject",
+                "reply_inbox");
+        if (!configured.isBlank()) {
+            return stripScheme(configured, "nats");
+        }
+        return "_INBOX.spec-regression." + Long.toUnsignedString(System.nanoTime());
+    }
+
     private void readNatsInfo(InputStream input) throws IOException {
         String line = readLine(input);
         if (!line.startsWith("INFO")) {
-            throw new IOException("NATS server did not send INFO before publish.");
+            throw new IOException("NATS server did not send INFO before command.");
         }
     }
 
@@ -486,6 +566,10 @@ class DefaultMessagingTransport implements MessagingTransport {
 
     private String cleanupStdout(MessagingTransportRequest request, int cleanedCount) {
         return "cleaned " + cleanedCount + " native messages from " + request.targetRef() + "\n";
+    }
+
+    private String requestReplyStdout(MessagingTransportRequest request) {
+        return "requested 1 native reply from " + request.targetRef() + "\n";
     }
 
     private String stripScheme(String value, String scheme) {

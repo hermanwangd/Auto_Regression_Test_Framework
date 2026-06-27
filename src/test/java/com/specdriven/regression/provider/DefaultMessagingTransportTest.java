@@ -86,6 +86,37 @@ class DefaultMessagingTransportTest {
     }
 
     @Test
+    void requestsNatsReplyOverCoreProtocol() throws Exception {
+        String requestPayload = "{\"paymentId\":\"PAY-REQ-001\"}";
+        String replyPayload = "{\"approved\":true,\"paymentId\":\"PAY-REQ-001\"}";
+        try (ServerSocket server = new ServerSocket(0)) {
+            CompletableFuture<Void> served = CompletableFuture.runAsync(
+                    () -> serveNatsRequestReply(server, requestPayload, replyPayload));
+            DefaultMessagingTransport transport = new DefaultMessagingTransport();
+
+            MessagingTransportResult result = transport.execute(new MessagingTransportRequest(
+                    "payment_authorization",
+                    "nats",
+                    "nats://127.0.0.1:" + server.getLocalPort(),
+                    "payment.authorization",
+                    "subject_ref",
+                    "request_payment_authorization",
+                    "request_reply",
+                    "authorization_request",
+                    "PAY-REQ-001",
+                    requestPayload,
+                    2,
+                    Map.of(),
+                    Map.of("mode", "request_reply")));
+
+            assertThat(result.stdout()).isEqualTo("requested 1 native reply from payment.authorization\n");
+            assertThat(result.actualOutput()).isEqualTo(replyPayload + "\n");
+            assertThat(result.messageCount()).isEqualTo(1);
+            served.get(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
     void observesLocalConfiguredPayload() throws Exception {
         MessagingTransportResult result = new DefaultMessagingTransport().observe(new MessagingTransportRequest(
                 "payment_events",
@@ -216,6 +247,38 @@ class DefaultMessagingTransportTest {
             output.write("PONG\r\n".getBytes(StandardCharsets.US_ASCII));
             byte[] message = payload.getBytes(StandardCharsets.UTF_8);
             output.write(("MSG payment.events 1 " + message.length + "\r\n").getBytes(StandardCharsets.US_ASCII));
+            output.write(message);
+            output.write("\r\n".getBytes(StandardCharsets.US_ASCII));
+            output.flush();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private void serveNatsRequestReply(ServerSocket server, String requestPayload, String replyPayload) {
+        try (Socket socket = server.accept();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(
+                        socket.getInputStream(),
+                        StandardCharsets.US_ASCII));
+                OutputStream output = socket.getOutputStream()) {
+            output.write("INFO {}\r\n".getBytes(StandardCharsets.US_ASCII));
+            output.flush();
+            reader.readLine();
+            String subscribe = reader.readLine();
+            String publish = reader.readLine();
+            String[] publishParts = publish.split(" ");
+            assertThat(subscribe).startsWith("SUB _INBOX.spec-regression.");
+            assertThat(publishParts).hasSize(4);
+            assertThat(publishParts[0]).isEqualTo("PUB");
+            assertThat(publishParts[1]).isEqualTo("payment.authorization");
+            assertThat(publishParts[2]).startsWith("_INBOX.spec-regression.");
+            assertThat(Integer.parseInt(publishParts[3])).isEqualTo(requestPayload.getBytes(StandardCharsets.UTF_8).length);
+            assertThat(reader.readLine()).isEqualTo(requestPayload);
+            assertThat(reader.readLine()).isEqualTo("PING");
+            output.write("PONG\r\n".getBytes(StandardCharsets.US_ASCII));
+            byte[] message = replyPayload.getBytes(StandardCharsets.UTF_8);
+            output.write(("MSG " + publishParts[2] + " 1 " + message.length + "\r\n")
+                    .getBytes(StandardCharsets.US_ASCII));
             output.write(message);
             output.write("\r\n".getBytes(StandardCharsets.US_ASCII));
             output.flush();

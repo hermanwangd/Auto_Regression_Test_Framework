@@ -153,6 +153,79 @@ class ProviderCapabilityRegistryTest {
     }
 
     @Test
+    void acceptsNativeNatsRequestReplyContractWithPayloadBinding() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_authorization",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "nats",
+                        "server_ref", "nats://127.0.0.1:4222",
+                        "subject_ref", "payment.authorization",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-authorization.json"),
+                        "actions", Map.of(
+                                "request_payment_authorization", Map.of(
+                                        "mode", "request_reply",
+                                        "payload_binding", "authorization_request",
+                                        "serialization", "json",
+                                        "requires_correlation", true,
+                                        "correlation_id", "PAY-REQ-001"))),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isTrue();
+        assertThat(validation.registryStatus()).isEqualTo("supported");
+        assertThat(validation.runtimeStatus()).isEqualTo("supported");
+    }
+
+    @Test
+    void blocksNativeNatsRequestReplyWithoutPayloadBinding() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_authorization",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "nats",
+                        "server_ref", "nats://127.0.0.1:4222",
+                        "subject_ref", "payment.authorization",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-authorization.json"),
+                        "actions", Map.of(
+                                "request_payment_authorization", Map.of(
+                                        "mode", "request_reply",
+                                        "serialization", "json"))),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .contains(".actions.request_payment_authorization.payload_binding");
+    }
+
+    @Test
+    void blocksNativeKafkaRequestReplyUntilReusableRuntimeExists() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_authorization",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "kafka",
+                        "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
+                        "topic_ref", "payment.authorization",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-authorization.json"),
+                        "actions", Map.of(
+                                "request_payment_authorization", Map.of(
+                                        "mode", "request_reply",
+                                        "payload_binding", "authorization_request",
+                                        "serialization", "json"))),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .contains(".actions.request_payment_authorization.mode");
+    }
+
+    @Test
     void acceptsNativeKafkaAndNatsCleanupContractsWithoutPayloadBinding() {
         ProviderCapabilityRegistry.ProviderContractValidation kafka = registry.validate(
                 "adapters",

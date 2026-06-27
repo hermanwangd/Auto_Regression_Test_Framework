@@ -376,12 +376,12 @@ class ProviderCapabilityRegistry {
                 continue;
             }
             String mode = messagingActionMode(action);
-            if (!List.of("publish", "consume", "observe", "cleanup").contains(mode)) {
+            if (!supportsNativeMessagingMode(type, mode)) {
                 violations.add(required(".actions." + actionName + ".mode",
-                        "Use supported messaging action mode `publish`, `consume`, `observe`, or `cleanup` "
-                                + "before invoking `" + actionName + "`."));
+                        "Use supported messaging action mode `publish`, `request_reply`, `consume`, `observe`, "
+                                + "or `cleanup` before invoking `" + actionName + "`."));
             }
-            if ("publish".equals(mode)
+            if (requiresMessagingPayload(mode)
                     && firstText(action, "payload_binding", "message_binding", "event_binding").isBlank()) {
                 violations.add(required(".actions." + actionName + ".payload_binding",
                         "Declare payload_binding, message_binding, or event_binding for native messaging action `"
@@ -421,7 +421,18 @@ class ProviderCapabilityRegistry {
 
     private String messagingActionMode(Map<?, ?> action) {
         String mode = stringValue(action.get("mode"));
-        return mode.isBlank() ? "publish" : mode.toLowerCase(Locale.ROOT);
+        return mode.isBlank() ? "publish" : mode.toLowerCase(Locale.ROOT).replace('-', '_');
+    }
+
+    private boolean requiresMessagingPayload(String mode) {
+        return "publish".equals(mode) || "request".equals(mode) || "request_reply".equals(mode);
+    }
+
+    private boolean supportsNativeMessagingMode(String type, String mode) {
+        if (List.of("publish", "consume", "observe", "cleanup").contains(mode)) {
+            return true;
+        }
+        return "nats".equals(type) && List.of("request", "request_reply").contains(mode);
     }
 
     private void validateBinding(

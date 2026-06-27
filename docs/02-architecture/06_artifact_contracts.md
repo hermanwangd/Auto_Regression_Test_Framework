@@ -134,8 +134,8 @@ Current provider contract minimums enforced by the framework verification build:
 |---|---|
 | `file_batch/shell` | `command`, positive `timeout_seconds`, `outputs.actual_output_ref` |
 | `request_response/rest` | `endpoint_ref`, `base_url_ref`, or `service_ref`; `actions`; positive `timeout_seconds`; `outputs.actual_output_ref` |
-| `messaging/local` or `messaging/mock` | `topic_ref`, `subject_ref`, `stream_ref`, or `endpoint_ref`; positive `timeout_seconds`; `outputs.actual_output_ref`; supported action; payload binding when publishing; cleanup strategy and positive max count when cleaning; correlation id when required |
-| `messaging/kafka` or `messaging/nats` | `bootstrap_servers_ref`, `server_ref`, or `connection_ref`; `topic_ref` or `subject_ref`; positive `timeout_seconds`; `outputs.actual_output_ref`; supported action; payload binding when publishing; `cleanup_strategy: drain` and positive `max_count` when cleaning; correlation id when required |
+| `messaging/local` or `messaging/mock` | `topic_ref`, `subject_ref`, `stream_ref`, or `endpoint_ref`; positive `timeout_seconds`; `outputs.actual_output_ref`; supported action; payload binding when publishing or requesting a reply; cleanup strategy and positive max count when cleaning; correlation id when required |
+| `messaging/kafka` or `messaging/nats` | `bootstrap_servers_ref`, `server_ref`, or `connection_ref`; `topic_ref` or `subject_ref`; positive `timeout_seconds`; `outputs.actual_output_ref`; supported action; payload binding when publishing; payload binding for NATS request/reply; `cleanup_strategy: drain` and positive `max_count` when cleaning; correlation id when required |
 | `db_fixture/jdbc` | `connection_ref`, `isolation_key`, `cleanup_strategy`, setup/cleanup SQL by `sql_ref`, verification SQL by `sql_ref` |
 | `deployment_readiness/local` or `deployment_readiness/mock` | `readiness_probe`, deployment/service/target ref, `deployed_version_ref`, positive `timeout_seconds`, `outputs.actual_output_ref` |
 | `deployment_readiness/k8s` | `readiness_probe`, `namespace_ref`, `kube_context_ref` or `connection_ref` for `kubectl` probes, `api_server_ref` or `endpoint_ref` for `api_deployment_available`, deployment/service/selector ref for readiness, `target_selector` or `pod_ref` plus positive `log_tail_lines` for `pod_logs`, `deployed_version_ref`, positive `timeout_seconds`, `outputs.actual_output_ref` |
@@ -791,7 +791,8 @@ Adapter/provider runtime rules:
 - Dispatch uses DSL fields and mapping fields: adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type.
 - The framework supplies resolved input paths and run workspace paths.
 - Adapters and providers write actual outputs, observation results, and cleanup results under the run evidence directory.
-- Messaging actions that declare `requires_correlation: true` must also declare `correlation_id`, `correlation_id_ref`, or `correlation_key` before publish, consume, observe, or cleanup dispatch.
+- Messaging actions that declare `requires_correlation: true` must also declare `correlation_id`, `correlation_id_ref`, or `correlation_key` before publish, request/reply, consume, observe, or cleanup dispatch.
+- Messaging request/reply actions must declare `mode: request_reply` or `mode: request` and a `payload_binding`, `message_binding`, or `event_binding`. Current native request/reply support is implemented for NATS; Kafka request/reply remains unsupported until a selected RP requires a reusable contract.
 - Messaging cleanup actions must declare `mode: cleanup`, `cleanup_strategy: drain`, and a positive bounded `max_count`. Current cleanup is bounded drain behavior for test-owned topics, subjects, or consumer groups, not broker administrator purge.
 - Non-success exit codes fail the test case and must preserve stdout, stderr, exit code, and timeout state.
 - Timeouts fail the test case and must trigger fixture cleanup.
