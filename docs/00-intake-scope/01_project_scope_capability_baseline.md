@@ -282,7 +282,7 @@ Current framework verification can be accepted only for the framework capabiliti
 | CAP-009 | Package Input Catalog | M1 | Platform | Partial | Supported binding types are `input_file`, `dataset`, `db_seed`, `api_payload`, and `message_event`; `config_file`, `env_var`, and `existing_state` remain pending |
 | CAP-010 | Package Binding Resolver | M1 | Platform | Partial | Binding unit tests and dry-run gaps for supported types; additional pilot bindings pending |
 | CAP-011 | Release Package Adapter | M1 | Platform | Framework verified | File/batch, REST, local/mock messaging, JDBC fixture, local/mock readiness, and approved external runner evidence |
-| CAP-012 | Package Output Assertion Library | M1 | Platform | Partial | File diff, expected-result artifact checks, and JSON path equality checks are framework-tested; schema, contract, DB row, absence, and tolerance remain pending |
+| CAP-012 | Package Output Assertion Library | M1 | Platform | Partial | File diff, expected-result artifact checks, JSON path equality checks, and DB row count assertions are framework-tested; schema, contract, absence, and tolerance remain pending |
 | CAP-013 | Package Fixture Lifecycle | M1 | Platform | Framework verified | DB setup/query/cleanup evidence and cleanup policy checks |
 | CAP-014 | Release Package Test Execution | M1 | Platform | Framework verified | Batch/run execution report and raw evidence for current provider set |
 | CAP-015 | Coverage Reporter | M1 | Platform | Framework verified | Batch-level AC coverage report; real pilot >80% remains pending owner artifacts |

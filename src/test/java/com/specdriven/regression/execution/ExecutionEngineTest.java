@@ -102,6 +102,53 @@ class ExecutionEngineTest {
     }
 
     @Test
+    void evaluatesDbRowMatchesAssertionAgainstFixtureDatabase() throws Exception {
+        String jdbcUrl = "jdbc:h2:mem:execution_db_assertion_" + System.nanoTime() + ";DB_CLOSE_DELAY=-1";
+        writeDbRowAssertionPackage(jdbcUrl);
+        ProviderRuntime fakeRuntime = request -> {
+            try {
+                Files.createDirectories(request.stdoutLog().getParent());
+                Files.createDirectories(request.stderrLog().getParent());
+                Files.createDirectories(request.actualOutput().getParent());
+                Files.writeString(request.stdoutLog(), "db assertion target executed\n");
+                Files.writeString(request.stderrLog(), "");
+                Files.writeString(request.actualOutput(), "ok\n");
+                return new AdapterExecutionResult(0, false, request.stdoutLog(), request.stderrLog(), request.actualOutput());
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to write fake DB assertion output.", e);
+            }
+        };
+        ExecutionEngine engine = new ExecutionEngine(
+                new DataPipelineAdapter(),
+                new AssertionEngine(),
+                new EvidenceWriter(),
+                new BindingResolver(),
+                new ProviderContractResolver(),
+                new DatabaseFixtureProvider(),
+                new ProviderRuntimeRegistry(Map.of("request_response/rest", fakeRuntime)));
+
+        ExecutionResult result = engine.execute(
+                tempDir,
+                tempDir.resolve("tests/approved/TC-DB-ASSERT-001.yaml"),
+                "BATCH-DB-ASSERT",
+                "RUN-DB-ASSERT");
+
+        Path runDir = tempDir.resolve("evidence/runs/RUN-DB-ASSERT");
+        assertThat(result.passed()).isTrue();
+        assertThat(Files.readString(runDir.resolve("assertions.yaml")))
+                .contains("type: db_row_matches")
+                .contains("oracle: ${oracles.order_projection}")
+                .contains("expected_ref: queries/count_payment_orders.sql expected_count=1")
+                .contains("actual_ref: db:relational_db/count_payment_orders")
+                .contains("decision_rule: db_row_matches")
+                .contains("query `count_payment_orders` returned expected row_count `1`");
+        assertThat(Files.readString(runDir.resolve("run.yaml")))
+                .contains("provider_family: db_fixture")
+                .contains("assertion_status: passed")
+                .contains("cleanup_result: cleanup.yaml");
+    }
+
+    @Test
     void publicConstructorsRemainAvailableForFrameworkComposition() {
         DataPipelineAdapter adapter = new DataPipelineAdapter();
         AssertionEngine assertionEngine = new AssertionEngine();
@@ -531,6 +578,116 @@ class ExecutionEngineTest {
                     evidence_responsibility: [execution_log]
                     dependencies: []
                 """);
+    }
+
+    private void writeDbRowAssertionPackage(String jdbcUrl) throws IOException {
+        Files.createDirectories(tempDir.resolve("tests/approved"));
+        Files.createDirectories(tempDir.resolve("fixtures/db"));
+        Files.createDirectories(tempDir.resolve("queries"));
+        Files.writeString(tempDir.resolve("fixtures/db/seed_orders.sql"), """
+                CREATE TABLE IF NOT EXISTS orders (
+                    order_id VARCHAR(40),
+                    test_run_id VARCHAR(40),
+                    status VARCHAR(20)
+                );
+                INSERT INTO orders(order_id, test_run_id, status)
+                VALUES ('ORD-001', 'RUN-DB-ASSERT', 'PROJECTED');
+                """);
+        Files.writeString(tempDir.resolve("fixtures/db/cleanup_orders.sql"), """
+                DELETE FROM orders WHERE test_run_id = 'RUN-DB-ASSERT';
+                """);
+        Files.writeString(tempDir.resolve("queries/count_payment_orders.sql"), """
+                SELECT COUNT(*) FROM orders
+                WHERE test_run_id = 'RUN-DB-ASSERT' AND status = 'PROJECTED'
+                """);
+        Files.writeString(tempDir.resolve("tests/approved/TC-DB-ASSERT-001.yaml"), """
+                test_case_id: TC-DB-ASSERT-001
+                ac_id: AC-DB-ASSERT-001
+                rp_id: RP-DB-ASSERT
+                title: DB row assertion
+                status: approved
+                execution_target:
+                  ru_id: RU-api
+                  adapter: request_response
+                  execution_mode: ci_ephemeral
+                  environment_ref: ci://api
+                package_inputs:
+                  inputs:
+                    order_seed:
+                      bind_as: db_seed
+                      ref: fixtures/db/seed_orders.sql
+                fixture:
+                  setup:
+                    - provider: relational_db
+                      action: seed_orders
+                  cleanup:
+                    - provider: relational_db
+                      action: cleanup_orders
+                oracles:
+                  order_projection:
+                    type: query_result
+                    provider: relational_db
+                    query: count_payment_orders
+                    ref: queries/count_payment_orders.sql
+                    expected_count: 1
+                assertions:
+                  - type: db_row_matches
+                    oracle: ${oracles.order_projection}
+                """);
+        Files.writeString(tempDir.resolve("rp_ru_mapping.yaml"), """
+                rp_id: RP-DB-ASSERT
+                release_units:
+                  - ru_id: RU-api
+                    repo: /repo/api
+                    unit_type: service
+                    owner: product_developer
+                    version_ref: main
+                    validation_boundary: db_assertion
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://api
+                    adapter: request_response
+                    provider_contracts:
+                      adapters:
+                        request_response:
+                          provider_family: request_response
+                          provider_type: rest
+                          endpoint_ref: http://127.0.0.1:1
+                          timeout_seconds: 1
+                          success_exit_codes: [0]
+                          logs:
+                            stdout: logs/stdout.log
+                            stderr: logs/stderr.log
+                          outputs:
+                            actual_output_ref: actual/output.txt
+                          actions:
+                            submit:
+                              method: POST
+                              path: /submit
+                      bindings:
+                        order_seed:
+                          provider_family: db_fixture
+                          provider_type: jdbc
+                          bind_as: jdbc_seed
+                      fixtures:
+                        relational_db:
+                          provider_family: db_fixture
+                          provider_type: jdbc
+                          connection_ref: %s
+                          isolation_key: test_run_id
+                          cleanup_strategy: by_test_run_id
+                          setup_actions:
+                            seed_orders:
+                              sql_ref: fixtures/db/seed_orders.sql
+                          cleanup_actions:
+                            cleanup_orders:
+                              sql_ref: fixtures/db/cleanup_orders.sql
+                          verification_queries:
+                            count_payment_orders:
+                              sql_ref: queries/count_payment_orders.sql
+                    evidence_responsibility: [execution_log, fixture_setup, cleanup]
+                    dependencies: []
+                """.formatted(jdbcUrl));
     }
 
     private static class EmptyProviderContractResolver extends ProviderContractResolver {

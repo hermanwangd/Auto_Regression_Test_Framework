@@ -13,7 +13,10 @@ import org.yaml.snakeyaml.Yaml;
 @Service
 public class OracleReadinessService {
 
-    private static final List<String> SUPPORTED_M1_ORACLES = List.of("expected_result_artifact", "golden_file");
+    private static final List<String> SUPPORTED_M1_ORACLES = List.of(
+            "expected_result_artifact",
+            "golden_file",
+            "query_result");
 
     public OracleReadinessReport check(Path testCasePath) {
         Map<String, Object> testCase = readYamlMap(testCasePath);

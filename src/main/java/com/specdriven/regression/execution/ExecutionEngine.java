@@ -191,7 +191,8 @@ public class ExecutionEngine {
                         packageRoot,
                         testCase,
                         adapterResult.actualOutput(),
-                        runDir);
+                        runDir,
+                        dbFixtureContracts);
                 passed = assertionEvaluation.passed();
             }
         } finally {
