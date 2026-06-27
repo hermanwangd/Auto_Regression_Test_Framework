@@ -372,6 +372,79 @@ class FrameworkVerificationIT {
                 })
                 .extracting(ProviderContractGap::fieldPath)
                 .contains("release_units[0].provider_contracts.bindings.message_event");
+
+        Path productRepo = sampleProductRepo();
+        Path packageRoot = packageRoot(productRepo);
+        writeMappingYaml(packageRoot, providerFamilyMapping().replace("rp_id: RP-HETEROGENEOUS", "rp_id: RP-FWK-SAMPLE"));
+        writeProviderFamilyDryRunArtifacts(packageRoot);
+
+        CommandResult dryRun = execute(command(), "run", productRepo, "--env", "ci_ephemeral", "--dry-run");
+
+        assertThat(dryRun.exitCode()).isZero();
+        assertThat(dryRun.stdout()).contains("adapter_execution_started: false");
+        assertThat(dryRun.stdout()).contains("run_status: dry_run_ready");
+        assertThat(dryRun.stdout())
+                .contains("provider_family: request_response")
+                .contains("provider_type: rest")
+                .contains("affected_ru: RU-payment-api")
+                .contains("contract_path: release_units[0].provider_contracts.adapters.request_response")
+                .contains("provider_family: messaging")
+                .contains("provider_type: local")
+                .contains("affected_ru: RU-payment-events")
+                .contains("contract_path: release_units[1].provider_contracts.adapters.message_bus")
+                .contains("provider_family: db_fixture")
+                .contains("provider_type: relational_db")
+                .contains("affected_ru: RU-payment-db")
+                .contains("contract_path: release_units[2].provider_contracts.adapters.db_fixture")
+                .contains("provider_family: deployment_readiness")
+                .contains("provider_type: local")
+                .contains("affected_ru: RU-payment-k8s")
+                .contains("contract_path: release_units[3].provider_contracts.adapters.k8s_readiness")
+                .contains("provider_family: external_runner")
+                .contains("provider_type: command_runner")
+                .contains("affected_ru: RU-legacy-runner")
+                .contains("contract_path: release_units[4].provider_contracts.adapters.external_runner")
+                .contains("provider_family: file_batch")
+                .contains("provider_type: shell")
+                .contains("affected_ru: RU-batch-job")
+                .contains("contract_path: release_units[5].provider_contracts.adapters.spring_boot_cli")
+                .contains("registry_status: supported")
+                .contains("ap: Planning and Binding");
+        assertThat(Files.exists(packageRoot.resolve("evidence/runs"))).isFalse();
+        assertThat(Files.exists(packageRoot.resolve("evidence/batches"))).isFalse();
+
+        Path blockedRepo = sampleProductRepo();
+        Path blockedPackageRoot = packageRoot(blockedRepo);
+        writeMappingYaml(blockedPackageRoot, providerFamilyMapping()
+                .replace("rp_id: RP-HETEROGENEOUS", "rp_id: RP-FWK-SAMPLE")
+                .replace("approval_ref: docs/10-change-control/runner-approval.md",
+                        "approval_ref_missing: docs/10-change-control/runner-approval.md"));
+        clearApprovedTests(blockedPackageRoot);
+        writeDryRunExpectedResult(blockedPackageRoot, "RP-FWK-SAMPLE-AC-RUNNER");
+        writeDryRunTestCase(
+                blockedPackageRoot,
+                "RP-FWK-SAMPLE-TC-RUNNER",
+                "RP-FWK-SAMPLE-AC-RUNNER",
+                "RU-legacy-runner",
+                "external_runner",
+                "external_runner",
+                "");
+
+        CommandResult blockedDryRun = execute(command(), "run", blockedRepo, "--env", "ci_ephemeral", "--dry-run");
+
+        assertThat(blockedDryRun.exitCode()).isEqualTo(1);
+        assertThat(blockedDryRun.stdout()).contains("run_status: blocked");
+        assertThat(blockedDryRun.stdout())
+                .contains("provider_contract_gaps:")
+                .contains("provider_family: external_runner")
+                .contains("provider_type: command_runner")
+                .contains("registry_status: unapproved_escape_hatch")
+                .contains("runtime_status: blocked")
+                .contains("affected_ru: RU-legacy-runner")
+                .contains("capability: external_runner")
+                .contains("contract_path: release_units[4].provider_contracts.adapters.external_runner.approval_ref")
+                .contains("Declare external runner approval metadata")
+                .contains("ap: Planning and Binding");
     }
 
     @Test
@@ -435,6 +508,183 @@ class FrameworkVerificationIT {
 
     private void writeAcceptanceCriteria(Path packageRoot, String content) throws Exception {
         Files.writeString(packageRoot.resolve("acceptance_criteria.md"), content);
+    }
+
+    private void writeProviderFamilyDryRunArtifacts(Path packageRoot) throws Exception {
+        clearApprovedTests(packageRoot);
+        writeDryRunExpectedResult(packageRoot, "RP-FWK-SAMPLE-AC-API");
+        writeDryRunExpectedResult(packageRoot, "RP-FWK-SAMPLE-AC-EVENTS");
+        writeDryRunExpectedResult(packageRoot, "RP-FWK-SAMPLE-AC-DB");
+        writeDryRunExpectedResult(packageRoot, "RP-FWK-SAMPLE-AC-K8S");
+        writeDryRunExpectedResult(packageRoot, "RP-FWK-SAMPLE-AC-RUNNER");
+        writeDryRunExpectedResult(packageRoot, "RP-FWK-SAMPLE-AC-BATCH");
+        writeDryRunTestCase(
+                packageRoot,
+                "RP-FWK-SAMPLE-TC-API",
+                "RP-FWK-SAMPLE-AC-API",
+                "RU-payment-api",
+                "request_response",
+                "request_response",
+                """
+                  payment_payload:
+                    ref: fixtures/api/payment_payload.json
+                    bind_as: api_payload
+                """);
+        writeDryRunTestCase(
+                packageRoot,
+                "RP-FWK-SAMPLE-TC-EVENTS",
+                "RP-FWK-SAMPLE-AC-EVENTS",
+                "RU-payment-events",
+                "message_bus",
+                "messaging",
+                """
+                  payment_event:
+                    ref: fixtures/events/payment_event.json
+                    bind_as: message_event
+                """);
+        writeDryRunTestCase(
+                packageRoot,
+                "RP-FWK-SAMPLE-TC-DB",
+                "RP-FWK-SAMPLE-AC-DB",
+                "RU-payment-db",
+                "db_fixture",
+                "db_fixture",
+                "");
+        writeDryRunTestCase(
+                packageRoot,
+                "RP-FWK-SAMPLE-TC-K8S",
+                "RP-FWK-SAMPLE-AC-K8S",
+                "RU-payment-k8s",
+                "k8s_readiness",
+                "deployment_readiness",
+                "");
+        writeDryRunTestCase(
+                packageRoot,
+                "RP-FWK-SAMPLE-TC-RUNNER",
+                "RP-FWK-SAMPLE-AC-RUNNER",
+                "RU-legacy-runner",
+                "external_runner",
+                "external_runner",
+                "");
+        writeDryRunTestCase(
+                packageRoot,
+                "RP-FWK-SAMPLE-TC-BATCH",
+                "RP-FWK-SAMPLE-AC-BATCH",
+                "RU-batch-job",
+                "spring_boot_cli",
+                "file_batch",
+                """
+                  orders_seed:
+                    ref: fixtures/db/orders_seed.yaml
+                    bind_as: db_seed
+                """);
+    }
+
+    private void clearApprovedTests(Path packageRoot) throws Exception {
+        Path approvedDir = packageRoot.resolve("tests/approved");
+        Files.createDirectories(approvedDir);
+        try (Stream<Path> paths = Files.list(approvedDir)) {
+            for (Path path : paths.toList()) {
+                if (path.getFileName().toString().endsWith(".yaml")) {
+                    Files.delete(path);
+                }
+            }
+        }
+    }
+
+    private void writeDryRunExpectedResult(Path packageRoot, String acId) throws Exception {
+        String expectedResultId = acId.replace("-AC-", "-ER-");
+        Path expected = packageRoot.resolve("expected-results/approved/" + expectedResultId + ".yaml");
+        Files.createDirectories(expected.getParent());
+        Files.writeString(expected, """
+                expected_result_id: %s
+                rp_id: RP-FWK-SAMPLE
+                ac_id: %s
+                status: approved_for_regression
+                source_refs:
+                  - acceptance_criteria.md#%s
+                input_refs: []
+                expected_outputs:
+                  output_ref: expected/output/%s.txt
+                assumptions: []
+                unresolved_gaps: []
+                approved_by: platform
+                approved_at: 2026-06-27T00:00:00+08:00
+                approval_ref: FRAMEWORK_VERIFICATION_FIXTURE.md
+                blocked_reason: null
+                """.formatted(expectedResultId, acId, acId, acId));
+    }
+
+    private void writeDryRunTestCase(
+            Path packageRoot,
+            String testCaseId,
+            String acId,
+            String ruId,
+            String adapter,
+            String capability,
+            String inputsYaml) throws Exception {
+        String expectedResultId = acId.replace("-AC-", "-ER-");
+        Path testCase = packageRoot.resolve("tests/approved/" + testCaseId + ".yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s
+                rp_id: RP-FWK-SAMPLE
+                ac_id: %s
+                artifact_status: approved_for_regression
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
+                source_fingerprint: sha256:provider-family-dry-run
+                execution_target:
+                  ru_id: %s
+                  adapter: %s
+                  execution_mode: ci_ephemeral
+                  environment_ref: ci://framework-verification/%s
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [%s, file_assertion]
+                expected:
+                  ref: expected-results/approved/%s.yaml
+                oracles:
+                  primary:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
+                package_inputs:
+                  inputs:
+                %s
+                steps:
+                  - id: dry_run_provider
+                    action: %s
+                    target_ru_id: %s
+                assertions:
+                  - type: file_diff
+                    oracle: ${oracles.primary}
+                evidence_required:
+                  - execution_log
+                """.formatted(
+                testCaseId,
+                acId,
+                acId,
+                ruId,
+                adapter,
+                ruId,
+                capability,
+                expectedResultId,
+                expectedResultId,
+                inputsYaml.isBlank() ? "    {}\n" : inputsYaml.indent(4),
+                firstAction(adapter),
+                ruId));
+    }
+
+    private String firstAction(String adapter) {
+        return switch (adapter) {
+            case "request_response" -> "submit_payment";
+            case "message_bus" -> "publish_payment_event";
+            case "k8s_readiness" -> "check_readiness";
+            default -> "call_ru";
+        };
     }
 
     private String providerFamilyMapping() {
