@@ -356,6 +356,50 @@ class ProviderCapabilityRegistryTest {
     }
 
     @Test
+    void acceptsNativeK8sDirectApiDeploymentAvailableContract() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_k8s",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "k8s",
+                        "readiness_probe", "api_deployment_available",
+                        "api_server_ref", "env://K8S_API_SERVER",
+                        "namespace_ref", "payment",
+                        "deployment_ref", "deployment/payment-api",
+                        "deployed_version_ref", "build-42",
+                        "timeout_seconds", 30,
+                        "outputs", Map.of("actual_output_ref", "actual/k8s-api-readiness.txt")),
+                "sit_deployed");
+
+        assertThat(validation.ready()).isTrue();
+        assertThat(validation.registryStatus()).isEqualTo("supported");
+        assertThat(validation.runtimeStatus()).isEqualTo("supported");
+    }
+
+    @Test
+    void blocksNativeK8sDirectApiReadinessWithoutApiServerOrDeployment() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_k8s",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "k8s",
+                        "readiness_probe", "api_deployment_available",
+                        "namespace_ref", "payment",
+                        "deployed_version_ref", "build-42",
+                        "timeout_seconds", 30,
+                        "outputs", Map.of("actual_output_ref", "actual/k8s-api-readiness.txt")),
+                "sit_deployed");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .contains(
+                        ".api_server_ref",
+                        ".deployment_ref");
+    }
+
+    @Test
     void blocksNativeK8sPodLogReadinessWithoutSelectorOrBoundedTail() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
                 "adapters",

@@ -142,6 +142,7 @@ public class DeploymentReadinessProvider {
         builder.append("provider: ").append(providerName).append("\n");
         appendIfPresent(builder, "provider_type", stringValue(contract.get("provider_type")));
         appendIfPresent(builder, "readiness_probe", stringValue(contract.get("readiness_probe")));
+        appendIfPresent(builder, "api_server_ref", stringValue(contract.get("api_server_ref")));
         appendIfPresent(builder, "kube_context_ref", stringValue(contract.get("kube_context_ref")));
         appendIfPresent(builder, "namespace_ref", stringValue(contract.get("namespace_ref")));
         appendIfPresent(builder, "pod_ref", stringValue(contract.get("pod_ref")));

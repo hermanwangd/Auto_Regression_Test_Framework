@@ -215,6 +215,58 @@ class DeploymentReadinessProviderTest {
     }
 
     @Test
+    void defaultProbeRunsDirectK8sApiDeploymentAvailableProbe() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/apis/apps/v1/namespaces/payment/deployments/payment-api", exchange -> {
+            byte[] response = """
+                    {
+                      "metadata": {"name": "payment-api"},
+                      "spec": {"replicas": 3},
+                      "status": {
+                        "availableReplicas": 3,
+                        "updatedReplicas": 3,
+                        "observedGeneration": 7
+                      }
+                    }
+                    """.getBytes();
+            exchange.sendResponseHeaders(200, response.length);
+            try (OutputStream body = exchange.getResponseBody()) {
+                body.write(response);
+            }
+        });
+        server.start();
+        try {
+            AdapterExecutionResult result = executeProvider(
+                    new DeploymentReadinessProvider(),
+                    "payment_k8s",
+                    Map.of(
+                            "provider_type", "k8s",
+                            "readiness_probe", "api_deployment_available",
+                            "api_server_ref", "http://127.0.0.1:" + server.getAddress().getPort(),
+                            "namespace_ref", "payment",
+                            "deployment_ref", "deployment/payment-api",
+                            "deployed_version_ref", "build-42",
+                            "timeout_seconds", 2));
+
+            Path runDir = tempDir.resolve("run");
+            assertThat(result.exitCode()).isZero();
+            assertThat(Files.readString(result.stdoutLog()))
+                    .contains("k8s api deployment available for deployment/payment-api")
+                    .contains("availableReplicas=3")
+                    .contains("replicas=3");
+            assertThat(Files.readString(result.actualOutput())).isEqualTo("ready\n");
+            assertThat(Files.readString(runDir.resolve("readiness.yaml")))
+                    .contains("readiness_probe: api_deployment_available")
+                    .contains("api_server_ref: http://127.0.0.1:" + server.getAddress().getPort())
+                    .contains("namespace_ref: payment")
+                    .contains("deployment_ref: deployment/payment-api")
+                    .contains("check_count: 1");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void defaultProbeWritesFailedEvidenceWhenK8sEnvRefIsMissing() throws Exception {
         Path kubectl = executable("kubectl-unused.sh", """
                 #!/bin/sh

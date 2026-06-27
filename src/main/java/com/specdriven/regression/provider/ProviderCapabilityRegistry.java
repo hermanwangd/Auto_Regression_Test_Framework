@@ -232,6 +232,23 @@ class ProviderCapabilityRegistry {
             String providerName,
             Map<String, Object> contract,
             List<ProviderContractViolation> violations) {
+        String readinessProbe = stringValue(contract.get("readiness_probe"));
+        if ("api_deployment_available".equals(readinessProbe)) {
+            if (!hasAnyText(contract, "api_server_ref", "endpoint_ref")) {
+                violations.add(required(".api_server_ref",
+                        "Declare api_server_ref or endpoint_ref for native K8s API readiness provider `"
+                                + providerName + "`."));
+            }
+            if (!hasAnyText(contract, "namespace_ref")) {
+                violations.add(required(".namespace_ref",
+                        "Declare namespace_ref for native K8s API readiness provider `" + providerName + "`."));
+            }
+            if (!hasAnyText(contract, "deployment_ref")) {
+                violations.add(required(".deployment_ref",
+                        "Declare deployment_ref for native K8s API readiness provider `" + providerName + "`."));
+            }
+            return;
+        }
         if (!hasAnyText(contract, "kube_context_ref", "connection_ref")) {
             violations.add(required(".kube_context_ref",
                     "Declare kube_context_ref or connection_ref for native K8s readiness provider `"
@@ -241,7 +258,6 @@ class ProviderCapabilityRegistry {
             violations.add(required(".namespace_ref",
                     "Declare namespace_ref for native K8s readiness provider `" + providerName + "`."));
         }
-        String readinessProbe = stringValue(contract.get("readiness_probe"));
         if ("pod_logs".equals(readinessProbe)) {
             if (!hasAnyText(contract, "target_selector", "pod_ref")) {
                 violations.add(required(".target_selector",

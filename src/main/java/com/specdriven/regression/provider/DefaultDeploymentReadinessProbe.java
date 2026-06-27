@@ -4,15 +4,18 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import org.yaml.snakeyaml.Yaml;
 
 class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
 
@@ -39,6 +42,9 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
 
     private DeploymentReadinessProbeResult checkK8s(DeploymentReadinessProbeRequest request)
             throws IOException, InterruptedException {
+        if ("api_deployment_available".equals(request.readinessProbe())) {
+            return checkK8sApiDeploymentAvailable(request);
+        }
         List<String> command = k8sCommand(request);
         ProcessBuilder builder = new ProcessBuilder(command);
         Process process = builder.start();
@@ -109,6 +115,86 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
         command.add(request.deploymentRef());
         command.add("--timeout=" + Math.max(1, request.timeoutSeconds()) + "s");
         return command;
+    }
+
+    private DeploymentReadinessProbeResult checkK8sApiDeploymentAvailable(DeploymentReadinessProbeRequest request)
+            throws IOException, InterruptedException {
+        URI uri = URI.create(k8sApiServer(request)
+                + "/apis/apps/v1/namespaces/"
+                + encodePathSegment(resolveRef(request.namespaceRef()))
+                + "/deployments/"
+                + encodePathSegment(k8sDeploymentName(request.deploymentRef())));
+        HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
+                .timeout(Duration.ofSeconds(Math.max(1, request.timeoutSeconds())))
+                .GET();
+        String bearerRef = firstText(request.contract(), "bearer_ref", "credential_ref");
+        if (!bearerRef.isBlank()) {
+            builder.header("Authorization", "Bearer " + resolveRef(bearerRef));
+        }
+        HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new IOException("K8s API deployment readiness failed with status `"
+                    + response.statusCode() + "` for `" + request.deploymentRef() + "`.");
+        }
+        Map<?, ?> deployment = yamlMap(response.body());
+        int replicas = Math.max(1, intAt(deployment, "spec", "replicas"));
+        int availableReplicas = intAt(deployment, "status", "availableReplicas");
+        int updatedReplicas = intAt(deployment, "status", "updatedReplicas");
+        if (availableReplicas < replicas) {
+            throw new IOException("K8s API deployment readiness failed for `" + request.deploymentRef()
+                    + "`: availableReplicas=" + availableReplicas + " replicas=" + replicas + ".");
+        }
+        return new DeploymentReadinessProbeResult(
+                "k8s api deployment available for " + request.deploymentRef()
+                        + " availableReplicas=" + availableReplicas
+                        + " replicas=" + replicas
+                        + " updatedReplicas=" + updatedReplicas + "\n",
+                "ready\n",
+                1);
+    }
+
+    private String k8sApiServer(DeploymentReadinessProbeRequest request) throws IOException {
+        String apiServer = firstText(request.contract(), "api_server_ref", "endpoint_ref");
+        if (apiServer.isBlank()) {
+            throw new IOException("K8s API deployment readiness probe requires api_server_ref.");
+        }
+        return resolveRef(apiServer).replaceAll("/+$", "");
+    }
+
+    private String k8sDeploymentName(String deploymentRef) throws IOException {
+        String deploymentName = resolveRef(deploymentRef);
+        for (String prefix : List.of("deployment/", "deploy/", "deployments/")) {
+            if (deploymentName.startsWith(prefix)) {
+                return deploymentName.substring(prefix.length());
+            }
+        }
+        return deploymentName;
+    }
+
+    private String encodePathSegment(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
+    private Map<?, ?> yamlMap(String content) throws IOException {
+        Object loaded = new Yaml().load(content);
+        if (loaded instanceof Map<?, ?> map) {
+            return map;
+        }
+        throw new IOException("K8s API deployment readiness response must be an object.");
+    }
+
+    private int intAt(Map<?, ?> root, String section, String field) {
+        Object child = root.get(section);
+        if (child instanceof Map<?, ?> childMap) {
+            Object value = childMap.get(field);
+            if (value instanceof Number number) {
+                return number.intValue();
+            }
+            if (value instanceof String text && !text.isBlank()) {
+                return Integer.parseInt(text);
+            }
+        }
+        return 0;
     }
 
     private int logTailLines(DeploymentReadinessProbeRequest request) throws IOException {
