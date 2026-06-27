@@ -2,7 +2,7 @@
 
 | Evidence ID | Evidence | Owner | Used For | Storage |
 |---|---|---|---|---|
-| EVD-000 | Framework verification reports, sample Product Repo fixture run output, packaged CLI smoke output, and CI command logs | Platform / QA | AC-002, AC-004, AC-006, AC-007, AC-008, AC-009, and AC-010 sample-framework proof; confirms Maven verification validates the framework and does not claim downstream RP release evidence | `target/surefire-reports/`, `target/failsafe-reports/`, packaged CLI output, and CI artifacts |
+| EVD-000 | Framework verification reports, sample Product Repo fixture run output, packaged CLI smoke output, and CI command logs | Platform / QA | AC-001 through AC-010 sample-framework proof; confirms Maven verification validates the framework and does not claim downstream RP release evidence | `target/surefire-reports/`, `target/failsafe-reports/`, packaged CLI output, and CI artifacts |
 | EVD-001 | Product Repo readiness report and readiness agent explanation | Platform / Agent Skill | F001 readiness proof and owner-actionable next-step guidance | `docs/08-release/release-packages/<rp_id>/evidence/readiness/` |
 | EVD-002 | RP completeness report | Platform | F002 artifact completeness proof | `docs/08-release/release-packages/<rp_id>/evidence/readiness/` |
 | EVD-003 | RP AC intake and classification report | Platform / Agent Skill | F003 AC inventory and readiness proof | `docs/08-release/release-packages/<rp_id>/evidence/generation/` |

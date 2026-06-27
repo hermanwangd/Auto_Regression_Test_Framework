@@ -188,6 +188,117 @@ class FrameworkVerificationIT {
                 .contains("actual_ref: actual/output.txt");
     }
 
+    @Test
+    @DisplayName("FWK-IT-007 | AC-001 AC-010 | product repo bootstrap readiness and idempotency")
+    void productRepoBootstrapReadinessAndIdempotencyAreDeterministic() throws Exception {
+        Path productRepo = tempDir.resolve("empty-product-repo");
+        RegressionCommand command = command();
+
+        CommandResult beforeInit = execute(command, "check-readiness", productRepo);
+        CommandResult init = execute(command, "init-product-repo", productRepo);
+        Files.writeString(productRepo.resolve("docs/01-specs/sentinel.md"), "preserve me\n");
+        CommandResult afterInit = execute(command, "check-readiness", productRepo);
+        CommandResult initAgain = execute(command, "init-product-repo", productRepo);
+
+        assertThat(beforeInit.exitCode()).isEqualTo(1);
+        assertThat(beforeInit.stdout()).contains("status: fail");
+        assertThat(beforeInit.stdout()).contains("Create missing Product Repo lifecycle paths");
+        assertThat(init.exitCode()).isZero();
+        assertThat(init.stdout()).contains("status: pass");
+        assertThat(init.stdout()).contains("created_count: 13");
+        assertThat(afterInit.exitCode()).isZero();
+        assertThat(afterInit.stdout()).contains("status: pass");
+        assertThat(afterInit.stdout()).contains("ready: true");
+        assertThat(afterInit.stdout()).contains("Run init-rp to create the first Release Package record.");
+        assertThat(initAgain.exitCode()).isZero();
+        assertThat(initAgain.stdout()).contains("created_count: 0");
+        assertThat(initAgain.stdout()).contains("skipped_existing_count: 13");
+        assertThat(Files.readString(productRepo.resolve("docs/01-specs/sentinel.md"))).isEqualTo("preserve me\n");
+        assertThat(Files.exists(productRepo.resolve("docs/08-release/release-packages/" + SAMPLE_RP_ID))).isFalse();
+    }
+
+    @Test
+    @DisplayName("FWK-IT-008 | AC-003 AC-010 | AC readiness preserves owner-authored truth")
+    void acReadinessPreservesOwnerAuthoredTruthWithoutRewritingRpAc() throws Exception {
+        Path productRepo = sampleProductRepo();
+        Path packageRoot = packageRoot(productRepo);
+        Path acceptanceCriteria = packageRoot.resolve("acceptance_criteria.md");
+        String originalAc = Files.readString(acceptanceCriteria);
+
+        CommandResult check = execute(command(), "check-rp", productRepo, "--strict-schema", "--include-ac-readiness");
+
+        assertThat(check.exitCode()).isZero();
+        assertThat(check.stdout()).contains("ac_readiness:");
+        assertThat(check.stdout()).contains("ac_id: RP-FWK-SAMPLE-AC-001");
+        assertThat(check.stdout()).contains("readiness: ready_for_generation");
+        assertThat(check.stdout()).contains("classification: automatable");
+        assertThat(check.stdout()).contains("owner_authored_truth_preserved: true");
+        assertThat(Files.readString(acceptanceCriteria)).isEqualTo(originalAc);
+    }
+
+    @Test
+    @DisplayName("FWK-IT-009 | AC-005 AC-010 | test drafting is gated by AC and execution context readiness")
+    void testDraftingIsGatedByAcAndExecutionContextReadiness() throws Exception {
+        Path readyRepo = sampleProductRepo();
+        Path readyPackageRoot = packageRoot(readyRepo);
+        Files.delete(readyPackageRoot.resolve("tests/approved/RP-FWK-SAMPLE-TC-001.yaml"));
+        CommandResult readyDraft = execute(command(), "generate-tests", readyRepo);
+
+        assertThat(readyDraft.exitCode()).isZero();
+        assertThat(readyDraft.stdout()).contains("generated_artifact_type: draft_executable_test_case");
+        assertThat(Files.readString(readyPackageRoot.resolve(
+                        "tests/draft/RP-FWK-SAMPLE-TC-001-draft_executable_test_case.yaml")))
+                .contains("dsl_version: v1")
+                .contains("ac_id: RP-FWK-SAMPLE-AC-001")
+                .contains("scenario:")
+                .contains("execution_target:")
+                .contains("steps:")
+                .contains("assertions:")
+                .contains("evidence_required:");
+
+        Path existingRepo = sampleProductRepo();
+        Path existingPackageRoot = packageRoot(existingRepo);
+        Path approvedTest = existingPackageRoot.resolve("tests/approved/RP-FWK-SAMPLE-TC-001.yaml");
+        String originalApprovedTest = Files.readString(approvedTest);
+        CommandResult existingDraft = execute(command(), "generate-tests", existingRepo);
+
+        assertThat(existingDraft.exitCode()).isZero();
+        assertThat(existingDraft.stdout()).contains("generated_artifact_type: update_proposal");
+        assertThat(Files.readString(approvedTest)).isEqualTo(originalApprovedTest);
+        assertThat(Files.readString(existingPackageRoot.resolve(
+                        "tests/draft/RP-FWK-SAMPLE-TC-001-update_proposal.yaml")))
+                .contains("proposal_type: test_case_update")
+                .contains("replaces: tests/approved/RP-FWK-SAMPLE-TC-001.yaml");
+
+        Path ambiguousRepo = sampleProductRepo();
+        Path ambiguousPackageRoot = packageRoot(ambiguousRepo);
+        writeAcceptanceCriteria(ambiguousPackageRoot, Files.readString(
+                        ambiguousPackageRoot.resolve("acceptance_criteria.md"))
+                .replace("    pass_fail_rule: actual output matches approved expected output\n", ""));
+        CommandResult ambiguousDraft = execute(command(), "generate-tests", ambiguousRepo);
+
+        assertThat(ambiguousDraft.exitCode()).isEqualTo(1);
+        assertThat(ambiguousDraft.stdout()).contains("generated_artifact_type: none");
+        assertThat(ambiguousDraft.stdout()).contains("gap: AC is not ready for generation");
+
+        Path incompleteContextRepo = sampleProductRepo();
+        Path incompleteContextPackageRoot = packageRoot(incompleteContextRepo);
+        Files.delete(incompleteContextPackageRoot.resolve("tests/approved/RP-FWK-SAMPLE-TC-001.yaml"));
+        writeMappingYaml(incompleteContextPackageRoot, Files.readString(
+                        incompleteContextPackageRoot.resolve("rp_ru_mapping.yaml"))
+                .replace("    repo: /repo/framework-sample\n", ""));
+        CommandResult skeletonDraft = execute(command(), "generate-tests", incompleteContextRepo);
+
+        assertThat(skeletonDraft.exitCode()).isZero();
+        assertThat(skeletonDraft.stdout()).contains("generated_artifact_type: draft_test_skeleton");
+        assertThat(skeletonDraft.stdout()).contains("gap: release_units[0].repo");
+        assertThat(Files.readString(incompleteContextPackageRoot.resolve(
+                        "tests/draft/RP-FWK-SAMPLE-TC-001-draft_test_skeleton.yaml")))
+                .contains("artifact_status: draft_test_skeleton")
+                .contains("readiness_gaps:")
+                .contains("release_units[0].repo");
+    }
+
     private Path sampleProductRepo() throws Exception {
         Path productRepo = tempDir.resolve("sample-product-repo-" + System.nanoTime());
         copyResourceDirectory("framework-verification/sample-product-repo", productRepo);
@@ -222,6 +333,10 @@ class FrameworkVerificationIT {
 
     private void writeMappingYaml(Path packageRoot, String content) throws Exception {
         Files.writeString(packageRoot.resolve("rp_ru_mapping.yaml"), content);
+    }
+
+    private void writeAcceptanceCriteria(Path packageRoot, String content) throws Exception {
+        Files.writeString(packageRoot.resolve("acceptance_criteria.md"), content);
     }
 
     private void copyResourceDirectory(String resourceName, Path target) throws Exception {

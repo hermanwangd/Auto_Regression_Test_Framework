@@ -70,6 +70,9 @@ The integration suite shall expose AC traceability through `FrameworkVerificatio
 | FWK-IT-004 | AC-006, AC-008, AC-010 | Truth-source approval failure | Unapproved expected result blocks before adapter execution or assertion evaluation. |
 | FWK-IT-005 | AC-007, AC-008, AC-010 | Test inventory boundary | Missing approved checked-in DSL test case blocks before adapter execution. |
 | FWK-IT-006 | AC-007, AC-009 | Execution/assertion failure | Adapter execution starts, assertion fails, run evidence is failed, and report is not review-ready. |
+| FWK-IT-007 | AC-001, AC-010 | Product Repo bootstrap and readiness | Bootstrap creates lifecycle folders, readiness changes from fail to pass, rerun is idempotent, and no RP scope is invented. |
+| FWK-IT-008 | AC-003, AC-010 | AC readiness intake | Owner-authored RP AC remains unchanged while readiness output preserves stable AC ID, classification, and owner-authored truth flag. |
+| FWK-IT-009 | AC-005, AC-010 | Test drafting readiness gates | Ready AC produces executable draft, existing approved tests produce update proposals, ambiguous AC blocks, and incomplete context produces skeleton only. |
 
 Generated sample evidence must stay in the test temp directory. It shall not be committed and shall not count as real Product/RP release evidence.
 
@@ -78,9 +81,9 @@ Generated sample evidence must stay in the test temp directory. It shall not be 
 | Test ID | AC Coverage | Scenario | Command Level | Priority | Automation |
 |---|---|---|---|---|---|
 | FWK-001 | AC-001 through AC-010 | Unit/component suite validates parsers, readiness checks, CLI behavior, resolvers, execution services, evidence writers, and reporters | `./mvnw test` | P1 | Auto |
-| FWK-002 | AC-002, AC-004, AC-007, AC-009, AC-010 | Sample Product/RP/RU fixture runs happy path through `check-rp`, `run`, and `report` without SIT/UAT deployment | `./mvnw verify` | P1 | Auto |
+| FWK-002 | AC-001 through AC-010 | Sample Product/RP/RU fixture runs AC-linked framework integration cases through CLI commands without SIT/UAT deployment | `./mvnw verify` | P1 | Auto |
 | FWK-003 | AC-010 | Sample fixture evidence is marked as framework verification evidence and is not counted as downstream RP release evidence | `./mvnw verify` | P1 | Auto |
-| FWK-004 | AC-002, AC-004, AC-006, AC-007, AC-008, AC-009, AC-010 | Artifact readiness gaps, provider contract gaps, unapproved expected results, missing approved DSL tests, or failed assertions block or fail with actionable evidence | `./mvnw verify` | P1 | Auto |
+| FWK-004 | AC-002, AC-003, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009, AC-010 | Artifact readiness gaps, provider contract gaps, AC readiness gaps, drafting gates, unapproved expected results, missing approved DSL tests, or failed assertions block or fail with actionable evidence | `./mvnw verify` | P1 | Auto |
 | FWK-005 | AC-010 | Packaged jar delegates CLI arguments to the framework command layer and returns meaningful exit codes | `./mvnw test` plus packaged CLI smoke | P1 | Auto / CLI |
 
 ## 7.6 Downstream RP Regression Boundary
