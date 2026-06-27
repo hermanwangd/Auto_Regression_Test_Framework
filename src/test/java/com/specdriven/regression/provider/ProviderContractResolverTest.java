@@ -283,6 +283,87 @@ class ProviderContractResolverTest {
     }
 
     @Test
+    void blocksAmbiguousAdapterMatchAcrossReleaseUnitsBeforeExecution() throws Exception {
+        Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
+        Files.writeString(mapping, heterogeneousMapping("""
+                  - ru_id: RU-payment-api-blue
+                    repo: /repo/payment-api-blue
+                    unit_type: service
+                    owner: product_developer
+                    version_ref: build-123
+                    validation_boundary: request_response_api
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://payment/api-blue
+                    adapter: request_response
+                    provider_contracts:
+                      adapters:
+                        request_response:
+                          provider_family: request_response
+                          provider_type: rest
+                          endpoint_ref: env://PAYMENT_API_BLUE
+                          timeout_seconds: 10
+                          outputs:
+                            actual_output_ref: actual/blue-response.json
+                          actions:
+                            submit_payment:
+                              method: POST
+                              path: /payments
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                  - ru_id: RU-payment-api-green
+                    repo: /repo/payment-api-green
+                    unit_type: service
+                    owner: product_developer
+                    version_ref: build-456
+                    validation_boundary: request_response_api
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://payment/api-green
+                    adapter: request_response
+                    provider_contracts:
+                      adapters:
+                        request_response:
+                          provider_family: request_response
+                          provider_type: rest
+                          endpoint_ref: env://PAYMENT_API_GREEN
+                          timeout_seconds: 10
+                          outputs:
+                            actual_output_ref: actual/green-response.json
+                          actions:
+                            submit_payment:
+                              method: POST
+                              path: /payments
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                """));
+
+        ProviderContractResolutionReport report = new ProviderContractResolver().resolve(
+                mapping,
+                "request_response",
+                List.of(),
+                List.of());
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.resolvedContracts()).isEmpty();
+        assertThat(report.gaps())
+                .anySatisfy(gap -> {
+                    assertThat(gap.contractType()).isEqualTo("adapter");
+                    assertThat(gap.providerName()).isEqualTo("request_response");
+                    assertThat(gap.providerFamily()).isEqualTo("request_response");
+                    assertThat(gap.registryStatus()).isEqualTo("ambiguous");
+                    assertThat(gap.runtimeStatus()).isEqualTo("blocked");
+                    assertThat(gap.affectedRu()).isEqualTo("RU-payment-api-blue,RU-payment-api-green");
+                    assertThat(gap.fieldPath())
+                            .isEqualTo("release_units[0].provider_contracts.adapters.request_response");
+                    assertThat(gap.ownerAction())
+                            .contains("Select target RU")
+                            .contains("RU-payment-api-blue")
+                            .contains("RU-payment-api-green");
+                });
+    }
+
+    @Test
     void reportsProviderFamilySpecificGapWhenRequestResponseContractIsIncomplete() throws Exception {
         Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
         Files.writeString(mapping, heterogeneousMapping("""

@@ -42,7 +42,12 @@ public class ProviderContractResolver {
         List<ResolvedProviderContract> resolved = new ArrayList<>();
         List<ProviderContractGap> gaps = new ArrayList<>();
 
-        ReleaseUnitContracts adapterOwner = ownerForAdapter(releaseUnits, targetRuId, adapter);
+        List<ReleaseUnitContracts> adapterOwners = ownersForAdapter(releaseUnits, targetRuId, adapter);
+        if (adapterOwners.size() > 1) {
+            gaps.add(ambiguousGap(adapterOwners, "adapters", "adapter", adapter));
+            return new ProviderContractResolutionReport(false, List.of(), List.copyOf(gaps));
+        }
+        ReleaseUnitContracts adapterOwner = adapterOwners.isEmpty() ? fallbackUnit(releaseUnits) : adapterOwners.get(0);
         if (hasContract(adapterOwner.contracts(), "adapters", adapter)) {
             resolveContract(resolved, gaps, adapterOwner, "adapters", "adapter", adapter);
         } else {
@@ -53,7 +58,12 @@ public class ProviderContractResolver {
         }
 
         for (String bindingType : bindingTypes) {
-            ReleaseUnitContracts owner = ownerFor(releaseUnits, "bindings", bindingType, adapterOwner);
+            List<ReleaseUnitContracts> owners = ownersFor(releaseUnits, "bindings", bindingType, adapterOwner);
+            if (owners.size() > 1) {
+                gaps.add(ambiguousGap(owners, "bindings", "binding", bindingType));
+                continue;
+            }
+            ReleaseUnitContracts owner = owners.isEmpty() ? adapterOwner : owners.get(0);
             if (hasContract(owner.contracts(), "bindings", bindingType)) {
                 resolveContract(resolved, gaps, owner, "bindings", "binding", bindingType);
             } else {
@@ -65,7 +75,12 @@ public class ProviderContractResolver {
         }
 
         for (String fixtureProvider : fixtureProviders) {
-            ReleaseUnitContracts owner = ownerFor(releaseUnits, "fixtures", fixtureProvider, adapterOwner);
+            List<ReleaseUnitContracts> owners = ownersFor(releaseUnits, "fixtures", fixtureProvider, adapterOwner);
+            if (owners.size() > 1) {
+                gaps.add(ambiguousGap(owners, "fixtures", "fixture", fixtureProvider));
+                continue;
+            }
+            ReleaseUnitContracts owner = owners.isEmpty() ? adapterOwner : owners.get(0);
             if (hasContract(owner.contracts(), "fixtures", fixtureProvider)) {
                 resolveContract(resolved, gaps, owner, "fixtures", "fixture", fixtureProvider);
             } else {
@@ -178,22 +193,26 @@ public class ProviderContractResolver {
         return ownerAction + " Affected RU: `" + owner.ruId() + "`.";
     }
 
-    private ReleaseUnitContracts ownerForAdapter(
+    private List<ReleaseUnitContracts> ownersForAdapter(
             List<ReleaseUnitContracts> releaseUnits,
             String targetRuId,
             String adapter) {
         if (!targetRuId.isBlank()) {
             ReleaseUnitContracts targetOwner = ownerByRuId(releaseUnits, targetRuId);
             if (targetOwner != null) {
-                return targetOwner;
+                return List.of(targetOwner);
             }
         }
+        List<ReleaseUnitContracts> adapterMatches = new ArrayList<>();
         for (ReleaseUnitContracts unit : releaseUnits) {
             if (unit.adapter().equals(adapter)) {
-                return unit;
+                adapterMatches.add(unit);
             }
         }
-        return ownerFor(releaseUnits, "adapters", adapter, fallbackUnit(releaseUnits));
+        if (!adapterMatches.isEmpty()) {
+            return List.copyOf(adapterMatches);
+        }
+        return ownersFor(releaseUnits, "adapters", adapter, fallbackUnit(releaseUnits));
     }
 
     private ReleaseUnitContracts ownerByRuId(List<ReleaseUnitContracts> releaseUnits, String targetRuId) {
@@ -205,20 +224,52 @@ public class ProviderContractResolver {
         return null;
     }
 
-    private ReleaseUnitContracts ownerFor(
+    private List<ReleaseUnitContracts> ownersFor(
             List<ReleaseUnitContracts> releaseUnits,
             String section,
             String name,
             ReleaseUnitContracts fallback) {
         if (hasContract(fallback.contracts(), section, name)) {
-            return fallback;
+            return List.of(fallback);
         }
+        List<ReleaseUnitContracts> matches = new ArrayList<>();
         for (ReleaseUnitContracts unit : releaseUnits) {
             if (hasContract(unit.contracts(), section, name)) {
-                return unit;
+                matches.add(unit);
             }
         }
-        return fallback;
+        if (!matches.isEmpty()) {
+            return List.copyOf(matches);
+        }
+        return List.of(fallback);
+    }
+
+    private ProviderContractGap ambiguousGap(
+            List<ReleaseUnitContracts> owners,
+            String section,
+            String contractType,
+            String providerName) {
+        ReleaseUnitContracts first = owners.get(0);
+        Map<String, Object> contract = contract(first.contracts(), section, providerName);
+        return new ProviderContractGap(
+                path(first, section, providerName),
+                contractType,
+                providerName,
+                providerFamily(contract, section, providerName, first),
+                stringValue(contract.get("provider_type")),
+                "ambiguous",
+                "blocked",
+                ruIds(owners),
+                providerName,
+                "Select target RU or rename provider contract `" + providerName
+                        + "` so it resolves to one RU only. Candidate RUs: " + ruIds(owners) + ".");
+    }
+
+    private String ruIds(List<ReleaseUnitContracts> owners) {
+        return String.join(",", owners.stream()
+                .map(ReleaseUnitContracts::ruId)
+                .filter(ruId -> !ruId.isBlank())
+                .toList());
     }
 
     private ReleaseUnitContracts fallbackUnit(List<ReleaseUnitContracts> releaseUnits) {

@@ -273,10 +273,10 @@ Current framework verification can be accepted only for the framework capabiliti
 |---|---|---:|---|---|---|
 | CAP-001 | Product Repo Bootstrap CLI and Readiness Agent Skill | M1 | Platform / Agent Skill | Framework verified | Initialized docs lifecycle, machine-readable readiness report, and owner-actionable readiness explanation |
 | CAP-002 | RP Creation Guide and Completeness Check | M1 | Platform | Framework verified | RP creation checklist and completeness report |
-| CAP-003 | RP Feature Spec and AC Intake | M1 | Platform / Agent Skill | Framework verified | Parsed RP feature spec and RP AC inventory |
+| CAP-003 | RP Feature Spec and AC Intake | M1 | Platform | Framework verified | Parsed RP feature spec and RP AC inventory |
 | CAP-004 | RP/RU Mapping Intake and Completeness Check | M1 | Platform | Framework verified | Validated RP/RU mapping report |
-| CAP-005 | AC and Execution Context Readiness Agent Skill | M1 | Agent Skill | Framework verified | Generation readiness report |
-| CAP-006 | Expected Result Drafting Agent Skill | M1 | Agent Skill | Framework verified | Reviewable expected-result artifact |
+| CAP-005 | AC and Execution Context Readiness Service / Future Agent Skill | M1 | Platform / Agent Skill | Partial | Java readiness and DSL draft service is framework-tested; packaged agent skill artifact remains pending |
+| CAP-006 | Expected Result Drafting Service / Future Agent Skill | M1 | Platform / Agent Skill | Partial | Java expected-result draft and approval-gate service is framework-tested; packaged agent skill artifact remains pending |
 | CAP-007 | Test Case YAML DSL and Lifecycle | M1 | Platform | Framework verified | Schema validation and checked-in RP test folder policy |
 | CAP-008 | Execution Environment Resolver | M1 | Platform | Framework verified | Execution mode and environment readiness report |
 | CAP-009 | Package Input Catalog | M1 | Platform | Partial | Supported binding types are `input_file`, `dataset`, `db_seed`, `api_payload`, and `message_event`; `config_file`, `env_var`, and `existing_state` remain pending |

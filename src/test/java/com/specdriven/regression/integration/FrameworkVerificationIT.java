@@ -445,6 +445,40 @@ class FrameworkVerificationIT {
                 .contains("contract_path: release_units[4].provider_contracts.adapters.external_runner.approval_ref")
                 .contains("Declare external runner approval metadata")
                 .contains("ap: Planning and Binding");
+
+        Path ambiguousRepo = sampleProductRepo();
+        Path ambiguousPackageRoot = packageRoot(ambiguousRepo);
+        writeMappingYaml(ambiguousPackageRoot, ambiguousRequestResponseMapping());
+        clearApprovedTests(ambiguousPackageRoot);
+        writeDryRunExpectedResult(ambiguousPackageRoot, "RP-FWK-SAMPLE-AC-AMBIGUOUS");
+        writeDryRunTestCase(
+                ambiguousPackageRoot,
+                "RP-FWK-SAMPLE-TC-AMBIGUOUS",
+                "RP-FWK-SAMPLE-AC-AMBIGUOUS",
+                "",
+                "request_response",
+                "request_response",
+                """
+                  payment_payload:
+                    ref: fixtures/api/payment_payload.json
+                    bind_as: api_payload
+                """);
+
+        CommandResult ambiguousDryRun =
+                execute(command(), "run", ambiguousRepo, "--env", "ci_ephemeral", "--dry-run");
+
+        assertThat(ambiguousDryRun.exitCode()).isEqualTo(1);
+        assertThat(ambiguousDryRun.stdout())
+                .contains("adapter_execution_started: false")
+                .contains("run_status: blocked")
+                .contains("provider_contract_gaps:")
+                .contains("provider_family: request_response")
+                .contains("registry_status: ambiguous")
+                .contains("runtime_status: blocked")
+                .contains("affected_ru: RU-payment-api-blue,RU-payment-api-green")
+                .contains("contract_path: release_units[0].provider_contracts.adapters.request_response")
+                .contains("Select target RU")
+                .contains("ap: Planning and Binding");
     }
 
     @Test
@@ -637,7 +671,7 @@ class FrameworkVerificationIT {
                   acceptance_criteria: acceptance_criteria.md#%s
                 source_fingerprint: sha256:provider-family-dry-run
                 execution_target:
-                  ru_id: %s
+                %s\
                   adapter: %s
                   execution_mode: ci_ephemeral
                   environment_ref: ci://framework-verification/%s
@@ -667,7 +701,7 @@ class FrameworkVerificationIT {
                 testCaseId,
                 acId,
                 acId,
-                ruId,
+                targetRuYaml(ruId),
                 adapter,
                 ruId,
                 capability,
@@ -676,6 +710,13 @@ class FrameworkVerificationIT {
                 inputsYaml.isBlank() ? "    {}\n" : inputsYaml.indent(4),
                 firstAction(adapter),
                 ruId));
+    }
+
+    private String targetRuYaml(String ruId) {
+        if (ruId.isBlank()) {
+            return "";
+        }
+        return "  ru_id: " + ruId + "\n";
     }
 
     private String firstAction(String adapter) {
@@ -853,6 +894,75 @@ class FrameworkVerificationIT {
                           provider_family: file_batch
                           provider_type: file_fixture
                           materialize_as: input_file
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                """;
+    }
+
+    private String ambiguousRequestResponseMapping() {
+        return """
+                rp_id: RP-FWK-SAMPLE
+                release_units:
+                  - ru_id: RU-payment-api-blue
+                    repo: /repo/payment-api-blue
+                    unit_type: service
+                    owner: product_developer
+                    version_ref: build-blue
+                    validation_boundary: request_response_api
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://payment/api-blue
+                    adapter: request_response
+                    provider_contracts:
+                      adapters:
+                        request_response:
+                          provider_family: request_response
+                          provider_type: rest
+                          endpoint_ref: env://PAYMENT_API_BLUE
+                          timeout_seconds: 10
+                          actions:
+                            submit_payment:
+                              method: POST
+                              path: /payments
+                              request_binding: payment_payload
+                          outputs:
+                            actual_output_ref: actual/blue-response.json
+                      bindings:
+                        api_payload:
+                          provider_family: request_response
+                          provider_type: request_body
+                          bind_as: request_body
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                  - ru_id: RU-payment-api-green
+                    repo: /repo/payment-api-green
+                    unit_type: service
+                    owner: product_developer
+                    version_ref: build-green
+                    validation_boundary: request_response_api
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://payment/api-green
+                    adapter: request_response
+                    provider_contracts:
+                      adapters:
+                        request_response:
+                          provider_family: request_response
+                          provider_type: rest
+                          endpoint_ref: env://PAYMENT_API_GREEN
+                          timeout_seconds: 10
+                          actions:
+                            submit_payment:
+                              method: POST
+                              path: /payments
+                              request_binding: payment_payload
+                          outputs:
+                            actual_output_ref: actual/green-response.json
+                      bindings:
+                        api_payload:
+                          provider_family: request_response
+                          provider_type: request_body
+                          bind_as: request_body
                     evidence_responsibility: [execution_log]
                     dependencies: []
                 """;
