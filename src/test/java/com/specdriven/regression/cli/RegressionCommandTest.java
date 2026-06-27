@@ -1210,6 +1210,39 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksMessagingProviderWithUnsupportedSerializationBeforeInvocation() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-SERIALIZATION";
+        String acId = rpId + "-AC-001";
+        String payload = "{\"eventId\":\"EVT-001\",\"status\":\"published\"}\n";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingProviderMapping(rpId, "local", "mock://payment.events", "payment_event",
+                "publish_payment_event", "avro");
+        writeMessagingEventPayload(rpId, payload);
+        writeApprovedExpectedResult(rpId, acId, payload);
+        writeApprovedMessagingTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: messaging");
+        assertThat(output.toString()).contains("provider_type: local");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.publish_payment_event.serialization");
+        assertThat(output.toString()).contains("Use supported messaging serialization `json` before invoking messaging action `publish_payment_event`");
+    }
+
+    @Test
     void runExecutesLocalDeploymentReadinessProviderAndWritesEvidence() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-READY";
@@ -2483,7 +2516,21 @@ class RegressionCommandTest {
             String providerType,
             String topicRef,
             String payloadBinding) throws Exception {
+        writeMessagingProviderMapping(rpId, providerType, topicRef, payloadBinding,
+                "publish_payment_event", "");
+    }
+
+    private void writeMessagingProviderMapping(
+            String rpId,
+            String providerType,
+            String topicRef,
+            String payloadBinding,
+            String actionName,
+            String serialization) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        String serializationLine = serialization.isBlank()
+                ? ""
+                : "\n              serialization: " + serialization;
         Files.writeString(mapping, """
                 rp_id: %s
                 release_units:
@@ -2505,9 +2552,9 @@ class RegressionCommandTest {
                           topic_ref: %s
                           timeout_seconds: 10
                           actions:
-                            publish_payment_event:
+                            %s:
                               mode: publish
-                              payload_binding: %s
+                              payload_binding: %s%s
                           logs:
                             stdout: logs/message.log
                             stderr: logs/message-error.log
@@ -2524,7 +2571,7 @@ class RegressionCommandTest {
                       observations: {}
                     evidence_responsibility: [execution_log, message_event]
                     dependencies: []
-                """.formatted(rpId, providerType, topicRef, payloadBinding));
+                """.formatted(rpId, providerType, topicRef, actionName, payloadBinding, serializationLine));
     }
 
     private void writeMessagingEventPayload(String rpId, String payload) throws Exception {

@@ -890,6 +890,21 @@ public class RegressionCommand {
                         "Add package input binding `" + payloadBinding
                                 + "` before invoking messaging action `" + actionName + "`."));
             }
+            String serialization = stringValue(action.get("serialization"));
+            if (!serialization.isBlank() && !"json".equalsIgnoreCase(serialization)) {
+                gaps.add(new ProviderContractGap(
+                        context.contractPath() + ".actions." + actionName + ".serialization",
+                        "adapter",
+                        context.providerName(),
+                        context.providerFamily(),
+                        context.providerType(),
+                        "unsupported",
+                        "blocked",
+                        context.ruId(),
+                        context.providerName(),
+                        "Use supported messaging serialization `json` before invoking messaging action `"
+                                + actionName + "`."));
+            }
         }
         return gaps;
     }
