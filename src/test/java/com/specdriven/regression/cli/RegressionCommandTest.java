@@ -448,6 +448,44 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runSitDeployedBlocksWithoutDeploymentReadinessAndWritesStructuredEvidence() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "service"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeSitMappingWithoutDeploymentReadiness("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001", "ready\n");
+        writeApprovedDeploymentReadinessTestCase("RP-001", "RP-001-AC-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "sit_deployed"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001");
+        String runEvidence = Files.readString(runDir.resolve("run.yaml"));
+        String failureDetails = Files.readString(runDir.resolve("failure_details.yaml"));
+        String batchEvidence = Files.readString(tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/evidence/batches/BATCH-001/batch.yaml"));
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(runEvidence).contains("status: blocked");
+        assertThat(runEvidence).contains("execution_mode: sit_deployed");
+        assertThat(runEvidence).contains("environment_ref: sit://payment/k8s");
+        assertThat(batchEvidence).contains("status: blocked");
+        assertThat(batchEvidence).contains("execution_mode: sit_deployed");
+        assertThat(failureDetails).contains("ap: Discovery and Context");
+        assertThat(failureDetails).contains("field_path: release_units[0].deployment.deployment_ref");
+        assertThat(failureDetails).contains("field_path: release_units[0].deployment.readiness_check");
+        assertThat(failureDetails).contains("field_path: release_units[0].deployment.deployed_version_ref");
+        assertThat(failureDetails).contains("owner_action: Provide SIT deployment readiness evidence");
+    }
+
+    @Test
     void runExecutesApprovedTestThroughAdapterAndWritesEvidence() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -1739,6 +1777,45 @@ class RegressionCommandTest {
                 "docs/08-release/release-packages/" + rpId + "/fixtures/readiness/payment-api.ready");
         Files.createDirectories(marker.getParent());
         Files.writeString(marker, "ready\n");
+    }
+
+    private void writeSitMappingWithoutDeploymentReadiness(String rpId) throws Exception {
+        Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        Files.writeString(mapping, """
+                rp_id: %s
+                release_units:
+                  - ru_id: RU-payment-k8s
+                    repo: /repo/payment-k8s
+                    unit_type: deployment
+                    owner: platform
+                    version_ref: deploy-123
+                    validation_boundary: deployed_service
+                    execution_mode: sit_deployed
+                    deployment_required: true
+                    environment_ref: sit://payment/k8s
+                    adapter: k8s_readiness
+                    provider_contracts:
+                      adapters:
+                        k8s_readiness:
+                          provider_family: deployment_readiness
+                          provider_type: local
+                          readiness_probe: file_exists
+                          target_selector: deployment/payment-api
+                          deployment_ref: fixtures/readiness/payment-api.ready
+                          timeout_seconds: 10
+                          logs:
+                            stdout: logs/readiness.log
+                            stderr: logs/readiness-error.log
+                          outputs:
+                            actual_output_ref: actual/readiness.txt
+                      bindings: {}
+                      fixtures: {}
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [readiness_result]
+                    dependencies: []
+                """.formatted(rpId));
     }
 
     private void writeDbFixtureMapping(String rpId, String jdbcUrl) throws Exception {

@@ -355,7 +355,9 @@ public class RegressionCommand {
                     batchId,
                     runId,
                     preflight.approvedTests(),
-                    preflight.failureDetails());
+                    preflight.failureDetails(),
+                    preflight.executionMode(),
+                    preflight.environmentRef());
             evidenceWriter.writeExecutionBatch(
                     packageRoot,
                     batchId,
@@ -441,7 +443,10 @@ public class RegressionCommand {
             out.println("  - ap: Discovery and Context");
             out.println("    field_path: " + gap.fieldPath());
             out.println("    owner_action: " + gap.ownerAction());
-            failureDetails.add("field_path: " + gap.fieldPath() + ", owner_action: " + gap.ownerAction());
+            failureDetails.add(failureDetail(
+                    "Discovery and Context",
+                    gap.fieldPath(),
+                    gap.ownerAction()));
         }
         if (approvedTests.isEmpty()) {
             blocked = true;
@@ -449,7 +454,10 @@ public class RegressionCommand {
             out.println("  - ap: Definition and Validation");
             out.println("    field_path: tests/approved");
             out.println("    owner_action: Add approved_for_regression DSL test cases before run.");
-            failureDetails.add("field_path: tests/approved, owner_action: Add approved_for_regression DSL test cases before run.");
+            failureDetails.add(failureDetail(
+                    "Definition and Validation",
+                    "tests/approved",
+                    "Add approved_for_regression DSL test cases before run."));
         }
 
         out.println("binding_gaps:");
@@ -464,9 +472,14 @@ public class RegressionCommand {
                 out.println("    binding_name: " + gap.bindingName());
                 out.println("    binding_type: " + gap.bindingType());
                 out.println("    owner_action: " + gap.ownerAction());
-                failureDetails.add("field_path: " + gap.fieldPath()
-                        + ", binding_type: " + gap.bindingType()
-                        + ", owner_action: " + gap.ownerAction());
+                failureDetails.add(failureDetail(
+                        "Planning and Binding",
+                        gap.fieldPath(),
+                        gap.ownerAction(),
+                        "test_case_id: " + gap.testCaseId(),
+                        "ac_id: " + gap.acId(),
+                        "binding_name: " + gap.bindingName(),
+                        "binding_type: " + gap.bindingType()));
             }
             ExpectedResultEligibilityReport eligibility =
                     expectedResultService.checkEligibility(packageRoot, bindingReport.acId());
@@ -479,7 +492,11 @@ public class RegressionCommand {
             for (ExpectedResultGap gap : eligibility.gaps()) {
                 out.println("    field_path: " + gap.fieldPath());
                 out.println("    owner_action: " + gap.ownerAction());
-                failureDetails.add("field_path: " + gap.fieldPath() + ", owner_action: " + gap.ownerAction());
+                failureDetails.add(failureDetail(
+                        "Oracle and Assertion Engine",
+                        gap.fieldPath(),
+                        gap.ownerAction(),
+                        "ac_id: " + bindingReport.acId()));
             }
             OracleReadinessReport oracleReport = oracleReadinessService.check(approvedTest);
             blocked = blocked || !oracleReport.ready();
@@ -491,9 +508,13 @@ public class RegressionCommand {
                 out.println("    field_path: " + gap.fieldPath());
                 out.println("    oracle_type: " + gap.oracleType());
                 out.println("    owner_action: " + gap.ownerAction());
-                failureDetails.add("field_path: " + gap.fieldPath()
-                        + ", oracle_type: " + gap.oracleType()
-                        + ", owner_action: " + gap.ownerAction());
+                failureDetails.add(failureDetail(
+                        "Oracle and Assertion Engine",
+                        gap.fieldPath(),
+                        gap.ownerAction(),
+                        "test_case_id: " + gap.testCaseId(),
+                        "ac_id: " + gap.acId(),
+                        "oracle_type: " + gap.oracleType()));
             }
             FixtureLifecycleReport fixtureReport = fixtureLifecycleService.validate(approvedTest);
             blocked = blocked || !fixtureReport.ready();
@@ -504,7 +525,12 @@ public class RegressionCommand {
                 out.println("    ac_id: " + bindingReport.acId());
                 out.println("    field_path: " + gap.fieldPath());
                 out.println("    owner_action: " + gap.ownerAction());
-                failureDetails.add("field_path: " + gap.fieldPath() + ", owner_action: " + gap.ownerAction());
+                failureDetails.add(failureDetail(
+                        "Fixture and State Manager",
+                        gap.fieldPath(),
+                        gap.ownerAction(),
+                        "test_case_id: " + bindingReport.testCaseId(),
+                        "ac_id: " + bindingReport.acId()));
             }
 
             ProviderContractResolutionReport providerReport = providerContractResolver.resolve(
@@ -544,15 +570,21 @@ public class RegressionCommand {
                 out.println("    affected_ru: " + gap.affectedRu());
                 out.println("    capability: " + gap.capability());
                 out.println("    owner_action: " + gap.ownerAction());
-                failureDetails.add("contract_path: " + gap.fieldPath()
-                        + ", provider_family: " + gap.providerFamily()
-                        + ", provider_type: " + gap.providerType()
-                        + ", registry_status: " + gap.registryStatus()
-                        + ", runtime_status: " + gap.runtimeStatus()
-                        + ", affected_ru: " + gap.affectedRu()
-                        + ", capability: " + gap.capability()
-                        + ", provider_name: " + gap.providerName()
-                        + ", owner_action: " + gap.ownerAction());
+                failureDetails.add(failureDetail(
+                        "Planning and Binding",
+                        gap.fieldPath(),
+                        gap.ownerAction(),
+                        "test_case_id: " + bindingReport.testCaseId(),
+                        "ac_id: " + bindingReport.acId(),
+                        "contract_path: " + gap.fieldPath(),
+                        "contract_type: " + gap.contractType(),
+                        "provider_name: " + gap.providerName(),
+                        "provider_family: " + gap.providerFamily(),
+                        "provider_type: " + gap.providerType(),
+                        "registry_status: " + gap.registryStatus(),
+                        "runtime_status: " + gap.runtimeStatus(),
+                        "affected_ru: " + gap.affectedRu(),
+                        "capability: " + gap.capability()));
             }
         }
 
@@ -565,6 +597,19 @@ public class RegressionCommand {
                 List.copyOf(failureDetails),
                 environmentReport.executionMode(),
                 environmentReport.environmentRef());
+    }
+
+    private String failureDetail(String ap, String fieldPath, String ownerAction, String... extraLines) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("ap: ").append(ap).append("\n");
+        builder.append("field_path: ").append(fieldPath).append("\n");
+        for (String extraLine : extraLines) {
+            if (extraLine != null && !extraLine.isBlank()) {
+                builder.append(extraLine).append("\n");
+            }
+        }
+        builder.append("owner_action: ").append(ownerAction);
+        return builder.toString();
     }
 
     private int draftExpectedResults(Path root, Map<String, String> options, PrintStream out, PrintStream err) {

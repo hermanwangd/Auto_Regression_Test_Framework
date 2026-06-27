@@ -212,10 +212,22 @@ public class EvidenceWriter {
     }
 
     public ExecutionResult writeBlockedRun(
-            Path packageRoot, String batchId, String runId, List<Path> approvedTests, List<String> failureDetails) {
+            Path packageRoot,
+            String batchId,
+            String runId,
+            List<Path> approvedTests,
+            List<String> failureDetails,
+            String executionMode,
+            String environmentRef) {
         Path runDir = packageRoot.resolve("evidence/runs").resolve(runId);
         Map<String, Object> testCase = approvedTests.isEmpty() ? Map.of() : readYamlMap(approvedTests.get(0));
         Map<?, ?> executionTarget = executionTarget(testCase);
+        String resolvedExecutionMode = isBlank(executionMode)
+                ? stringValue(executionTarget.get("execution_mode"))
+                : executionMode;
+        String resolvedEnvironmentRef = isBlank(environmentRef)
+                ? stringValue(executionTarget.get("environment_ref"))
+                : environmentRef;
         try {
             Files.createDirectories(runDir);
             Files.writeString(runDir.resolve("run.yaml"), """
@@ -238,8 +250,8 @@ public class EvidenceWriter {
                     stringValue(testCase.get("rp_id")),
                     stringValue(testCase.get("test_case_id")),
                     stringValue(testCase.get("ac_id")),
-                    stringValue(executionTarget.get("execution_mode")),
-                    stringValue(executionTarget.get("environment_ref")),
+                    resolvedExecutionMode,
+                    resolvedEnvironmentRef,
                     stringValue(executionTarget.get("ru_id"))));
             Files.writeString(runDir.resolve("failure_details.yaml"), failureDetailsYaml(failureDetails));
             return new ExecutionResult(
@@ -264,6 +276,10 @@ public class EvidenceWriter {
             builder.append("  - ").append(detail.replace("\n", "\n    ")).append("\n");
         }
         return builder.toString();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     @SuppressWarnings("unchecked")
