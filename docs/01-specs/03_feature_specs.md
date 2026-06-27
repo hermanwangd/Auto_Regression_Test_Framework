@@ -44,11 +44,12 @@ M1 includes:
 
 - One RP with a bounded set of release unit repos.
 - Local or CI execution without requiring a persistent service.
-- REST and/or gRPC request-response execution through provider contracts.
-- Kafka and/or NATS message execution or observation through provider contracts.
+- REST and/or gRPC request-response execution through configurable built-in provider contracts.
+- Kafka and/or NATS message execution or observation through configurable built-in provider contracts.
 - DB fixture setup, query, and cleanup for stateful regression scenarios.
 - K8s and VM readiness checks before deployed-environment execution.
-- External runner bridge for legacy or specialized validation that is not yet a native provider.
+- Provider capability registry and contract validation so unsupported or incomplete provider configs block before execution.
+- External runner bridge only as an approved escape hatch for legacy or specialized validation that cannot yet use a reusable built-in provider.
 - Small reviewable fixtures or documented fixture generation.
 - RP-level AC readiness classification.
 - Agent-generated draft regression tests and expected results for ready RP AC.
@@ -59,6 +60,7 @@ M1 excludes:
 - Cross-package orchestration.
 - Production data unless masked and approved.
 - Broad package-type plugin support beyond the selected heterogeneous pilot.
+- RP-specific custom scripts or harnesses as the standard extension path.
 - Dashboard-driven release governance.
 - Fully automated waiver, manual-only, or release approval.
 
@@ -94,10 +96,10 @@ Implementation may start only for slices whose inputs are ready:
 - F001/F002 may start with the agreed Product Repo folder structure and RP artifact checklist.
 - F003/F004 require at least one pilot RP with owner-provided `rp_feature_spec.md`, `acceptance_criteria.md`, and `rp_ru_mapping.yaml`.
 - F005/F006 require RP AC with observable input, behavior, output, and pass/fail expectations.
-- F007 requires checked-in executable or approved DSL test artifacts, package inputs, fixture strategy, adapter mode, and expected-result policy.
+- F007 requires checked-in executable or approved DSL test artifacts, package inputs, fixture strategy, adapter mode, provider registry support, provider contract validation, and expected-result policy.
 - F008 requires RP AC inventory, execution evidence format, traceability rules, and approval records for exclusions.
 
-Before full M1 implementation, the responsible owner shall supply the pilot RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, adapter/provider modes, and required provider families.
+Before full M1 implementation, the responsible owner shall supply the pilot RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, adapter/provider modes, required provider families, and any approved escape-hatch provider need.
 
 ## 3.6 CI/CD and Environment Execution Policy
 
@@ -384,7 +386,7 @@ The framework shall resolve package inputs, bind runtime values, confirm environ
 
 One RP regression execution is a batch. A batch may contain one or more test runs. Each test run validates one approved DSL test case and produces run-level evidence. The batch produces the RP-level execution summary used by F008 coverage reporting.
 
-The execution process and DSL shall remain package-type-neutral. M1 provider implementations may start with a bounded subset of REST/gRPC, Kafka/NATS, DB fixture, K8s and VM readiness, shell/file, and external runner support required by the selected pilot.
+The execution process and DSL shall remain package-type-neutral. M1 provider implementations shall prioritize reusable built-in providers for request/response, messaging, DB fixture, deployment readiness, and file/batch execution. External runner support is not the default extension path; it is an approved escape hatch when a legacy or specialized boundary cannot yet be represented by a reusable provider contract.
 
 F007 defines RP Regression Execution. Framework Verification tests may exercise F007 through a sample Product Repo fixture, but that fixture evidence is not downstream Product/RP release evidence.
 
@@ -398,6 +400,9 @@ F007 shall not author AC, classify AC readiness, generate tests, regenerate chec
 - Check that required expected-result artifacts are `approved_for_regression` or otherwise explicitly allowed by the execution policy.
 - Validate that every DSL section can be consumed by exactly one AP responsibility path before adapter execution starts.
 - Validate that every DSL logical reference to an adapter, binding, fixture, oracle, assertion, or observation has a matching provider contract or supported default.
+- Validate each provider contract against a capability registry by `provider_family`, `provider_type`, required fields, supported runtime status, and execution mode before adapter/provider execution.
+- Reject ambiguous multi-RU provider resolution rather than falling back silently to the first RU.
+- Require explicit approval metadata before using an external runner escape hatch, including reason, owner, bounded command or container ref, timeout, inputs, outputs, and evidence map.
 - Create one unique batch ID for the RP execution request.
 - Create one unique run ID per approved test case in that batch.
 - Resolve the RP execution mode as `local_fixture`, `ci_ephemeral`, `sit_deployed`, or `evidence_only`.

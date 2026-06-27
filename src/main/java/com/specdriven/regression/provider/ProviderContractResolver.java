@@ -14,6 +14,16 @@ import org.yaml.snakeyaml.Yaml;
 @Service
 public class ProviderContractResolver {
 
+    private final ProviderCapabilityRegistry providerCapabilityRegistry;
+
+    public ProviderContractResolver() {
+        this(new ProviderCapabilityRegistry());
+    }
+
+    ProviderContractResolver(ProviderCapabilityRegistry providerCapabilityRegistry) {
+        this.providerCapabilityRegistry = providerCapabilityRegistry;
+    }
+
     public ProviderContractResolutionReport resolve(
             Path mappingYaml,
             String adapter,
@@ -24,17 +34,8 @@ public class ProviderContractResolver {
         List<ProviderContractGap> gaps = new ArrayList<>();
 
         ReleaseUnitContracts adapterOwner = ownerForAdapter(releaseUnits, adapter);
-        if (hasRequiredAdapterContract(adapterOwner, adapter)) {
-            resolved.add(resolved(adapterOwner, "adapters", "adapter", adapter));
-        } else if (hasContract(adapterOwner.contracts(), "adapters", adapter)) {
-            AdapterGapDetail detail = adapterGapDetail(adapterOwner, adapter);
-            gaps.add(gap(
-                    adapterOwner,
-                    "adapters",
-                    "adapter",
-                    adapter,
-                    detail.pathSuffix(),
-                    detail.ownerAction()));
+        if (hasContract(adapterOwner.contracts(), "adapters", adapter)) {
+            resolveContract(resolved, gaps, adapterOwner, "adapters", "adapter", adapter);
         } else {
             gaps.add(gap(adapterOwner, "adapters", "adapter", adapter, "",
                     "Add provider contract `" + adapter + "` under "
@@ -45,7 +46,7 @@ public class ProviderContractResolver {
         for (String bindingType : bindingTypes) {
             ReleaseUnitContracts owner = ownerFor(releaseUnits, "bindings", bindingType, adapterOwner);
             if (hasContract(owner.contracts(), "bindings", bindingType)) {
-                resolved.add(resolved(owner, "bindings", "binding", bindingType));
+                resolveContract(resolved, gaps, owner, "bindings", "binding", bindingType);
             } else {
                 gaps.add(gap(owner, "bindings", "binding", bindingType, "",
                         "Add provider contract `" + bindingType + "` under "
@@ -57,7 +58,7 @@ public class ProviderContractResolver {
         for (String fixtureProvider : fixtureProviders) {
             ReleaseUnitContracts owner = ownerFor(releaseUnits, "fixtures", fixtureProvider, adapterOwner);
             if (hasContract(owner.contracts(), "fixtures", fixtureProvider)) {
-                resolved.add(resolved(owner, "fixtures", "fixture", fixtureProvider));
+                resolveContract(resolved, gaps, owner, "fixtures", "fixture", fixtureProvider);
             } else {
                 gaps.add(gap(owner, "fixtures", "fixture", fixtureProvider, "",
                         "Add provider contract `" + fixtureProvider + "` under "
@@ -72,16 +73,49 @@ public class ProviderContractResolver {
                 List.copyOf(gaps));
     }
 
-    private ResolvedProviderContract resolved(
+    private void resolveContract(
+            List<ResolvedProviderContract> resolved,
+            List<ProviderContractGap> gaps,
             ReleaseUnitContracts owner,
             String section,
             String contractType,
             String providerName) {
+        Map<String, Object> contract = contract(owner.contracts(), section, providerName);
+        ProviderCapabilityRegistry.ProviderContractValidation validation =
+                providerCapabilityRegistry.validate(section, providerName, contract, owner.executionMode());
+        if (validation.ready()) {
+            resolved.add(resolved(owner, section, contractType, providerName, validation));
+            return;
+        }
+        for (ProviderCapabilityRegistry.ProviderContractViolation violation : validation.violations()) {
+            gaps.add(gap(
+                    owner,
+                    section,
+                    contractType,
+                    providerName,
+                    violation.pathSuffix(),
+                    validation.providerFamily(),
+                    validation.providerType(),
+                    violation.registryStatus(),
+                    violation.runtimeStatus(),
+                    ownerAction(owner, violation.ownerAction())));
+        }
+    }
+
+    private ResolvedProviderContract resolved(
+            ReleaseUnitContracts owner,
+            String section,
+            String contractType,
+            String providerName,
+            ProviderCapabilityRegistry.ProviderContractValidation validation) {
         return new ResolvedProviderContract(
                 contractType,
                 providerName,
                 "ru",
-                providerFamily(contract(owner.contracts(), section, providerName), section, providerName, owner),
+                validation.providerFamily(),
+                validation.providerType(),
+                validation.registryStatus(),
+                validation.runtimeStatus(),
                 owner.ruId(),
                 providerName,
                 path(owner, section, providerName));
@@ -102,6 +136,37 @@ public class ProviderContractResolver {
                 owner.ruId(),
                 providerName,
                 ownerAction);
+    }
+
+    private ProviderContractGap gap(
+            ReleaseUnitContracts owner,
+            String section,
+            String contractType,
+            String providerName,
+            String pathSuffix,
+            String providerFamily,
+            String providerType,
+            String registryStatus,
+            String runtimeStatus,
+            String ownerAction) {
+        return new ProviderContractGap(
+                path(owner, section, providerName) + pathSuffix,
+                contractType,
+                providerName,
+                providerFamily,
+                providerType,
+                registryStatus,
+                runtimeStatus,
+                owner.ruId(),
+                providerName,
+                ownerAction);
+    }
+
+    private String ownerAction(ReleaseUnitContracts owner, String ownerAction) {
+        if (owner.ruId().isBlank() || ownerAction.contains(owner.ruId())) {
+            return ownerAction;
+        }
+        return ownerAction + " Affected RU: `" + owner.ruId() + "`.";
     }
 
     private ReleaseUnitContracts ownerForAdapter(List<ReleaseUnitContracts> releaseUnits, String adapter) {
@@ -128,7 +193,7 @@ public class ProviderContractResolver {
 
     private ReleaseUnitContracts fallbackUnit(List<ReleaseUnitContracts> releaseUnits) {
         if (releaseUnits.isEmpty()) {
-            return new ReleaseUnitContracts(0, "", "", "", Map.of());
+            return new ReleaseUnitContracts(0, "", "", "", "", Map.of());
         }
         return releaseUnits.get(0);
     }
@@ -140,75 +205,6 @@ public class ProviderContractResolver {
     private boolean hasContract(Map<String, Object> contracts, String section, String name) {
         Object value = contracts.get(section);
         return value instanceof Map<?, ?> map && map.containsKey(name);
-    }
-
-    private boolean hasRequiredAdapterContract(ReleaseUnitContracts owner, String adapter) {
-        Map<String, Object> contractMap = contract(owner.contracts(), "adapters", adapter);
-        if (contractMap.isEmpty()) {
-            return false;
-        }
-        String family = providerFamily(contractMap, "adapters", adapter, owner);
-        if (family.equals("request_response")) {
-            return hasAnyText(contractMap, "endpoint_ref", "base_url_ref", "service_ref")
-                    && hasMap(contractMap, "actions");
-        }
-        if (family.equals("messaging")) {
-            return hasAnyText(contractMap, "topic_ref", "subject_ref", "stream_ref", "endpoint_ref");
-        }
-        if (family.equals("deployment_readiness")) {
-            return hasAnyText(contractMap, "readiness_probe", "target_selector", "deployment_ref", "service_ref");
-        }
-        if (family.equals("external_runner")) {
-            return hasAnyText(contractMap, "command", "container_ref");
-        }
-        return hasAnyText(contractMap, "command");
-    }
-
-    private AdapterGapDetail adapterGapDetail(ReleaseUnitContracts owner, String adapter) {
-        Map<String, Object> contractMap = contract(owner.contracts(), "adapters", adapter);
-        String family = providerFamily(contractMap, "adapters", adapter, owner);
-        if (family.equals("request_response")) {
-            if (!hasAnyText(contractMap, "endpoint_ref", "base_url_ref", "service_ref")) {
-                return new AdapterGapDetail(".endpoint_ref",
-                        "Declare endpoint_ref, base_url_ref, or service_ref for `" + adapter
-                                + "` on `" + owner.ruId() + "` before execution.");
-            }
-            return new AdapterGapDetail(".actions",
-                    "Declare at least one request/response action for `" + adapter
-                            + "` on `" + owner.ruId() + "` before execution.");
-        }
-        if (family.equals("messaging")) {
-            return new AdapterGapDetail(".topic_ref",
-                    "Declare topic_ref, subject_ref, stream_ref, or endpoint_ref for `" + adapter
-                            + "` on `" + owner.ruId() + "` before execution.");
-        }
-        if (family.equals("deployment_readiness")) {
-            return new AdapterGapDetail(".readiness_probe",
-                    "Declare readiness_probe, target_selector, deployment_ref, or service_ref for `" + adapter
-                            + "` on `" + owner.ruId() + "` before execution.");
-        }
-        if (family.equals("external_runner")) {
-            return new AdapterGapDetail(".command",
-                    "Declare command or container_ref for external runner `" + adapter
-                            + "` on `" + owner.ruId() + "` before execution.");
-        }
-        return new AdapterGapDetail(".command",
-                "Declare executable adapter command for `" + adapter + "` on `"
-                        + owner.ruId() + "` before execution.");
-    }
-
-    private boolean hasAnyText(Map<String, Object> map, String... fields) {
-        for (String field : fields) {
-            String value = stringValue(map.get(field));
-            if (!value.isBlank()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean hasMap(Map<String, Object> map, String field) {
-        return map.get(field) instanceof Map<?, ?> nested && !nested.isEmpty();
     }
 
     @SuppressWarnings("unchecked")
@@ -290,6 +286,7 @@ public class ProviderContractResolver {
                         stringValue(unit.get("ru_id")),
                         stringValue(unit.get("adapter")),
                         stringValue(unit.get("validation_boundary")),
+                        stringValue(unit.get("execution_mode")),
                         contractMap));
             }
             return List.copyOf(releaseUnitContracts);
@@ -307,9 +304,7 @@ public class ProviderContractResolver {
             String ruId,
             String adapter,
             String validationBoundary,
+            String executionMode,
             Map<String, Object> contracts) {
-    }
-
-    private record AdapterGapDetail(String pathSuffix, String ownerAction) {
     }
 }

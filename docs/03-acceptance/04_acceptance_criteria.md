@@ -27,6 +27,8 @@ Minimum verification rule for DSL/AP clarity:
 - Baseline, spec, architecture, and AC documents shall use the same seven AP names and shall not introduce hidden AP-level components.
 - Every required or conditional DSL field shall map to a primary AP consumer and have a clear reason for being required.
 - Provider implementation settings shall be validated through RP/RU mapping or provider contracts, not embedded directly inside DSL test cases.
+- Provider contracts shall be validated against a capability registry by explicit `provider_family`, `provider_type`, required fields, supported runtime status, execution mode, and evidence output requirements.
+- External runner use shall require explicit approval metadata and shall be reported as an escape hatch, not as the standard provider extension path.
 - A feature is not implementation-ready when its DSL fields, provider contract paths, assertion/oracle source, fixture lifecycle, or evidence outputs cannot be explained through the 7 AP flow.
 - Maven framework verification evidence shall not be treated as downstream Product/RP release evidence.
 - CLI RP regression evidence shall identify the RP, batch, environment, test cases, and AC covered by the selected RP execution.
@@ -101,19 +103,25 @@ Then each RU entry shall declare required execution metadata, dependency semanti
 
 And provider contract references shall identify the adapter, binding, fixture, oracle, assertion, or observation capability that DSL tests may use.
 
+And each provider contract required for execution shall resolve to one provider capability registry entry with explicit provider family, provider type, required fields, runtime support status, allowed execution mode, and evidence outputs.
+
 ### Failure Path
 
-Given missing, ambiguous, or unsafe mapping data
+Given missing, ambiguous, unsupported, or unsafe mapping data
 When regression execution is requested
 Then execution shall be blocked before adapter/provider execution and the report shall include the blocking field and owner action.
 
-And the report shall state whether the block was caused by RP membership, RU version, execution mode, environment reference, dependency semantics, or provider contract configuration.
+And the report shall state whether the block was caused by RP membership, RU version, execution mode, environment reference, dependency semantics, provider capability registry status, or provider contract configuration.
 
 ### Boundary Path
 
 Given an RP with multiple RUs
 When dependency semantics are checked
 Then execution order shall be derived from declared dependencies, not inferred from file order or naming.
+
+Given a DSL test target or provider contract could match more than one RU
+When dry-run resolves provider contracts
+Then execution shall be blocked until the target RU or provider reference is unambiguous.
 
 ## AC-005 Agent Drafting Is Gated by Readiness
 
@@ -167,9 +175,9 @@ Given approved or execution-eligible DSL test cases for the pilot RP
 When regression is run in an allowed execution mode
 Then the RP execution shall produce one batch evidence record with RP ID, batch ID, execution mode, environment reference, included run IDs, test case IDs, AC IDs, and final batch status.
 
-And each executed test case shall produce durable run evidence with RP ID, batch ID, AC ID, test case ID, run ID, execution mode, resolved bindings, provider contracts used, adapter result, assertion result, cleanup result, and final pass/fail status.
+And each executed test case shall produce durable run evidence with RP ID, batch ID, AC ID, test case ID, run ID, execution mode, resolved bindings, provider contracts used, provider family, provider type, registry status, provider contract path, adapter/provider result, assertion result, cleanup result, and final pass/fail status.
 
-And the selected heterogeneous pilot shall produce evidence for each required provider family in scope: request/response, messaging, DB fixture, deployment readiness, external runner, and file/batch when the RP uses it.
+And the selected heterogeneous pilot shall produce evidence for each registered provider family selected for the RP: request/response, messaging, DB fixture, deployment readiness, and file/batch when the RP uses it. External runner evidence is required only when an approved escape-hatch contract is selected.
 
 ### Failure Path
 
@@ -193,7 +201,7 @@ Then the tests shall produce two different run IDs and two different run evidenc
 
 ### Happy Path
 
-Given all required test artifacts, mappings, provider contracts, truth sources, fixture policy, and environment readiness are available
+Given all required test artifacts, mappings, provider contracts, provider capability registry entries, truth sources, fixture policy, and environment readiness are available
 When regression is requested
 Then execution may proceed according to the declared execution mode.
 
@@ -201,13 +209,13 @@ And dry-run shall show which AP gates passed before real adapter execution is al
 
 ### Failure Path
 
-Given required test artifacts, mappings, provider contracts, truth sources, fixture policy, deployment evidence, or environment readiness are missing or unsupported
+Given required test artifacts, mappings, provider contracts, provider capability registry entries, truth sources, fixture policy, deployment evidence, or environment readiness are missing or unsupported
 When regression is requested
 Then execution shall stop before unsafe adapter/provider execution and report the blocking reason with owner action.
 
 And the blocking report shall include the AP name and DSL field or provider contract path that caused the stop.
 
-And when a selected pilot provider family is missing or unsupported, the dry-run report shall name the provider family, capability, affected RU, provider contract path, and required owner action.
+And when a selected pilot provider family or provider type is missing, unsupported, ambiguous, or only available as an unapproved escape hatch, the dry-run report shall name the provider family, provider type, capability, affected RU, provider contract path, registry status, and required owner action.
 
 ### Boundary Path
 
@@ -220,6 +228,10 @@ When one deployment readiness provider is missing or not configured
 Then only the affected RU path shall be blocked, and independent RU paths may proceed when their dependencies are satisfied.
 
 For multi-RU RPs, execution shall respect declared dependency semantics and stop downstream execution when a required upstream validation fails.
+
+Given an external runner provider contract without approval metadata, bounded timeout, declared inputs/outputs, or evidence map
+When dry-run is requested
+Then execution shall be blocked before runner invocation and the report shall state that the standard built-in provider path must be used or an escape-hatch approval must be supplied.
 
 ## AC-009 Coverage and Evidence Are Release Review Ready
 

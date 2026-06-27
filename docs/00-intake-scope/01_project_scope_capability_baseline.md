@@ -62,7 +62,7 @@ For this framework, a release package must declare:
 - Regression evidence required for release review.
 - Environment assumptions, including test data, dependencies, and runtime constraints.
 
-The M1 pilot uses one heterogeneous release package as the adoption proof. The selected RP should include request/response interaction, asynchronous messaging, DB fixture setup/cleanup, K8s and VM readiness, and at least one external runner bridge where direct framework execution is not yet reusable. Package-specific behavior remains outside the framework core.
+The M1 pilot uses one heterogeneous release package as the adoption proof. The selected RP should include request/response interaction, asynchronous messaging, DB fixture setup/cleanup, K8s and VM readiness, and provider capability registry validation. External runner is optional and allowed only as an approved escape hatch when a reusable built-in provider cannot safely represent a legacy or specialized boundary. Package-specific behavior remains outside the framework core.
 
 ## 1.6 Product Repo Definition
 

@@ -485,7 +485,7 @@ class RegressionCommandTest {
         assertThat(runEvidence).contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli");
         assertThat(runEvidence).contains("contract_path: release_units[0].provider_contracts.bindings.db_seed");
         assertThat(runEvidence).contains("provider_family: file_batch");
-        assertThat(runEvidence).contains("provider_family: db_fixture");
+        assertThat(runEvidence).contains("provider_type: file_fixture");
         assertThat(runEvidence).contains("affected_ru: RU-transform-job");
     }
 
@@ -612,7 +612,7 @@ class RegressionCommandTest {
     }
 
     @Test
-    void runFailsUnsupportedMessagingProviderTypeWithEvidence() throws Exception {
+    void runBlocksUnsupportedMessagingProviderTypeBeforeExecution() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-MSG-KAFKA";
         String acId = rpId + "-AC-001";
@@ -628,23 +628,24 @@ class RegressionCommandTest {
         writeApprovedExpectedResult(rpId, acId, payload);
         writeApprovedMessagingTestCase(rpId, acId);
 
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
         int exit = command.execute(new String[] {
                 "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral"},
-                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+                print(output), print(new ByteArrayOutputStream()));
 
         Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
         assertThat(exit).isEqualTo(1);
-        assertThat(Files.readString(runDir.resolve("messaging.yaml")))
-                .contains("status: failed")
-                .contains("provider: message_bus")
-                .contains("provider_type: kafka")
-                .contains("topic_ref: kafka://payment.events")
-                .contains("message_count: 0")
-                .contains("Unsupported messaging provider_type `kafka`");
-        assertThat(Files.readString(runDir.resolve("run.yaml")))
-                .contains("status: failed")
+        assertThat(output.toString())
+                .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.provider_type")
                 .contains("provider_family: messaging")
-                .contains("assertion_status: not_run");
+                .contains("provider_type: kafka")
+                .contains("registry_status: unsupported")
+                .contains("Unsupported provider_type `kafka`");
+        assertThat(Files.exists(runDir.resolve("messaging.yaml"))).isFalse();
+        assertThat(Files.readString(runDir.resolve("run.yaml")))
+                .contains("status: blocked")
+                .contains("adapter_execution_started: false");
     }
 
     @Test
@@ -913,6 +914,7 @@ class RegressionCommandTest {
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
         writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
         writeExecutableCiMappingWithFixtureProvider("RP-001");
+        writeDbFixtureSql("RP-001");
         writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
         writeApprovedTestCaseWithCleanupFixture("RP-001");
 
@@ -1417,10 +1419,13 @@ class RegressionCommandTest {
                     provider_contracts:
                       adapters:
                         spring_boot_cli:
+                          provider_family: file_batch
+                          provider_type: shell
                           command: java -jar ${repo}/target/release-unit.jar
                       bindings:
                         db_seed:
-                          provider: file_fixture
+                          provider_family: file_batch
+                          provider_type: file_fixture
                           materialize_as: input_file
                       fixtures: {}
                       oracles: {}
@@ -1474,6 +1479,8 @@ class RegressionCommandTest {
                     provider_contracts:
                       adapters:
                         spring_boot_cli:
+                          provider_family: file_batch
+                          provider_type: shell
                           command: /bin/sh -c 'echo %s; echo adapter-warn >&2'
                           working_directory: .
                           timeout_seconds: 10
@@ -1485,7 +1492,8 @@ class RegressionCommandTest {
                             actual_output_ref: actual/output.txt
                       bindings:
                         db_seed:
-                          provider: file_fixture
+                          provider_family: file_batch
+                          provider_type: file_fixture
                           materialize_as: input_file
                       fixtures: {}
                       oracles: {}
@@ -1514,6 +1522,8 @@ class RegressionCommandTest {
                     provider_contracts:
                       adapters:
                         other_cli:
+                          provider_family: file_batch
+                          provider_type: shell
                           command: /bin/sh -c 'echo wrong-ru'
                           working_directory: .
                           timeout_seconds: 10
@@ -1543,6 +1553,8 @@ class RegressionCommandTest {
                     provider_contracts:
                       adapters:
                         spring_boot_cli:
+                          provider_family: file_batch
+                          provider_type: shell
                           command: /bin/sh -c 'echo adapter-ok; echo adapter-warn >&2'
                           working_directory: .
                           timeout_seconds: 10
@@ -1554,7 +1566,8 @@ class RegressionCommandTest {
                             actual_output_ref: actual/output.txt
                       bindings:
                         db_seed:
-                          provider: file_fixture
+                          provider_family: file_batch
+                          provider_type: file_fixture
                           materialize_as: input_file
                       fixtures: {}
                       oracles: {}
@@ -1600,6 +1613,7 @@ class RegressionCommandTest {
                       bindings:
                         api_payload:
                           provider_family: request_response
+                          provider_type: request_body
                           bind_as: request_body
                       fixtures: {}
                       oracles: {}
@@ -1663,6 +1677,7 @@ class RegressionCommandTest {
                       bindings:
                         message_event:
                           provider_family: messaging
+                          provider_type: event_payload
                           bind_as: event_payload
                       fixtures: {}
                       oracles: {}
@@ -1744,6 +1759,8 @@ class RegressionCommandTest {
                     provider_contracts:
                       adapters:
                         spring_boot_cli:
+                          provider_family: file_batch
+                          provider_type: shell
                           command: /bin/sh -c 'echo db-fixture-ok'
                           working_directory: .
                           timeout_seconds: 10
@@ -1755,13 +1772,15 @@ class RegressionCommandTest {
                             actual_output_ref: actual/output.txt
                       bindings:
                         db_seed:
-                          provider: relational_db
+                          provider_family: file_batch
+                          provider_type: file_fixture
                           materialize_as: jdbc_seed
                       fixtures:
                         relational_db:
                           provider_family: db_fixture
                           provider_type: jdbc
                           connection_ref: %s
+                          cleanup_strategy: by_test_run_id
                           setup_actions:
                             seed_orders:
                               sql_ref: fixtures/db/seed_orders.sql
@@ -1812,6 +1831,8 @@ class RegressionCommandTest {
                     provider_contracts:
                       adapters:
                         spring_boot_cli:
+                          provider_family: file_batch
+                          provider_type: shell
                           command: /bin/sh -c 'echo adapter-ok; echo adapter-warn >&2'
                           working_directory: .
                           timeout_seconds: 10
@@ -1823,12 +1844,21 @@ class RegressionCommandTest {
                             actual_output_ref: actual/output.txt
                       bindings:
                         db_seed:
-                          provider: file_fixture
+                          provider_family: file_batch
+                          provider_type: file_fixture
                           materialize_as: input_file
                       fixtures:
                         relational_db:
-                          setup_action: seed_orders
-                          cleanup_action: cleanup_orders
+                          provider_family: db_fixture
+                          provider_type: jdbc
+                          connection_ref: jdbc:h2:mem:cleanup_fixture;DB_CLOSE_DELAY=-1
+                          cleanup_strategy: by_test_run_id
+                          setup_actions:
+                            seed_orders:
+                              sql_ref: fixtures/db/seed_orders.sql
+                          cleanup_actions:
+                            cleanup_orders:
+                              sql_ref: fixtures/db/cleanup_orders.sql
                       oracles: {}
                       assertions: {}
                       observations: {}

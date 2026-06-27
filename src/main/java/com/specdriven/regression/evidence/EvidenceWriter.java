@@ -124,6 +124,9 @@ public class EvidenceWriter {
             builder.append("  - contract_type: ").append(contract.contractType()).append("\n");
             builder.append("    provider_name: ").append(contract.providerName()).append("\n");
             builder.append("    provider_family: ").append(contract.providerFamily()).append("\n");
+            builder.append("    provider_type: ").append(contract.providerType()).append("\n");
+            builder.append("    registry_status: ").append(contract.registryStatus()).append("\n");
+            builder.append("    runtime_status: ").append(contract.runtimeStatus()).append("\n");
             builder.append("    affected_ru: ").append(contract.affectedRu()).append("\n");
             builder.append("    capability: ").append(contract.capability()).append("\n");
             builder.append("    contract_path: ").append(contract.contractPath()).append("\n");

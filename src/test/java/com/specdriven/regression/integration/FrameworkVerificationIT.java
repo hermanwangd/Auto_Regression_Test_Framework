@@ -110,7 +110,8 @@ class FrameworkVerificationIT {
                 .contains("release_units[0].provider_contracts.adapters.spring_boot_cli.command")
                 .contains("provider_family: file_batch")
                 .contains("affected_ru: RU-framework-sample-adapter")
-                .contains("Declare executable adapter command for `spring_boot_cli` on `RU-framework-sample-adapter`");
+                .contains("Declare executable adapter command for `spring_boot_cli`")
+                .contains("Affected RU: `RU-framework-sample-adapter`");
     }
 
     @Test
@@ -388,7 +389,8 @@ class FrameworkVerificationIT {
                 .contains("binding_type: db_seed")
                 .contains("provider_contracts_used:")
                 .contains("provider_family: file_batch")
-                .contains("provider_family: db_fixture")
+                .contains("provider_type: file_fixture")
+                .contains("registry_status: supported")
                 .contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli")
                 .contains("contract_path: release_units[0].provider_contracts.bindings.db_seed")
                 .contains("affected_ru: RU-framework-sample-adapter")
@@ -462,6 +464,7 @@ class FrameworkVerificationIT {
                       bindings:
                         api_payload:
                           provider_family: request_response
+                          provider_type: request_body
                           bind_as: request_body
                       fixtures: {}
                     evidence_responsibility: [execution_log]
@@ -480,11 +483,12 @@ class FrameworkVerificationIT {
                       adapters:
                         message_bus:
                           provider_family: messaging
-                          provider_type: kafka
-                          topic_ref: kafka://payment.events
+                          provider_type: local
+                          topic_ref: mock://payment.events
                       bindings:
                         message_event:
                           provider_family: messaging
+                          provider_type: event_payload
                           bind_as: event_payload
                       fixtures: {}
                     evidence_responsibility: [execution_log]
@@ -508,6 +512,7 @@ class FrameworkVerificationIT {
                       fixtures:
                         relational_db:
                           provider_family: db_fixture
+                          provider_type: jdbc
                           connection_ref: secret://ci/payment-db
                           cleanup_strategy: by_test_run_id
                     evidence_responsibility: [cleanup_result]
@@ -526,8 +531,9 @@ class FrameworkVerificationIT {
                       adapters:
                         k8s_readiness:
                           provider_family: deployment_readiness
-                          provider_type: k8s
-                          readiness_probe: deployment_available
+                          provider_type: local
+                          readiness_probe: file_exists
+                          deployment_ref: fixtures/readiness/payment-api.ready
                     evidence_responsibility: [readiness_result]
                     dependencies: []
                   - ru_id: RU-legacy-runner
@@ -545,7 +551,17 @@ class FrameworkVerificationIT {
                         external_runner:
                           provider_family: external_runner
                           provider_type: command_runner
+                          approval_ref: docs/10-change-control/runner-approval.md
+                          approved_by: release_owner
+                          reason: legacy harness cannot use a reusable built-in provider yet
                           command: ./run-legacy-check.sh
+                          timeout_seconds: 60
+                          inputs:
+                            request: fixtures/legacy/request.json
+                          outputs:
+                            result: evidence/legacy/result.json
+                          evidence_map:
+                            runner_log: logs/legacy-runner.log
                     evidence_responsibility: [runner_result]
                     dependencies: []
                   - ru_id: RU-batch-job
@@ -561,10 +577,13 @@ class FrameworkVerificationIT {
                     provider_contracts:
                       adapters:
                         spring_boot_cli:
+                          provider_family: file_batch
+                          provider_type: shell
                           command: java -jar batch.jar
                       bindings:
                         db_seed:
-                          provider: file_fixture
+                          provider_family: file_batch
+                          provider_type: file_fixture
                           materialize_as: input_file
                     evidence_responsibility: [execution_log]
                     dependencies: []

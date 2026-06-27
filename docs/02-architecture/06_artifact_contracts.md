@@ -93,6 +93,8 @@ release_units:
     provider_contracts:
       adapters:
         spring_boot_cli:
+          provider_family: file_batch
+          provider_type: shell
           command: java -jar ${repo}/target/release-unit.jar --spring.profiles.active=regression
           working_directory: ${repo}
           timeout_seconds: 900
@@ -107,7 +109,8 @@ release_units:
             - 0
       bindings:
         db_seed:
-          provider: file_fixture
+          provider_family: file_batch
+          provider_type: file_fixture
           materialize_as: input_file
       fixtures: {}
       oracles: {}
@@ -123,7 +126,7 @@ release_units:
 
 The framework consumes this mapping. It must not decide RP membership.
 
-`provider_contracts` is the canonical contract container. Contracts may be supplied at reusable defaults, RP level, or RU level. Resolution order is: framework/provider default, then RP-level override, then RU-level override. The most specific declared contract wins, and unsupported or ambiguous overrides fail before execution. Dispatch uses DSL and mapping fields: `execution_target.adapter` and step `action` select adapter contracts; `package_inputs.inputs.<name>.bind_as` selects binding contracts; fixture actions select fixture contracts; `oracles.<name>.type` selects oracle contracts; assertion `type` selects assertion contracts; observation `type` selects observation contracts.
+`provider_contracts` is the canonical contract container. Executable provider contracts must declare `provider_family` and `provider_type` so the provider capability registry can validate required fields, runtime support status, allowed execution modes, and evidence outputs before execution. Contracts may be supplied at reusable defaults, RP level, or RU level. Resolution order is: framework/provider default, then RP-level override, then RU-level override. The most specific declared contract wins, and unsupported or ambiguous overrides fail before execution. Dispatch uses DSL and mapping fields: `execution_target.adapter` and step `action` select adapter contracts; `package_inputs.inputs.<name>.bind_as` selects binding contracts; fixture actions select fixture contracts; `oracles.<name>.type` selects oracle contracts; assertion `type` selects assertion contracts; observation `type` selects observation contracts.
 
 Allowed `execution_mode` values are `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only`.
 
@@ -662,10 +665,11 @@ DSL extension rules:
 
 - Keep DSL sections and required fields stable across Products, RPs, and RUs.
 - Provider interfaces must be stable and reusable across RPs by default.
-- RP-specific provider behavior belongs in validated provider contract configuration, not test case DSL and not one-off provider code.
+- RP-specific provider behavior belongs in validated provider contract configuration, not test case DSL, not one-off provider code, and not RP-specific custom scripts as the standard path.
 - Provider configuration is not part of the test case DSL. Test cases may reference provider capabilities only by logical type, action, binding, oracle, assertion, observation, or fixture names.
-- Prefer configuring an existing adapter/provider before adding provider code or a new DSL field.
-- Add provider code only when the required behavior cannot be expressed safely by an existing provider contract.
+- Prefer configuring an existing built-in provider before adding provider code or a new DSL field.
+- Add provider code only when the required behavior is reusable across RPs and cannot be expressed safely by an existing provider contract.
+- Use external runner contracts only as approved escape hatches with bounded execution and evidence mapping.
 - Provider contract configuration must be schema-validated before execution.
 - Add new `bind_as`, fixture action, oracle type, assertion type, observation type, or adapter action only for recurring cross-RP concepts.
 - Do not add package-specific commands, URLs, credentials, SQL bodies, queue implementation details, or shell scripts directly to test case DSL.
@@ -711,6 +715,8 @@ Each executable adapter or provider must expose a validated contract through `rp
 provider_contracts:
   adapters:
     spring_boot_cli:
+      provider_family: file_batch
+      provider_type: shell
       command: java -jar ${repo}/target/release-unit.jar --spring.profiles.active=regression
       working_directory: ${repo}
       timeout_seconds: 900
@@ -727,10 +733,13 @@ provider_contracts:
         - 0
   bindings:
     db_seed:
-      provider: file_fixture
+      provider_family: file_batch
+      provider_type: file_fixture
       materialize_as: input_file
   fixtures:
     relational_db:
+      provider_family: db_fixture
+      provider_type: jdbc
       connection_ref: secret://sit/order-db
       seed_actions:
         seed_orders:
@@ -750,6 +759,8 @@ provider_contracts:
 Adapter/provider runtime rules:
 
 - Contract resolution order is provider default, RP-level override, then RU-level override.
+- Executable contracts must declare `provider_family` and `provider_type`; heuristic family inference is diagnostic only and must not silently choose a runtime.
+- Provider capability registry status must be checked before dispatch. Unsupported, ambiguous, unsafe, or unapproved escape-hatch contracts fail before execution.
 - Dispatch uses DSL fields and mapping fields: adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type.
 - The framework supplies resolved input paths and run workspace paths.
 - Adapters and providers write actual outputs, observation results, and cleanup results under the run evidence directory.
@@ -757,6 +768,7 @@ Adapter/provider runtime rules:
 - Timeouts fail the test case and must trigger fixture cleanup.
 - Adapters must not perform deployment in M1.
 - Provider contracts must reference secrets, SQL, payloads, and environment resources by reference, not inline sensitive values or package-specific implementation bodies.
+- External runner contracts require approval metadata, reason, bounded timeout, declared inputs/outputs, and evidence artifact map before invocation.
 - Unsupported provider actions or contract fields must fail before execution with owner action.
 
 ## 6.10 Execution Evidence

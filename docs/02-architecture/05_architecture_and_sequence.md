@@ -15,7 +15,7 @@ In scope:
 - AC readiness classification and agent draft generation boundaries.
 - Durable test case and expected-result lifecycle.
 - Local fixture, CI ephemeral, SIT deployed, and evidence-only execution modes.
-- Heterogeneous RP pilot support through config-driven provider contracts, reusable provider families, and an external runner bridge.
+- Heterogeneous RP pilot support through a provider capability registry, config-driven provider contracts, reusable built-in provider families, and a governed external runner escape hatch.
 - Coverage, traceability, and release review evidence.
 
 Out of scope:
@@ -36,7 +36,7 @@ Out of scope:
 | Test lifecycle | Generate separately from execute | Approved tests are checked in and not regenerated on every run. |
 | Test case DSL | Minimal package-neutral DSL with explicit version | Different Products and RPs express regression tests through one artifact model without overfitting to one package type. |
 | Adapter model | Core framework plus package adapters | Execution process is generic; package behavior stays adapter-specific. |
-| Heterogeneous RP support | Config-driven provider contracts plus external runner bridge | Different RU languages, deployments, and messaging styles are bound by provider contracts instead of DSL or framework-core changes. |
+| Heterogeneous RP support | Provider capability registry plus config-driven built-in providers | Different RU languages, deployments, and messaging styles are bound by reusable provider contracts instead of DSL, framework-core changes, or RP-specific scripts. External runner is a governed escape hatch only. |
 | Implementation stack | Spring Boot 3.x on Java 17+ | Provides a modern Java runtime, dependency injection, validation, configuration binding, and CLI packaging path. |
 | Verification boundary | Separate framework verification from RP regression execution | Maven validates this framework; CLI `run` validates downstream Product/RP packages and writes RP release evidence. |
 
@@ -79,7 +79,7 @@ CLI Orchestrator
 | Discovery and Context | Discover Product/RP/RU artifacts, load AC inventory, RP/RU mapping, environment context, and readiness reports | AC-001, AC-002, AC-003, AC-004, AC-005 |
 | Planning and Binding | Expand parameters, resolve dependencies, bind package inputs, expected results, oracles, runtime references, and step placeholders into an execution plan | AC-005, AC-007 |
 | Fixture and State Manager | Check preconditions, set up fixtures, seed or publish data, enforce cleanup, and validate postconditions | AC-007 |
-| Execution Engine | Execute planned steps through package adapters, manage execution modes, step outputs, timeout, retry, and adapter result capture | AC-007 |
+| Execution Engine | Execute planned steps through provider registry dispatch, manage execution modes, step outputs, timeout, retry, and adapter/provider result capture | AC-007 |
 | Oracle and Assertion Engine | Resolve oracle truth sources and evaluate actual outputs through assertion decision rules | AC-007 |
 | Evidence and Reporting | Persist batch summaries, run evidence, observations, cleanup results, failures, traceability, coverage, and release-review reports | AC-007, AC-009 |
 
@@ -107,7 +107,7 @@ DSL and artifact flow through the 7 AP:
 | Oracle and Assertion Engine | Actual outputs, approved expected results, oracle references, assertion rules | Pass/fail decisions with expected value, actual value, comparison rule, and failure reason |
 | Evidence and Reporting | All AP outputs, traceability, waivers, coverage policy | Durable batch evidence, run evidence package, AC coverage report, release-review summary |
 
-This flow keeps the DSL stable. New RP/RU behavior should be added through validated mapping, provider contracts, adapters, and enum extensions only when the behavior is reusable across RPs.
+This flow keeps the DSL stable. New RP/RU behavior should be added through validated mapping and configurable built-in provider contracts first. New provider code is allowed only for reusable cross-RP behavior; DSL enum extensions require a versioned compatibility decision.
 
 The heterogeneous RP support model and current capability matrix are recorded in `docs/02-architecture/07_heterogeneous_rp_support_capability_matrix.md`.
 
@@ -138,6 +138,16 @@ For implementation clarity, each AP owns one primary question and one durable ha
 | Evidence and Reporting | Is there enough durable evidence to support coverage and release review without manually reconstructing the RP execution? | `batch_summary`, `evidence_package`, `coverage_report`, `failure_summary`, and `release_review_summary`. |
 
 Provider contracts are configuration artifacts consumed by APs; they are not DSL sections. A provider contract declares a named capability such as a binding resolver, fixture setup action, adapter command, oracle reader, assertion comparator, or observation collector. The DSL references those capabilities by logical name, and the AP validates that the referenced capability exists before execution.
+
+Provider capability registry rules:
+
+- The registry is the canonical source for supported `provider_family` and `provider_type` combinations.
+- Each registry entry declares required fields, supported actions, allowed execution modes, runtime support status, evidence outputs, and safety policy.
+- Supported runtime status values are `supported`, `partial`, `escape_hatch`, and `unsupported`.
+- RP/RU provider contracts must explicitly declare `provider_family` and `provider_type`. Heuristic family inference may be retained only for backward-compatible diagnostics and must not silently choose a runtime.
+- Contract resolution follows framework defaults, RP-level overrides, then RU-level overrides. Ambiguous multi-RU matches block dry-run and execution.
+- Execution dispatch must go through the registry. Adding a provider runtime should not require adding product-specific conditionals to the execution engine.
+- External runner entries are `escape_hatch` providers. They require explicit owner approval metadata, bounded timeout, declared inputs/outputs, and an evidence map.
 
 ## 5.4 Module Boundaries
 
@@ -199,11 +209,11 @@ Boundary rules:
 - `expectedresult` enforces source references and approval status.
 - `environment` blocks SIT runs unless deployment and readiness evidence exist.
 - `binding` resolves parameters, package inputs, oracles, runtime references, and step placeholders; it does not execute package behavior.
-- `provider` resolves provider contract precedence and dispatches provider contracts by adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type.
+- `provider` owns the capability registry, validates provider contract precedence, and dispatches provider contracts by adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type.
 - `fixture` owns setup, cleanup, precondition, and postcondition lifecycle coordination.
 - `execution` executes a prepared plan and records step results; it does not own schema validation, binding resolution, provider contract resolution, or fixture policy.
 - `oracle` loads truth sources and decision parameters; `assertion` applies comparison rules against actual outputs.
-- `adapter` is the only package-type-specific execution boundary.
+- `adapter` is the legacy shell/file execution boundary. New heterogeneous behavior should enter through provider registry entries before considering adapter-specific or external-runner behavior.
 - `evidence` and `report` write durable evidence under the RP release record.
 
 DSL-to-module responsibility:
@@ -223,7 +233,7 @@ If a DSL section cannot be assigned to one of these modules, it is not ready for
 
 ## 5.5 Extension Model for RP/RU Variants
 
-The framework must scale across different RP and RU test needs by keeping the DSL semantic core stable and moving package-specific behavior into configurable adapters and providers. A new RP type should normally configure an existing adapter/provider through RP/RU contracts, not change runner orchestration or provider code.
+The framework must scale across different RP and RU test needs by keeping the DSL semantic core stable and moving package-specific behavior into configurable built-in provider contracts. A new RP type should normally configure an existing built-in provider through RP/RU contracts, not change runner orchestration or provider code.
 
 ```text
 Stable DSL Core
@@ -294,8 +304,9 @@ The RP/RU mapping is the primary extension entrypoint. It declares adapter mode,
 
 Extension governance rules:
 
-- Prefer configuring an existing adapter/provider before adding provider code or a new DSL field.
-- Add provider code only when the required behavior cannot be expressed safely by an existing provider contract.
+- Prefer configuring an existing built-in provider before adding provider code or a new DSL field.
+- Add provider code only when the required behavior is reusable across RPs and cannot be expressed safely by an existing provider contract.
+- Use an external runner only as an approved escape hatch for legacy or specialized boundaries, not as the normal way to onboard each RP.
 - Validate provider contract schemas before execution, including required fields, secret references, cleanup strategy, and unsupported actions.
 - Add a new DSL enum only when a recurring cross-RP concept cannot be represented by existing `bind_as`, fixture action, oracle type, assertion type, observation type, or adapter action.
 - Add or change DSL required fields only through a `dsl_version` compatibility decision.
@@ -427,7 +438,7 @@ Minimum executable adapter fields:
 
 Minimum provider contract rules:
 
-- A provider contract must declare provider type and supported action names.
+- A provider contract must declare provider family, provider type, supported action names, runtime support status, and required evidence outputs.
 - A provider contract must reference inputs, queries, payloads, secrets, or environment resources by reference, not inline sensitive values.
 - Fixture providers that mutate state must declare cleanup strategy.
 - Oracle providers must declare oracle type, truth source, and comparison or decision rule.
@@ -507,6 +518,7 @@ docs/08-release/release-packages/<rp_id>/evidence/runs/<run_id>/
 | Always require SIT | Rejected | Some RPs can be validated with local or CI fixtures; SIT is required only when the boundary needs deployed behavior. |
 | Generate tests on every run | Rejected | Breaks reviewability and durable test case management. |
 | Framework decides RP membership | Rejected | RP/RU membership is owner-authored business/release scope. |
+| External runner as primary integration model | Rejected | Would push each RP to maintain its own test tools or scripts and weaken reusable provider governance. |
 
 The architecture should be revisited when multiple RP types require shared service workflows, concurrent teams need a central index, or evidence volume becomes too large for repo-based storage.
 
@@ -549,7 +561,7 @@ Implementation must start with F001/F002/F004 foundation tasks, then validate th
 Blocking for full F003-F008 implementation:
 
 - Pilot RP ID and target release.
-- Pilot RP provider family priority across REST/gRPC, Kafka/NATS, DB fixture, K8s and VM readiness, and external runner bridge.
+- Pilot RP provider family priority across REST/gRPC, Kafka/NATS, DB fixture, K8s and VM readiness, and any approved external runner escape hatch.
 - Owner-authored `rp_feature_spec.md`.
 - Owner-authored `acceptance_criteria.md`.
 - Owner-authored `rp_ru_mapping.yaml`.

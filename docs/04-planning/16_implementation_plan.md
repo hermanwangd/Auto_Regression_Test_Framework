@@ -11,7 +11,7 @@ This is an implementation plan, not the framework verification strategy itself. 
 - Product, RP, and RU responsibilities are accepted.
 - RP-level AC are the release coverage denominator.
 - ADR-005 is accepted: Framework Verification and RP Regression Execution are separate execution lines.
-- ADR-006 is accepted: heterogeneous RP support is handled through provider contracts and external runner bridge.
+- ADR-006 is accepted: heterogeneous RP support is handled through provider contracts, a provider capability registry, reusable built-in providers, and a governed external runner escape hatch.
 - Minimum RP artifacts are defined: `package.yaml`, `rp_feature_spec.md`, `rp_ru_mapping.yaml`, `acceptance_criteria.md`, `tests/`, `expected-results/`, `traceability.md`, and `evidence_index.md`.
 - Architecture design defines Spring Boot 3.x / Java 17+ AP-level components, extension points, provider families, internal package boundaries, CLI commands, storage paths, execution modes, failure handling, and AC coverage.
 
@@ -31,7 +31,7 @@ Ready after pilot RP artifacts exist:
 - F007 Release Package DSL Test Execution.
 - F008 Coverage and Evidence Package.
 
-Pilot RP owner must supply RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, expected-result approval owner, adapter mode, dependency graph, adapter/provider contracts, and any required binding, fixture, oracle, assertion, or observation provider capability.
+Pilot RP owner must supply RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, expected-result approval owner, adapter mode, dependency graph, adapter/provider contracts, any required binding, fixture, oracle, assertion, or observation provider capability, and any approved external runner escape-hatch need.
 
 ## Task Backlog
 
@@ -93,7 +93,7 @@ Related features: F002, F003, F004
 Acceptance: AC-002, AC-003, AC-004
 Modules: `schema`
 
-Implement typed parsers for `package.yaml`, `rp_ru_mapping.yaml`, AC entries, DSL test cases, expected results, provider contracts, and evidence records. Start with YAML/Markdown front matter or embedded YAML blocks supported by the artifact contracts. DSL parsing must validate `dsl_version`, required fields, conditionally required fields, and allowed enum values. Provider contract parsing must validate provider type, supported actions, required references, secret refs, cleanup strategy, and unsupported configuration.
+Implement typed parsers for `package.yaml`, `rp_ru_mapping.yaml`, AC entries, DSL test cases, expected results, provider contracts, and evidence records. Start with YAML/Markdown front matter or embedded YAML blocks supported by the artifact contracts. DSL parsing must validate `dsl_version`, required fields, conditionally required fields, and allowed enum values. Provider contract parsing must require explicit `provider_family` and `provider_type` for executable contracts and validate supported actions, required references, secret refs, cleanup strategy, evidence outputs, escape-hatch approval metadata when applicable, and unsupported configuration.
 
 Verification:
 
@@ -109,7 +109,7 @@ Related feature: F004
 Acceptance: AC-004
 Modules: `mapping`, `environment`
 
-Validate that each owner-authored RU entry declares repo, owner, unit type, version reference, validation boundary, execution mode, deployment requirement, environment reference, adapter or adapter mode, evidence responsibility, dependencies, and adapter/provider contracts when execution is required.
+Validate that each owner-authored RU entry declares repo, owner, unit type, version reference, validation boundary, execution mode, deployment requirement, environment reference, adapter or adapter mode, evidence responsibility, dependencies, and adapter/provider contracts when execution is required. Mapping validation must not infer provider ownership from file order when multiple RUs could match.
 
 Verification:
 
@@ -206,7 +206,7 @@ Related feature: F007
 Acceptance: AC-007, AC-008
 Modules: `provider`, `schema`
 
-Resolve validated provider contracts from provider defaults, RP-level overrides, and RU-level overrides. Dispatch adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type to the selected contract. Fail before execution when a contract is missing, ambiguous, unsupported, or unsafe. The resolver must record provider family metadata so dry-run and evidence can distinguish request/response, messaging, DB fixture, deployment readiness, external runner, and file/batch behavior.
+Introduce the provider capability registry and contract validator before adding more provider runtimes. The registry must define supported `provider_family` and `provider_type` combinations, required fields, supported actions, allowed execution modes, runtime support status, evidence outputs, and safety policy. Resolve validated provider contracts from provider defaults, RP-level overrides, and RU-level overrides. Dispatch adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type through the registry-selected runtime. Fail before execution when a contract is missing, ambiguous, unsupported, unsafe, or only available through an unapproved escape hatch.
 
 Verification:
 
@@ -214,7 +214,7 @@ Verification:
 regress run --root <product-repo> --rp-id <rp-id> --dry-run
 ```
 
-Done when provider contract resolution reports provider family, provider name, source level, action/type, affected RU, test case ID, AC ID, and owner action for unsupported or missing capabilities.
+Done when provider contract resolution reports provider family, provider type, provider name, runtime support status, source level, action/type, affected RU, test case ID, AC ID, contract path, and owner action for unsupported, missing, ambiguous, unsafe, or unapproved escape-hatch capabilities. Execution dispatch must no longer require adding a new product-specific conditional to `ExecutionEngine`.
 
 ### T011 - Fixture Lifecycle Manager
 
@@ -238,9 +238,9 @@ Related feature: F007
 Acceptance: AC-007, AC-008
 Modules: `execution`, `adapter`, `provider`
 
-Implement execution of a prepared plan through validated adapter/provider contract configuration. The core executor and test case DSL stay package-type-neutral; providers own package-specific calls, messages, fixture operations, readiness probes, external runner invocation, and actual-result capture through reusable, configurable contracts.
+Implement execution of a prepared plan through validated adapter/provider contract configuration. The core executor and test case DSL stay package-type-neutral; providers own package-specific calls, messages, fixture operations, readiness probes, and actual-result capture through reusable, configurable contracts. External runner invocation is implemented only after a selected, approved escape-hatch need exists.
 
-The pilot provider set is selected from `docs/02-architecture/07_heterogeneous_rp_support_capability_matrix.md` and should include only the REST/gRPC, Kafka/NATS, DB fixture, K8s and VM readiness, shell/file, and external runner capabilities required by the selected heterogeneous RP.
+The pilot provider set is selected from `docs/02-architecture/07_heterogeneous_rp_support_capability_matrix.md` and should include only the reusable REST/gRPC, Kafka/NATS, DB fixture, K8s and VM readiness, and shell/file capabilities required by the selected heterogeneous RP. External runner is selected only when explicitly approved as an escape hatch.
 
 Verification:
 
@@ -352,7 +352,7 @@ Related features: F001-F008
 Acceptance: AC-010 plus AC-001 through AC-009 as exercised through sample fixtures
 Modules: Maven build, integration tests, sample Product Repo fixture, provider-family fixtures
 
-Add the framework integration verification layer. Configure Maven Failsafe to run `*IT.java` tests during `./mvnw verify`. The integration tests shall use a sample Product Repo fixture, local/mock adapters, local/mock provider-family fixtures, and deterministic data. They shall exercise representative check, dry-run/run, report, provider-family dry-run, unsupported-provider blocking, and provider evidence normalization flows without requiring SIT/UAT deployment.
+Add the framework integration verification layer. Configure Maven Failsafe to run `*IT.java` tests during `./mvnw verify`. The integration tests shall use a sample Product Repo fixture, local/mock adapters, local/mock provider-family fixtures, and deterministic data. They shall exercise representative check, dry-run/run, report, provider capability registry validation, provider-family dry-run, unsupported-provider blocking, unapproved escape-hatch blocking, and provider evidence normalization flows without requiring SIT/UAT deployment.
 
 Verification:
 
@@ -361,7 +361,7 @@ Verification:
 ./mvnw verify
 ```
 
-Done when `./mvnw test` remains the fast unit/component framework suite, `./mvnw verify` runs the sample Product Repo integration suite plus provider-family contract verification, and fixture or mock provider evidence is not presented as downstream Product/RP release evidence.
+Done when `./mvnw test` remains the fast unit/component framework suite, `./mvnw verify` runs the sample Product Repo integration suite plus provider capability registry and provider-family contract verification, and fixture or mock provider evidence is not presented as downstream Product/RP release evidence.
 
 ### T017 - Pilot RP Validation Harness
 

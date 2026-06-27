@@ -1,6 +1,5 @@
 package com.specdriven.regression.execution;
 
-import com.specdriven.regression.adapter.AdapterExecutionRequest;
 import com.specdriven.regression.adapter.AdapterExecutionResult;
 import com.specdriven.regression.adapter.DataPipelineAdapter;
 import com.specdriven.regression.assertion.AssertionEngine;
@@ -30,15 +29,12 @@ import org.yaml.snakeyaml.Yaml;
 @Service
 public class ExecutionEngine {
 
-    private final DataPipelineAdapter adapter;
     private final AssertionEngine assertionEngine;
     private final EvidenceWriter evidenceWriter;
     private final BindingResolver bindingResolver;
     private final ProviderContractResolver providerContractResolver;
-    private final RequestResponseProvider requestResponseProvider;
     private final DatabaseFixtureProvider databaseFixtureProvider;
-    private final MessagingProvider messagingProvider;
-    private final DeploymentReadinessProvider deploymentReadinessProvider;
+    private final ProviderRuntimeRegistry providerRuntimeRegistry;
 
     public ExecutionEngine() {
         this(new DataPipelineAdapter(), new AssertionEngine(), new EvidenceWriter());
@@ -116,15 +112,34 @@ public class ExecutionEngine {
             DatabaseFixtureProvider databaseFixtureProvider,
             MessagingProvider messagingProvider,
             DeploymentReadinessProvider deploymentReadinessProvider) {
-        this.adapter = adapter;
+        this(
+                adapter,
+                assertionEngine,
+                evidenceWriter,
+                bindingResolver,
+                providerContractResolver,
+                databaseFixtureProvider,
+                new ProviderRuntimeRegistry(
+                        adapter,
+                        requestResponseProvider,
+                        messagingProvider,
+                        deploymentReadinessProvider));
+    }
+
+    public ExecutionEngine(
+            DataPipelineAdapter adapter,
+            AssertionEngine assertionEngine,
+            EvidenceWriter evidenceWriter,
+            BindingResolver bindingResolver,
+            ProviderContractResolver providerContractResolver,
+            DatabaseFixtureProvider databaseFixtureProvider,
+            ProviderRuntimeRegistry providerRuntimeRegistry) {
         this.assertionEngine = assertionEngine;
         this.evidenceWriter = evidenceWriter;
         this.bindingResolver = bindingResolver;
         this.providerContractResolver = providerContractResolver;
-        this.requestResponseProvider = requestResponseProvider;
         this.databaseFixtureProvider = databaseFixtureProvider;
-        this.messagingProvider = messagingProvider;
-        this.deploymentReadinessProvider = deploymentReadinessProvider;
+        this.providerRuntimeRegistry = providerRuntimeRegistry;
     }
 
     public ExecutionResult execute(Path packageRoot, Path testCasePath, String batchId, String runId) {
@@ -140,6 +155,7 @@ public class ExecutionEngine {
                 adapterName,
                 bindingReport.resolvedBindings().stream().map(ResolvedBinding::bindingType).toList(),
                 fixtureProviders(testCase));
+        ResolvedProviderContract adapterProviderContract = adapterProviderContract(providerReport);
         Map<String, Object> contract = adapterContract(mappingYaml, adapterName, targetRuId);
         Map<String, Map<String, Object>> dbFixtureContracts = dbFixtureContracts(mappingYaml, providerReport);
         Path runDir = packageRoot.resolve("evidence/runs").resolve(runId);
@@ -154,7 +170,7 @@ public class ExecutionEngine {
         try {
             databaseFixtureProvider.setup(packageRoot, testCase, dbFixtureContracts, runDir);
             adapterResult = executeProvider(
-                    providerReport,
+                    adapterProviderContract,
                     packageRoot,
                     contract,
                     testCase,
@@ -202,7 +218,7 @@ public class ExecutionEngine {
     }
 
     private AdapterExecutionResult executeProvider(
-            ProviderContractResolutionReport providerReport,
+            ResolvedProviderContract providerContract,
             Path packageRoot,
             Map<String, Object> contract,
             Map<String, Object> testCase,
@@ -212,58 +228,28 @@ public class ExecutionEngine {
             Path stdoutLog,
             Path stderrLog,
             Path actualOutput) {
-        String providerFamily = adapterProviderFamily(providerReport);
-        if ("request_response".equals(providerFamily)) {
-            return requestResponseProvider.execute(
-                    packageRoot,
-                    contract,
-                    testCase,
-                    resolvedBindings,
-                    runDir,
-                    stdoutLog,
-                    stderrLog,
-                    actualOutput);
-        }
-        if ("messaging".equals(providerFamily)) {
-            return messagingProvider.execute(
-                    adapterName(testCase),
-                    packageRoot,
-                    contract,
-                    testCase,
-                    resolvedBindings,
-                    runDir,
-                    stdoutLog,
-                    stderrLog,
-                    actualOutput);
-        }
-        if ("deployment_readiness".equals(providerFamily)) {
-            return deploymentReadinessProvider.execute(
-                    adapterName(testCase),
-                    packageRoot,
-                    contract,
-                    runDir,
-                    stdoutLog,
-                    stderrLog,
-                    actualOutput);
-        }
-        return adapter.execute(new AdapterExecutionRequest(
-                stringValue(contract.get("command")),
+        ProviderRuntime runtime = providerRuntimeRegistry.runtimeFor(providerContract);
+        return runtime.execute(new ProviderRuntimeRequest(
+                providerContract,
+                packageRoot,
+                contract,
+                testCase,
+                resolvedBindings,
                 workingDirectory,
-                intValue(contract.get("timeout_seconds"), 300),
-                successExitCodes(contract.get("success_exit_codes")),
                 runDir,
                 stdoutLog,
                 stderrLog,
-                actualOutput));
+                actualOutput,
+                successExitCodes(contract.get("success_exit_codes"))));
     }
 
-    private String adapterProviderFamily(ProviderContractResolutionReport providerReport) {
+    private ResolvedProviderContract adapterProviderContract(ProviderContractResolutionReport providerReport) {
         for (ResolvedProviderContract contract : providerReport.resolvedContracts()) {
             if ("adapter".equals(contract.contractType())) {
-                return contract.providerFamily();
+                return contract;
             }
         }
-        return "";
+        throw new IllegalStateException("No resolved adapter provider contract available.");
     }
 
     @SuppressWarnings("unchecked")
