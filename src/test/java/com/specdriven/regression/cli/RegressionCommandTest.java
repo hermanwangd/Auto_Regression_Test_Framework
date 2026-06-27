@@ -728,7 +728,9 @@ class RegressionCommandTest {
                 .contains("provider_family: messaging")
                 .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus")
                 .contains("actual_output: actual/message.json")
-                .contains("assertion_status: passed");
+                .contains("assertion_status: passed")
+                .contains("provider_evidence:")
+                .contains("messaging: messaging.yaml");
     }
 
     @Test

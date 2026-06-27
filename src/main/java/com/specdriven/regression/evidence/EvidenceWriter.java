@@ -94,6 +94,8 @@ public class EvidenceWriter {
                     %s
                     provider_contracts_used:
                     %s
+                    provider_evidence:
+                    %s
                     exit_code: %s
                     timeout: %s
                     stdout: %s
@@ -115,6 +117,7 @@ public class EvidenceWriter {
                     resolvedDependenciesYaml(resolvedDependencies),
                     resolvedBindingsYaml(resolvedBindings),
                     providerContractsYaml(providerContracts),
+                    providerEvidenceYaml(runDir),
                     adapterResult.exitCode(),
                     adapterResult.timeout(),
                     runDir.relativize(adapterResult.stdoutLog()),
@@ -169,6 +172,26 @@ public class EvidenceWriter {
             builder.append("    capability: ").append(contract.capability()).append("\n");
             builder.append("    contract_path: ").append(contract.contractPath()).append("\n");
             builder.append("    source_level: ").append(contract.sourceLevel()).append("\n");
+        }
+        return builder.toString().stripTrailing();
+    }
+
+    private String providerEvidenceYaml(Path runDir) {
+        List<ProviderEvidenceRef> refs = List.of(
+                new ProviderEvidenceRef("messaging", "messaging.yaml"),
+                new ProviderEvidenceRef("deployment_readiness", "readiness.yaml"),
+                new ProviderEvidenceRef("fixture_setup", "fixture_setup.yaml"),
+                new ProviderEvidenceRef("cleanup", "cleanup.yaml"));
+        StringBuilder builder = new StringBuilder();
+        for (ProviderEvidenceRef ref : refs) {
+            Path evidencePath = runDir.resolve(ref.path());
+            if (Files.isRegularFile(evidencePath)) {
+                builder.append("  ").append(ref.name()).append(": ")
+                        .append(runDir.relativize(evidencePath)).append("\n");
+            }
+        }
+        if (builder.isEmpty()) {
+            return "  []";
         }
         return builder.toString().stripTrailing();
     }
@@ -365,5 +388,8 @@ public class EvidenceWriter {
 
     private String stringValue(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private record ProviderEvidenceRef(String name, String path) {
     }
 }
