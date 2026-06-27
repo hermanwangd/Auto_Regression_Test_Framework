@@ -138,6 +138,8 @@ Current provider contract minimums enforced by the framework verification build:
 | `messaging/kafka` or `messaging/nats` | `bootstrap_servers_ref`, `server_ref`, or `connection_ref`; `topic_ref` or `subject_ref`; positive `timeout_seconds`; `outputs.actual_output_ref`; supported action; payload binding when publishing; `cleanup_strategy: drain` and positive `max_count` when cleaning; correlation id when required |
 | `db_fixture/jdbc` | `connection_ref`, `isolation_key`, `cleanup_strategy`, setup/cleanup SQL by `sql_ref`, verification SQL by `sql_ref` |
 | `deployment_readiness/local` or `deployment_readiness/mock` | `readiness_probe`, deployment/service/target ref, `deployed_version_ref`, positive `timeout_seconds`, `outputs.actual_output_ref` |
+| `deployment_readiness/k8s` | `readiness_probe`, `kube_context_ref` or `connection_ref`, `namespace_ref`, deployment/service/selector ref for readiness, `target_selector` or `pod_ref` plus positive `log_tail_lines` for `pod_logs`, `deployed_version_ref`, positive `timeout_seconds`, `outputs.actual_output_ref` |
+| `deployment_readiness/vm` | `readiness_probe`, `host_ref` and positive `port` for TCP, or `health_url_ref`/`endpoint_ref` for HTTP, `deployed_version_ref`, positive `timeout_seconds`, `outputs.actual_output_ref` |
 | `external_runner/command_runner` | approval metadata, reason, command/container ref, inputs, outputs, positive timeout, evidence map, safe evidence paths |
 
 Examples in this document must use those fields when they describe current runtime-supported provider contracts. Native gRPC, Kafka, NATS, bounded K8s readiness, and bounded VM readiness examples are runtime-supported only within the verification boundaries stated in the architecture and validation plan.

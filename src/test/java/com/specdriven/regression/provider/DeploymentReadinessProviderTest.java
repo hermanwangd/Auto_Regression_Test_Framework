@@ -55,6 +55,43 @@ class DeploymentReadinessProviderTest {
     }
 
     @Test
+    void runsNativeK8sPodLogProbeAndWritesEvidence() throws Exception {
+        RecordingDeploymentReadinessProbe probe = new RecordingDeploymentReadinessProbe(
+                new DeploymentReadinessProbeResult(
+                        "captured pod logs\n",
+                        "payment-api started\nhealth ready\n",
+                        1));
+
+        AdapterExecutionResult result = executeProvider(
+                new DeploymentReadinessProvider(probe),
+                "payment_k8s",
+                Map.of(
+                        "provider_type", "k8s",
+                        "readiness_probe", "pod_logs",
+                        "kube_context_ref", "env://KUBE_CONTEXT",
+                        "namespace_ref", "payment",
+                        "target_selector", "app=payment-api",
+                        "log_tail_lines", 50,
+                        "deployed_version_ref", "build-42",
+                        "timeout_seconds", 30));
+
+        Path runDir = tempDir.resolve("run");
+        assertThat(result.exitCode()).isZero();
+        assertThat(probe.request.readinessProbe()).isEqualTo("pod_logs");
+        assertThat(probe.request.targetSelector()).isEqualTo("app=payment-api");
+        assertThat(Files.readString(result.stdoutLog())).isEqualTo("captured pod logs\n");
+        assertThat(Files.readString(result.actualOutput())).isEqualTo("payment-api started\nhealth ready\n");
+        assertThat(Files.readString(runDir.resolve("readiness.yaml")))
+                .contains("status: passed")
+                .contains("provider_type: k8s")
+                .contains("readiness_probe: pod_logs")
+                .contains("target_selector: app=payment-api")
+                .contains("log_tail_lines: 50")
+                .contains("deployed_version_ref: build-42")
+                .contains("check_count: 1");
+    }
+
+    @Test
     void runsNativeVmTcpReadinessProbeAndWritesEvidence() throws Exception {
         RecordingDeploymentReadinessProbe probe = new RecordingDeploymentReadinessProbe();
 
@@ -137,6 +174,44 @@ class DeploymentReadinessProviderTest {
 
         assertThat(result.exitCode()).isZero();
         assertThat(Files.readString(result.stdoutLog())).isEqualTo("pod ready\n");
+    }
+
+    @Test
+    void defaultProbeRunsBoundedKubectlPodLogsAndCapturesOutput() throws Exception {
+        Path argsFile = tempDir.resolve("kubectl-pod-logs.args");
+        Path kubectl = executable("kubectl-pod-logs.sh", """
+                #!/bin/sh
+                printf '%%s\\n' "$@" > "%s"
+                echo "payment-api started"
+                echo "health ready"
+                exit 0
+                """.formatted(argsFile));
+
+        AdapterExecutionResult result = executeProvider(
+                new DeploymentReadinessProvider(),
+                "payment_k8s",
+                Map.of(
+                        "provider_type", "k8s",
+                        "readiness_probe", "pod_logs",
+                        "kubectl_ref", kubectl.toString(),
+                        "kube_context_ref", "kind-ci",
+                        "namespace_ref", "payment",
+                        "target_selector", "app=payment-api",
+                        "log_tail_lines", 50,
+                        "deployed_version_ref", "build-42",
+                        "timeout_seconds", 2));
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(Files.readString(argsFile))
+                .contains("--context\nkind-ci")
+                .contains("-n\npayment")
+                .contains("logs")
+                .contains("-l\napp=payment-api")
+                .contains("--tail=50");
+        assertThat(Files.readString(result.stdoutLog()))
+                .isEqualTo("payment-api started\nhealth ready\n");
+        assertThat(Files.readString(result.actualOutput()))
+                .isEqualTo("payment-api started\nhealth ready\n");
     }
 
     @Test
@@ -256,12 +331,21 @@ class DeploymentReadinessProviderTest {
 
     private static class RecordingDeploymentReadinessProbe implements DeploymentReadinessProbe {
 
+        private final DeploymentReadinessProbeResult result;
         private DeploymentReadinessProbeRequest request;
+
+        RecordingDeploymentReadinessProbe() {
+            this(new DeploymentReadinessProbeResult("native readiness passed\n", "ready\n", 1));
+        }
+
+        RecordingDeploymentReadinessProbe(DeploymentReadinessProbeResult result) {
+            this.result = result;
+        }
 
         @Override
         public DeploymentReadinessProbeResult check(DeploymentReadinessProbeRequest request) {
             this.request = request;
-            return new DeploymentReadinessProbeResult("native readiness passed\n", "ready\n", 1);
+            return result;
         }
     }
 }

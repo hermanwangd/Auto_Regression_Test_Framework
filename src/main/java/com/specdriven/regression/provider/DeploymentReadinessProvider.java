@@ -144,9 +144,11 @@ public class DeploymentReadinessProvider {
         appendIfPresent(builder, "readiness_probe", stringValue(contract.get("readiness_probe")));
         appendIfPresent(builder, "kube_context_ref", stringValue(contract.get("kube_context_ref")));
         appendIfPresent(builder, "namespace_ref", stringValue(contract.get("namespace_ref")));
+        appendIfPresent(builder, "pod_ref", stringValue(contract.get("pod_ref")));
         appendIfPresent(builder, "target_selector", stringValue(contract.get("target_selector")));
         appendIfPresent(builder, "deployment_ref", stringValue(contract.get("deployment_ref")));
         appendIfPresent(builder, "service_ref", stringValue(contract.get("service_ref")));
+        appendIfPresent(builder, "log_tail_lines", stringValue(contract.get("log_tail_lines")));
         appendIfPresent(builder, "host_ref", stringValue(contract.get("host_ref")));
         appendIfPresent(builder, "port", stringValue(contract.get("port")));
         appendIfPresent(builder, "health_url_ref", stringValue(contract.get("health_url_ref")));

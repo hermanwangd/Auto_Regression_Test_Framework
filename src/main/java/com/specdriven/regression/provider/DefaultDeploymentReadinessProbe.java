@@ -53,6 +53,12 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
             throw new IOException("K8s readiness probe failed for `" + request.deploymentRef()
                     + "`: " + stderr.strip());
         }
+        if ("pod_logs".equals(request.readinessProbe())) {
+            return new DeploymentReadinessProbeResult(
+                    stdout,
+                    stdout,
+                    1);
+        }
         return new DeploymentReadinessProbeResult(
                 stdout.isBlank() ? "k8s readiness passed for " + request.deploymentRef() + "\n" : stdout,
                 "ready\n",
@@ -75,6 +81,20 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
             command.add("-n");
             command.add(resolveRef(request.namespaceRef()));
         }
+        if ("pod_logs".equals(request.readinessProbe())) {
+            command.add("logs");
+            String podRef = firstText(request.contract(), "pod_ref");
+            if (!podRef.isBlank()) {
+                command.add(resolveRef(podRef));
+            } else if (!request.targetSelector().isBlank()) {
+                command.add("-l");
+                command.add(request.targetSelector());
+            } else {
+                throw new IOException("K8s pod_logs readiness probe requires pod_ref or target_selector.");
+            }
+            command.add("--tail=" + logTailLines(request));
+            return command;
+        }
         if ("pod_ready".equals(request.readinessProbe())) {
             command.add("wait");
             command.add("--for=condition=Ready");
@@ -89,6 +109,22 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
         command.add(request.deploymentRef());
         command.add("--timeout=" + Math.max(1, request.timeoutSeconds()) + "s");
         return command;
+    }
+
+    private int logTailLines(DeploymentReadinessProbeRequest request) throws IOException {
+        String value = firstText(request.contract(), "log_tail_lines");
+        if (value.isBlank()) {
+            throw new IOException("K8s pod_logs readiness probe requires positive log_tail_lines.");
+        }
+        try {
+            int tailLines = Integer.parseInt(value);
+            if (tailLines > 0) {
+                return tailLines;
+            }
+        } catch (NumberFormatException e) {
+            throw new IOException("K8s pod_logs log_tail_lines must be a positive integer.", e);
+        }
+        throw new IOException("K8s pod_logs log_tail_lines must be a positive integer.");
     }
 
     private DeploymentReadinessProbeResult checkVm(DeploymentReadinessProbeRequest request)

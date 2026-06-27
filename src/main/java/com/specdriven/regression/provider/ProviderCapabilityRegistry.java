@@ -241,6 +241,20 @@ class ProviderCapabilityRegistry {
             violations.add(required(".namespace_ref",
                     "Declare namespace_ref for native K8s readiness provider `" + providerName + "`."));
         }
+        String readinessProbe = stringValue(contract.get("readiness_probe"));
+        if ("pod_logs".equals(readinessProbe)) {
+            if (!hasAnyText(contract, "target_selector", "pod_ref")) {
+                violations.add(required(".target_selector",
+                        "Declare target_selector or pod_ref for native K8s pod log readiness provider `"
+                                + providerName + "`."));
+            }
+            if (!isPositiveInteger(contract.get("log_tail_lines"))) {
+                violations.add(required(".log_tail_lines",
+                        "Declare log_tail_lines as a positive bounded integer for native K8s pod log readiness "
+                                + "provider `" + providerName + "`."));
+            }
+            return;
+        }
         if (!hasAnyText(contract, "deployment_ref", "service_ref", "target_selector")) {
             violations.add(required(".deployment_ref",
                     "Declare deployment_ref, service_ref, or target_selector for native K8s readiness provider `"
