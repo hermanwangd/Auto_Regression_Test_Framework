@@ -64,7 +64,7 @@ class ProviderCapabilityRegistry {
     private boolean isSupportedProvider(String section, String family, String type) {
         return switch (family) {
             case "file_batch" -> type.equals("shell") || type.equals("file_fixture");
-            case "request_response" -> type.equals("rest") || type.equals("request_body");
+            case "request_response" -> type.equals("rest") || type.equals("grpc") || type.equals("request_body");
             case "messaging" -> type.equals("local")
                     || type.equals("mock")
                     || type.equals("event_payload")
@@ -120,9 +120,9 @@ class ProviderCapabilityRegistry {
                         "Declare actual_output_ref for executable adapter `" + providerName + "`."));
             }
         }
-        if (family.equals("request_response") && type.equals("rest")) {
+        if (family.equals("request_response") && List.of("rest", "grpc").contains(type)) {
             if (!hasAnyText(contract, "endpoint_ref", "base_url_ref", "service_ref")) {
-                violations.add(required(".endpoint_ref",
+                violations.add(required(type.equals("grpc") ? ".service_ref" : ".endpoint_ref",
                         "Declare endpoint_ref, base_url_ref, or service_ref for `" + providerName + "`."));
             }
             if (!hasAnyText(contract, "timeout_seconds")) {
@@ -142,6 +142,9 @@ class ProviderCapabilityRegistry {
                 violations.add(required(".actions",
                         "Declare at least one request/response action for `" + providerName + "`."));
             }
+            if (type.equals("grpc")) {
+                validateGrpcRequestResponseAdapter(providerName, contract, violations);
+            }
         }
         if (family.equals("messaging") && List.of("local", "mock", "kafka", "nats").contains(type)) {
             validateMessagingAdapter(type, providerName, contract, violations);
@@ -151,6 +154,42 @@ class ProviderCapabilityRegistry {
         }
         if (family.equals("external_runner")) {
             validateExternalRunner(providerName, contract, violations);
+        }
+    }
+
+    private void validateGrpcRequestResponseAdapter(
+            String providerName,
+            Map<String, Object> contract,
+            List<ProviderContractViolation> violations) {
+        String descriptorRef = stringValue(contract.get("descriptor_ref"));
+        if (descriptorRef.isBlank()) {
+            violations.add(required(".descriptor_ref",
+                    "Declare descriptor_ref for native gRPC request/response provider `" + providerName + "`."));
+        } else if (isUnsafeRelativeProviderPath(descriptorRef)) {
+            violations.add(required(".descriptor_ref",
+                    "Keep native gRPC descriptor_ref `" + descriptorRef
+                            + "` under the RP package before execution."));
+        }
+        if (!(contract.get("actions") instanceof Map<?, ?> actions) || actions.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<?, ?> entry : actions.entrySet()) {
+            String actionName = stringValue(entry.getKey());
+            if (!(entry.getValue() instanceof Map<?, ?> action)) {
+                continue;
+            }
+            if (firstText(action, "service", "service_ref").isBlank()) {
+                violations.add(required(".actions." + actionName + ".service",
+                        "Declare gRPC service for request/response action `" + actionName + "`."));
+            }
+            if (stringValue(action.get("method")).isBlank()) {
+                violations.add(required(".actions." + actionName + ".method",
+                        "Declare gRPC method for request/response action `" + actionName + "`."));
+            }
+            if (stringValue(action.get("request_binding")).isBlank()) {
+                violations.add(required(".actions." + actionName + ".request_binding",
+                        "Declare request_binding for request/response action `" + actionName + "`."));
+            }
         }
     }
 

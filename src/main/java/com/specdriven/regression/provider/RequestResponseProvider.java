@@ -20,13 +20,19 @@ import org.springframework.stereotype.Component;
 public class RequestResponseProvider {
 
     private final HttpClient httpClient;
+    private final GrpcClientInvoker grpcClientInvoker;
 
     public RequestResponseProvider() {
-        this(HttpClient.newHttpClient());
+        this(HttpClient.newHttpClient(), new DefaultGrpcClientInvoker());
     }
 
     public RequestResponseProvider(HttpClient httpClient) {
+        this(httpClient, new DefaultGrpcClientInvoker());
+    }
+
+    RequestResponseProvider(HttpClient httpClient, GrpcClientInvoker grpcClientInvoker) {
         this.httpClient = httpClient;
+        this.grpcClientInvoker = grpcClientInvoker;
     }
 
     public AdapterExecutionResult execute(
@@ -44,6 +50,17 @@ public class RequestResponseProvider {
             Files.createDirectories(actualOutput.getParent());
 
             Map<?, ?> action = selectedAction(contract, testCase);
+            if ("grpc".equalsIgnoreCase(stringValue(contract.get("provider_type")))) {
+                return executeGrpc(
+                        packageRoot,
+                        contract,
+                        action,
+                        resolvedBindings,
+                        runDir,
+                        stdoutLog,
+                        stderrLog,
+                        actualOutput);
+            }
             String bindingName = stringValue(action.get("request_binding"));
             String payload = requestPayload(packageRoot, resolvedBindings, bindingName);
             HttpResponse<String> response = httpClient.send(
@@ -68,6 +85,42 @@ public class RequestResponseProvider {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Request/response provider interrupted.", e);
+        }
+    }
+
+    private AdapterExecutionResult executeGrpc(
+            Path packageRoot,
+            Map<String, Object> contract,
+            Map<?, ?> action,
+            List<ResolvedBinding> resolvedBindings,
+            Path runDir,
+            Path stdoutLog,
+            Path stderrLog,
+            Path actualOutput) throws InterruptedException {
+        String bindingName = stringValue(action.get("request_binding"));
+        try {
+            GrpcClientResult response = grpcClientInvoker.invoke(new GrpcClientRequest(
+                    firstText(contract, "endpoint_ref", "base_url_ref", "service_ref"),
+                    packageRoot.resolve(stringValue(contract.get("descriptor_ref"))).normalize(),
+                    firstText(action, "service", "service_ref"),
+                    stringValue(action.get("method")),
+                    requestPayload(packageRoot, resolvedBindings, bindingName),
+                    intValue(contract.get("timeout_seconds"), 300),
+                    booleanValue(contract.get("plaintext"), true),
+                    firstText(contract, "authority_ref", "authority")));
+            Files.writeString(stdoutLog, response.responseBody());
+            Files.writeString(stderrLog, "");
+            Files.writeString(actualOutput, response.responseBody());
+            writeRequestResponseEvidence(runDir, contract, action, "passed", false, "", actualOutput);
+            return new AdapterExecutionResult(0, false, stdoutLog, stderrLog, actualOutput);
+        } catch (GrpcClientException e) {
+            writeFailure(stdoutLog, stderrLog, actualOutput, e);
+            writeRequestResponseEvidence(runDir, contract, action, "failed", e.timeout(), e.getMessage(), actualOutput);
+            return new AdapterExecutionResult(e.timeout() ? -1 : 1, e.timeout(), stdoutLog, stderrLog, actualOutput);
+        } catch (IOException e) {
+            writeFailure(stdoutLog, stderrLog, actualOutput, e);
+            writeRequestResponseEvidence(runDir, contract, action, "failed", false, e.getMessage(), actualOutput);
+            return new AdapterExecutionResult(1, false, stdoutLog, stderrLog, actualOutput);
         }
     }
 
@@ -139,7 +192,39 @@ public class RequestResponseProvider {
         }
     }
 
-    private String firstText(Map<String, Object> map, String... fields) {
+    private void writeRequestResponseEvidence(
+            Path runDir,
+            Map<String, Object> contract,
+            Map<?, ?> action,
+            String status,
+            boolean timeout,
+            String error,
+            Path actualOutput) {
+        try {
+            Files.createDirectories(runDir);
+            StringBuilder builder = new StringBuilder();
+            builder.append("provider_family: request_response\n");
+            builder.append("provider_type: ").append(stringValue(contract.get("provider_type"))).append("\n");
+            builder.append("status: ").append(status).append("\n");
+            builder.append("timeout: ").append(timeout).append("\n");
+            builder.append("endpoint_ref: ")
+                    .append(firstText(contract, "endpoint_ref", "base_url_ref", "service_ref"))
+                    .append("\n");
+            builder.append("descriptor_ref: ").append(stringValue(contract.get("descriptor_ref"))).append("\n");
+            builder.append("service: ").append(firstText(action, "service", "service_ref")).append("\n");
+            builder.append("method: ").append(stringValue(action.get("method"))).append("\n");
+            builder.append("request_binding: ").append(stringValue(action.get("request_binding"))).append("\n");
+            builder.append("actual_output: ").append(runDir.relativize(actualOutput)).append("\n");
+            if (error != null && !error.isBlank()) {
+                builder.append("error: ").append(error.replace('\n', ' ').replace('\r', ' ')).append("\n");
+            }
+            Files.writeString(runDir.resolve("request_response.yaml"), builder.toString());
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write request/response provider evidence.", e);
+        }
+    }
+
+    private String firstText(Map<?, ?> map, String... fields) {
         for (String field : fields) {
             String value = stringValue(map.get(field));
             if (!value.isBlank()) {
@@ -157,6 +242,17 @@ public class RequestResponseProvider {
             return Integer.parseInt(text);
         }
         return fallback;
+    }
+
+    private boolean booleanValue(Object value, boolean fallback) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        String text = stringValue(value);
+        if (text.isBlank()) {
+            return fallback;
+        }
+        return Boolean.parseBoolean(text);
     }
 
     private String stringValue(Object value) {

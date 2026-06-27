@@ -19,9 +19,9 @@ import java.net.http.HttpTimeoutException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Optional;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import javax.net.ssl.SSLContext;
@@ -181,6 +181,95 @@ class RequestResponseProviderTest {
         }
     }
 
+    @Test
+    void invokesGrpcUnaryActionThroughNativeInvokerAndWritesEvidence() throws Exception {
+        writePayload("fixtures/payment.json", "{\"paymentId\":\"P-003\"}");
+        CapturingGrpcClientInvoker invoker = new CapturingGrpcClientInvoker(
+                new GrpcClientResult("{\"status\":\"approved\"}"));
+        RequestResponseProvider provider = new RequestResponseProvider(HttpClient.newHttpClient(), invoker);
+        Path runDir = tempDir.resolve("run-grpc");
+
+        AdapterExecutionResult result = provider.execute(
+                tempDir,
+                Map.of(
+                        "provider_type", "grpc",
+                        "service_ref", "127.0.0.1:9090",
+                        "descriptor_ref", "descriptors/payment.desc",
+                        "timeout_seconds", 5,
+                        "outputs", Map.of("actual_output_ref", "actual/grpc-response.json"),
+                        "actions", Map.of(
+                                "submit_payment", Map.of(
+                                        "service", "payment.PaymentService",
+                                        "method", "SubmitPayment",
+                                        "request_binding", "payment_payload"))),
+                Map.of("steps", List.of(Map.of("action", "submit_payment"))),
+                List.of(new ResolvedBinding("payment_payload", "api_payload", "fixtures/payment.json")),
+                runDir,
+                runDir.resolve("logs/stdout.log"),
+                runDir.resolve("logs/stderr.log"),
+                runDir.resolve("actual/grpc-response.json"));
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.timeout()).isFalse();
+        assertThat(invoker.request().endpoint()).isEqualTo("127.0.0.1:9090");
+        assertThat(invoker.request().descriptorPath()).isEqualTo(tempDir.resolve("descriptors/payment.desc"));
+        assertThat(invoker.request().service()).isEqualTo("payment.PaymentService");
+        assertThat(invoker.request().method()).isEqualTo("SubmitPayment");
+        assertThat(invoker.request().payloadJson()).isEqualTo("{\"paymentId\":\"P-003\"}");
+        assertThat(invoker.request().timeoutSeconds()).isEqualTo(5);
+        assertThat(Files.readString(result.stdoutLog())).isEqualTo("{\"status\":\"approved\"}");
+        assertThat(Files.readString(result.actualOutput())).isEqualTo("{\"status\":\"approved\"}");
+        assertThat(Files.readString(result.stderrLog())).isEmpty();
+        assertThat(Files.readString(runDir.resolve("request_response.yaml")))
+                .contains("provider_type: grpc")
+                .contains("status: passed")
+                .contains("service: payment.PaymentService")
+                .contains("method: SubmitPayment")
+                .contains("descriptor_ref: descriptors/payment.desc")
+                .contains("actual_output: actual/grpc-response.json");
+    }
+
+    @Test
+    void writesFailedGrpcEvidenceWhenNativeInvokerFails() throws Exception {
+        writePayload("fixtures/payment.json", "{\"paymentId\":\"P-004\"}");
+        RequestResponseProvider provider = new RequestResponseProvider(
+                HttpClient.newHttpClient(),
+                request -> {
+                    throw new IOException("gRPC service unavailable");
+                });
+        Path runDir = tempDir.resolve("run-grpc-failure");
+
+        AdapterExecutionResult result = provider.execute(
+                tempDir,
+                Map.of(
+                        "provider_type", "grpc",
+                        "service_ref", "127.0.0.1:9090",
+                        "descriptor_ref", "descriptors/payment.desc",
+                        "timeout_seconds", 5,
+                        "outputs", Map.of("actual_output_ref", "actual/grpc-response.json"),
+                        "actions", Map.of(
+                                "submit_payment", Map.of(
+                                        "service", "payment.PaymentService",
+                                        "method", "SubmitPayment",
+                                        "request_binding", "payment_payload"))),
+                Map.of("steps", List.of(Map.of("action", "submit_payment"))),
+                List.of(new ResolvedBinding("payment_payload", "api_payload", "fixtures/payment.json")),
+                runDir,
+                runDir.resolve("logs/stdout.log"),
+                runDir.resolve("logs/stderr.log"),
+                runDir.resolve("actual/grpc-response.json"));
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.timeout()).isFalse();
+        assertThat(Files.readString(result.stdoutLog())).isEmpty();
+        assertThat(Files.readString(result.actualOutput())).isEmpty();
+        assertThat(Files.readString(result.stderrLog())).contains("gRPC service unavailable");
+        assertThat(Files.readString(runDir.resolve("request_response.yaml")))
+                .contains("provider_type: grpc")
+                .contains("status: failed")
+                .contains("error: gRPC service unavailable");
+    }
+
     private AdapterExecutionResult executeProvider(
             Map<String, Object> contract,
             List<ResolvedBinding> resolvedBindings,
@@ -295,6 +384,26 @@ class RequestResponseProviderTest {
                 HttpResponse.BodyHandler<T> responseBodyHandler,
                 HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
             return CompletableFuture.failedFuture(exception);
+        }
+    }
+
+    private static class CapturingGrpcClientInvoker implements GrpcClientInvoker {
+
+        private final GrpcClientResult result;
+        private GrpcClientRequest request;
+
+        CapturingGrpcClientInvoker(GrpcClientResult result) {
+            this.result = result;
+        }
+
+        @Override
+        public GrpcClientResult invoke(GrpcClientRequest request) {
+            this.request = request;
+            return result;
+        }
+
+        GrpcClientRequest request() {
+            return request;
         }
     }
 }

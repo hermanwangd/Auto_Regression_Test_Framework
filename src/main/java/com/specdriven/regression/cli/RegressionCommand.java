@@ -761,7 +761,8 @@ public class RegressionCommand {
             BindingResolutionReport bindingReport) {
         AdapterContractContext context =
                 adapterContractContext(mappingYaml, targetRuId(approvedTest), adapterName(approvedTest));
-        if (!"request_response".equals(context.providerFamily()) || !"rest".equals(context.providerType())) {
+        if (!"request_response".equals(context.providerFamily())
+                || !List.of("rest", "grpc").contains(context.providerType())) {
             return List.of();
         }
         Object actionsValue = context.contract().get("actions");

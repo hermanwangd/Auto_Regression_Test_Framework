@@ -1116,6 +1116,37 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksGrpcProviderWithMissingPayloadBindingBeforeInvocation() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-GRPC-BINDING";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_api"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeGrpcProviderMapping(rpId, "submit_payment", "missing_payload");
+        writeRestPayload(rpId);
+        writeApprovedExpectedResult(rpId, acId, "{\"status\":\"accepted\",\"paymentId\":\"PAY-001\"}\n");
+        writeApprovedRestTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: request_response");
+        assertThat(output.toString()).contains("provider_type: grpc");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.request_response.actions.submit_payment.request_binding");
+        assertThat(output.toString()).contains("Add package input binding `missing_payload` before invoking request/response action `submit_payment`");
+    }
+
+    @Test
     void runDryRunBlocksRestProviderWithoutTimeoutBeforeInvocation() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-REST-TIMEOUT";
@@ -2914,6 +2945,56 @@ class RegressionCommandTest {
                     evidence_responsibility: [execution_log]
                     dependencies: []
                 """.formatted(rpId, port, timeoutField, actionName, requestBinding, outputField));
+    }
+
+    private void writeGrpcProviderMapping(
+            String rpId,
+            String actionName,
+            String requestBinding) throws Exception {
+        Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        Files.writeString(mapping, """
+                rp_id: %s
+                release_units:
+                  - ru_id: RU-payment-api
+                    repo: /repo/payment-api
+                    unit_type: service_api
+                    owner: product_developer
+                    version_ref: build-123
+                    validation_boundary: request_response_api
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://payment/api
+                    adapter: request_response
+                    provider_contracts:
+                      adapters:
+                        request_response:
+                          provider_family: request_response
+                          provider_type: grpc
+                          service_ref: 127.0.0.1:9090
+                          descriptor_ref: descriptors/payment.desc
+                          timeout_seconds: 10
+                          actions:
+                            %s:
+                              service: payment.PaymentService
+                              method: SubmitPayment
+                              request_binding: %s
+                          logs:
+                            stdout: logs/response.log
+                            stderr: logs/error.log
+                          outputs:
+                            actual_output_ref: actual/response.json
+                      bindings:
+                        api_payload:
+                          provider_family: request_response
+                          provider_type: request_body
+                          bind_as: request_body
+                      fixtures: {}
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                """.formatted(rpId, actionName, requestBinding));
     }
 
     private void writeRestPayload(String rpId) throws Exception {

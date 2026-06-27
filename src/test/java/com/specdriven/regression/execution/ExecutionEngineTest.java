@@ -118,13 +118,14 @@ class ExecutionEngineTest {
     }
 
     @Test
-    void defaultProviderRuntimeRegistryResolvesNativeMessagingRuntimes() {
+    void defaultProviderRuntimeRegistryResolvesNativeProviderRuntimes() {
         ProviderRuntimeRegistry registry = new ProviderRuntimeRegistry(
                 new DataPipelineAdapter(),
                 new RequestResponseProvider(),
                 new MessagingProvider(),
                 new DeploymentReadinessProvider());
 
+        assertThat(registry.runtimeFor(resolvedAdapter("request_response", "grpc"))).isNotNull();
         assertThat(registry.runtimeFor(resolvedAdapter("messaging", "kafka"))).isNotNull();
         assertThat(registry.runtimeFor(resolvedAdapter("messaging", "nats"))).isNotNull();
         assertThat(registry.runtimeFor(resolvedAdapter("deployment_readiness", "k8s"))).isNotNull();

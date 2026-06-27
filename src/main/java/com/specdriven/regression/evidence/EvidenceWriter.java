@@ -178,6 +178,7 @@ public class EvidenceWriter {
 
     private String providerEvidenceYaml(Path runDir) {
         List<ProviderEvidenceRef> refs = List.of(
+                new ProviderEvidenceRef("request_response", "request_response.yaml"),
                 new ProviderEvidenceRef("messaging", "messaging.yaml"),
                 new ProviderEvidenceRef("deployment_readiness", "readiness.yaml"),
                 new ProviderEvidenceRef("external_runner", "external_runner.yaml"),

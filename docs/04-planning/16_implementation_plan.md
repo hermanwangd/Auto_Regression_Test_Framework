@@ -43,7 +43,7 @@ This snapshot separates framework verification progress from pilot acceptance pr
 | AC intake and DSL drafting | Implemented for framework readiness/draft flows | Unit/component and integration tests | Apply to owner-provided pilot RP AC. |
 | Batch/run evidence and coverage | Implemented for sample and CLI flows | `./mvnw verify` and report tests | Validate against real pilot RP batch evidence. |
 | File/batch runtime | Supported | Provider registry dispatch and shell/file tests | Keep as reusable provider. |
-| REST runtime | Supported | Request/response provider tests | Add gRPC only if selected pilot needs it. |
+| REST/gRPC request-response runtime | Supported for REST and native descriptor-driven gRPC unary calls | Request/response provider, native gRPC invoker, runtime registry, CLI preflight, and evidence tests | Add richer response assertions and pilot endpoint evidence. |
 | Messaging runtime | Supported for local/mock plus native Kafka/NATS publish dispatch | Messaging provider contract, runtime registry, and evidence tests | Add Kafka/NATS consume/observe and broker-backed pilot validation. |
 | DB fixture runtime | Supported for JDBC fixture lifecycle | DB setup/query/cleanup tests with `sql_ref`, cleanup strategy, and isolation key | Add DB-row oracle/assertion types if pilot requires them. |
 | Deployment readiness runtime | Supported for local/mock plus native K8s/VM bounded readiness probes | Readiness provider, runtime registry, and provider contract tests with version, timeout, target refs, and output refs | Add direct kube API, pod logs, SSH/WinRM, and real pilot environment validation. |
@@ -259,7 +259,7 @@ Implement execution of a prepared plan through validated adapter/provider contra
 
 The pilot provider set is selected from `docs/02-architecture/07_heterogeneous_rp_support_capability_matrix.md` and should include only the reusable REST/gRPC, Kafka/NATS, DB fixture, K8s and VM readiness, and shell/file capabilities required by the selected heterogeneous RP. External runner is selected only when explicitly approved as an escape hatch.
 
-Current framework verification support is narrower than the pilot target: REST is supported, local/mock messaging is supported, native Kafka/NATS publish dispatch is supported, JDBC DB fixture is supported, local/mock plus native K8s/VM bounded deployment readiness is supported, file/batch is supported, and approved command-runner external runner is supported as an escape hatch. Native gRPC, Kafka/NATS consume or observe, deeper K8s/VM probes, and real pilot environment evidence require separate implementation slices before they can satisfy full pilot acceptance.
+Current framework verification support is narrower than the pilot target: REST and native descriptor-driven gRPC unary calls are supported, local/mock messaging is supported, native Kafka/NATS publish dispatch is supported, JDBC DB fixture is supported, local/mock plus native K8s/VM bounded deployment readiness is supported, file/batch is supported, and approved command-runner external runner is supported as an escape hatch. Kafka/NATS consume or observe, deeper K8s/VM probes, richer assertion/oracle providers, and real pilot environment evidence require separate implementation slices before they can satisfy full pilot acceptance.
 
 Verification:
 

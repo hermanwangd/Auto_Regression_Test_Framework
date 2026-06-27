@@ -108,6 +108,54 @@ class ProviderCapabilityRegistryTest {
     }
 
     @Test
+    void acceptsNativeGrpcRequestResponseContract() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "request_response",
+                Map.of(
+                        "provider_family", "request_response",
+                        "provider_type", "grpc",
+                        "service_ref", "dns:///payment-api:9090",
+                        "descriptor_ref", "descriptors/payment.desc",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/grpc-response.json"),
+                        "actions", Map.of(
+                                "submit_payment", Map.of(
+                                        "service", "payment.PaymentService",
+                                        "method", "SubmitPayment",
+                                        "request_binding", "payment_payload"))),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isTrue();
+        assertThat(validation.registryStatus()).isEqualTo("supported");
+        assertThat(validation.runtimeStatus()).isEqualTo("supported");
+    }
+
+    @Test
+    void blocksNativeGrpcContractWithoutDescriptorActionOrOutput() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "request_response",
+                Map.of(
+                        "provider_family", "request_response",
+                        "provider_type", "grpc",
+                        "actions", Map.of(
+                                "submit_payment", Map.of(
+                                        "service", "payment.PaymentService"))),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .contains(
+                        ".service_ref",
+                        ".descriptor_ref",
+                        ".timeout_seconds",
+                        ".outputs.actual_output_ref",
+                        ".actions.submit_payment.method",
+                        ".actions.submit_payment.request_binding");
+    }
+
+    @Test
     void acceptsNativeK8sAndVmDeploymentReadinessContracts() {
         ProviderCapabilityRegistry.ProviderContractValidation k8s = registry.validate(
                 "adapters",

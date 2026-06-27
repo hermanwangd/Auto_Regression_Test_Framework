@@ -85,6 +85,7 @@ public class ProviderRuntimeRegistry {
         runtimes.put(key("file_batch", "shell"), commandRuntime);
         runtimes.put(key("external_runner", "command_runner"), commandRuntime);
         runtimes.put(key("request_response", "rest"), requestResponseRuntime);
+        runtimes.put(key("request_response", "grpc"), requestResponseRuntime);
         runtimes.put(key("messaging", "local"), messagingRuntime);
         runtimes.put(key("messaging", "mock"), messagingRuntime);
         runtimes.put(key("messaging", "kafka"), messagingRuntime);
