@@ -381,6 +381,39 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksMalformedExecutionFocusedDslV1ParametersBeforeAdapterExecution() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeMalformedParameterizedTestCase("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("binding_gaps:")
+                .contains("ap: Planning and Binding")
+                .contains("test_case_id: RP-001-TC-001")
+                .contains("ac_id: RP-001-AC-001")
+                .contains("field_path: parameters.cases[1].case_id")
+                .contains("field_path: parameters.cases[1].values.orders_seed_ref")
+                .contains("reason: parameter_resolution_failed")
+                .contains("owner_action: Use a unique case_id for each explicit parameter case.")
+                .contains("owner_action: Declare a value for parameter reference `${parameters.orders_seed_ref}`.")
+                .contains("run_status: blocked");
+    }
+
+    @Test
     void runDryRunReportsPassedApGatesBeforeAdapterExecution() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -4036,6 +4069,18 @@ class RegressionCommandTest {
                   retry:
                     max_attempts: 0
                 """.formatted(testCaseId, rpId, acId, acId, rpId, expectedResultId));
+    }
+
+    private void writeMalformedParameterizedTestCase(String rpId) throws Exception {
+        writeApprovedParameterizedTestCase(rpId);
+        String testCaseId = rpId + "-TC-001";
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + testCaseId + ".yaml");
+        String yaml = Files.readString(testCase)
+                .replace("case_id: boundary", "case_id: baseline")
+                .replace("orders_seed_ref: fixtures/input/orders_seed_boundary.csv",
+                        "unused_ref: fixtures/input/orders_seed_unused.csv");
+        Files.writeString(testCase, yaml);
     }
 
     private void writeApprovedExternalRunnerTestCase(String rpId) throws Exception {
