@@ -635,6 +635,35 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksExternalRunnerWhenBuiltInProviderAlternativeExists() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "service"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeApprovedExternalRunnerMapping("RP-001", "request_response/rest");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001", "runner-ok\n");
+        writeApprovedExternalRunnerTestCase("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: external_runner");
+        assertThat(output.toString()).contains("provider_type: command_runner");
+        assertThat(output.toString()).contains("registry_status: unapproved_escape_hatch");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.external_runner.built_in_provider_alternative");
+        assertThat(output.toString()).contains("Configure built-in provider `request_response/rest` before using external runner");
+    }
+
+    @Test
     void runUsesProviderContractForExecutionTargetRuInMultiRuMapping() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -1795,8 +1824,15 @@ class RegressionCommandTest {
     }
 
     private void writeApprovedExternalRunnerMapping(String rpId) throws Exception {
+        writeApprovedExternalRunnerMapping(rpId, "");
+    }
+
+    private void writeApprovedExternalRunnerMapping(String rpId, String builtInProviderAlternative) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
-        Files.writeString(mapping, """
+        String builtInProviderAlternativeLine = builtInProviderAlternative.isBlank()
+                ? ""
+                : "built_in_provider_alternative: \"" + builtInProviderAlternative + "\"";
+        String mappingContent = """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-legacy-runner
@@ -1817,6 +1853,7 @@ class RegressionCommandTest {
                           approval_ref: docs/10-change-control/runner-approval.md
                           approved_by: qa_lead
                           reason: Legacy RP-owned harness is required until a reusable provider exists.
+                          __BUILT_IN_PROVIDER_ALTERNATIVE__
                           command: printf 'runner-ok\\n'
                           timeout_seconds: 30
                           inputs:
@@ -1828,7 +1865,10 @@ class RegressionCommandTest {
                             runner_actual_output: actual/output.txt
                     evidence_responsibility: [runner_result]
                     dependencies: []
-                """.formatted(rpId, rpId));
+                """.formatted(rpId, rpId)
+                .replace("__BUILT_IN_PROVIDER_ALTERNATIVE__",
+                        builtInProviderAlternativeLine);
+        Files.writeString(mapping, mappingContent);
     }
 
     private void writeExecutableMultiRuMapping(String rpId) throws Exception {

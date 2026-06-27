@@ -189,6 +189,12 @@ class ProviderCapabilityRegistry {
             violations.add(escapeHatch(".evidence_map",
                     "Declare external runner evidence_map before invoking `" + providerName + "`."));
         }
+        String builtInProviderAlternative = stringValue(contract.get("built_in_provider_alternative"));
+        if (!builtInProviderAlternative.isBlank()) {
+            violations.add(escapeHatch(".built_in_provider_alternative",
+                    "Configure built-in provider `" + builtInProviderAlternative
+                            + "` before using external runner `" + providerName + "`."));
+        }
     }
 
     private ProviderContractViolation required(String pathSuffix, String ownerAction) {
