@@ -693,6 +693,35 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksExternalRunnerWithUnsafeEvidenceMapPath() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "service"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeApprovedExternalRunnerMapping("RP-001", "", "actual/output.txt", 30, "../outside/stdout.log");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001", "runner-ok\n");
+        writeApprovedExternalRunnerTestCase("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: external_runner");
+        assertThat(output.toString()).contains("provider_type: command_runner");
+        assertThat(output.toString()).contains("registry_status: unapproved_escape_hatch");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.external_runner.evidence_map.runner_stdout");
+        assertThat(output.toString()).contains("Keep external runner evidence map path `../outside/stdout.log` under the run evidence directory");
+    }
+
+    @Test
     void runDryRunBlocksExternalRunnerWithUnboundedTimeout() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -1901,6 +1930,16 @@ class RegressionCommandTest {
             String builtInProviderAlternative,
             String actualOutputRef,
             int timeoutSeconds) throws Exception {
+        writeApprovedExternalRunnerMapping(rpId, builtInProviderAlternative, actualOutputRef, timeoutSeconds,
+                "logs/stdout.log");
+    }
+
+    private void writeApprovedExternalRunnerMapping(
+            String rpId,
+            String builtInProviderAlternative,
+            String actualOutputRef,
+            int timeoutSeconds,
+            String runnerStdoutRef) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
         String builtInProviderAlternativeLine = builtInProviderAlternative.isBlank()
                 ? ""
@@ -1934,11 +1973,11 @@ class RegressionCommandTest {
                           outputs:
                             actual_output_ref: %s
                           evidence_map:
-                            runner_stdout: logs/stdout.log
+                            runner_stdout: %s
                             runner_actual_output: actual/output.txt
                     evidence_responsibility: [runner_result]
                     dependencies: []
-                """.formatted(rpId, rpId, timeoutSeconds, actualOutputRef)
+                """.formatted(rpId, rpId, timeoutSeconds, actualOutputRef, runnerStdoutRef)
                 .replace("__BUILT_IN_PROVIDER_ALTERNATIVE__",
                         builtInProviderAlternativeLine);
         Files.writeString(mapping, mappingContent);

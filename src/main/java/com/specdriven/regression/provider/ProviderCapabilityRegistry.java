@@ -201,6 +201,15 @@ class ProviderCapabilityRegistry {
         if (!hasMap(contract, "evidence_map")) {
             violations.add(escapeHatch(".evidence_map",
                     "Declare external runner evidence_map before invoking `" + providerName + "`."));
+        } else if (contract.get("evidence_map") instanceof Map<?, ?> evidenceMap) {
+            for (Map.Entry<?, ?> evidenceRef : evidenceMap.entrySet()) {
+                String evidencePath = stringValue(evidenceRef.getValue());
+                if (isUnsafeRelativeOutputPath(evidencePath)) {
+                    violations.add(escapeHatch(".evidence_map." + evidenceRef.getKey(),
+                            "Keep external runner evidence map path `" + evidencePath
+                                    + "` under the run evidence directory before invoking `" + providerName + "`."));
+                }
+            }
         }
         String builtInProviderAlternative = stringValue(contract.get("built_in_provider_alternative"));
         if (!builtInProviderAlternative.isBlank()) {
