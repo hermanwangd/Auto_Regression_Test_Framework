@@ -181,8 +181,10 @@ public class ExecutionEngine {
                     stdoutLog,
                     stderrLog,
                     actualOutput);
-            writeExternalRunnerEvidence(adapterProviderContract, contract, runDir);
-            passed = !adapterResult.timeout()
+            ExternalRunnerEvidenceResult externalRunnerEvidence =
+                    writeExternalRunnerEvidence(adapterProviderContract, contract, runDir);
+            passed = externalRunnerEvidence.complete()
+                    && !adapterResult.timeout()
                     && successExitCodes(contract.get("success_exit_codes")).contains(adapterResult.exitCode());
             if (passed) {
                 assertionEvaluation = assertionEngine.evaluateFileDiff(
@@ -220,38 +222,98 @@ public class ExecutionEngine {
                 adapterResult.actualOutput());
     }
 
-    private void writeExternalRunnerEvidence(
+    private ExternalRunnerEvidenceResult writeExternalRunnerEvidence(
             ResolvedProviderContract providerContract,
             Map<String, Object> contract,
             Path runDir) {
         if (!"external_runner".equals(providerContract.providerFamily())) {
-            return;
+            return ExternalRunnerEvidenceResult.successful();
         }
         try {
             Files.createDirectories(runDir);
             StringBuilder builder = new StringBuilder();
+            List<ExternalRunnerMappedArtifact> mappedArtifacts = externalRunnerMappedArtifacts(contract, runDir);
+            boolean evidenceComplete = mappedArtifacts.stream().allMatch(ExternalRunnerMappedArtifact::exists);
             builder.append("escape_hatch_status: approved\n");
+            builder.append("evidence_complete: ").append(evidenceComplete).append("\n");
             builder.append("approval_ref: ").append(stringValue(contract.get("approval_ref"))).append("\n");
             builder.append("approved_by: ").append(stringValue(contract.get("approved_by"))).append("\n");
             builder.append("reason: ").append(stringValue(contract.get("reason"))).append("\n");
             builder.append("runner_ref: ").append(runnerRef(contract)).append("\n");
             builder.append("evidence_map:\n");
-            Object evidenceMap = contract.get("evidence_map");
-            if (evidenceMap instanceof Map<?, ?> entries && !entries.isEmpty()) {
-                for (Map.Entry<?, ?> entry : entries.entrySet()) {
-                    builder.append("  ")
-                            .append(entry.getKey())
-                            .append(": ")
-                            .append(stringValue(entry.getValue()))
-                            .append("\n");
-                }
-            } else {
+            if (mappedArtifacts.isEmpty()) {
                 builder.append("  {}\n");
+            } else {
+                for (ExternalRunnerMappedArtifact artifact : mappedArtifacts) {
+                    builder.append("  ").append(artifact.name()).append(": ").append(artifact.path()).append("\n");
+                }
             }
+            builder.append("mapped_artifacts:\n");
+            appendMappedArtifacts(builder, mappedArtifacts);
+            builder.append("missing_mapped_artifacts:\n");
+            appendMissingMappedArtifacts(builder, mappedArtifacts);
             Files.writeString(runDir.resolve("external_runner.yaml"), builder.toString());
+            return new ExternalRunnerEvidenceResult(evidenceComplete);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write external runner evidence.", e);
         }
+    }
+
+    private List<ExternalRunnerMappedArtifact> externalRunnerMappedArtifacts(
+            Map<String, Object> contract,
+            Path runDir) {
+        Object evidenceMap = contract.get("evidence_map");
+        if (!(evidenceMap instanceof Map<?, ?> entries) || entries.isEmpty()) {
+            return List.of();
+        }
+        List<ExternalRunnerMappedArtifact> artifacts = new ArrayList<>();
+        for (Map.Entry<?, ?> entry : entries.entrySet()) {
+            String path = stringValue(entry.getValue());
+            artifacts.add(new ExternalRunnerMappedArtifact(
+                    stringValue(entry.getKey()),
+                    path,
+                    Files.isRegularFile(runDir.resolve(path))));
+        }
+        return artifacts;
+    }
+
+    private void appendMappedArtifacts(
+            StringBuilder builder,
+            List<ExternalRunnerMappedArtifact> mappedArtifacts) {
+        if (mappedArtifacts.isEmpty()) {
+            builder.append("  []\n");
+            return;
+        }
+        for (ExternalRunnerMappedArtifact artifact : mappedArtifacts) {
+            builder.append("  - name: ").append(artifact.name()).append("\n");
+            builder.append("    path: ").append(artifact.path()).append("\n");
+            builder.append("    exists: ").append(artifact.exists()).append("\n");
+        }
+    }
+
+    private void appendMissingMappedArtifacts(
+            StringBuilder builder,
+            List<ExternalRunnerMappedArtifact> mappedArtifacts) {
+        List<ExternalRunnerMappedArtifact> missing = mappedArtifacts.stream()
+                .filter(artifact -> !artifact.exists())
+                .toList();
+        if (missing.isEmpty()) {
+            builder.append("  []\n");
+            return;
+        }
+        for (ExternalRunnerMappedArtifact artifact : missing) {
+            builder.append("  - name: ").append(artifact.name()).append("\n");
+            builder.append("    path: ").append(artifact.path()).append("\n");
+        }
+    }
+
+    private record ExternalRunnerEvidenceResult(boolean complete) {
+        static ExternalRunnerEvidenceResult successful() {
+            return new ExternalRunnerEvidenceResult(true);
+        }
+    }
+
+    private record ExternalRunnerMappedArtifact(String name, String path, boolean exists) {
     }
 
     private String runnerRef(Map<String, Object> contract) {

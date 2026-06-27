@@ -635,6 +635,39 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runFailsApprovedExternalRunnerWhenMappedEvidenceArtifactIsMissing() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "service"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeApprovedExternalRunnerMapping("RP-001", "", "actual/output.txt", 30, "logs/stdout.log",
+                "runner_diagnostics: diagnostics/result.json");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001", "runner-ok\n");
+        writeApprovedExternalRunnerTestCase("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001");
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: true");
+        assertThat(output.toString()).contains("run_status: failed");
+        String runEvidence = Files.readString(runDir.resolve("run.yaml"));
+        assertThat(runEvidence).contains("status: failed");
+        assertThat(runEvidence).contains("assertion_status: not_run");
+        String externalRunnerEvidence = Files.readString(runDir.resolve("external_runner.yaml"));
+        assertThat(externalRunnerEvidence).contains("evidence_complete: false");
+        assertThat(externalRunnerEvidence).contains("missing_mapped_artifacts:");
+        assertThat(externalRunnerEvidence).contains("name: runner_diagnostics");
+        assertThat(externalRunnerEvidence).contains("path: diagnostics/result.json");
+    }
+
+    @Test
     void runDryRunBlocksExternalRunnerWhenBuiltInProviderAlternativeExists() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -1940,10 +1973,24 @@ class RegressionCommandTest {
             String actualOutputRef,
             int timeoutSeconds,
             String runnerStdoutRef) throws Exception {
+        writeApprovedExternalRunnerMapping(rpId, builtInProviderAlternative, actualOutputRef, timeoutSeconds,
+                runnerStdoutRef, "");
+    }
+
+    private void writeApprovedExternalRunnerMapping(
+            String rpId,
+            String builtInProviderAlternative,
+            String actualOutputRef,
+            int timeoutSeconds,
+            String runnerStdoutRef,
+            String extraEvidenceMapLine) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
         String builtInProviderAlternativeLine = builtInProviderAlternative.isBlank()
                 ? ""
                 : "built_in_provider_alternative: \"" + builtInProviderAlternative + "\"";
+        String extraEvidenceMapEntry = extraEvidenceMapLine.isBlank()
+                ? ""
+                : "            " + extraEvidenceMapLine;
         String mappingContent = """
                 rp_id: %s
                 release_units:
@@ -1975,9 +2022,10 @@ class RegressionCommandTest {
                           evidence_map:
                             runner_stdout: %s
                             runner_actual_output: actual/output.txt
+                %s
                     evidence_responsibility: [runner_result]
                     dependencies: []
-                """.formatted(rpId, rpId, timeoutSeconds, actualOutputRef, runnerStdoutRef)
+                """.formatted(rpId, rpId, timeoutSeconds, actualOutputRef, runnerStdoutRef, extraEvidenceMapEntry)
                 .replace("__BUILT_IN_PROVIDER_ALTERNATIVE__",
                         builtInProviderAlternativeLine);
         Files.writeString(mapping, mappingContent);
