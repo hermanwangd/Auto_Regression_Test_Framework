@@ -1,6 +1,7 @@
 package com.specdriven.regression.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.specdriven.regression.adapter.AdapterExecutionResult;
 import com.specdriven.regression.adapter.DataPipelineAdapter;
@@ -10,12 +11,14 @@ import com.specdriven.regression.evidence.EvidenceWriter;
 import com.specdriven.regression.provider.DatabaseFixtureProvider;
 import com.specdriven.regression.provider.DeploymentReadinessProvider;
 import com.specdriven.regression.provider.MessagingProvider;
+import com.specdriven.regression.provider.ProviderContractResolutionReport;
 import com.specdriven.regression.provider.ProviderContractResolver;
 import com.specdriven.regression.provider.RequestResponseProvider;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
@@ -113,6 +116,107 @@ class ExecutionEngineTest {
                 .isNotNull();
     }
 
+    @Test
+    void blocksExecutionWhenProviderResolverDoesNotReturnAdapterContract() throws Exception {
+        writeMinimalTestCase("TC-NO-ADAPTER");
+        ExecutionEngine engine = new ExecutionEngine(
+                new DataPipelineAdapter(),
+                new AssertionEngine(),
+                new EvidenceWriter(),
+                new BindingResolver(),
+                new EmptyProviderContractResolver(),
+                new DatabaseFixtureProvider(),
+                new ProviderRuntimeRegistry(Map.of()));
+
+        assertThatThrownBy(() -> engine.execute(
+                tempDir,
+                tempDir.resolve("tests/approved/TC-NO-ADAPTER.yaml"),
+                "BATCH-NO-ADAPTER",
+                "RUN-NO-ADAPTER"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("No resolved adapter provider contract available");
+    }
+
+    @Test
+    void failsExternalRunnerWhenMappedEvidenceIsMissing() throws Exception {
+        writeExternalRunnerPackage("TC-EXTERNAL-MISSING", "external-output\n");
+        ExecutionEngine engine = executionEngineWithExternalRunnerRuntime(false, "external-output\n");
+
+        ExecutionResult result = engine.execute(
+                tempDir,
+                tempDir.resolve("tests/approved/TC-EXTERNAL-MISSING.yaml"),
+                "BATCH-EXTERNAL",
+                "RUN-EXTERNAL-MISSING");
+
+        Path runDir = tempDir.resolve("evidence/runs/RUN-EXTERNAL-MISSING");
+        assertThat(result.passed()).isFalse();
+        assertThat(result.status()).isEqualTo("failed");
+        assertThat(Files.readString(runDir.resolve("external_runner.yaml")))
+                .contains("evidence_complete: false")
+                .contains("runner_ref: registry.example.com/external-runner:1.0")
+                .contains("missing_mapped_artifacts:")
+                .contains("path: logs/external-runner.log");
+        assertThat(Files.readString(runDir.resolve("run.yaml")))
+                .contains("status: failed")
+                .contains("external_runner: external_runner.yaml")
+                .contains("assertion_status: not_run");
+    }
+
+    @Test
+    void passesExternalRunnerWhenMappedEvidenceAndAssertionsPass() throws Exception {
+        writeExternalRunnerPackage("TC-EXTERNAL-PASS", "external-output\n");
+        ExecutionEngine engine = executionEngineWithExternalRunnerRuntime(true, "external-output\n");
+
+        ExecutionResult result = engine.execute(
+                tempDir,
+                tempDir.resolve("tests/approved/TC-EXTERNAL-PASS.yaml"),
+                "BATCH-EXTERNAL",
+                "RUN-EXTERNAL-PASS");
+
+        Path runDir = tempDir.resolve("evidence/runs/RUN-EXTERNAL-PASS");
+        assertThat(result.passed()).isTrue();
+        assertThat(Files.readString(runDir.resolve("external_runner.yaml")))
+                .contains("evidence_complete: true")
+                .contains("runner_log: logs/external-runner.log")
+                .contains("missing_mapped_artifacts:\n  []");
+        assertThat(Files.readString(runDir.resolve("run.yaml")))
+                .contains("status: passed")
+                .contains("resolved_dependencies:\n  - RU-auth")
+                .contains("assertion_status: passed");
+    }
+
+    private ExecutionEngine executionEngineWithExternalRunnerRuntime(boolean writeMappedEvidence, String actualOutput) {
+        ProviderRuntime runtime = request -> {
+            try {
+                Files.createDirectories(request.stdoutLog().getParent());
+                Files.createDirectories(request.stderrLog().getParent());
+                Files.createDirectories(request.actualOutput().getParent());
+                Files.writeString(request.stdoutLog(), "external runner selected\n");
+                Files.writeString(request.stderrLog(), "");
+                Files.writeString(request.actualOutput(), actualOutput);
+                if (writeMappedEvidence) {
+                    Files.writeString(request.runDir().resolve("logs/external-runner.log"), "runner evidence\n");
+                }
+                return new AdapterExecutionResult(
+                        0,
+                        false,
+                        request.stdoutLog(),
+                        request.stderrLog(),
+                        request.actualOutput());
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to write fake external runner output.", e);
+            }
+        };
+        return new ExecutionEngine(
+                new DataPipelineAdapter(),
+                new AssertionEngine(),
+                new EvidenceWriter(),
+                new BindingResolver(),
+                new ProviderContractResolver(),
+                new DatabaseFixtureProvider(),
+                new ProviderRuntimeRegistry(Map.of("external_runner/command_runner", runtime)));
+    }
+
     private void writeRuntimeOutput(ProviderRuntimeRequest request) {
         try {
             Files.createDirectories(request.stdoutLog().getParent());
@@ -124,6 +228,86 @@ class ExecutionEngineTest {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write fake runtime output.", e);
         }
+    }
+
+    private void writeMinimalTestCase(String testCaseId) throws IOException {
+        Files.createDirectories(tempDir.resolve("tests/approved"));
+        Files.writeString(tempDir.resolve("tests/approved/" + testCaseId + ".yaml"), """
+                test_case_id: %s
+                ac_id: AC-NO-ADAPTER
+                rp_id: RP-NO-ADAPTER
+                execution_target:
+                  ru_id: RU-api
+                  adapter: request_response
+                """.formatted(testCaseId));
+    }
+
+    private void writeExternalRunnerPackage(String testCaseId, String expectedOutput) throws IOException {
+        Files.createDirectories(tempDir.resolve("tests/approved"));
+        Files.createDirectories(tempDir.resolve("expected"));
+        Files.createDirectories(tempDir.resolve("expected-results/approved"));
+        Files.writeString(tempDir.resolve("expected/external-output.txt"), expectedOutput);
+        Files.writeString(tempDir.resolve("expected-results/approved/ER-EXTERNAL.yaml"), """
+                expected_result_id: ER-EXTERNAL
+                status: approved
+                expected_outputs:
+                  output_ref: expected/external-output.txt
+                """);
+        Files.writeString(tempDir.resolve("tests/approved/" + testCaseId + ".yaml"), """
+                test_case_id: %s
+                ac_id: AC-EXTERNAL
+                rp_id: RP-EXTERNAL
+                title: External runner bridge
+                status: approved
+                execution_target:
+                  ru_id: RU-external
+                  adapter: external_runner
+                expected:
+                  ref: expected-results/approved/ER-EXTERNAL.yaml
+                oracles:
+                  primary:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/ER-EXTERNAL.yaml
+                assertions:
+                  - type: file_diff
+                    oracle: ${oracles.primary}
+                """.formatted(testCaseId));
+        Files.writeString(tempDir.resolve("rp_ru_mapping.yaml"), """
+                rp_id: RP-EXTERNAL
+                release_units:
+                  - ru_id: RU-external
+                    repo: /repo/external
+                    unit_type: external_test_runner
+                    owner: qa
+                    version_ref: runner-42
+                    validation_boundary: external_runner_bridge
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://external
+                    adapter: external_runner
+                    provider_contracts:
+                      adapters:
+                        external_runner:
+                          provider_family: external_runner
+                          provider_type: command_runner
+                          approval_ref: ADR-EXTERNAL
+                          approved_by: SA
+                          reason: legacy protocol bridge
+                          container_ref: registry.example.com/external-runner:1.0
+                          timeout_seconds: 10
+                          inputs:
+                            payload: fixtures/request.json
+                          logs:
+                            stdout: logs/stdout.log
+                            stderr: logs/stderr.log
+                          outputs:
+                            actual_output_ref: actual/output.txt
+                          evidence_map:
+                            runner_log: logs/external-runner.log
+                      fixtures: {}
+                    evidence_responsibility: [runner_log]
+                    dependencies: [RU-auth]
+                """);
     }
 
     private void writeRequestResponsePackage() throws IOException {
@@ -206,5 +390,17 @@ class ExecutionEngineTest {
                     evidence_responsibility: [execution_log]
                     dependencies: []
                 """);
+    }
+
+    private static class EmptyProviderContractResolver extends ProviderContractResolver {
+        @Override
+        public ProviderContractResolutionReport resolve(
+                Path mappingYaml,
+                String targetRuId,
+                String adapter,
+                List<String> bindingTypes,
+                List<String> fixtureProviders) {
+            return new ProviderContractResolutionReport(false, List.of(), List.of());
+        }
     }
 }
