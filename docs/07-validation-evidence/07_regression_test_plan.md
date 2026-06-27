@@ -112,6 +112,7 @@ This is a pre-provider-runtime gate. FWK-008 must be green before sample fixture
 |---|---|---|
 | Identity and traceability | Reads `dsl_version`, `test_case_id`, `status`, `revision`, and `traceability.package_id` / `acceptance_criteria_id` / `source` | Missing traceability or unsupported `status` blocks before execution. |
 | Targets | Resolves multiple named `targets` with `type`, `runner`, and `environment` | Missing target or execute step referencing an unknown target blocks before provider dispatch. |
+| Parameters | Expands `parameters.strategy: explicit_cases` into separate run IDs and run evidence with `parameter_case_id` | Unsupported strategy, duplicate case ID, missing values, or unresolved `${parameters.<name>}` blocks before provider dispatch. |
 | Setup | Resolves `setup.fixtures` and `cleanup_ref` for state-mutating fixtures | State-changing fixture without cleanup reference reports a fixture-policy gap. |
 | Execute | Resolves `execute[].operation`, `target`, `with`, and `outputs` | `call_ru`, `target_ru_id`, missing outputs, or unsupported operation blocks before execution. |
 | Expected results | Resolves `expected_results` refs used by verification | Duplicated legacy oracle/expected references or missing expected ref blocks before assertion evaluation. |
@@ -127,6 +128,7 @@ Minimum FWK-008 test cases:
 - Missing traceability, unsupported status, missing target, unknown execute target, missing execute outputs, missing expected result ref, invalid verify rule, invalid evidence ref, or unbounded runtime policy blocks before provider dispatch.
 - Legacy operation/field names such as `call_ru`, `target_ru_id`, `package_inputs`, and `oracles` are rejected in new execution-focused artifacts.
 - Governance-heavy fields such as approval, waiver, release gate, or risk approval state are rejected in DSL test cases.
+- `parameters.strategy: explicit_cases` with two cases creates two run IDs, two run evidence directories, recorded `parameter_case_id`, and batch/report coverage that counts the AC once.
 - Generator output for `draft_executable_test_case` emits the v1 execution-focused field set and does not overwrite checked-in approved tests.
 - CLI dry-run reports DSL validation gaps with AP, field path, test case ID, AC ID, reason, and owner action.
 - CLI `run` accepts one `tests/approved/` v1 test with `status: active`, writes run and batch evidence, and CLI `report --batch-id` returns review-ready coverage with traceability to RP ID, AC ID, test case ID, and run ID.

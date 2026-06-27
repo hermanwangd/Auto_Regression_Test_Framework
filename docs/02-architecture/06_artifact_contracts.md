@@ -231,6 +231,7 @@ Use clear test-case language in new DSL artifacts:
 | `traceability` | Link the test to package ID, AC ID, and source spec reference. |
 | `targets` | Name each application, database, event bus, file store, batch runner, or external boundary used by the test. |
 | `scenario` | Describe test type, scope, behavior, and required capabilities. |
+| `parameters` | Optionally declare explicit reviewed parameter cases for repeated execution of the same logical test. |
 | `setup` | Declare fixtures, seed data, mock setup, or initial state needed before execution. |
 | `execute` | Declare readable operations, target, runtime inputs, and output capture. |
 | `expected_results` | Reference expected files, JSON/YAML payloads, DB state snapshots, response payloads, schemas, or contracts. |
@@ -245,6 +246,7 @@ The v1 contract separates stable top-level structure from execution-required con
 - Always required: `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime`.
 - Conditionally required: `setup.fixtures` when the scenario needs precondition data, state mutation, mock setup, seed data, or cleanup.
 - Conditionally required: `expected_results` when a verify item references an approved artifact, schema, contract, payload, file, DB state snapshot, or other reusable truth source. Simple deterministic expected values may be declared directly in `verify[].expected`.
+- Conditionally required: `parameters.strategy`, `parameters.cases[].case_id`, and `parameters.cases[].values` when the test uses parameterization. M1 supports only `strategy: explicit_cases`.
 - Required when referenced: `execute[].outputs`, `verify[].selector`, `verify[].target/query/event`, `verify[].options`, and fixture `cleanup_ref`.
 - Prohibited in DSL: provider implementation settings, secrets, endpoint URLs, connection strings, SQL bodies, shell scripts, release gates, waivers, risk approvals, and approval workflow state.
 
@@ -273,11 +275,18 @@ scenario:
   description: Run the sample pipeline and verify normalized output.
   capabilities: [db_seed, batch_execution, file_assertion]
 
+parameters:
+  strategy: explicit_cases
+  cases:
+    - case_id: baseline
+      values:
+        orders_seed_ref: fixtures/db/orders_seed.yaml
+
 setup:
   fixtures:
     orders_seed:
       type: database_seed
-      ref: fixtures/db/orders_seed.yaml
+      ref: ${parameters.orders_seed_ref}
       cleanup_ref: fixtures/db/orders_cleanup.yaml
 
 execute:
@@ -363,6 +372,26 @@ Every execute step must declare an `outputs` map when later verification or evid
 Use `setup.fixtures` for precondition data or state that must exist before the operation runs, such as database seeds, file seeds, mock setup, queue seed messages, or initial state. A fixture that changes system state should include `cleanup_ref` when possible.
 
 Use `execute[].with` for runtime inputs passed to the target operation, such as request payloads, file refs, fixture refs, event payloads, query params, or command args. Provider-specific connection strings, credentials, endpoints, SQL bodies, queue client settings, and shell scripts do not belong in the DSL body; they belong in validated provider contracts or referenced files.
+
+### 6.7.3A Parameterization
+
+M1 parameterization supports only explicit reviewed cases:
+
+```yaml
+parameters:
+  strategy: explicit_cases
+  cases:
+    - case_id: baseline
+      values:
+        orders_seed_ref: fixtures/db/orders_seed_baseline.yaml
+    - case_id: boundary
+      values:
+        orders_seed_ref: fixtures/db/orders_seed_boundary.yaml
+```
+
+Parameter values may be referenced as `${parameters.<name>}` from `setup.fixtures`, `execute[].with`, `expected_results`, `verify`, or `evidence` fields. Each explicit case produces a separate run ID and run evidence record with `parameter_case_id`. Coverage still counts the traced AC once per selected batch even when multiple parameter cases pass.
+
+Dynamic data selection, combinatorial case generation, runtime-created cases, secrets, and provider connection details do not belong in `parameters` for v1.
 
 ### 6.7.4 Expected Results and Verification
 
