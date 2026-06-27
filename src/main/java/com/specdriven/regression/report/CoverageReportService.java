@@ -30,7 +30,12 @@ public class CoverageReportService {
         List<String> failureDetails = new ArrayList<>();
         gaps.addAll(unapprovedExclusionGaps(acceptanceCriteria));
         if (batchMissing) {
-            gaps.add("missing_evidence: " + packageRoot.relativize(batchYaml));
+            String fieldPath = packageRoot.relativize(batchYaml).toString();
+            gaps.add(reportGap(
+                    "missing_evidence",
+                    fieldPath,
+                    "Restore or regenerate the missing batch evidence before release review.",
+                    "missing_evidence: " + fieldPath));
         }
         for (RunEvidence evidence : runs) {
             Map<String, Object> run = evidence.run();
@@ -41,12 +46,34 @@ public class CoverageReportService {
                     .anyMatch(test -> runTestCaseId.equals(stringValue(test.get("test_case_id")))
                             && runAcId.equals(stringValue(test.get("ac_id"))));
             if (evidence.missing()) {
-                gaps.add("missing_evidence: " + packageRoot.relativize(evidence.runDir().resolve("run.yaml")));
+                String fieldPath = packageRoot.relativize(evidence.runDir().resolve("run.yaml")).toString();
+                gaps.add(reportGap(
+                        "missing_evidence",
+                        fieldPath,
+                        "Restore or regenerate the missing run evidence before release review.",
+                        "run_id: " + evidence.runId(),
+                        "test_case_id: " + runTestCaseId,
+                        "ac_id: " + runAcId,
+                        "missing_evidence: " + fieldPath));
             } else if (!"passed".equals(runStatus)) {
-                gaps.add("run_status: " + runStatus);
+                String fieldPath = packageRoot.relativize(evidence.runDir().resolve("run.yaml")).toString();
+                gaps.add(reportGap(
+                        "run_status_not_passed",
+                        fieldPath,
+                        "Resolve the non-passing run before claiming release review readiness.",
+                        "run_id: " + evidence.runId(),
+                        "test_case_id: " + runTestCaseId,
+                        "ac_id: " + runAcId,
+                        "run_status: " + runStatus));
             }
             if (!evidence.missing() && !hasTraceableApprovedTest) {
-                gaps.add("missing_traceability: " + runTestCaseId + " -> " + runAcId);
+                gaps.add(reportGap(
+                        "missing_traceability",
+                        "tests/approved",
+                        "Check approved test traceability for the reported test case and AC.",
+                        "test_case_id: " + runTestCaseId,
+                        "ac_id: " + runAcId,
+                        "missing_traceability: " + runTestCaseId + " -> " + runAcId));
             }
             if ("passed".equals(runStatus)
                     && isAutomatable(acceptanceCriteria, runAcId)
@@ -109,18 +136,41 @@ public class CoverageReportService {
         List<String> gaps = new ArrayList<>();
         gaps.addAll(unapprovedExclusionGaps(acceptanceCriteria));
         if (runMissing) {
-            gaps.add("missing_evidence: " + packageRoot.relativize(runYaml));
+            String fieldPath = packageRoot.relativize(runYaml).toString();
+            gaps.add(reportGap(
+                    "missing_evidence",
+                    fieldPath,
+                    "Restore or regenerate the missing run evidence before release review.",
+                    "missing_evidence: " + fieldPath));
         } else if (!"passed".equals(runStatus)) {
-            gaps.add("run_status: " + runStatus);
+            String fieldPath = packageRoot.relativize(runYaml).toString();
+            gaps.add(reportGap(
+                    "run_status_not_passed",
+                    fieldPath,
+                    "Resolve the non-passing run before claiming release review readiness.",
+                    "test_case_id: " + runTestCaseId,
+                    "ac_id: " + runAcId,
+                    "run_status: " + runStatus));
         }
         if (!runMissing && !hasTraceableApprovedTest) {
-            gaps.add("missing_traceability: " + runTestCaseId + " -> " + runAcId);
+            gaps.add(reportGap(
+                    "missing_traceability",
+                    "tests/approved",
+                    "Check approved test traceability for the reported test case and AC.",
+                    "test_case_id: " + runTestCaseId,
+                    "ac_id: " + runAcId,
+                    "missing_traceability: " + runTestCaseId + " -> " + runAcId));
         }
         if (!runMissing) {
             gaps.addAll(uncoveredAcGaps(denominatorAcIds, coveredAcIds));
         }
         if (!runMissing && gaps.isEmpty() && totalAutomatable > 0 && covered == totalAutomatable) {
-            gaps.add("batch_required_for_release_coverage: " + runId);
+            gaps.add(reportGap(
+                    "batch_required_for_release_coverage",
+                    "evidence/runs/" + runId + "/run.yaml",
+                    "Generate release coverage with --batch-id so RP coverage uses batch-level evidence.",
+                    "run_id: " + runId,
+                    "batch_required_for_release_coverage: " + runId));
         }
         List<String> failureDetails = runMissing ? List.of() : assertionFailureDetails(runDir, run);
         boolean reviewReady = false;
@@ -366,7 +416,12 @@ public class CoverageReportService {
         List<String> gaps = new ArrayList<>();
         for (String acId : denominatorAcIds) {
             if (!coveredAcIds.contains(acId)) {
-                gaps.add("uncovered_ac: " + acId);
+                gaps.add(reportGap(
+                        "uncovered_ac",
+                        "acceptance_criteria.md#" + acId,
+                        "Add or fix a passed approved test run for this automatable AC.",
+                        "ac_id: " + acId,
+                        "uncovered_ac: " + acId));
             }
         }
         return gaps;
@@ -376,10 +431,30 @@ public class CoverageReportService {
         List<String> gaps = new ArrayList<>();
         for (Map<?, ?> item : acceptanceCriteria) {
             if (isUnapprovedExclusion(item)) {
-                gaps.add("unapproved_exclusion: " + stringValue(item.get("ac_id")));
+                String acId = stringValue(item.get("ac_id"));
+                gaps.add(reportGap(
+                        "unapproved_exclusion",
+                        "acceptance_criteria.md#" + acId,
+                        "Add an approved manual-only or waiver exclusion record, or make the AC automatable.",
+                        "ac_id: " + acId,
+                        "unapproved_exclusion: " + acId));
             }
         }
         return gaps;
+    }
+
+    private String reportGap(String reason, String fieldPath, String ownerAction, String... extraLines) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("ap: Evidence and Reporting\n");
+        builder.append("    field_path: ").append(fieldPath).append("\n");
+        builder.append("    reason: ").append(reason).append("\n");
+        for (String line : extraLines) {
+            if (line != null && !line.isBlank()) {
+                builder.append("    ").append(line).append("\n");
+            }
+        }
+        builder.append("    owner_action: ").append(ownerAction);
+        return builder.toString();
     }
 
     private List<RunEvidence> runsFromBatch(Path packageRoot, Map<String, Object> batch) {

@@ -1202,6 +1202,9 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("report_status: not_review_ready");
         assertThat(output.toString()).contains("coverage_percent: 100.0");
         assertThat(output.toString()).contains("batch_required_for_release_coverage: RUN-001");
+        assertThat(output.toString()).contains("ap: Evidence and Reporting");
+        assertThat(output.toString()).contains("reason: batch_required_for_release_coverage");
+        assertThat(output.toString()).contains("owner_action: Generate release coverage with --batch-id");
         assertThat(Files.readString(reviewDir.resolve("coverage_report.yaml"))).contains("covered: 1");
         assertThat(Files.readString(reviewDir.resolve("coverage_report.yaml"))).contains("total_automatable: 1");
         assertThat(Files.readString(reviewDir.resolve("traceability_report.yaml"))).contains("RP-001-AC-001");
@@ -1210,7 +1213,9 @@ class RegressionCommandTest {
         assertThat(Files.exists(reviewDir.resolve("evidence_index.md"))).isTrue();
         assertThat(Files.readString(reviewDir.resolve("failure_summary.yaml")))
                 .contains("unresolved_failures: 1")
-                .contains("batch_required_for_release_coverage: RUN-001");
+                .contains("batch_required_for_release_coverage: RUN-001")
+                .contains("reason: batch_required_for_release_coverage")
+                .contains("owner_action: Generate release coverage with --batch-id");
         assertThat(Files.readString(reviewDir.resolve("release_review_summary.yaml"))).contains("review_ready: false");
     }
 
