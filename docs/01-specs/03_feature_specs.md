@@ -394,12 +394,13 @@ Product developers own AC clarification and manual expected-result input. QA or 
 - Map each generated DSL section to the AP that will consume it: identity and traceability to Definition and Validation, targets/setup/execute inputs to Planning and Binding, setup fixture fields to Fixture and State Manager, execute operations to Execution Engine, expected_results/verify to Oracle and Assertion Engine, and evidence/runtime fields to Evidence and Reporting.
 - Refuse executable drafting when an AP cannot be selected or when a required AP input would have to be invented by the agent.
 - Mark ambiguous AC as `not_ready_for_generation`.
-- Generate `draft_test_skeleton` using the package-neutral test case DSL only when AC is ready but execution context is incomplete.
+- Generate `draft_test_skeleton` only when AC is ready but execution context is incomplete. The skeleton shall use v1 identity/status/revision and traceability fields, plus `source_fingerprint` and `readiness_gaps`; it shall not include executable sections that require invented context.
 - Generate `draft_executable_test_case` using the package-neutral test case DSL only when AC and execution context are both ready.
 - Include `dsl_version` and all required DSL identity/status/revision, traceability, targets, scenario, setup, execute, expected_results, verify, evidence, and runtime fields in every generated executable draft.
+- Do not emit legacy-only fields such as `rp_id`, `ac_id`, `artifact_status`, or `source_refs` in new generated test-case drafts.
 - Store generated test drafts as reviewable artifacts instead of transient execution state.
 - Detect existing checked-in test cases for the same RP AC before generating replacements.
-- Emit update proposals when RP AC, RP/RU mapping, targets, setup fixtures, execute operations, expected_results, verify rules, evidence refs, or runtime policy change.
+- Emit update proposals when RP AC, RP/RU mapping, targets, setup fixtures, execute operations, expected_results, verify rules, evidence refs, or runtime policy change. Update proposals shall use v1 identity/status/revision and traceability fields, include `replaces`, `source_fingerprint`, and `readiness_gaps`, and avoid legacy-only fields.
 - Preserve checked-in test history by creating revisions or replacement links instead of silently overwriting checked-in tests.
 - Reference expected results as `pending`, `missing`, or linked to F006 output; do not generate expected-result truth in F005.
 - Emit a generation readiness report listing readiness status, generated artifact type, gaps, and owner action.

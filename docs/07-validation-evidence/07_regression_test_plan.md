@@ -133,6 +133,7 @@ Minimum FWK-008 test cases:
 - Governance-heavy fields such as approval, waiver, release gate, or risk approval state are rejected in DSL test cases.
 - `parameters.strategy: explicit_cases` with two cases creates two run IDs, two run evidence directories, recorded `parameter_case_id`, and batch/report coverage that counts the AC once.
 - Generator output for `draft_executable_test_case` emits the v1 execution-focused field set and does not overwrite checked-in approved tests.
+- Generator output for `draft_test_skeleton` and `update_proposal` uses v1 identity/status/revision and traceability fields, avoids `rp_id`, `ac_id`, `artifact_status`, and `source_refs`, and never treats a skeleton as executable.
 - CLI dry-run reports DSL validation gaps with AP, field path, test case ID, AC ID, reason, and owner action.
 - CLI `run` accepts one `tests/approved/` v1 test with `status: active`, writes run and batch evidence, and CLI `report --batch-id` returns review-ready coverage with traceability to RP ID, AC ID, test case ID, and run ID.
 

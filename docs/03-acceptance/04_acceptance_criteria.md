@@ -160,9 +160,9 @@ Given ambiguous AC
 When the agent skill performs readiness and test drafting
 Then the AC shall be marked `not_ready_for_generation` and no executable test shall be produced.
 
-Given a generated executable draft contains legacy-only fields or governance-heavy fields
+Given a generated executable draft, skeleton, or update proposal contains legacy-only fields or governance-heavy fields
 When the draft is checked for execution readiness
-Then it shall be rejected before it can be promoted to an execution-eligible test case.
+Then it shall be rejected before it can be promoted or used as an execution-eligible test case.
 
 ### Boundary Path
 
@@ -170,7 +170,11 @@ Given ready AC with incomplete execution context
 When the agent skill performs readiness and test drafting
 Then only a `draft_test_skeleton` may be produced.
 
+The skeleton shall use v1 identity/status/revision and traceability fields, include readiness gaps, and omit executable sections that require missing target, setup, execute, expected-result, verify, evidence, or runtime context.
+
 Existing checked-in approved tests for the same RP AC shall not be silently overwritten.
+
+When an approved test already exists for the same RP AC, generation shall create an `update_proposal` with v1 identity/status/revision, traceability, `replaces`, source fingerprint, and readiness gaps instead of modifying the approved test in place.
 
 ## AC-006 Expected Results and Verify Rules Are Explicit
 

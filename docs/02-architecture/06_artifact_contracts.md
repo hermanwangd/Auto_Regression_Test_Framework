@@ -214,6 +214,48 @@ Test case generation and test case execution are separate actions. Execution sha
 | `tests/approved/` | Reviewed test cases eligible for normal regression execution |
 | `tests/retired/` | Superseded test cases retained for traceability |
 
+Drafting artifacts created after DSL v1 adoption must use the same identity, status, revision, and traceability vocabulary as executable DSL test cases. Skeletons and update proposals are review artifacts, not executable tests; they must not emit legacy-only fields such as `rp_id`, `ac_id`, `artifact_status`, or `source_refs`.
+
+Skeleton draft shape:
+
+```yaml
+dsl_version: v1
+test_case_id: RP-AR-M1-data-pipeline-TC-001
+status: draft_skeleton
+revision: 1
+traceability:
+  package_id: RP-AR-M1-data-pipeline
+  acceptance_criteria_id: RP-AR-M1-data-pipeline-AC-001
+  source: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-001
+source_fingerprint: <fingerprint>
+readiness_gaps:
+  - field_path: release_units[0].repo
+    reason: execution_context_incomplete
+    gap: release_units[0].repo
+    owner_action: Complete RP/RU mapping execution context before executable test generation.
+```
+
+Update proposal shape:
+
+```yaml
+proposal_type: test_case_update
+dsl_version: v1
+test_case_id: RP-AR-M1-data-pipeline-TC-001
+status: needs_update
+revision: 1
+traceability:
+  package_id: RP-AR-M1-data-pipeline
+  acceptance_criteria_id: RP-AR-M1-data-pipeline-AC-001
+  source: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-001
+replaces: tests/approved/RP-AR-M1-data-pipeline-TC-001.yaml
+source_fingerprint: <fingerprint>
+readiness_gaps:
+  - field_path: tests/approved
+    reason: approved_test_exists
+    gap: approved test exists
+    owner_action: Review the generated update proposal instead of overwriting the approved test.
+```
+
 An approved test case may be replaced only by an explicit update proposal that records the source change and replacement relationship.
 
 ## 6.7 Execution-Focused Test Case DSL v1
@@ -536,7 +578,7 @@ Implementation work after this documentation baseline must first add validation 
 Implementation sequencing rule:
 
 - First implement DSL v1 parsing and validation for the execution-focused field set.
-- Then update generation so new drafts emit only execution-focused fields.
+- Then update generation so executable drafts emit execution-focused fields, and skeleton/update proposal artifacts emit only v1 identity/status/revision, traceability, source fingerprint, replacement link when relevant, and readiness gaps.
 - Then keep legacy artifacts readable through compatibility behavior until migrated.
 - Then prove one active execution-focused DSL v1 artifact can pass `run` and `report --batch-id` with review-ready coverage.
 - Only after those checks pass may provider runtime dispatch or sample fixture migration claim execution-focused DSL support.

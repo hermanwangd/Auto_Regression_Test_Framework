@@ -290,7 +290,14 @@ class FrameworkVerificationIT {
         assertThat(Files.readString(existingPackageRoot.resolve(
                         "tests/draft/RP-FWK-SAMPLE-TC-001-update_proposal.yaml")))
                 .contains("proposal_type: test_case_update")
-                .contains("replaces: tests/approved/RP-FWK-SAMPLE-TC-001.yaml");
+                .contains("dsl_version: v1")
+                .contains("status: needs_update")
+                .contains("traceability:")
+                .contains("replaces: tests/approved/RP-FWK-SAMPLE-TC-001.yaml")
+                .doesNotContain("rp_id:")
+                .doesNotContain("ac_id:")
+                .doesNotContain("artifact_status:")
+                .doesNotContain("source_refs:");
 
         Path ambiguousRepo = sampleProductRepo();
         Path ambiguousPackageRoot = packageRoot(ambiguousRepo);
@@ -316,9 +323,14 @@ class FrameworkVerificationIT {
         assertThat(skeletonDraft.stdout()).contains("gap: release_units[0].repo");
         assertThat(Files.readString(incompleteContextPackageRoot.resolve(
                         "tests/draft/RP-FWK-SAMPLE-TC-001-draft_test_skeleton.yaml")))
-                .contains("artifact_status: draft_test_skeleton")
+                .contains("status: draft_skeleton")
+                .contains("traceability:")
                 .contains("readiness_gaps:")
-                .contains("release_units[0].repo");
+                .contains("release_units[0].repo")
+                .doesNotContain("rp_id:")
+                .doesNotContain("ac_id:")
+                .doesNotContain("artifact_status:")
+                .doesNotContain("source_refs:");
     }
 
     @Test

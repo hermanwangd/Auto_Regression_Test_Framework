@@ -120,11 +120,23 @@ class TestCaseLifecycleServiceTest {
 
         assertThat(result.generatedArtifactType()).isEqualTo("draft_test_skeleton");
         String yaml = Files.readString(result.writtenPath());
-        assertThat(yaml).contains("artifact_status: draft_test_skeleton");
+        assertThat(yaml).contains("dsl_version: v1");
+        assertThat(yaml).contains("test_case_id: RP-AR-M1-data-pipeline-TC-002");
+        assertThat(yaml).contains("status: draft_skeleton");
+        assertThat(yaml).contains("revision: 1");
+        assertThat(yaml).contains("traceability:");
+        assertThat(yaml).contains("package_id: RP-AR-M1-data-pipeline");
+        assertThat(yaml).contains("acceptance_criteria_id: RP-AR-M1-data-pipeline-AC-002");
+        assertThat(yaml).contains("source: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-002");
         assertThat(yaml).contains("readiness_gaps:");
         assertThat(yaml).contains("field_path: execution_target.adapter");
         assertThat(yaml).contains("reason: execution_context_incomplete");
         assertThat(yaml).contains("owner_action: Complete RP/RU mapping execution context before executable test generation.");
+        assertThat(yaml)
+                .doesNotContain("rp_id:")
+                .doesNotContain("ac_id:")
+                .doesNotContain("artifact_status:")
+                .doesNotContain("source_refs:");
     }
 
     @Test
@@ -169,6 +181,22 @@ class TestCaseLifecycleServiceTest {
         assertThat(result.generatedArtifactType()).isEqualTo("update_proposal");
         assertThat(result.writtenPath()).isNotNull();
         assertThat(result.writtenPath().toString()).contains("tests/draft");
-        assertThat(Files.readString(result.writtenPath())).contains("replaces: tests/approved/RP-AR-M1-data-pipeline-TC-001.yaml");
+        String proposal = Files.readString(result.writtenPath());
+        assertThat(proposal).contains("proposal_type: test_case_update");
+        assertThat(proposal).contains("dsl_version: v1");
+        assertThat(proposal).contains("test_case_id: RP-AR-M1-data-pipeline-TC-001");
+        assertThat(proposal).contains("status: needs_update");
+        assertThat(proposal).contains("revision: 1");
+        assertThat(proposal).contains("traceability:");
+        assertThat(proposal).contains("package_id: RP-AR-M1-data-pipeline");
+        assertThat(proposal).contains("acceptance_criteria_id: RP-AR-M1-data-pipeline-AC-001");
+        assertThat(proposal).contains("source: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-001");
+        assertThat(proposal).contains("replaces: tests/approved/RP-AR-M1-data-pipeline-TC-001.yaml");
+        assertThat(proposal).contains("readiness_gaps:");
+        assertThat(proposal)
+                .doesNotContain("rp_id:")
+                .doesNotContain("ac_id:")
+                .doesNotContain("artifact_status:")
+                .doesNotContain("source_refs:");
     }
 }

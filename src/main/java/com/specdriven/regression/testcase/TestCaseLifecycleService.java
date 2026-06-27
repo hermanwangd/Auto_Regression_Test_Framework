@@ -43,6 +43,7 @@ public class TestCaseLifecycleService {
         String content = switch (generatedType) {
             case "update_proposal" -> updateProposalContent(
                     ac,
+                    testCaseId,
                     Path.of("tests/approved/" + testCaseId + ".yaml"),
                     executionContext);
             case "draft_executable_test_case" -> executableDraftContent(ac, testCaseId, executionContext);
@@ -227,12 +228,12 @@ public class TestCaseLifecycleService {
         return """
                 dsl_version: v1
                 test_case_id: %s
-                rp_id: %s
-                ac_id: %s
-                artifact_status: draft_test_skeleton
+                status: draft_skeleton
                 revision: 1
-                source_refs:
-                  acceptance_criteria: acceptance_criteria.md#%s
+                traceability:
+                  package_id: %s
+                  acceptance_criteria_id: %s
+                  source: acceptance_criteria.md#%s
                 source_fingerprint: %s
                 readiness_gaps:
                 %s
@@ -247,6 +248,7 @@ public class TestCaseLifecycleService {
 
     private String updateProposalContent(
             AcReadinessItem ac,
+            String testCaseId,
             Path approvedPath,
             ExecutionContextReadiness executionContext) {
         List<String> gaps = new ArrayList<>(executionContext.gaps());
@@ -255,15 +257,22 @@ public class TestCaseLifecycleService {
         }
         return """
                 proposal_type: test_case_update
-                rp_id: %s
-                ac_id: %s
-                artifact_status: needs_update
+                dsl_version: v1
+                test_case_id: %s
+                status: needs_update
+                revision: 1
+                traceability:
+                  package_id: %s
+                  acceptance_criteria_id: %s
+                  source: acceptance_criteria.md#%s
                 replaces: %s
                 source_fingerprint: %s
                 readiness_gaps:
                 %s
                 """.formatted(
+                testCaseId,
                 ac.rpId(),
+                ac.acId(),
                 ac.acId(),
                 approvedPath.toString(),
                 fingerprint(ac),

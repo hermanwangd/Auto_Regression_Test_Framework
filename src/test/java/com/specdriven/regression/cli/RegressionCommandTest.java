@@ -223,7 +223,15 @@ class RegressionCommandTest {
                 "docs/08-release/release-packages/RP-001/tests/draft/RP-001-TC-001-draft_test_skeleton.yaml");
         assertThat(exit).isZero();
         assertThat(Files.exists(draft)).isTrue();
-        assertThat(Files.readString(draft)).contains("artifact_status: draft_test_skeleton");
+        assertThat(Files.readString(draft))
+                .contains("status: draft_skeleton")
+                .contains("traceability:")
+                .contains("package_id: RP-001")
+                .contains("acceptance_criteria_id: RP-001-AC-001")
+                .doesNotContain("rp_id:")
+                .doesNotContain("ac_id:")
+                .doesNotContain("artifact_status:")
+                .doesNotContain("source_refs:");
         assertThat(output.toString()).contains("generated_artifact_type: draft_test_skeleton");
         assertThat(output.toString()).contains("ap: Planning and Binding");
         assertThat(output.toString()).contains("field_path: release_units");
