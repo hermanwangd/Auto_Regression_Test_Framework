@@ -1,0 +1,34 @@
+rp_id: RP-FWK-SAMPLE
+release_units:
+  - ru_id: RU-framework-sample-adapter
+    repo: /repo/framework-sample
+    unit_type: data_pipeline
+    owner: platform
+    version_ref: framework-verification-fixture
+    validation_boundary: execute_pipeline_with_fixture
+    execution_mode: ci_ephemeral
+    deployment_required: false
+    environment_ref: ci://framework-verification/RP-FWK-SAMPLE
+    adapter: spring_boot_cli
+    provider_contracts:
+      adapters:
+        spring_boot_cli:
+          command: 'echo framework-sample-ok; echo framework-sample-warn >&2'
+          working_directory: .
+          timeout_seconds: 10
+          success_exit_codes: [0]
+          logs:
+            stdout: logs/stdout.log
+            stderr: logs/stderr.log
+          outputs:
+            actual_output_ref: actual/output.txt
+      bindings:
+        db_seed:
+          provider: file_fixture
+          materialize_as: input_file
+      fixtures: {}
+      oracles: {}
+      assertions: {}
+      observations: {}
+    evidence_responsibility: [execution_log]
+    dependencies: []

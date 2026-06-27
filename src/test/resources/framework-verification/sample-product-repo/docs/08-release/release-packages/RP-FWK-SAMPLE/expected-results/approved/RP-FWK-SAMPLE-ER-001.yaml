@@ -1,0 +1,16 @@
+expected_result_id: RP-FWK-SAMPLE-ER-001
+rp_id: RP-FWK-SAMPLE
+ac_id: RP-FWK-SAMPLE-AC-001
+status: approved_for_regression
+source_refs:
+  - acceptance_criteria.md#RP-FWK-SAMPLE-AC-001
+input_refs:
+  - fixtures/db/orders_seed.yaml
+expected_outputs:
+  output_ref: expected/output/orders.csv
+assumptions: []
+unresolved_gaps: []
+approved_by: platform
+approved_at: 2026-06-27T00:00:00+08:00
+approval_ref: FRAMEWORK_VERIFICATION_FIXTURE.md
+blocked_reason: null

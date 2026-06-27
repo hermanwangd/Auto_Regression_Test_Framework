@@ -17,8 +17,9 @@ Do not commit generated outputs, caches, virtual environments, dependency folder
 
 This project uses Maven Wrapper with Spring Boot 3.x and Java 17+.
 
-- `./mvnw test`: run the full automated test suite.
-- `./mvnw package`: compile, test, and package the Spring Boot jar.
+- `./mvnw test`: run fast unit/component tests through Maven Surefire.
+- `./mvnw verify`: run unit/component tests, package the jar, and run Failsafe `*IT` framework integration tests.
+- `./mvnw package`: compile, test, and package the Spring Boot jar without the Failsafe integration-test phase.
 - `./mvnw spring-boot:run`: start the application locally.
 - `./mvnw test -Dtest=RegressionCommandTest`: run a focused CLI behavior test.
 
@@ -32,7 +33,7 @@ Use project formatters and linters once introduced. Keep configuration in commit
 
 ## Testing Guidelines
 
-Place tests under `src/test/java/`, matching the source package when possible. Use names that describe behavior, for example `RegressionRunnerRejectsMissingSpecTest` or `ProviderContractResolutionTest`.
+Place tests under `src/test/java/`, matching the source package when possible. Use `*Test` for Surefire unit/component tests and `*IT` for Failsafe framework integration tests. Keep framework verification fixtures under `src/test/resources/framework-verification/`.
 
 Regression tests should include the input spec, expected behavior, and at least one failure-path case. Keep fixtures small. If a test needs large data, document how to fetch or regenerate it.
 

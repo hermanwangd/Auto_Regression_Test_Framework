@@ -1,0 +1,18 @@
+product_id: FRAMEWORK-SAMPLE
+rp_id: RP-FWK-SAMPLE
+name: Framework Verification Sample RP
+owner: platform
+target_release: FRAMEWORK-VERIFY
+package_type: data_pipeline
+lifecycle_status: sample_framework_verification
+default_execution_mode: ci_ephemeral
+fixture_scope: framework_verification
+release_evidence: false
+artifact_paths:
+  feature_spec: rp_feature_spec.md
+  acceptance_criteria: acceptance_criteria.md
+  ru_mapping: rp_ru_mapping.yaml
+  tests: tests
+  expected_results: expected-results
+  traceability: traceability.md
+  evidence_index: evidence_index.md

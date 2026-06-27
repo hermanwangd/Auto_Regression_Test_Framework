@@ -1,0 +1,38 @@
+dsl_version: v1
+test_case_id: RP-FWK-SAMPLE-TC-001
+rp_id: RP-FWK-SAMPLE
+ac_id: RP-FWK-SAMPLE-AC-001
+artifact_status: approved_for_regression
+revision: 1
+source_refs:
+  acceptance_criteria: acceptance_criteria.md#RP-FWK-SAMPLE-AC-001
+source_fingerprint: sha256:framework-verification-fixture
+execution_target:
+  ru_id: RU-framework-sample-adapter
+  adapter: spring_boot_cli
+  execution_mode: ci_ephemeral
+  environment_ref: ci://framework-verification/RP-FWK-SAMPLE
+scenario:
+  type: integration
+  scope: release_package
+  capabilities: [db_seed, batch_execution, file_assertion]
+expected:
+  ref: expected-results/approved/RP-FWK-SAMPLE-ER-001.yaml
+oracles:
+  normalized_orders:
+    type: expected_result_artifact
+    ref: expected-results/approved/RP-FWK-SAMPLE-ER-001.yaml
+package_inputs:
+  inputs:
+    orders_seed:
+      ref: fixtures/db/orders_seed.yaml
+      bind_as: db_seed
+steps:
+  - id: run_pipeline
+    action: call_ru
+    target_ru_id: RU-framework-sample-adapter
+assertions:
+  - type: file_diff
+    oracle: ${oracles.normalized_orders}
+evidence_required:
+  - execution_log
