@@ -108,6 +108,8 @@ public class EvidenceWriter {
                     assertion_status: %s
                     assertions: %s
                     cleanup_result: %s
+                    dsl_runtime:
+                    %s
                     """.formatted(
                     runId,
                     batchId,
@@ -129,10 +131,162 @@ public class EvidenceWriter {
                     runDir.relativize(adapterResult.actualOutput()),
                     assertionEvaluation == null ? "not_run" : assertionEvaluation.status(),
                     assertionEvaluation == null ? "" : runDir.relativize(assertionEvaluation.evidencePath()),
-                    cleanupResult));
+                    cleanupResult,
+                    dslRuntimeYaml(testCase)));
             return runDir;
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write execution run evidence.", e);
+        }
+    }
+
+    private String dslRuntimeYaml(Map<String, Object> testCase) {
+        if (!"v1".equals(stringValue(testCase.get("dsl_version")))) {
+            return "  []";
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append("  dsl_version: ").append(stringValue(testCase.get("dsl_version"))).append("\n");
+        builder.append("  targets:\n").append(targetsYaml(testCase.get("targets"))).append("\n");
+        builder.append("  setup_fixtures:\n").append(setupFixturesYaml(testCase.get("setup"))).append("\n");
+        builder.append("  execute_steps:\n").append(executeStepsYaml(testCase.get("execute"))).append("\n");
+        builder.append("  expected_results:\n").append(expectedResultsYaml(testCase.get("expected_results"))).append("\n");
+        builder.append("  verify_rules:\n").append(verifyRulesYaml(testCase.get("verify"))).append("\n");
+        builder.append("  evidence_required:\n").append(evidenceRequiredYaml(testCase.get("evidence"))).append("\n");
+        builder.append("  runtime:\n").append(runtimeYaml(testCase.get("runtime")));
+        return builder.toString().stripTrailing();
+    }
+
+    private String targetsYaml(Object targetsValue) {
+        Map<?, ?> targets = map(targetsValue);
+        if (targets.isEmpty()) {
+            return "    []";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (Map.Entry<?, ?> entry : targets.entrySet()) {
+            Map<?, ?> target = map(entry.getValue());
+            builder.append("    - target_id: ").append(stringValue(entry.getKey())).append("\n");
+            appendField(builder, "      ", "type", target.get("type"));
+            appendField(builder, "      ", "runner", target.get("runner"));
+            appendField(builder, "      ", "environment", target.get("environment"));
+        }
+        return builder.toString().stripTrailing();
+    }
+
+    private String setupFixturesYaml(Object setupValue) {
+        Map<?, ?> fixtures = map(map(setupValue).get("fixtures"));
+        if (fixtures.isEmpty()) {
+            return "    []";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (Map.Entry<?, ?> entry : fixtures.entrySet()) {
+            Map<?, ?> fixture = map(entry.getValue());
+            builder.append("    - fixture_name: ").append(stringValue(entry.getKey())).append("\n");
+            appendField(builder, "      ", "type", fixture.get("type"));
+            appendField(builder, "      ", "ref", fixture.get("ref"));
+            appendField(builder, "      ", "cleanup_ref", fixture.get("cleanup_ref"));
+        }
+        return builder.toString().stripTrailing();
+    }
+
+    private String executeStepsYaml(Object executeValue) {
+        List<?> execute = list(executeValue);
+        if (execute.isEmpty()) {
+            return "    []";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (Object item : execute) {
+            Map<?, ?> step = map(item);
+            builder.append("    - step_id: ").append(stringValue(step.get("id"))).append("\n");
+            appendField(builder, "      ", "target", step.get("target"));
+            appendField(builder, "      ", "operation", step.get("operation"));
+            builder.append("      outputs:\n").append(outputsYaml(step.get("outputs")));
+        }
+        return builder.toString().stripTrailing();
+    }
+
+    private String outputsYaml(Object outputsValue) {
+        Map<?, ?> outputs = map(outputsValue);
+        if (outputs.isEmpty()) {
+            return "        []\n";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (Map.Entry<?, ?> entry : outputs.entrySet()) {
+            builder.append("        ").append(stringValue(entry.getKey())).append(": ")
+                    .append(outputRef(entry.getValue())).append("\n");
+        }
+        return builder.toString();
+    }
+
+    private String expectedResultsYaml(Object expectedResultsValue) {
+        Map<?, ?> expectedResults = map(expectedResultsValue);
+        if (expectedResults.isEmpty()) {
+            return "    []";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (Map.Entry<?, ?> entry : expectedResults.entrySet()) {
+            Map<?, ?> expectedResult = map(entry.getValue());
+            builder.append("    - expected_result_id: ").append(stringValue(entry.getKey())).append("\n");
+            appendField(builder, "      ", "type", expectedResult.get("type"));
+            appendField(builder, "      ", "ref", expectedResult.get("ref"));
+        }
+        return builder.toString().stripTrailing();
+    }
+
+    private String verifyRulesYaml(Object verifyValue) {
+        List<?> verifyRules = list(verifyValue);
+        if (verifyRules.isEmpty()) {
+            return "    []";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (Object item : verifyRules) {
+            Map<?, ?> rule = map(item);
+            builder.append("    - verify_id: ").append(stringValue(rule.get("id"))).append("\n");
+            appendField(builder, "      ", "type", rule.get("type"));
+            appendField(builder, "      ", "actual", rule.get("actual"));
+            appendField(builder, "      ", "expected", rule.get("expected"));
+            appendField(builder, "      ", "target", rule.get("target"));
+        }
+        return builder.toString().stripTrailing();
+    }
+
+    private String evidenceRequiredYaml(Object evidenceValue) {
+        List<?> refs = list(map(evidenceValue).get("required"));
+        if (refs.isEmpty()) {
+            return "    []";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (Object ref : refs) {
+            builder.append("    - ").append(stringValue(ref)).append("\n");
+        }
+        return builder.toString().stripTrailing();
+    }
+
+    private String runtimeYaml(Object runtimeValue) {
+        Map<?, ?> runtime = map(runtimeValue);
+        if (runtime.isEmpty()) {
+            return "    []";
+        }
+        StringBuilder builder = new StringBuilder();
+        appendField(builder, "    ", "timeout", runtime.get("timeout"));
+        Object retry = runtime.get("retry");
+        if (retry instanceof Map<?, ?> retryMap) {
+            builder.append("    retry:\n");
+            appendField(builder, "      ", "max_attempts", retryMap.get("max_attempts"));
+        }
+        return builder.toString().stripTrailing();
+    }
+
+    private String outputRef(Object value) {
+        if (value instanceof Map<?, ?> output) {
+            String ref = stringValue(output.get("ref"));
+            return ref.isBlank() ? stringValue(value) : ref;
+        }
+        return stringValue(value);
+    }
+
+    private void appendField(StringBuilder builder, String indent, String name, Object value) {
+        String text = stringValue(value);
+        if (!text.isBlank()) {
+            builder.append(indent).append(name).append(": ").append(text).append("\n");
         }
     }
 
@@ -392,6 +546,14 @@ public class EvidenceWriter {
             return map;
         }
         return Map.of();
+    }
+
+    private Map<?, ?> map(Object value) {
+        return value instanceof Map<?, ?> map ? map : Map.of();
+    }
+
+    private List<?> list(Object value) {
+        return value instanceof List<?> list ? list : List.of();
     }
 
     private String stringValue(Object value) {
