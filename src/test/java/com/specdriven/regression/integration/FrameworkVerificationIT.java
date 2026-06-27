@@ -11,6 +11,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -22,6 +23,7 @@ class FrameworkVerificationIT {
     Path tempDir;
 
     @Test
+    @DisplayName("FWK-IT-001 | AC-002 AC-004 AC-007 AC-009 AC-010 | happy path check-run-report")
     void sampleProductRepoFixtureRunsThroughCheckRunAndReportWithoutSitDeployment() throws Exception {
         Path productRepo = sampleProductRepo();
         Path packageRoot = packageRoot(productRepo);
@@ -55,6 +57,7 @@ class FrameworkVerificationIT {
     }
 
     @Test
+    @DisplayName("FWK-IT-002 | AC-002 AC-004 AC-010 | readiness gaps block before execution evidence")
     void strictRpCheckReportsPackageSchemaAndMappingGapsBeforeExecution() throws Exception {
         Path productRepo = sampleProductRepo();
         Path packageRoot = packageRoot(productRepo);
@@ -76,6 +79,7 @@ class FrameworkVerificationIT {
     }
 
     @Test
+    @DisplayName("FWK-IT-003 | AC-004 AC-008 AC-010 | provider contract gap blocks adapter execution")
     void runBlocksBeforeAdapterExecutionWhenProviderContractIsIncomplete() throws Exception {
         Path productRepo = sampleProductRepo();
         Path packageRoot = packageRoot(productRepo);
@@ -100,6 +104,34 @@ class FrameworkVerificationIT {
     }
 
     @Test
+    @DisplayName("FWK-IT-004 | AC-006 AC-008 AC-010 | unapproved expected result blocks before assertion")
+    void runBlocksBeforeAdapterExecutionWhenExpectedResultIsNotApproved() throws Exception {
+        Path productRepo = sampleProductRepo();
+        Path packageRoot = packageRoot(productRepo);
+        Path expectedResult = packageRoot.resolve("expected-results/approved/RP-FWK-SAMPLE-ER-001.yaml");
+        Files.writeString(expectedResult, Files.readString(expectedResult)
+                .replace("status: approved_for_regression", "status: draft"));
+
+        CommandResult run = execute(command(), "run", productRepo, "--env", "ci_ephemeral");
+
+        assertThat(run.exitCode()).isEqualTo(1);
+        assertThat(run.stdout()).contains("adapter_execution_started: false");
+        assertThat(run.stdout()).contains("expected_result_eligibility:");
+        assertThat(run.stdout()).contains("eligible: false");
+        assertThat(run.stdout()).contains("field_path: status");
+        assertThat(run.stdout()).contains("Approve expected result before using it as regression truth.");
+        assertThat(run.stdout()).contains("run_status: blocked");
+        assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/run.yaml")))
+                .contains("status: blocked")
+                .contains("adapter_execution_started: false")
+                .contains("failure_details: failure_details.yaml");
+        assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/failure_details.yaml")))
+                .contains("field_path: status")
+                .contains("Approve expected result before using it as regression truth.");
+    }
+
+    @Test
+    @DisplayName("FWK-IT-005 | AC-007 AC-008 AC-010 | missing approved DSL test blocks execution")
     void runBlocksWhenNoApprovedDslTestCaseIsCheckedIn() throws Exception {
         Path productRepo = sampleProductRepo();
         Path packageRoot = packageRoot(productRepo);
@@ -123,6 +155,7 @@ class FrameworkVerificationIT {
     }
 
     @Test
+    @DisplayName("FWK-IT-006 | AC-007 AC-009 | failed assertion creates failed evidence and not-review-ready report")
     void failedAssertionProducesRunEvidenceAndNotReviewReadyReport() throws Exception {
         Path productRepo = sampleProductRepo();
         Path packageRoot = packageRoot(productRepo);

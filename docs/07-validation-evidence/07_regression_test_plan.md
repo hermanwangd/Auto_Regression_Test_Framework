@@ -60,25 +60,28 @@ copy sample Product Repo fixture to temp directory
 -> assert batch evidence, run evidence, and coverage evidence
 ```
 
-The integration suite shall cover at least these sample Product/RP/RU scenarios:
+The integration suite shall expose AC traceability through `FrameworkVerificationIT` display names and this mapping:
 
-- Happy path: `check-rp`, `run`, and `report` complete with 100% sample coverage.
-- Artifact readiness failure: package schema and RP/RU mapping gaps block before execution evidence is written.
-- Provider contract failure: missing adapter command blocks before adapter execution and writes blocked run evidence.
-- Test inventory boundary: missing approved DSL test case blocks before adapter execution.
-- Execution/assertion failure: adapter execution starts, assertion fails, run evidence is failed, and report is not review-ready.
+| Integration Case | AC Coverage | Scenario | Required Assertions |
+|---|---|---|---|
+| FWK-IT-001 | AC-002, AC-004, AC-007, AC-009, AC-010 | Happy path `check-rp`, `run`, and `report` complete without SIT/UAT deployment | Complete RP artifacts, valid RP/RU mapping, durable batch/run evidence, 100% sample coverage, and sample evidence boundary. |
+| FWK-IT-002 | AC-002, AC-004, AC-010 | Artifact readiness failure | Package schema and RP/RU mapping gaps are reported before execution evidence is written. |
+| FWK-IT-003 | AC-004, AC-008, AC-010 | Provider contract failure | Missing adapter command blocks before adapter execution and writes blocked run evidence. |
+| FWK-IT-004 | AC-006, AC-008, AC-010 | Truth-source approval failure | Unapproved expected result blocks before adapter execution or assertion evaluation. |
+| FWK-IT-005 | AC-007, AC-008, AC-010 | Test inventory boundary | Missing approved checked-in DSL test case blocks before adapter execution. |
+| FWK-IT-006 | AC-007, AC-009 | Execution/assertion failure | Adapter execution starts, assertion fails, run evidence is failed, and report is not review-ready. |
 
 Generated sample evidence must stay in the test temp directory. It shall not be committed and shall not count as real Product/RP release evidence.
 
 ## 7.5 Required Framework Verification Cases
 
-| Test ID | Scenario | Command Level | Priority | Automation |
-|---|---|---|---|---|
-| FWK-001 | Unit/component suite validates parsers, readiness checks, CLI behavior, resolvers, execution services, evidence writers, and reporters | `./mvnw test` | P1 | Auto |
-| FWK-002 | Sample Product/RP/RU fixture runs happy path through `check-rp`, `run`, and `report` without SIT/UAT deployment | `./mvnw verify` | P1 | Auto |
-| FWK-003 | Sample fixture evidence is marked as framework verification evidence and is not counted as downstream RP release evidence | `./mvnw verify` | P1 | Auto |
-| FWK-004 | Artifact readiness gaps, provider contract gaps, missing approved DSL tests, or failed assertions block or fail with actionable evidence | `./mvnw verify` | P1 | Auto |
-| FWK-005 | Packaged jar delegates CLI arguments to the framework command layer and returns meaningful exit codes | `./mvnw test` plus packaged CLI smoke | P1 | Auto / CLI |
+| Test ID | AC Coverage | Scenario | Command Level | Priority | Automation |
+|---|---|---|---|---|---|
+| FWK-001 | AC-001 through AC-010 | Unit/component suite validates parsers, readiness checks, CLI behavior, resolvers, execution services, evidence writers, and reporters | `./mvnw test` | P1 | Auto |
+| FWK-002 | AC-002, AC-004, AC-007, AC-009, AC-010 | Sample Product/RP/RU fixture runs happy path through `check-rp`, `run`, and `report` without SIT/UAT deployment | `./mvnw verify` | P1 | Auto |
+| FWK-003 | AC-010 | Sample fixture evidence is marked as framework verification evidence and is not counted as downstream RP release evidence | `./mvnw verify` | P1 | Auto |
+| FWK-004 | AC-002, AC-004, AC-006, AC-007, AC-008, AC-009, AC-010 | Artifact readiness gaps, provider contract gaps, unapproved expected results, missing approved DSL tests, or failed assertions block or fail with actionable evidence | `./mvnw verify` | P1 | Auto |
+| FWK-005 | AC-010 | Packaged jar delegates CLI arguments to the framework command layer and returns meaningful exit codes | `./mvnw test` plus packaged CLI smoke | P1 | Auto / CLI |
 
 ## 7.6 Downstream RP Regression Boundary
 
