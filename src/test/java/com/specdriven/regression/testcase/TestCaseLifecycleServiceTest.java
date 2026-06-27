@@ -42,9 +42,45 @@ class TestCaseLifecycleServiceTest {
         assertThat(yaml).contains("source_refs:");
         assertThat(yaml).contains("source_fingerprint:");
         assertThat(yaml).contains("execution_target:");
+        assertThat(yaml).contains("package_inputs:");
+        assertThat(yaml).contains("primary_input:");
+        assertThat(yaml).contains("bind_as: input_file");
+        assertThat(yaml).contains("lifecycle: read_only");
+        assertThat(yaml).contains("oracles:");
+        assertThat(yaml).contains("fixture:");
         assertThat(yaml).contains("steps:");
         assertThat(yaml).contains("assertions:");
         assertThat(yaml).contains("evidence_required:");
+        assertThat(yaml).contains("policy:");
+        assertThat(yaml).contains("cleanup_required: false");
+    }
+
+    @Test
+    void writesCleanupFixtureWhenExecutableDraftMutatesState() throws Exception {
+        AcReadinessItem readyAc = AcReadinessItem.ready(
+                "RP-AR-M1-order-flow-AC-001",
+                "RP-AR-M1-order-flow",
+                "Seeded order produces persisted allocation",
+                "automatable",
+                List.of("docs/01-specs/rp_feature_spec.md"));
+
+        TestCaseDraftResult result = new TestCaseLifecycleService().generateDraft(
+                tempDir, readyAc, ExecutionContextReadiness.ready(
+                        "RU-order-service",
+                        "spring_boot_cli",
+                        "ci_ephemeral",
+                        "ci://pipeline/rp-ar-m1-order-flow",
+                        List.of("db_seed", "batch_execution", "db_assertion")));
+
+        assertThat(result.generatedArtifactType()).isEqualTo("draft_executable_test_case");
+        String yaml = Files.readString(result.writtenPath());
+        assertThat(yaml).contains("bind_as: db_seed");
+        assertThat(yaml).contains("lifecycle: state_mutating");
+        assertThat(yaml).contains("cleanup_required: true");
+        assertThat(yaml).contains("cleanup:");
+        assertThat(yaml).contains("- id: cleanup_primary_input");
+        assertThat(yaml).contains("action: cleanup_bound_input");
+        assertThat(yaml).contains("input: ${package_inputs.inputs.primary_input}");
     }
 
     @Test

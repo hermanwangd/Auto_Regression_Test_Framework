@@ -78,17 +78,34 @@ public class TestCaseLifecycleService {
                   execution_mode: %s
                   environment_ref: %s
                 expected:
-                  status: pending
+                  status: pending_owner_review
+                oracles:
+                  owner_approved_expected:
+                    type: pending_owner_approved_rule
+                    status: pending_owner_review
+                    owner_action: Approve expected result or replace with reviewed oracle before regression execution.
+                package_inputs:
+                  inputs:
+                    primary_input:
+                      bind_as: %s
+                      lifecycle: %s
+                      ref: pending_owner_selected_input
+                      owner_action: Select checked-in or cataloged logical input data for this AC.
+                %s
                 steps:
                   - id: execute_rp_behavior
                     action: call_ru
                     target_ru_id: %s
+                    input: ${package_inputs.inputs.primary_input}
                 assertions:
                   - type: pending_owner_approved_rule
-                    oracle: pending
+                    oracle: ${oracles.owner_approved_expected}
                 evidence_required:
                   - execution_log
                   - assertion_result
+                policy:
+                  cleanup_required: %s
+                  destructive_actions_allowed: false
                 """.formatted(
                 testCaseId,
                 ac.rpId(),
@@ -100,7 +117,63 @@ public class TestCaseLifecycleService {
                 executionContext.adapter(),
                 executionContext.executionMode(),
                 executionContext.environmentRef(),
-                executionContext.ruId());
+                inputBindAs(executionContext.capabilities()),
+                inputLifecycle(executionContext.capabilities()),
+                fixtureYaml(executionContext.capabilities()),
+                executionContext.ruId(),
+                requiresCleanup(executionContext.capabilities()));
+    }
+
+    private String inputBindAs(List<String> capabilities) {
+        if (capabilities.contains("dataset_input")) {
+            return "dataset";
+        }
+        if (capabilities.contains("file_input")) {
+            return "input_file";
+        }
+        if (capabilities.contains("api_payload")) {
+            return "api_payload";
+        }
+        if (capabilities.contains("message_event")) {
+            return "message_event";
+        }
+        if (capabilities.contains("db_seed")) {
+            return "db_seed";
+        }
+        if (capabilities.contains("config_input")) {
+            return "config_file";
+        }
+        if (capabilities.contains("env_var")) {
+            return "env_var";
+        }
+        return "existing_state";
+    }
+
+    private String inputLifecycle(List<String> capabilities) {
+        return requiresCleanup(capabilities) ? "state_mutating" : "read_only";
+    }
+
+    private boolean requiresCleanup(List<String> capabilities) {
+        return capabilities.contains("db_seed")
+                || capabilities.contains("message_event")
+                || capabilities.contains("config_input")
+                || capabilities.contains("env_var");
+    }
+
+    private String fixtureYaml(List<String> capabilities) {
+        if (!requiresCleanup(capabilities)) {
+            return """
+                    fixture:
+                      setup: []
+                      cleanup: []""";
+        }
+        return """
+                fixture:
+                  setup: []
+                  cleanup:
+                    - id: cleanup_primary_input
+                      action: cleanup_bound_input
+                      input: ${package_inputs.inputs.primary_input}""";
     }
 
     private String skeletonDraftContent(
