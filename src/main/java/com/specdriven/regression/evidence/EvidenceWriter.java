@@ -193,6 +193,9 @@ public class EvidenceWriter {
             return "";
         }
         Path cleanupPath = runDir.resolve("cleanup.yaml");
+        if (Files.exists(cleanupPath)) {
+            return runDir.relativize(cleanupPath).toString();
+        }
         StringBuilder builder = new StringBuilder("status: passed\ncleanup_actions:\n");
         for (Object entry : cleanupEntries) {
             if (entry instanceof Map<?, ?> action) {

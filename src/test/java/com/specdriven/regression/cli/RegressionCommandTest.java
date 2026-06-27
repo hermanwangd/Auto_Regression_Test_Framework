@@ -10,6 +10,7 @@ import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.DriverManager;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -566,6 +567,81 @@ class RegressionCommandTest {
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    void runExecutesDbFixtureSetupAndCleanupWithEvidence() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-DB";
+        String acId = rpId + "-AC-001";
+        String jdbcUrl = "jdbc:h2:mem:rp_db_fixture_" + System.nanoTime() + ";DB_CLOSE_DELAY=-1";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_db"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeDbFixtureMapping(rpId, jdbcUrl);
+        writeDbFixtureSql(rpId);
+        writeApprovedExpectedResult(rpId, acId, "db-fixture-ok\n");
+        writeApprovedDbFixtureTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
+        String runEvidence = Files.readString(runDir.resolve("run.yaml"));
+        assertThat(exit).isZero();
+        assertThat(Files.readString(runDir.resolve("fixture_setup.yaml")))
+                .contains("provider: relational_db")
+                .contains("action: seed_orders")
+                .contains("row_count: 1");
+        assertThat(Files.readString(runDir.resolve("cleanup.yaml")))
+                .contains("provider: relational_db")
+                .contains("action: cleanup_orders")
+                .contains("status: passed");
+        assertThat(countOrders(jdbcUrl)).isZero();
+        assertThat(runEvidence)
+                .contains("status: passed")
+                .contains("provider_family: db_fixture")
+                .contains("contract_path: release_units[0].provider_contracts.fixtures.relational_db")
+                .contains("cleanup_result: cleanup.yaml");
+    }
+
+    @Test
+    void runCleansDbFixtureWhenAssertionFails() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-DB-FAIL";
+        String acId = rpId + "-AC-001";
+        String jdbcUrl = "jdbc:h2:mem:rp_db_fixture_fail_" + System.nanoTime() + ";DB_CLOSE_DELAY=-1";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_db"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeDbFixtureMapping(rpId, jdbcUrl);
+        writeDbFixtureSql(rpId);
+        writeApprovedExpectedResult(rpId, acId, "unexpected-output\n");
+        writeApprovedDbFixtureTestCase(rpId, acId);
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
+        assertThat(exit).isEqualTo(1);
+        assertThat(Files.readString(runDir.resolve("run.yaml")))
+                .contains("status: failed")
+                .contains("assertion_status: failed")
+                .contains("cleanup_result: cleanup.yaml");
+        assertThat(Files.readString(runDir.resolve("cleanup.yaml")))
+                .contains("provider: relational_db")
+                .contains("action: cleanup_orders")
+                .contains("status: passed");
+        assertThat(countOrders(jdbcUrl)).isZero();
     }
 
     @Test
@@ -1358,6 +1434,74 @@ class RegressionCommandTest {
         Files.writeString(payload, "{\"amount\":100,\"currency\":\"USD\"}\n");
     }
 
+    private void writeDbFixtureMapping(String rpId, String jdbcUrl) throws Exception {
+        Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        Files.writeString(mapping, """
+                rp_id: %s
+                release_units:
+                  - ru_id: RU-order-db
+                    repo: /repo/order-db
+                    unit_type: service_db
+                    owner: product_developer
+                    version_ref: schema-123
+                    validation_boundary: db_fixture
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://order/db
+                    adapter: spring_boot_cli
+                    provider_contracts:
+                      adapters:
+                        spring_boot_cli:
+                          command: /bin/sh -c 'echo db-fixture-ok'
+                          working_directory: .
+                          timeout_seconds: 10
+                          success_exit_codes: [0]
+                          logs:
+                            stdout: logs/stdout.log
+                            stderr: logs/stderr.log
+                          outputs:
+                            actual_output_ref: actual/output.txt
+                      bindings:
+                        db_seed:
+                          provider: relational_db
+                          materialize_as: jdbc_seed
+                      fixtures:
+                        relational_db:
+                          provider_family: db_fixture
+                          provider_type: jdbc
+                          connection_ref: %s
+                          setup_actions:
+                            seed_orders:
+                              sql_ref: fixtures/db/seed_orders.sql
+                          cleanup_actions:
+                            cleanup_orders:
+                              sql_ref: fixtures/db/cleanup_orders.sql
+                          verification_queries:
+                            seeded_orders:
+                              sql: SELECT COUNT(*) FROM orders
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [execution_log, cleanup_result]
+                    dependencies: []
+                """.formatted(rpId, jdbcUrl));
+    }
+
+    private void writeDbFixtureSql(String rpId) throws Exception {
+        Path fixtureDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/fixtures/db");
+        Files.createDirectories(fixtureDir);
+        Files.writeString(fixtureDir.resolve("seed_orders.sql"), """
+                CREATE TABLE IF NOT EXISTS orders (
+                  id VARCHAR(64) PRIMARY KEY,
+                  status VARCHAR(32)
+                );
+                MERGE INTO orders KEY(id) VALUES ('ORDER-001', 'READY');
+                """);
+        Files.writeString(fixtureDir.resolve("cleanup_orders.sql"), """
+                DELETE FROM orders WHERE id = 'ORDER-001';
+                """);
+    }
+
     private void writeExecutableCiMappingWithFixtureProvider(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
         Files.writeString(mapping, """
@@ -1541,6 +1685,64 @@ class RegressionCommandTest {
                 """.formatted(rpId, rpId, acId, acId, expectedResultId, expectedResultId));
     }
 
+    private void writeApprovedDbFixtureTestCase(String rpId, String acId) throws Exception {
+        String expectedResultId = acId.replace("-AC-", "-ER-");
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: %s-TC-001
+                rp_id: %s
+                ac_id: %s
+                artifact_status: approved_for_regression
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
+                source_fingerprint: sha256:test
+                execution_target:
+                  ru_id: RU-order-db
+                  adapter: spring_boot_cli
+                  execution_mode: ci_ephemeral
+                  environment_ref: ci://order/db
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [db_seed, db_fixture, batch_execution, file_assertion]
+                expected:
+                  ref: expected-results/approved/%s.yaml
+                oracles:
+                  db_fixture_output:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
+                package_inputs:
+                  inputs:
+                    orders_seed:
+                      ref: fixtures/db/seed_orders.sql
+                      bind_as: db_seed
+                fixture:
+                  setup:
+                    - provider: relational_db
+                      action: seed_orders
+                      lifecycle: mutates_state
+                  cleanup:
+                    - provider: relational_db
+                      action: cleanup_orders
+                policy:
+                  cleanup_required: true
+                steps:
+                  - id: run_db_backed_check
+                    action: call_ru
+                    target_ru_id: RU-order-db
+                assertions:
+                  - type: file_diff
+                    oracle: ${oracles.db_fixture_output}
+                evidence_required:
+                  - execution_log
+                  - cleanup_result
+                """.formatted(rpId, rpId, acId, acId, expectedResultId, expectedResultId));
+    }
+
     private void writeApprovedTestCaseWithOracleType(String rpId, String oracleType) throws Exception {
         writeApprovedTestCaseWithOracleType(rpId, "db_seed", oracleType);
     }
@@ -1701,5 +1903,14 @@ class RegressionCommandTest {
                   - execution_log
                   - cleanup_result
                 """.formatted(rpId, rpId, rpId, rpId, rpId, rpId, rpId));
+    }
+
+    private int countOrders(String jdbcUrl) throws Exception {
+        try (var connection = DriverManager.getConnection(jdbcUrl);
+                var statement = connection.createStatement();
+                var result = statement.executeQuery("SELECT COUNT(*) FROM orders")) {
+            result.next();
+            return result.getInt(1);
+        }
     }
 }

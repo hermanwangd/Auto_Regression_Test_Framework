@@ -9,6 +9,7 @@ import com.specdriven.regression.binding.BindingResolutionReport;
 import com.specdriven.regression.binding.BindingResolver;
 import com.specdriven.regression.binding.ResolvedBinding;
 import com.specdriven.regression.evidence.EvidenceWriter;
+import com.specdriven.regression.provider.DatabaseFixtureProvider;
 import com.specdriven.regression.provider.ProviderContractResolutionReport;
 import com.specdriven.regression.provider.ProviderContractResolver;
 import com.specdriven.regression.provider.RequestResponseProvider;
@@ -18,6 +19,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -32,6 +34,7 @@ public class ExecutionEngine {
     private final BindingResolver bindingResolver;
     private final ProviderContractResolver providerContractResolver;
     private final RequestResponseProvider requestResponseProvider;
+    private final DatabaseFixtureProvider databaseFixtureProvider;
 
     public ExecutionEngine() {
         this(new DataPipelineAdapter(), new AssertionEngine(), new EvidenceWriter());
@@ -56,7 +59,7 @@ public class ExecutionEngine {
             BindingResolver bindingResolver,
             ProviderContractResolver providerContractResolver) {
         this(adapter, assertionEngine, evidenceWriter, bindingResolver, providerContractResolver,
-                new RequestResponseProvider());
+                new RequestResponseProvider(), new DatabaseFixtureProvider());
     }
 
     public ExecutionEngine(
@@ -66,12 +69,25 @@ public class ExecutionEngine {
             BindingResolver bindingResolver,
             ProviderContractResolver providerContractResolver,
             RequestResponseProvider requestResponseProvider) {
+        this(adapter, assertionEngine, evidenceWriter, bindingResolver, providerContractResolver,
+                requestResponseProvider, new DatabaseFixtureProvider());
+    }
+
+    public ExecutionEngine(
+            DataPipelineAdapter adapter,
+            AssertionEngine assertionEngine,
+            EvidenceWriter evidenceWriter,
+            BindingResolver bindingResolver,
+            ProviderContractResolver providerContractResolver,
+            RequestResponseProvider requestResponseProvider,
+            DatabaseFixtureProvider databaseFixtureProvider) {
         this.adapter = adapter;
         this.assertionEngine = assertionEngine;
         this.evidenceWriter = evidenceWriter;
         this.bindingResolver = bindingResolver;
         this.providerContractResolver = providerContractResolver;
         this.requestResponseProvider = requestResponseProvider;
+        this.databaseFixtureProvider = databaseFixtureProvider;
     }
 
     public ExecutionResult execute(Path packageRoot, Path testCasePath, String batchId, String runId) {
@@ -80,40 +96,49 @@ public class ExecutionEngine {
         String acId = stringValue(testCase.get("ac_id"));
         String adapterName = adapterName(testCase);
         String targetRuId = targetRuId(testCase);
+        Path mappingYaml = packageRoot.resolve("rp_ru_mapping.yaml");
         BindingResolutionReport bindingReport = bindingResolver.resolve(testCasePath);
         ProviderContractResolutionReport providerReport = providerContractResolver.resolve(
-                packageRoot.resolve("rp_ru_mapping.yaml"),
+                mappingYaml,
                 adapterName,
                 bindingReport.resolvedBindings().stream().map(ResolvedBinding::bindingType).toList(),
                 fixtureProviders(testCase));
-        Map<String, Object> contract = adapterContract(packageRoot.resolve("rp_ru_mapping.yaml"), adapterName, targetRuId);
+        Map<String, Object> contract = adapterContract(mappingYaml, adapterName, targetRuId);
+        Map<String, Map<String, Object>> dbFixtureContracts = dbFixtureContracts(mappingYaml, providerReport);
         Path runDir = packageRoot.resolve("evidence/runs").resolve(runId);
         Path stdoutLog = runDir.resolve(pathValue(contract, "logs", "stdout", "logs/stdout.log"));
         Path stderrLog = runDir.resolve(pathValue(contract, "logs", "stderr", "logs/stderr.log"));
         Path actualOutput = runDir.resolve(pathValue(contract, "outputs", "actual_output_ref", "actual/output.txt"));
         Path workingDirectory = workingDirectory(packageRoot, contract);
 
-        AdapterExecutionResult adapterResult = executeProvider(
-                providerReport,
-                packageRoot,
-                contract,
-                testCase,
-                bindingReport.resolvedBindings(),
-                workingDirectory,
-                runDir,
-                stdoutLog,
-                stderrLog,
-                actualOutput);
-        boolean passed = !adapterResult.timeout()
-                && successExitCodes(contract.get("success_exit_codes")).contains(adapterResult.exitCode());
+        AdapterExecutionResult adapterResult;
         AssertionEvaluation assertionEvaluation = null;
-        if (passed) {
-            assertionEvaluation = assertionEngine.evaluateFileDiff(
+        boolean passed;
+        try {
+            databaseFixtureProvider.setup(packageRoot, testCase, dbFixtureContracts, runDir);
+            adapterResult = executeProvider(
+                    providerReport,
                     packageRoot,
+                    contract,
                     testCase,
-                    adapterResult.actualOutput(),
-                    runDir);
-            passed = assertionEvaluation.passed();
+                    bindingReport.resolvedBindings(),
+                    workingDirectory,
+                    runDir,
+                    stdoutLog,
+                    stderrLog,
+                    actualOutput);
+            passed = !adapterResult.timeout()
+                    && successExitCodes(contract.get("success_exit_codes")).contains(adapterResult.exitCode());
+            if (passed) {
+                assertionEvaluation = assertionEngine.evaluateFileDiff(
+                        packageRoot,
+                        testCase,
+                        adapterResult.actualOutput(),
+                        runDir);
+                passed = assertionEvaluation.passed();
+            }
+        } finally {
+            databaseFixtureProvider.cleanup(packageRoot, testCase, dbFixtureContracts, runDir);
         }
         String status = passed ? "passed" : "failed";
         evidenceWriter.writeExecutionRun(
@@ -218,6 +243,70 @@ public class ExecutionEngine {
             return Map.of();
         }
         Object contract = adapterMap.get(adapterName);
+        if (contract instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return Map.of();
+    }
+
+    private Map<String, Map<String, Object>> dbFixtureContracts(
+            Path mappingYaml,
+            ProviderContractResolutionReport providerReport) {
+        Map<String, Map<String, Object>> contracts = new LinkedHashMap<>();
+        for (ResolvedProviderContract contract : providerReport.resolvedContracts()) {
+            if ("fixture".equals(contract.contractType()) && "db_fixture".equals(contract.providerFamily())) {
+                Map<String, Object> fixtureContract =
+                        fixtureContract(mappingYaml, contract.providerName(), contract.affectedRu());
+                if (isJdbcFixtureContract(fixtureContract)) {
+                    contracts.put(contract.providerName(), fixtureContract);
+                }
+            }
+        }
+        return Map.copyOf(contracts);
+    }
+
+    private boolean isJdbcFixtureContract(Map<String, Object> contract) {
+        return "jdbc".equalsIgnoreCase(stringValue(contract.get("provider_type")))
+                && !stringValue(contract.get("connection_ref")).isBlank();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> fixtureContract(Path mappingYaml, String providerName, String affectedRu) {
+        Map<String, Object> root = readYamlMap(mappingYaml);
+        Object unitsValue = root.get("release_units");
+        if (!(unitsValue instanceof List<?> units)) {
+            return Map.of();
+        }
+        Map<String, Object> fallback = Map.of();
+        for (Object entry : units) {
+            if (!(entry instanceof Map<?, ?> unit)) {
+                continue;
+            }
+            Map<String, Object> contract = fixtureContract(unit, providerName);
+            if (contract.isEmpty()) {
+                continue;
+            }
+            if (!affectedRu.isBlank() && affectedRu.equals(stringValue(unit.get("ru_id")))) {
+                return contract;
+            }
+            if (fallback.isEmpty()) {
+                fallback = contract;
+            }
+        }
+        return fallback;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> fixtureContract(Map<?, ?> unit, String providerName) {
+        Object contracts = unit.get("provider_contracts");
+        if (!(contracts instanceof Map<?, ?> contractMap)) {
+            return Map.of();
+        }
+        Object fixtures = contractMap.get("fixtures");
+        if (!(fixtures instanceof Map<?, ?> fixtureMap)) {
+            return Map.of();
+        }
+        Object contract = fixtureMap.get(providerName);
         if (contract instanceof Map<?, ?> map) {
             return (Map<String, Object>) map;
         }
