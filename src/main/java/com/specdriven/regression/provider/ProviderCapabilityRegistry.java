@@ -184,6 +184,15 @@ class ProviderCapabilityRegistry {
         if (!hasMap(contract, "outputs")) {
             violations.add(escapeHatch(".outputs",
                     "Declare external runner outputs before invoking `" + providerName + "`."));
+        } else if (contract.get("outputs") instanceof Map<?, ?> outputs) {
+            for (Map.Entry<?, ?> output : outputs.entrySet()) {
+                String outputPath = stringValue(output.getValue());
+                if (isUnsafeRelativeOutputPath(outputPath)) {
+                    violations.add(escapeHatch(".outputs." + output.getKey(),
+                            "Keep external runner output path `" + outputPath
+                                    + "` under the run evidence directory before invoking `" + providerName + "`."));
+                }
+            }
         }
         if (!hasMap(contract, "evidence_map")) {
             violations.add(escapeHatch(".evidence_map",
@@ -217,6 +226,18 @@ class ProviderCapabilityRegistry {
 
     private boolean hasMap(Map<String, Object> map, String field) {
         return map.get(field) instanceof Map<?, ?> nested && !nested.isEmpty();
+    }
+
+    private boolean isUnsafeRelativeOutputPath(String path) {
+        String normalized = path.replace('\\', '/');
+        return normalized.isBlank()
+                || normalized.startsWith("/")
+                || normalized.startsWith("~/")
+                || normalized.equals("..")
+                || normalized.startsWith("../")
+                || normalized.contains("/../")
+                || normalized.endsWith("/..")
+                || normalized.matches("^[A-Za-z]:.*");
     }
 
     private String stringValue(Object value) {
