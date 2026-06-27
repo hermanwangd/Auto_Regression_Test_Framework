@@ -4,9 +4,12 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import org.springframework.stereotype.Service;
 import org.yaml.snakeyaml.Yaml;
 
@@ -36,12 +39,12 @@ public class RpRuMappingService {
     public RpRuMappingValidationReport validate(Path mappingYaml) {
         Map<String, Object> document = readYamlMap(mappingYaml);
         List<RpRuMappingGap> gaps = new ArrayList<>();
-        List<ReleaseUnitMapping> releaseUnits = new ArrayList<>();
+        List<ParsedReleaseUnit> parsedReleaseUnits = new ArrayList<>();
 
         Object releaseUnitsValue = document.get("release_units");
         if (!(releaseUnitsValue instanceof List<?> units) || units.isEmpty()) {
             gaps.add(gap("release_units", "Declare at least one owner-authored release unit."));
-            return report(gaps, releaseUnits);
+            return report(gaps, List.of());
         }
 
         for (int index = 0; index < units.size(); index++) {
@@ -80,16 +83,113 @@ public class RpRuMappingService {
                 }
             }
 
-            releaseUnits.add(new ReleaseUnitMapping(
-                    stringValue(unit.get("ru_id")),
-                    stringValue(unit.get("repo")),
-                    stringValue(unit.get("unit_type")),
-                    stringValue(unit.get("execution_mode")),
-                    stringValue(unit.get("environment_ref")),
-                    stringValue(unit.get("adapter"))));
+            String ruId = stringValue(unit.get("ru_id"));
+            parsedReleaseUnits.add(new ParsedReleaseUnit(
+                    index,
+                    new ReleaseUnitMapping(
+                            ruId,
+                            stringValue(unit.get("repo")),
+                            stringValue(unit.get("unit_type")),
+                            stringValue(unit.get("execution_mode")),
+                            stringValue(unit.get("environment_ref")),
+                            stringValue(unit.get("adapter"))),
+                    dependencies(index, unit, gaps)));
         }
 
+        List<ReleaseUnitMapping> releaseUnits = orderedReleaseUnits(parsedReleaseUnits, gaps);
         return report(gaps, releaseUnits);
+    }
+
+    private List<DependencyRef> dependencies(int unitIndex, Map<?, ?> unit, List<RpRuMappingGap> gaps) {
+        Object value = unit.get("dependencies");
+        if (value == null || value instanceof List<?> list && list.isEmpty()) {
+            return List.of();
+        }
+        if (!(value instanceof List<?> list)) {
+            gaps.add(gap("release_units[" + unitIndex + "].dependencies",
+                    "Declare dependencies as a list of existing RU IDs."));
+            return List.of();
+        }
+        List<DependencyRef> dependencies = new ArrayList<>();
+        for (int index = 0; index < list.size(); index++) {
+            String dependency = stringValue(list.get(index));
+            if (dependency.isBlank()) {
+                gaps.add(gap("release_units[" + unitIndex + "].dependencies[" + index + "]",
+                        "Declare dependency as a non-empty RU ID."));
+            } else {
+                dependencies.add(new DependencyRef(index, dependency));
+            }
+        }
+        return List.copyOf(dependencies);
+    }
+
+    private List<ReleaseUnitMapping> orderedReleaseUnits(
+            List<ParsedReleaseUnit> parsedReleaseUnits,
+            List<RpRuMappingGap> gaps) {
+        Map<String, ParsedReleaseUnit> unitsById = new LinkedHashMap<>();
+        for (ParsedReleaseUnit unit : parsedReleaseUnits) {
+            String ruId = unit.mapping().ruId();
+            if (ruId.isBlank()) {
+                continue;
+            }
+            if (unitsById.containsKey(ruId)) {
+                gaps.add(gap("release_units[" + unit.index() + "].ru_id",
+                        "Declare each release unit with a unique ru_id."));
+            } else {
+                unitsById.put(ruId, unit);
+            }
+        }
+
+        int graphGapCount = gaps.size();
+        Map<String, Integer> dependencyCounts = new LinkedHashMap<>();
+        Map<String, List<String>> dependentsByDependency = new LinkedHashMap<>();
+        for (ParsedReleaseUnit unit : parsedReleaseUnits) {
+            String ruId = unit.mapping().ruId();
+            if (ruId.isBlank() || !unitsById.containsKey(ruId)) {
+                continue;
+            }
+            dependencyCounts.putIfAbsent(ruId, 0);
+            for (DependencyRef dependency : unit.dependencies()) {
+                if (!unitsById.containsKey(dependency.ruId())) {
+                    gaps.add(gap("release_units[" + unit.index() + "].dependencies[" + dependency.index() + "]",
+                            "Declare dependency `" + dependency.ruId() + "` as an existing RU ID in this RP."));
+                    continue;
+                }
+                dependencyCounts.put(ruId, dependencyCounts.get(ruId) + 1);
+                dependentsByDependency.computeIfAbsent(dependency.ruId(), ignored -> new ArrayList<>()).add(ruId);
+            }
+        }
+
+        if (gaps.size() > graphGapCount) {
+            return parsedReleaseUnits.stream().map(ParsedReleaseUnit::mapping).toList();
+        }
+
+        Queue<String> ready = new ArrayDeque<>();
+        for (Map.Entry<String, Integer> entry : dependencyCounts.entrySet()) {
+            if (entry.getValue() == 0) {
+                ready.add(entry.getKey());
+            }
+        }
+
+        List<ReleaseUnitMapping> ordered = new ArrayList<>();
+        while (!ready.isEmpty()) {
+            String ruId = ready.remove();
+            ordered.add(unitsById.get(ruId).mapping());
+            for (String dependent : dependentsByDependency.getOrDefault(ruId, List.of())) {
+                int remaining = dependencyCounts.get(dependent) - 1;
+                dependencyCounts.put(dependent, remaining);
+                if (remaining == 0) {
+                    ready.add(dependent);
+                }
+            }
+        }
+
+        if (ordered.size() != unitsById.size()) {
+            gaps.add(gap("release_units.dependencies",
+                    "Break the release unit dependency cycle before execution."));
+            return parsedReleaseUnits.stream().map(ParsedReleaseUnit::mapping).toList();
+        }
+        return List.copyOf(ordered);
     }
 
     private RpRuMappingValidationReport report(List<RpRuMappingGap> gaps, List<ReleaseUnitMapping> releaseUnits) {
@@ -124,5 +224,11 @@ public class RpRuMappingService {
 
     private String stringValue(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private record ParsedReleaseUnit(int index, ReleaseUnitMapping mapping, List<DependencyRef> dependencies) {
+    }
+
+    private record DependencyRef(int index, String ruId) {
     }
 }
