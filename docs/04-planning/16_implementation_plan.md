@@ -166,7 +166,7 @@ Verification:
 
 Done when valid DSL v1 artifacts pass, invalid DSL blocks before provider dispatch with AP/field/test/AC/owner-action details, generated executable drafts use execution-focused fields, and legacy artifacts remain readable only through compatibility behavior.
 
-The next validation slice shall add failing tests first for `response_status_equals` using provider HTTP status metadata without `actual`, then prove the CLI runtime path writes provider metadata and assertion evidence before broadening response assertion behavior.
+The response status metadata gate includes `response_status_equals` with request/response provider HTTP status metadata, blocking the metadata shortcut when no request/response execute target exists, and requiring `actual` plus `selector` when the status is read from captured structured output.
 
 ### T003B - Execution-Focused DSL v1 Run and Report Consumption Gate
 

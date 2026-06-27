@@ -370,6 +370,7 @@ public class DslTestCaseValidator {
                 .map(this::stringValue)
                 .collect(java.util.stream.Collectors.toSet());
         Map<String, Set<String>> executeOutputs = executeOutputs(document);
+        boolean requestResponseMetadataAvailable = hasRequestResponseExecuteTarget(document);
         for (int index = 0; index < verify.size(); index++) {
             Map<?, ?> rule = verify.get(index);
             String prefix = "verify[" + index + "]";
@@ -397,8 +398,13 @@ public class DslTestCaseValidator {
                 requirePresent(rule, "expected", "verify", testCaseId, acId, gaps,
                         "Declare expected status for verify rule `" + verifyId + "`.", prefix + ".expected", verifyId);
                 if (!isMissing(rule.get("actual"))) {
+                    requireSelector(rule, prefix, verifyId, testCaseId, acId, gaps,
+                            "Declare selector when response_status_equals reads status from a captured actual output.");
                     validateReference(rule.get("actual"), prefix + ".actual", "verify", verifyId, expectedNames,
                             executeOutputs, Set.of(), testCaseId, acId, gaps);
+                } else if (!requestResponseMetadataAvailable) {
+                    gaps.add(gap(testCaseId, acId, "verify", prefix + ".actual", verifyId,
+                            "Declare actual plus selector, or execute through a request_response target that supplies provider HTTP status metadata."));
                 }
                 validateExpectedReference(rule.get("expected"), prefix + ".expected", verifyId, expectedNames,
                         testCaseId, acId, gaps);
@@ -434,6 +440,17 @@ public class DslTestCaseValidator {
         }
     }
 
+    private boolean hasRequestResponseExecuteTarget(Map<?, ?> document) {
+        Map<?, ?> targets = map(document.get("targets"));
+        for (Map<?, ?> step : mapList(document.get("execute"))) {
+            Map<?, ?> target = map(targets.get(stringValue(step.get("target"))));
+            if ("request_response".equals(stringValue(target.get("runner")))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void validateSelectorWhenRequired(
             Map<?, ?> rule,
             String type,
@@ -446,8 +463,23 @@ public class DslTestCaseValidator {
                 && isMissing(rule.get("selector"))
                 && isMissing(rule.get("path"))
                 && isMissing(rule.get("json_path"))) {
-            gaps.add(gap(testCaseId, acId, "verify", prefix + ".selector", verifyId,
-                    "Declare selector for JSON path verify rule `" + verifyId + "`."));
+            requireSelector(rule, prefix, verifyId, testCaseId, acId, gaps,
+                    "Declare selector for JSON path verify rule `" + verifyId + "`.");
+        }
+    }
+
+    private void requireSelector(
+            Map<?, ?> rule,
+            String prefix,
+            String verifyId,
+            String testCaseId,
+            String acId,
+            List<DslValidationGap> gaps,
+            String ownerAction) {
+        if (isMissing(rule.get("selector"))
+                && isMissing(rule.get("path"))
+                && isMissing(rule.get("json_path"))) {
+            gaps.add(gap(testCaseId, acId, "verify", prefix + ".selector", verifyId, ownerAction));
         }
     }
 

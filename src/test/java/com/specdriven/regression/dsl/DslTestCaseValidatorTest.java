@@ -145,6 +145,8 @@ class DslTestCaseValidatorTest {
     @Test
     void acceptsResponseStatusVerifyWithoutActualWhenProviderMetadataIsUsed() {
         String yaml = validExecutionFocusedDsl()
+                .replace("runner: spring_boot_cli", "runner: request_response")
+                .replace("operation: run_batch", "operation: call_api")
                 .replace("""
                   - id: verify_output
                     type: file_diff
@@ -161,6 +163,53 @@ class DslTestCaseValidatorTest {
 
         assertThat(report.ready()).isTrue();
         assertThat(report.gaps()).isEmpty();
+    }
+
+    @Test
+    void blocksResponseStatusVerifyWithoutActualWhenNoRequestResponseMetadataSourceExists() {
+        String yaml = validExecutionFocusedDsl()
+                .replace("""
+                  - id: verify_output
+                    type: file_diff
+                    actual: ${execute.run_pipeline.outputs.actual_output}
+                    expected: ${expected_results.primary.ref}
+                """, """
+                  - id: verify_http_status
+                    type: response_status_equals
+                    expected: 202
+                """)
+                .replace("${verify.verify_output.result}", "${verify.verify_http_status.result}");
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains("verify[0].actual");
+        assertThat(report.gaps()).extracting(DslValidationGap::ownerAction)
+                .contains("Declare actual plus selector, or execute through a request_response target that supplies provider HTTP status metadata.");
+    }
+
+    @Test
+    void blocksResponseStatusVerifyWithActualButWithoutSelector() {
+        String yaml = validExecutionFocusedDsl()
+                .replace("""
+                  - id: verify_output
+                    type: file_diff
+                    actual: ${execute.run_pipeline.outputs.actual_output}
+                    expected: ${expected_results.primary.ref}
+                """, """
+                  - id: verify_http_status
+                    type: response_status_equals
+                    actual: ${execute.run_pipeline.outputs.actual_output}
+                    expected: 202
+                """)
+                .replace("${verify.verify_output.result}", "${verify.verify_http_status.result}");
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains("verify[0].selector");
     }
 
     @Test
