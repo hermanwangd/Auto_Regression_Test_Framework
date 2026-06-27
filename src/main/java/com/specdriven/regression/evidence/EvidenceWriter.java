@@ -2,7 +2,9 @@ package com.specdriven.regression.evidence;
 
 import com.specdriven.regression.adapter.AdapterExecutionResult;
 import com.specdriven.regression.assertion.AssertionEvaluation;
+import com.specdriven.regression.binding.ResolvedBinding;
 import com.specdriven.regression.execution.ExecutionResult;
+import com.specdriven.regression.provider.ResolvedProviderContract;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -23,6 +25,28 @@ public class EvidenceWriter {
             String status,
             AdapterExecutionResult adapterResult,
             AssertionEvaluation assertionEvaluation) {
+        return writeExecutionRun(
+                runDir,
+                batchId,
+                runId,
+                testCase,
+                status,
+                adapterResult,
+                assertionEvaluation,
+                List.of(),
+                List.of());
+    }
+
+    public Path writeExecutionRun(
+            Path runDir,
+            String batchId,
+            String runId,
+            Map<String, Object> testCase,
+            String status,
+            AdapterExecutionResult adapterResult,
+            AssertionEvaluation assertionEvaluation,
+            List<ResolvedBinding> resolvedBindings,
+            List<ResolvedProviderContract> providerContracts) {
         Map<?, ?> executionTarget = executionTarget(testCase);
         try {
             Files.createDirectories(runDir);
@@ -40,6 +64,10 @@ public class EvidenceWriter {
                     ru_refs:
                       - %s
                     resolved_dependencies: []
+                    resolved_bindings:
+                    %s
+                    provider_contracts_used:
+                    %s
                     exit_code: %s
                     timeout: %s
                     stdout: %s
@@ -58,6 +86,8 @@ public class EvidenceWriter {
                     stringValue(executionTarget.get("execution_mode")),
                     stringValue(executionTarget.get("environment_ref")),
                     stringValue(executionTarget.get("ru_id")),
+                    resolvedBindingsYaml(resolvedBindings),
+                    providerContractsYaml(providerContracts),
                     adapterResult.exitCode(),
                     adapterResult.timeout(),
                     runDir.relativize(adapterResult.stdoutLog()),
@@ -70,6 +100,36 @@ public class EvidenceWriter {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write execution run evidence.", e);
         }
+    }
+
+    private String resolvedBindingsYaml(List<ResolvedBinding> resolvedBindings) {
+        if (resolvedBindings.isEmpty()) {
+            return "  []";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (ResolvedBinding binding : resolvedBindings) {
+            builder.append("  - binding_name: ").append(binding.bindingName()).append("\n");
+            builder.append("    binding_type: ").append(binding.bindingType()).append("\n");
+            builder.append("    ref: ").append(binding.ref()).append("\n");
+        }
+        return builder.toString().stripTrailing();
+    }
+
+    private String providerContractsYaml(List<ResolvedProviderContract> providerContracts) {
+        if (providerContracts.isEmpty()) {
+            return "  []";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (ResolvedProviderContract contract : providerContracts) {
+            builder.append("  - contract_type: ").append(contract.contractType()).append("\n");
+            builder.append("    provider_name: ").append(contract.providerName()).append("\n");
+            builder.append("    provider_family: ").append(contract.providerFamily()).append("\n");
+            builder.append("    affected_ru: ").append(contract.affectedRu()).append("\n");
+            builder.append("    capability: ").append(contract.capability()).append("\n");
+            builder.append("    contract_path: ").append(contract.contractPath()).append("\n");
+            builder.append("    source_level: ").append(contract.sourceLevel()).append("\n");
+        }
+        return builder.toString().stripTrailing();
     }
 
     public Path writeExecutionBatch(

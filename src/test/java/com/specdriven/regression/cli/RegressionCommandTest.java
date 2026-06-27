@@ -380,6 +380,13 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("ap: Planning and Binding");
         assertThat(output.toString()).contains("provider_contracts.adapters.spring_boot_cli");
         assertThat(output.toString()).contains("provider_contracts.bindings.db_seed");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.bindings.db_seed");
+        assertThat(output.toString()).contains("provider_family: file_batch");
+        assertThat(output.toString()).contains("provider_family: db_fixture");
+        assertThat(output.toString()).contains("affected_ru: RU-transform-job");
+        assertThat(output.toString()).contains("capability: spring_boot_cli");
+        assertThat(output.toString()).contains("capability: db_seed");
         assertThat(output.toString()).contains("adapter_execution_started: false");
         assertThat(output.toString()).doesNotContain("run_status: dry_run_ready");
     }
@@ -461,12 +468,50 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("exit_code: 0");
         assertThat(Files.readString(runDir.resolve("logs/stdout.log"))).contains("adapter-ok");
         assertThat(Files.readString(runDir.resolve("logs/stderr.log"))).contains("adapter-warn");
-        assertThat(Files.readString(runDir.resolve("run.yaml"))).contains("status: passed");
-        assertThat(Files.readString(runDir.resolve("run.yaml"))).contains("rp_id: RP-001");
-        assertThat(Files.readString(runDir.resolve("run.yaml"))).contains("execution_mode: ci_ephemeral");
-        assertThat(Files.readString(runDir.resolve("run.yaml"))).contains("environment_ref: ci://pipeline/RP-001");
-        assertThat(Files.readString(runDir.resolve("run.yaml"))).contains("ru_refs:");
-        assertThat(Files.readString(runDir.resolve("run.yaml"))).contains("exit_code: 0");
+        String runEvidence = Files.readString(runDir.resolve("run.yaml"));
+        assertThat(runEvidence).contains("status: passed");
+        assertThat(runEvidence).contains("rp_id: RP-001");
+        assertThat(runEvidence).contains("execution_mode: ci_ephemeral");
+        assertThat(runEvidence).contains("environment_ref: ci://pipeline/RP-001");
+        assertThat(runEvidence).contains("ru_refs:");
+        assertThat(runEvidence).contains("exit_code: 0");
+        assertThat(runEvidence).contains("resolved_bindings:");
+        assertThat(runEvidence).contains("binding_type: db_seed");
+        assertThat(runEvidence).contains("provider_contracts_used:");
+        assertThat(runEvidence).contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli");
+        assertThat(runEvidence).contains("contract_path: release_units[0].provider_contracts.bindings.db_seed");
+        assertThat(runEvidence).contains("provider_family: file_batch");
+        assertThat(runEvidence).contains("provider_family: db_fixture");
+        assertThat(runEvidence).contains("affected_ru: RU-transform-job");
+    }
+
+    @Test
+    void runUsesProviderContractForExecutionTargetRuInMultiRuMapping() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeExecutableMultiRuMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedTestCase("RP-001", "db_seed");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001");
+        String runEvidence = Files.readString(runDir.resolve("run.yaml"));
+        assertThat(exit).isZero();
+        assertThat(Files.readString(runDir.resolve("logs/stdout.log"))).contains("adapter-ok");
+        assertThat(Files.readString(runDir.resolve("logs/stdout.log"))).doesNotContain("wrong-ru");
+        assertThat(runEvidence)
+                .contains("status: passed")
+                .contains("contract_path: release_units[1].provider_contracts.adapters.spring_boot_cli")
+                .contains("affected_ru: RU-transform-job");
     }
 
     @Test
@@ -1136,6 +1181,75 @@ class RegressionCommandTest {
                     evidence_responsibility: [execution_log]
                     dependencies: []
                 """.formatted(rpId, rpId, stdoutValue));
+    }
+
+    private void writeExecutableMultiRuMapping(String rpId) throws Exception {
+        Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        Files.writeString(mapping, """
+                rp_id: %s
+                release_units:
+                  - ru_id: RU-unrelated-job
+                    repo: /repo/unrelated
+                    unit_type: data_pipeline
+                    owner: product_developer
+                    version_ref: main
+                    validation_boundary: execute_pipeline_with_fixture
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://pipeline/%s/unrelated
+                    adapter: other_cli
+                    provider_contracts:
+                      adapters:
+                        other_cli:
+                          command: /bin/sh -c 'echo wrong-ru'
+                          working_directory: .
+                          timeout_seconds: 10
+                          success_exit_codes: [0]
+                          logs:
+                            stdout: logs/stdout.log
+                            stderr: logs/stderr.log
+                          outputs:
+                            actual_output_ref: actual/output.txt
+                      bindings: {}
+                      fixtures: {}
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                  - ru_id: RU-transform-job
+                    repo: /repo/transform
+                    unit_type: data_pipeline
+                    owner: product_developer
+                    version_ref: main
+                    validation_boundary: execute_pipeline_with_fixture
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://pipeline/%s
+                    adapter: spring_boot_cli
+                    provider_contracts:
+                      adapters:
+                        spring_boot_cli:
+                          command: /bin/sh -c 'echo adapter-ok; echo adapter-warn >&2'
+                          working_directory: .
+                          timeout_seconds: 10
+                          success_exit_codes: [0]
+                          logs:
+                            stdout: logs/stdout.log
+                            stderr: logs/stderr.log
+                          outputs:
+                            actual_output_ref: actual/output.txt
+                      bindings:
+                        db_seed:
+                          provider: file_fixture
+                          materialize_as: input_file
+                      fixtures: {}
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [execution_log]
+                    dependencies: [RU-unrelated-job]
+                """.formatted(rpId, rpId, rpId));
     }
 
     private void writeExecutableCiMappingWithFixtureProvider(String rpId) throws Exception {

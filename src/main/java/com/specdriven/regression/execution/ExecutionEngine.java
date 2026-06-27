@@ -5,7 +5,12 @@ import com.specdriven.regression.adapter.AdapterExecutionResult;
 import com.specdriven.regression.adapter.DataPipelineAdapter;
 import com.specdriven.regression.assertion.AssertionEngine;
 import com.specdriven.regression.assertion.AssertionEvaluation;
+import com.specdriven.regression.binding.BindingResolutionReport;
+import com.specdriven.regression.binding.BindingResolver;
+import com.specdriven.regression.binding.ResolvedBinding;
 import com.specdriven.regression.evidence.EvidenceWriter;
+import com.specdriven.regression.provider.ProviderContractResolutionReport;
+import com.specdriven.regression.provider.ProviderContractResolver;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -22,6 +27,8 @@ public class ExecutionEngine {
     private final DataPipelineAdapter adapter;
     private final AssertionEngine assertionEngine;
     private final EvidenceWriter evidenceWriter;
+    private final BindingResolver bindingResolver;
+    private final ProviderContractResolver providerContractResolver;
 
     public ExecutionEngine() {
         this(new DataPipelineAdapter(), new AssertionEngine(), new EvidenceWriter());
@@ -36,9 +43,20 @@ public class ExecutionEngine {
     }
 
     public ExecutionEngine(DataPipelineAdapter adapter, AssertionEngine assertionEngine, EvidenceWriter evidenceWriter) {
+        this(adapter, assertionEngine, evidenceWriter, new BindingResolver(), new ProviderContractResolver());
+    }
+
+    public ExecutionEngine(
+            DataPipelineAdapter adapter,
+            AssertionEngine assertionEngine,
+            EvidenceWriter evidenceWriter,
+            BindingResolver bindingResolver,
+            ProviderContractResolver providerContractResolver) {
         this.adapter = adapter;
         this.assertionEngine = assertionEngine;
         this.evidenceWriter = evidenceWriter;
+        this.bindingResolver = bindingResolver;
+        this.providerContractResolver = providerContractResolver;
     }
 
     public ExecutionResult execute(Path packageRoot, Path testCasePath, String batchId, String runId) {
@@ -46,7 +64,14 @@ public class ExecutionEngine {
         String testCaseId = stringValue(testCase.get("test_case_id"));
         String acId = stringValue(testCase.get("ac_id"));
         String adapterName = adapterName(testCase);
-        Map<String, Object> contract = adapterContract(packageRoot.resolve("rp_ru_mapping.yaml"), adapterName);
+        String targetRuId = targetRuId(testCase);
+        BindingResolutionReport bindingReport = bindingResolver.resolve(testCasePath);
+        ProviderContractResolutionReport providerReport = providerContractResolver.resolve(
+                packageRoot.resolve("rp_ru_mapping.yaml"),
+                adapterName,
+                bindingReport.resolvedBindings().stream().map(ResolvedBinding::bindingType).toList(),
+                fixtureProviders(testCase));
+        Map<String, Object> contract = adapterContract(packageRoot.resolve("rp_ru_mapping.yaml"), adapterName, targetRuId);
         Path runDir = packageRoot.resolve("evidence/runs").resolve(runId);
         Path stdoutLog = runDir.resolve(pathValue(contract, "logs", "stdout", "logs/stdout.log"));
         Path stderrLog = runDir.resolve(pathValue(contract, "logs", "stderr", "logs/stderr.log"));
@@ -74,7 +99,16 @@ public class ExecutionEngine {
             passed = assertionEvaluation.passed();
         }
         String status = passed ? "passed" : "failed";
-        evidenceWriter.writeExecutionRun(runDir, batchId, runId, testCase, status, adapterResult, assertionEvaluation);
+        evidenceWriter.writeExecutionRun(
+                runDir,
+                batchId,
+                runId,
+                testCase,
+                status,
+                adapterResult,
+                assertionEvaluation,
+                bindingReport.resolvedBindings(),
+                providerReport.resolvedContracts());
         return new ExecutionResult(
                 runId,
                 testCaseId,
@@ -89,12 +123,33 @@ public class ExecutionEngine {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> adapterContract(Path mappingYaml, String adapterName) {
+    private Map<String, Object> adapterContract(Path mappingYaml, String adapterName, String targetRuId) {
         Map<String, Object> root = readYamlMap(mappingYaml);
         Object unitsValue = root.get("release_units");
-        if (!(unitsValue instanceof List<?> units) || units.isEmpty() || !(units.get(0) instanceof Map<?, ?> unit)) {
+        if (!(unitsValue instanceof List<?> units)) {
             return Map.of();
         }
+        Map<String, Object> fallback = Map.of();
+        for (Object entry : units) {
+            if (!(entry instanceof Map<?, ?> unit)) {
+                continue;
+            }
+            Map<String, Object> contract = adapterContract(unit, adapterName);
+            if (contract.isEmpty()) {
+                continue;
+            }
+            if (!targetRuId.isBlank() && targetRuId.equals(stringValue(unit.get("ru_id")))) {
+                return contract;
+            }
+            if (fallback.isEmpty()) {
+                fallback = contract;
+            }
+        }
+        return fallback;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> adapterContract(Map<?, ?> unit, String adapterName) {
         Object contracts = unit.get("provider_contracts");
         if (!(contracts instanceof Map<?, ?> contractMap)) {
             return Map.of();
@@ -116,6 +171,39 @@ public class ExecutionEngine {
             return stringValue(target.get("adapter"));
         }
         return "";
+    }
+
+    private String targetRuId(Map<String, Object> testCase) {
+        Object executionTarget = testCase.get("execution_target");
+        if (executionTarget instanceof Map<?, ?> target) {
+            return stringValue(target.get("ru_id"));
+        }
+        return "";
+    }
+
+    private List<String> fixtureProviders(Map<String, Object> testCase) {
+        Object fixture = testCase.get("fixture");
+        if (!(fixture instanceof Map<?, ?> fixtureMap)) {
+            return List.of();
+        }
+        List<String> providers = new ArrayList<>();
+        addFixtureProviders(providers, fixtureMap.get("setup"));
+        addFixtureProviders(providers, fixtureMap.get("cleanup"));
+        return List.copyOf(providers);
+    }
+
+    private void addFixtureProviders(List<String> providers, Object entries) {
+        if (!(entries instanceof List<?> list)) {
+            return;
+        }
+        for (Object entry : list) {
+            if (entry instanceof Map<?, ?> action) {
+                String provider = stringValue(action.get("provider"));
+                if (!provider.isBlank() && !providers.contains(provider)) {
+                    providers.add(provider);
+                }
+            }
+        }
     }
 
     private Path workingDirectory(Path packageRoot, Map<String, Object> contract) {

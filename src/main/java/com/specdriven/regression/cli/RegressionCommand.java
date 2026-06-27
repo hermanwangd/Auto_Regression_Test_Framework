@@ -520,6 +520,10 @@ public class RegressionCommand {
                 out.println("    ac_id: " + bindingReport.acId());
                 out.println("    contract_type: " + contract.contractType());
                 out.println("    provider_name: " + contract.providerName());
+                out.println("    provider_family: " + contract.providerFamily());
+                out.println("    affected_ru: " + contract.affectedRu());
+                out.println("    capability: " + contract.capability());
+                out.println("    contract_path: " + contract.contractPath());
                 out.println("    source_level: " + contract.sourceLevel());
             }
             out.println("provider_contract_gaps:");
@@ -530,8 +534,14 @@ public class RegressionCommand {
                 out.println("    contract_path: " + gap.fieldPath());
                 out.println("    contract_type: " + gap.contractType());
                 out.println("    provider_name: " + gap.providerName());
+                out.println("    provider_family: " + gap.providerFamily());
+                out.println("    affected_ru: " + gap.affectedRu());
+                out.println("    capability: " + gap.capability());
                 out.println("    owner_action: " + gap.ownerAction());
                 failureDetails.add("contract_path: " + gap.fieldPath()
+                        + ", provider_family: " + gap.providerFamily()
+                        + ", affected_ru: " + gap.affectedRu()
+                        + ", capability: " + gap.capability()
                         + ", provider_name: " + gap.providerName()
                         + ", owner_action: " + gap.ownerAction());
             }

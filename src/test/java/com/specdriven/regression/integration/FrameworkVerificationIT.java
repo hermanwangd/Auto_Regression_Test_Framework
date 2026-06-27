@@ -5,11 +5,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.specdriven.regression.cli.RegressionCommand;
 import com.specdriven.regression.discovery.ReleasePackageService;
 import com.specdriven.regression.productrepo.ProductRepoService;
+import com.specdriven.regression.provider.ProviderContractGap;
+import com.specdriven.regression.provider.ProviderContractResolutionReport;
+import com.specdriven.regression.provider.ProviderContractResolver;
+import com.specdriven.regression.provider.ResolvedProviderContract;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -90,7 +95,10 @@ class FrameworkVerificationIT {
 
         assertThat(run.exitCode()).isEqualTo(1);
         assertThat(run.stdout()).contains("adapter_execution_started: false");
-        assertThat(run.stdout()).contains("contract_path: provider_contracts.adapters.spring_boot_cli.command");
+        assertThat(run.stdout()).contains(
+                "contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli.command");
+        assertThat(run.stdout()).contains("provider_family: file_batch");
+        assertThat(run.stdout()).contains("affected_ru: RU-framework-sample-adapter");
         assertThat(run.stdout()).contains("run_status: blocked");
         assertThat(Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml")))
                 .contains("status: blocked");
@@ -99,8 +107,10 @@ class FrameworkVerificationIT {
                 .contains("adapter_execution_started: false")
                 .contains("failure_details: failure_details.yaml");
         assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/failure_details.yaml")))
-                .contains("provider_contracts.adapters.spring_boot_cli.command")
-                .contains("Declare executable adapter command before execution.");
+                .contains("release_units[0].provider_contracts.adapters.spring_boot_cli.command")
+                .contains("provider_family: file_batch")
+                .contains("affected_ru: RU-framework-sample-adapter")
+                .contains("Declare executable adapter command for `spring_boot_cli` on `RU-framework-sample-adapter`");
     }
 
     @Test
@@ -299,6 +309,92 @@ class FrameworkVerificationIT {
                 .contains("release_units[0].repo");
     }
 
+    @Test
+    @DisplayName("FWK-IT-010 | AC-004 AC-007 AC-008 | provider-family contract dry-run")
+    void providerFamilyContractDryRunReportsMetadataAndBlocking() throws Exception {
+        Path mapping = tempDir.resolve("heterogeneous-rp_ru_mapping.yaml");
+        Files.writeString(mapping, providerFamilyMapping());
+        ProviderContractResolver resolver = new ProviderContractResolver();
+
+        List<ProviderContractResolutionReport> reports = List.of(
+                resolver.resolve(mapping, "request_response", List.of("api_payload"), List.of("relational_db")),
+                resolver.resolve(mapping, "message_bus", List.of("message_event"), List.of()),
+                resolver.resolve(mapping, "k8s_readiness", List.of(), List.of()),
+                resolver.resolve(mapping, "external_runner", List.of(), List.of()),
+                resolver.resolve(mapping, "spring_boot_cli", List.of("db_seed"), List.of()));
+
+        assertThat(reports).allMatch(ProviderContractResolutionReport::ready);
+        assertThat(reports.stream()
+                        .flatMap(report -> report.resolvedContracts().stream())
+                        .map(ResolvedProviderContract::providerFamily)
+                        .toList())
+                .contains("request_response", "messaging", "db_fixture",
+                        "deployment_readiness", "external_runner", "file_batch");
+        assertThat(reports.stream()
+                        .flatMap(report -> report.resolvedContracts().stream())
+                        .map(ResolvedProviderContract::contractPath)
+                        .toList())
+                .contains("release_units[1].provider_contracts.bindings.message_event",
+                        "release_units[2].provider_contracts.fixtures.relational_db");
+
+        Path missingMapping = tempDir.resolve("missing-provider-rp_ru_mapping.yaml");
+        Files.writeString(missingMapping, """
+                rp_id: RP-HETEROGENEOUS
+                release_units:
+                  - ru_id: RU-payment-events
+                    repo: /repo/payment-events
+                    unit_type: service
+                    owner: product_developer
+                    version_ref: build-456
+                    validation_boundary: event_observation
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://payment/events
+                    adapter: message_bus
+                    provider_contracts: {}
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                """);
+
+        ProviderContractResolutionReport blocked = resolver.resolve(
+                missingMapping, "message_bus", List.of("message_event"), List.of());
+
+        assertThat(blocked.ready()).isFalse();
+        assertThat(blocked.gaps())
+                .anySatisfy(gap -> {
+                    assertThat(gap.providerFamily()).isEqualTo("messaging");
+                    assertThat(gap.affectedRu()).isEqualTo("RU-payment-events");
+                    assertThat(gap.capability()).isEqualTo("message_bus");
+                    assertThat(gap.fieldPath())
+                            .isEqualTo("release_units[0].provider_contracts.adapters.message_bus");
+                    assertThat(gap.ownerAction()).contains("RU-payment-events");
+                })
+                .extracting(ProviderContractGap::fieldPath)
+                .contains("release_units[0].provider_contracts.bindings.message_event");
+    }
+
+    @Test
+    @DisplayName("FWK-IT-011 | AC-007 AC-008 AC-009 | provider-family evidence normalization")
+    void sampleRunEvidenceNormalizesProviderContractsAndBindings() throws Exception {
+        Path productRepo = sampleProductRepo();
+        Path packageRoot = packageRoot(productRepo);
+
+        CommandResult run = execute(command(), "run", productRepo, "--env", "ci_ephemeral");
+
+        assertThat(run.exitCode()).isZero();
+        String runEvidence = Files.readString(packageRoot.resolve("evidence/runs/RUN-001/run.yaml"));
+        assertThat(runEvidence)
+                .contains("resolved_bindings:")
+                .contains("binding_type: db_seed")
+                .contains("provider_contracts_used:")
+                .contains("provider_family: file_batch")
+                .contains("provider_family: db_fixture")
+                .contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli")
+                .contains("contract_path: release_units[0].provider_contracts.bindings.db_seed")
+                .contains("affected_ru: RU-framework-sample-adapter")
+                .contains("status: passed");
+    }
+
     private Path sampleProductRepo() throws Exception {
         Path productRepo = tempDir.resolve("sample-product-repo-" + System.nanoTime());
         copyResourceDirectory("framework-verification/sample-product-repo", productRepo);
@@ -337,6 +433,142 @@ class FrameworkVerificationIT {
 
     private void writeAcceptanceCriteria(Path packageRoot, String content) throws Exception {
         Files.writeString(packageRoot.resolve("acceptance_criteria.md"), content);
+    }
+
+    private String providerFamilyMapping() {
+        return """
+                rp_id: RP-HETEROGENEOUS
+                release_units:
+                  - ru_id: RU-payment-api
+                    repo: /repo/payment-api
+                    unit_type: service
+                    owner: product_developer
+                    version_ref: build-123
+                    validation_boundary: request_response_api
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://payment/api
+                    adapter: request_response
+                    provider_contracts:
+                      adapters:
+                        request_response:
+                          provider_family: request_response
+                          provider_type: rest
+                          endpoint_ref: env://PAYMENT_API
+                          actions:
+                            submit_payment:
+                              method: POST
+                              path: /payments
+                      bindings:
+                        api_payload:
+                          provider_family: request_response
+                          bind_as: request_body
+                      fixtures: {}
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                  - ru_id: RU-payment-events
+                    repo: /repo/payment-events
+                    unit_type: service
+                    owner: product_developer
+                    version_ref: build-456
+                    validation_boundary: event_observation
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://payment/events
+                    adapter: message_bus
+                    provider_contracts:
+                      adapters:
+                        message_bus:
+                          provider_family: messaging
+                          provider_type: kafka
+                          topic_ref: kafka://payment.events
+                      bindings:
+                        message_event:
+                          provider_family: messaging
+                          bind_as: event_payload
+                      fixtures: {}
+                    evidence_responsibility: [execution_log]
+                    dependencies: [RU-payment-api]
+                  - ru_id: RU-payment-db
+                    repo: /repo/payment-db
+                    unit_type: database
+                    owner: product_developer
+                    version_ref: schema-789
+                    validation_boundary: state_fixture
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://payment/db
+                    adapter: db_fixture
+                    provider_contracts:
+                      adapters:
+                        db_fixture:
+                          provider_family: db_fixture
+                          provider_type: relational_db
+                          command: validate-db-fixture
+                      fixtures:
+                        relational_db:
+                          provider_family: db_fixture
+                          connection_ref: secret://ci/payment-db
+                          cleanup_strategy: by_test_run_id
+                    evidence_responsibility: [cleanup_result]
+                    dependencies: []
+                  - ru_id: RU-payment-k8s
+                    repo: /repo/payment-k8s
+                    unit_type: deployment
+                    owner: platform
+                    version_ref: deploy-123
+                    validation_boundary: deployed_service
+                    execution_mode: ci_ephemeral
+                    deployment_required: true
+                    environment_ref: ci://payment/k8s
+                    adapter: k8s_readiness
+                    provider_contracts:
+                      adapters:
+                        k8s_readiness:
+                          provider_family: deployment_readiness
+                          provider_type: k8s
+                          readiness_probe: deployment_available
+                    evidence_responsibility: [readiness_result]
+                    dependencies: []
+                  - ru_id: RU-legacy-runner
+                    repo: /repo/legacy-runner
+                    unit_type: external_test_runner
+                    owner: qa
+                    version_ref: runner-42
+                    validation_boundary: external_runner
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://runner
+                    adapter: external_runner
+                    provider_contracts:
+                      adapters:
+                        external_runner:
+                          provider_family: external_runner
+                          provider_type: command_runner
+                          command: ./run-legacy-check.sh
+                    evidence_responsibility: [runner_result]
+                    dependencies: []
+                  - ru_id: RU-batch-job
+                    repo: /repo/batch-job
+                    unit_type: batch
+                    owner: product_developer
+                    version_ref: batch-100
+                    validation_boundary: file_batch
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://batch
+                    adapter: spring_boot_cli
+                    provider_contracts:
+                      adapters:
+                        spring_boot_cli:
+                          command: java -jar batch.jar
+                      bindings:
+                        db_seed:
+                          provider: file_fixture
+                          materialize_as: input_file
+                    evidence_responsibility: [execution_log]
+                    dependencies: []
+                """;
     }
 
     private void copyResourceDirectory(String resourceName, Path target) throws Exception {
