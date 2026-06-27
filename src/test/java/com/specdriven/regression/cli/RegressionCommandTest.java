@@ -420,6 +420,45 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runBlocksMalformedExecutionFocusedDslV1ParametersBeforeParameterExpansion() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeMalformedParameterizedTestCase("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("run_id: RUN-001")
+                .doesNotContain("run_id: RUN-002")
+                .contains("run_status: blocked");
+        assertThat(Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml")))
+                .contains("run_id: RUN-001")
+                .doesNotContain("RUN-002")
+                .doesNotContain("parameter_case_id:");
+        assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/run.yaml")))
+                .contains("status: blocked")
+                .contains("adapter_execution_started: false")
+                .doesNotContain("parameter_case_id: baseline");
+        assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/failure_details.yaml")))
+                .contains("field_path: parameters.cases[1].case_id")
+                .contains("field_path: parameters.cases[1].values.orders_seed_ref")
+                .contains("reason: parameter_resolution_failed");
+    }
+
+    @Test
     void runDryRunReportsPassedApGatesBeforeAdapterExecution() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},

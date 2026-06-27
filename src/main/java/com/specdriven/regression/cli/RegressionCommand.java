@@ -416,6 +416,29 @@ public class RegressionCommand {
         out.println("batch_id: " + batchId);
         out.println("execution_results:");
         for (Path approvedTest : executionTests) {
+            List<String> preflightFailureDetails = preflight.failureDetails(approvedTest);
+            if (!preflightFailureDetails.isEmpty()) {
+                String runId = formatSequentialId("RUN", runNumber++);
+                while (Files.exists(packageRoot.resolve("evidence/runs").resolve(runId))) {
+                    runId = formatSequentialId("RUN", runNumber++);
+                }
+                String targetRuId = targetRuId(approvedTest);
+                List<String> dependencies = targetDependencies(mappingYaml, targetRuId);
+                ExecutionResult result = evidenceWriter.writeBlockedRun(
+                        packageRoot,
+                        batchId,
+                        runId,
+                        List.of(approvedTest),
+                        preflightFailureDetails,
+                        preflight.executionMode(),
+                        preflight.environmentRef(),
+                        dependencies);
+                results.add(result);
+                passed = false;
+                recordRuStatus(ruStatuses, targetRuId, result.status());
+                printExecutionResult(out, packageRoot, result);
+                continue;
+            }
             for (ParameterCase parameterCase : parameterCases(approvedTest)) {
                 String runId = formatSequentialId("RUN", runNumber++);
                 while (Files.exists(packageRoot.resolve("evidence/runs").resolve(runId))) {
@@ -427,19 +450,8 @@ public class RegressionCommand {
                     List<String> dependencies = targetDependencies(mappingYaml, targetRuId);
                     DependencyBlock dependencyBlock =
                             dependencyBlock(mappingYaml, executionTest, targetRuId, dependencies, ruStatuses);
-                    List<String> preflightFailureDetails = preflight.failureDetails(approvedTest);
                     ExecutionResult result;
-                    if (!preflightFailureDetails.isEmpty()) {
-                        result = evidenceWriter.writeBlockedRun(
-                                packageRoot,
-                                batchId,
-                                runId,
-                                List.of(executionTest),
-                                preflightFailureDetails,
-                                preflight.executionMode(),
-                                preflight.environmentRef(),
-                                dependencies);
-                    } else if (dependencyBlock.blocked()) {
+                    if (dependencyBlock.blocked()) {
                         result = evidenceWriter.writeBlockedRun(
                                 packageRoot,
                                 batchId,
@@ -455,18 +467,7 @@ public class RegressionCommand {
                     results.add(result);
                     passed = passed && result.passed();
                     recordRuStatus(ruStatuses, targetRuId, result.status());
-                    out.println("  - test_case_id: " + result.testCaseId());
-                    out.println("    ac_id: " + result.acId());
-                    if (!parameterCase.caseId().isBlank()) {
-                        out.println("    parameter_case_id: " + parameterCase.caseId());
-                    }
-                    out.println("    run_id: " + result.runId());
-                    out.println("    run_dir: " + packageRoot.relativize(result.runDir()));
-                    out.println("    status: " + result.status());
-                    out.println("    exit_code: " + result.exitCode());
-                    out.println("    timeout: " + result.timeout());
-                    out.println("    stdout: " + result.runDir().relativize(result.stdoutLog()));
-                    out.println("    stderr: " + result.runDir().relativize(result.stderrLog()));
+                    printExecutionResult(out, packageRoot, result);
                 } finally {
                     deleteParameterizedTestCase(approvedTest, executionTest);
                 }
@@ -483,6 +484,21 @@ public class RegressionCommand {
                 results);
         out.println("run_status: " + runStatus);
         return passed ? 0 : 1;
+    }
+
+    private void printExecutionResult(PrintStream out, Path packageRoot, ExecutionResult result) {
+        out.println("  - test_case_id: " + result.testCaseId());
+        out.println("    ac_id: " + result.acId());
+        if (!result.parameterCaseId().isBlank()) {
+            out.println("    parameter_case_id: " + result.parameterCaseId());
+        }
+        out.println("    run_id: " + result.runId());
+        out.println("    run_dir: " + packageRoot.relativize(result.runDir()));
+        out.println("    status: " + result.status());
+        out.println("    exit_code: " + result.exitCode());
+        out.println("    timeout: " + result.timeout());
+        out.println("    stdout: " + result.runDir().relativize(result.stdoutLog()));
+        out.println("    stderr: " + result.runDir().relativize(result.stderrLog()));
     }
 
     private String aggregateRunStatus(List<ExecutionResult> results) {
