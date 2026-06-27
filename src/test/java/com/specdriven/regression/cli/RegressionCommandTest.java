@@ -1530,6 +1530,68 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksDeploymentReadinessWithoutTimeoutBeforeExecution() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-READY-TIMEOUT";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "deployment"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeDeploymentReadinessMappingWithoutTimeout(rpId);
+        writeDeploymentReadyMarker(rpId);
+        writeApprovedExpectedResult(rpId, acId, "ready\n");
+        writeApprovedDeploymentReadinessTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: deployment_readiness");
+        assertThat(output.toString()).contains("provider_type: local");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.k8s_readiness.timeout_seconds");
+        assertThat(output.toString()).contains("Declare timeout_seconds as a positive bounded integer for deployment readiness provider `k8s_readiness`");
+    }
+
+    @Test
+    void runDryRunBlocksDeploymentReadinessWithoutOutputRefBeforeExecution() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-READY-OUTPUT";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "deployment"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeDeploymentReadinessMappingWithoutOutputRef(rpId);
+        writeDeploymentReadyMarker(rpId);
+        writeApprovedExpectedResult(rpId, acId, "ready\n");
+        writeApprovedDeploymentReadinessTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: deployment_readiness");
+        assertThat(output.toString()).contains("provider_type: local");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.k8s_readiness.outputs.actual_output_ref");
+        assertThat(output.toString()).contains("Declare actual_output_ref for deployment readiness provider `k8s_readiness`");
+    }
+
+    @Test
     void runFailsDeploymentReadinessWhenMarkerIsMissing() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-READY-MISSING";
@@ -2957,8 +3019,31 @@ class RegressionCommandTest {
         writeDeploymentReadinessMapping(rpId, "");
     }
 
+    private void writeDeploymentReadinessMappingWithoutTimeout(String rpId) throws Exception {
+        writeDeploymentReadinessMapping(rpId, "                          deployed_version_ref: deploy-123\n",
+                false, true);
+    }
+
+    private void writeDeploymentReadinessMappingWithoutOutputRef(String rpId) throws Exception {
+        writeDeploymentReadinessMapping(rpId, "                          deployed_version_ref: deploy-123\n",
+                true, false);
+    }
+
     private void writeDeploymentReadinessMapping(String rpId, String deployedVersionRefLine) throws Exception {
+        writeDeploymentReadinessMapping(rpId, deployedVersionRefLine, true, true);
+    }
+
+    private void writeDeploymentReadinessMapping(
+            String rpId,
+            String deployedVersionRefLine,
+            boolean includeTimeout,
+            boolean includeOutputRef) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        String timeoutLine = includeTimeout ? "                          timeout_seconds: 10\n" : "";
+        String outputsBlock = includeOutputRef
+                ? "                          outputs:\n"
+                        + "                            actual_output_ref: actual/readiness.txt\n"
+                : "";
         Files.writeString(mapping, """
                 rp_id: %s
                 release_units:
@@ -2980,20 +3065,17 @@ class RegressionCommandTest {
                           readiness_probe: file_exists
                           target_selector: deployment/payment-api
                           deployment_ref: fixtures/readiness/payment-api.ready
-%s                          timeout_seconds: 10
-                          logs:
+%s%s                          logs:
                             stdout: logs/readiness.log
                             stderr: logs/readiness-error.log
-                          outputs:
-                            actual_output_ref: actual/readiness.txt
-                      bindings: {}
+%s                      bindings: {}
                       fixtures: {}
                       oracles: {}
                       assertions: {}
                       observations: {}
                     evidence_responsibility: [readiness_result]
                     dependencies: []
-                """.formatted(rpId, deployedVersionRefLine));
+                """.formatted(rpId, deployedVersionRefLine, timeoutLine, outputsBlock));
     }
 
     private void writeDeploymentReadyMarker(String rpId) throws Exception {

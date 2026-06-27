@@ -792,6 +792,9 @@ class FrameworkVerificationIT {
                           readiness_probe: file_exists
                           deployment_ref: fixtures/readiness/payment-api.ready
                           deployed_version_ref: deploy-123
+                          timeout_seconds: 10
+                          outputs:
+                            actual_output_ref: actual/readiness.txt
                     evidence_responsibility: [readiness_result]
                     dependencies: []
                   - ru_id: RU-legacy-runner

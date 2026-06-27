@@ -167,6 +167,19 @@ class ProviderCapabilityRegistry {
                 violations.add(required(".deployed_version_ref",
                         "Declare deployed_version_ref for `" + providerName + "` before execution."));
             }
+            if (!hasAnyText(contract, "timeout_seconds")) {
+                violations.add(required(".timeout_seconds",
+                        "Declare timeout_seconds as a positive bounded integer for deployment readiness provider `"
+                                + providerName + "`."));
+            } else if (!isPositiveInteger(contract.get("timeout_seconds"))) {
+                violations.add(required(".timeout_seconds",
+                        "Declare timeout_seconds as a positive bounded integer for deployment readiness provider `"
+                                + providerName + "`."));
+            }
+            if (!hasNestedAnyText(contract, "outputs", "actual_output_ref")) {
+                violations.add(required(".outputs.actual_output_ref",
+                        "Declare actual_output_ref for deployment readiness provider `" + providerName + "`."));
+            }
         }
         if (family.equals("external_runner")) {
             validateExternalRunner(providerName, contract, violations);
