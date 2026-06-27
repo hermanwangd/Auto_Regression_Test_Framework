@@ -152,10 +152,13 @@ class ProviderContractResolverTest {
                           provider_family: request_response
                           provider_type: rest
                           endpoint_ref: env://PAYMENT_API
+                          timeout_seconds: 10
                           actions:
                             submit_payment:
                               method: POST
                               path: /payments
+                          outputs:
+                            actual_output_ref: actual/response.json
                       bindings:
                         api_payload:
                           provider_family: request_response

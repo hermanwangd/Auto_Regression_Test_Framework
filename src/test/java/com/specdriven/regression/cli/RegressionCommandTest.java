@@ -1116,6 +1116,68 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksRestProviderWithoutTimeoutBeforeInvocation() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-REST-TIMEOUT";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_api"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeRestProviderMappingWithoutTimeout(rpId, 65535);
+        writeRestPayload(rpId);
+        writeApprovedExpectedResult(rpId, acId, "{\"status\":\"accepted\",\"paymentId\":\"PAY-001\"}\n");
+        writeApprovedRestTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: request_response");
+        assertThat(output.toString()).contains("provider_type: rest");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.request_response.timeout_seconds");
+        assertThat(output.toString()).contains("Declare timeout_seconds as a positive bounded integer for request/response provider `request_response`");
+    }
+
+    @Test
+    void runDryRunBlocksRestProviderWithoutOutputRefBeforeInvocation() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-REST-OUTPUT";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_api"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeRestProviderMappingWithoutOutputRef(rpId, 65535);
+        writeRestPayload(rpId);
+        writeApprovedExpectedResult(rpId, acId, "{\"status\":\"accepted\",\"paymentId\":\"PAY-001\"}\n");
+        writeApprovedRestTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: request_response");
+        assertThat(output.toString()).contains("provider_type: rest");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.request_response.outputs.actual_output_ref");
+        assertThat(output.toString()).contains("Declare actual_output_ref for request/response provider `request_response`");
+    }
+
+    @Test
     void runExecutesLocalMessagingProviderAndWritesEvidence() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-MSG";
@@ -2629,7 +2691,30 @@ class RegressionCommandTest {
             int port,
             String actionName,
             String requestBinding) throws Exception {
+        writeRestProviderMapping(rpId, port, actionName, requestBinding, true, true);
+    }
+
+    private void writeRestProviderMappingWithoutTimeout(String rpId, int port) throws Exception {
+        writeRestProviderMapping(rpId, port, "submit_payment", "payment_payload", false, true);
+    }
+
+    private void writeRestProviderMappingWithoutOutputRef(String rpId, int port) throws Exception {
+        writeRestProviderMapping(rpId, port, "submit_payment", "payment_payload", true, false);
+    }
+
+    private void writeRestProviderMapping(
+            String rpId,
+            int port,
+            String actionName,
+            String requestBinding,
+            boolean includeTimeout,
+            boolean includeOutputRef) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        String timeoutField = includeTimeout ? "                          timeout_seconds: 10\n" : "";
+        String outputField = includeOutputRef
+                ? "                          outputs:\n"
+                        + "                            actual_output_ref: actual/response.json\n"
+                : "                          outputs: {}\n";
         Files.writeString(mapping, """
                 rp_id: %s
                 release_units:
@@ -2649,8 +2734,7 @@ class RegressionCommandTest {
                           provider_family: request_response
                           provider_type: rest
                           endpoint_ref: http://127.0.0.1:%s
-                          timeout_seconds: 10
-                          actions:
+%s                          actions:
                             %s:
                               method: POST
                               path: /payments
@@ -2658,9 +2742,7 @@ class RegressionCommandTest {
                           logs:
                             stdout: logs/response.log
                             stderr: logs/error.log
-                          outputs:
-                            actual_output_ref: actual/response.json
-                      bindings:
+%s                      bindings:
                         api_payload:
                           provider_family: request_response
                           provider_type: request_body
@@ -2671,7 +2753,7 @@ class RegressionCommandTest {
                       observations: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []
-                """.formatted(rpId, port, actionName, requestBinding));
+                """.formatted(rpId, port, timeoutField, actionName, requestBinding, outputField));
     }
 
     private void writeRestPayload(String rpId) throws Exception {

@@ -118,6 +118,19 @@ class ProviderCapabilityRegistry {
                 violations.add(required(".endpoint_ref",
                         "Declare endpoint_ref, base_url_ref, or service_ref for `" + providerName + "`."));
             }
+            if (!hasAnyText(contract, "timeout_seconds")) {
+                violations.add(required(".timeout_seconds",
+                        "Declare timeout_seconds as a positive bounded integer for request/response provider `"
+                                + providerName + "`."));
+            } else if (!isPositiveInteger(contract.get("timeout_seconds"))) {
+                violations.add(required(".timeout_seconds",
+                        "Declare timeout_seconds as a positive bounded integer for request/response provider `"
+                                + providerName + "`."));
+            }
+            if (!hasNestedAnyText(contract, "outputs", "actual_output_ref")) {
+                violations.add(required(".outputs.actual_output_ref",
+                        "Declare actual_output_ref for request/response provider `" + providerName + "`."));
+            }
             if (!hasMap(contract, "actions")) {
                 violations.add(required(".actions",
                         "Declare at least one request/response action for `" + providerName + "`."));
