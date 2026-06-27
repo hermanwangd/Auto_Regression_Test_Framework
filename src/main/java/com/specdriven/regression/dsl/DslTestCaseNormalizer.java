@@ -238,6 +238,9 @@ public class DslTestCaseNormalizer {
             assertion.put("type", type);
             copyIfPresent(verifyItem, assertion, "path", "json_path", "actual", "expected_value", "expected_status",
                     "tolerance", "query", "provider");
+            if (assertion.get("path") == null && assertion.get("json_path") == null) {
+                putIfNotBlank(assertion, "path", firstText(verifyItem, "selector"));
+            }
             if (assertion.get("path") == null && stringValue(verifyItem.get("actual")).startsWith("$.")) {
                 assertion.put("path", verifyItem.get("actual"));
             }

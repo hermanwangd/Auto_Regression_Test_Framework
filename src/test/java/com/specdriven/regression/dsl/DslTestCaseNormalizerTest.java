@@ -98,4 +98,27 @@ class DslTestCaseNormalizerTest {
                 .satisfies(assertion -> assertThat(((Map<?, ?>) assertion).get("oracle"))
                         .isEqualTo("${oracles.contract}"));
     }
+
+    @Test
+    void mapsCanonicalVerifySelectorToRuntimeAssertionPath() {
+        Map<String, Object> normalized = new DslTestCaseNormalizer().normalize(Map.of(
+                "test_case_id", "TC-SELECTOR-001",
+                "expected_results", Map.of(),
+                "verify", List.of(Map.of(
+                        "type", "json_path_equals",
+                        "actual", "${execute.submit_payment.outputs.response_body}",
+                        "selector", "$.status",
+                        "expected", "ACCEPTED"))));
+
+        assertThat((List<?>) normalized.get("assertions"))
+                .singleElement()
+                .satisfies(assertion -> {
+                    Map<?, ?> assertionMap = (Map<?, ?>) assertion;
+                    assertThat(assertionMap.get("type")).isEqualTo("json_path_equals");
+                    assertThat(assertionMap.get("actual"))
+                            .isEqualTo("${execute.submit_payment.outputs.response_body}");
+                    assertThat(assertionMap.get("path")).isEqualTo("$.status");
+                    assertThat(assertionMap.get("expected_value")).isEqualTo("ACCEPTED");
+                });
+    }
 }
