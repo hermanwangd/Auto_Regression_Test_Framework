@@ -166,6 +166,69 @@ class ProviderCapabilityRegistry {
                 violations.add(required(".cleanup_strategy",
                         "Declare cleanup_strategy for fixture `" + providerName + "`."));
             }
+            validateDbFixtureSqlReferences(providerName, contract, violations);
+        }
+    }
+
+    private void validateDbFixtureSqlReferences(
+            String providerName,
+            Map<String, Object> contract,
+            List<ProviderContractViolation> violations) {
+        validateDbFixtureActionSqlReferences(providerName, contract, "setup_actions", violations);
+        validateDbFixtureActionSqlReferences(providerName, contract, "cleanup_actions", violations);
+        if (contract.get("verification_queries") instanceof Map<?, ?> queries) {
+            for (Map.Entry<?, ?> entry : queries.entrySet()) {
+                String queryName = stringValue(entry.getKey());
+                if (!(entry.getValue() instanceof Map<?, ?> query)) {
+                    continue;
+                }
+                if (!stringValue(query.get("sql")).isBlank()) {
+                    violations.add(required(".verification_queries." + queryName + ".sql",
+                            "Move DB fixture verification SQL for `" + queryName
+                                    + "` into sql_ref before setup."));
+                    continue;
+                }
+                String sqlRef = stringValue(query.get("sql_ref"));
+                if (sqlRef.isBlank()) {
+                    violations.add(required(".verification_queries." + queryName + ".sql_ref",
+                            "Declare sql_ref for DB fixture verification query `" + queryName
+                                    + "` in fixture `" + providerName + "`."));
+                } else if (isUnsafeRelativeProviderPath(sqlRef)) {
+                    violations.add(required(".verification_queries." + queryName + ".sql_ref",
+                            "Keep DB fixture verification sql_ref `" + sqlRef
+                                    + "` under the RP package before setup."));
+                }
+            }
+        }
+    }
+
+    private void validateDbFixtureActionSqlReferences(
+            String providerName,
+            Map<String, Object> contract,
+            String section,
+            List<ProviderContractViolation> violations) {
+        if (!(contract.get(section) instanceof Map<?, ?> actions)) {
+            return;
+        }
+        for (Map.Entry<?, ?> entry : actions.entrySet()) {
+            String actionName = stringValue(entry.getKey());
+            if (!(entry.getValue() instanceof Map<?, ?> action)) {
+                continue;
+            }
+            if (!stringValue(action.get("sql")).isBlank()) {
+                violations.add(required("." + section + "." + actionName + ".sql",
+                        "Move DB fixture SQL for action `" + actionName + "` into sql_ref before setup."));
+                continue;
+            }
+            String sqlRef = stringValue(action.get("sql_ref"));
+            if (sqlRef.isBlank()) {
+                violations.add(required("." + section + "." + actionName + ".sql_ref",
+                        "Declare sql_ref for DB fixture action `" + actionName
+                                + "` in fixture `" + providerName + "`."));
+            } else if (isUnsafeRelativeProviderPath(sqlRef)) {
+                violations.add(required("." + section + "." + actionName + ".sql_ref",
+                        "Keep DB fixture sql_ref `" + sqlRef + "` under the RP package before setup."));
+            }
         }
     }
 
@@ -270,6 +333,18 @@ class ProviderCapabilityRegistry {
     }
 
     private boolean isUnsafeRelativeOutputPath(String path) {
+        String normalized = path.replace('\\', '/');
+        return normalized.isBlank()
+                || normalized.startsWith("/")
+                || normalized.startsWith("~/")
+                || normalized.equals("..")
+                || normalized.startsWith("../")
+                || normalized.contains("/../")
+                || normalized.endsWith("/..")
+                || normalized.matches("^[A-Za-z]:.*");
+    }
+
+    private boolean isUnsafeRelativeProviderPath(String path) {
         String normalized = path.replace('\\', '/');
         return normalized.isBlank()
                 || normalized.startsWith("/")

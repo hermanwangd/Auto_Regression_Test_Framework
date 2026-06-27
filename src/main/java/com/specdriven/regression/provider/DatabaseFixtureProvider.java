@@ -36,7 +36,7 @@ public class DatabaseFixtureProvider {
                 try (Connection connection = connection(contract)) {
                     executeActionSql(packageRoot, connection, contract, "setup_actions", action);
                     actionEvidence.add(new ActionEvidence(action.provider(), action.action(), "passed"));
-                    verificationRows.putAll(verificationRows(connection, contract));
+                    verificationRows.putAll(verificationRows(packageRoot, connection, contract));
                 }
             }
             writeSetupEvidence(runDir.resolve("fixture_setup.yaml"), actionEvidence, verificationRows);
@@ -98,7 +98,7 @@ public class DatabaseFixtureProvider {
         if (sqlRef.isBlank()) {
             throw new IllegalArgumentException("DB fixture action `" + action.action() + "` requires sql_ref.");
         }
-        String script = Files.readString(packageRoot.resolve(sqlRef).normalize());
+        String script = readSqlRef(packageRoot, sqlRef);
         try (Statement statement = connection.createStatement()) {
             for (String sql : script.split(";")) {
                 String trimmed = sql.trim();
@@ -109,8 +109,8 @@ public class DatabaseFixtureProvider {
         }
     }
 
-    private Map<String, Integer> verificationRows(Connection connection, Map<String, Object> contract)
-            throws SQLException {
+    private Map<String, Integer> verificationRows(Path packageRoot, Connection connection, Map<String, Object> contract)
+            throws SQLException, IOException {
         Object queries = contract.get("verification_queries");
         if (!(queries instanceof Map<?, ?> queryMap) || queryMap.isEmpty()) {
             return Map.of();
@@ -119,7 +119,8 @@ public class DatabaseFixtureProvider {
         try (Statement statement = connection.createStatement()) {
             for (Map.Entry<?, ?> entry : queryMap.entrySet()) {
                 Map<?, ?> query = entry.getValue() instanceof Map<?, ?> map ? map : Map.of();
-                String sql = stringValue(query.get("sql"));
+                String sqlRef = stringValue(query.get("sql_ref"));
+                String sql = sqlRef.isBlank() ? stringValue(query.get("sql")) : readSqlRef(packageRoot, sqlRef);
                 if (sql.isBlank()) {
                     continue;
                 }
@@ -133,6 +134,15 @@ public class DatabaseFixtureProvider {
             }
         }
         return rows;
+    }
+
+    private String readSqlRef(Path packageRoot, String sqlRef) throws IOException {
+        Path normalizedRoot = packageRoot.toAbsolutePath().normalize();
+        Path sqlPath = normalizedRoot.resolve(sqlRef).normalize();
+        if (!sqlPath.startsWith(normalizedRoot)) {
+            throw new IllegalArgumentException("DB fixture sql_ref must stay under the RP package: " + sqlRef);
+        }
+        return Files.readString(sqlPath);
     }
 
     private List<FixtureAction> fixtureActions(

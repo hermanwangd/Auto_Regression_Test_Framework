@@ -1480,6 +1480,38 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksDbFixtureWithInlineVerificationSqlBeforeSetup() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-DB-INLINE-SQL";
+        String acId = rpId + "-AC-001";
+        String jdbcUrl = "jdbc:h2:mem:rp_db_fixture_inline_" + System.nanoTime() + ";DB_CLOSE_DELAY=-1";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_db"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeDbFixtureMappingWithInlineVerificationSql(rpId, jdbcUrl);
+        writeDbFixtureSql(rpId);
+        writeApprovedExpectedResult(rpId, acId, "db-fixture-ok\n");
+        writeApprovedDbFixtureTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: db_fixture");
+        assertThat(output.toString()).contains("provider_type: jdbc");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.fixtures.relational_db.verification_queries.seeded_orders.sql");
+        assertThat(output.toString()).contains("Move DB fixture verification SQL for `seeded_orders` into sql_ref");
+    }
+
+    @Test
     void runCreatesBatchAndSeparateRunEvidenceForEachApprovedTest() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -2798,6 +2830,14 @@ class RegressionCommandTest {
     }
 
     private void writeDbFixtureMapping(String rpId, String jdbcUrl) throws Exception {
+        writeDbFixtureMapping(rpId, jdbcUrl, "sql_ref: fixtures/db/count_orders.sql");
+    }
+
+    private void writeDbFixtureMappingWithInlineVerificationSql(String rpId, String jdbcUrl) throws Exception {
+        writeDbFixtureMapping(rpId, jdbcUrl, "sql: SELECT COUNT(*) FROM orders");
+    }
+
+    private void writeDbFixtureMapping(String rpId, String jdbcUrl, String verificationQuery) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
         Files.writeString(mapping, """
                 rp_id: %s
@@ -2845,13 +2885,13 @@ class RegressionCommandTest {
                               sql_ref: fixtures/db/cleanup_orders.sql
                           verification_queries:
                             seeded_orders:
-                              sql: SELECT COUNT(*) FROM orders
+                              %s
                       oracles: {}
                       assertions: {}
                       observations: {}
                     evidence_responsibility: [execution_log, cleanup_result]
                     dependencies: []
-                """.formatted(rpId, jdbcUrl));
+                """.formatted(rpId, jdbcUrl, verificationQuery));
     }
 
     private void writeDbFixtureSql(String rpId) throws Exception {
@@ -2867,6 +2907,7 @@ class RegressionCommandTest {
         Files.writeString(fixtureDir.resolve("cleanup_orders.sql"), """
                 DELETE FROM orders WHERE id = 'ORDER-001';
                 """);
+        Files.writeString(fixtureDir.resolve("count_orders.sql"), "SELECT COUNT(*) FROM orders");
     }
 
     private void writeExecutableCiMappingWithFixtureProvider(String rpId) throws Exception {
