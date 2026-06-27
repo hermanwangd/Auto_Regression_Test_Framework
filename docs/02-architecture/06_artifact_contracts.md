@@ -764,6 +764,7 @@ Adapter/provider runtime rules:
 - Dispatch uses DSL fields and mapping fields: adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type.
 - The framework supplies resolved input paths and run workspace paths.
 - Adapters and providers write actual outputs, observation results, and cleanup results under the run evidence directory.
+- Messaging actions that declare `requires_correlation: true` must also declare `correlation_id`, `correlation_id_ref`, or `correlation_key` before publish, consume, or observe dispatch.
 - Non-success exit codes fail the test case and must preserve stdout, stderr, exit code, and timeout state.
 - Timeouts fail the test case and must trigger fixture cleanup.
 - Adapters must not perform deployment in M1.

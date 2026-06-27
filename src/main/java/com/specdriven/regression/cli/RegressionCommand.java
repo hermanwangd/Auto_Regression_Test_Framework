@@ -905,6 +905,21 @@ public class RegressionCommand {
                         "Use supported messaging serialization `json` before invoking messaging action `"
                                 + actionName + "`."));
             }
+            if (isTruthy(action.get("requires_correlation"))
+                    && firstText(action, "correlation_id", "correlation_id_ref", "correlation_key").isBlank()) {
+                gaps.add(new ProviderContractGap(
+                        context.contractPath() + ".actions." + actionName + ".correlation_id_ref",
+                        "adapter",
+                        context.providerName(),
+                        context.providerFamily(),
+                        context.providerType(),
+                        "incomplete",
+                        "blocked",
+                        context.ruId(),
+                        context.providerName(),
+                        "Declare correlation_id, correlation_id_ref, or correlation_key before invoking messaging action `"
+                                + actionName + "`."));
+            }
         }
         return gaps;
     }
@@ -982,6 +997,14 @@ public class RegressionCommand {
             }
         }
         return "";
+    }
+
+    private boolean isTruthy(Object value) {
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        String text = stringValue(value);
+        return "true".equalsIgnoreCase(text) || "yes".equalsIgnoreCase(text);
     }
 
     private void printApGateStatus(PrintStream out, List<String> failureDetails) {
