@@ -1361,6 +1361,7 @@ class RegressionCommandTest {
                 .contains("provider_type: local")
                 .contains("readiness_probe: file_exists")
                 .contains("deployment_ref: fixtures/readiness/payment-api.ready")
+                .contains("deployed_version_ref: deploy-123")
                 .contains("check_count: 1");
         assertThat(Files.readString(runDir.resolve("actual/readiness.txt"))).isEqualTo("ready\n");
         assertThat(runEvidence)
@@ -1369,6 +1370,37 @@ class RegressionCommandTest {
                 .contains("contract_path: release_units[0].provider_contracts.adapters.k8s_readiness")
                 .contains("actual_output: actual/readiness.txt")
                 .contains("assertion_status: passed");
+    }
+
+    @Test
+    void runDryRunBlocksDeploymentReadinessWithoutVersionRefBeforeExecution() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-READY-VERSION";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "deployment"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeDeploymentReadinessMappingWithoutVersionRef(rpId);
+        writeDeploymentReadyMarker(rpId);
+        writeApprovedExpectedResult(rpId, acId, "ready\n");
+        writeApprovedDeploymentReadinessTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: deployment_readiness");
+        assertThat(output.toString()).contains("provider_type: local");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.k8s_readiness.deployed_version_ref");
+        assertThat(output.toString()).contains("Declare deployed_version_ref for `k8s_readiness`");
     }
 
     @Test
@@ -2745,6 +2777,14 @@ class RegressionCommandTest {
     }
 
     private void writeDeploymentReadinessMapping(String rpId) throws Exception {
+        writeDeploymentReadinessMapping(rpId, "                          deployed_version_ref: deploy-123\n");
+    }
+
+    private void writeDeploymentReadinessMappingWithoutVersionRef(String rpId) throws Exception {
+        writeDeploymentReadinessMapping(rpId, "");
+    }
+
+    private void writeDeploymentReadinessMapping(String rpId, String deployedVersionRefLine) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
         Files.writeString(mapping, """
                 rp_id: %s
@@ -2767,7 +2807,7 @@ class RegressionCommandTest {
                           readiness_probe: file_exists
                           target_selector: deployment/payment-api
                           deployment_ref: fixtures/readiness/payment-api.ready
-                          timeout_seconds: 10
+%s                          timeout_seconds: 10
                           logs:
                             stdout: logs/readiness.log
                             stderr: logs/readiness-error.log
@@ -2780,7 +2820,7 @@ class RegressionCommandTest {
                       observations: {}
                     evidence_responsibility: [readiness_result]
                     dependencies: []
-                """.formatted(rpId));
+                """.formatted(rpId, deployedVersionRefLine));
     }
 
     private void writeDeploymentReadyMarker(String rpId) throws Exception {

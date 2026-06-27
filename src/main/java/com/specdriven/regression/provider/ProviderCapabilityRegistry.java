@@ -136,6 +136,10 @@ class ProviderCapabilityRegistry {
                 violations.add(required(".deployment_ref",
                         "Declare deployment_ref, service_ref, or target_selector for `" + providerName + "`."));
             }
+            if (!hasAnyText(contract, "deployed_version_ref")) {
+                violations.add(required(".deployed_version_ref",
+                        "Declare deployed_version_ref for `" + providerName + "` before execution."));
+            }
         }
         if (family.equals("external_runner")) {
             validateExternalRunner(providerName, contract, violations);

@@ -99,6 +99,7 @@ public class DeploymentReadinessProvider {
         appendIfPresent(builder, "target_selector", stringValue(contract.get("target_selector")));
         appendIfPresent(builder, "deployment_ref", stringValue(contract.get("deployment_ref")));
         appendIfPresent(builder, "service_ref", stringValue(contract.get("service_ref")));
+        appendIfPresent(builder, "deployed_version_ref", stringValue(contract.get("deployed_version_ref")));
         builder.append("checks:\n");
         builder.append("  - name: ").append(stringValue(contract.get("readiness_probe"))).append("\n");
         builder.append("    status: ").append(status).append("\n");

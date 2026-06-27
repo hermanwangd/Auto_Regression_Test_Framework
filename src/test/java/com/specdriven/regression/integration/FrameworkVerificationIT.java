@@ -785,6 +785,7 @@ class FrameworkVerificationIT {
                           provider_type: local
                           readiness_probe: file_exists
                           deployment_ref: fixtures/readiness/payment-api.ready
+                          deployed_version_ref: deploy-123
                     evidence_responsibility: [readiness_result]
                     dependencies: []
                   - ru_id: RU-legacy-runner
