@@ -225,6 +225,10 @@ class RegressionCommandTest {
         assertThat(Files.exists(draft)).isTrue();
         assertThat(Files.readString(draft)).contains("artifact_status: draft_test_skeleton");
         assertThat(output.toString()).contains("generated_artifact_type: draft_test_skeleton");
+        assertThat(output.toString()).contains("ap: Planning and Binding");
+        assertThat(output.toString()).contains("field_path: release_units");
+        assertThat(output.toString()).contains("reason: execution_context_incomplete");
+        assertThat(output.toString()).contains("owner_action: Complete RP/RU mapping execution context before executable test generation.");
     }
 
     @Test

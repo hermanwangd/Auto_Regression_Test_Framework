@@ -342,10 +342,21 @@ public class RegressionCommand {
                 out.println("    path: " + packageRoot.relativize(result.writtenPath()));
             }
             for (String gap : result.gaps()) {
-                out.println("    gap: " + gap);
+                printGenerationGap(out, item, gap);
             }
         }
         return blocked ? 1 : 0;
+    }
+
+    private void printGenerationGap(PrintStream out, AcReadinessItem item, String gap) {
+        boolean acReadinessGap = "AC is not ready for generation".equals(gap);
+        out.println("    ap: " + (acReadinessGap ? "Definition and Validation" : "Planning and Binding"));
+        out.println("    field_path: " + (acReadinessGap ? "acceptance_criteria.md#" + item.acId() : gap));
+        out.println("    reason: " + (acReadinessGap ? "ac_readiness_gap" : "execution_context_incomplete"));
+        out.println("    gap: " + gap);
+        out.println("    owner_action: " + (acReadinessGap
+                ? "Clarify owner-authored AC before executable test generation."
+                : "Complete RP/RU mapping execution context before executable test generation."));
     }
 
     private int runRegression(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
