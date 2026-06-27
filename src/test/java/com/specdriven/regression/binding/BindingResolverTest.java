@@ -56,6 +56,24 @@ class BindingResolverTest {
                 .contains("expected.ref");
     }
 
+    @Test
+    void resolvesExecutionFocusedDslBindingsFromSetupAndExecuteSections() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/RP-001-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, executionFocusedTest());
+
+        BindingResolutionReport report = new BindingResolver().resolve(testCase);
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.testCaseId()).isEqualTo("RP-001-TC-001");
+        assertThat(report.acId()).isEqualTo("RP-001-AC-001");
+        assertThat(report.resolvedBindings()).extracting(ResolvedBinding::bindingName)
+                .containsExactly("orders_seed", "api_payload");
+        assertThat(report.resolvedBindings()).extracting(ResolvedBinding::bindingType)
+                .containsExactly("db_seed", "api_payload");
+        assertThat(report.gaps()).isEmpty();
+    }
+
     private String approvedTest(String bindingType, String expectedRef) {
         String expectedBlock = expectedRef.isBlank() ? "expected: {}\n" : "expected:\n  ref: " + expectedRef + "\n";
         return """
@@ -97,5 +115,54 @@ class BindingResolverTest {
                 evidence_required:
                   - execution_log
                 """.formatted(expectedBlock, bindingType);
+    }
+
+    private String executionFocusedTest() {
+        return """
+                dsl_version: v1
+                test_case_id: RP-001-TC-001
+                status: approved_for_regression
+                revision: 1
+                traceability:
+                  package_id: RP-001
+                  acceptance_criteria_id: RP-001-AC-001
+                  source: acceptance_criteria.md#RP-001-AC-001
+                targets:
+                  RU-api:
+                    type: application
+                    runner: request_response
+                    environment: ci://api
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [db_seed, api_payload, response_assertion]
+                setup:
+                  fixtures:
+                    orders_seed:
+                      type: database_seed
+                      ref: fixtures/db/orders_seed.yaml
+                      lifecycle: state_mutating
+                execute:
+                  - id: submit_payment
+                    target: RU-api
+                    operation: submit
+                    with:
+                      api_payload:
+                        type: api_payload
+                        ref: fixtures/request.json
+                expected_results:
+                  primary:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/RP-001-ER-001.yaml
+                verify:
+                  - type: file_diff
+                    actual: ${execute.submit_payment.outputs.actual_response}
+                    expected: ${expected_results.primary.ref}
+                evidence:
+                  required: [execution_log, assertion_result]
+                runtime:
+                  cleanup_required: true
+                  destructive_actions_allowed: false
+                """;
     }
 }

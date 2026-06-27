@@ -7,6 +7,7 @@ import com.specdriven.regression.assertion.AssertionEvaluation;
 import com.specdriven.regression.binding.BindingResolutionReport;
 import com.specdriven.regression.binding.BindingResolver;
 import com.specdriven.regression.binding.ResolvedBinding;
+import com.specdriven.regression.dsl.DslTestCaseNormalizer;
 import com.specdriven.regression.evidence.EvidenceWriter;
 import com.specdriven.regression.provider.DatabaseFixtureProvider;
 import com.specdriven.regression.provider.DeploymentReadinessProvider;
@@ -35,6 +36,7 @@ public class ExecutionEngine {
     private final ProviderContractResolver providerContractResolver;
     private final DatabaseFixtureProvider databaseFixtureProvider;
     private final ProviderRuntimeRegistry providerRuntimeRegistry;
+    private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
 
     public ExecutionEngine() {
         this(new DataPipelineAdapter(), new AssertionEngine(), new EvidenceWriter());
@@ -143,7 +145,7 @@ public class ExecutionEngine {
     }
 
     public ExecutionResult execute(Path packageRoot, Path testCasePath, String batchId, String runId) {
-        Map<String, Object> testCase = readYamlMap(testCasePath);
+        Map<String, Object> testCase = dslTestCaseNormalizer.normalize(readYamlMap(testCasePath));
         String testCaseId = stringValue(testCase.get("test_case_id"));
         String acId = stringValue(testCase.get("ac_id"));
         String adapterName = adapterName(testCase);

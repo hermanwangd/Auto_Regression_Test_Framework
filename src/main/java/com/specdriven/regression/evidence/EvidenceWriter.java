@@ -3,6 +3,7 @@ package com.specdriven.regression.evidence;
 import com.specdriven.regression.adapter.AdapterExecutionResult;
 import com.specdriven.regression.assertion.AssertionEvaluation;
 import com.specdriven.regression.binding.ResolvedBinding;
+import com.specdriven.regression.dsl.DslTestCaseNormalizer;
 import com.specdriven.regression.execution.ExecutionResult;
 import com.specdriven.regression.provider.ResolvedProviderContract;
 import java.io.IOException;
@@ -16,6 +17,8 @@ import org.yaml.snakeyaml.Yaml;
 
 @Service
 public class EvidenceWriter {
+
+    private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
 
     public Path writeExecutionRun(
             Path runDir,
@@ -72,6 +75,7 @@ public class EvidenceWriter {
             List<ResolvedBinding> resolvedBindings,
             List<String> resolvedDependencies,
             List<ResolvedProviderContract> providerContracts) {
+        testCase = dslTestCaseNormalizer.normalize(testCase);
         Map<?, ?> executionTarget = executionTarget(testCase);
         try {
             Files.createDirectories(runDir);
@@ -303,7 +307,9 @@ public class EvidenceWriter {
             String environmentRef,
             List<String> resolvedDependencies) {
         Path runDir = packageRoot.resolve("evidence/runs").resolve(runId);
-        Map<String, Object> testCase = approvedTests.isEmpty() ? Map.of() : readYamlMap(approvedTests.get(0));
+        Map<String, Object> testCase = approvedTests.isEmpty()
+                ? Map.of()
+                : dslTestCaseNormalizer.normalize(readYamlMap(approvedTests.get(0)));
         Map<?, ?> executionTarget = executionTarget(testCase);
         String resolvedExecutionMode = isBlank(executionMode)
                 ? stringValue(executionTarget.get("execution_mode"))

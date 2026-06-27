@@ -1,5 +1,6 @@
 package com.specdriven.regression.fixture;
 
+import com.specdriven.regression.dsl.DslTestCaseNormalizer;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -15,8 +16,10 @@ import org.yaml.snakeyaml.Yaml;
 @Service
 public class FixtureLifecycleService {
 
+    private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
+
     public FixtureLifecycleReport validate(Path testCasePath) {
-        Map<String, Object> testCase = readYamlMap(testCasePath);
+        Map<String, Object> testCase = dslTestCaseNormalizer.normalize(readYamlMap(testCasePath));
         Object fixture = testCase.get("fixture");
         Object policy = testCase.get("policy");
         Set<String> fixtureProviders = new LinkedHashSet<>();

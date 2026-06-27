@@ -1,5 +1,6 @@
 package com.specdriven.regression.oracle;
 
+import com.specdriven.regression.dsl.DslTestCaseNormalizer;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -19,9 +20,10 @@ public class OracleReadinessService {
             "schema",
             "contract",
             "query_result");
+    private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
 
     public OracleReadinessReport check(Path testCasePath) {
-        Map<String, Object> testCase = readYamlMap(testCasePath);
+        Map<String, Object> testCase = dslTestCaseNormalizer.normalize(readYamlMap(testCasePath));
         String testCaseId = stringValue(testCase.get("test_case_id"));
         String acId = stringValue(testCase.get("ac_id"));
         List<OracleReadinessGap> gaps = new ArrayList<>();

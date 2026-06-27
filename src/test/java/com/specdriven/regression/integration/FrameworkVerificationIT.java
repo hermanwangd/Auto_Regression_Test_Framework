@@ -260,12 +260,23 @@ class FrameworkVerificationIT {
         assertThat(Files.readString(readyPackageRoot.resolve(
                         "tests/draft/RP-FWK-SAMPLE-TC-001-draft_executable_test_case.yaml")))
                 .contains("dsl_version: v1")
-                .contains("ac_id: RP-FWK-SAMPLE-AC-001")
+                .contains("status: draft_executable")
+                .contains("traceability:")
+                .contains("acceptance_criteria_id: RP-FWK-SAMPLE-AC-001")
                 .contains("scenario:")
-                .contains("execution_target:")
-                .contains("steps:")
-                .contains("assertions:")
-                .contains("evidence_required:");
+                .contains("targets:")
+                .contains("setup:")
+                .contains("execute:")
+                .contains("expected_results:")
+                .contains("verify:")
+                .contains("evidence:")
+                .contains("runtime:")
+                .doesNotContain("execution_target:")
+                .doesNotContain("package_inputs:")
+                .doesNotContain("oracles:")
+                .doesNotContain("steps:")
+                .doesNotContain("assertions:")
+                .doesNotContain("evidence_required:");
 
         Path existingRepo = sampleProductRepo();
         Path existingPackageRoot = packageRoot(existingRepo);

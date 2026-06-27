@@ -61,6 +61,86 @@ class ExecutionEngineTest {
     }
 
     @Test
+    void executesExecutionFocusedDslV1ThroughRuntimeCompatibilityLayer() throws Exception {
+        writeRequestResponsePackage();
+        Files.writeString(tempDir.resolve("tests/approved/TC-REGISTRY-001.yaml"), """
+                dsl_version: v1
+                test_case_id: TC-REGISTRY-001
+                status: approved_for_regression
+                revision: 1
+                traceability:
+                  package_id: RP-REGISTRY
+                  acceptance_criteria_id: AC-REGISTRY-001
+                  source: acceptance_criteria.md#AC-REGISTRY-001
+                targets:
+                  RU-api:
+                    type: application
+                    runner: request_response
+                    environment: ci://api
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [api_payload, response_assertion]
+                setup:
+                  fixtures: {}
+                execute:
+                  - id: submit_payment
+                    target: RU-api
+                    operation: submit
+                    with:
+                      api_payload:
+                        type: api_payload
+                        ref: fixtures/request.json
+                    outputs:
+                      actual_response:
+                        ref: actual/response.txt
+                expected_results:
+                  primary:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/ER-REGISTRY-001.yaml
+                verify:
+                  - type: file_diff
+                    actual: ${execute.submit_payment.outputs.actual_response}
+                    expected: ${expected_results.primary.ref}
+                evidence:
+                  required: [execution_log, assertion_result]
+                runtime:
+                  cleanup_required: false
+                  destructive_actions_allowed: false
+                """);
+        AtomicBoolean runtimeCalled = new AtomicBoolean(false);
+        ProviderRuntime fakeRuntime = request -> {
+            runtimeCalled.set(true);
+            writeRuntimeOutput(request);
+            return new AdapterExecutionResult(0, false, request.stdoutLog(), request.stderrLog(), request.actualOutput());
+        };
+        ExecutionEngine engine = new ExecutionEngine(
+                new DataPipelineAdapter(),
+                new AssertionEngine(),
+                new EvidenceWriter(),
+                new BindingResolver(),
+                new ProviderContractResolver(),
+                new DatabaseFixtureProvider(),
+                new ProviderRuntimeRegistry(Map.of("request_response/rest", fakeRuntime)));
+
+        ExecutionResult result = engine.execute(
+                tempDir,
+                tempDir.resolve("tests/approved/TC-REGISTRY-001.yaml"),
+                "BATCH-DSL-V1",
+                "RUN-DSL-V1");
+
+        assertThat(runtimeCalled).isTrue();
+        assertThat(result.passed()).isTrue();
+        assertThat(result.acId()).isEqualTo("AC-REGISTRY-001");
+        assertThat(Files.readString(tempDir.resolve("evidence/runs/RUN-DSL-V1/run.yaml")))
+                .contains("rp_id: RP-REGISTRY")
+                .contains("ac_id: AC-REGISTRY-001")
+                .contains("ru_refs:\n  - RU-api")
+                .contains("binding_name: api_payload")
+                .contains("status: passed");
+    }
+
+    @Test
     void evaluatesJsonPathEqualsAssertionAgainstProviderActualOutput() throws Exception {
         writeJsonResponseAssertionPackage();
         ProviderRuntime fakeRuntime = request -> {

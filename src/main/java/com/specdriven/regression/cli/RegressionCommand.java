@@ -8,6 +8,7 @@ import com.specdriven.regression.discovery.ReleasePackageCompletenessReport;
 import com.specdriven.regression.discovery.ReleasePackageGap;
 import com.specdriven.regression.discovery.ReleasePackageResult;
 import com.specdriven.regression.discovery.ReleasePackageService;
+import com.specdriven.regression.dsl.DslTestCaseNormalizer;
 import com.specdriven.regression.environment.ExecutionEnvironmentGap;
 import com.specdriven.regression.environment.ExecutionEnvironmentReport;
 import com.specdriven.regression.environment.ExecutionEnvironmentResolver;
@@ -82,6 +83,7 @@ public class RegressionCommand {
     private final OracleReadinessService oracleReadinessService;
     private final EvidenceWriter evidenceWriter;
     private final CoverageReportService coverageReportService;
+    private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
 
     public RegressionCommand(ProductRepoService productRepoService, ReleasePackageService releasePackageService) {
         this(
@@ -864,7 +866,7 @@ public class RegressionCommand {
                 continue;
             }
             String mode = messagingActionMode(action);
-            if (!List.of("publish", "consume", "observe", "cleanup").contains(mode)) {
+            if (!List.of("publish", "request", "request_reply", "consume", "observe", "cleanup").contains(mode)) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName + ".mode",
                         "adapter",
@@ -875,11 +877,11 @@ public class RegressionCommand {
                         "blocked",
                         context.ruId(),
                         context.providerName(),
-                        "Use supported messaging action mode `publish`, `consume`, `observe`, or `cleanup` "
+                        "Use supported messaging action mode `publish`, `request_reply`, `consume`, `observe`, or `cleanup` "
                                 + "before invoking `" + actionName + "`."));
             }
             String payloadBinding = firstText(action, "payload_binding", "message_binding", "event_binding");
-            if ("publish".equals(mode) && payloadBinding.isBlank()) {
+            if (messagingRequiresPayload(mode) && payloadBinding.isBlank()) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName + ".payload_binding",
                         "adapter",
@@ -892,7 +894,7 @@ public class RegressionCommand {
                         context.providerName(),
                         "Declare payload_binding, message_binding, or event_binding for messaging action `"
                                 + actionName + "` before invocation."));
-            } else if ("publish".equals(mode) && !bindingNames.contains(payloadBinding)) {
+            } else if (messagingRequiresPayload(mode) && !bindingNames.contains(payloadBinding)) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName + ".payload_binding",
                         "adapter",
@@ -986,7 +988,14 @@ public class RegressionCommand {
 
     private String messagingActionMode(Map<?, ?> action) {
         String mode = stringValue(action.get("mode"));
-        return mode.isBlank() ? "publish" : mode.toLowerCase(java.util.Locale.ROOT);
+        return mode.isBlank() ? "publish" : mode.toLowerCase(java.util.Locale.ROOT).replace('-', '_');
+    }
+
+    private boolean messagingRequiresPayload(String mode) {
+        return mode.isBlank()
+                || "publish".equals(mode)
+                || "request".equals(mode)
+                || "request_reply".equals(mode);
     }
 
     private boolean isPositiveInteger(Object value) {
@@ -1004,7 +1013,7 @@ public class RegressionCommand {
     }
 
     private List<String> stepActions(Path approvedTest) {
-        Object stepsValue = readYamlMap(approvedTest).get("steps");
+        Object stepsValue = testCaseMap(approvedTest).get("steps");
         if (!(stepsValue instanceof List<?> steps)) {
             return List.of();
         }
@@ -1271,7 +1280,7 @@ public class RegressionCommand {
     }
 
     private String adapterName(Path testCasePath) {
-        Object executionTarget = readYamlMap(testCasePath).get("execution_target");
+        Object executionTarget = testCaseMap(testCasePath).get("execution_target");
         if (executionTarget instanceof Map<?, ?> target) {
             Object adapter = target.get("adapter");
             return adapter == null ? "" : adapter.toString();
@@ -1280,7 +1289,7 @@ public class RegressionCommand {
     }
 
     private String targetRuId(Path testCasePath) {
-        Object executionTarget = readYamlMap(testCasePath).get("execution_target");
+        Object executionTarget = testCaseMap(testCasePath).get("execution_target");
         if (executionTarget instanceof Map<?, ?> target) {
             return stringValue(target.get("ru_id"));
         }
@@ -1288,11 +1297,15 @@ public class RegressionCommand {
     }
 
     private String testCaseId(Path testCasePath) {
-        return stringValue(readYamlMap(testCasePath).get("test_case_id"));
+        return stringValue(testCaseMap(testCasePath).get("test_case_id"));
     }
 
     private String acId(Path testCasePath) {
-        return stringValue(readYamlMap(testCasePath).get("ac_id"));
+        return stringValue(testCaseMap(testCasePath).get("ac_id"));
+    }
+
+    private Map<String, Object> testCaseMap(Path testCasePath) {
+        return dslTestCaseNormalizer.normalize(readYamlMap(testCasePath));
     }
 
     private List<String> targetDependencies(Path mappingYaml, String targetRuId) {

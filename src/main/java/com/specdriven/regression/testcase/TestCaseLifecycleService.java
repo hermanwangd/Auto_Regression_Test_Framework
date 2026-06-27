@@ -60,50 +60,48 @@ public class TestCaseLifecycleService {
         return """
                 dsl_version: v1
                 test_case_id: %s
-                rp_id: %s
-                ac_id: %s
-                artifact_status: draft_executable_test_case
+                status: draft_executable
                 revision: 1
-                owner: product_developer
-                source_refs:
-                  acceptance_criteria: acceptance_criteria.md#%s
+                traceability:
+                  package_id: %s
+                  acceptance_criteria_id: %s
+                  source: acceptance_criteria.md#%s
                 source_fingerprint: %s
                 scenario:
                   type: integration
                   scope: rp
                   capabilities: %s
-                execution_target:
-                  ru_id: %s
-                  adapter: %s
-                  execution_mode: %s
-                  environment_ref: %s
-                expected:
-                  status: pending_owner_review
-                oracles:
-                  owner_approved_expected:
-                    type: pending_owner_approved_rule
-                    status: pending_owner_review
-                    owner_action: Approve expected result or replace with reviewed oracle before regression execution.
-                package_inputs:
-                  inputs:
-                    primary_input:
-                      bind_as: %s
-                      lifecycle: %s
-                      ref: pending_owner_selected_input
-                      owner_action: Select checked-in or cataloged logical input data for this AC.
+                targets:
+                  %s:
+                    type: %s
+                    runner: %s
+                    execution_mode: %s
+                    environment: %s
                 %s
-                steps:
+                execute:
                   - id: execute_rp_behavior
-                    action: call_ru
-                    target_ru_id: %s
-                    input: ${package_inputs.inputs.primary_input}
-                assertions:
-                  - type: pending_owner_approved_rule
-                    oracle: ${oracles.owner_approved_expected}
-                evidence_required:
-                  - execution_log
-                  - assertion_result
-                policy:
+                    target: %s
+                    operation: call_ru
+                    with:
+                      primary_input: ${setup.fixtures.primary_input}
+                    outputs:
+                      actual_output:
+                        ref: actual/output.txt
+                expected_results:
+                  owner_approved_expected:
+                    type: expected_result_artifact
+                    status: pending_owner_review
+                    ref: pending_owner_approved_expected_result
+                    owner_action: Approve expected result before regression execution.
+                verify:
+                  - type: file_diff
+                    actual: ${execute.execute_rp_behavior.outputs.actual_output}
+                    expected: ${expected_results.owner_approved_expected.ref}
+                evidence:
+                  required:
+                    - execution_log
+                    - assertion_result
+                runtime:
                   cleanup_required: %s
                   destructive_actions_allowed: false
                 """.formatted(
@@ -114,11 +112,10 @@ public class TestCaseLifecycleService {
                 fingerprint(ac),
                 yamlList(executionContext.capabilities()),
                 executionContext.ruId(),
+                targetType(executionContext.capabilities()),
                 executionContext.adapter(),
                 executionContext.executionMode(),
                 executionContext.environmentRef(),
-                inputBindAs(executionContext.capabilities()),
-                inputLifecycle(executionContext.capabilities()),
                 fixtureYaml(executionContext.capabilities()),
                 executionContext.ruId(),
                 requiresCleanup(executionContext.capabilities()));
@@ -153,6 +150,19 @@ public class TestCaseLifecycleService {
         return requiresCleanup(capabilities) ? "state_mutating" : "read_only";
     }
 
+    private String targetType(List<String> capabilities) {
+        if (capabilities.contains("batch_execution")) {
+            return "batch_runner";
+        }
+        if (capabilities.contains("api_payload")) {
+            return "application";
+        }
+        if (capabilities.contains("message_event")) {
+            return "event_bus";
+        }
+        return "application";
+    }
+
     private boolean requiresCleanup(List<String> capabilities) {
         return capabilities.contains("db_seed")
                 || capabilities.contains("message_event")
@@ -161,19 +171,23 @@ public class TestCaseLifecycleService {
     }
 
     private String fixtureYaml(List<String> capabilities) {
+        String setup = """
+                setup:
+                  fixtures:
+                    primary_input:
+                      type: %s
+                      lifecycle: %s
+                      ref: pending_owner_selected_input
+                      owner_action: Select checked-in or cataloged logical input data for this AC.
+                """.formatted(inputBindAs(capabilities), inputLifecycle(capabilities));
         if (!requiresCleanup(capabilities)) {
-            return """
-                    fixture:
-                      setup: []
-                      cleanup: []""";
+            return setup + "  cleanup: []";
         }
-        return """
-                fixture:
-                  setup: []
+        return setup + """
                   cleanup:
                     - id: cleanup_primary_input
                       action: cleanup_bound_input
-                      input: ${package_inputs.inputs.primary_input}""";
+                      input: ${setup.fixtures.primary_input}""";
     }
 
     private String skeletonDraftContent(

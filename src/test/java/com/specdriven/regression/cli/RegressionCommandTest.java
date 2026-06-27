@@ -1445,6 +1445,35 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunAllowsNativeMessagingRequestReplyWithPayloadBinding() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-REQUEST-REPLY";
+        String acId = rpId + "-AC-001";
+        String payload = "{\"requestId\":\"REQ-001\",\"status\":\"accepted\"}\n";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingRequestReplyProviderMapping(rpId);
+        writeMessagingEventPayload(rpId, payload);
+        writeApprovedExpectedResult(rpId, acId, payload);
+        writeApprovedMessagingTestCase(rpId, acId, "request_payment_status");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isZero();
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: dry_run_ready");
+        assertThat(output.toString()).doesNotContain("Use supported messaging action mode");
+        assertThat(output.toString()).doesNotContain("Add package input binding `payment_event`");
+    }
+
+    @Test
     void runDryRunBlocksMessagingProviderWithUnsupportedActionBeforeInvocation() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-MSG-ACTION";
@@ -3256,6 +3285,55 @@ class RegressionCommandTest {
                       assertions: {}
                       observations: {}
                     evidence_responsibility: [execution_log, cleanup_result]
+                    dependencies: []
+                """.formatted(rpId));
+    }
+
+    private void writeMessagingRequestReplyProviderMapping(String rpId) throws Exception {
+        Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
+        Files.writeString(mapping, """
+                rp_id: %s
+                release_units:
+                  - ru_id: RU-payment-events
+                    repo: /repo/payment-events
+                    unit_type: service_event
+                    owner: product_developer
+                    version_ref: build-456
+                    validation_boundary: event_request_reply
+                    execution_mode: ci_ephemeral
+                    deployment_required: false
+                    environment_ref: ci://payment/events
+                    adapter: message_bus
+                    provider_contracts:
+                      adapters:
+                        message_bus:
+                          provider_family: messaging
+                          provider_type: nats
+                          server_ref: env://NATS_SERVER
+                          subject_ref: payment.status.request
+                          timeout_seconds: 10
+                          actions:
+                            request_payment_status:
+                              mode: request_reply
+                              payload_binding: payment_event
+                              serialization: json
+                              requires_correlation: true
+                              correlation_id: REQ-001
+                          logs:
+                            stdout: logs/message.log
+                            stderr: logs/message-error.log
+                          outputs:
+                            actual_output_ref: actual/message.json
+                      bindings:
+                        message_event:
+                          provider_family: messaging
+                          provider_type: event_payload
+                          bind_as: event_payload
+                      fixtures: {}
+                      oracles: {}
+                      assertions: {}
+                      observations: {}
+                    evidence_responsibility: [execution_log, message_event]
                     dependencies: []
                 """.formatted(rpId));
     }

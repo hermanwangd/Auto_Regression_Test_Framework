@@ -61,6 +61,58 @@ class FixtureLifecycleServiceTest {
                 .allMatch(action -> action.contains("Declare cleanup"));
     }
 
+    @Test
+    void acceptsExecutionFocusedSetupFixtureWithCleanupPolicy() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/RP-001-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: RP-001-TC-001
+                status: approved_for_regression
+                revision: 1
+                traceability:
+                  package_id: RP-001
+                  acceptance_criteria_id: RP-001-AC-001
+                  source: acceptance_criteria.md#RP-001-AC-001
+                targets:
+                  RU-transform-job:
+                    type: batch_runner
+                    runner: spring_boot_cli
+                    environment: ci://pipeline/RP-001
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [db_seed, batch_execution]
+                setup:
+                  fixtures:
+                    orders_seed:
+                      type: database_seed
+                      ref: fixtures/db/orders_seed.yaml
+                      provider: relational_db
+                      setup_action: seed_orders
+                      cleanup_action: cleanup_orders
+                      lifecycle: state_mutating
+                execute:
+                  - id: run_pipeline
+                    target: RU-transform-job
+                    operation: call_ru
+                expected_results: {}
+                verify: []
+                evidence:
+                  required: [execution_log, cleanup_result]
+                runtime:
+                  cleanup_required: true
+                  cleanup_on_failure: true
+                """);
+
+        FixtureLifecycleReport report = new FixtureLifecycleService().validate(testCase);
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.cleanupRequired()).isTrue();
+        assertThat(report.fixtureProviders()).containsExactly("relational_db");
+        assertThat(report.gaps()).isEmpty();
+    }
+
     private String testCaseWithFixture(String fixtureBlock) {
         return """
                 dsl_version: v1

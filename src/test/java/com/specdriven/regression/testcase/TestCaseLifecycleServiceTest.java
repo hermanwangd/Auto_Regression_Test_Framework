@@ -36,23 +36,37 @@ class TestCaseLifecycleServiceTest {
         String yaml = Files.readString(result.writtenPath());
         assertThat(yaml).contains("dsl_version: v1");
         assertThat(yaml).contains("test_case_id: RP-AR-M1-data-pipeline-TC-001");
-        assertThat(yaml).contains("ac_id: RP-AR-M1-data-pipeline-AC-001");
-        assertThat(yaml).contains("artifact_status: draft_executable_test_case");
-        assertThat(yaml).contains("owner: product_developer");
-        assertThat(yaml).contains("source_refs:");
+        assertThat(yaml).contains("status: draft_executable");
+        assertThat(yaml).contains("traceability:");
+        assertThat(yaml).contains("package_id: RP-AR-M1-data-pipeline");
+        assertThat(yaml).contains("acceptance_criteria_id: RP-AR-M1-data-pipeline-AC-001");
+        assertThat(yaml).contains("source: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-001");
         assertThat(yaml).contains("source_fingerprint:");
-        assertThat(yaml).contains("execution_target:");
-        assertThat(yaml).contains("package_inputs:");
+        assertThat(yaml).contains("targets:");
+        assertThat(yaml).contains("runner: spring_boot_cli");
+        assertThat(yaml).contains("environment: ci://pipeline/rp-ar-m1-data-pipeline");
+        assertThat(yaml).contains("setup:");
+        assertThat(yaml).contains("execute:");
         assertThat(yaml).contains("primary_input:");
-        assertThat(yaml).contains("bind_as: input_file");
+        assertThat(yaml).contains("type: input_file");
         assertThat(yaml).contains("lifecycle: read_only");
-        assertThat(yaml).contains("oracles:");
-        assertThat(yaml).contains("fixture:");
-        assertThat(yaml).contains("steps:");
-        assertThat(yaml).contains("assertions:");
-        assertThat(yaml).contains("evidence_required:");
-        assertThat(yaml).contains("policy:");
+        assertThat(yaml).contains("operation: call_ru");
+        assertThat(yaml).contains("expected_results:");
+        assertThat(yaml).contains("verify:");
+        assertThat(yaml).contains("evidence:");
+        assertThat(yaml).contains("runtime:");
         assertThat(yaml).contains("cleanup_required: false");
+        assertThat(yaml)
+                .doesNotContain("rp_id:")
+                .doesNotContain("ac_id:")
+                .doesNotContain("artifact_status:")
+                .doesNotContain("execution_target:")
+                .doesNotContain("package_inputs:")
+                .doesNotContain("oracles:")
+                .doesNotContain("steps:")
+                .doesNotContain("assertions:")
+                .doesNotContain("evidence_required:")
+                .doesNotContain("policy:");
     }
 
     @Test
@@ -74,13 +88,13 @@ class TestCaseLifecycleServiceTest {
 
         assertThat(result.generatedArtifactType()).isEqualTo("draft_executable_test_case");
         String yaml = Files.readString(result.writtenPath());
-        assertThat(yaml).contains("bind_as: db_seed");
+        assertThat(yaml).contains("type: db_seed");
         assertThat(yaml).contains("lifecycle: state_mutating");
         assertThat(yaml).contains("cleanup_required: true");
         assertThat(yaml).contains("cleanup:");
         assertThat(yaml).contains("- id: cleanup_primary_input");
         assertThat(yaml).contains("action: cleanup_bound_input");
-        assertThat(yaml).contains("input: ${package_inputs.inputs.primary_input}");
+        assertThat(yaml).contains("input: ${setup.fixtures.primary_input}");
     }
 
     @Test

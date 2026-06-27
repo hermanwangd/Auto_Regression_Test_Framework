@@ -1,5 +1,6 @@
 package com.specdriven.regression.assertion;
 
+import com.specdriven.regression.dsl.DslTestCaseNormalizer;
 import com.specdriven.regression.oracle.OracleResolver;
 import com.specdriven.regression.oracle.ResolvedOracle;
 import java.io.IOException;
@@ -21,6 +22,7 @@ import org.yaml.snakeyaml.Yaml;
 public class AssertionEngine {
 
     private final OracleResolver oracleResolver;
+    private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
 
     public AssertionEngine() {
         this(new OracleResolver());
@@ -44,6 +46,7 @@ public class AssertionEngine {
             Path actualOutput,
             Path runDir,
             Map<String, Map<String, Object>> dbFixtureContracts) {
+        testCase = dslTestCaseNormalizer.normalize(testCase);
         List<AssertionDetail> details = new ArrayList<>();
         for (Map<?, ?> assertion : assertions(testCase)) {
             details.add(evaluateAssertion(
