@@ -37,23 +37,23 @@ External runner is not required for the M1 pilot unless the selected RP contains
 |---|---|---|---|
 | Product Repo readiness | Supported for folder/readiness checks | Keep | Harden reports and owner actions |
 | RP artifact completeness | Supported structurally | Keep | Add richer cross-artifact readiness |
-| RP/RU mapping | Validates required RU fields | Multi-RU dependency-aware execution | Resolver and executor currently read primarily the first RU |
+| RP/RU mapping | Supported for required RU fields, dependency graph ordering, target-RU provider resolution, and downstream blocking after failed upstream validation | Multi-RU dependency-aware execution | Add richer cross-artifact dependency readiness reporting |
 | DSL lifecycle | Draft and approved test lifecycle exists | Stable package-neutral DSL v1 | Draft generator is not yet complete for all required DSL sections |
-| Binding types | `input_file`, `dataset`, `db_seed` readiness | Add `api_payload`, `message_event`, `config_file`, `env_var`, `existing_state` as providers mature | Unsupported bindings fail before execution |
-| Fixture lifecycle | Validates cleanup policy for mutating fixtures | Execute DB seed/query/cleanup and message cleanup where needed | Current fixture service validates only; it does not perform DB or queue operations |
-| Execution adapter | Local shell command adapter | Provider-registry-dispatched REST/gRPC, Kafka/NATS, DB, deployment readiness, and shell/file providers | Current execution engine still has hard-coded dispatch paths |
-| REST | Reserved by DSL/design only | Native request/response provider | Needs contract schema, executor, assertions, evidence |
+| Binding types | Supports `input_file`, `dataset`, `db_seed`, `api_payload`, and `message_event` readiness/resolution | Add `config_file`, `env_var`, and `existing_state` as providers mature | Unsupported bindings fail before execution |
+| Fixture lifecycle | Validates cleanup policy and executes JDBC DB fixture setup, verification query counts, and cleanup | Execute DB seed/query/cleanup and message cleanup where needed | Add message cleanup and stronger fixture safety policy |
+| Execution adapter | Provider runtime registry dispatches file/batch shell, REST, local/mock messaging, JDBC DB fixture, local/mock deployment readiness, and approved command-runner escape hatch paths | Provider-registry-dispatched REST/gRPC, Kafka/NATS, DB, deployment readiness, and shell/file providers | Add native gRPC, Kafka/NATS, K8s, and VM providers as reusable runtimes |
+| REST | Supported through configurable HTTP request/response provider with payload binding and evidence capture | Native request/response provider | Add richer response assertions such as status, JSON path, schema, and contract checks |
 | gRPC | Not implemented | Native or generated-client provider | Needs schema/reflection or descriptor contract |
-| Kafka | Not implemented | Publish, consume, observe, correlate | Needs topic refs, serialization, timeout, evidence rules |
-| NATS | Not implemented | Publish/request/reply/subscribe where pilot needs it | Needs subject refs, correlation, timeout, evidence rules |
+| Kafka | Contract validation exists; local/mock messaging runtime can exercise payload evidence only | Publish, consume, observe, correlate | Needs native Kafka client provider, topic refs, serialization, timeout, correlation, and evidence rules |
+| NATS | Contract validation exists; local/mock messaging runtime can exercise payload evidence only | Publish/request/reply/subscribe where pilot needs it | Needs native NATS client provider, subject refs, correlation, timeout, and evidence rules |
 | Orbix | Not implemented | Approved external runner escape hatch first only if needed; native provider later if reusable | Avoid one-off RP-specific provider code |
-| K8s readiness | SIT readiness fields are checked | Kube context, namespace, deployment, service, pod/log readiness provider | No kube API or command probe yet |
-| VM readiness | Environment ref is checked | SSH/WinRM/service-health readiness provider | No VM probe provider yet |
-| DB fixture | `db_seed` can be declared and validated | Seed, query, assert, and cleanup with isolation key | Needs DB provider and safety policy |
+| K8s readiness | Partial local/mock deployment readiness provider supports `file_exists` readiness evidence; SIT readiness fields are checked | Kube context, namespace, deployment, service, pod/log readiness provider | Add kube API or bounded command probe provider |
+| VM readiness | Partial local/mock deployment readiness provider supports readiness evidence shape; environment refs are checked | SSH/WinRM/service-health readiness provider | Add SSH/WinRM or bounded service-health probe provider |
+| DB fixture | Supported for JDBC seed SQL, verification query counts, and cleanup SQL through provider contracts | Seed, query, assert, and cleanup with isolation key | Add stricter safety policy and DB-row assertion/oracle types |
 | Oracle/assertion | File diff and expected-result artifact path | JSON path, schema, contract, DB row, absence, tolerance | Add assertion providers incrementally |
-| Evidence | Batch/run evidence exists | Include resolved bindings, provider contracts used, cleanup, observations, assertion details | Current evidence is incomplete for full AC-007 |
-| External runner bridge | Not implemented | Governed escape hatch for JUnit, Newman, Robot, legacy binaries, or custom harnesses only when built-in providers cannot cover the boundary | Needs approval metadata, bounded execution policy, runner contract, and evidence mapping before use |
-| Provider registry | Structural resolver exists | Config-driven provider registry with default, RP, and RU precedence, explicit family/type validation, and runtime dispatch | Current resolver is minimal, partially heuristic, and not multi-RU capable |
+| Evidence | Batch/run evidence includes bindings, dependencies, provider contracts, assertion status, cleanup, failed/blocked runs, and selected provider-specific evidence | Include resolved bindings, provider contracts used, cleanup, observations, assertion details | Add richer observation and postcondition evidence for native messaging and deployment providers |
+| External runner bridge | Contract validation and approved `command_runner` dispatch exist as an escape hatch; approval metadata and bounded timeout are required | Governed escape hatch for JUnit, Newman, Robot, legacy binaries, or custom harnesses only when built-in providers cannot cover the boundary | Add stronger evidence-map normalization before broad use |
+| Provider registry | Supported structural capability registry validates explicit family/type, target-RU ownership, runtime status, and dispatch for selected providers | Config-driven provider registry with default, RP, and RU precedence, explicit family/type validation, and runtime dispatch | Externalize or govern registry configuration as provider set grows |
 
 Status meanings:
 
