@@ -114,6 +114,22 @@ Every provider-family case must also verify dry-run output. Dry-run must name pr
 | FWK-006 | AC-004, AC-007, AC-008, AC-009, AC-010 | Provider-family contract verification covers request/response, messaging, DB fixture, deployment readiness, file/batch provider behavior, and escape-hatch contract gating with local/mock fixtures | `./mvnw verify` | P1 | Auto |
 | FWK-007 | AC-007, AC-008, AC-010 | Provider-family negative cases block before unsafe execution and report provider family, provider type, registry status, escape-hatch approval status when applicable, capability, affected RU, provider contract path, AP gate, and owner action | `./mvnw verify` | P1 | Auto |
 
+### 7.6.1 Current Coverage Snapshot
+
+This snapshot records what the current framework verification suite is intended to prove. It must be updated whenever provider runtime support changes.
+
+| Area | Current Java Evidence | Status | Remaining Pilot Gap |
+|---|---|---|---|
+| Framework CLI, readiness, generation, run, report, batch/run evidence | `RegressionCommandTest`, `ProductRepoServiceTest`, `ReleasePackageServiceTest`, `AcIntakeServiceTest`, `TestCaseLifecycleServiceTest`, `CoverageReportService` tests through CLI flows | Covered by unit/component tests | None for framework behavior; real RP evidence still requires owner artifacts. |
+| Sample Product Repo integration | `FrameworkVerificationIT`, `PackagedCliSmokeIT` | Covered by `./mvnw verify` | Does not count as downstream RP release evidence. |
+| File/batch provider | `RegressionCommandTest`, `FrameworkVerificationIT`, `ExecutionEngineTest` | Supported with bounded shell/file execution, logs, output refs, timeout, success code, and evidence | Native package-specific adapters are out of scope unless reusable. |
+| REST request/response provider | `RegressionCommandTest` request/response cases | Supported for REST with endpoint/service refs, actions, payload binding, timeout, output ref, and evidence | Native gRPC remains a target provider slice. |
+| Messaging provider | `RegressionCommandTest` messaging cases | Supported for local/mock messaging with topic/subject refs, payload binding, timeout, output ref, correlation checks, and unsupported serialization blocking | Native Kafka/NATS remains a target provider slice. |
+| DB fixture provider | `RegressionCommandTest` DB fixture cases | Supported for JDBC setup/query/cleanup with `sql_ref`, cleanup strategy, isolation key, and evidence | DB-row assertion/oracle types remain future provider/assertion work. |
+| Deployment readiness provider | `RegressionCommandTest` readiness cases | Partial local/mock readiness with probe, deployment/version refs, timeout, output ref, and readiness evidence | Native K8s and VM readiness remain target provider slices. |
+| External runner escape hatch | `RegressionCommandTest`, `FrameworkVerificationIT` escape-hatch cases | Supported for approved command-runner contracts, safe outputs/evidence map, built-in alternative blocking, and mapped-artifact checks | Broader runner schema/content checks are future hardening. |
+| Heterogeneous pilot validation | Not covered by framework Maven tests | Pending owner-provided RP | Requires real `package.yaml`, `rp_feature_spec.md`, `acceptance_criteria.md`, `rp_ru_mapping.yaml`, approved tests, approved truth sources, and selected provider contracts. |
+
 ## 7.7 Selected Heterogeneous Pilot Validation Gate
 
 After owner-provided pilot RP artifacts exist, the downstream RP release pipeline shall validate the real heterogeneous RP using its real Product Repo artifacts and selected provider contracts.

@@ -44,12 +44,12 @@ External runner is not required for the M1 pilot unless the selected RP contains
 | Execution adapter | Provider runtime registry dispatches file/batch shell, REST, local/mock messaging, JDBC DB fixture, local/mock deployment readiness, and approved command-runner escape hatch paths | Provider-registry-dispatched REST/gRPC, Kafka/NATS, DB, deployment readiness, and shell/file providers | Add native gRPC, Kafka/NATS, K8s, and VM providers as reusable runtimes |
 | REST | Supported through configurable HTTP request/response provider with payload binding, evidence capture, and dry-run blocking for unsupported actions or unresolved payload bindings | Native request/response provider | Add richer response assertions such as status, JSON path, schema, and contract checks |
 | gRPC | Not implemented | Native or generated-client provider | Needs schema/reflection or descriptor contract |
-| Kafka | Contract validation exists; local/mock messaging runtime can exercise payload evidence and dry-run blocking for unsupported actions, unresolved payload bindings, or unsupported serialization | Publish, consume, observe, correlate | Needs native Kafka client provider, topic refs, serialization, timeout, correlation, and evidence rules |
-| NATS | Contract validation exists; local/mock messaging runtime can exercise payload evidence and dry-run blocking for unsupported actions, unresolved payload bindings, or unsupported serialization | Publish/request/reply/subscribe where pilot needs it | Needs native NATS client provider, subject refs, correlation, timeout, and evidence rules |
+| Kafka | Contract validation exists; local/mock messaging runtime can exercise payload evidence and dry-run blocking for unsupported actions, unresolved payload bindings, unsupported serialization, missing timeout, missing output ref, and required correlation gaps | Publish, consume, observe, correlate | Needs native Kafka client provider, topic refs, serialization, timeout, correlation, observation rule, and evidence rules |
+| NATS | Contract validation exists; local/mock messaging runtime can exercise payload evidence and dry-run blocking for unsupported actions, unresolved payload bindings, unsupported serialization, missing timeout, missing output ref, and required correlation gaps | Publish/request/reply/subscribe where pilot needs it | Needs native NATS client provider, subject refs, correlation, timeout, observation rule, and evidence rules |
 | Orbix | Not implemented | Approved external runner escape hatch first only if needed; native provider later if reusable | Avoid one-off RP-specific provider code |
-| K8s readiness | Partial local/mock deployment readiness provider supports `file_exists` readiness evidence; SIT readiness fields are checked | Kube context, namespace, deployment, service, pod/log readiness provider | Add kube API or bounded command probe provider |
-| VM readiness | Partial local/mock deployment readiness provider supports readiness evidence shape; environment refs are checked | SSH/WinRM/service-health readiness provider | Add SSH/WinRM or bounded service-health probe provider |
-| DB fixture | Supported for JDBC seed SQL, verification query counts, and cleanup SQL through provider contracts | Seed, query, assert, and cleanup with isolation key | Add stricter safety policy and DB-row assertion/oracle types |
+| K8s readiness | Partial local/mock deployment readiness provider supports `file_exists` readiness evidence and dry-run blocking for missing version ref, timeout, or output ref; SIT readiness fields are checked | Kube context, namespace, deployment, service, pod/log readiness provider | Add kube API or bounded command probe provider |
+| VM readiness | Partial local/mock deployment readiness provider supports readiness evidence shape and required version/timeout/output refs; environment refs are checked | SSH/WinRM/service-health readiness provider | Add SSH/WinRM or bounded service-health probe provider |
+| DB fixture | Supported for JDBC seed SQL refs, verification query SQL refs, cleanup SQL refs, cleanup strategy, isolation key validation, and setup/cleanup evidence | Seed, query, assert, and cleanup with isolation key | Add DB-row assertion/oracle types and stronger destructive-operation policy |
 | Oracle/assertion | File diff and expected-result artifact path | JSON path, schema, contract, DB row, absence, tolerance | Add assertion providers incrementally |
 | Evidence | Batch/run evidence includes bindings, dependencies, provider contracts, assertion status, cleanup, failed/blocked runs, and selected provider-specific evidence | Include resolved bindings, provider contracts used, cleanup, observations, assertion details | Add richer observation and postcondition evidence for native messaging and deployment providers |
 | External runner bridge | Contract validation, approved `command_runner` dispatch, approval metadata checks, positive bounded timeout checks, unsafe output and evidence-map path blocking, built-in provider alternative blocking, evidence-map recording, and mapped-artifact existence checks exist as an escape hatch | Governed escape hatch for JUnit, Newman, Robot, legacy binaries, or custom harnesses only when built-in providers cannot cover the boundary | Add mapped-artifact content/schema checks before broad use |
@@ -67,9 +67,9 @@ Status meanings:
 | Provider Family | Purpose | Example Technologies | Minimum Contract |
 |---|---|---|---|
 | Request/response provider | Invoke synchronous APIs and capture response evidence | REST, gRPC, Orbix bridge | Endpoint or service ref, action, payload binding, auth ref, timeout, response mapping |
-| Message provider | Publish, consume, observe, and correlate events | Kafka, NATS | Topic/subject ref, payload binding, key/correlation id, serialization, timeout, observation rule |
-| DB fixture provider | Prepare and validate state | SQL/NoSQL DBs | Connection ref, schema/table or query refs, seed input, isolation key, cleanup strategy |
-| Deployment readiness provider | Block execution until deployed targets are ready | K8s, VM | Environment ref, target selector, readiness probe, version/deployment ref, log/evidence refs |
+| Message provider | Publish, consume, observe, and correlate events | Kafka, NATS | Topic/subject ref, payload binding, key/correlation id, serialization, timeout, actual output ref, observation rule |
+| DB fixture provider | Prepare and validate state | SQL/NoSQL DBs | Connection ref, query refs, setup/cleanup SQL refs, isolation key, cleanup strategy |
+| Deployment readiness provider | Block execution until deployed targets are ready | K8s, VM | Environment ref, target selector, readiness probe, version/deployment ref, timeout, actual output ref, log/evidence refs |
 | External runner provider | Governed escape hatch for existing tools or legacy runtimes that cannot yet use built-in providers | JUnit, Newman, Robot, C++ or VB.NET harness | Approval ref, command or container ref, inputs, outputs, success codes, timeout, evidence artifact map |
 | File/batch provider | Run file, CLI, batch, or data-pipeline style tests | Spring Boot CLI, scripts, scheduled jobs | Command, working directory, inputs, output refs, logs, success codes, bounded timeout |
 
@@ -101,11 +101,15 @@ release_units:
               request_binding: payment_payload
               response_mapping:
                 payment_id: $.paymentId
+          timeout_seconds: 30
+          outputs:
+            actual_output_ref: actual/payment-response.json
       fixtures:
         payment_db:
           provider_family: db_fixture
-          provider_type: relational_db
+          provider_type: jdbc
           connection_ref: secret://sit/payment-db
+          isolation_key: test_run_id
           cleanup_strategy: by_test_run_id
       observations:
         payment_events:
@@ -113,6 +117,9 @@ release_units:
           provider_type: kafka
           topic_ref: kafka://payment.events
           correlation_id: ${run.id}
+          timeout_seconds: 30
+          outputs:
+            actual_output_ref: actual/payment-events.json
 ```
 
 The DSL would reference logical names such as `submit_payment`, `payment_payload`, and `payment_events`. It would not contain URLs, credentials, SQL bodies, topic client settings, or K8s commands.

@@ -128,6 +128,19 @@ The framework consumes this mapping. It must not decide RP membership.
 
 `provider_contracts` is the canonical contract container. Executable provider contracts must declare `provider_family` and `provider_type` so the provider capability registry can validate required fields, runtime support status, allowed execution modes, and evidence outputs before execution. Contracts may be supplied at reusable defaults, RP level, or RU level. Resolution order is: framework/provider default, then RP-level override, then RU-level override. The most specific declared contract wins, and unsupported or ambiguous overrides fail before execution. Dispatch uses DSL and mapping fields: `execution_target.adapter` and step `action` select adapter contracts; `package_inputs.inputs.<name>.bind_as` selects binding contracts; fixture actions select fixture contracts; `oracles.<name>.type` selects oracle contracts; assertion `type` selects assertion contracts; observation `type` selects observation contracts.
 
+Current provider contract minimums enforced by the framework verification build:
+
+| Provider Family / Type | Enforced Minimum Fields |
+|---|---|
+| `file_batch/shell` | `command`, positive `timeout_seconds`, `outputs.actual_output_ref` |
+| `request_response/rest` | `endpoint_ref`, `base_url_ref`, or `service_ref`; `actions`; positive `timeout_seconds`; `outputs.actual_output_ref` |
+| `messaging/local` or `messaging/mock` | `topic_ref`, `subject_ref`, `stream_ref`, or `endpoint_ref`; positive `timeout_seconds`; `outputs.actual_output_ref`; supported action; payload binding when action requires input; correlation id when required |
+| `db_fixture/jdbc` | `connection_ref`, `isolation_key`, `cleanup_strategy`, setup/cleanup SQL by `sql_ref`, verification SQL by `sql_ref` |
+| `deployment_readiness/local` or `deployment_readiness/mock` | `readiness_probe`, deployment/service/target ref, `deployed_version_ref`, positive `timeout_seconds`, `outputs.actual_output_ref` |
+| `external_runner/command_runner` | approval metadata, reason, command/container ref, inputs, outputs, positive timeout, evidence map, safe evidence paths |
+
+Examples in this document must use those fields when they describe current runtime-supported provider contracts. Examples that mention target providers such as native gRPC, Kafka, NATS, K8s, or VM readiness are target contract sketches until a runtime and verification case exist.
+
 Allowed `execution_mode` values are `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only`.
 
 Each RU entry must declare dependency semantics with `dependencies`. Use an empty list for independent RUs. A dependency entry must include `ru_id` and `required`, and may include `consumes` to identify the upstream output used by this RU.
@@ -741,16 +754,17 @@ provider_contracts:
       provider_family: db_fixture
       provider_type: jdbc
       connection_ref: secret://sit/order-db
-      seed_actions:
+      isolation_key: test_run_id
+      cleanup_strategy: by_test_run_id
+      setup_actions:
         seed_orders:
-          input_binding: orders_seed
-          table: orders
-          key_fields: [test_run_id, order_id]
+          sql_ref: fixtures/db/seed_orders.sql
       cleanup_actions:
         cleanup_orders:
-          table: orders
-          where:
-            test_run_id: ${run.id}
+          sql_ref: fixtures/db/cleanup_orders.sql
+      verification_queries:
+        seeded_orders:
+          sql_ref: fixtures/db/count_orders.sql
   oracles: {}
   assertions: {}
   observations: {}

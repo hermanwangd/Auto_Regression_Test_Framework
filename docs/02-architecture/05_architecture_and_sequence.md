@@ -149,6 +149,20 @@ Provider capability registry rules:
 - Execution dispatch must go through the registry. Adding a provider runtime should not require adding product-specific conditionals to the execution engine.
 - External runner entries are `escape_hatch` providers. They require explicit owner approval metadata, bounded timeout, declared inputs/outputs, and an evidence map.
 
+Current provider runtime status:
+
+| Provider Family / Type | Runtime Status | Primary Implementation | Minimum Required Contract Fields | Verification Boundary |
+|---|---|---|---|---|
+| `file_batch/shell` | Supported | `ProviderRuntimeRegistry` dispatch to `DataPipelineAdapter` | `command`, positive `timeout_seconds`, `outputs.actual_output_ref`, logs, success exit codes when non-default | Framework unit/component and sample integration tests. |
+| `request_response/rest` | Supported | `RequestResponseProvider` | endpoint/base/service ref, action map, request binding where action needs input, positive `timeout_seconds`, `outputs.actual_output_ref` | Framework provider-family tests; not native gRPC. |
+| `messaging/local` and `messaging/mock` | Supported for local/mock evidence | `MessagingProvider` | topic/subject/stream/endpoint ref, supported action, payload binding, positive `timeout_seconds`, `outputs.actual_output_ref`, correlation id when required | Framework provider-family tests; not native Kafka/NATS certification. |
+| `db_fixture/jdbc` | Supported for JDBC fixture lifecycle | `DatabaseFixtureProvider` | `connection_ref`, `isolation_key`, `cleanup_strategy`, setup/cleanup `sql_ref`, verification query `sql_ref` when declared | Framework provider-family tests with H2/local JDBC fixtures. |
+| `deployment_readiness/local` and `deployment_readiness/mock` | Partial local/mock readiness | `DeploymentReadinessProvider` | readiness probe, deployment/service/target ref, `deployed_version_ref`, positive `timeout_seconds`, `outputs.actual_output_ref` | Framework provider-family tests; not native K8s/VM readiness. |
+| `external_runner/command_runner` | Supported escape hatch | `DataPipelineAdapter` plus `ExecutionEngine` external-runner evidence mapping | approval ref, approver, reason, command/container ref, inputs, outputs, positive timeout, evidence map, no built-in-provider alternative | Framework contract and evidence tests; not the standard extension path. |
+| `request_response/grpc`, `messaging/kafka`, `messaging/nats`, native K8s, native VM | Target / not implemented | None yet | Provider-specific schema, environment refs, action support, bounded timeout, actual output refs, evidence mapping, failure semantics | Requires a future implementation slice and verification case before pilot acceptance. |
+
+The architecture is implementation-ready for supported and partial rows only. Target rows are valid product direction, but they remain design or implementation backlog until a runtime and verification case are added.
+
 ## 5.4 Module Boundaries
 
 The implementation uses Spring Boot 3.x on Java 17+. Package names may be adjusted to match the final Java group ID, but these boundaries are required.
@@ -272,6 +286,10 @@ Example configurable HTTP adapter contract:
 provider_contracts:
   adapters:
     http_api:
+      provider_family: request_response
+      provider_type: rest
+      endpoint_ref: env://ORDER_API
+      timeout_seconds: 30
       actions:
         submit_order:
           method: POST
@@ -279,6 +297,8 @@ provider_contracts:
           request_binding: order_payload
           response_mapping:
             order_id: $.id
+      outputs:
+        actual_output_ref: actual/order-response.json
 ```
 
 Example configurable relational DB fixture contract:
@@ -287,17 +307,20 @@ Example configurable relational DB fixture contract:
 provider_contracts:
   fixtures:
     relational_db:
+      provider_family: db_fixture
+      provider_type: jdbc
       connection_ref: secret://sit/order-db
-      seed_actions:
+      isolation_key: test_run_id
+      cleanup_strategy: by_test_run_id
+      setup_actions:
         seed_orders:
-          input_binding: orders_seed
-          table: orders
-          key_fields: [test_run_id, order_id]
+          sql_ref: fixtures/db/seed_orders.sql
       cleanup_actions:
         cleanup_orders:
-          table: orders
-          where:
-            test_run_id: ${run.id}
+          sql_ref: fixtures/db/cleanup_orders.sql
+      verification_queries:
+        seeded_orders:
+          sql_ref: fixtures/db/count_orders.sql
 ```
 
 The RP/RU mapping is the primary extension entrypoint. It declares adapter mode, provider contracts, validation boundary, execution mode, environment reference, dependencies, and evidence responsibility. The DSL references those logical capabilities; it must not embed package-specific shell scripts, URLs, credentials, SQL bodies, queue implementation details, or database commands.

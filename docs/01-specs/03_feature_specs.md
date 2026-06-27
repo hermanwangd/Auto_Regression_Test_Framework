@@ -64,6 +64,20 @@ M1 excludes:
 - Dashboard-driven release governance.
 - Fully automated waiver, manual-only, or release approval.
 
+### Staged Provider Boundary
+
+M1 framework delivery is staged. The current framework verification target is not the same as the selected heterogeneous pilot target.
+
+| Provider Area | Framework Verification Target | Heterogeneous Pilot Target |
+|---|---|---|
+| Request/response | REST provider contracts with payload binding, timeout, output refs, and evidence. | REST or native gRPC, depending on the selected RP. |
+| Messaging | Local/mock publish or observe behavior with topic/subject refs, payload binding, timeout, correlation checks, and observed output refs. | Native Kafka and/or NATS only when required by the selected RP. |
+| DB fixture | JDBC setup, verification query, cleanup SQL refs, cleanup strategy, isolation key, and cleanup evidence. | Same contract against the selected pilot DB fixture boundary. |
+| Deployment readiness | Local/mock readiness evidence with deployed version ref, timeout, output ref, and bounded probe behavior. | Native K8s and VM readiness when the selected RP uses deployed-environment validation. |
+| External runner | Approved command-runner escape hatch with approval metadata, bounded timeout, inputs, outputs, evidence map, and mapped-artifact checks. | Optional only when no reusable built-in provider can represent the selected boundary. |
+
+The product shall not claim native gRPC, Kafka, NATS, K8s, or VM support merely because framework verification passes with local/mock providers. Those provider paths become accepted only after their reusable runtime, contract validation, evidence mapping, and verification cases are implemented.
+
 ## 3.4 Feature List
 
 | Feature ID | Feature | Purpose | M1 |
@@ -100,6 +114,8 @@ Implementation may start only for slices whose inputs are ready:
 - F008 requires RP AC inventory, execution evidence format, traceability rules, and approval records for exclusions.
 
 Before full M1 implementation, the responsible owner shall supply the pilot RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, adapter/provider modes, required provider families, and any approved escape-hatch provider need.
+
+For implementation planning, a slice is ready only when its provider contract can name the provider family, provider type, required fields, evidence outputs, runtime status, AP owner, and verification case. If any of those cannot be stated, the slice remains a spec/design task rather than an implementation task.
 
 ## 3.6 CI/CD and Environment Execution Policy
 

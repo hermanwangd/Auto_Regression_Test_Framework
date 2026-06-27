@@ -64,6 +64,15 @@ For this framework, a release package must declare:
 
 The M1 pilot uses one heterogeneous release package as the adoption proof. The selected RP should include request/response interaction, asynchronous messaging, DB fixture setup/cleanup, K8s and VM readiness, and provider capability registry validation. External runner is optional and allowed only as an approved escape hatch when a reusable built-in provider cannot safely represent a legacy or specialized boundary. Package-specific behavior remains outside the framework core.
 
+M1 is delivered through two gates:
+
+| Gate | Proves | Does Not Prove |
+|---|---|---|
+| Framework Verification | The framework can validate artifacts, block unsafe execution, run local/mock provider paths, write evidence, and calculate sample coverage through `./mvnw test` and `./mvnw verify`. | Real downstream RP release readiness or native technology certification. |
+| Heterogeneous Pilot Validation | An owner-provided Product Repo and RP can achieve greater than 80% automatable RP AC coverage using the selected provider contracts. | Broad support for every package type or every native provider. |
+
+The framework verification fixture may use local or mock providers for Kafka/NATS-like messaging and K8s/VM-like readiness. Native Kafka, NATS, gRPC, K8s, and VM providers are pilot-target provider work and must not be claimed as complete until their provider contracts, runtimes, evidence, and tests exist.
+
 ## 1.6 Product Repo Definition
 
 The Product Repo owns development workflow specs for the virtual product boundary and its package releases. It is not required to contain runtime implementation code. Runtime implementation remains in RU repos.
@@ -245,31 +254,51 @@ Ownership split:
 | M3 Governance Integration | Regression output supports release review and waiver decisions | P1/P2/P3 policy, approval flow, waiver record, Go/No-Go report |
 | M4 Scale-out | Multiple projects can adopt the same framework beyond the first pilot | Plugin SDK, project templates, adapter examples, adoption guide |
 
+## 1.13.1 Current Acceptance Boundary
+
+Current framework verification can be accepted only for the framework capabilities covered by Maven tests and sample Product Repo fixtures. It is not enough to declare the M1 heterogeneous pilot accepted.
+
+| Area | Current Framework Status | Pilot Acceptance Requirement |
+|---|---|---|
+| File/batch execution | Supported through bounded shell/file provider contracts. | Use when selected RP has file, CLI, batch, or pipeline-style validation. |
+| REST request/response | Supported through configurable REST provider contracts. | Add native gRPC only if the selected pilot requires it. |
+| Messaging | Supported through local/mock messaging provider contracts with topic/subject refs, payload binding, timeout, correlation checks, and output refs. | Native Kafka/NATS provider path must be implemented or explicitly replaced by approved external runner evidence. |
+| DB fixture | Supported through JDBC setup, verification query, cleanup SQL refs, cleanup strategy, and isolation key evidence. | Pilot must prove state isolation and cleanup on real selected DB fixture boundary. |
+| Deployment readiness | Supported through local/mock readiness evidence with version ref, timeout, output ref, and `file_exists` probe. | Native K8s and VM readiness checks are required only when the selected pilot needs deployed-environment validation. |
+| External runner | Supported as an approved escape hatch with approval metadata, timeout, inputs, outputs, evidence map, and mapped-artifact checks. | Use only when built-in providers cannot safely represent the selected legacy or specialized boundary. |
+
 ## 1.14 Capability Baseline
 
 | Capability ID | Capability | MVP | Owner | Status | Evidence |
 |---|---|---:|---|---|---|
-| CAP-001 | Product Repo Bootstrap CLI and Readiness Agent Skill | M1 | Platform / Agent Skill | Planned | Initialized docs lifecycle, machine-readable readiness report, and owner-actionable readiness explanation |
-| CAP-002 | RP Creation Guide and Completeness Check | M1 | Platform | Planned | RP creation checklist and completeness report |
-| CAP-003 | RP Feature Spec and AC Intake | M1 | Platform / Agent Skill | Planned | Parsed RP feature spec and RP AC inventory |
-| CAP-004 | RP/RU Mapping Intake and Completeness Check | M1 | Platform | Planned | Validated RP/RU mapping report |
-| CAP-005 | AC and Execution Context Readiness Agent Skill | M1 | Agent Skill | Planned | Generation readiness report |
-| CAP-006 | Expected Result Drafting Agent Skill | M1 | Agent Skill | Planned | Reviewable expected-result artifact |
-| CAP-007 | Test Case YAML DSL and Lifecycle | M1 | Platform | Planned | Schema validation and checked-in RP test folder policy |
-| CAP-008 | Execution Environment Resolver | M1 | Platform | Planned | Execution mode and environment readiness report |
-| CAP-009 | Package Input Catalog | M1 | Platform | Planned | Catalog schema and sample package inputs |
-| CAP-010 | Package Binding Resolver | M1 | Platform | Planned | Binding unit tests |
-| CAP-011 | Release Package Adapter | M1 | Platform | Planned | Package execution evidence |
-| CAP-012 | Package Output Assertion Library | M1 | Platform | Planned | Assertion test report |
-| CAP-013 | Package Fixture Lifecycle | M1 | Platform | Planned | Setup and cleanup evidence |
-| CAP-014 | Release Package Test Execution | M1 | Platform | Planned | Execution report and raw evidence |
-| CAP-015 | Coverage Reporter | M1 | Platform | Planned | AC coverage report showing >80% |
-| CAP-016 | Evidence Reporter | M1 | Platform | Planned | Reviewable evidence package |
+| CAP-001 | Product Repo Bootstrap CLI and Readiness Agent Skill | M1 | Platform / Agent Skill | Framework verified | Initialized docs lifecycle, machine-readable readiness report, and owner-actionable readiness explanation |
+| CAP-002 | RP Creation Guide and Completeness Check | M1 | Platform | Framework verified | RP creation checklist and completeness report |
+| CAP-003 | RP Feature Spec and AC Intake | M1 | Platform / Agent Skill | Framework verified | Parsed RP feature spec and RP AC inventory |
+| CAP-004 | RP/RU Mapping Intake and Completeness Check | M1 | Platform | Framework verified | Validated RP/RU mapping report |
+| CAP-005 | AC and Execution Context Readiness Agent Skill | M1 | Agent Skill | Framework verified | Generation readiness report |
+| CAP-006 | Expected Result Drafting Agent Skill | M1 | Agent Skill | Framework verified | Reviewable expected-result artifact |
+| CAP-007 | Test Case YAML DSL and Lifecycle | M1 | Platform | Framework verified | Schema validation and checked-in RP test folder policy |
+| CAP-008 | Execution Environment Resolver | M1 | Platform | Framework verified | Execution mode and environment readiness report |
+| CAP-009 | Package Input Catalog | M1 | Platform | Partial | Supported binding types are `input_file`, `dataset`, `db_seed`, `api_payload`, and `message_event`; `config_file`, `env_var`, and `existing_state` remain pending |
+| CAP-010 | Package Binding Resolver | M1 | Platform | Partial | Binding unit tests and dry-run gaps for supported types; additional pilot bindings pending |
+| CAP-011 | Release Package Adapter | M1 | Platform | Framework verified | File/batch, REST, local/mock messaging, JDBC fixture, local/mock readiness, and approved external runner evidence |
+| CAP-012 | Package Output Assertion Library | M1 | Platform | Partial | File diff and expected-result artifact checks; JSON path, schema, contract, DB row, absence, and tolerance remain pending |
+| CAP-013 | Package Fixture Lifecycle | M1 | Platform | Framework verified | DB setup/query/cleanup evidence and cleanup policy checks |
+| CAP-014 | Release Package Test Execution | M1 | Platform | Framework verified | Batch/run execution report and raw evidence for current provider set |
+| CAP-015 | Coverage Reporter | M1 | Platform | Framework verified | Batch-level AC coverage report; real pilot >80% remains pending owner artifacts |
+| CAP-016 | Evidence Reporter | M1 | Platform | Framework verified | Reviewable evidence package for sample/local framework verification flows |
 | CAP-017 | Advanced Spec Readiness Checker | M2 | Agent Skill | Planned | Advanced readiness report |
 | CAP-018 | Failure Triage Agent | M3 | Agent Skill | Planned | Failure triage report |
 | CAP-019 | Release Gate Engine | M3 | QA / Release | Planned | Go / No-Go evidence |
 | CAP-020 | Waiver Process | M3 | Release | Planned | Waiver records |
 | CAP-021 | Plugin SDK | M4 | Platform | Planned | Custom package type plugin example |
+
+Status meanings:
+
+- `Framework verified`: implemented and covered by framework Maven tests or sample fixture verification.
+- `Partial`: implemented for the current local/mock or supported provider subset, with explicitly listed gaps.
+- `Pilot pending`: requires owner-provided pilot RP artifacts or native provider implementation before acceptance.
+- `Planned`: not part of the current implemented M1 framework verification slice.
 
 CAP-001 through CAP-016 are framework-core capabilities for M1. CAP-009 Package Input Catalog, CAP-010 Package Binding Resolver, and CAP-013 Package Fixture Lifecycle are part of the generic test execution process for all release package types. CAP-011 Release Package Adapter is implemented through provider families and adapters; the first M1 adoption proof focuses on the selected heterogeneous RP rather than a single package type.
 

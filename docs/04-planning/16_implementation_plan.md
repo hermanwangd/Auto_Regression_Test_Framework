@@ -33,6 +33,23 @@ Ready after pilot RP artifacts exist:
 
 Pilot RP owner must supply RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, expected-result approval owner, adapter mode, dependency graph, adapter/provider contracts, any required binding, fixture, oracle, assertion, or observation provider capability, and any approved external runner escape-hatch need.
 
+## Current Implementation Status Snapshot
+
+This snapshot separates framework verification progress from pilot acceptance progress. Update it when a provider runtime or verification case changes.
+
+| Area | Current Status | Evidence / Gate | Next Work |
+|---|---|---|---|
+| Product Repo and RP skeleton | Implemented for framework verification | CLI tests and sample fixture verification | Harden cross-artifact readiness as pilot artifacts arrive. |
+| AC intake and DSL drafting | Implemented for framework readiness/draft flows | Unit/component and integration tests | Apply to owner-provided pilot RP AC. |
+| Batch/run evidence and coverage | Implemented for sample and CLI flows | `./mvnw verify` and report tests | Validate against real pilot RP batch evidence. |
+| File/batch runtime | Supported | Provider registry dispatch and shell/file tests | Keep as reusable provider. |
+| REST runtime | Supported | Request/response provider tests | Add gRPC only if selected pilot needs it. |
+| Messaging runtime | Supported for local/mock only | Messaging provider contract and evidence tests | Add native Kafka/NATS provider slices for selected pilot. |
+| DB fixture runtime | Supported for JDBC fixture lifecycle | DB setup/query/cleanup tests with `sql_ref`, cleanup strategy, and isolation key | Add DB-row oracle/assertion types if pilot requires them. |
+| Deployment readiness runtime | Partial local/mock only | Readiness provider tests with version, timeout, and output refs | Add native K8s/VM readiness provider slices for selected pilot. |
+| External runner escape hatch | Supported as governed escape hatch | Contract gating and mapped evidence tests | Add content/schema validation only if pilot needs it. |
+| Heterogeneous pilot validation | Pending | Requires owner-provided Product/RP artifacts | Run T017 after pilot artifacts exist. |
+
 ## Task Backlog
 
 ### T000 - Test Boundary and Verification Plan Alignment
@@ -241,6 +258,8 @@ Modules: `execution`, `adapter`, `provider`
 Implement execution of a prepared plan through validated adapter/provider contract configuration. The core executor and test case DSL stay package-type-neutral; providers own package-specific calls, messages, fixture operations, readiness probes, and actual-result capture through reusable, configurable contracts. External runner invocation is implemented only after a selected, approved escape-hatch need exists.
 
 The pilot provider set is selected from `docs/02-architecture/07_heterogeneous_rp_support_capability_matrix.md` and should include only the reusable REST/gRPC, Kafka/NATS, DB fixture, K8s and VM readiness, and shell/file capabilities required by the selected heterogeneous RP. External runner is selected only when explicitly approved as an escape hatch.
+
+Current framework verification support is narrower than the pilot target: REST is supported, local/mock messaging is supported, JDBC DB fixture is supported, local/mock deployment readiness is partial, file/batch is supported, and approved command-runner external runner is supported as an escape hatch. Native gRPC, Kafka, NATS, K8s, and VM providers require separate implementation slices before they can satisfy pilot acceptance.
 
 Verification:
 

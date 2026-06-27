@@ -33,6 +33,16 @@ Minimum verification rule for DSL/AP clarity:
 - Maven framework verification evidence shall not be treated as downstream Product/RP release evidence.
 - CLI RP regression evidence shall identify the RP, batch, environment, test cases, and AC covered by the selected RP execution.
 
+Acceptance is split by evidence source:
+
+| Acceptance Scope | Evidence Source | Can Be Accepted Now When |
+|---|---|---|
+| Framework behavior | `./mvnw test`, `./mvnw verify`, sample Product Repo fixtures, and local/mock provider-family cases | The AC behavior is about framework parsing, readiness, blocking, execution, evidence writing, reporting, or verification boundary. |
+| Downstream RP regression capability | `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` against owner-provided RP artifacts | The run uses real RP AC, approved tests, approved truth sources, selected provider contracts, and Product Repo evidence. |
+| Native heterogeneous pilot support | The selected pilot RP plus native provider implementations where required | Native provider runtime, contract validation, evidence mapping, and provider-specific verification exist for the selected REST/gRPC, Kafka/NATS, DB, K8s/VM, or escape-hatch boundary. |
+
+Passing framework verification is necessary but not sufficient for accepting native Kafka, NATS, gRPC, K8s, VM, or the full selected heterogeneous pilot. Those are accepted only through the downstream RP or native-provider evidence above.
+
 ## AC-001 Product Repo Bootstrap and Readiness Are Deterministic
 
 ### Happy Path
@@ -178,6 +188,8 @@ Then the RP execution shall produce one batch evidence record with RP ID, batch 
 And each executed test case shall produce durable run evidence with RP ID, batch ID, AC ID, test case ID, run ID, execution mode, resolved bindings, provider contracts used, provider family, provider type, registry status, provider contract path, adapter/provider result, assertion result, cleanup result, and final pass/fail status.
 
 And the selected heterogeneous pilot shall produce evidence for each registered provider family selected for the RP: request/response, messaging, DB fixture, deployment readiness, and file/batch when the RP uses it. External runner evidence is required only when an approved escape-hatch contract is selected.
+
+For framework verification, local/mock provider-family evidence may satisfy the framework behavior portion of this AC. It does not satisfy native Kafka/NATS/gRPC/K8s/VM pilot acceptance unless those native runtimes are implemented and selected by the pilot RP.
 
 ### Failure Path
 
