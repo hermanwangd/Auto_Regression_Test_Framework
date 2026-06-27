@@ -203,6 +203,7 @@ public class ExecutionEngine {
                 adapterResult,
                 assertionEvaluation,
                 bindingReport.resolvedBindings(),
+                targetDependencies(mappingYaml, targetRuId),
                 providerReport.resolvedContracts());
         return new ExecutionResult(
                 runId,
@@ -429,6 +430,36 @@ public class ExecutionEngine {
             codes.add(intValue(entry, 0));
         }
         return List.copyOf(codes);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> targetDependencies(Path mappingYaml, String targetRuId) {
+        if (targetRuId.isBlank()) {
+            return List.of();
+        }
+        Map<String, Object> root = readYamlMap(mappingYaml);
+        Object unitsValue = root.get("release_units");
+        if (!(unitsValue instanceof List<?> units)) {
+            return List.of();
+        }
+        for (Object entry : units) {
+            if (!(entry instanceof Map<?, ?> unit) || !targetRuId.equals(stringValue(unit.get("ru_id")))) {
+                continue;
+            }
+            Object dependencies = unit.get("dependencies");
+            if (!(dependencies instanceof List<?> list) || list.isEmpty()) {
+                return List.of();
+            }
+            List<String> resolved = new ArrayList<>();
+            for (Object dependency : list) {
+                String dependencyId = stringValue(dependency);
+                if (!dependencyId.isBlank()) {
+                    resolved.add(dependencyId);
+                }
+            }
+            return List.copyOf(resolved);
+        }
+        return List.of();
     }
 
     @SuppressWarnings("unchecked")

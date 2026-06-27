@@ -34,6 +34,7 @@ public class EvidenceWriter {
                 adapterResult,
                 assertionEvaluation,
                 List.of(),
+                List.of(),
                 List.of());
     }
 
@@ -46,6 +47,30 @@ public class EvidenceWriter {
             AdapterExecutionResult adapterResult,
             AssertionEvaluation assertionEvaluation,
             List<ResolvedBinding> resolvedBindings,
+            List<ResolvedProviderContract> providerContracts) {
+        return writeExecutionRun(
+                runDir,
+                batchId,
+                runId,
+                testCase,
+                status,
+                adapterResult,
+                assertionEvaluation,
+                resolvedBindings,
+                List.of(),
+                providerContracts);
+    }
+
+    public Path writeExecutionRun(
+            Path runDir,
+            String batchId,
+            String runId,
+            Map<String, Object> testCase,
+            String status,
+            AdapterExecutionResult adapterResult,
+            AssertionEvaluation assertionEvaluation,
+            List<ResolvedBinding> resolvedBindings,
+            List<String> resolvedDependencies,
             List<ResolvedProviderContract> providerContracts) {
         Map<?, ?> executionTarget = executionTarget(testCase);
         try {
@@ -63,7 +88,8 @@ public class EvidenceWriter {
                     environment_ref: %s
                     ru_refs:
                       - %s
-                    resolved_dependencies: []
+                    resolved_dependencies:
+                    %s
                     resolved_bindings:
                     %s
                     provider_contracts_used:
@@ -86,6 +112,7 @@ public class EvidenceWriter {
                     stringValue(executionTarget.get("execution_mode")),
                     stringValue(executionTarget.get("environment_ref")),
                     stringValue(executionTarget.get("ru_id")),
+                    resolvedDependenciesYaml(resolvedDependencies),
                     resolvedBindingsYaml(resolvedBindings),
                     providerContractsYaml(providerContracts),
                     adapterResult.exitCode(),
@@ -111,6 +138,17 @@ public class EvidenceWriter {
             builder.append("  - binding_name: ").append(binding.bindingName()).append("\n");
             builder.append("    binding_type: ").append(binding.bindingType()).append("\n");
             builder.append("    ref: ").append(binding.ref()).append("\n");
+        }
+        return builder.toString().stripTrailing();
+    }
+
+    private String resolvedDependenciesYaml(List<String> resolvedDependencies) {
+        if (resolvedDependencies.isEmpty()) {
+            return "  []";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (String dependency : resolvedDependencies) {
+            builder.append("  - ").append(dependency).append("\n");
         }
         return builder.toString().stripTrailing();
     }

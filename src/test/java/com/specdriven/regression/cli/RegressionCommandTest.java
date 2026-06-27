@@ -552,6 +552,8 @@ class RegressionCommandTest {
         assertThat(Files.readString(runDir.resolve("logs/stdout.log"))).doesNotContain("wrong-ru");
         assertThat(runEvidence)
                 .contains("status: passed")
+                .contains("resolved_dependencies:")
+                .contains("RU-unrelated-job")
                 .contains("contract_path: release_units[1].provider_contracts.adapters.spring_boot_cli")
                 .contains("affected_ru: RU-transform-job");
     }
