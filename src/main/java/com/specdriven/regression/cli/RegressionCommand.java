@@ -558,6 +558,7 @@ public class RegressionCommand {
         for (ExecutionEnvironmentGap gap : environmentReport.gaps()) {
             out.println("  - ap: Discovery and Context");
             out.println("    field_path: " + gap.fieldPath());
+            out.println("    reason: " + failureReason("Discovery and Context", gap.fieldPath()));
             out.println("    owner_action: " + gap.ownerAction());
             failureDetails.add(failureDetail(
                     "Discovery and Context",
@@ -569,6 +570,7 @@ public class RegressionCommand {
             out.println("test_case_gaps:");
             out.println("  - ap: Definition and Validation");
             out.println("    field_path: tests/approved");
+            out.println("    reason: " + failureReason("Definition and Validation", "tests/approved"));
             out.println("    owner_action: Add approved_for_regression DSL test cases before run.");
             failureDetails.add(failureDetail(
                     "Definition and Validation",
@@ -586,6 +588,7 @@ public class RegressionCommand {
                 out.println("    test_case_id: " + gap.testCaseId());
                 out.println("    ac_id: " + gap.acId());
                 out.println("    field_path: " + gap.fieldPath());
+                out.println("    reason: " + failureReason("Planning and Binding", gap.fieldPath()));
                 out.println("    binding_name: " + gap.bindingName());
                 out.println("    binding_type: " + gap.bindingType());
                 out.println("    owner_action: " + gap.ownerAction());
@@ -608,6 +611,7 @@ public class RegressionCommand {
             out.println("    status: " + eligibility.status());
             for (ExpectedResultGap gap : eligibility.gaps()) {
                 out.println("    field_path: " + gap.fieldPath());
+                out.println("    reason: " + failureReason("Oracle and Assertion Engine", gap.fieldPath()));
                 out.println("    owner_action: " + gap.ownerAction());
                 addTestFailure(failureDetails, testFailureDetails, failureDetail(
                         "Oracle and Assertion Engine",
@@ -623,6 +627,7 @@ public class RegressionCommand {
                 out.println("    test_case_id: " + gap.testCaseId());
                 out.println("    ac_id: " + gap.acId());
                 out.println("    field_path: " + gap.fieldPath());
+                out.println("    reason: " + failureReason("Oracle and Assertion Engine", gap.fieldPath()));
                 out.println("    oracle_type: " + gap.oracleType());
                 out.println("    owner_action: " + gap.ownerAction());
                 addTestFailure(failureDetails, testFailureDetails, failureDetail(
@@ -641,6 +646,7 @@ public class RegressionCommand {
                 out.println("    test_case_id: " + bindingReport.testCaseId());
                 out.println("    ac_id: " + bindingReport.acId());
                 out.println("    field_path: " + gap.fieldPath());
+                out.println("    reason: " + failureReason("Fixture and State Manager", gap.fieldPath()));
                 out.println("    owner_action: " + gap.ownerAction());
                 addTestFailure(failureDetails, testFailureDetails, failureDetail(
                         "Fixture and State Manager",
@@ -679,6 +685,7 @@ public class RegressionCommand {
                 out.println("    test_case_id: " + bindingReport.testCaseId());
                 out.println("    ac_id: " + bindingReport.acId());
                 out.println("    contract_path: " + gap.fieldPath());
+                out.println("    reason: " + failureReason("Planning and Binding", gap.fieldPath()));
                 out.println("    contract_type: " + gap.contractType());
                 out.println("    provider_name: " + gap.providerName());
                 out.println("    provider_family: " + gap.providerFamily());

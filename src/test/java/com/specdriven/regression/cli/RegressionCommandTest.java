@@ -292,6 +292,7 @@ class RegressionCommandTest {
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("binding_gaps:");
+        assertThat(output.toString()).contains("reason: binding_resolution_failed");
         assertThat(output.toString()).contains("existing_state");
         assertThat(output.toString()).contains("adapter_execution_started: false");
     }
@@ -419,6 +420,7 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("provider_contracts.bindings.db_seed");
         assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli");
         assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.bindings.db_seed");
+        assertThat(output.toString()).contains("reason: provider_contract_resolution_failed");
         assertThat(output.toString()).contains("provider_family: file_batch");
         assertThat(output.toString()).contains("provider_family: db_fixture");
         assertThat(output.toString()).contains("affected_ru: RU-transform-job");
