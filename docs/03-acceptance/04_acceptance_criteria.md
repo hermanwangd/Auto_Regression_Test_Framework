@@ -169,6 +169,8 @@ Then the RP execution shall produce one batch evidence record with RP ID, batch 
 
 And each executed test case shall produce durable run evidence with RP ID, batch ID, AC ID, test case ID, run ID, execution mode, resolved bindings, provider contracts used, adapter result, assertion result, cleanup result, and final pass/fail status.
 
+And the selected heterogeneous pilot shall produce evidence for each required provider family in scope: request/response, messaging, DB fixture, deployment readiness, external runner, and file/batch when the RP uses it.
+
 ### Failure Path
 
 Given a regression run that fails during adapter execution, assertion evaluation, observation collection, or cleanup
@@ -205,11 +207,17 @@ Then execution shall stop before unsafe adapter/provider execution and report th
 
 And the blocking report shall include the AP name and DSL field or provider contract path that caused the stop.
 
+And when a selected pilot provider family is missing or unsupported, the dry-run report shall name the provider family, capability, affected RU, provider contract path, and required owner action.
+
 ### Boundary Path
 
 Given `sit_deployed` execution mode
 When deployment or environment readiness evidence is missing
 Then regression shall not start.
+
+Given the selected heterogeneous pilot includes K8s and VM deployment readiness
+When one deployment readiness provider is missing or not configured
+Then only the affected RU path shall be blocked, and independent RU paths may proceed when their dependencies are satisfied.
 
 For multi-RU RPs, execution shall respect declared dependency semantics and stop downstream execution when a required upstream validation fails.
 

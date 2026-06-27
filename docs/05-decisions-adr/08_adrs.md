@@ -104,3 +104,25 @@ The Test Plan belongs under validation evidence and defines verification strateg
 ### Consequences
 
 CI can run fast framework checks with `./mvnw test`, deeper framework integration checks with `./mvnw verify`, and product-specific RP regression through release package pipelines. Sample Product Repo fixtures can prove framework behavior, but only real Product Repo RP evidence can support downstream release review.
+
+---
+
+## ADR-006 Use Provider Contracts for Heterogeneous RP Support
+
+### Status
+
+Accepted
+
+### Context
+
+Different Products, Release Packages, and Release Units may use different implementation languages, deployment models, and communication technologies, including Java, Go, C++, VB.NET, K8s, VM, REST, Kafka, NATS, gRPC, and Orbix. If the DSL or framework core directly models every technology, the framework will become brittle and every new RP will require core changes.
+
+### Decision
+
+Use config-driven provider contracts as the heterogeneous execution boundary. The DSL remains package-neutral and references logical capabilities such as inputs, actions, fixtures, oracles, assertions, observations, and evidence. `rp_ru_mapping.yaml` declares RU membership, execution mode, deployment requirement, dependencies, and provider contracts. Reusable provider families implement concrete behavior for request/response APIs, messaging, DB fixtures, deployment readiness, file/batch execution, and external runner bridge.
+
+The selected M1 pilot shall exercise one heterogeneous RP that includes REST and/or gRPC, Kafka and/or NATS, DB fixture setup/cleanup, K8s and VM readiness, and an external runner bridge where direct native execution is not yet reusable.
+
+### Consequences
+
+Provider contract validation becomes part of the execution gate. New RP-specific needs should be handled by provider configuration first, reusable provider code second, and DSL changes only when a recurring cross-RP concept cannot be represented by the existing DSL. Legacy or specialized systems can enter through an external runner bridge as long as they produce standardized evidence.

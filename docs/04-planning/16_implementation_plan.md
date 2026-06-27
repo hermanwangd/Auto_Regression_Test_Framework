@@ -11,8 +11,9 @@ This is an implementation plan, not the framework verification strategy itself. 
 - Product, RP, and RU responsibilities are accepted.
 - RP-level AC are the release coverage denominator.
 - ADR-005 is accepted: Framework Verification and RP Regression Execution are separate execution lines.
+- ADR-006 is accepted: heterogeneous RP support is handled through provider contracts and external runner bridge.
 - Minimum RP artifacts are defined: `package.yaml`, `rp_feature_spec.md`, `rp_ru_mapping.yaml`, `acceptance_criteria.md`, `tests/`, `expected-results/`, `traceability.md`, and `evidence_index.md`.
-- Architecture design defines Spring Boot 3.x / Java 17+ AP-level components, extension points, internal package boundaries, CLI commands, storage paths, execution modes, failure handling, and AC coverage.
+- Architecture design defines Spring Boot 3.x / Java 17+ AP-level components, extension points, provider families, internal package boundaries, CLI commands, storage paths, execution modes, failure handling, and AC coverage.
 
 ## Staged Readiness
 
@@ -80,8 +81,8 @@ Implement `regress init-rp` and `regress check-rp` for the RP folder contract un
 Verification:
 
 ```bash
-regress init-rp --root <product-repo> --rp-id RP-AR-M1-data-pipeline --package-type data_pipeline
-regress check-rp --root <product-repo> --rp-id RP-AR-M1-data-pipeline
+regress init-rp --root <product-repo> --rp-id <pilot-rp-id> --package-type <package-type>
+regress check-rp --root <product-repo> --rp-id <pilot-rp-id>
 ```
 
 Done when required RP files and folders are present or reported as completeness gaps with owner action.
@@ -189,7 +190,7 @@ Related feature: F007
 Acceptance: AC-007, AC-008
 Modules: `binding`
 
-Resolve expected-result refs, data selection strategy, parameterized cases, dependencies, name-keyed package input bindings, runtime paths, environment refs, and step output placeholders from approved test cases. M1 must support pilot binding types `input_file`, `dataset`, and `db_seed`; reserved binding types such as `api_payload`, `message_event`, `config_file`, `env_var`, and `existing_state` must fail as unsupported until providers are implemented.
+Resolve expected-result refs, data selection strategy, parameterized cases, dependencies, name-keyed package input bindings, runtime paths, environment refs, and step output placeholders from approved test cases. The initial file/batch path supports `input_file`, `dataset`, and `db_seed`. For the selected heterogeneous pilot, bindings required by selected provider families, such as `api_payload`, `message_event`, `config_file`, `env_var`, and `existing_state`, must become supported when their provider contracts are implemented. Binding types outside the selected or implemented provider families must fail as unsupported before execution.
 
 Verification:
 
@@ -197,7 +198,7 @@ Verification:
 regress run --root <product-repo> --rp-id <rp-id> --dry-run
 ```
 
-Done when unresolved bindings, data selection, parameter cases, or dependencies fail fast with file path, test case ID, AC ID, parameter case when applicable, binding or section name, binding type when applicable, and owner action.
+Done when supported pilot bindings resolve into the execution plan, and unresolved bindings, data selection, parameter cases, or dependencies fail fast with file path, test case ID, AC ID, parameter case when applicable, binding or section name, binding type when applicable, provider family when applicable, and owner action.
 
 ### T010 - Provider Contract Registry and Dispatch
 
@@ -205,7 +206,7 @@ Related feature: F007
 Acceptance: AC-007, AC-008
 Modules: `provider`, `schema`
 
-Resolve validated provider contracts from provider defaults, RP-level overrides, and RU-level overrides. Dispatch adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type to the selected contract. Fail before execution when a contract is missing, ambiguous, unsupported, or unsafe.
+Resolve validated provider contracts from provider defaults, RP-level overrides, and RU-level overrides. Dispatch adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type to the selected contract. Fail before execution when a contract is missing, ambiguous, unsupported, or unsafe. The resolver must record provider family metadata so dry-run and evidence can distinguish request/response, messaging, DB fixture, deployment readiness, external runner, and file/batch behavior.
 
 Verification:
 
@@ -213,7 +214,7 @@ Verification:
 regress run --root <product-repo> --rp-id <rp-id> --dry-run
 ```
 
-Done when provider contract resolution reports provider name, source level, action/type, test case ID, AC ID, and owner action for unsupported or missing capabilities.
+Done when provider contract resolution reports provider family, provider name, source level, action/type, affected RU, test case ID, AC ID, and owner action for unsupported or missing capabilities.
 
 ### T011 - Fixture Lifecycle Manager
 
@@ -221,7 +222,7 @@ Related feature: F007
 Acceptance: AC-007, AC-008
 Modules: `fixture`
 
-Implement precondition checks, fixture setup and cleanup lifecycle, and postcondition checks for local and CI runs. Use provider contracts for M1 pilot fixture behavior such as file workspace setup and database seed/cleanup. Reserved fixture behavior such as message/event publishing and configuration binding must fail as unsupported until providers are implemented. Record cleanup evidence even when execution fails.
+Implement precondition checks, fixture setup and cleanup lifecycle, and postcondition checks for local and CI runs. Use provider contracts for M1 pilot fixture behavior such as file workspace setup, database seed/query/cleanup, message publish/consume cleanup, and configuration binding when those provider families are selected by the heterogeneous pilot. Fixture behavior outside selected or implemented provider families must fail as unsupported before execution. Record cleanup evidence even when execution fails.
 
 Verification:
 
@@ -229,23 +230,25 @@ Verification:
 regress run --root <product-repo> --rp-id <rp-id> --env local_fixture
 ```
 
-Done when setup, cleanup, and cleanup failure state are written to run evidence.
+Done when selected pilot fixture providers can prepare and clean their declared state, and setup, cleanup, and cleanup failure state are written to run evidence.
 
-### T012 - Adapter Runtime and Data Pipeline Pilot Adapter
+### T012 - Provider Runtime Foundation and Pilot Provider Set
 
 Related feature: F007
 Acceptance: AC-007, AC-008
-Modules: `execution`, `adapter`
+Modules: `execution`, `adapter`, `provider`
 
-Implement execution of a prepared plan and the first data pipeline adapter using validated adapter/provider contract configuration. The core executor and test case DSL stay package-type-neutral; the adapter owns package-specific command execution and actual-result capture through reusable, configurable contracts.
+Implement execution of a prepared plan through validated adapter/provider contract configuration. The core executor and test case DSL stay package-type-neutral; providers own package-specific calls, messages, fixture operations, readiness probes, external runner invocation, and actual-result capture through reusable, configurable contracts.
+
+The pilot provider set is selected from `docs/02-architecture/07_heterogeneous_rp_support_capability_matrix.md` and should include only the REST/gRPC, Kafka/NATS, DB fixture, K8s and VM readiness, shell/file, and external runner capabilities required by the selected heterogeneous RP.
 
 Verification:
 
 ```bash
-regress run --root <product-repo> --rp-id RP-AR-M1-data-pipeline --env ci_ephemeral
+regress run --root <product-repo> --rp-id <pilot-rp-id> --env ci_ephemeral
 ```
 
-Done when a pilot adapter can execute or validate one approved test, preserve stdout/stderr/exit code/timeout state, and emit actual outputs under the run evidence directory.
+Done when the pilot provider set can execute or validate one approved test per required provider family, preserve provider results and timeout state, and emit actual outputs under the run evidence directory.
 
 ### T013 - Oracle and Assertion Engine
 
@@ -253,7 +256,9 @@ Related feature: F007
 Acceptance: AC-007
 Modules: `oracle`, `assertion`
 
-Implement M1 oracle loading and assertion types required by the pilot, starting with `golden_file` and `expected_result_artifact` where approved expected-result artifacts are used. Reserved oracle types such as `schema`, `contract`, `invariant`, `query_result`, `tolerance`, and `absence` must fail as unsupported until providers are implemented. Start assertion execution with file equality/diff, structured value equality, status checks, and evidence-reference checks.
+Implement M1 oracle loading and assertion types required by the pilot, starting with `golden_file` and `expected_result_artifact` where approved expected-result artifacts are used. For the selected heterogeneous pilot, promote required oracle and assertion types such as response status or JSON path checks, `query_result` DB checks, `schema`, `contract`, `invariant`, `tolerance`, or `absence` only when their provider family and assertion implementation are selected and verified.
+
+Oracle or assertion types outside selected or implemented provider families are rejected as unsupported before assertion evaluation.
 
 Verification:
 
@@ -261,7 +266,7 @@ Verification:
 regress run --root <product-repo> --rp-id <rp-id> --test-case <tc-id>
 ```
 
-Done when failures include oracle ref or inline rule, expected ref when applicable, actual ref, decision rule, diff summary, and test case trace.
+Done when selected pilot assertion types produce pass/fail results, and failures include oracle ref or inline rule, expected ref when applicable, actual ref, decision rule, provider family when applicable, diff or mismatch summary, and test case trace.
 
 ### T014 - Evidence Writer
 
@@ -269,7 +274,7 @@ Related features: F007, F008
 Acceptance: AC-007, AC-009
 Modules: `evidence`
 
-Write `evidence/runs/<run_id>/run.yaml`, logs, actual outputs, assertion results, observation results, postcondition results, cleanup evidence, and failure details. Evidence must include RP ID, AC ID, test case ID, run ID, RU refs, execution mode, environment ref, parameter case when applicable, and resolved dependencies.
+Write `evidence/runs/<run_id>/run.yaml`, logs, actual outputs, assertion results, observation results, postcondition results, cleanup evidence, and failure details. Evidence must include RP ID, AC ID, test case ID, run ID, RU refs, execution mode, environment ref, parameter case when applicable, resolved dependencies, resolved bindings, provider contracts used, provider family, adapter/provider result, assertion result, cleanup result, and final pass/fail status.
 
 Verification:
 
@@ -341,13 +346,13 @@ regress report --root <product-repo> --rp-id <rp-id> --batch-id <batch-id>
 
 Done when coverage, traceability, evidence index, failure summary, and release review summary are review-ready for the selected batch. `--run-id` may remain available for debugging one test run, but it must not be used to determine RP release coverage.
 
-### T016 - Maven Verify Framework Integration Harness
+### T016 - Maven Verify Framework and Provider-Family Integration Harness
 
 Related features: F001-F008
 Acceptance: AC-010 plus AC-001 through AC-009 as exercised through sample fixtures
-Modules: Maven build, integration tests, sample Product Repo fixture
+Modules: Maven build, integration tests, sample Product Repo fixture, provider-family fixtures
 
-Add the framework integration verification layer. Configure Maven Failsafe to run `*IT.java` tests during `./mvnw verify`. The integration tests shall use a sample Product Repo fixture, local/mock adapters, and deterministic data. They shall exercise representative check, dry-run/run, and report flows without requiring SIT/UAT deployment.
+Add the framework integration verification layer. Configure Maven Failsafe to run `*IT.java` tests during `./mvnw verify`. The integration tests shall use a sample Product Repo fixture, local/mock adapters, local/mock provider-family fixtures, and deterministic data. They shall exercise representative check, dry-run/run, report, provider-family dry-run, unsupported-provider blocking, and provider evidence normalization flows without requiring SIT/UAT deployment.
 
 Verification:
 
@@ -356,7 +361,7 @@ Verification:
 ./mvnw verify
 ```
 
-Done when `./mvnw test` remains the fast unit/component framework suite, `./mvnw verify` runs the sample Product Repo integration suite, and fixture evidence is not presented as downstream Product/RP release evidence.
+Done when `./mvnw test` remains the fast unit/component framework suite, `./mvnw verify` runs the sample Product Repo integration suite plus provider-family contract verification, and fixture or mock provider evidence is not presented as downstream Product/RP release evidence.
 
 ### T017 - Pilot RP Validation Harness
 
@@ -364,16 +369,16 @@ Related features: F001-F008
 Acceptance: AC-001 through AC-010
 Modules: all M1 modules
 
-Run the full workflow against the data pipeline pilot RP after owner-provided RP artifacts exist.
+Run the full workflow against the selected heterogeneous pilot RP after owner-provided RP artifacts exist.
 
 Verification:
 
 ```bash
 regress check-readiness --root <product-repo>
-regress check-rp --root <product-repo> --rp-id RP-AR-M1-data-pipeline
-regress generate-tests --root <product-repo> --rp-id RP-AR-M1-data-pipeline --mode draft
-regress run --root <product-repo> --rp-id RP-AR-M1-data-pipeline --env ci_ephemeral
-regress report --root <product-repo> --rp-id RP-AR-M1-data-pipeline --batch-id <batch-id>
+regress check-rp --root <product-repo> --rp-id <pilot-rp-id>
+regress generate-tests --root <product-repo> --rp-id <pilot-rp-id> --mode draft
+regress run --root <product-repo> --rp-id <pilot-rp-id> --env ci_ephemeral
+regress report --root <product-repo> --rp-id <pilot-rp-id> --batch-id <batch-id>
 ```
 
 Done when the pilot RP evidence package shows greater than 80% coverage for automatable RP AC or reports explicit approved exclusions.
@@ -436,7 +441,7 @@ Gate 4 - Release evidence ready:
 | Evidence cannot support release review | Evidence writer and reporter require RP/AC/test/run traceability. |
 | Multi-test RP execution overwrites evidence | Batch execution creates one batch per RP run and one unique run ID per approved test. |
 | Single-run report is mistaken for RP coverage | RP release coverage is calculated only from batch-level evidence. |
-| Maven framework verification is mistaken for downstream RP release evidence | AC-010, ADR-005, and T016 separate Surefire/Failsafe evidence from Product Repo RP evidence. |
+| Maven framework verification is mistaken for downstream RP release evidence | AC-010, ADR-005, ADR-006, and T016 separate Surefire/Failsafe evidence and mock provider evidence from Product Repo RP evidence. |
 
 ## Completion Criteria for M1
 

@@ -62,7 +62,7 @@ For this framework, a release package must declare:
 - Regression evidence required for release review.
 - Environment assumptions, including test data, dependencies, and runtime constraints.
 
-The M1 pilot uses a data pipeline release package as the first package type. The release package adapter may be package-type-specific, but the test execution process remains framework-core.
+The M1 pilot uses one heterogeneous release package as the adoption proof. The selected RP should include request/response interaction, asynchronous messaging, DB fixture setup/cleanup, K8s and VM readiness, and at least one external runner bridge where direct framework execution is not yet reusable. Package-specific behavior remains outside the framework core.
 
 ## 1.6 Product Repo Definition
 
@@ -231,7 +231,7 @@ Ownership split:
 - Not fully automating release approval.
 - Not allowing agent-generated tests or expected results to merge without review.
 - Not using production data without masking and approval.
-- Not supporting every release package type in M1; M1 uses a data pipeline release package as the first pilot.
+- Not supporting every release package type or technology provider natively in M1; the first pilot proves the provider model on one selected heterogeneous RP.
 - Not building a full dashboard before the pilot proves value.
 - Not owning CD deployment orchestration in M1; the framework consumes deployment and environment readiness evidence when SIT is required.
 - Not executing destructive operations without explicit approval.
@@ -240,7 +240,7 @@ Ownership split:
 
 | Milestone | Meaning | Exit Criteria |
 |---|---|---|
-| M1 Release Package Vertical Slice | Product developer can generate, review, and run regression tests for one data pipeline release package pilot | Basic AC readiness gate, AC-driven test generation, expected-result generation, package input catalog, package adapter, assertions, coverage >80%, evidence package |
+| M1 Release Package Vertical Slice | Product developer can generate, review, and run regression tests for one heterogeneous release package pilot | Basic AC readiness gate, AC-driven test generation, expected-result generation, package input catalog, provider-dispatched execution, assertions, coverage >80%, evidence package |
 | M2 Framework Hardening | Framework supports repeatable adoption across additional release package types | Advanced spec readiness checker, schema validation, fixture lifecycle, reusable assertions, stable CLI, documented onboarding |
 | M3 Governance Integration | Regression output supports release review and waiver decisions | P1/P2/P3 policy, approval flow, waiver record, Go/No-Go report |
 | M4 Scale-out | Multiple projects can adopt the same framework beyond the first pilot | Plugin SDK, project templates, adapter examples, adoption guide |
@@ -271,7 +271,7 @@ Ownership split:
 | CAP-020 | Waiver Process | M3 | Release | Planned | Waiver records |
 | CAP-021 | Plugin SDK | M4 | Platform | Planned | Custom package type plugin example |
 
-CAP-001 through CAP-016 are framework-core capabilities for M1. CAP-009 Package Input Catalog, CAP-010 Package Binding Resolver, and CAP-013 Package Fixture Lifecycle are part of the generic test execution process for all release package types. CAP-011 Release Package Adapter may have package-type-specific implementations, with the first M1 adapter focused on the data pipeline release package pilot.
+CAP-001 through CAP-016 are framework-core capabilities for M1. CAP-009 Package Input Catalog, CAP-010 Package Binding Resolver, and CAP-013 Package Fixture Lifecycle are part of the generic test execution process for all release package types. CAP-011 Release Package Adapter is implemented through provider families and adapters; the first M1 adoption proof focuses on the selected heterogeneous RP rather than a single package type.
 
 ## 1.15 AC Readiness and Fallback Policy
 
@@ -303,7 +303,7 @@ Rules:
 
 - RP acceptance criteria are explicit enough for the agent to derive expected results without inventing business rules.
 - Product developers will trust generated artifacts if diffs, traceability, and review controls are clear.
-- The first data pipeline release package can reach greater than 80% meaningful regression coverage with a small package adapter and fixture set.
+- The first heterogeneous release package can reach greater than 80% meaningful regression coverage with a reusable provider contract model and a bounded provider set.
 - The first pilot has stable sample data or masked data that can be committed or regenerated safely.
 - Coverage measured by RP AC mapping is a useful proxy for regression confidence.
 

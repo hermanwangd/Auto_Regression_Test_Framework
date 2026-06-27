@@ -45,12 +45,14 @@ Other lifecycle folders may reference these RP artifacts, but the RP folder is t
 
 Stable IDs are required for generation, execution, coverage, and evidence traceability.
 
+Examples in this document use a file/batch-style RP ID for readability. They illustrate artifact shape and do not define the selected heterogeneous M1 pilot.
+
 ## 6.3 `package.yaml`
 
 ```yaml
 product_id: PROD-auto-regression
 rp_id: RP-AR-M1-data-pipeline
-name: M1 Data Pipeline Regression Pilot
+name: M1 File Batch Regression Example
 owner: product_developer
 target_release: M1
 package_type: data_pipeline
@@ -58,7 +60,7 @@ lifecycle_status: draft
 default_execution_mode: ci_ephemeral
 scope:
   includes:
-    - bounded data pipeline release package pilot
+    - bounded file/batch release package example
   excludes:
     - cross-package orchestration
 linked_product_context:
@@ -268,7 +270,9 @@ Parameterized execution must preserve case identity in evidence. A failed case m
 
 DSL v1 schema rules:
 
-M1 implementation core is intentionally smaller than the full DSL vocabulary. M1 must implement `scenario.type` values `component` and `integration`, `scenario.scope` values `release_unit` and `release_package`, and the capabilities required by the data-pipeline pilot: `file_input`, `dataset_input`, `db_seed`, `batch_execution`, and `file_assertion`. Other enum values documented below are reserved DSL v1 vocabulary and must fail as unsupported until their providers are implemented.
+M1 implementation core is intentionally smaller than the full DSL vocabulary. The initial executable core supports `scenario.type` values `component` and `integration`, `scenario.scope` values `release_unit` and `release_package`, and the currently implemented file/batch capabilities: `file_input`, `dataset_input`, `db_seed`, `batch_execution`, and `file_assertion`.
+
+The selected heterogeneous RP pilot promotes additional DSL v1 capabilities such as `api_payload`, `message_event`, `existing_state`, `response_assertion`, and `db_assertion` when their provider families are implemented and verified. DSL enum values outside the selected or implemented provider families remain reserved and must fail as unsupported before execution.
 
 - `scenario.type` must be one of `component`, `integration`, `contract`, `migration`, or `e2e`.
 - `scenario.scope` must be one of `release_unit`, `release_package`, or `product`.

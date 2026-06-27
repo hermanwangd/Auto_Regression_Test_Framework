@@ -38,12 +38,17 @@ Virtual Product
 
 ## 3.3 M1 Pilot Boundary
 
-M1 validates the product baseline through one data pipeline release package pilot.
+M1 validates the product baseline through one heterogeneous release package pilot.
 
 M1 includes:
 
 - One RP with a bounded set of release unit repos.
 - Local or CI execution without requiring a persistent service.
+- REST and/or gRPC request-response execution through provider contracts.
+- Kafka and/or NATS message execution or observation through provider contracts.
+- DB fixture setup, query, and cleanup for stateful regression scenarios.
+- K8s and VM readiness checks before deployed-environment execution.
+- External runner bridge for legacy or specialized validation that is not yet a native provider.
 - Small reviewable fixtures or documented fixture generation.
 - RP-level AC readiness classification.
 - Agent-generated draft regression tests and expected results for ready RP AC.
@@ -53,7 +58,7 @@ M1 excludes:
 
 - Cross-package orchestration.
 - Production data unless masked and approved.
-- Broad package-type plugin support.
+- Broad package-type plugin support beyond the selected heterogeneous pilot.
 - Dashboard-driven release governance.
 - Fully automated waiver, manual-only, or release approval.
 
@@ -92,7 +97,7 @@ Implementation may start only for slices whose inputs are ready:
 - F007 requires checked-in executable or approved DSL test artifacts, package inputs, fixture strategy, adapter mode, and expected-result policy.
 - F008 requires RP AC inventory, execution evidence format, traceability rules, and approval records for exclusions.
 
-Before full M1 implementation, the responsible owner shall supply the pilot RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, and adapter mode.
+Before full M1 implementation, the responsible owner shall supply the pilot RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, adapter/provider modes, and required provider families.
 
 ## 3.6 CI/CD and Environment Execution Policy
 
@@ -174,7 +179,7 @@ The DSL shall reject or block these concerns from the test case body:
 - CD deployment instructions or environment provisioning scripts.
 - New RP feature behavior, AC wording, expected-result approval, waiver approval, or release approval.
 
-M1 implements only the DSL v1 subset required for the data-pipeline pilot; additional DSL v1 enum values are reserved until their providers are implemented.
+M1 implements only the DSL v1 subset required for the selected heterogeneous pilot. Additional DSL v1 enum values remain reserved until their providers are implemented and verified.
 
 The lifecycle is:
 
@@ -371,7 +376,7 @@ Generated expected results shall remain draft until reviewed. Product developers
 
 ### Purpose
 
-Execute checked-in approved or execution-eligible package-neutral DSL regression test cases against a release package using a generic test execution process. M1 validates this process with one data pipeline release package type.
+Execute checked-in approved or execution-eligible package-neutral DSL regression test cases against a release package using a generic test execution process. M1 validates this process with one selected heterogeneous release package pilot.
 
 ### Expected Behavior
 
@@ -379,7 +384,7 @@ The framework shall resolve package inputs, bind runtime values, confirm environ
 
 One RP regression execution is a batch. A batch may contain one or more test runs. Each test run validates one approved DSL test case and produces run-level evidence. The batch produces the RP-level execution summary used by F008 coverage reporting.
 
-The execution process and DSL shall remain package-type-neutral. The M1 adapter implementation may be data-pipeline-specific.
+The execution process and DSL shall remain package-type-neutral. M1 provider implementations may start with a bounded subset of REST/gRPC, Kafka/NATS, DB fixture, K8s and VM readiness, shell/file, and external runner support required by the selected pilot.
 
 F007 defines RP Regression Execution. Framework Verification tests may exercise F007 through a sample Product Repo fixture, but that fixture evidence is not downstream Product/RP release evidence.
 
@@ -485,7 +490,7 @@ Allow additional release package types to plug into the generic test execution p
 
 ### Expected Behavior
 
-The SDK shall define package adapter contracts, evidence contribution expectations, validation boundaries, and onboarding conventions for package types beyond the M1 data pipeline pilot.
+The SDK shall define package adapter contracts, evidence contribution expectations, validation boundaries, and onboarding conventions for package types and provider families beyond the M1 heterogeneous pilot.
 
 ### Required Mechanism
 

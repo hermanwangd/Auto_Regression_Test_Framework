@@ -15,7 +15,7 @@ In scope:
 - AC readiness classification and agent draft generation boundaries.
 - Durable test case and expected-result lifecycle.
 - Local fixture, CI ephemeral, SIT deployed, and evidence-only execution modes.
-- Data pipeline pilot adapter as the first package-specific adapter.
+- Heterogeneous RP pilot support through config-driven provider contracts, reusable provider families, and an external runner bridge.
 - Coverage, traceability, and release review evidence.
 
 Out of scope:
@@ -36,6 +36,7 @@ Out of scope:
 | Test lifecycle | Generate separately from execute | Approved tests are checked in and not regenerated on every run. |
 | Test case DSL | Minimal package-neutral DSL with explicit version | Different Products and RPs express regression tests through one artifact model without overfitting to one package type. |
 | Adapter model | Core framework plus package adapters | Execution process is generic; package behavior stays adapter-specific. |
+| Heterogeneous RP support | Config-driven provider contracts plus external runner bridge | Different RU languages, deployments, and messaging styles are bound by provider contracts instead of DSL or framework-core changes. |
 | Implementation stack | Spring Boot 3.x on Java 17+ | Provides a modern Java runtime, dependency injection, validation, configuration binding, and CLI packaging path. |
 | Verification boundary | Separate framework verification from RP regression execution | Maven validates this framework; CLI `run` validates downstream Product/RP packages and writes RP release evidence. |
 
@@ -107,6 +108,8 @@ DSL and artifact flow through the 7 AP:
 | Evidence and Reporting | All AP outputs, traceability, waivers, coverage policy | Durable batch evidence, run evidence package, AC coverage report, release-review summary |
 
 This flow keeps the DSL stable. New RP/RU behavior should be added through validated mapping, provider contracts, adapters, and enum extensions only when the behavior is reusable across RPs.
+
+The heterogeneous RP support model and current capability matrix are recorded in `docs/02-architecture/07_heterogeneous_rp_support_capability_matrix.md`.
 
 AP boundary contract:
 
@@ -307,14 +310,14 @@ Maven commands are not the RP public execution interface. `./mvnw test` and `./m
 ```bash
 regress init-product-repo --root .
 regress check-readiness --root .
-regress check-readiness --root . --rp-id RP-AR-M1-data-pipeline --write-report
+regress check-readiness --root . --rp-id <pilot-rp-id> --write-report
 agent product-repo-readiness --report docs/08-release/release-packages/<rp_id>/evidence/readiness/readiness.yaml
-regress init-rp --root . --rp-id RP-AR-M1-data-pipeline --package-type data_pipeline
-regress check-rp --root . --rp-id RP-AR-M1-data-pipeline
-regress generate-tests --root . --rp-id RP-AR-M1-data-pipeline --mode draft
-regress draft-expected-results --root . --rp-id RP-AR-M1-data-pipeline
-regress run --root . --rp-id RP-AR-M1-data-pipeline --env ci_ephemeral
-regress report --root . --rp-id RP-AR-M1-data-pipeline --batch-id BATCH-20260626-001
+regress init-rp --root . --rp-id <pilot-rp-id> --package-type <package-type>
+regress check-rp --root . --rp-id <pilot-rp-id>
+regress generate-tests --root . --rp-id <pilot-rp-id> --mode draft
+regress draft-expected-results --root . --rp-id <pilot-rp-id>
+regress run --root . --rp-id <pilot-rp-id> --env ci_ephemeral
+regress report --root . --rp-id <pilot-rp-id> --batch-id <batch-id>
 ```
 
 CLI contracts:
@@ -536,7 +539,7 @@ Ready after pilot RP artifacts exist:
 
 - F003 RP AC intake against real owner-authored AC.
 - F005/F006 agent draft generation and expected-result drafting.
-- F007 execution path for the data pipeline pilot adapter, using the adapter/provider contract in the artifact contract.
+- F007 execution path for the selected heterogeneous pilot provider set, using the adapter/provider contract model in the artifact contracts and capability matrix.
 - F008 final coverage and evidence package using real run evidence.
 
 Implementation must start with F001/F002/F004 foundation tasks, then validate the pilot RP before enabling generation and execution.
@@ -546,6 +549,7 @@ Implementation must start with F001/F002/F004 foundation tasks, then validate th
 Blocking for full F003-F008 implementation:
 
 - Pilot RP ID and target release.
+- Pilot RP provider family priority across REST/gRPC, Kafka/NATS, DB fixture, K8s and VM readiness, and external runner bridge.
 - Owner-authored `rp_feature_spec.md`.
 - Owner-authored `acceptance_criteria.md`.
 - Owner-authored `rp_ru_mapping.yaml`.
