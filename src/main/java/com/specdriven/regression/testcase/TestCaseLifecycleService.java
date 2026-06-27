@@ -125,7 +125,7 @@ public class TestCaseLifecycleService {
                 ac.acId(),
                 ac.acId(),
                 fingerprint(ac),
-                indentedList(executionContext.gaps(), "  - "));
+                readinessGapsYaml(executionContext.gaps()));
     }
 
     private String updateProposalContent(
@@ -150,7 +150,7 @@ public class TestCaseLifecycleService {
                 ac.acId(),
                 approvedPath.toString(),
                 fingerprint(ac),
-                indentedList(gaps, "  - "));
+                readinessGapsYaml(gaps));
     }
 
     private String testCaseId(String acId) {
@@ -168,15 +168,27 @@ public class TestCaseLifecycleService {
         return "[" + String.join(", ", values) + "]";
     }
 
-    private String indentedList(List<String> values, String prefix) {
-        if (values.isEmpty()) {
-            return prefix + "none\n";
+    private String readinessGapsYaml(List<String> gaps) {
+        if (gaps.isEmpty()) {
+            return "  []";
         }
         StringBuilder builder = new StringBuilder();
-        for (String value : values) {
-            builder.append(prefix).append(value).append('\n');
+        for (String gap : gaps) {
+            boolean approvedExists = "approved test exists".equals(gap);
+            builder.append("  - field_path: ")
+                    .append(approvedExists ? "tests/approved" : gap)
+                    .append("\n");
+            builder.append("    reason: ")
+                    .append(approvedExists ? "approved_test_exists" : "execution_context_incomplete")
+                    .append("\n");
+            builder.append("    gap: ").append(gap).append("\n");
+            builder.append("    owner_action: ")
+                    .append(approvedExists
+                            ? "Review the generated update proposal instead of overwriting the approved test."
+                            : "Complete RP/RU mapping execution context before executable test generation.")
+                    .append("\n");
         }
-        return builder.toString();
+        return builder.toString().stripTrailing();
     }
 
     private void writeNewFile(Path path, String content) {

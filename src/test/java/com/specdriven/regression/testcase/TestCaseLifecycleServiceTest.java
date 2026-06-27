@@ -63,7 +63,9 @@ class TestCaseLifecycleServiceTest {
         String yaml = Files.readString(result.writtenPath());
         assertThat(yaml).contains("artifact_status: draft_test_skeleton");
         assertThat(yaml).contains("readiness_gaps:");
-        assertThat(yaml).contains("execution_target.adapter");
+        assertThat(yaml).contains("field_path: execution_target.adapter");
+        assertThat(yaml).contains("reason: execution_context_incomplete");
+        assertThat(yaml).contains("owner_action: Complete RP/RU mapping execution context before executable test generation.");
     }
 
     @Test
