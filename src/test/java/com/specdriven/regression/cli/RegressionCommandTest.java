@@ -433,6 +433,47 @@ class RegressionCommandTest {
     }
 
     @Test
+    void blockedExecutionFocusedDslV1RunPreservesDslRuntimeEvidence() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeCompleteCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExecutionFocusedTestCase("RP-001", "existing_state");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001");
+        String runEvidence = Files.readString(runDir.resolve("run.yaml"));
+        String failureDetails = Files.readString(runDir.resolve("failure_details.yaml"));
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(runEvidence)
+                .contains("status: blocked")
+                .contains("adapter_execution_started: false")
+                .contains("dsl_runtime:")
+                .contains("dsl_version: v1")
+                .contains("target_id: RU-transform-job")
+                .contains("fixture_name: orders_seed")
+                .contains("type: existing_state")
+                .contains("operation: run_batch")
+                .contains("expected_results:")
+                .contains("verify_rules:")
+                .contains("runtime:");
+        assertThat(failureDetails)
+                .contains("reason: binding_resolution_failed")
+                .contains("setup.fixtures.orders_seed.type")
+                .contains("existing_state");
+    }
+
+    @Test
     void blockedRunDoesNotOverwriteExistingRunEvidence() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -3795,6 +3836,10 @@ class RegressionCommandTest {
     }
 
     private void writeApprovedExecutionFocusedTestCase(String rpId) throws Exception {
+        writeApprovedExecutionFocusedTestCase(rpId, "db_seed");
+    }
+
+    private void writeApprovedExecutionFocusedTestCase(String rpId, String fixtureType) throws Exception {
         String acId = rpId + "-AC-001";
         String expectedResultId = acId.replace("-AC-", "-ER-");
         Path testCase = tempDir.resolve(
@@ -3822,7 +3867,7 @@ class RegressionCommandTest {
                 setup:
                   fixtures:
                     orders_seed:
-                      type: db_seed
+                      type: %s
                       ref: fixtures/db/orders_seed.yaml
                       cleanup_ref: fixtures/db/orders_cleanup.yaml
                 execute:
@@ -3854,7 +3899,7 @@ class RegressionCommandTest {
                   timeout: PT10M
                   retry:
                     max_attempts: 0
-                """.formatted(rpId, rpId, acId, acId, rpId, expectedResultId));
+                """.formatted(rpId, rpId, acId, acId, rpId, fixtureType, expectedResultId));
     }
 
     private void writeApprovedTestCase(String rpId, String testCaseId, String acId, String bindingType)

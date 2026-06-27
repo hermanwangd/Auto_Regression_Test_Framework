@@ -15,6 +15,7 @@ This is an implementation plan, not the framework verification strategy itself. 
 - Minimum RP artifacts are defined: `package.yaml`, `rp_feature_spec.md`, `rp_ru_mapping.yaml`, `acceptance_criteria.md`, `tests/`, `expected-results/`, `traceability.md`, and `evidence_index.md`.
 - Architecture design defines Spring Boot 3.x / Java 17+ AP-level components, extension points, provider families, internal package boundaries, CLI commands, storage paths, execution modes, failure handling, and AC coverage.
 - Execution-focused DSL v1 is defined in the artifact contracts and must be validated and proven through CLI `run` plus `report --batch-id` before F007 provider runtime expansion.
+- Before any DSL, AP, provider runtime, evidence, or report implementation slice starts, the feature/spec, architecture design, artifact contract, AC, implementation plan, and test plan must be aligned on behavior, non-goals, required/conditional/prohibited fields, AP ownership, happy/failure/boundary paths, and verification evidence.
 
 ## Staged Readiness
 
@@ -33,7 +34,7 @@ Ready after pilot RP artifacts exist:
 - F007 Release Package DSL Test Execution.
 - F008 Coverage and Evidence Package.
 
-Pilot RP owner must supply RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, expected-result approval owner, adapter mode, dependency graph, adapter/provider contracts, any required binding, fixture, oracle, assertion, or observation provider capability, and any approved external runner escape-hatch need.
+Pilot RP owner must supply RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, expected-result approval owner, adapter mode, dependency graph, adapter/provider contracts, any required target/binding, fixture, expected-result, verify, or evidence/observation provider capability, and any approved external runner escape-hatch need.
 
 ## Current Implementation Status Snapshot
 
@@ -47,7 +48,7 @@ This snapshot separates framework verification progress from pilot acceptance pr
 | File/batch runtime | Supported | Provider registry dispatch and shell/file tests | Keep as reusable provider. |
 | REST/gRPC request-response runtime | Supported for REST and native descriptor-driven gRPC unary calls plus HTTP/status field, JSON path equality/absence, numeric tolerance, and schema/contract response assertions | Request/response provider, native gRPC invoker, runtime registry, CLI preflight, response assertion, schema/contract assertion, and evidence tests | Add pilot endpoint evidence when required. |
 | Messaging runtime | Supported for local/mock plus native Kafka/NATS publish, NATS request/reply, consume/observe, and bounded cleanup drain dispatch | Messaging provider contract, runtime registry, native transport, CLI preflight, and evidence tests | Add owner broker-backed pilot validation and persistent broker purge only if the selected RP requires it. |
-| DB fixture runtime | Supported for JDBC fixture lifecycle and DB row count assertions | DB setup/query/cleanup tests with `sql_ref`, cleanup strategy, isolation key, query-result oracle readiness, and DB assertion evidence | Add richer DB-row match modes only if pilot requires them. |
+| DB fixture runtime | Supported for JDBC fixture lifecycle and DB row count assertions | DB setup/query/cleanup tests with `sql_ref`, cleanup strategy, isolation key, query-result expected-result readiness, and DB verify evidence | Add richer DB-row match modes only if pilot requires them. |
 | Deployment readiness runtime | Supported for local/mock plus native K8s/VM bounded readiness probes, K8s direct API deployment availability, K8s pod log capture, and VM SSH/WinRM command probes | Readiness provider, runtime registry, and provider contract tests with version, timeout, target refs, API server refs, bounded log tail refs, command refs, and output refs | Add real pilot environment validation. |
 | External runner escape hatch | Supported as governed escape hatch | Contract gating and mapped evidence tests | Add content/schema validation only if pilot needs it. |
 | Heterogeneous pilot validation | Pending | Requires owner-provided Product/RP artifacts | Run T017 after pilot artifacts exist. |
@@ -69,6 +70,23 @@ rg "Framework Verification|RP Regression Execution|mvnw test|mvnw verify|regress
 ```
 
 Done when the docs consistently state that `./mvnw test` and `./mvnw verify` validate this framework, while `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` validates a downstream Product/RP and writes RP evidence.
+
+### T000A - Pre-Implementation Documentation Alignment Gate
+
+Related feature: Cross-cutting DSL/AP/provider governance
+Acceptance: AC-005, AC-006, AC-007, AC-008, AC-009, AC-010
+Modules: docs, planning
+
+Before changing DSL validation, generation, execution, evidence, reporting, provider runtime, or AP boundaries, update and review the feature/spec, architecture design, artifact contract, AC, implementation plan, and test plan. The review must confirm consistent field ownership, required vs conditional field rules, prohibited governance and legacy fields, AP consumers, provider contract boundary, acceptance behavior, and verification evidence.
+
+Verification:
+
+```bash
+rg -n "call_ru|target_ru_id|package_inputs|oracles|approval_status|release_gate|risk_approval" docs/01-specs docs/02-architecture docs/03-acceptance docs/04-planning docs/07-validation-evidence
+rg -n "dsl_version|targets|setup|execute|expected_results|verify|evidence|required|conditional|prohibited" docs/01-specs docs/02-architecture docs/03-acceptance docs/07-validation-evidence
+```
+
+Done when legacy terms appear only in migration/prohibited-field contexts, governance-heavy fields are absent from DSL examples, and the next implementation task can point to specific AC and verification cases.
 
 ### T001 - Product Repo Bootstrap CLI and Readiness Agent Skill
 
@@ -132,8 +150,8 @@ Implement the execution-focused DSL v1 validation gate before provider runtime m
 
 The gate validates:
 
-- Required fields: `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`.
-- Conditional fields: `setup.fixtures.<name>.cleanup_ref` for state mutation, `execute[].with`, `execute[].outputs`, `verify[].selector`, `verify[].target/query/event`, and `verify[].options`.
+- Always-required fields: `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime`.
+- Conditional fields: `setup.fixtures` when precondition data or mutated state is needed, `expected_results` when verify rules use approved artifacts or reusable truth sources, `setup.fixtures.<name>.cleanup_ref` for state mutation, `execute[].with`, `execute[].outputs`, `verify[].selector`, `verify[].target/query/event`, and `verify[].options`.
 - Supported operations: `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, and `run_application`.
 - Supported verify rules: basic, structure, collection, numeric, file, state, and event checks defined in the artifact contract.
 - Prohibited fields: legacy-only fields such as `call_ru`, `target_ru_id`, `package_inputs`, and `oracles`, plus approval, waiver, release gate, and risk approval fields.
@@ -321,15 +339,15 @@ regress run --root <product-repo> --rp-id <pilot-rp-id> --env ci_ephemeral
 
 Done when the pilot provider set can execute or validate one approved test per required provider family, preserve provider results and timeout state, and emit actual outputs under the run evidence directory.
 
-### T013 - Oracle and Assertion Engine
+### T013 - Expected-Result and Verify Engine
 
 Related feature: F007
 Acceptance: AC-007
 Modules: `oracle`, `assertion`
 
-Implement M1 oracle loading and assertion types required by the pilot, starting with `golden_file`, `expected_result_artifact`, HTTP/status field checks, JSON path equality and absence checks, numeric tolerance checks, schema/contract checks, and `query_result` DB row count checks where approved expected-result artifacts, reviewed query refs, or inline decision rules are used. For the selected heterogeneous pilot, promote required oracle and assertion types such as `invariant` only when their provider family and assertion implementation are selected and verified.
+Implement M1 expected-result loading and verify types required by the pilot, starting with `file`, `expected_result_artifact`, HTTP/status field checks, JSON path equality and absence checks, numeric tolerance checks, schema/contract checks, and `query_result` DB row count checks where approved expected-result artifacts, reviewed query refs, or inline decision rules are used. For the selected heterogeneous pilot, promote required verify types such as `invariant` only when their provider family and assertion implementation are selected and verified.
 
-Oracle or assertion types outside selected or implemented provider families are rejected as unsupported before assertion evaluation.
+Expected-result or verify types outside selected or implemented provider families are rejected as unsupported before verify evaluation.
 
 Verification:
 
@@ -337,7 +355,7 @@ Verification:
 regress run --root <product-repo> --rp-id <rp-id> --test-case <tc-id>
 ```
 
-Done when selected pilot assertion types produce pass/fail results, and failures include oracle ref or inline rule, expected ref when applicable, actual ref, decision rule, provider family when applicable, diff or mismatch summary, and test case trace.
+Done when selected pilot verify types produce pass/fail results, and failures include expected-result ref or inline rule, expected ref when applicable, actual ref, decision rule, provider family when applicable, diff or mismatch summary, and test case trace.
 
 ### T014 - Evidence Writer
 
@@ -457,7 +475,7 @@ Done when the pilot RP evidence package shows greater than 80% coverage for auto
 ## Dependency Order
 
 ```text
-T000 -> T001 -> T002 -> T003
+T000 -> T000A -> T001 -> T002 -> T003
                   |
                   +-> T003A -> T003B -> T004 -> T008 -> T009 -> T010 -> T011 -> T012 -> T013 -> T014 -> T014A
                   |                                                                                 |

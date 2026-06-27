@@ -117,10 +117,10 @@ AP boundary contract:
 |---|---|---|
 | Definition and Validation | Discovery, planning, generation approval, or run start | Artifact path, field path, lifecycle status, supported `dsl_version`, owner action |
 | Discovery and Context | Planning | RP ID, missing artifact, missing RU, requested environment, owner action |
-| Planning and Binding | Fixture setup or adapter/provider execution | Test case ID, AC ID, unresolved binding/oracle/fixture/parameter, provider contract key, owner action |
+| Planning and Binding | Fixture setup or adapter/provider execution | Test case ID, AC ID, unresolved target, setup fixture, execute input, expected-result ref, verify ref, evidence ref, runtime policy, provider contract key, owner action |
 | Fixture and State Manager | Adapter execution when setup is unsafe or incomplete | Test case ID, setup action, cleanup requirement, state scope, owner action |
-| Execution Engine | Assertion evaluation when step execution fails | Step ID, adapter, action, exit code or timeout, log refs, owner action |
-| Oracle and Assertion Engine | Pass/fail reporting when truth or comparison rule is missing | Assertion ID, oracle ref, expected-result approval status, actual ref, owner action |
+| Execution Engine | Verify evaluation when an execute operation fails | Execute step ID, provider or adapter, operation, exit code or timeout, log refs, owner action |
+| Oracle and Assertion Engine | Pass/fail reporting when truth or comparison rule is missing | Verify ID, expected-result ref, expected-result approval status when applicable, actual ref, owner action |
 | Evidence and Reporting | Release-review-ready claim | Missing evidence type, affected AC/test/run, coverage impact, owner action |
 
 APs communicate through structured reports and execution-plan records, not hidden side effects. Each AP output must be durable enough to explain why the next AP did or did not run.
@@ -131,13 +131,13 @@ For implementation clarity, each AP owns one primary question and one durable ha
 |---|---|---|
 | Definition and Validation | Are declared artifacts syntactically valid, lifecycle-ready, approved when needed, and compatible with supported versions? | `validation_report` with field paths, lifecycle status, and compatibility result. |
 | Discovery and Context | Which RP, AC, RU repos, artifact paths, execution mode, environment, and provider contract references are in scope? | `rp_execution_context` with resolved artifact and contract references. |
-| Planning and Binding | Can every logical DSL reference be resolved into an executable plan without embedding provider-specific code in the DSL? | `execution_plan` with bound inputs, parameters, fixture intents, oracle refs, and step placeholders. |
+| Planning and Binding | Can every logical DSL reference be resolved into an executable plan without embedding provider-specific code in the DSL? | `execution_plan` with bound inputs, parameters, fixture intents, expected-result refs, verify refs, and execute output placeholders. |
 | Fixture and State Manager | Is test state safe to prepare and clean up for this execution mode? | `fixture_plan` and `cleanup_plan` with setup, mutation scope, cleanup, and postcondition evidence refs. |
 | Execution Engine | Can the planned logical steps run through declared providers and adapters in the selected environment? | `execution_result` with step status, adapter outputs, logs, actual result refs, timeout/retry metadata. |
-| Oracle and Assertion Engine | Do approved truth sources or deterministic decision rules prove pass/fail for the actual outputs? | `assertion_result` with oracle refs, expected, actual, comparator, and failure reason. |
+| Oracle and Assertion Engine | Do approved truth sources or deterministic decision rules prove pass/fail for the actual outputs? | `assertion_result` with expected-result refs, expected, actual, comparator, and failure reason. |
 | Evidence and Reporting | Is there enough durable evidence to support coverage and release review without manually reconstructing the RP execution? | `batch_summary`, `evidence_package`, `coverage_report`, `failure_summary`, and `release_review_summary`. |
 
-Provider contracts are configuration artifacts consumed by APs; they are not DSL sections. A provider contract declares a named capability such as a binding resolver, fixture setup action, adapter command, oracle reader, assertion comparator, or observation collector. The DSL references those capabilities by logical name, and the AP validates that the referenced capability exists before execution.
+Provider contracts are configuration artifacts consumed by APs; they are not DSL sections. A provider contract declares a named capability such as a target runner, fixture provider, execute operation provider, expected-result reader, verify provider, or evidence collector. The DSL references those capabilities by logical name, and the AP validates that the referenced capability exists before execution.
 
 Execution-focused DSL v1 references provider behavior through `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures`, `expected_results`, and `verify` rules. It must not embed provider configuration, endpoint URLs, connection strings, shell scripts, SQL bodies, release gates, waivers, or approval workflow. Legacy fields such as `execution_target`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, and `policy` are compatibility inputs only until parser/generator migration is complete.
 
@@ -174,7 +174,7 @@ Current provider runtime status:
 | `request_response/grpc` | Supported for unary descriptor-driven calls | `RequestResponseProvider` plus `DefaultGrpcClientInvoker` | service ref, descriptor ref, action service and method, request binding, positive `timeout_seconds`, `outputs.actual_output_ref` | Framework registry, CLI preflight, provider evidence, and loopback gRPC tests; not yet pilot endpoint evidence. |
 | `messaging/local` and `messaging/mock` | Supported for local/mock evidence | `MessagingProvider` | topic/subject/stream/endpoint ref, supported action mode, payload binding for publish/request, cleanup strategy and positive max count for cleanup, positive `timeout_seconds`, `outputs.actual_output_ref`, correlation id when required | Framework provider-family tests. |
 | `messaging/kafka` and `messaging/nats` | Supported for native publish, consume/observe, and bounded cleanup drain; NATS also supports native request/reply | `MessagingProvider` plus `DefaultMessagingTransport` | bootstrap/server/connection ref, topic or subject ref, supported action mode, payload binding for publish and request/reply, cleanup strategy and positive max count for cleanup, positive `timeout_seconds`, `outputs.actual_output_ref`, correlation id when required | Framework provider-family and injectable transport tests; pilot broker evidence remains pending. |
-| `db_fixture/jdbc` | Supported for JDBC fixture lifecycle and DB row count assertions | `DatabaseFixtureProvider` plus `AssertionEngine` | `connection_ref`, `isolation_key`, `cleanup_strategy`, setup/cleanup `sql_ref`, verification query `sql_ref` or query-result oracle when declared | Framework provider-family tests with H2/local JDBC fixtures. |
+| `db_fixture/jdbc` | Supported for JDBC fixture lifecycle and DB row count assertions | `DatabaseFixtureProvider` plus `AssertionEngine` | `connection_ref`, `isolation_key`, `cleanup_strategy`, setup/cleanup `sql_ref`, verification query `sql_ref` or query-result expected-result when declared | Framework provider-family tests with H2/local JDBC fixtures. |
 | `deployment_readiness/local` and `deployment_readiness/mock` | Supported for local/mock readiness | `DeploymentReadinessProvider` | readiness probe, deployment/service/target ref, `deployed_version_ref`, positive `timeout_seconds`, `outputs.actual_output_ref` | Framework provider-family tests. |
 | `deployment_readiness/k8s` | Supported for bounded `kubectl` probes, direct API deployment availability, and pod log capture | `DeploymentReadinessProvider` plus `DefaultDeploymentReadinessProbe` | readiness probe, namespace ref, kube context or API server ref, deployment/service/selector refs, `deployed_version_ref`, positive `timeout_seconds`, bounded log tail when used, `outputs.actual_output_ref` | Framework provider-family and stubbed API tests; pilot cluster evidence remains pending. |
 | `deployment_readiness/vm` | Supported for bounded TCP, HTTP health, SSH command, and WinRM command probes | `DeploymentReadinessProvider` plus `DefaultDeploymentReadinessProbe` | host or health URL ref, command refs for SSH/WinRM, optional executable wrapper refs, `deployed_version_ref`, positive `timeout_seconds`, `outputs.actual_output_ref` | Framework provider-family tests; pilot VM evidence remains pending. |
@@ -273,11 +273,11 @@ Stable DSL Core
         |
         +--> Extension Points
               +--> Execution Adapter
-              +--> Binding Provider
+              +--> Target and Binding Provider
               +--> Fixture Provider
-              +--> Oracle Provider
-              +--> Assertion Provider
-              +--> Observation Provider
+              +--> Expected-Result Reader
+              +--> Verify Provider
+              +--> Evidence Collector
 ```
 
 Core runner owns:
@@ -348,7 +348,7 @@ Extension governance rules:
 - Add provider code only when the required behavior is reusable across RPs and cannot be expressed safely by an existing provider contract.
 - Use an external runner only as an approved escape hatch for legacy or specialized boundaries, not as the normal way to onboard each RP.
 - Validate provider contract schemas before execution, including required fields, secret references, cleanup strategy, and unsupported actions.
-- Add a new DSL enum only when a recurring cross-RP concept cannot be represented by existing `bind_as`, fixture action, oracle type, assertion type, observation type, or adapter action.
+- Add a new DSL enum only when a recurring cross-RP concept cannot be represented by existing target runner, fixture type, execute operation, expected-result type, verify type, or evidence output.
 - Add or change DSL required fields only through a `dsl_version` compatibility decision.
 - A package adapter must not silently skip unsupported DSL sections; it must fail fast with test case ID, AC ID, section name, and owner action.
 
@@ -435,7 +435,7 @@ Select RP
 -> create RP execution batch
 -> set up fixtures
 -> execute adapter or collect evidence-only input
--> run assertions
+-> run verify rules
 -> clean up fixtures
 -> write run evidence
 -> write batch summary
@@ -481,18 +481,19 @@ Minimum executable adapter fields:
 
 Minimum provider contract rules:
 
-- A provider contract must declare provider family, provider type, supported action names, runtime support status, and required evidence outputs.
+- A provider contract must declare provider family, provider type, supported operation or capability names, runtime support status, and required evidence outputs.
 - A provider contract must reference inputs, queries, payloads, secrets, or environment resources by reference, not inline sensitive values.
 - Fixture providers that mutate state must declare cleanup strategy.
-- Oracle providers must declare oracle type, truth source, and comparison or decision rule.
-- Observation providers must declare source and collection rule.
+- Expected-result readers must declare truth source type, source reference, and allowed usage.
+- Verify providers must declare verify type, actual/expected requirements, selector/query/event requirements, and comparison or decision rule.
+- Evidence collectors must declare source and collection rule.
 
 Runtime rules:
 
 - Non-success exit codes fail the test case and preserve exit code, stdout, stderr, and resolved inputs.
 - Timeout fails the test case and still triggers fixture cleanup.
 - Adapter execution must not deploy RU code in M1.
-- Package-type behavior belongs in configurable adapters/providers; DSL, orchestration, evidence format, and assertion lifecycle stay in framework core.
+- Package-type behavior belongs in configurable adapters/providers; DSL, orchestration, evidence format, and verify lifecycle stay in framework core.
 
 ## 5.11 Failure Handling
 
@@ -534,7 +535,7 @@ Each test run writes:
 - `run.yaml`: run status, timestamps, RP ID, batch ID, AC ID, test case ID, RU refs, execution mode.
 - `logs/`: adapter logs and framework validation logs.
 - `actual/`: captured actual outputs or evidence references.
-- `assertions.yaml`: assertion results, oracle refs, actual refs, decision rule, diff summary.
+- `assertions.yaml`: verify results, expected-result refs, actual refs, decision rule, diff summary.
 - `observations.yaml`: observation collection results such as log, metric, event, or trace checks.
 - `postconditions.yaml`: final-state validation results after execution and cleanup.
 - `cleanup.yaml`: fixture cleanup status and cleanup evidence.
@@ -577,7 +578,7 @@ The architecture should be revisited when multiple RP types require shared servi
 | AC-004 | RP/RU mapping validation and unsafe execution block | `mapping`, `environment` |
 | AC-005 | Agent DSL test drafting only from ready inputs and no silent overwrite | `readiness`, `testcase` |
 | AC-006 | Expected result source references and approval gate | `expectedresult` |
-| AC-007 | RP DSL test execution with inputs, fixtures, adapters, assertions, evidence | `execution`, `binding`, `provider`, `fixture`, `adapter`, `assertion`, `evidence` |
+| AC-007 | RP DSL test execution with inputs, fixtures, adapters/providers, verify rules, evidence | `execution`, `binding`, `provider`, `fixture`, `adapter`, `assertion`, `evidence` |
 | AC-008 | Unsafe or incomplete regression execution is blocked | `environment`, `mapping`, `provider`, `execution` |
 | AC-009 | Coverage, traceability, failures, and approved exclusions | `report`, `evidence` |
 | AC-010 | Framework verification and RP regression execution remain separate | Maven Surefire/Failsafe configuration, sample Product Repo fixture, `cli`, `evidence` |

@@ -23,12 +23,13 @@ Minimum verification rule for DSL/AP clarity:
 
 - Every readiness, generation, dry-run, execution, or evidence report that references DSL behavior shall include `ap`, `field_path` or `contract_path`, `test_case_id` when applicable, `ac_id` when applicable, `reason`, and `owner_action`.
 - DSL validation failures shall identify whether the problem belongs to DSL syntax, execution lifecycle state, traceability, targets, setup fixtures, execute outputs, expected results, verify rules, RP/RU mapping, provider contract, environment readiness, runtime policy, or evidence completeness.
-- New execution-focused DSL artifacts shall use `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime` as the core contract before F007 provider runtime execution.
+- New execution-focused DSL artifacts shall use `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime` as the always-required core contract before F007 provider runtime execution. `setup` and `expected_results` content is required when the scenario or verify rules need it.
 - New execution-focused DSL artifacts shall not contain legacy-only fields such as `rp_id`, `ac_id`, `execution_target`, `target_ru_id`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, or `policy`.
 - New execution-focused DSL artifacts shall not contain governance-heavy fields such as `approval_status`, `approved_by`, `approval_required`, `waiver`, `release_gate`, `risk_approval`, or governance workflow state.
 - A missing provider contract, unsupported DSL capability, missing expected result, missing cleanup reference, missing execute output, invalid verify rule, or missing environment readiness shall block before adapter execution starts.
 - Baseline, spec, architecture, and AC documents shall use the same seven AP names and shall not introduce hidden AP-level components.
 - Every required or conditional DSL field shall map to a primary AP consumer and have a clear reason for being required.
+- Before implementation starts for any DSL, AP, provider runtime, evidence, or report change, the feature/spec, architecture design, artifact contract, AC, implementation plan, and test plan shall describe the same behavior, non-goals, required/conditional/prohibited fields, happy/failure/boundary paths, and verification evidence.
 - Provider implementation settings shall be validated through RP/RU mapping or provider contracts, not embedded directly inside DSL test cases.
 - Provider contracts shall be validated against a capability registry by explicit `provider_family`, `provider_type`, required fields, supported runtime status, execution mode, and evidence output requirements.
 - External runner use shall require explicit approval metadata and shall be reported as an escape hatch, not as the standard provider extension path.
@@ -240,6 +241,8 @@ When regression is requested
 Then execution shall stop before unsafe adapter/provider execution and report the blocking reason with owner action.
 
 And the blocking report shall include the AP name and DSL field or provider contract path that caused the stop.
+
+And blocked run evidence shall preserve enough normalized DSL runtime context to explain which targets, setup fixtures, execute operations, expected-result refs, verify rules, evidence refs, and runtime policy were resolved before blocking.
 
 And when a selected pilot provider family or provider type is missing, unsupported, ambiguous, or only available as an unapproved escape hatch, the dry-run report shall name the provider family, provider type, capability, affected RU, provider contract path, registry status, and required owner action.
 

@@ -88,7 +88,7 @@ The product shall not claim downstream RP release readiness merely because frame
 | F004 | RP/RU Mapping Intake and Completeness Check | Consume human-authored RP/RU mapping and check whether it is complete for regression execution | Yes |
 | F005 | Agent Skill: AC and Execution Context Readiness with DSL Test Drafting | Use agent reasoning to classify AC/execution readiness and draft package-neutral DSL test skeletons or executable regression test cases | Yes |
 | F006 | Agent Skill: Expected Result Drafting | Draft reviewable expected-result artifacts from explicit RP AC and source context | Yes |
-| F007 | Release Package DSL Test Execution | Execute package-level regression from checked-in package-neutral DSL test cases using generic input catalog, binding, fixture lifecycle, adapters, assertions, and evidence collection | Yes |
+| F007 | Release Package DSL Test Execution | Execute package-level regression from checked-in package-neutral DSL test cases using generic input catalog, binding, fixture lifecycle, providers/adapters, verify rules, and evidence collection | Yes |
 | F008 | Coverage and Evidence Package | Report RP AC coverage, traceability, execution evidence, failures, waivers, and release review inputs | Yes |
 | F009 | Advanced Spec Readiness | Detect deeper cross-artifact spec gaps and drift across product, RP, architecture, data, and change history | No |
 | F010 | Release Governance Integration | Apply release gate policy, waiver workflow, and Go/No-Go records | No |
@@ -163,20 +163,21 @@ The 7 AP are the framework capability areas behind the DSL lifecycle: Definition
 
 Each AP must be independently explainable in readiness and execution reports. A report that says only "DSL invalid" or "execution failed" is not sufficient; it must name the AP, field path or provider contract, affected test case, affected AC, reason, and owner action.
 
-The DSL field set should stay minimal but complete enough to execute safely. M1 shall treat these fields as the execution-focused DSL v1 core:
+The DSL field set should stay minimal but complete enough to execute safely. M1 shall treat these fields as the execution-focused DSL v1 core. Top-level sections may be present as empty maps for schema stability, but content is required only when the scenario references or needs it.
 
-| Required Field | Why It Is Required | Consuming AP |
-|---|---|---|
-| `dsl_version` | Selects supported schema and compatibility rules. | Definition and Validation |
-| `test_case_id`, `status`, `revision` | Gives every run stable artifact identity and execution lifecycle state. | Definition and Validation / Evidence and Reporting |
-| `traceability.package_id`, `traceability.acceptance_criteria_id`, `traceability.source` | Gives every run stable traceability to RP-level AC and source. | Definition and Validation / Evidence and Reporting |
-| `targets` | Names the application, database, event bus, file store, batch runner, or external boundary used by the test. | Discovery and Context / Planning and Binding |
-| `scenario.type`, `scenario.scope`, `scenario.description`, `scenario.capabilities` | Tells the framework what kind of behavior and provider capability is needed. | Planning and Binding |
-| `execute[]` | Declares readable operations, target IDs, runtime inputs, and observable outputs. | Execution Engine |
-| `expected_results` | Declares expected artifacts, payloads, schemas, contracts, or state snapshots used by verification. | Oracle and Assertion Engine |
-| `verify[]` | Declares how pass/fail is evaluated. | Oracle and Assertion Engine |
-| `evidence.required[]` | Declares what concrete execution or verification outputs must be retained. | Evidence and Reporting |
-| `runtime.timeout`, `runtime.retry` | Bounds execution duration and retry behavior. | Execution Engine |
+| Field or Section | Requirement Rule | Why It Is Required | Consuming AP |
+|---|---|---|---|
+| `dsl_version` | Always required | Selects supported schema and compatibility rules. | Definition and Validation |
+| `test_case_id`, `status`, `revision` | Always required | Gives every run stable artifact identity and execution lifecycle state. | Definition and Validation / Evidence and Reporting |
+| `traceability.package_id`, `traceability.acceptance_criteria_id`, `traceability.source` | Always required | Gives every run stable traceability to RP-level AC and source. | Definition and Validation / Evidence and Reporting |
+| `targets` | Always required | Names the application, database, event bus, file store, batch runner, or external boundary used by the test. | Discovery and Context / Planning and Binding |
+| `scenario.type`, `scenario.scope`, `scenario.description`, `scenario.capabilities` | Always required | Tells the framework what kind of behavior and provider capability is needed. | Planning and Binding |
+| `setup.fixtures` | Required when the scenario needs precondition data, mutated state, mock setup, seed data, or cleanup | Declares fixture lifecycle before and after execution. | Fixture and State Manager |
+| `execute[]` | Always required | Declares readable operations, target IDs, runtime inputs, and observable outputs. | Execution Engine |
+| `expected_results` | Required when `verify[]` uses approved artifacts, payloads, schemas, contracts, or state snapshots | Declares reusable truth references used by verification. Inline deterministic expected values may live directly under `verify[].expected`. | Oracle and Assertion Engine |
+| `verify[]` | Always required | Declares how pass/fail is evaluated. | Oracle and Assertion Engine |
+| `evidence.required[]` | Always required | Declares what concrete execution or verification outputs must be retained. | Evidence and Reporting |
+| `runtime.timeout`, `runtime.retry` | Always required | Bounds execution duration and retry behavior. | Execution Engine |
 
 Conditional fields are required only when the scenario needs them:
 
@@ -198,7 +199,7 @@ Validation alone is not enough. At least one checked-in `tests/approved/` execut
 New execution-focused DSL artifacts must:
 
 - Use readable operation names such as `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, or `run_application`.
-- Use `targets`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime` instead of framework-internal legacy fields.
+- Use `targets`, `setup` when needed, `execute`, `expected_results` when needed, `verify`, `evidence`, and `runtime` instead of framework-internal legacy fields.
 - Capture `execute[].outputs` whenever verification or evidence references execution results.
 - Keep provider implementation details in RP/RU mapping or provider contracts, not inside the test case body.
 - Fail validation before execution when required fields, conditional fields, or supported enum values are missing.
@@ -228,7 +229,20 @@ Execution-eligible test cases should be stored in the RP `tests/` folder. In the
 
 The agent may propose new or updated test cases when source artifacts change, but it shall not silently overwrite checked-in approved tests.
 
-## 3.8 Framework Verification and RP Regression Execution Boundary
+## 3.8 Pre-Implementation Documentation Gate
+
+Any implementation slice that changes DSL validation, generation, execution, evidence, reporting, provider runtime, or AP boundaries must update the documents first. The slice is not implementation-ready until the feature/spec, architecture design, artifact contract, acceptance criteria, implementation plan, and framework verification test plan agree on:
+
+- The user-visible behavior and non-goals.
+- Required, conditional, optional, legacy-compatible, and prohibited DSL fields.
+- Data binding, fixture setup, fixture cleanup, expected-result, verify/assert, evidence, and runtime semantics.
+- Which AP consumes each DSL section and which provider contract resolves package-specific behavior.
+- Happy path, failure path, and boundary path acceptance.
+- Framework verification tests and downstream RP validation evidence needed to prove the change.
+
+If any of those items cannot be stated without inventing RP behavior, the work remains a spec/design task rather than an implementation task.
+
+## 3.9 Framework Verification and RP Regression Execution Boundary
 
 This document uses two different execution terms:
 
@@ -385,7 +399,7 @@ Product developers own AC clarification and manual expected-result input. QA or 
 
 ### Purpose
 
-Use an agent skill to draft expected-result artifacts from explicit RP AC, RP feature specs, package inputs, and source context.
+Use an agent skill to draft expected-result artifacts from explicit RP AC, RP feature specs, input/fixture references, and source context.
 
 ### Expected Behavior
 
@@ -395,7 +409,7 @@ Generated expected results shall remain draft until reviewed. Product developers
 
 ### Required Mechanism
 
-- Read `rp_feature_spec.md`, `acceptance_criteria.md`, package input references, fixture or sample data, and linked product spec context.
+- Read `rp_feature_spec.md`, `acceptance_criteria.md`, input references, fixture or sample data, and linked product spec context.
 - Draft expected results as separate reviewable artifacts, not hidden runtime state.
 - Attach source references from expected results back to RP AC IDs and input references.
 - Mark expected-result artifacts as `draft`, `blocked`, or `approved_for_regression`.
@@ -427,7 +441,7 @@ F007 implementation must not proceed directly to provider runtime expansion unti
 ### Required Mechanism
 
 - Read `package.yaml`, `rp_ru_mapping.yaml`, checked-in DSL test cases from the RP `tests/` folder, target definitions, setup fixture refs, execute operation refs, expected-result artifacts, verify rules, evidence refs, runtime policy, and provider contracts.
-- Check that test cases declare supported `dsl_version` and include required DSL identity/status/revision, traceability, targets, scenario, setup, execute, expected_results, verify, evidence, and runtime fields.
+- Check that test cases declare supported `dsl_version` and include the v1 core contract: identity/status/revision, traceability, targets, scenario, execute, verify, evidence, and runtime fields, with setup and expected-results content required when referenced or needed by the scenario.
 - Reject new execution-focused DSL artifacts that still use legacy-only fields such as `rp_id`, `ac_id`, `execution_target`, `target_ru_id`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, or `policy`.
 - Reject new execution-focused DSL artifacts that contain governance-heavy fields such as approval, waiver, release gate, or risk approval state.
 - Check that test cases have execution lifecycle status allowed by the selected run policy.
@@ -462,7 +476,7 @@ Package RP-level coverage, traceability, raw execution evidence, failures, and a
 
 ### Expected Behavior
 
-The framework shall report coverage against automatable RP-level AC using batch-level evidence, trace generated tests to RP AC, retain raw execution evidence from F007, identify failures with oracle or inline decision rule results and actual results, and include manual-only or waived AC records where approved.
+The framework shall report coverage against automatable RP-level AC using batch-level evidence, trace generated tests to RP AC, retain raw execution evidence from F007, identify failures with expected-result or inline decision rule results and actual results, and include manual-only or waived AC records where approved.
 
 F008 shall not execute tests, generate tests, generate expected results, approve waivers, change the coverage denominator, or decide release Go/No-Go. Product developers own evidence review for implementation correctness. QA or release owners approve waivers, manual-only exclusions, and release decisions through F010 or a human release process.
 

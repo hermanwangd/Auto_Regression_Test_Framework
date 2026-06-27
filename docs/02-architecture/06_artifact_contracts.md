@@ -126,7 +126,7 @@ release_units:
 
 The framework consumes this mapping. It must not decide RP membership.
 
-`provider_contracts` is the canonical contract container. Executable provider contracts must declare `provider_family` and `provider_type` so the provider capability registry can validate required fields, runtime support status, allowed execution modes, and evidence outputs before execution. Contracts may be supplied at reusable defaults, RP level, or RU level. Resolution order is: framework/provider default, then RP-level override, then RU-level override. The most specific declared contract wins, and unsupported or ambiguous overrides fail before execution. Dispatch uses DSL and mapping fields: `targets.<target_id>.runner` and `execute[].operation` select adapter/provider contracts; `setup.fixtures.<name>.type` selects fixture contracts; `expected_results.<name>.type` selects expected-result readers; `verify[].type` selects assertion or state/event verification providers; `evidence.required[]` selects evidence collection requirements.
+`provider_contracts` is the canonical contract container. Executable provider contracts must declare `provider_family` and `provider_type` so the provider capability registry can validate required fields, runtime support status, allowed execution modes, and evidence outputs before execution. Contracts may be supplied at reusable defaults, RP level, or RU level. Resolution order is: framework/provider default, then RP-level override, then RU-level override. The most specific declared contract wins, and unsupported or ambiguous overrides fail before execution. Dispatch uses DSL and mapping fields: `targets.<target_id>.runner` and `execute[].operation` select adapter/provider contracts; `setup.fixtures.<name>.type` selects fixture contracts; `expected_results.<name>.type` selects expected-result readers; `verify[].type` selects verify providers; `evidence.required[]` selects evidence collection requirements.
 
 Current provider contract minimums enforced by the framework verification build:
 
@@ -237,6 +237,16 @@ Use clear test-case language in new DSL artifacts:
 | `verify` | Declare assertions over captured outputs, state, events, or files. |
 | `evidence` | Declare evidence refs that must be retained from execution or verification. |
 | `runtime` | Declare bounded timeout and retry policy. |
+
+### 6.7.0 Requirement Rules
+
+The v1 contract separates stable top-level structure from execution-required content:
+
+- Always required: `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime`.
+- Conditionally required: `setup.fixtures` when the scenario needs precondition data, state mutation, mock setup, seed data, or cleanup.
+- Conditionally required: `expected_results` when a verify item references an approved artifact, schema, contract, payload, file, DB state snapshot, or other reusable truth source. Simple deterministic expected values may be declared directly in `verify[].expected`.
+- Required when referenced: `execute[].outputs`, `verify[].selector`, `verify[].target/query/event`, `verify[].options`, and fixture `cleanup_ref`.
+- Prohibited in DSL: provider implementation settings, secrets, endpoint URLs, connection strings, SQL bodies, shell scripts, release gates, waivers, risk approvals, and approval workflow state.
 
 The v1 semantic model is:
 
@@ -512,7 +522,7 @@ Rules:
 
 ## 6.9 Adapter and Provider Contract
 
-Each executable adapter or provider must expose a validated contract through `rp_ru_mapping.yaml`, RP-level provider configuration, or reusable defaults. Command execution is one adapter contract shape; HTTP, DB, queue, oracle, assertion, fixture, and observation providers should also be configured through contracts rather than one-off provider code.
+Each executable adapter or provider must expose a validated contract through `rp_ru_mapping.yaml`, RP-level provider configuration, or reusable defaults. Command execution is one adapter contract shape; HTTP, DB, queue, expected-result reader, verify, fixture, and evidence/observation providers should also be configured through contracts rather than one-off provider code.
 
 ```yaml
 provider_contracts:
@@ -565,7 +575,7 @@ Adapter/provider runtime rules:
 - Contract resolution order is provider default, RP-level override, then RU-level override.
 - Executable contracts must declare `provider_family` and `provider_type`; heuristic family inference is diagnostic only and must not silently choose a runtime.
 - Provider capability registry status must be checked before dispatch. Unsupported, ambiguous, unsafe, or unapproved escape-hatch contracts fail before execution.
-- Dispatch uses DSL fields and mapping fields: adapter/action, `bind_as`, fixture action, oracle type, assertion type, and observation type.
+- Dispatch uses v1 DSL fields and mapping fields: `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures.<name>.type`, `expected_results.<name>.type`, `verify[].type`, and `evidence.required[]`.
 - The framework supplies resolved input paths and run workspace paths.
 - Adapters and providers write actual outputs, observation results, and cleanup results under the run evidence directory.
 - Messaging actions that declare `requires_correlation: true` must also declare `correlation_id`, `correlation_id_ref`, or `correlation_key` before publish, request/reply, consume, observe, or cleanup dispatch.

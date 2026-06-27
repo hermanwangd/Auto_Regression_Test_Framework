@@ -1179,7 +1179,9 @@ public class RegressionCommand {
         if ("parameters".equals(fieldPath) || fieldPath.startsWith("parameters.")) {
             return "parameter_expansion_unsupported";
         }
-        if (fieldPath.startsWith("package_inputs.")) {
+        if (fieldPath.startsWith("package_inputs.")
+                || fieldPath.startsWith("setup.fixtures.")
+                || fieldPath.matches("execute\\[\\d+]\\.with\\..*")) {
             return "binding_resolution_failed";
         }
         if (fieldPath.contains("provider_contracts")) {

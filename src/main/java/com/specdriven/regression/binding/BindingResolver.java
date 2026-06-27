@@ -19,7 +19,8 @@ public class BindingResolver {
     private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
 
     public BindingResolutionReport resolve(Path testCasePath) {
-        Map<String, Object> testCase = dslTestCaseNormalizer.normalize(readYamlMap(testCasePath));
+        Map<String, Object> rawTestCase = readYamlMap(testCasePath);
+        Map<String, Object> testCase = dslTestCaseNormalizer.normalize(rawTestCase);
         String testCaseId = stringValue(testCase.get("test_case_id"));
         String acId = stringValue(testCase.get("ac_id"));
         List<ResolvedBinding> resolvedBindings = new ArrayList<>();
@@ -33,11 +34,12 @@ public class BindingResolver {
                 if (entry.getValue() instanceof Map<?, ?> binding) {
                     String bindingType = stringValue(binding.get("bind_as"));
                     String ref = stringValue(binding.get("ref"));
+                    String bindingFieldPath = bindingFieldPath(rawTestCase, bindingName);
                     if (bindingType.isBlank()) {
-                        gaps.add(gap(testCaseId, acId, "package_inputs.inputs." + bindingName + ".bind_as",
+                        gaps.add(gap(testCaseId, acId, bindingFieldPath,
                                 bindingName, "", "Declare binding type for package input `" + bindingName + "`."));
                     } else if (!SUPPORTED_M1_BINDINGS.contains(bindingType)) {
-                        gaps.add(gap(testCaseId, acId, "package_inputs.inputs." + bindingName + ".bind_as",
+                        gaps.add(gap(testCaseId, acId, bindingFieldPath,
                                 bindingName, bindingType,
                                 "Use supported M1 binding type input_file, dataset, db_seed, api_payload, or message_event; or implement provider support."));
                     } else {
@@ -63,6 +65,27 @@ public class BindingResolver {
                 acId,
                 List.copyOf(resolvedBindings),
                 List.copyOf(gaps));
+    }
+
+    private String bindingFieldPath(Map<String, Object> rawTestCase, String bindingName) {
+        Object setup = rawTestCase.get("setup");
+        if (setup instanceof Map<?, ?> setupMap
+                && setupMap.get("fixtures") instanceof Map<?, ?> fixtures
+                && fixtures.containsKey(bindingName)) {
+            return "setup.fixtures." + bindingName + ".type";
+        }
+        Object execute = rawTestCase.get("execute");
+        if (execute instanceof List<?> executeSteps) {
+            for (int i = 0; i < executeSteps.size(); i++) {
+                Object step = executeSteps.get(i);
+                if (step instanceof Map<?, ?> stepMap
+                        && stepMap.get("with") instanceof Map<?, ?> with
+                        && with.containsKey(bindingName)) {
+                    return "execute[" + i + "].with." + bindingName + ".type";
+                }
+            }
+        }
+        return "package_inputs.inputs." + bindingName + ".bind_as";
     }
 
     private boolean usesExpectedResultArtifact(Map<String, Object> testCase) {

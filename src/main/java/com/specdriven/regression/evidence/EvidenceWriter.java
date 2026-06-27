@@ -488,6 +488,8 @@ public class EvidenceWriter {
                     resolved_dependencies:
                     %s
                     failure_details: failure_details.yaml
+                    dsl_runtime:
+                    %s
                     """.formatted(
                     runId,
                     batchId,
@@ -497,7 +499,8 @@ public class EvidenceWriter {
                     resolvedExecutionMode,
                     resolvedEnvironmentRef,
                     stringValue(executionTarget.get("ru_id")),
-                    resolvedDependenciesYaml(resolvedDependencies)));
+                    resolvedDependenciesYaml(resolvedDependencies),
+                    dslRuntimeYaml(testCase)));
             Files.writeString(runDir.resolve("failure_details.yaml"), failureDetailsYaml(failureDetails));
             return new ExecutionResult(
                     runId,
