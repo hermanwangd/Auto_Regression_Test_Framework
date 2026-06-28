@@ -4,16 +4,16 @@ Status: M1 Staged Implementation-Ready Draft
 
 ## 7.1 Purpose
 
-This document defines how the Release Package Regression Framework supports RPs whose RUs use different implementation languages, deployment environments, and interaction styles. It also records the current framework capability matrix so pilot planning does not confuse implemented support with target support.
+This document defines how the Release Package Regression Framework supports heterogeneous execution after Product/RP/RU topology has been translated by Agent Skills into framework-readable artifacts. It also records the current framework capability matrix so pilot planning does not confuse implemented support with target support.
 
 ## 7.2 Support Principle
 
-The framework supports executable RP/RU boundaries, not implementation languages directly.
+The framework supports logical targets, runner/provider contracts, fixtures, verify rules, and evidence. It does not understand Product/RP/RU topology or implementation languages directly.
 
 - DSL test cases describe logical validation intent: targets, setup fixtures, execute operations, expected results, verify rules, cleanup needs, runtime policy, and evidence.
-- `rp_ru_mapping.yaml` declares which RUs are in the RP, their versions, execution modes, dependencies, validation boundaries, and provider contracts.
+- Product-owned `rp_ru_mapping.yaml` declares which RUs are in the RP. The Agent Skill translates that topology into `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, and `traceability_map.yaml`.
 - Provider contracts bind logical DSL operations and verify rules to reusable concrete technology behavior such as REST, gRPC, Kafka, NATS, DB, K8s, VM, or a governed external runner escape hatch.
-- Providers normalize execution, verify, cleanup, and evidence results back into the common RP evidence model.
+- Providers normalize execution, verify, cleanup, and evidence results back into the common suite/run evidence model with optional RP/RU trace labels.
 
 Java, Go, C++, VB.NET, and other languages should normally be invisible to the DSL. Language matters only when a reusable provider cannot express a legacy or specialized boundary and an approved escape-hatch contract is used.
 
@@ -37,7 +37,7 @@ External runner is not required for the M1 pilot unless the selected RP contains
 |---|---|---|---|
 | Product Repo readiness | Supported for folder/readiness checks | Keep | Harden reports and owner actions |
 | RP artifact completeness | Supported structurally | Keep | Add richer cross-artifact readiness |
-| RP/RU mapping | Supported for required RU fields, dependency graph ordering, target-RU provider resolution, and downstream blocking after failed upstream validation | Multi-RU dependency-aware execution | Add richer cross-artifact dependency readiness reporting |
+| Generated execution artifacts | Supported structurally for suite/run/environment/provider inputs; product mapping is currently product-side input | Logical target dependency-aware execution from generated run plans | Add richer Agent Skill translation checks and generated artifact readiness reporting |
 | DSL lifecycle | Draft and approved test lifecycle exists; execution-focused DSL v1 parser/generator validation, CLI run/report consumption, and `dsl_runtime` run evidence cover identity, traceability, targets, scenario, setup, execute, expected results, verify, evidence, and runtime | Stable package-neutral DSL v1 consumed by validation, run, evidence, and report | Add parameter cases, observations, and postconditions as those execution paths mature |
 | Binding types | Supports `input_file`, `dataset`, `db_seed`, `api_payload`, and `message_event` readiness/resolution | Add `config_file`, `env_var`, and `existing_state` as providers mature | Unsupported bindings fail before execution |
 | Fixture lifecycle | Validates cleanup policy and executes JDBC DB fixture setup, verification query counts, cleanup, and bounded messaging cleanup drain where configured | Execute DB seed/query/cleanup and test-owned message drain cleanup where needed | Add stronger fixture safety policy and persistent broker purge only if a pilot RP requires it |
@@ -53,7 +53,7 @@ External runner is not required for the M1 pilot unless the selected RP contains
 | Expected-result / verify | File diff, expected-result artifact path, HTTP/status field checks, JSON path equality and absence checks, numeric tolerance checks, schema/contract checks, multi-check aggregation, and DB row count checks | JSON path, schema, contract, DB row, absence, tolerance | Add invariant or custom comparator providers only when a selected pilot requires them |
 | Evidence | Batch/run evidence includes bindings, dependencies, provider contracts, verify status, cleanup, failed/blocked runs, and selected provider-specific evidence | Include resolved bindings, provider contracts used, cleanup, observations, verify details | Add richer observation and postcondition evidence for native messaging and deployment providers |
 | External runner bridge | Contract validation, approved `command_runner` dispatch, approval metadata checks, positive bounded timeout checks, unsafe output and evidence-map path blocking, built-in provider alternative blocking, evidence-map recording, and mapped-artifact existence checks exist as an escape hatch | Governed escape hatch for JUnit, Newman, Robot, legacy binaries, or custom harnesses only when built-in providers cannot cover the boundary | Add mapped-artifact content/schema checks before broad use |
-| Provider registry | Supported structural capability registry validates explicit family/type, target-RU ownership, runtime status, and dispatch for selected providers | Config-driven provider registry with default, RP, and RU precedence, explicit family/type validation, and runtime dispatch | Externalize or govern registry configuration as provider set grows |
+| Provider registry | Supported structural capability registry validates explicit family/type, logical target binding, runtime status, and dispatch for selected providers | Config-driven provider registry with defaults plus generated suite/run/environment overrides, explicit family/type validation, and runtime dispatch | Externalize or govern registry configuration as provider set grows |
 
 Status meanings:
 
@@ -77,51 +77,56 @@ Provider configuration must reference secrets and environment resources by name 
 
 ## 7.6 Contract Boundary Example
 
-This example is a target-state RP contract sketch because it includes native Kafka execution in a real environment. Current framework verification supports native Kafka publish, consume/observe, and bounded cleanup drain dispatch and blocks incomplete Kafka contracts with owner-actionable missing-field gaps. Real pilot evidence still requires an owner-provided broker environment and release package artifacts.
+This example is a target-state generated framework contract sketch because it includes native Kafka execution in a real environment. Current framework verification supports native Kafka publish, consume/observe, and bounded cleanup drain dispatch and blocks incomplete Kafka contracts with owner-actionable missing-field gaps. Real pilot evidence still requires owner-provided product context, Agent-generated artifacts, and broker environment evidence.
 
 ```yaml
-release_units:
-  - ru_id: RU-payment-api
-    repo: git://example/payment-api
-    unit_type: service
-    version_ref: build-123
-    validation_boundary: request_response_api
-    execution_mode: sit_deployed
-    deployment_required: true
-    environment_ref: sit://payment
-    adapter: request_response
-    provider_contracts:
-      adapters:
-        request_response:
-          provider_family: request_response
-          provider_type: rest
-          base_url_ref: env://PAYMENT_API_BASE_URL
-          actions:
-            submit_payment:
-              method: POST
-              path: /payments
-              request_binding: payment_payload
-              response_mapping:
-                payment_id: $.paymentId
-          timeout_seconds: 30
-          outputs:
-            actual_output_ref: actual/payment-response.json
-      fixtures:
-        payment_db:
-          provider_family: db_fixture
-          provider_type: jdbc
-          connection_ref: secret://sit/payment-db
-          isolation_key: test_run_id
-          cleanup_strategy: by_test_run_id
-      observations:
-        payment_events:
-          provider_family: messaging
-          provider_type: kafka
-          topic_ref: kafka://payment.events
-          correlation_id: ${run.id}
-          timeout_seconds: 30
-          outputs:
-            actual_output_ref: actual/payment-events.json
+environment_id: sit_payment
+targets:
+  payment_api:
+    type: service
+    runner: request_response
+    provider_contract_ref: provider_contracts.yaml#adapters.request_response
+  payment_db:
+    type: database
+    runner: jdbc
+    provider_contract_ref: provider_contracts.yaml#fixtures.payment_db
+  payment_events:
+    type: event_bus
+    runner: kafka
+    provider_contract_ref: provider_contracts.yaml#observations.payment_events
+
+provider_contracts:
+  adapters:
+    request_response:
+      provider_family: request_response
+      provider_type: rest
+      base_url_ref: env://PAYMENT_API_BASE_URL
+      actions:
+        submit_payment:
+          method: POST
+          path: /payments
+          request_binding: payment_payload
+          response_mapping:
+            payment_id: $.paymentId
+      timeout_seconds: 30
+      outputs:
+        actual_output_ref: actual/payment-response.json
+  fixtures:
+    payment_db:
+      provider_family: db_fixture
+      provider_type: jdbc
+      connection_ref: secret://sit/payment-db
+      isolation_key: test_run_id
+      cleanup_strategy: by_test_run_id
+  observations:
+    payment_events:
+      provider_family: messaging
+      provider_type: kafka
+      topic_ref: kafka://payment.events
+      correlation_id: ${run.id}
+      timeout_seconds: 30
+      outputs:
+        actual_output_ref: actual/payment-events.json
 ```
 
 The DSL would reference logical names such as `submit_payment`, `payment_payload`, and `payment_events`. It would not contain URLs, credentials, SQL bodies, topic client settings, or K8s commands.
@@ -137,7 +142,7 @@ The DSL would reference logical names such as `submit_payment`, `payment_payload
 
 ## 7.8 Implementation Implications
 
-The next implementation slice should not start by coding REST, Kafka, K8s, and VM providers all at once. It should first introduce a provider capability registry and contract validator that supports multiple RU entries, explicit provider family/type metadata, capability readiness, unsupported-capability blocking, and standardized evidence output. After that, add provider families in pilot order:
+The next implementation slice should not start by coding REST, Kafka, K8s, and VM providers all at once. It should first introduce or harden the provider capability registry, generated artifact validator, and contract validator that support multiple logical targets, explicit provider family/type metadata, capability readiness, unsupported-capability blocking, and standardized evidence output. After that, add provider families in pilot order:
 
 1. Request/response provider for REST or gRPC.
 2. DB fixture provider for seed/query/cleanup.

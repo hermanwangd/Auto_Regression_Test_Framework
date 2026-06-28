@@ -2,9 +2,9 @@
 
 Status: Implementation-Ready Draft for M1 staged delivery
 
-This plan implements the Product/RP/RU baseline without changing product scope or authoring RP acceptance criteria. It starts with the framework foundation, then enables generation, execution, and evidence once pilot RP artifacts exist.
+This plan implements the Product/RP/RU baseline while keeping framework core product-topology agnostic. It starts with Product Repo readiness and Agent Skill translation contracts, then enables generic DSL execution and evidence once generated framework artifacts exist.
 
-This is an implementation plan, not the framework verification strategy itself. Framework Verification is defined in `docs/07-validation-evidence/07_regression_test_plan.md`, including unit/component tests and sample Product/RP/RU integration verification. Real downstream RP regression execution remains a release-package validation flow after owner-provided RP artifacts exist.
+This is an implementation plan, not the framework verification strategy itself. Framework Verification is defined in `docs/07-validation-evidence/07_regression_test_plan.md`, including unit/component tests and sample generated-artifact integration verification. Real downstream RP regression execution remains a release-package validation flow after owner-provided RP artifacts are translated into framework-readable artifacts.
 
 ## Entry Criteria
 
@@ -12,6 +12,7 @@ This is an implementation plan, not the framework verification strategy itself. 
 - RP-level AC are the release coverage denominator.
 - ADR-005 is accepted: Framework Verification and RP Regression Execution are separate execution lines.
 - ADR-006 is accepted: heterogeneous RP support is handled through provider contracts, a provider capability registry, reusable built-in providers, and a governed external runner escape hatch.
+- ADR-008 is accepted: framework core is product-topology agnostic and consumes generated suite/run/environment/provider artifacts.
 - Minimum RP artifacts are defined: `package.yaml`, `rp_feature_spec.md`, `rp_ru_mapping.yaml`, `acceptance_criteria.md`, `tests/`, `expected-results/`, `traceability.md`, and `evidence_index.md`.
 - Architecture design defines Spring Boot 3.x / Java 17+ AP-level components, extension points, provider families, internal package boundaries, CLI commands, storage paths, execution modes, failure handling, and AC coverage.
 - Execution-focused DSL v1 is defined in the artifact contracts and must be validated and proven through CLI `run` plus `report --batch-id` before F007 provider runtime expansion.
@@ -23,7 +24,7 @@ Ready to implement now:
 
 - F001 Product Repo Bootstrap CLI and Readiness Agent Skill.
 - F002 Release Package Creation Guide and Completeness Check.
-- F004 RP/RU Mapping Intake and Completeness Check, using sample or pilot mappings.
+- F004 Agent Skill Product Mapping Translation, using sample or pilot mappings to generate framework-readable artifacts.
 - Execution-focused DSL v1 parser/validator, generator guard, and run/report consumption gate before provider runtime migration.
 
 Ready after pilot RP artifacts exist:
@@ -34,7 +35,7 @@ Ready after pilot RP artifacts exist:
 - F007 Release Package DSL Test Execution.
 - F008 Coverage and Evidence Package.
 
-Pilot RP owner must supply RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, expected-result approval owner, adapter mode, dependency graph, adapter/provider contracts, any required target/binding, fixture, expected-result, verify, or evidence/observation provider capability, and any approved external runner escape-hatch need.
+Pilot RP owner must supply RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, expected-result approval owner, adapter intent, dependency graph, required provider capabilities, and any approved external runner escape-hatch need. The Agent Skill must translate these into `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, and `traceability_map.yaml` before framework core execution.
 
 ## Current Implementation Status Snapshot
 
@@ -51,7 +52,7 @@ This snapshot separates framework verification progress from pilot acceptance pr
 | DB fixture runtime | Supported for JDBC fixture lifecycle and DB row count assertions | DB setup/query/cleanup tests with `sql_ref`, cleanup strategy, isolation key, query-result expected-result readiness, and DB verify evidence | Add richer DB-row match modes only if pilot requires them. |
 | Deployment readiness runtime | Supported for local/mock plus native K8s/VM bounded readiness probes, K8s direct API deployment availability, K8s pod log capture, and VM SSH/WinRM command probes | Readiness provider, runtime registry, and provider contract tests with version, timeout, target refs, API server refs, bounded log tail refs, command refs, and output refs | Add real pilot environment validation. |
 | External runner escape hatch | Supported as governed escape hatch | Contract gating and mapped evidence tests | Add content/schema validation only if pilot needs it. |
-| Heterogeneous pilot validation | Pending | Requires owner-provided Product/RP artifacts | Run T017 after pilot artifacts exist. |
+| Heterogeneous pilot validation | Pending | Requires owner-provided Product/RP artifacts plus generated framework artifacts | Run T017 after pilot artifacts are translated. |
 
 ## Task Backlog
 
@@ -69,7 +70,7 @@ Verification:
 rg "Framework Verification|RP Regression Execution|mvnw test|mvnw verify|regress run" docs
 ```
 
-Done when the docs consistently state that `./mvnw test` and `./mvnw verify` validate this framework, while `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` validates a downstream Product/RP and writes RP evidence.
+Done when the docs consistently state that `./mvnw test` and `./mvnw verify` validate this framework, while downstream Product/RP validation first generates framework-readable artifacts and then invokes the generic runner to write RP evidence.
 
 ### T000A - Pre-Implementation Documentation Alignment Gate
 
@@ -130,7 +131,7 @@ Related features: F002, F003, F004
 Acceptance: AC-002, AC-003, AC-004
 Modules: `schema`
 
-Implement typed parsers for `package.yaml`, `rp_ru_mapping.yaml`, AC entries, DSL test cases, expected results, provider contracts, and evidence records. Start with YAML/Markdown front matter or embedded YAML blocks supported by the artifact contracts. DSL parsing must validate `dsl_version`, required fields, conditionally required fields, and allowed enum values. Provider contract parsing must require explicit `provider_family` and `provider_type` for executable contracts and validate supported actions, required references, secret refs, cleanup strategy, evidence outputs, escape-hatch approval metadata when applicable, and unsupported configuration.
+Implement typed parsers for product-side readiness artifacts such as `package.yaml` and `rp_ru_mapping.yaml`, and runtime artifacts such as DSL test cases, `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, expected results, traceability maps, and evidence records. Start with YAML/Markdown front matter or embedded YAML blocks supported by the artifact contracts. DSL parsing must validate `dsl_version`, required fields, conditionally required fields, and allowed enum values. Provider contract parsing must require explicit `provider_family` and `provider_type` for executable contracts and validate supported actions, required references, secret refs, cleanup strategy, evidence outputs, escape-hatch approval metadata when applicable, and unsupported configuration.
 
 Verification:
 
@@ -193,21 +194,22 @@ Verification:
 
 Done when an active v1 approved test can pass CLI `run`, write run and batch evidence, and pass CLI `report --batch-id` with review-ready traceability to RP ID, AC ID, test case ID, batch ID, and run ID.
 
-### T004 - RP/RU Mapping Validator
+### T004 - Agent Product Mapping Translation Contract
 
 Related feature: F004
 Acceptance: AC-004
-Modules: `mapping`, `environment`
+Modules: Agent Skill, generated artifact schemas, `environment`, `provider`
 
-Validate that each owner-authored RU entry declares repo, owner, unit type, version reference, validation boundary, execution mode, deployment requirement, environment reference, adapter or adapter mode, evidence responsibility, dependencies, and adapter/provider contracts when execution is required. Mapping validation must not infer provider ownership from file order when multiple RUs could match.
+Define and validate the boundary where Product/RP/RU mapping is translated into framework-readable artifacts. The Agent Skill reads owner-authored mapping and product context, then emits `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, and `traceability_map.yaml`. Framework core validation checks generated artifacts only and must not infer provider ownership from Product/RP/RU topology, file order, language, or naming.
 
 Verification:
 
 ```bash
-regress check-rp --root <product-repo> --rp-id <rp-id>
+agent product-mapping-translate --root <product-repo> --rp-id <rp-id> --out generated-framework/
+regress validate-artifacts --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/ci_ephemeral.yaml
 ```
 
-Done when missing mapping fields block execution, dependency graph errors are reported, and the report does not infer RP membership.
+Done when incomplete product mapping blocks Agent Skill translation, generated artifact schema errors block framework execution, target dependency graph errors are reported, and the framework report does not infer RP membership or RU technology.
 
 ### T005 - AC Intake and Readiness Classifier
 
@@ -264,12 +266,12 @@ Related features: F004, F007
 Acceptance: AC-004, AC-007, AC-008
 Modules: `environment`
 
-Resolve `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only` execution modes from `rp_ru_mapping.yaml`. Block SIT execution unless deployment and environment readiness evidence exist.
+Resolve `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only` execution modes from generated `run_plan.yaml` and `environment_binding.yaml`. Block SIT execution unless deployment and environment readiness evidence refs exist.
 
 Verification:
 
 ```bash
-regress run --root <product-repo> --rp-id <rp-id> --env sit_deployed
+regress run --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/sit_deployed.yaml
 ```
 
 Done when the command blocks before adapter execution if SIT readiness evidence is missing.
@@ -285,7 +287,7 @@ Resolve execution-focused DSL v1 `targets`, `setup.fixtures`, `execute[].with`, 
 Verification:
 
 ```bash
-regress run --root <product-repo> --rp-id <rp-id> --dry-run
+regress run --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/ci_ephemeral.yaml --dry-run
 ```
 
 Done when supported pilot targets, setup fixtures, execute inputs/outputs, expected results, verify rules, evidence refs, and runtime policy resolve into the execution plan, and unresolved fields fail fast with file path, test case ID, AC ID, section name, field path, provider family when applicable, and owner action.
@@ -313,15 +315,15 @@ Related feature: F007
 Acceptance: AC-007, AC-008
 Modules: `provider`, `schema`
 
-Introduce the provider capability registry and contract validator before adding more provider runtimes. The registry must define supported `provider_family` and `provider_type` combinations, required fields, supported actions, allowed execution modes, runtime support status, evidence outputs, and safety policy. Resolve validated provider contracts from provider defaults, RP-level overrides, and RU-level overrides. Dispatch `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures.<name>.type`, `expected_results.<name>.type`, `verify[].type`, and `evidence.required[]` through the registry-selected runtime. Fail before execution when a contract is missing, ambiguous, unsupported, unsafe, or only available through an unapproved escape hatch.
+Introduce the provider capability registry and contract validator before adding more provider runtimes. The registry must define supported `provider_family` and `provider_type` combinations, required fields, supported actions, allowed execution modes, runtime support status, evidence outputs, and safety policy. Resolve validated provider contracts from provider defaults plus generated suite/run/environment overrides. Dispatch `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures.<name>.type`, `expected_results.<name>.type`, `verify[].type`, and `evidence.required[]` through the registry-selected runtime. Fail before execution when a contract is missing, ambiguous, unsupported, unsafe, or only available through an unapproved escape hatch.
 
 Verification:
 
 ```bash
-regress run --root <product-repo> --rp-id <rp-id> --dry-run
+regress run --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/ci_ephemeral.yaml --dry-run
 ```
 
-Done when provider contract resolution reports provider family, provider type, provider name, runtime support status, source level, action/type, affected RU, test case ID, AC ID, contract path, and owner action for unsupported, missing, ambiguous, unsafe, or unapproved escape-hatch capabilities. Execution dispatch must no longer require adding a new product-specific conditional to `ExecutionEngine`.
+Done when provider contract resolution reports provider family, provider type, provider name, runtime support status, source level, action/type, affected logical target, test case ID, AC ID, contract path, and owner action for unsupported, missing, ambiguous, unsafe, or unapproved escape-hatch capabilities. Execution dispatch must no longer require adding a new product-specific conditional to `ExecutionEngine`.
 
 ### T011 - Fixture Lifecycle Manager
 
@@ -334,7 +336,7 @@ Implement precondition checks, fixture setup and cleanup lifecycle, and postcond
 Verification:
 
 ```bash
-regress run --root <product-repo> --rp-id <rp-id> --env local_fixture
+regress run --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/local_fixture.yaml
 ```
 
 Done when selected pilot fixture providers can prepare and clean their declared state, and setup, cleanup, and cleanup failure state are written to run evidence.
@@ -354,7 +356,7 @@ Current framework verification support is narrower than the pilot target: REST a
 Verification:
 
 ```bash
-regress run --root <product-repo> --rp-id <pilot-rp-id> --env ci_ephemeral
+regress run --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/ci_ephemeral.yaml
 ```
 
 Done when the pilot provider set can execute or validate one approved test per required provider family, preserve provider results and timeout state, and emit actual outputs under the run evidence directory.
@@ -372,7 +374,7 @@ Expected-result or verify types outside selected or implemented provider familie
 Verification:
 
 ```bash
-regress run --root <product-repo> --rp-id <rp-id> --test-case <tc-id>
+regress run --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/ci_ephemeral.yaml --test-case <tc-id>
 ```
 
 Done when selected pilot verify types produce pass/fail results, and failures include expected-result ref or inline rule, expected ref when applicable, actual ref, decision rule, provider family when applicable, diff or mismatch summary, and test case trace.
@@ -383,12 +385,12 @@ Related features: F007, F008
 Acceptance: AC-007, AC-009
 Modules: `evidence`
 
-Write `evidence/runs/<run_id>/run.yaml`, logs, actual outputs, assertion results, observation results, postcondition results, cleanup evidence, and failure details. Evidence must include RP ID, AC ID, test case ID, run ID, RU refs, execution mode, environment ref, parameter case when applicable, resolved dependencies, resolved bindings, provider contracts used, provider family, adapter/provider result, assertion result, cleanup result, and final pass/fail status.
+Write `evidence/runs/<run_id>/run.yaml`, logs, actual outputs, assertion results, observation results, postcondition results, cleanup evidence, and failure details. Evidence must include package trace label when provided, AC ID, test case ID, run ID, logical target refs, execution mode, environment ref, parameter case when applicable, resolved dependencies, resolved bindings, provider contracts used, provider family, adapter/provider result, assertion result, cleanup result, and final pass/fail status.
 
 Verification:
 
 ```bash
-regress run --root <product-repo> --rp-id <rp-id>
+regress run --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/ci_ephemeral.yaml
 ```
 
 Done when every execution path produces durable evidence, including failed and blocked runs.
@@ -399,7 +401,7 @@ Related features: F007, F008
 Acceptance: AC-007, AC-009
 Modules: `cli`, `execution`, `evidence`
 
-Fix execution evidence so one RP regression command can run multiple approved test cases without overwriting evidence. `regress run` must create one batch ID per RP execution and one unique run ID per approved test case. Run evidence remains test-case-level; batch evidence summarizes the RP execution.
+Fix execution evidence so one suite regression command can run multiple approved test cases without overwriting evidence. `regress run` must create one batch ID per suite execution and one unique run ID per approved test case. Run evidence remains test-case-level; batch evidence summarizes the suite execution with optional RP trace labels.
 
 Required evidence layout:
 
@@ -412,7 +414,7 @@ Minimum `batch.yaml` fields:
 
 ```yaml
 batch_id:
-rp_id:
+package_id:
 execution_mode:
 environment_ref:
 started_at:
@@ -428,10 +430,10 @@ runs:
 Verification:
 
 ```bash
-regress run --root <product-repo> --rp-id <rp-id> --env ci_ephemeral
+regress run --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/ci_ephemeral.yaml
 ```
 
-Done when two approved tests in one RP produce two different run directories, no evidence files are overwritten, and CLI output includes the generated `batch_id`.
+Done when two approved tests in one suite produce two different run directories, no evidence files are overwritten, and CLI output includes the generated `batch_id`.
 
 ### T015 - Coverage and Traceability Reporter
 
@@ -450,7 +452,7 @@ Coverage rules:
 Verification:
 
 ```bash
-regress report --root <product-repo> --rp-id <rp-id> --batch-id <batch-id>
+regress report --batch-id <batch-id>
 ```
 
 Done when coverage, traceability, evidence index, failure summary, and release review summary are review-ready for the selected batch. `--run-id` may remain available for debugging one test run, but it must not be used to determine RP release coverage.
@@ -461,7 +463,7 @@ Related features: F001-F008
 Acceptance: AC-010 plus AC-001 through AC-009 as exercised through sample fixtures
 Modules: Maven build, integration tests, sample Product Repo fixture, provider-family fixtures
 
-Add the framework integration verification layer. Configure Maven Failsafe to run `*IT.java` tests during `./mvnw verify`. The integration tests shall use a sample Product Repo fixture, local/mock adapters, local/mock provider-family fixtures, and deterministic data. They shall exercise representative check, dry-run/run, report, provider capability registry validation, provider-family dry-run, unsupported-provider blocking, unapproved escape-hatch blocking, and provider evidence normalization flows without requiring SIT/UAT deployment.
+Add the framework integration verification layer. Configure Maven Failsafe to run `*IT.java` tests during `./mvnw verify`. The integration tests shall use sample generated framework artifacts, local/mock adapters, local/mock provider-family fixtures, and deterministic data. They shall exercise representative validation, dry-run/run, report, provider capability registry validation, provider-family dry-run, unsupported-provider blocking, unapproved escape-hatch blocking, and provider evidence normalization flows without requiring SIT/UAT deployment.
 
 Verification:
 
@@ -485,9 +487,10 @@ Verification:
 ```bash
 regress check-readiness --root <product-repo>
 regress check-rp --root <product-repo> --rp-id <pilot-rp-id>
+agent product-mapping-translate --root <product-repo> --rp-id <pilot-rp-id> --out generated-framework/
 regress generate-tests --root <product-repo> --rp-id <pilot-rp-id> --mode draft
-regress run --root <product-repo> --rp-id <pilot-rp-id> --env ci_ephemeral
-regress report --root <product-repo> --rp-id <pilot-rp-id> --batch-id <batch-id>
+regress run --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/ci_ephemeral.yaml
+regress report --batch-id <batch-id>
 ```
 
 Done when the pilot RP evidence package shows greater than 80% coverage for automatable RP AC or reports explicit approved exclusions.
@@ -544,8 +547,8 @@ Gate 4 - Release evidence ready:
 | Tests are regenerated on every run | Execution reads checked-in DSL tests from `tests/approved/`; generation is separate. |
 | Provider runtime is implemented before the DSL contract is stable | T003A and T003B block provider runtime migration until execution-focused DSL validation, generator output, dry-run reporting, and CLI run/report consumption are verified. |
 | SIT run starts before deployment readiness | Environment resolver blocks `sit_deployed` before adapter execution. |
-| Multi-RU order is ambiguous | Mapping validator requires dependency graph and rejects scalar order-only execution planning. |
-| RP/RU membership is inferred incorrectly | Mapping validator consumes human-authored `rp_ru_mapping.yaml` only. |
+| Product topology order is ambiguous | Agent Skill translation requires generated target dependency graph and rejects scalar order-only execution planning. |
+| RP/RU membership is inferred incorrectly | Framework core consumes generated artifacts only; Agent Skill consumes human-authored `rp_ru_mapping.yaml`. |
 | Expected results become truth without review | Expected-result manager blocks unapproved artifacts. |
 | Evidence cannot support release review | Evidence writer and reporter require RP/AC/test/run traceability. |
 | Multi-test RP execution overwrites evidence | Batch execution creates one batch per RP run and one unique run ID per approved test. |

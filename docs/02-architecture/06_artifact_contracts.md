@@ -2,6 +2,8 @@
 
 These contracts define the minimum artifacts needed to design or implement the M1 Release Package Regression Framework. They are specification contracts, not final runtime API design.
 
+Core boundary: Product/RP/RU mapping is product knowledge consumed by Phase 2 Agent Skills. The framework core consumes generated framework-readable artifacts: DSL tests, suite manifest, run plan, environment binding, provider contracts, expected results, parameter sets, and traceability map.
+
 ## 6.1 Product Repo Layout
 
 Release Package records shall be grouped by RP ID:
@@ -11,6 +13,12 @@ docs/08-release/release-packages/<rp_id>/
   package.yaml
   rp_feature_spec.md
   rp_ru_mapping.yaml
+  generated-framework/
+    suite_manifest.yaml
+    run_plan.yaml
+    environment_bindings/
+    provider_contracts/
+    traceability_map.yaml
   acceptance_criteria.md
   tests/
     draft/
@@ -75,7 +83,9 @@ artifact_paths:
   evidence_index: evidence_index.md
 ```
 
-## 6.4 `rp_ru_mapping.yaml`
+## 6.4 Product Mapping Input and Generated Framework Artifacts
+
+`rp_ru_mapping.yaml` remains a Product Repo artifact, but it is not a framework runtime contract. The Agent Skill reads it with product docs, release manifest, deployment manifest, and SIT topology, then produces framework-readable artifacts.
 
 ```yaml
 rp_id: RP-AR-M1-data-pipeline
@@ -124,9 +134,64 @@ release_units:
       - RP-AR-M1-data-pipeline-AC-001
 ```
 
-The framework consumes this mapping. It must not decide RP membership.
+The framework must not consume this mapping to decide RP membership, RU technology, runner eligibility, or topology. Runtime uses generated artifacts:
 
-`provider_contracts` is the canonical contract container. Executable provider contracts must declare `provider_family` and `provider_type` so the provider capability registry can validate required fields, runtime support status, allowed execution modes, and evidence outputs before execution. Contracts may be supplied at reusable defaults, RP level, or RU level. Resolution order is: framework/provider default, then RP-level override, then RU-level override. The most specific declared contract wins, and unsupported or ambiguous overrides fail before execution. Dispatch uses DSL and mapping fields: `targets.<target_id>.runner` and `execute[].operation` select adapter/provider contracts; `setup.fixtures.<name>.type` selects fixture contracts; `expected_results.<name>.type` selects expected-result readers; `verify[].type` selects verify providers; `evidence.required[]` selects evidence collection requirements.
+```text
+generated-framework/
+  suite_manifest.yaml
+  run_plan.yaml
+  environment_bindings/
+    ci_ephemeral.yaml
+    sit_deployed.yaml
+  provider_contracts/
+    providers.yaml
+  traceability_map.yaml
+```
+
+Minimal `suite_manifest.yaml`:
+
+```yaml
+suite_id: RP-AR-M1-data-pipeline-regression
+tests:
+  - tests/approved/RP-AR-M1-data-pipeline-TC-001.yaml
+coverage_source_ref: acceptance_criteria.md
+traceability_map_ref: traceability_map.yaml
+```
+
+Minimal `run_plan.yaml`:
+
+```yaml
+run_profile: ci_ephemeral
+execution_mode: ci_ephemeral
+target_dependencies:
+  transform_job: []
+runtime:
+  timeout: PT10M
+```
+
+Minimal `environment_binding.yaml`:
+
+```yaml
+environment_id: ci_ephemeral
+targets:
+  transform_job:
+    type: batch_job
+    runner: spring_boot_cli
+    provider_contract_ref: provider_contracts/providers.yaml#adapters.spring_boot_cli
+```
+
+Minimal `traceability_map.yaml`:
+
+```yaml
+package_id: RP-AR-M1-data-pipeline
+source_labels:
+  transform_job:
+    rp_id: RP-AR-M1-data-pipeline
+    ru_id: RU-transform-job
+    version_ref: main
+```
+
+`provider_contracts` is the canonical contract container for runtime. Executable provider contracts must declare `provider_family` and `provider_type` so the provider capability registry can validate required fields, runtime support status, allowed execution modes, and evidence outputs before execution. Contracts may be supplied as reusable defaults or through generated suite/run/environment artifacts. Resolution order is: framework/provider default, then generated suite/run-profile/environment-binding override. Unsupported or ambiguous overrides fail before execution. Dispatch uses DSL and generated artifact fields: `targets.<target_id>.runner` and `execute[].operation` select adapter/provider contracts; `setup.fixtures.<name>.type` selects fixture contracts; `expected_results.<name>.type` selects expected-result readers; `verify[].type` selects verify providers; `evidence.required[]` selects evidence collection requirements.
 
 Current provider contract minimums enforced by the framework verification build:
 
@@ -144,28 +209,29 @@ Current provider contract minimums enforced by the framework verification build:
 
 Examples in this document must use those fields when they describe current runtime-supported provider contracts. Native gRPC, Kafka, NATS, bounded K8s readiness, and bounded VM readiness examples are runtime-supported only within the verification boundaries stated in the architecture and validation plan.
 
-Allowed `execution_mode` values are `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only`.
+Allowed generated `execution_mode` values are `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only`.
 
-Each RU entry must declare dependency semantics with `dependencies`. Use an empty list for independent RUs. A dependency entry must include `ru_id` and `required`, and may include `consumes` to identify the upstream output used by this RU.
+The generated run plan must declare target dependency semantics. Use an empty list for independent targets. A dependency entry must include `target_id` and `required`, and may include `consumes` to identify the upstream output used by this target.
 
 ```yaml
-dependencies:
-  - ru_id: RU-transform-job
-    required: true
-    consumes:
-      - normalized_orders
+target_dependencies:
+  downstream_check:
+    - target_id: transform_job
+      required: true
+      consumes:
+        - normalized_orders
 ```
 
-Execution order is derived from this dependency graph. `dependency_order` may be used only as a display hint or migration aid; it is not sufficient for M1 execution planning.
+Execution order is derived from this generated target dependency graph. Product-side `dependency_order` may be used only as an Agent Skill input; it is not sufficient for framework execution planning.
 
-When `execution_mode` is `sit_deployed`, the mapping must include deployment readiness evidence:
+When `execution_mode` is `sit_deployed`, the generated environment binding or run plan must include deployment readiness evidence refs:
 
 ```yaml
 deployment:
   required: true
   environment: SIT
   deployment_ref: cd://release/RP-AR-M1-data-pipeline/build-123
-  readiness_check: https://sit.example.internal/health
+  readiness_ref: readiness/sit-transform-job.yaml
   deployed_version_ref: build-123
 ```
 
@@ -227,12 +293,12 @@ traceability:
   package_id: RP-AR-M1-data-pipeline
   acceptance_criteria_id: RP-AR-M1-data-pipeline-AC-001
   source: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-001
-source_fingerprint: <fingerprint>
-readiness_gaps:
-  - field_path: release_units[0].repo
-    reason: execution_context_incomplete
-    gap: release_units[0].repo
-    owner_action: Complete RP/RU mapping execution context before executable test generation.
+  source_fingerprint: <fingerprint>
+  readiness_gaps:
+    - field_path: generated-framework/environment_bindings/ci_ephemeral.yaml#targets.transform_job
+      reason: execution_context_incomplete
+      gap: logical target binding is missing
+      owner_action: Run Product Mapping Translation after completing Product/RP/RU context.
 ```
 
 Update proposal shape:
@@ -608,7 +674,7 @@ Rules:
 
 ## 6.9 Adapter and Provider Contract
 
-Each executable adapter or provider must expose a validated contract through `rp_ru_mapping.yaml`, RP-level provider configuration, or reusable defaults. Command execution is one adapter contract shape; HTTP, DB, queue, expected-result reader, verify, fixture, and evidence/observation providers should also be configured through contracts rather than one-off provider code.
+Each executable adapter or provider must expose a validated contract through generated provider contract artifacts, generated environment bindings, or reusable defaults. Command execution is one adapter contract shape; HTTP, DB, queue, expected-result reader, verify, fixture, and evidence/observation providers should also be configured through contracts rather than one-off provider code.
 
 ```yaml
 provider_contracts:
@@ -658,10 +724,10 @@ provider_contracts:
 
 Adapter/provider runtime rules:
 
-- Contract resolution order is provider default, RP-level override, then RU-level override.
+- Contract resolution order is provider default, then generated suite/run-profile/environment-binding override.
 - Executable contracts must declare `provider_family` and `provider_type`; heuristic family inference is diagnostic only and must not silently choose a runtime.
 - Provider capability registry status must be checked before dispatch. Unsupported, ambiguous, unsafe, or unapproved escape-hatch contracts fail before execution.
-- Dispatch uses v1 DSL fields and mapping fields: `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures.<name>.type`, `expected_results.<name>.type`, `verify[].type`, and `evidence.required[]`.
+- Dispatch uses v1 DSL fields and generated artifact fields: `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures.<name>.type`, `expected_results.<name>.type`, `verify[].type`, and `evidence.required[]`.
 - The framework supplies resolved input paths and run workspace paths.
 - Adapters and providers write actual outputs, observation results, and cleanup results under the run evidence directory.
 - Messaging actions that declare `requires_correlation: true` must also declare `correlation_id`, `correlation_id_ref`, or `correlation_key` before publish, request/reply, consume, observe, or cleanup dispatch.
@@ -676,13 +742,13 @@ Adapter/provider runtime rules:
 
 ## 6.10 Execution Evidence
 
-One RP regression execution produces one batch summary and one run evidence directory per approved test case executed in that batch.
+One suite execution produces one batch summary and one run evidence directory per approved test case executed in that batch. Product/RP/RU labels may be copied from `traceability_map.yaml` for reporting, but runtime decisions use generated target IDs and provider contracts.
 
 Batch evidence:
 
 ```yaml
 batch_id: BATCH-20260626-001
-rp_id: RP-AR-M1-data-pipeline
+package_id: RP-AR-M1-data-pipeline
 status: passed
 execution_mode: ci_ephemeral
 environment_ref: ci://pipeline/rp-ar-m1-data-pipeline
@@ -710,7 +776,7 @@ Run evidence:
 ```yaml
 run_id: RUN-20260626-001
 batch_id: BATCH-20260626-001
-rp_id: RP-AR-M1-data-pipeline
+package_id: RP-AR-M1-data-pipeline
 test_case_id: RP-AR-M1-data-pipeline-TC-001
 ac_id: RP-AR-M1-data-pipeline-AC-001
 status: passed
@@ -745,7 +811,7 @@ docs/08-release/release-packages/<rp_id>/evidence/runs/<run_id>/
 
 ## 6.11 Readiness Report
 
-Readiness reports shall include:
+Readiness reports for Product Repo readiness may include product mapping gaps. Runtime readiness reports shall include generated artifact gaps.
 
 ```yaml
 rp_id: RP-AR-M1-data-pipeline
@@ -755,7 +821,8 @@ checks:
   - check_id: RP_ARTIFACTS_PRESENT
     status: failed
     missing:
-      - rp_ru_mapping.yaml
-    owner_action: add human-authored RP/RU mapping
-next_required_step: complete required RP artifacts before generation
+      - generated-framework/run_plan.yaml
+      - generated-framework/environment_bindings/ci_ephemeral.yaml
+    owner_action: run the product mapping Agent Skill after completing Product/RP/RU mapping inputs
+next_required_step: generate framework-readable artifacts before execution
 ```

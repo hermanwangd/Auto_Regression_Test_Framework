@@ -11,7 +11,7 @@ The DSL and 7 AP are validated through these AC rather than as separate, abstrac
 | AC-001 | Definition and Validation / Discovery and Context | Product Repo structure must be ready before DSL artifacts are created or executed. |
 | AC-002 | Definition and Validation / Discovery and Context | RP records must expose the artifact locations where DSL tests, expected results, and evidence live. |
 | AC-003 | Definition and Validation | Owner-authored RP AC remain the source of truth that DSL tests trace to. |
-| AC-004 | Discovery and Context / Planning and Binding | RP/RU mapping defines execution boundary and provider contracts that DSL tests reference logically. |
+| AC-004 | Discovery and Context / Planning and Binding | Agent-generated suite, run, environment, provider, and traceability artifacts define the execution boundary that DSL tests reference logically. |
 | AC-005 | Definition and Validation / Planning and Binding | Agent-created execution-focused DSL drafts are allowed only when AC and execution context readiness are explicit. |
 | AC-006 | Definition and Validation / Oracle and Assertion Engine | DSL `expected_results` and `verify` rules must point to explicit truth sources or deterministic decision rules. |
 | AC-007 | Planning and Binding / Fixture and State Manager / Execution Engine / Oracle and Assertion Engine / Evidence and Reporting | Checked-in DSL tests must execute through the full 7 AP flow and produce durable evidence. |
@@ -22,7 +22,7 @@ The DSL and 7 AP are validated through these AC rather than as separate, abstrac
 Minimum verification rule for DSL/AP clarity:
 
 - Every readiness, generation, dry-run, execution, or evidence report that references DSL behavior shall include `ap`, `field_path` or `contract_path`, `test_case_id` when applicable, `ac_id` when applicable, `reason`, and `owner_action`.
-- DSL validation failures shall identify whether the problem belongs to DSL syntax, execution lifecycle state, traceability, targets, setup fixtures, execute outputs, expected results, verify rules, RP/RU mapping, provider contract, environment readiness, runtime policy, or evidence completeness.
+- DSL validation failures shall identify whether the problem belongs to DSL syntax, execution lifecycle state, traceability, targets, setup fixtures, execute outputs, expected results, verify rules, generated suite/run/environment artifacts, provider contract, environment readiness, runtime policy, or evidence completeness.
 - New execution-focused DSL artifacts shall use `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime` as the always-required core contract before F007 provider runtime execution. `setup` and `expected_results` content is required when the scenario or verify rules need it.
 - M1 execution-focused DSL artifacts shall contain exactly one executable `execute[]` item. Multiple operations shall be represented as multiple approved test cases in the same batch until multi-step orchestration is designed and verified.
 - New execution-focused DSL artifacts may use `parameters.ref` and `parameters.bind_as` when the same reviewed test case must run with multiple named input variants from a checked-in parameter set. Inline `parameters.strategy`, `parameters.cases`, and `${parameters.<name>}` references are legacy-only and unsupported in new DSL artifacts.
@@ -34,7 +34,7 @@ Minimum verification rule for DSL/AP clarity:
 - Every required or conditional DSL field shall map to a primary AP consumer and have a clear reason for being required.
 - A verify rule shall declare the truth source required by its type: captured-output `actual` and `expected`, provider metadata plus `expected`, or target/query/event semantics.
 - Before implementation starts for any DSL, AP, provider runtime, evidence, or report change, the feature/spec, architecture design, artifact contract, AC, implementation plan, and test plan shall describe the same behavior, non-goals, required/conditional/prohibited fields, happy/failure/boundary paths, and verification evidence.
-- Provider implementation settings shall be validated through RP/RU mapping or provider contracts, not embedded directly inside DSL test cases.
+- Provider implementation settings shall be validated through generated provider contracts and environment bindings, not embedded directly inside DSL test cases.
 - Provider contracts shall be validated against a capability registry by explicit `provider_family`, `provider_type`, required fields, supported runtime status, execution mode, and evidence output requirements.
 - External runner use shall require explicit approval metadata and shall be reported as an escape hatch, not as the standard provider extension path.
 - A feature is not implementation-ready when its DSL fields, provider contract paths, expected-result source, verify rule, setup lifecycle, execute outputs, runtime policy, or evidence outputs cannot be explained through the 7 AP flow.
@@ -47,7 +47,7 @@ Acceptance is split by evidence source:
 | Acceptance Scope | Evidence Source | Can Be Accepted Now When |
 |---|---|---|
 | Framework behavior | `./mvnw test`, `./mvnw verify`, sample Product Repo fixtures, and local/mock provider-family cases | The AC behavior is about framework parsing, readiness, blocking, execution, evidence writing, reporting, or verification boundary. |
-| Downstream RP regression capability | `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` against owner-provided RP artifacts | The run uses real RP AC, approved tests, approved truth sources, selected provider contracts, and Product Repo evidence. |
+| Downstream RP regression capability | Agent translation plus generic `regress run --suite-manifest ... --run-plan ... --environment-binding ...` against owner-provided RP artifacts | The run uses real RP AC, approved tests, approved truth sources, generated framework artifacts, selected provider contracts, and Product Repo evidence. |
 | Native heterogeneous pilot support | The selected pilot RP plus native provider implementations where required | Native provider runtime, contract validation, evidence mapping, and provider-specific verification exist for the selected REST/gRPC, Kafka/NATS, DB, K8s/VM, or escape-hatch boundary. |
 
 Passing framework verification is necessary but not sufficient for accepting native Kafka, NATS, gRPC, K8s, VM, or the full selected heterogeneous pilot. Those are accepted only through the downstream RP or native-provider evidence above.
@@ -112,35 +112,41 @@ Given missing behavior, input, output, or pass/fail rules
 When intake is performed
 Then the framework shall not author, rewrite, or invent primary RP behavior or formal RP AC.
 
-## AC-004 RP/RU Mapping Blocks Unsafe Execution
+## AC-004 Generated Execution Artifacts Block Unsafe Execution
 
 ### Happy Path
 
-Given an owner-authored RP/RU mapping
-When the mapping is checked
-Then each RU entry shall declare required execution metadata, dependency semantics, environment reference, and provider contract references.
+Given owner-authored Product/RP/RU mapping has been translated by the Agent Skill
+When the generated framework artifacts are checked
+Then `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, and `traceability_map.yaml` shall declare the selected tests, logical targets, dependency semantics, execution mode, environment references, provider contract references, and opaque product trace labels.
 
-And provider contract references shall identify the adapter, binding, fixture, oracle, assertion, or observation capability that DSL tests may use.
+And provider contract references shall identify the runner, binding, fixture, expected-result reader, verify provider, observation provider, or evidence capability that DSL tests may use.
 
 And each provider contract required for execution shall resolve to one provider capability registry entry with explicit provider family, provider type, required fields, runtime support status, allowed execution mode, and evidence outputs.
 
+And framework checks shall treat RP/RU IDs, implementation language, release manifest, and SIT topology as opaque traceability or Agent Skill input, not as runtime decision rules.
+
 ### Failure Path
 
-Given missing, ambiguous, unsupported, or unsafe mapping data
+Given missing, ambiguous, unsupported, or unsafe generated suite/run/environment/provider data
 When regression execution is requested
 Then execution shall be blocked before adapter/provider execution and the report shall include the blocking field and owner action.
 
-And the report shall state whether the block was caused by RP membership, RU version, execution mode, environment reference, dependency semantics, provider capability registry status, or provider contract configuration.
+And the report shall state whether the block was caused by suite manifest, run profile, logical target dependency, execution mode, environment binding, provider capability registry status, or provider contract configuration.
+
+Given Product/RP/RU mapping is incomplete or inconsistent
+When the Agent Skill translation is requested
+Then the Agent Skill shall report product-side readiness gaps and shall not ask the framework core to infer missing topology.
 
 ### Boundary Path
 
-Given an RP with multiple RUs
+Given a generated run plan with multiple logical targets
 When dependency semantics are checked
-Then execution order shall be derived from declared dependencies, not inferred from file order or naming.
+Then execution order shall be derived from declared target dependencies, not inferred from Product/RP/RU file order, naming, language, or topology.
 
-Given a DSL test target or provider contract could match more than one RU
+Given a DSL test target or provider contract could match more than one logical target or provider contract
 When dry-run resolves provider contracts
-Then execution shall be blocked until the target RU or provider reference is unambiguous.
+Then execution shall be blocked until the target or provider reference is unambiguous.
 
 ## AC-005 Agent Drafting Is Gated by Readiness
 
@@ -248,7 +254,7 @@ Then the two parameter cases shall produce two different run IDs and two differe
 
 ### Happy Path
 
-Given all required test artifacts, mappings, provider contracts, provider capability registry entries, expected results, setup fixtures, execute output mappings, verify rules, runtime policy, and environment readiness are available
+Given all required test artifacts, generated suite/run/environment artifacts, provider contracts, provider capability registry entries, expected results, setup fixtures, execute output mappings, verify rules, runtime policy, and environment readiness are available
 When regression is requested
 Then execution may proceed according to the declared execution mode.
 
@@ -258,7 +264,7 @@ And dry-run shall show that the DSL v1 validation gate passed before provider co
 
 ### Failure Path
 
-Given required test artifacts, mappings, provider contracts, provider capability registry entries, expected results, setup fixtures, execute output mappings, verify rules, runtime policy, deployment evidence, or environment readiness are missing or unsupported
+Given required test artifacts, generated suite/run/environment artifacts, provider contracts, provider capability registry entries, expected results, setup fixtures, execute output mappings, verify rules, runtime policy, deployment evidence, or environment readiness are missing or unsupported
 When regression is requested
 Then execution shall stop before unsafe adapter/provider execution and report the blocking reason with owner action.
 
@@ -266,7 +272,7 @@ And the blocking report shall include the AP name and DSL field or provider cont
 
 And blocked run evidence shall preserve enough normalized DSL runtime context to explain which targets, setup fixtures, execute operations, expected-result refs, verify rules, evidence refs, and runtime policy were resolved before blocking.
 
-And when a selected pilot provider family or provider type is missing, unsupported, ambiguous, or only available as an unapproved escape hatch, the dry-run report shall name the provider family, provider type, capability, affected RU, provider contract path, registry status, and required owner action.
+And when a selected pilot provider family or provider type is missing, unsupported, ambiguous, or only available as an unapproved escape hatch, the dry-run report shall name the provider family, provider type, capability, affected logical target, provider contract path, registry status, and required owner action.
 
 Given a new DSL test case uses multiple executable `execute[]` steps, `call_ru`, `target_ru_id`, `package_inputs`, `oracles`, missing `execute[].outputs`, missing `runtime.timeout`, missing `runtime.retry.max_attempts`, unsupported `verify[].type`, missing structured verify selector, or governance-heavy approval/release fields
 When dry-run or execution is requested
@@ -284,9 +290,9 @@ Then regression shall not start.
 
 Given the selected heterogeneous pilot includes K8s and VM deployment readiness
 When one deployment readiness provider is missing or not configured
-Then only the affected RU path shall be blocked, and independent RU paths may proceed when their dependencies are satisfied.
+Then only the affected logical target path shall be blocked, and independent target paths may proceed when their dependencies are satisfied.
 
-For multi-RU RPs, execution shall respect declared dependency semantics and stop downstream execution when a required upstream validation fails.
+For multi-target run plans, execution shall respect declared dependency semantics and stop downstream execution when a required upstream target validation fails.
 
 Given an external runner provider contract without approval metadata, bounded timeout, declared inputs/outputs, or evidence map
 When dry-run is requested
@@ -351,8 +357,8 @@ When `./mvnw verify` is run
 Then the result shall verify framework behavior against a sample Product Repo fixture without requiring SIT/UAT deployment.
 
 Given a downstream Product Release Package needs regression validation
-When `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` is run
-Then the framework shall produce RP batch/run evidence under that Product Repo.
+When product-aware tooling generates framework-readable artifacts and invokes the generic runner
+Then the framework shall produce batch/run evidence that can be packaged under that Product Repo with RP trace labels.
 
 ### Failure Path
 
@@ -371,5 +377,5 @@ When release coverage is calculated for a real Product/RP
 Then fixture evidence shall not count toward the downstream Product/RP release denominator or numerator.
 
 Given SIT/UAT validation is required for an RP
-When no deployed RU versions or environment readiness evidence exist
+When no deployed target versions or environment readiness evidence exist
 Then framework Maven tests may still pass, but RP Regression Execution in `sit_deployed` mode shall not start.

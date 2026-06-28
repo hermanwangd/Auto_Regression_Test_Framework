@@ -1,16 +1,16 @@
 # 07. Framework Verification Test Plan
 
-This plan defines how to verify the regression test framework itself. It covers unit/component verification and sample Product/RP/RU integration verification.
+This plan defines how to verify the regression test framework itself. It covers unit/component verification and sample generated-artifact integration verification.
 
-It does not define downstream product-feature release AC and does not replace a real RP release regression plan. Real Product/RP regression evidence is produced later by `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` against owner-provided RP artifacts.
+It does not define downstream product-feature release AC and does not replace a real RP release regression plan. Real Product/RP regression evidence is produced later after owner-provided RP artifacts are translated into framework-readable suite, run, environment, provider, and traceability artifacts.
 
 ## 7.1 Verification Objective
 
 Framework verification shall prove that the framework can:
 
 - Run fast unit/component tests for parsers, validators, resolvers, CLI behavior, evidence writers, and reporting logic.
-- Run an end-to-end framework integration flow against a sample Product Repo fixture.
-- Use sample Product/RP/RU artifacts to validate RP discovery, RP/RU mapping, checked-in execution-focused DSL test discovery, adapter execution, verification, batch evidence, run evidence, and coverage report generation.
+- Run an end-to-end framework integration flow against sample generated framework artifacts.
+- Use sample DSL tests, suite manifest, run plan, environment binding, provider contracts, expected results, and traceability map to validate generic discovery, binding, adapter execution, verification, batch evidence, run evidence, and coverage report generation.
 - Verify provider capability registry and provider-family contract behavior required by the selected heterogeneous pilot without treating mock or sample provider evidence as downstream RP release evidence.
 - Keep sample fixture evidence clearly separate from downstream Product/RP release evidence.
 
@@ -19,7 +19,7 @@ Framework verification shall prove that the framework can:
 | Level | Subject Under Test | Command | Fixture Source | Evidence |
 |---|---|---|---|---|
 | Unit/component framework verification | Framework modules and CLI behavior | `./mvnw test` | Temp directories and small local test data | Maven Surefire reports. |
-| Sample Product/RP/RU integration verification | Framework end-to-end behavior | `./mvnw verify` | `src/test/resources/framework-verification/sample-product-repo/` | Maven Failsafe reports and generated temporary sample evidence. |
+| Sample generated-artifact integration verification | Framework end-to-end behavior | `./mvnw verify` | `src/test/resources/framework-verification/sample-product-repo/` generated framework artifacts | Maven Failsafe reports and generated temporary sample evidence. |
 | Provider-family contract verification | Provider capability registry validation, provider contract parsing, dry-run dispatch, unsupported capability blocking, unapproved escape-hatch blocking, and normalized evidence shape | `./mvnw verify` | Local/mock provider fixtures plus injectable native messaging transport coverage for request/response, Kafka/NATS publish, NATS request/reply, consume/observe, cleanup, DB fixture, deployment readiness, file/batch, and escape-hatch contract validation when declared | Maven Failsafe reports and generated temporary provider evidence. |
 | Packaged CLI smoke verification | Spring Boot jar CLI entrypoint | `java -jar target/spec-driven-auto-regression-0.1.0-SNAPSHOT.jar check-readiness --root .` | Current repository Product Repo structure | CLI output and exit code. |
 
@@ -33,8 +33,8 @@ Unit/component tests live in `src/test/java` and use the `*Test` suffix so Maven
 They shall cover:
 
 - Product Repo bootstrap and readiness checks.
-- RP skeleton and artifact completeness checks.
-- RP/RU mapping parser, dependency graph, and missing-field handling.
+- RP skeleton and product artifact completeness checks for product-side readiness.
+- Generated suite manifest, run plan, environment binding, provider contract, target dependency, and missing-field handling.
 - DSL schema validation for `traceability`, `targets`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`, plus execution lifecycle status checks and unsupported capability blocking.
 - Expected-result approval gating.
 - Environment resolver behavior for `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only`.
@@ -43,13 +43,13 @@ They shall cover:
 - Unsupported provider families, missing contracts, missing cleanup policy, and missing readiness evidence fail before adapter/provider execution.
 - Packaged CLI delegation behavior through `RegressionApplication.runCli(...)`.
 
-## 7.4 Sample Product/RP/RU Integration Verification
+## 7.4 Sample Generated-Artifact Integration Verification
 
-The sample integration fixture is a miniature Product Repo used only to verify the framework. It must include:
+The sample integration fixture is a miniature Product Repo plus generated framework artifacts used only to verify the framework. The framework integration path must consume generated artifacts, not infer Product/RP/RU topology. It must include:
 
 - A sample Product Repo root marker that says fixture evidence is not downstream Product/RP release evidence.
-- One sample RP, currently `RP-FWK-SAMPLE`.
-- One sample RU mapping, currently `RU-framework-sample-adapter`.
+- One sample RP label, currently `RP-FWK-SAMPLE`, carried only through traceability metadata.
+- Generated `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, and `traceability_map.yaml`.
 - One checked-in approved DSL test case.
 - One approved expected-result artifact.
 - One provider contract using a bounded local shell adapter.
@@ -60,9 +60,9 @@ Provider-family verification cases use a separate local/mock provider fixture se
 The integration flow shall:
 
 ```text
-copy sample Product Repo fixture to temp directory
--> check-rp --strict-schema
--> run --rp-id RP-FWK-SAMPLE --env ci_ephemeral
+copy sample Product Repo fixture with generated framework artifacts to temp directory
+-> validate-artifacts --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/ci_ephemeral.yaml
+-> run --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/ci_ephemeral.yaml
 -> report --batch-id BATCH-001
 -> assert batch evidence, run evidence, and coverage evidence
 ```
@@ -71,8 +71,8 @@ The integration suite shall expose AC traceability through `FrameworkVerificatio
 
 | Integration Case | AC Coverage | Scenario | Required Assertions |
 |---|---|---|---|
-| FWK-IT-001 | AC-002, AC-004, AC-007, AC-009, AC-010 | Happy path `check-rp`, `run`, and `report` complete without SIT/UAT deployment | Complete RP artifacts, valid RP/RU mapping, durable batch/run evidence, 100% sample coverage, and sample evidence boundary. |
-| FWK-IT-002 | AC-002, AC-004, AC-010 | Artifact readiness failure | Package schema and RP/RU mapping gaps are reported before execution evidence is written. |
+| FWK-IT-001 | AC-002, AC-004, AC-007, AC-009, AC-010 | Happy path generated artifact validation, `run`, and `report` complete without SIT/UAT deployment | Complete generated artifacts, durable batch/run evidence, 100% sample coverage, and sample evidence boundary. |
+| FWK-IT-002 | AC-002, AC-004, AC-010 | Artifact readiness failure | Missing generated suite/run/environment artifacts or provider contracts are reported before execution evidence is written. |
 | FWK-IT-003 | AC-004, AC-008, AC-010 | Provider contract failure | Missing adapter command blocks before adapter execution and writes blocked run evidence. |
 | FWK-IT-004 | AC-006, AC-008, AC-010 | Truth-source approval failure | Unapproved expected result blocks before adapter execution or assertion evaluation. |
 | FWK-IT-005 | AC-007, AC-008, AC-010 | Test inventory boundary | Missing execution-eligible checked-in DSL test case blocks before adapter execution. |
@@ -80,14 +80,14 @@ The integration suite shall expose AC traceability through `FrameworkVerificatio
 | FWK-IT-007 | AC-001, AC-010 | Product Repo bootstrap and readiness | Bootstrap creates lifecycle folders, readiness changes from fail to pass, rerun is idempotent, and no RP scope is invented. |
 | FWK-IT-008 | AC-003, AC-010 | AC readiness intake | Owner-authored RP AC remains unchanged while readiness output preserves stable AC ID, classification, and owner-authored truth flag. |
 | FWK-IT-009 | AC-005, AC-010 | Test drafting readiness gates | Ready AC produces executable draft, existing approved tests produce update proposals, ambiguous AC blocks, and incomplete context produces skeleton only. |
-| FWK-IT-010 | AC-004, AC-007, AC-008 | Provider-family contract dry-run | Local/mock provider contracts for selected provider families resolve through the capability registry with provider family, provider type, registry status, and contract path, while missing, ambiguous, unsupported, or unapproved escape-hatch provider contracts block with affected RU and owner action. |
+| FWK-IT-010 | AC-004, AC-007, AC-008 | Provider-family contract dry-run | Local/mock provider contracts for selected provider families resolve through the capability registry with provider family, provider type, registry status, and contract path, while missing, ambiguous, unsupported, or unapproved escape-hatch provider contracts block with affected logical target and owner action. |
 | FWK-IT-011 | AC-007, AC-008, AC-009 | Provider-family evidence normalization | Mock provider results are normalized into run evidence with provider family, provider type, registry status, provider contract path, adapter/provider result, assertion result, cleanup result, and final status. |
 
 Generated sample evidence must stay in the test temp directory. It shall not be committed and shall not count as real Product/RP release evidence.
 
 ## 7.5 Provider-Family Contract Verification
 
-Provider-family verification proves that the framework can validate provider capability registry entries, plan, dispatch, block, and normalize evidence for heterogeneous RP execution boundaries. It does not prove a real Product/RP release.
+Provider-family verification proves that the framework can validate provider capability registry entries, plan, dispatch, block, and normalize evidence for heterogeneous logical execution boundaries. It does not prove a real Product/RP release.
 
 The contract verification suite shall cover:
 
@@ -96,11 +96,11 @@ The contract verification suite shall cover:
 | Request/response | Resolve a REST or gRPC-style action contract, payload binding, response mapping, timeout, and assertion reference | Missing endpoint/service ref, unsupported action, or missing payload binding blocks before invocation | Provider family, action, request binding ref, response evidence ref, assertion result |
 | Messaging | Resolve publish/request_reply/consume/observe/cleanup contract with topic or subject ref, payload binding for publish/request, correlation id when required, timeout, observation rule, cleanup strategy, and max cleanup count | Missing topic/subject ref, missing publish/request payload binding, missing cleanup strategy/count, missing correlation id where required, unsupported mode, or unsupported serialization blocks before dispatch | Provider family, topic/subject ref, action mode, correlation id, observed message/event ref, request/reply output ref, cleanup result |
 | DB fixture | Resolve seed/query/cleanup contract with connection ref, isolation key, and cleanup strategy | Mutating setup without cleanup, missing connection ref, or unsafe query ref blocks before setup | Seed ref, query result ref, cleanup result, postcondition evidence |
-| Deployment readiness | Resolve K8s and VM readiness contracts, version/deployment refs, readiness probes, bounded K8s direct API readiness, bounded K8s pod log capture, and bounded VM SSH/WinRM command probes | Missing deployment ref, API server ref, pod selector/log tail bound, VM command ref, readiness probe, environment ref, or provider capability blocks affected RU before execution | Deployment provider family, readiness status, deployment/version ref, affected RU, captured pod log ref or VM command output ref when configured |
+| Deployment readiness | Resolve K8s and VM readiness contracts, version/deployment refs, readiness probes, bounded K8s direct API readiness, bounded K8s pod log capture, and bounded VM SSH/WinRM command probes | Missing deployment ref, API server ref, pod selector/log tail bound, VM command ref, readiness probe, environment ref, or provider capability blocks affected logical target before execution | Deployment provider family, readiness status, deployment/version ref, affected target, captured pod log ref or VM command output ref when configured |
 | File/batch | Resolve command, working directory, input refs, output refs, logs, success codes, and timeout | Missing command, missing output ref, timeout, or non-success exit code produces failed run evidence | stdout/stderr refs, actual output ref, exit code, timeout flag |
 | External runner escape hatch | Resolve only when explicit approval metadata, reason, owner, command/container ref, inputs, outputs, timeout, and evidence map are present | Missing approval, unbounded timeout, unsafe output path, unsafe evidence-map path, missing evidence map, or available built-in provider alternative blocks before runner invocation; missing mapped evidence artifact fails the run after invocation | Escape-hatch status, approval ref, runner command/container ref, exit/timeout result, mapped evidence artifacts, and mapped-artifact existence status |
 
-Every provider-family case must also verify dry-run output. Dry-run must name provider family, provider type, registry status, capability, affected RU, provider contract path, AP gate, and owner action for missing, ambiguous, unsupported, or unapproved escape-hatch capabilities.
+Every provider-family case must also verify dry-run output. Dry-run must name provider family, provider type, registry status, capability, affected logical target, provider contract path, AP gate, and owner action for missing, ambiguous, unsupported, or unapproved escape-hatch capabilities.
 
 ## 7.5.1 Execution-Focused DSL v1 Verification
 
@@ -165,12 +165,12 @@ Legacy terms may appear only in migration, compatibility, or prohibited-field co
 | Test ID | AC Coverage | Scenario | Command Level | Priority | Automation |
 |---|---|---|---|---|---|
 | FWK-001 | AC-001 through AC-010 | Unit/component suite validates parsers, readiness checks, CLI behavior, resolvers, execution services, evidence writers, and reporters | `./mvnw test` | P1 | Auto |
-| FWK-002 | AC-001 through AC-010 | Sample Product/RP/RU fixture runs AC-linked framework integration cases through CLI commands without SIT/UAT deployment | `./mvnw verify` | P1 | Auto |
+| FWK-002 | AC-001 through AC-010 | Sample generated artifacts run AC-linked framework integration cases through CLI commands without SIT/UAT deployment | `./mvnw verify` | P1 | Auto |
 | FWK-003 | AC-010 | Sample fixture evidence is marked as framework verification evidence and is not counted as downstream RP release evidence | `./mvnw verify` | P1 | Auto |
 | FWK-004 | AC-002, AC-003, AC-004, AC-005, AC-006, AC-007, AC-008, AC-009, AC-010 | Artifact readiness gaps, provider contract gaps, AC readiness gaps, drafting gates, missing expected results, missing execution-eligible DSL tests, or failed verify rules block or fail with actionable evidence | `./mvnw verify` | P1 | Auto |
 | FWK-005 | AC-010 | Packaged jar delegates CLI arguments to the framework command layer and returns meaningful exit codes | `./mvnw test` plus packaged CLI smoke | P1 | Auto / CLI |
 | FWK-006 | AC-004, AC-007, AC-008, AC-009, AC-010 | Provider-family contract verification covers request/response, messaging, DB fixture, deployment readiness, file/batch provider behavior, and escape-hatch contract gating with local/mock fixtures | `./mvnw verify` | P1 | Auto |
-| FWK-007 | AC-007, AC-008, AC-010 | Provider-family negative cases block before unsafe execution and report provider family, provider type, registry status, escape-hatch approval status when applicable, capability, affected RU, provider contract path, AP gate, and owner action | `./mvnw verify` | P1 | Auto |
+| FWK-007 | AC-007, AC-008, AC-010 | Provider-family negative cases block before unsafe execution and report provider family, provider type, registry status, escape-hatch approval status when applicable, capability, affected logical target, provider contract path, AP gate, and owner action | `./mvnw verify` | P1 | Auto |
 | FWK-008 | AC-005, AC-006, AC-007, AC-008, AC-009 | Execution-focused DSL v1 parser/generator/translator verifies `targets/setup/execute/expected_results/verify/evidence/runtime`, blocks invalid DSL before provider dispatch, rejects legacy-only or governance-heavy DSL fields, and proves one v1 approved test can pass CLI `run` plus review-ready `report --batch-id` | `./mvnw test` | P1 | Auto |
 | FWK-009 | AC-005, AC-006, AC-007, AC-008, AC-009, AC-010 | Pre-implementation documentation review confirms feature/spec, architecture, artifact contract, AC, implementation plan, and test plan agree before a DSL/runtime slice starts | Docs review plus lightweight `rg` checks | P1 | Manual / Agent-assisted |
 
@@ -189,11 +189,11 @@ This snapshot records what the current framework verification suite is intended 
 | DB fixture provider | `RegressionCommandTest`, `ExecutionEngineTest`, and `OracleReadinessServiceTest` DB fixture/assertion cases | Supported for JDBC setup/query/cleanup with `sql_ref`, cleanup strategy, isolation key, query-result oracle readiness, DB row count assertions, and evidence | Richer DB-row match modes remain future provider/assertion work only if selected by the pilot. |
 | Deployment readiness provider | `RegressionCommandTest`, `ProviderCapabilityRegistryTest`, `DeploymentReadinessProviderTest`, and `ExecutionEngineTest` readiness cases | Supported for local/mock readiness and native K8s/VM bounded probes with deployment/version refs, kube API or VM target refs, timeout, output ref, bounded K8s direct API deployment availability, bounded K8s pod log capture, VM SSH/WinRM command probes, dispatch, and readiness evidence | Real pilot K8s/VM validation remains target provider work. |
 | External runner escape hatch | `RegressionCommandTest`, `FrameworkVerificationIT` escape-hatch cases | Supported for approved command-runner contracts, safe outputs/evidence map, built-in alternative blocking, and mapped-artifact checks | Broader runner schema/content checks are future hardening. |
-| Heterogeneous pilot validation | Not covered by framework Maven tests | Pending owner-provided RP | Requires real `package.yaml`, `rp_feature_spec.md`, `acceptance_criteria.md`, `rp_ru_mapping.yaml`, approved tests, approved truth sources, and selected provider contracts. |
+| Heterogeneous pilot validation | Not covered by framework Maven tests | Pending owner-provided RP plus generated artifacts | Requires real `package.yaml`, `rp_feature_spec.md`, `acceptance_criteria.md`, `rp_ru_mapping.yaml`, approved tests, approved truth sources, generated suite/run/environment artifacts, and selected provider contracts. |
 
 ## 7.7 Selected Heterogeneous Pilot Validation Gate
 
-After owner-provided pilot RP artifacts exist, the downstream RP release pipeline shall validate the real heterogeneous RP using its real Product Repo artifacts and selected provider contracts.
+After owner-provided pilot RP artifacts exist, the downstream RP release pipeline shall run Agent Skill translation, then validate the real heterogeneous RP using generated framework artifacts and selected provider contracts.
 
 The selected pilot validation must prove:
 
@@ -205,7 +205,7 @@ The selected pilot validation must prove:
 - Batch/run evidence includes provider family, provider type, registry status, provider contract path, resolved bindings, adapter/provider result, assertion result, cleanup result, and final pass/fail status.
 - Dry-run blocks missing, ambiguous, unsupported, or unapproved escape-hatch selected provider families/types before unsafe execution.
 
-This gate is not satisfied by the sample framework fixture. It requires owner-authored `package.yaml`, `rp_feature_spec.md`, `acceptance_criteria.md`, `rp_ru_mapping.yaml`, approved DSL tests, approved truth sources, selected provider contracts, and environment readiness records for the pilot RP.
+This gate is not satisfied by the sample framework fixture. It requires owner-authored `package.yaml`, `rp_feature_spec.md`, `acceptance_criteria.md`, `rp_ru_mapping.yaml`, approved DSL tests, approved truth sources, generated suite/run/environment artifacts, selected provider contracts, and environment readiness records for the pilot RP.
 
 ## 7.8 Downstream RP Regression Boundary
 
@@ -214,21 +214,22 @@ Downstream Product/RP regression is a framework capability, but it is not the pr
 When owner-provided Product/RP artifacts exist, release package regression shall be verified by a separate RP validation flow:
 
 ```bash
-regress run --root <product-repo> --rp-id <rp-id> --env <mode>
-regress report --root <product-repo> --rp-id <rp-id> --batch-id <batch-id>
+agent product-mapping-translate --root <product-repo> --rp-id <rp-id> --out generated-framework/
+regress run --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/<mode>.yaml
+regress report --batch-id <batch-id>
 ```
 
-That flow produces real RP batch/run evidence under the Product Repo. It may use `local_fixture`, `ci_ephemeral`, `sit_deployed`, or `evidence_only` depending on the RP validation boundary. SIT/UAT runs require deployed RU versions and environment readiness evidence.
+That flow produces real RP batch/run evidence under the Product Repo. It may use `local_fixture`, `ci_ephemeral`, `sit_deployed`, or `evidence_only` depending on the generated run profile. SIT/UAT runs require deployed target versions and environment readiness evidence.
 
 ## 7.9 CI/CD Execution Policy
 
 | Pipeline Stage | Required Command | Purpose |
 |---|---|---|
 | Pull request | `./mvnw test` | Fast framework unit/component verification. |
-| Main or release branch | `./mvnw verify` | Framework integration verification with sample Product/RP/RU fixture. |
+| Main or release branch | `./mvnw verify` | Framework integration verification with sample generated framework artifacts. |
 | Provider-family contract verification | `./mvnw verify` | Local/mock provider-family proof for heterogeneous execution boundaries without real downstream RP release evidence. |
 | Packaged CLI smoke | `java -jar target/spec-driven-auto-regression-0.1.0-SNAPSHOT.jar check-readiness --root .` | Verify packaged command delegation. |
-| RP release pipeline | `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` | Downstream RP regression execution, outside this framework verification plan. |
+| RP release pipeline | Agent translation plus `regress run --suite-manifest ... --run-plan ... --environment-binding ...` | Downstream RP regression execution, outside this framework verification plan. |
 
 All commands should be bounded and avoid memory-heavy execution. Local and CI runs should stay under the repository guidance of 8 GB RAM.
 

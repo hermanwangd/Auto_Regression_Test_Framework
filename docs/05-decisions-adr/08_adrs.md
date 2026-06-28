@@ -94,10 +94,10 @@ The phrase "test execution" can mean two different things in this repository: te
 
 Use two explicit execution lines:
 
-- Framework Verification validates this framework product. `./mvnw test` runs unit and component tests through Maven Surefire. `./mvnw verify` runs framework integration tests through Maven Failsafe against a sample Product Repo fixture and local/mock adapters.
-- RP Regression Execution validates a downstream Product Release Package. It is invoked through the framework CLI, for example `regress run --root <product-repo> --rp-id <rp-id> --env <mode>`.
+- Framework Verification validates this framework product. `./mvnw test` runs unit and component tests through Maven Surefire. `./mvnw verify` runs framework integration tests through Maven Failsafe against sample generated artifacts and local/mock adapters.
+- RP Regression Execution validates a downstream Product Release Package. Product-aware tooling first generates framework-readable artifacts, then invokes the generic runner, for example `regress run --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/<mode>.yaml`.
 
-Framework Verification must not depend on SIT/UAT deployment and must not claim downstream RP release evidence. RP Regression Execution may run in `local_fixture`, `ci_ephemeral`, `sit_deployed`, or `evidence_only` mode depending on the RP validation boundary. SIT/UAT regression is triggered by a release package pipeline after required RU versions are deployed; it is not part of Maven unit/component testing for this framework.
+Framework Verification must not depend on SIT/UAT deployment and must not claim downstream RP release evidence. RP Regression Execution may run in `local_fixture`, `ci_ephemeral`, `sit_deployed`, or `evidence_only` mode depending on the generated run profile. SIT/UAT regression is triggered by a release package pipeline after required product targets are deployed; it is not part of Maven unit/component testing for this framework.
 
 The Test Plan belongs under validation evidence and defines verification strategy. The Implementation Plan remains under planning and defines the work required to implement or extend that strategy.
 
@@ -119,13 +119,13 @@ Different Products, Release Packages, and Release Units may use different implem
 
 ### Decision
 
-Use config-driven provider contracts as the heterogeneous execution boundary. The DSL remains package-neutral and references logical capabilities such as inputs, actions, fixtures, oracles, assertions, observations, and evidence. `rp_ru_mapping.yaml` declares RU membership, execution mode, deployment requirement, dependencies, and provider contracts. A provider capability registry validates `provider_family`, `provider_type`, required fields, supported runtime status, execution modes, safety policy, and evidence outputs before execution. Reusable built-in provider families implement concrete behavior for request/response APIs, messaging, DB fixtures, deployment readiness, and file/batch execution.
+Use config-driven provider contracts as the heterogeneous execution boundary. The DSL remains package-neutral and references logical capabilities such as inputs, actions, fixtures, expected results, verify rules, observations, and evidence. Product-owned `rp_ru_mapping.yaml` declares RU membership, execution mode, deployment requirement, dependencies, and provider intent for Agent Skill translation. The framework runtime consumes generated `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, and `traceability_map.yaml`. A provider capability registry validates `provider_family`, `provider_type`, required fields, supported runtime status, execution modes, safety policy, and evidence outputs before execution. Reusable built-in provider families implement concrete behavior for request/response APIs, messaging, DB fixtures, deployment readiness, and file/batch execution.
 
 The selected M1 pilot shall exercise one heterogeneous RP that includes REST and/or gRPC, Kafka and/or NATS, DB fixture setup/cleanup, and K8s/VM readiness as needed by the RP boundary. External runner is not a required pilot capability. It is an approved escape hatch only when a legacy or specialized boundary cannot yet be represented by a reusable built-in provider contract.
 
 ### Consequences
 
-Provider contract validation becomes part of the execution gate. New RP-specific needs should be handled by provider configuration first, reusable provider code second, and DSL changes only when a recurring cross-RP concept cannot be represented by the existing DSL. External runner use must be explicit, bounded, owner-approved, and evidenced; it must not become the standard way for each RP to develop its own test tool or script.
+Provider contract validation becomes part of the execution gate. New RP-specific needs should be handled by Agent Skill translation and provider configuration first, reusable provider code second, and DSL changes only when a recurring cross-RP concept cannot be represented by the existing DSL. External runner use must be explicit, bounded, owner-approved, and evidenced; it must not become the standard way for each RP to develop its own test tool or script.
 
 ---
 
@@ -158,3 +158,29 @@ Inline `parameters.strategy`, inline `parameters.cases`, and `${parameters.<name
 ### Consequences
 
 Parameter data becomes reusable and separately reviewable, while DSL test cases stay focused on execution semantics. Binding, validation, evidence, report, and generator work must migrate from inline case expansion to parameter set resolution. Existing inline explicit-case tests require either migration or an explicit compatibility path during transition.
+
+---
+
+## ADR-008 Keep Framework Core Product-Topology Agnostic
+
+### Status
+
+Accepted
+
+### Context
+
+Earlier design drafts allowed the framework to consume `rp_ru_mapping.yaml` directly for RP/RU membership, RU dependency order, provider ownership, execution mode, and environment topology. That would make the runtime understand product-specific release topology and would force new framework logic whenever a Product, Release Package, Release Unit, language, deployment model, or SIT topology changes.
+
+### Decision
+
+Separate responsibilities into three layers:
+
+- Product/RP/RU docs own product knowledge: product specs, RP feature specs, RP AC, RP/RU mapping, release manifest, deployment manifest, and SIT topology.
+- Phase 2 Agent Skills interpret product knowledge and generate framework-readable artifacts: `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, DSL tests, expected results, and `traceability_map.yaml`.
+- Generic Test Framework core validates and executes only framework-readable artifacts. It may preserve RP/RU labels as opaque traceability metadata, but it must not decide RP membership, RU technology, runner eligibility, release manifest semantics, or SIT topology.
+
+Framework validation covers generic contracts: DSL syntax, target IDs, runner/provider existence, fixture refs, expected-result refs, verify rules, evidence refs, timeout/retry, secret-safety rules, and generated artifact consistency. Agent Skill validation covers product mapping: which RUs are in an RP, whether a RU can use Maven Failsafe or another runner, which topology targets exist in SIT, and whether generated targets match release context.
+
+### Consequences
+
+F004 is a Product Mapping Translation feature, not a framework-core RP/RU mapping validator. AC-004 validates generated framework artifacts and product-side translation gaps separately. Runtime implementation must move from RP/RU-aware discovery to suite/run/environment artifact discovery. Existing RP-oriented CLI commands may remain as product-aware wrappers only if they generate or locate the framework-readable artifacts before invoking the generic runner.

@@ -111,16 +111,19 @@ Each RP should define these minimum artifacts in the Product Repo:
 
 - `package.yaml`: RP identity, scope, owner, lifecycle status, target release, and package type.
 - `rp_feature_spec.md`: RP feature behavior, source context, and package-level behavior boundaries.
-- `rp_ru_mapping.yaml`: release units, repo references, owners, versions, dependency order, adapters, and evidence responsibilities.
+- `rp_ru_mapping.yaml`: product-owned release unit mapping used by Agent Skills, not by the framework core directly.
 - `acceptance_criteria.md`: RP-level AC used for generation, regression coverage, and release readiness.
 - `tests/`: versioned RP regression test cases, including draft, approved, and retired test artifacts.
 - `expected-results/`: reviewable expected-result artifacts used by approved tests.
+- `generated-framework/`: Agent-generated framework-readable artifacts such as `suite_manifest.yaml`, `run_plan.yaml`, `environment_bindings/*.yaml`, provider contracts, and `traceability_map.yaml`.
 - `traceability.md`: mapping from product spec context to RP AC, generated tests, evidence, and review state.
 - `evidence_index.md`: evidence package manifest for coverage reports, execution reports, logs, diffs, waivers, and approvals.
 
-## 1.8 RP/RU Mapping Contract
+## 1.8 Product Mapping and Framework Artifact Boundary
 
-Each RP/RU mapping entry should include:
+`rp_ru_mapping.yaml` is product knowledge. Product owners, SA, tech leads, or product developers use it to declare which RUs belong to an RP, which versions matter, and which validation boundary is intended. The generic framework core must not interpret product topology or decide which RU should use which runner.
+
+Each RP/RU mapping entry should include enough information for the Agent Skill to generate framework-readable artifacts:
 
 | Field | Purpose |
 |---|---|
@@ -130,17 +133,25 @@ Each RP/RU mapping entry should include:
 | `unit_type` | Service, job, data pipeline, schema, config, script, UI module, or other package unit type |
 | `owner` | Developer or team accountable for implementation evidence |
 | `version_ref` | Branch, tag, commit, build artifact, or version used by the RP |
-| `validation_boundary` | What the framework should execute or validate for this RU |
+| `validation_boundary` | What the Agent Skill should translate into logical framework targets and tests |
 | `execution_mode` | Local fixture, CI ephemeral, SIT deployed, or evidence-only validation mode |
 | `environment_ref` | Target environment, CI job, SIT namespace, endpoint set, or local fixture reference |
 | `deployment_required` | Whether this RU must be deployed before RP regression execution |
-| `adapter` | Release package adapter or adapter mode used for execution |
+| `adapter` | Candidate runner or provider mode for Agent Skill translation |
 | `evidence_responsibility` | Evidence this RU must produce or contribute |
-| `dependency_order` | Ordering constraints relative to other RUs |
+| `dependency_order` | Product topology hint; generated `run_plan.yaml` must express executable target dependencies |
+
+The Agent Skill translates product mapping into:
+
+- `suite_manifest.yaml`: selected tests, trace labels, and coverage source refs.
+- `run_plan.yaml`: logical target dependency graph, run profile, and selected execution mode.
+- `environment_binding.yaml`: logical targets bound to runner/provider contracts for one environment.
+- `provider_contracts/*.yaml`: reusable runner, fixture, verify, and evidence provider contracts.
+- `traceability_map.yaml`: opaque product/RP/RU/source labels used for reporting, not runtime branching.
 
 ## 1.8.1 Execution Environment Policy
 
-RP regression execution may run in different modes. The framework shall not assume every RP requires SIT deployment, and it shall not assume local-only execution is enough for every RP.
+RP regression execution may run in different modes. Product topology determines which mode is appropriate, but the Agent Skill records the selected mode in framework-readable run profiles and environment bindings. The framework shall not infer deployment need from RP/RU names or product topology.
 
 | Execution Mode | Use When | Deployment Ownership |
 |---|---|---|
@@ -149,15 +160,15 @@ RP regression execution may run in different modes. The framework shall not assu
 | `sit_deployed` | RP behavior depends on deployed RU services, jobs, schemas, configuration, or endpoints in SIT | CD or environment owner deploys RUs before regression |
 | `evidence_only` | The framework cannot execute the RU directly, but approved build, unit, component, or manual evidence can support RP AC | RU owner provides mapped evidence |
 
-For RPs that include multiple RUs, the RP/RU mapping must declare dependency order, execution mode, deployment requirement, environment reference, validation boundary, and evidence responsibility for each RU.
+For RPs that include multiple RUs, the RP/RU mapping must declare enough topology for the Agent Skill to generate explicit target dependencies, execution mode, deployment readiness refs, environment binding, and evidence responsibilities.
 
 CI/CD boundary:
 
 - CI may run readiness checks, artifact validation, agent generation, local fixture tests, and CI-ephemeral integration tests.
 - CD may deploy RU versions to SIT or another target environment.
-- SIT regression may run only after required RU versions and environment readiness are confirmed.
+- SIT regression may run only after the generated environment binding references readiness evidence for the selected deployed targets.
 - The framework orchestrates regression execution and evidence collection, but it does not own CD deployment in M1.
-- Evidence must record which RU versions, deployment references, environment references, and test case revisions were used.
+- Evidence may retain RP/RU/version labels as opaque traceability metadata, but framework decisions must use generated target IDs, provider contracts, run profiles, and environment bindings.
 
 ## 1.9 AC Level and Coverage Policy
 
@@ -181,7 +192,7 @@ Rules:
 
 The regression DSL is the checked-in RP-level test contract. In one sentence: it is the durable description of what RP behavior is validated and how the framework shall execute and judge that validation repeatably. It states which RP behavior is validated, which AC it traces to, what input or state is needed, what logical action is performed, what oracle/assertion decides pass/fail, and what evidence must be retained.
 
-The DSL is not a BDD-only story, package-specific script, provider configuration file, secret store, generated run log, or replacement for owner-authored RP AC. Provider-specific details such as endpoints, commands, DB loaders, queue clients, credentials, and adapter implementation settings belong in RP/RU mapping, provider contracts, or environment configuration.
+The DSL is not a BDD-only story, package-specific script, provider configuration file, secret store, generated run log, or replacement for owner-authored RP AC. Provider-specific details such as endpoints, commands, DB loaders, queue clients, credentials, and adapter implementation settings belong in generated provider contracts or environment bindings.
 
 The 7 AP are framework processing areas. In one sentence: they are the lifecycle responsibility boundaries that convert reviewed RP artifacts into executable and reviewable regression evidence. An AP is not necessarily a separate Java package, deployable service, or RP-specific plugin.
 
@@ -190,15 +201,16 @@ The baseline ownership model is:
 | Item | Owner | Purpose |
 |---|---|---|
 | RP feature spec and RP AC | Product owner, PM, SA, or RP owner | Define business behavior and acceptance truth. |
-| RP/RU mapping and provider contracts | RP/RU owner or platform owner | Declare release boundary, RU versions, execution modes, provider capabilities, and environment references. |
+| RP/RU mapping | RP/RU owner or platform owner | Declare product topology and release boundary for Agent Skill translation. |
+| Generated framework artifacts | Agent Skill with reviewer approval | Translate product topology into suite manifest, run plan, environment bindings, provider contracts, and traceability map. |
 | DSL test case | Product developer or agent-assisted reviewer | Preserve reviewed regression validation intent as a repeatable artifact. |
 | Expected result or oracle truth | RP owner or delegated reviewer | Approve the truth source used by assertions. |
 | 7 AP execution flow | Framework | Validate, plan, bind, execute, assert, and report without inventing business truth. |
 
 | AP | Consumes | Produces | Clear Boundary |
 |---|---|---|---|
-| Definition and Validation | Product/RP artifacts, DSL files, expected-result artifacts | Schema, lifecycle, approval, and compatibility findings | Validates; does not infer business truth. |
-| Discovery and Context | Product Repo, RP record, RP/RU mapping, requested env | Resolved RP context, RU list, artifact paths, AC inventory | Finds declared context; does not choose RP membership. |
+| Definition and Validation | DSL files, suite manifest, run plan, environment bindings, expected-result artifacts | Schema, lifecycle, approval, and compatibility findings | Validates framework-readable artifacts; does not infer business truth. |
+| Discovery and Context | Suite manifest, run plan, environment binding, requested profile | Resolved execution context, target list, artifact paths, traceability labels | Finds declared context; does not understand product topology. |
 | Planning and Binding | DSL tests, parameters, package inputs, provider contracts | Execution plan with resolved bindings and step placeholders | Resolves logical references; does not execute package behavior. |
 | Fixture and State Manager | Preconditions, fixture setup/cleanup, lifecycle policy | Prepared state, cleanup plan, cleanup evidence | Owns state safety; does not hide destructive actions. |
 | Execution Engine | Execution plan, adapter contracts, environment policy | Step results, adapter outputs, logs, runtime metadata | Executes configured actions; does not embed RP-specific logic. |
@@ -208,10 +220,10 @@ The baseline ownership model is:
 Ownership split:
 
 - RP owners define feature behavior, RP AC, RP/RU membership, and release decisions.
-- Agent skills may draft DSL tests or expected results only from ready owner-authored context.
+- Agent skills translate product topology into framework-readable artifacts and may draft DSL tests or expected results only from ready owner-authored context.
 - The DSL owns validation intent and logical references.
-- RP/RU mapping and provider contracts own package-specific execution configuration.
-- The 7 AP own deterministic validation, planning, execution orchestration, assertion evaluation, and evidence production.
+- Generated run plans, environment bindings, and provider contracts own executable configuration.
+- The 7 AP own deterministic validation, planning, execution orchestration, assertion evaluation, and evidence production over generated framework-readable artifacts only.
 
 ## 1.10 Success Metrics
 
@@ -274,7 +286,7 @@ Current framework verification can be accepted only for the framework capabiliti
 | CAP-001 | Product Repo Bootstrap CLI and Readiness Agent Skill | M1 | Platform / Agent Skill | Framework verified | Initialized docs lifecycle, machine-readable readiness report, and owner-actionable readiness explanation |
 | CAP-002 | RP Creation Guide and Completeness Check | M1 | Platform | Framework verified | RP creation checklist and completeness report |
 | CAP-003 | RP Feature Spec and AC Intake | M1 | Platform | Framework verified | Parsed RP feature spec and RP AC inventory |
-| CAP-004 | RP/RU Mapping Intake and Completeness Check | M1 | Platform | Framework verified | Validated RP/RU mapping report |
+| CAP-004 | Agent Skill Product Mapping Translation | M1 | Agent Skill / Platform | Framework contract verified | Product mapping translated into suite manifest, run plan, environment binding, provider contracts, and traceability map |
 | CAP-005 | AC and Execution Context Readiness Service / Future Agent Skill | M1 | Platform / Agent Skill | Partial | Java readiness and DSL draft service is framework-tested; packaged agent skill artifact remains pending |
 | CAP-006 | Expected Result Drafting Service / Future Agent Skill | M1 | Platform / Agent Skill | Partial | Java expected-result draft and approval-gate service is framework-tested; packaged agent skill artifact remains pending |
 | CAP-007 | Test Case YAML DSL and Lifecycle | M1 | Platform | Framework verified | Schema validation and checked-in RP test folder policy |
