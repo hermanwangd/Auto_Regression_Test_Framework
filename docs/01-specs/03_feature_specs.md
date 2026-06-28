@@ -155,7 +155,7 @@ The DSL must answer execution questions in a package-neutral, execution-focused 
 | Identity and traceability | Identify DSL version, test ID, execution status, revision, package ID, AC ID, and source reference. | Definition and Validation |
 | Targets and scenario | Describe named targets, scenario type, scope, description, and capabilities. | Discovery and Context / Planning and Binding |
 | Setup and runtime inputs | Reference fixtures, seed data, mock setup, initial state, and operation inputs. | Planning and Binding / Fixture and State Manager |
-| Parameterization | Declare explicit parameter cases when one logical test must run with multiple reviewed input variants. | Planning and Binding / Evidence and Reporting |
+| Parameterization | Declare a reviewed parameter set reference when one logical test must run with multiple input variants. | Planning and Binding / Evidence and Reporting |
 | Execution | Declare readable operations, target IDs, runtime inputs, and captured outputs without embedding provider-specific scripts. | Execution Engine |
 | Expected results and verification | Reference expected artifacts and define explicit `verify` checks over captured outputs, DB state, events, or files. | Oracle and Assertion Engine |
 | Evidence and runtime | Declare concrete evidence refs, timeout, and retry. | Evidence and Reporting |
@@ -173,7 +173,7 @@ The DSL field set should stay minimal but complete enough to execute safely. M1 
 | `traceability.package_id`, `traceability.acceptance_criteria_id`, `traceability.source` | Always required | Gives every run stable traceability to RP-level AC and source. | Definition and Validation / Evidence and Reporting |
 | `targets` | Always required | Names the application, database, event bus, file store, batch runner, or external boundary used by the test. | Discovery and Context / Planning and Binding |
 | `scenario.type`, `scenario.scope`, `scenario.description`, `scenario.capabilities` | Always required | Tells the framework what kind of behavior and provider capability is needed. | Planning and Binding |
-| `parameters` | Optional; required only when one test case must run multiple explicit input variants | Declares reviewed explicit cases without regenerating or duplicating test artifacts. | Planning and Binding / Evidence and Reporting |
+| `parameters` | Optional; required only when one test case must run multiple reviewed parameter-set variants | Declares a reviewed parameter set reference without regenerating or duplicating test artifacts. | Planning and Binding / Evidence and Reporting |
 | `setup.fixtures` | Required when the scenario needs precondition data, mutated state, mock setup, seed data, or cleanup | Declares fixture lifecycle before and after execution. | Fixture and State Manager |
 | `execute[]` | Always required; M1 runtime supports exactly one execute step per test case | Declares the readable operation, target ID, runtime inputs, and observable outputs. Multiple RP operations should be modeled as multiple approved test cases in one batch until multi-step orchestration is implemented. | Execution Engine |
 | `expected_results` | Required when `verify[]` uses approved artifacts, payloads, schemas, contracts, or state snapshots | Declares reusable truth references used by verification. Inline deterministic expected values may live directly under `verify[].expected`. | Oracle and Assertion Engine |
@@ -192,7 +192,7 @@ Conditional fields are required only when the scenario needs them:
 | `verify[].selector` | A verify rule compares or checks a field inside a structured actual result, including `json_path_equals`, `json_path_absent`, and structured `numeric_tolerance` checks. `actual` names the captured output; `selector` names the JSON/YAML path inside it. It is not required for provider metadata checks that do not read a structured actual body. | Provider-specific parser code, captured-output refs overloaded as JSONPath expressions, or runtime-inferred selectors. |
 | `verify[].target`, `verify[].query`, or `verify[].event` | The check validates DB state or published events. | Inline credentials, physical connection strings, or unreviewed destructive SQL. |
 | `verify[].options` | The check needs timeout, polling, tolerance, normalization, or ignore paths. | Release gate or risk approval policy. |
-| `parameters.strategy`, `parameters.cases[].case_id`, `parameters.cases[].values` | The test uses parameterization. M1 supports only `explicit_cases`. | Dynamic data discovery, combinatorial generation, secrets, or unreviewed runtime-created cases. |
+| `parameters.ref`, `parameters.bind_as` | The test uses parameterization. `ref` points to a reviewed parameter set and `bind_as` names the `${param.<bind_as>.*}` namespace used by the DSL. | Inline parameter cases, dynamic data discovery, combinatorial generation, secrets, or unreviewed runtime-created cases. |
 
 Optional fields such as tags, notes, or replacement links may improve maintenance, but governance-heavy fields must not be required for first execution.
 
@@ -208,7 +208,8 @@ New execution-focused DSL artifacts must:
 - Capture `execute[].outputs` whenever verification or evidence references execution results.
 - For structured output checks, keep `actual` as the captured output reference and declare `selector` as the canonical field path. `path` and `json_path` are compatibility aliases only; new generated DSL must use `selector`.
 - For provider metadata checks such as `response_status_equals`, declare the deterministic `expected` value and let request/response provider evidence supply the HTTP status. Declare `actual` plus `selector` only when the status is read from a captured structured output.
-- Use `parameters.strategy: explicit_cases` only when the reviewed test artifact must run the same behavior against multiple named input variants.
+- Use `parameters.ref` and `parameters.bind_as` only when the reviewed test artifact must run the same behavior against multiple named input variants from a checked-in parameter set.
+- Reference parameter values with `${param.<bind_as>.<field>}`. New DSL artifacts must not use `parameters.strategy`, inline `parameters.cases`, or `${parameters.<name>}` references.
 - Keep provider implementation details in RP/RU mapping or provider contracts, not inside the test case body.
 - Fail validation before execution when required fields, conditional fields, or supported enum values are missing.
 

@@ -112,7 +112,7 @@ This is a pre-provider-runtime gate. FWK-008 must be green before sample fixture
 |---|---|---|
 | Identity and traceability | Reads `dsl_version`, `test_case_id`, `status`, `revision`, and `traceability.package_id` / `acceptance_criteria_id` / `source` | Missing traceability or unsupported `status` blocks before execution. |
 | Targets | Resolves multiple named `targets` with `type`, `runner`, and `environment` | Missing target or execute step referencing an unknown target blocks before provider dispatch. |
-| Parameters | Expands `parameters.strategy: explicit_cases` into separate run IDs and run evidence with `parameter_case_id` | Unsupported strategy, duplicate case ID, missing values, or unresolved `${parameters.<name>}` blocks before provider dispatch. |
+| Parameters | Resolves `parameters.ref` into reviewed parameter cases, binds them through `parameters.bind_as`, and creates separate run IDs and run evidence with `parameter_case_id` | Missing or unreadable parameter ref, missing bind namespace, duplicate case ID in the referenced set, missing values, or unresolved `${param.<bind_as>.<field>}` blocks before provider dispatch. |
 | Setup | Resolves `setup.fixtures` and `cleanup_ref` for state-mutating fixtures | State-changing fixture without cleanup reference reports a fixture-policy gap. |
 | Execute | Resolves one M1 `execute[].operation`, `target`, `with`, and `outputs` while allowing multiple named targets for context or verification | Multiple executable steps, `call_ru`, `target_ru_id`, missing outputs, or unsupported operation blocks before execution. |
 | Expected results | Resolves `expected_results` refs used by verification | Duplicated legacy oracle/expected references or missing expected ref blocks before assertion evaluation. |
@@ -131,7 +131,7 @@ Minimum FWK-008 test cases:
 - `response_status_equals` with provider HTTP status metadata passes without `actual`; the same verify type blocks when neither provider metadata nor a captured `actual`/`selector` source is available.
 - Legacy operation/field names such as `call_ru`, `target_ru_id`, `package_inputs`, and `oracles` are rejected in new execution-focused artifacts.
 - Governance-heavy fields such as approval, waiver, release gate, or risk approval state are rejected in DSL test cases.
-- `parameters.strategy: explicit_cases` with two cases creates two run IDs, two run evidence directories, recorded `parameter_case_id`, and batch/report coverage that counts the AC once.
+- `parameters.ref` with a reviewed two-case parameter set and `parameters.bind_as` creates two run IDs, two run evidence directories, recorded `parameter_case_id`, resolved `${param.<bind_as>.<field>}` values, and batch/report coverage that counts the AC once.
 - Generator output for `draft_executable_test_case` emits the v1 execution-focused field set and does not overwrite checked-in approved tests.
 - Generator output for `draft_test_skeleton` and `update_proposal` uses v1 identity/status/revision and traceability fields, avoids `rp_id`, `ac_id`, `artifact_status`, and `source_refs`, and never treats a skeleton as executable.
 - CLI dry-run reports DSL validation gaps with AP, field path, test case ID, AC ID, reason, and owner action.

@@ -43,7 +43,7 @@ This snapshot separates framework verification progress from pilot acceptance pr
 | Area | Current Status | Evidence / Gate | Next Work |
 |---|---|---|---|
 | Product Repo and RP skeleton | Implemented for framework verification | CLI tests and sample fixture verification | Harden cross-artifact readiness as pilot artifacts arrive. |
-| AC intake and DSL drafting | Implemented for legacy framework readiness/draft flows and execution-focused DSL v1 parser/generator/run/report consumption | Unit/component tests, CLI run/report test, DSL v1 contract review, and `dsl_runtime` evidence metadata | Add M1 `explicit_cases` parameter expansion, then continue provider-family and pilot-environment hardening without regressing T003A/T003B gates. |
+| AC intake and DSL drafting | Implemented for legacy framework readiness/draft flows and execution-focused DSL v1 parser/generator/run/report consumption | Unit/component tests, CLI run/report test, DSL v1 contract review, and `dsl_runtime` evidence metadata | Replace inline `explicit_cases` parameter expansion with `parameters.ref` / `parameters.bind_as`, then continue provider-family and pilot-environment hardening without regressing T003A/T003B gates. |
 | Batch/run evidence and coverage | Implemented for sample and CLI flows | `./mvnw verify` and report tests | Validate against real pilot RP batch evidence. |
 | File/batch runtime | Supported | Provider registry dispatch and shell/file tests | Keep as reusable provider. |
 | REST/gRPC request-response runtime | Supported for REST and native descriptor-driven gRPC unary calls plus HTTP/status field, JSON path equality/absence, numeric tolerance, and schema/contract response assertions | Request/response provider, native gRPC invoker, runtime registry, CLI preflight, response assertion, schema/contract assertion, and evidence tests | Add pilot endpoint evidence when required. |
@@ -152,7 +152,7 @@ The gate validates:
 
 - Always-required fields: `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime`.
 - Conditional fields: `setup.fixtures` when precondition data or mutated state is needed, `expected_results` when verify rules use approved artifacts or reusable truth sources, `setup.fixtures.<name>.cleanup_ref` for state mutation, exactly one M1 `execute[]` item, `execute[].with`, `execute[].outputs`, `verify[].actual` when a verify rule reads captured output, `verify[].selector` for `json_path_equals`, `json_path_absent`, and structured `numeric_tolerance` checks, provider metadata for metadata-backed rules such as `response_status_equals`, `verify[].target/query/event`, and `verify[].options`.
-- Parameterization fields when used: `parameters.strategy: explicit_cases`, unique `parameters.cases[].case_id`, non-empty `parameters.cases[].values`, and resolvable `${parameters.<name>}` references.
+- Parameterization fields when used: `parameters.ref`, `parameters.bind_as`, a readable reviewed parameter set, unique case IDs in the referenced set, non-empty case values, and resolvable `${param.<bind_as>.<field>}` references.
 - Supported operations: `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, and `run_application`.
 - Supported verify rules: basic, structure, collection, numeric, file, state, and event checks defined in the artifact contract.
 - Prohibited fields: legacy-only fields such as `call_ru`, `target_ru_id`, `package_inputs`, and `oracles`, plus approval, waiver, release gate, and risk approval fields.
@@ -290,22 +290,22 @@ regress run --root <product-repo> --rp-id <rp-id> --dry-run
 
 Done when supported pilot targets, setup fixtures, execute inputs/outputs, expected results, verify rules, evidence refs, and runtime policy resolve into the execution plan, and unresolved fields fail fast with file path, test case ID, AC ID, section name, field path, provider family when applicable, and owner action.
 
-### T009A - Explicit Parameter Case Expansion
+### T009A - Parameter Set Reference Binding
 
 Related feature: F007
 Acceptance: AC-007, AC-008, AC-009
 Modules: `binding`, `execution`, `evidence`, `report`
 
-Implement the M1 parameterization subset for execution-focused DSL v1. Support only `parameters.strategy: explicit_cases`. Each case must declare a unique `case_id` and a non-empty `values` map. Runtime may resolve `${parameters.<name>}` references from setup fixtures, execute inputs, expected results, verify rules, and evidence refs. Each case produces a separate run ID and run evidence with `parameter_case_id`; coverage counts the traced AC once per batch.
+Implement the M1 parameterization subset for execution-focused DSL v1 using `parameters.ref` and `parameters.bind_as`. `parameters.ref` must point to a reviewed parameter set artifact. `parameters.bind_as` declares the namespace for `${param.<bind_as>.<field>}` references. Each referenced case must have a unique case ID and non-empty values. Runtime may resolve `${param.<bind_as>.<field>}` references from setup fixtures, execute inputs, expected results, verify rules, and evidence refs. Each case produces a separate run ID and run evidence with `parameter_case_id`; coverage counts the traced AC once per batch.
 
 Verification:
 
 ```bash
-./mvnw -q -Dtest='RegressionCommandTest#runExecutesExecutionFocusedDslV1ExplicitParameterCasesAsSeparateRuns' test
+./mvnw -q -Dtest='RegressionCommandTest#runExecutesExecutionFocusedDslV1ParameterSetRefAsSeparateRuns' test
 ./mvnw -q -Dtest='RegressionCommandTest,BindingResolverTest,DslTestCaseValidatorTest,CoverageReportServiceTest' test
 ```
 
-Done when two explicit parameter cases produce two run evidence directories with the same test case ID and AC ID, distinct run IDs, recorded `parameter_case_id`, resolved safe parameter refs, and batch/report coverage that counts the AC once.
+Done when one DSL test with `parameters.ref` and `parameters.bind_as` resolves a reviewed two-case parameter set, produces two run evidence directories with the same test case ID and AC ID, distinct run IDs, recorded `parameter_case_id`, resolved safe `${param.<bind_as>.<field>}` refs, and batch/report coverage that counts the AC once. Inline `parameters.strategy`, inline `parameters.cases`, and `${parameters.<name>}` references are accepted only through an explicit legacy compatibility path until migrated.
 
 ### T010 - Provider Contract Registry and Dispatch
 

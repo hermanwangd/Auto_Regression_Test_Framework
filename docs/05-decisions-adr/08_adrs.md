@@ -126,3 +126,35 @@ The selected M1 pilot shall exercise one heterogeneous RP that includes REST and
 ### Consequences
 
 Provider contract validation becomes part of the execution gate. New RP-specific needs should be handled by provider configuration first, reusable provider code second, and DSL changes only when a recurring cross-RP concept cannot be represented by the existing DSL. External runner use must be explicit, bounded, owner-approved, and evidenced; it must not become the standard way for each RP to develop its own test tool or script.
+
+---
+
+## ADR-007 Replace Inline Parameter Cases with Parameter Set References
+
+### Status
+
+Accepted
+
+### Context
+
+The first execution-focused DSL v1 parameter model used inline `parameters.strategy: explicit_cases` with embedded `parameters.cases[].values`. That made simple framework verification easy, but it pushed reviewed test data directly into the test case body and made reusable parameter catalogs harder to govern, share, and update across RP tests.
+
+The DSL needs a stable parameter contract that remains easy for agents to generate, lets product developers and QA review data separately from execution semantics, and avoids regenerating every test case when only parameter rows change.
+
+### Decision
+
+Replace the inline parameter-case syntax in new execution-focused DSL v1 artifacts with:
+
+```yaml
+parameters:
+  ref: parameter-sets/orders_regression_cases.yaml
+  bind_as: orders_case
+```
+
+DSL fields reference values through `${param.<bind_as>.<field>}`. The referenced parameter set artifact owns one or more reviewed named cases. The runtime expands those cases into separate runs, records `parameter_case_id`, and keeps coverage counted once for the traced AC per selected batch.
+
+Inline `parameters.strategy`, inline `parameters.cases`, and `${parameters.<name>}` references are legacy-only compatibility inputs until migrated. They are not the new v1 core syntax.
+
+### Consequences
+
+Parameter data becomes reusable and separately reviewable, while DSL test cases stay focused on execution semantics. Binding, validation, evidence, report, and generator work must migrate from inline case expansion to parameter set resolution. Existing inline explicit-case tests require either migration or an explicit compatibility path during transition.

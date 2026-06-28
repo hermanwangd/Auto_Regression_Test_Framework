@@ -25,7 +25,7 @@ Minimum verification rule for DSL/AP clarity:
 - DSL validation failures shall identify whether the problem belongs to DSL syntax, execution lifecycle state, traceability, targets, setup fixtures, execute outputs, expected results, verify rules, RP/RU mapping, provider contract, environment readiness, runtime policy, or evidence completeness.
 - New execution-focused DSL artifacts shall use `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime` as the always-required core contract before F007 provider runtime execution. `setup` and `expected_results` content is required when the scenario or verify rules need it.
 - M1 execution-focused DSL artifacts shall contain exactly one executable `execute[]` item. Multiple operations shall be represented as multiple approved test cases in the same batch until multi-step orchestration is designed and verified.
-- New execution-focused DSL artifacts may use `parameters.strategy: explicit_cases` when the same reviewed test case must run with multiple named input variants. Other parameterization strategies are unsupported in M1.
+- New execution-focused DSL artifacts may use `parameters.ref` and `parameters.bind_as` when the same reviewed test case must run with multiple named input variants from a checked-in parameter set. Inline `parameters.strategy`, `parameters.cases`, and `${parameters.<name>}` references are legacy-only and unsupported in new DSL artifacts.
 - New execution-focused DSL artifacts shall not contain legacy-only fields such as `rp_id`, `ac_id`, `execution_target`, `target_ru_id`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, or `policy`.
 - New execution-focused DSL artifacts shall not contain governance-heavy fields such as `approval_status`, `approved_by`, `approval_required`, `waiver`, `release_gate`, `risk_approval`, or governance workflow state.
 - A missing provider contract, unsupported DSL capability, missing expected result, missing cleanup reference, missing execute output, invalid verify rule, or missing environment readiness shall block before adapter execution starts.
@@ -214,7 +214,7 @@ Then the RP execution shall produce one batch evidence record with RP ID, batch 
 
 And each executed test case shall produce durable run evidence with RP ID, batch ID, AC ID, test case ID, run ID, execution mode, resolved targets, setup fixture results, execute outputs, expected result refs, verify results, provider contracts used, provider family, provider type, registry status, provider contract path, adapter/provider result, cleanup result, and final pass/fail status.
 
-And when a DSL test declares `parameters.strategy: explicit_cases`, each parameter case shall produce a separate run ID and durable run evidence containing `parameter_case_id` and resolved parameter values or safe references.
+And when a DSL test declares `parameters.ref` and `parameters.bind_as`, each resolved parameter-set case shall produce a separate run ID and durable run evidence containing `parameter_case_id` and resolved parameter values or safe references.
 
 And an execution-focused DSL v1 test case stored under `tests/approved/` with `status: active` shall run without requiring legacy-only fields in the test case body.
 
@@ -240,7 +240,7 @@ Given two execution-eligible tests exist in the same RP
 When regression execution runs
 Then the tests shall produce two different run IDs and two different run evidence directories.
 
-Given one execution-eligible test has two explicit parameter cases
+Given one execution-eligible test references a reviewed parameter set with two cases through `parameters.ref` and `parameters.bind_as`
 When regression execution runs
 Then the two parameter cases shall produce two different run IDs and two different run evidence directories while preserving the same test case ID and AC ID.
 
@@ -272,7 +272,7 @@ Given a new DSL test case uses multiple executable `execute[]` steps, `call_ru`,
 When dry-run or execution is requested
 Then the framework shall block during Definition and Validation or Planning and Binding before provider dispatch.
 
-Given a DSL test case uses unsupported parameterization strategy, missing parameter case ID, duplicate parameter case ID, missing `values`, or parameter references that cannot be resolved
+Given a DSL test case uses missing `parameters.ref`, missing `parameters.bind_as`, an unreadable parameter set, missing or duplicate parameter case IDs, missing case values, or `${param.<bind_as>.<field>}` references that cannot be resolved
 When dry-run or execution is requested
 Then the framework shall block during Definition and Validation or Planning and Binding before provider dispatch and report the parameter field path and owner action.
 
@@ -330,7 +330,7 @@ Given multiple passed tests cover the same AC in one batch
 When coverage is calculated
 Then that AC shall be counted once.
 
-Given multiple parameter cases for one test cover the same AC in one batch
+Given multiple parameter-set cases for one test cover the same AC in one batch
 When coverage is calculated
 Then that AC shall be counted once, while each parameter case remains visible in run evidence.
 

@@ -273,7 +273,7 @@ Use clear test-case language in new DSL artifacts:
 | `traceability` | Link the test to package ID, AC ID, and source spec reference. |
 | `targets` | Name each application, database, event bus, file store, batch runner, or external boundary used by the test. |
 | `scenario` | Describe test type, scope, behavior, and required capabilities. |
-| `parameters` | Optionally declare explicit reviewed parameter cases for repeated execution of the same logical test. |
+| `parameters` | Optionally reference a reviewed parameter set for repeated execution of the same logical test. |
 | `setup` | Declare fixtures, seed data, mock setup, or initial state needed before execution. |
 | `execute` | Declare readable operations, target, runtime inputs, and output capture. |
 | `expected_results` | Reference expected files, JSON/YAML payloads, DB state snapshots, response payloads, schemas, or contracts. |
@@ -288,7 +288,7 @@ The v1 contract separates stable top-level structure from execution-required con
 - Always required: `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime`.
 - Conditionally required: `setup.fixtures` when the scenario needs precondition data, state mutation, mock setup, seed data, or cleanup.
 - Conditionally required: `expected_results` when a verify item references an approved artifact, schema, contract, payload, file, DB state snapshot, or other reusable truth source. Simple deterministic expected values may be declared directly in `verify[].expected`.
-- Conditionally required: `parameters.strategy`, `parameters.cases[].case_id`, and `parameters.cases[].values` when the test uses parameterization. M1 supports only `strategy: explicit_cases`.
+- Conditionally required: `parameters.ref` and `parameters.bind_as` when the test uses parameterization. `parameters.ref` points to a reviewed parameter set artifact and `parameters.bind_as` defines the `${param.<bind_as>.*}` namespace used in the DSL.
 - Required when referenced: `execute[].outputs`, `verify[].selector` for structured output checks, `verify[].target/query/event` for state or event checks, `verify[].options` for polling/tolerance/normalization, and fixture `cleanup_ref`.
 - Prohibited in DSL: provider implementation settings, secrets, endpoint URLs, connection strings, SQL bodies, shell scripts, release gates, waivers, risk approvals, and approval workflow state.
 
@@ -318,17 +318,14 @@ scenario:
   capabilities: [db_seed, batch_execution, file_assertion]
 
 parameters:
-  strategy: explicit_cases
-  cases:
-    - case_id: baseline
-      values:
-        orders_seed_ref: fixtures/db/orders_seed.yaml
+  ref: parameter-sets/orders_regression_cases.yaml
+  bind_as: orders_case
 
 setup:
   fixtures:
     orders_seed:
       type: database_seed
-      ref: ${parameters.orders_seed_ref}
+      ref: ${param.orders_case.orders_seed_ref}
       cleanup_ref: fixtures/db/orders_cleanup.yaml
 
 execute:
@@ -419,23 +416,17 @@ Use `execute[].with` for runtime inputs passed to the target operation, such as 
 
 ### 6.7.3A Parameterization
 
-M1 parameterization supports only explicit reviewed cases:
+M1 parameterization uses reviewed parameter set artifacts. The DSL references the parameter set and declares the namespace used inside the test:
 
 ```yaml
 parameters:
-  strategy: explicit_cases
-  cases:
-    - case_id: baseline
-      values:
-        orders_seed_ref: fixtures/db/orders_seed_baseline.yaml
-    - case_id: boundary
-      values:
-        orders_seed_ref: fixtures/db/orders_seed_boundary.yaml
+  ref: parameter-sets/orders_regression_cases.yaml
+  bind_as: orders_case
 ```
 
-Parameter values may be referenced as `${parameters.<name>}` from `setup.fixtures`, `execute[].with`, `expected_results`, `verify`, or `evidence` fields. Each explicit case produces a separate run ID and run evidence record with `parameter_case_id`. Coverage still counts the traced AC once per selected batch even when multiple parameter cases pass.
+The referenced parameter set is a checked-in, reviewed artifact owned by the RP. It may contain one or more named cases, but the cases are not embedded in the DSL body. Parameter values may be referenced as `${param.<bind_as>.<field>}` from `setup.fixtures`, `execute[].with`, `expected_results`, `verify`, or `evidence` fields. Each resolved parameter case produces a separate run ID and run evidence record with `parameter_case_id`. Coverage still counts the traced AC once per selected batch even when multiple parameter cases pass.
 
-Dynamic data selection, combinatorial case generation, runtime-created cases, secrets, and provider connection details do not belong in `parameters` for v1.
+`parameters.strategy`, inline `parameters.cases`, `${parameters.<name>}` references, dynamic data selection, combinatorial case generation, runtime-created cases, secrets, and provider connection details do not belong in new v1 DSL artifacts. Existing `strategy: explicit_cases` artifacts may be read only through a legacy compatibility path until migrated to `ref` / `bind_as`.
 
 ### 6.7.4 Expected Results and Verification
 
