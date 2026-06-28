@@ -13,6 +13,7 @@ This is an implementation plan, not the framework verification strategy itself. 
 - ADR-005 is accepted: Framework Verification and RP Regression Execution are separate execution lines.
 - ADR-006 is accepted: heterogeneous RP support is handled through provider contracts, a provider capability registry, reusable built-in providers, and a governed external runner escape hatch.
 - ADR-008 is accepted: framework core is product-topology agnostic and consumes generated suite/run/environment/provider artifacts.
+- ADR-009 is accepted: new DSL metadata uses `labels` and `source_refs` instead of required product-specific `traceability.*` fields.
 - Minimum RP artifacts are defined: `package.yaml`, `rp_feature_spec.md`, `rp_ru_mapping.yaml`, `acceptance_criteria.md`, `tests/`, `expected-results/`, `traceability.md`, and `evidence_index.md`.
 - Architecture design defines Spring Boot 3.x / Java 17+ AP-level components, extension points, provider families, internal package boundaries, CLI commands, storage paths, execution modes, failure handling, and AC coverage.
 - Execution-focused DSL v1 is defined in the artifact contracts and must be validated and proven through CLI `run` plus `report --batch-id` before F007 provider runtime expansion.
@@ -151,7 +152,7 @@ Implement the execution-focused DSL v1 validation gate before provider runtime m
 
 The gate validates:
 
-- Always-required fields: `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime`.
+- Always-required fields: `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs.acceptance_criteria`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime`; `labels` and `compatible_profiles` are optional unless the selected report or profile needs them.
 - Conditional fields: `setup.fixtures` when precondition data or mutated state is needed, `expected_results` when verify rules use approved artifacts or reusable truth sources, `setup.fixtures.<name>.cleanup_ref` for state mutation, exactly one M1 `execute[]` item, `execute[].with`, `execute[].outputs`, `verify[].actual` when a verify rule reads captured output, `verify[].selector` for `json_path_equals`, `json_path_absent`, and structured `numeric_tolerance` checks, provider metadata for metadata-backed rules such as `response_status_equals`, `verify[].target/query/event`, and `verify[].options`.
 - Parameterization fields when used: `parameters.ref`, `parameters.bind_as`, a readable reviewed parameter set, unique case IDs in the referenced set, non-empty case values, and resolvable `${param.<bind_as>.<field>}` references.
 - Supported operations: `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, and `run_application`.
@@ -165,7 +166,7 @@ Verification:
 ./mvnw test
 ```
 
-Done when valid DSL v1 artifacts pass, invalid DSL blocks before provider dispatch with AP/field/test/AC/owner-action details, generated executable drafts use execution-focused fields, and legacy artifacts remain readable only through compatibility behavior.
+Done when valid DSL v1 artifacts pass, invalid DSL blocks before provider dispatch with AP/field/test/source-ref/owner-action details, generated executable drafts use execution-focused fields, and legacy artifacts remain readable only through compatibility behavior.
 
 The response status metadata gate includes `response_status_equals` with request/response provider HTTP status metadata, blocking the metadata shortcut when no request/response execute target exists, and requiring `actual` plus `selector` when the status is read from captured structured output.
 
@@ -175,14 +176,14 @@ Related features: F007, F008
 Acceptance: AC-007, AC-009
 Modules: `cli`, `execution`, `evidence`, `report`
 
-Prove that the same execution-focused DSL v1 artifact can be consumed by execution and reporting before provider runtime expansion. The test artifact must live under `tests/approved/`, use `status: active`, and contain only v1 sections: `traceability`, `targets`, `scenario`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`.
+Prove that the same execution-focused DSL v1 artifact can be consumed by execution and reporting before provider runtime expansion. The test artifact must live under `tests/approved/`, use `status: active`, and contain only v1 sections: `source_refs`, optional `labels`, optional `compatible_profiles`, `targets`, `scenario`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`.
 
 Required behavior:
 
-- `run` derives RP ID and AC ID from v1 `traceability.*` fields.
+- `run` derives the reviewed AC source from `source_refs.acceptance_criteria` and copies optional report labels from `labels` or generated `traceability_map.yaml`.
 - `run` resolves v1 targets, setup fixtures, execute outputs, expected-result refs, verify rules, evidence refs, timeout, and retry into durable run and batch evidence.
-- `report --batch-id` calculates coverage from the selected batch using v1 traceability and normalized run evidence.
-- The selected batch becomes review-ready when the v1 test passes and covers the automatable RP AC.
+- `report --batch-id` calculates coverage from the selected batch using v1 source refs, optional labels, generated `traceability_map.yaml`, and normalized run evidence.
+- The selected batch becomes review-ready when the v1 test passes and covers the automatable RP AC through a resolvable source ref.
 - A passing run that cannot be reported as review-ready is treated as an incomplete F007/F008 implementation.
 
 Verification:
@@ -192,7 +193,7 @@ Verification:
 ./mvnw -q -Dtest='RegressionCommandTest,DslTestCaseValidatorTest,TestCaseLifecycleServiceTest' test
 ```
 
-Done when an active v1 approved test can pass CLI `run`, write run and batch evidence, and pass CLI `report --batch-id` with review-ready traceability to RP ID, AC ID, test case ID, batch ID, and run ID.
+Done when an active v1 approved test can pass CLI `run`, write run and batch evidence, and pass CLI `report --batch-id` with review-ready source ref, labels or traceability-map labels when provided, test case ID, batch ID, and run ID.
 
 ### T004 - Agent Product Mapping Translation Contract
 
@@ -200,7 +201,7 @@ Related feature: F004
 Acceptance: AC-004
 Modules: Agent Skill, generated artifact schemas, `environment`, `provider`
 
-Define and validate the boundary where Product/RP/RU mapping is translated into framework-readable artifacts. The Agent Skill reads owner-authored mapping and product context, then emits `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, and `traceability_map.yaml`. Framework core validation checks generated artifacts only and must not infer provider ownership from Product/RP/RU topology, file order, language, or naming.
+Define and validate the boundary where Product/RP/RU mapping is translated into framework-readable artifacts. The Agent Skill reads owner-authored mapping and product context, then emits `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, `traceability_map.yaml`, and a mapping explanation report. Framework core validation checks generated artifacts only and must not infer provider ownership from Product/RP/RU topology, file order, language, or naming.
 
 Verification:
 
@@ -209,7 +210,7 @@ agent product-mapping-translate --root <product-repo> --rp-id <rp-id> --out gene
 regress validate-artifacts --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/ci_ephemeral.yaml
 ```
 
-Done when incomplete product mapping blocks Agent Skill translation, generated artifact schema errors block framework execution, target dependency graph errors are reported, and the framework report does not infer RP membership or RU technology.
+Done when incomplete product mapping blocks Agent Skill translation, generated artifact schema errors block framework execution, target dependency graph errors are reported, strategy selection rationale is reviewable, and the framework report does not infer RP membership or RU technology.
 
 ### T005 - AC Intake and Readiness Classifier
 
@@ -233,7 +234,7 @@ Related feature: F005
 Acceptance: AC-005
 Modules: `testcase`
 
-Implement draft package-neutral DSL test skeleton and draft executable DSL test artifact writing under `tests/draft/`. Generated executable drafts must use execution-focused DSL v1 fields: `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`. Detect existing checked-in test artifacts for the same RP AC and create update proposals instead of overwriting.
+Implement draft package-neutral DSL test skeleton and draft executable DSL test artifact writing under `tests/draft/`. Generated executable drafts must use execution-focused DSL v1 fields: `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs`, optional `labels`, optional `compatible_profiles`, `targets`, `scenario`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`. Detect existing checked-in test artifacts for the same source AC and create update proposals instead of overwriting.
 
 Verification:
 
@@ -241,7 +242,7 @@ Verification:
 regress generate-tests --root <product-repo> --rp-id <rp-id> --mode draft
 ```
 
-Done when checked-in DSL tests are protected and generated drafts include traceability source, revision, execution status, targets, execute outputs, expected_results, verify rules, evidence refs, and runtime policy.
+Done when checked-in DSL tests are protected and generated drafts include source refs, optional labels, revision, execution status, targets, execute outputs, expected_results, verify rules, evidence refs, and runtime policy.
 
 ### T007 - Expected Result Manager
 
@@ -290,7 +291,7 @@ Verification:
 regress run --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/ci_ephemeral.yaml --dry-run
 ```
 
-Done when supported pilot targets, setup fixtures, execute inputs/outputs, expected results, verify rules, evidence refs, and runtime policy resolve into the execution plan, and unresolved fields fail fast with file path, test case ID, AC ID, section name, field path, provider family when applicable, and owner action.
+Done when supported pilot targets, setup fixtures, execute inputs/outputs, expected results, verify rules, evidence refs, and runtime policy resolve into the execution plan, and unresolved fields fail fast with file path, test case ID, acceptance-criteria source ref when available, section name, field path, provider family when applicable, and owner action.
 
 ### T009A - Parameter Set Reference Binding
 
@@ -307,7 +308,7 @@ Verification:
 ./mvnw -q -Dtest='RegressionCommandTest,BindingResolverTest,DslTestCaseValidatorTest,CoverageReportServiceTest' test
 ```
 
-Done when one DSL test with `parameters.ref` and `parameters.bind_as` resolves a reviewed two-case parameter set, produces two run evidence directories with the same test case ID and AC ID, distinct run IDs, recorded `parameter_case_id`, resolved safe `${param.<bind_as>.<field>}` refs, and batch/report coverage that counts the AC once. Inline `parameters.strategy`, inline `parameters.cases`, and `${parameters.<name>}` references are accepted only through an explicit legacy compatibility path until migrated.
+Done when one DSL test with `parameters.ref` and `parameters.bind_as` resolves a reviewed two-case parameter set, produces two run evidence directories with the same test case ID and acceptance-criteria source ref, distinct run IDs, recorded `parameter_case_id`, resolved safe `${param.<bind_as>.<field>}` refs, and batch/report coverage that counts the AC once. Inline `parameters.strategy`, inline `parameters.cases`, and `${parameters.<name>}` references are accepted only through an explicit legacy compatibility path until migrated.
 
 ### T010 - Provider Contract Registry and Dispatch
 
@@ -323,7 +324,7 @@ Verification:
 regress run --suite-manifest generated-framework/suite_manifest.yaml --run-plan generated-framework/run_plan.yaml --environment-binding generated-framework/environment_bindings/ci_ephemeral.yaml --dry-run
 ```
 
-Done when provider contract resolution reports provider family, provider type, provider name, runtime support status, source level, action/type, affected logical target, test case ID, AC ID, contract path, and owner action for unsupported, missing, ambiguous, unsafe, or unapproved escape-hatch capabilities. Execution dispatch must no longer require adding a new product-specific conditional to `ExecutionEngine`.
+Done when provider contract resolution reports provider family, provider type, provider name, runtime support status, source level, action/type, affected logical target, test case ID, acceptance-criteria source ref when available, contract path, and owner action for unsupported, missing, ambiguous, unsafe, or unapproved escape-hatch capabilities. Execution dispatch must no longer require adding a new product-specific conditional to `ExecutionEngine`.
 
 ### T011 - Fixture Lifecycle Manager
 
@@ -385,7 +386,7 @@ Related features: F007, F008
 Acceptance: AC-007, AC-009
 Modules: `evidence`
 
-Write `evidence/runs/<run_id>/run.yaml`, logs, actual outputs, assertion results, observation results, postcondition results, cleanup evidence, and failure details. Evidence must include package trace label when provided, AC ID, test case ID, run ID, logical target refs, execution mode, environment ref, parameter case when applicable, resolved dependencies, resolved bindings, provider contracts used, provider family, adapter/provider result, assertion result, cleanup result, and final pass/fail status.
+Write `evidence/runs/<run_id>/run.yaml`, logs, actual outputs, assertion results, observation results, postcondition results, cleanup evidence, and failure details. Evidence must include source refs, report labels when provided, test case ID, run ID, logical target refs, execution mode, environment ref, parameter case when applicable, resolved dependencies, resolved bindings, provider contracts used, provider family, adapter/provider result, assertion result, cleanup result, and final pass/fail status.
 
 Verification:
 
@@ -414,7 +415,7 @@ Minimum `batch.yaml` fields:
 
 ```yaml
 batch_id:
-package_id:
+labels: {}
 execution_mode:
 environment_ref:
 started_at:
@@ -423,7 +424,8 @@ status:
 runs:
   - run_id:
     test_case_id:
-    ac_id:
+    source_refs:
+      acceptance_criteria:
     status:
 ```
 
@@ -441,13 +443,13 @@ Related feature: F008
 Acceptance: AC-009
 Modules: `report`, `evidence`
 
-Calculate coverage as covered automatable RP-level AC divided by total automatable RP-level AC. RP release coverage is batch-level, not single-run-level. Link generated tests and evidence to RP ID, AC ID, test case ID, batch ID, and run ID. Exclude manual-only or waived AC only with approval records.
+Calculate coverage as covered automatable RP-level AC divided by total automatable RP-level AC. RP release coverage is batch-level, not single-run-level. Link generated tests and evidence to acceptance-criteria source refs, optional Product/RP labels, test case ID, batch ID, and run ID. Exclude manual-only or waived AC only with approval records.
 
 Coverage rules:
 
 - Denominator is distinct RP AC classified as `automatable` or `partial`, plus any unapproved manual/waived exclusion that must still appear as a gap.
-- Numerator is distinct AC IDs with at least one passed, traceable approved test run in the selected batch.
-- Failed, blocked, missing-traceability, manual-only, waived, and duplicate AC coverage must not inflate the numerator.
+- Numerator is distinct acceptance-criteria source refs with at least one passed, traceable approved test run in the selected batch.
+- Failed, blocked, missing source refs or report labels, manual-only, waived, and duplicate AC coverage must not inflate the numerator.
 
 Verification:
 

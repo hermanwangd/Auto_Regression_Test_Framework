@@ -184,3 +184,38 @@ Framework validation covers generic contracts: DSL syntax, target IDs, runner/pr
 ### Consequences
 
 F004 is a Product Mapping Translation feature, not a framework-core RP/RU mapping validator. AC-004 validates generated framework artifacts and product-side translation gaps separately. Runtime implementation must move from RP/RU-aware discovery to suite/run/environment artifact discovery. Existing RP-oriented CLI commands may remain as product-aware wrappers only if they generate or locate the framework-readable artifacts before invoking the generic runner.
+
+---
+
+## ADR-009 Use Labels and Source References for Generic DSL Metadata
+
+### Status
+
+Accepted
+
+### Context
+
+Execution-focused DSL v1 originally used `traceability.package_id`, `traceability.acceptance_criteria_id`, and `traceability.source` as required runtime fields. After separating product topology from framework runtime, those names are too product-specific for the generic execution core and invite runtime logic to depend on Product/RP/RU semantics.
+
+### Decision
+
+New generated DSL artifacts shall use:
+
+```yaml
+labels:
+  product: ORDER
+  package: RP-ORDER-PLATFORM
+  runtime_unit: RU-normalization-pipeline
+
+source_refs:
+  acceptance_criteria: docs/acceptance_criteria.md#AC-001
+  feature_spec: docs/feature_spec.md#F001
+```
+
+`source_refs.acceptance_criteria` is required for reviewed-source traceability. `labels` are optional opaque report metadata. The framework may copy labels into evidence and reports, but it must not branch on labels to select runners, providers, topology, or execution strategy.
+
+`traceability.package_id`, `traceability.acceptance_criteria_id`, and `traceability.source` are compatibility inputs until migrated. They map to `labels.package`, `source_refs.acceptance_criteria`, and source refs respectively.
+
+### Consequences
+
+DSL test cases become more product-agnostic. Coverage and release evidence packaging must resolve product-specific reporting through `source_refs`, `labels`, and generated `traceability_map.yaml`. Generator, validator, run evidence, report, and compatibility tests must migrate away from required `traceability.*` fields for new artifacts.

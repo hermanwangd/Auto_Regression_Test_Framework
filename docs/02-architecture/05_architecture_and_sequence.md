@@ -123,8 +123,8 @@ AP boundary contract:
 | AP | Must Fail Before | Required Failure Detail |
 |---|---|---|
 | Definition and Validation | Discovery, planning, generation approval, or run start | Artifact path, field path, lifecycle status, supported `dsl_version`, owner action |
-| Discovery and Context | Planning | RP ID, missing artifact, missing RU, requested environment, owner action |
-| Planning and Binding | Fixture setup or adapter/provider execution | Test case ID, AC ID, unresolved target, setup fixture, execute input, expected-result ref, verify ref, evidence ref, runtime policy, provider contract key, owner action |
+| Discovery and Context | Planning | Requested suite/run profile, missing generated artifact, missing logical target, requested environment, owner action |
+| Planning and Binding | Fixture setup or adapter/provider execution | Test case ID, acceptance-criteria source ref when available, unresolved target, setup fixture, execute input, expected-result ref, verify ref, evidence ref, runtime policy, provider contract key, owner action |
 | Fixture and State Manager | Adapter execution when setup is unsafe or incomplete | Test case ID, setup action, cleanup requirement, state scope, owner action |
 | Execution Engine | Verify evaluation when an execute operation fails | Execute step ID, provider or adapter, operation, exit code or timeout, log refs, owner action |
 | Oracle and Assertion Engine | Pass/fail reporting when truth or comparison rule is missing | Verify ID, expected-result ref, expected-result approval status when applicable, actual ref or provider metadata source, owner action |
@@ -255,13 +255,13 @@ Boundary rules:
 - `oracle` loads expected-result sources and decision parameters; `assertion` applies verify rules against actual outputs.
 - `assertion` evaluates structured output selectors declared by DSL verify rules; it must not infer missing JSONPath selectors for `json_path_equals` or `json_path_absent` in new execution-focused DSL artifacts. Provider metadata checks, such as `response_status_equals`, may use request/response provider evidence without a DSL `actual` field when the provider contract supplies HTTP status metadata.
 - `adapter` is the legacy shell/file execution boundary. New heterogeneous behavior should enter through provider registry entries before considering adapter-specific or external-runner behavior.
-- `evidence` and `report` write durable evidence under the RP release record.
+- `evidence` and `report` write durable evidence under the configured evidence output path.
 
 DSL-to-module responsibility:
 
 | DSL Section | Primary Module | Secondary Module |
 |---|---|---|
-| `dsl_version`, `test_case_id`, `status`, `revision`, `traceability` | `schema`, `testcase` | `evidence` |
+| `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs`, optional `labels` | `schema`, `testcase` | `evidence` |
 | `targets`, `scenario` | `testcase`, `binding` | `provider`, generated artifact readers |
 | `setup.fixtures` | `fixture`, `binding` | `provider`, `environment`, `evidence` |
 | `execute` | `execution` | `adapter`, `provider`, `binding` |
@@ -364,7 +364,7 @@ Extension governance rules:
 - Validate provider contract schemas before execution, including required fields, secret references, cleanup strategy, and unsupported actions.
 - Add a new DSL enum only when a recurring cross-RP concept cannot be represented by existing target runner, fixture type, execute operation, expected-result type, verify type, or evidence output.
 - Add or change DSL required fields only through a `dsl_version` compatibility decision.
-- A package adapter must not silently skip unsupported DSL sections; it must fail fast with test case ID, AC ID, section name, and owner action.
+- A package adapter must not silently skip unsupported DSL sections; it must fail fast with test case ID, acceptance-criteria source ref when available, section name, and owner action.
 
 ## 5.6 CLI Boundary
 
@@ -435,8 +435,8 @@ Consistency model:
 - Source artifacts are read at command start.
 - Generated drafts record source references and source fingerprints.
 - Approved tests and expected results are immutable within a run.
-- Batch evidence records the RP ID, batch ID, execution mode, environment reference, and included run IDs.
-- Run evidence records trace package labels when provided, AC ID, test case ID, run ID, batch ID, logical target refs, execution mode, and environment reference.
+- Batch evidence records the batch ID, execution mode, environment reference, included run IDs, acceptance-criteria source refs, and optional report labels when provided.
+- Run evidence records source refs, optional report labels when provided, test case ID, run ID, batch ID, logical target refs, execution mode, and environment reference.
 
 ## 5.8 Execution Flow
 
@@ -445,7 +445,7 @@ Select generated suite
 -> validate suite_manifest, run_plan, environment_binding, provider contracts, and traceability_map
 -> load approved or execution-eligible DSL test cases
 -> validate execution-focused DSL v1 contract and block invalid legacy/governance fields
--> normalize v1 traceability and execution sections for run/report metadata
+-> normalize v1 source refs, optional report labels, and execution sections for run/report metadata
 -> validate expected-result approval status
 -> resolve execution mode and logical target dependency graph
 -> resolve provider contracts from DSL logical references
@@ -523,7 +523,7 @@ Runtime rules:
 | Missing generated suite, run plan, environment binding, or provider contract field | Block execution and report the exact field. |
 | Unsupported DSL version | Block execution and report supported versions and migration action. |
 | Missing required DSL field | Block generation approval or execution and report the field path. |
-| V1 DSL traceability cannot be normalized for run/report | Block execution or review-ready reporting and report the affected test case, AC, and field path. |
+| V1 DSL source refs or report labels cannot be normalized for run/report | Block execution or review-ready reporting and report the affected test case, source ref, and field path. |
 | Ambiguous AC | Mark `not_ready_for_generation`; do not draft executable tests. |
 | Existing approved test | Create update proposal or new draft revision; do not overwrite. |
 | Expected result not approved | Block normal regression execution. |
@@ -546,12 +546,12 @@ Runtime rules:
 
 Each suite execution writes a batch summary:
 
-- `batch.yaml`: batch status, timestamps, trace package labels when provided, execution mode, environment ref, and included run IDs with test case ID, AC ID, and status.
-- Batch reporting consumes normalized traceability from execution-focused DSL v1 and run evidence. It must not require new tests to carry legacy-only fields such as `rp_id` or `ac_id`.
+- `batch.yaml`: batch status, timestamps, report labels when provided, execution mode, environment ref, and included run IDs with test case ID, acceptance-criteria source ref, and status.
+- Batch reporting consumes normalized source refs, optional labels, generated `traceability_map.yaml`, and run evidence. It must not require new tests to carry legacy-only fields such as `rp_id` or `ac_id`.
 
 Each test run writes:
 
-- `run.yaml`: run status, timestamps, trace package labels when provided, batch ID, AC ID, test case ID, logical target refs, execution mode.
+- `run.yaml`: run status, timestamps, source refs, report labels when provided, batch ID, test case ID, logical target refs, execution mode.
 - `logs/`: adapter logs and framework validation logs.
 - `actual/`: captured actual outputs or evidence references.
 - `assertions.yaml`: verify results, expected-result refs, actual refs, decision rule, diff summary.
@@ -600,7 +600,7 @@ The architecture should be revisited when multiple RP types require shared servi
 | AC-007 | RP DSL test execution with inputs, fixtures, adapters/providers, verify rules, evidence | `execution`, `binding`, `provider`, `fixture`, `adapter`, `assertion`, `evidence` |
 | AC-008 | Unsafe or incomplete regression execution is blocked | `environment`, `mapping`, `provider`, `execution` |
 | AC-009 | Coverage, traceability, failures, and approved exclusions | `report`, `evidence` |
-| AC-010 | Framework verification and RP regression execution remain separate | Maven Surefire/Failsafe configuration, sample Product Repo fixture, `cli`, `evidence` |
+| AC-010 | Framework verification and RP regression execution remain separate | Maven Surefire/Failsafe configuration, sample generated artifacts, `cli`, `evidence` |
 
 ## 5.16 Implementation Readiness Gate
 

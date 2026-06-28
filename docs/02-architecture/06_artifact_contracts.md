@@ -163,6 +163,15 @@ Minimal `run_plan.yaml`:
 ```yaml
 run_profile: ci_ephemeral
 execution_mode: ci_ephemeral
+profile:
+  runner_location: ci
+  isolation_scope: single_target
+  dependency_model: isolated_dependencies
+  constraints:
+    testcontainers_allowed: true
+    mocks_allowed: true
+    shared_environment_allowed: false
+    destructive_operations: ephemeral_only
 target_dependencies:
   transform_job: []
 runtime:
@@ -173,10 +182,12 @@ Minimal `environment_binding.yaml`:
 
 ```yaml
 environment_id: ci_ephemeral
+environment_type: isolated
 targets:
   transform_job:
     type: batch_job
     runner: spring_boot_cli
+    binding_type: local_process
     provider_contract_ref: provider_contracts/providers.yaml#adapters.spring_boot_cli
 ```
 
@@ -192,6 +203,29 @@ source_labels:
 ```
 
 `provider_contracts` is the canonical contract container for runtime. Executable provider contracts must declare `provider_family` and `provider_type` so the provider capability registry can validate required fields, runtime support status, allowed execution modes, and evidence outputs before execution. Contracts may be supplied as reusable defaults or through generated suite/run/environment artifacts. Resolution order is: framework/provider default, then generated suite/run-profile/environment-binding override. Unsupported or ambiguous overrides fail before execution. Dispatch uses DSL and generated artifact fields: `targets.<target_id>.runner` and `execute[].operation` select adapter/provider contracts; `setup.fixtures.<name>.type` selects fixture contracts; `expected_results.<name>.type` selects expected-result readers; `verify[].type` selects verify providers; `evidence.required[]` selects evidence collection requirements.
+
+### 6.4A Framework-Owned Schemas and Catalogs
+
+The framework owns generic schemas and catalogs. Product-specific strategy selection remains outside the framework.
+
+Framework-owned schemas:
+
+- `test_case_dsl.schema.yaml`
+- `run_profile.schema.yaml`
+- `environment_binding.schema.yaml`
+- `runner_plugin_contract.md`
+- `verify_plugin_contract.md`
+- `result_schema.yaml`
+- `evidence_schema.yaml`
+
+Framework-owned catalogs:
+
+- Runner catalog: `maven_failsafe`, `cli_command`, `http_api`, `jdbc`, `nats`, `kafka`, `file`, `container`, `k8s_job`.
+- Operation catalog: `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, `run_application`.
+- Verify catalog: `equals`, `contains`, `file_diff`, `db_record_exists`, `event_published`, `schema_match`, plus supported structured-output checks.
+- Fixture catalog: database seed/cleanup, file seed/cleanup, message seed/cleanup, mock setup, and existing-state checks when provider contracts exist.
+
+The framework validates that a runner, operation, fixture type, verify type, and evidence ref are declared and supported. The Agent Skill decides whether a product/RU should use a catalog entry. For example, the framework may provide `maven_failsafe`, but the Agent Skill decides whether a release unit is Java/Maven and eligible for that runner.
 
 Current provider contract minimums enforced by the framework verification build:
 
@@ -280,7 +314,7 @@ Test case generation and test case execution are separate actions. Execution sha
 | `tests/approved/` | Reviewed test cases eligible for normal regression execution |
 | `tests/retired/` | Superseded test cases retained for traceability |
 
-Drafting artifacts created after DSL v1 adoption must use the same identity, status, revision, and traceability vocabulary as executable DSL test cases. Skeletons and update proposals are review artifacts, not executable tests; they must not emit legacy-only fields such as `rp_id`, `ac_id`, `artifact_status`, or `source_refs`.
+Drafting artifacts created after the generic DSL metadata migration must use the same identity, status, revision, `source_refs`, and optional `labels` vocabulary as executable DSL test cases. Skeletons and update proposals are review artifacts, not executable tests; they must not emit legacy-only fields such as `rp_id`, `ac_id`, `artifact_status`, or old `traceability.*` fields.
 
 Skeleton draft shape:
 
@@ -289,16 +323,17 @@ dsl_version: v1
 test_case_id: RP-AR-M1-data-pipeline-TC-001
 status: draft_skeleton
 revision: 1
-traceability:
-  package_id: RP-AR-M1-data-pipeline
-  acceptance_criteria_id: RP-AR-M1-data-pipeline-AC-001
-  source: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-001
-  source_fingerprint: <fingerprint>
-  readiness_gaps:
-    - field_path: generated-framework/environment_bindings/ci_ephemeral.yaml#targets.transform_job
-      reason: execution_context_incomplete
-      gap: logical target binding is missing
-      owner_action: Run Product Mapping Translation after completing Product/RP/RU context.
+labels:
+  package: RP-AR-M1-data-pipeline
+  runtime_unit: RU-transform-job
+source_refs:
+  acceptance_criteria: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-001
+source_fingerprint: <fingerprint>
+readiness_gaps:
+  - field_path: generated-framework/environment_bindings/ci_ephemeral.yaml#targets.transform_job
+    reason: execution_context_incomplete
+    gap: logical target binding is missing
+    owner_action: Run Product Mapping Translation after completing Product/RP/RU context.
 ```
 
 Update proposal shape:
@@ -309,10 +344,10 @@ dsl_version: v1
 test_case_id: RP-AR-M1-data-pipeline-TC-001
 status: needs_update
 revision: 1
-traceability:
-  package_id: RP-AR-M1-data-pipeline
-  acceptance_criteria_id: RP-AR-M1-data-pipeline-AC-001
-  source: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-001
+labels:
+  package: RP-AR-M1-data-pipeline
+source_refs:
+  acceptance_criteria: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-001
 replaces: tests/approved/RP-AR-M1-data-pipeline-TC-001.yaml
 source_fingerprint: <fingerprint>
 readiness_gaps:
@@ -326,7 +361,7 @@ An approved test case may be replaced only by an explicit update proposal that r
 
 ## 6.7 Execution-Focused Test Case DSL v1
 
-The test case artifact is a package-neutral execution DSL. It describes what RP behavior is validated, which targets are involved, what setup data is needed, what operation runs, what outputs are captured, which expected results are used, how verification is performed, what evidence is retained, and what runtime policy applies.
+The test case artifact is a package-neutral execution DSL. It describes what reviewed behavior is validated, which targets are involved, what setup data is needed, what operation runs, what outputs are captured, which expected results are used, how verification is performed, what evidence is retained, and what runtime policy applies.
 
 DSL v1 is intentionally not a governance workflow. It must not contain `approval_status`, `approved_by`, `approval_required`, `waiver`, `release_gate`, `risk_approval`, or release governance fields. Expected-result review and release approval remain separate artifacts and processes.
 
@@ -336,7 +371,8 @@ Use clear test-case language in new DSL artifacts:
 |---|---|
 | `dsl_version` | Select parser and compatibility rules. |
 | `test_case_id`, `status`, `revision` | Identify the durable test artifact and revision. `status` is execution lifecycle state, not approval state. |
-| `traceability` | Link the test to package ID, AC ID, and source spec reference. |
+| `labels` | Optional opaque metadata for reporting, such as product, package, runtime unit, team, or domain. |
+| `source_refs` | Link the test to reviewed source artifacts such as acceptance criteria and feature specs. |
 | `targets` | Name each application, database, event bus, file store, batch runner, or external boundary used by the test. |
 | `scenario` | Describe test type, scope, behavior, and required capabilities. |
 | `parameters` | Optionally reference a reviewed parameter set for repeated execution of the same logical test. |
@@ -351,7 +387,8 @@ Use clear test-case language in new DSL artifacts:
 
 The v1 contract separates stable top-level structure from execution-required content:
 
-- Always required: `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime`.
+- Always required: `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs.acceptance_criteria`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime`.
+- Optional: `labels` and `compatible_profiles`. `labels` are report metadata only; `compatible_profiles` restricts the test to named generated run profiles.
 - Conditionally required: `setup.fixtures` when the scenario needs precondition data, state mutation, mock setup, seed data, or cleanup.
 - Conditionally required: `expected_results` when a verify item references an approved artifact, schema, contract, payload, file, DB state snapshot, or other reusable truth source. Simple deterministic expected values may be declared directly in `verify[].expected`.
 - Conditionally required: `parameters.ref` and `parameters.bind_as` when the test uses parameterization. `parameters.ref` points to a reviewed parameter set artifact and `parameters.bind_as` defines the `${param.<bind_as>.*}` namespace used in the DSL.
@@ -366,10 +403,17 @@ test_case_id: RP-FWK-SAMPLE-TC-001
 status: draft_executable
 revision: 1
 
-traceability:
-  package_id: RP-FWK-SAMPLE
-  acceptance_criteria_id: RP-FWK-SAMPLE-AC-001
-  source: acceptance_criteria.md#RP-FWK-SAMPLE-AC-001
+labels:
+  product: FRAMEWORK-SAMPLE
+  package: RP-FWK-SAMPLE
+  runtime_unit: RU-framework-sample-adapter
+
+source_refs:
+  acceptance_criteria: acceptance_criteria.md#RP-FWK-SAMPLE-AC-001
+  feature_spec: rp_feature_spec.md#F001
+
+compatible_profiles:
+  - ci_ephemeral
 
 targets:
   framework_sample_pipeline:
@@ -599,15 +643,15 @@ runtime:
 
 Allowed DSL execution statuses are `draft_skeleton`, `draft_executable`, `active`, `needs_update`, and `retired`. These are not approval states and must not be used as release gates.
 
-An execution-focused DSL v1 artifact is execution-eligible only when it is stored under the RP `tests/approved/` lifecycle location and has an allowed executable status such as `active`. Expected-result approval remains on expected-result artifacts, not on the DSL status field.
+An execution-focused DSL v1 artifact is execution-eligible only when it is stored under the configured `tests/approved/` lifecycle location and has an allowed executable status such as `active`. Expected-result approval remains on expected-result artifacts, not on the DSL status field.
 
 ### 6.7.6 Run and Report Consumption
 
 The same execution-focused DSL v1 artifact must be consumed consistently by validation, binding, execution evidence, and coverage reporting:
 
-- `run` must derive RP ID and AC ID from `traceability.package_id` and `traceability.acceptance_criteria_id`.
+- `run` must derive the reviewed AC source from `source_refs.acceptance_criteria` and may copy opaque report labels from `labels` or `traceability_map.yaml`.
 - `run` must derive target runner, fixture type, operation, expected-result reader, verify type, evidence refs, timeout, and retry from v1 sections.
-- `run` must write normalized evidence fields needed by existing reporting, including RP ID, AC ID, test case ID, batch ID, run ID, provider family/type, provider contract path, final status, and actual-output refs.
+- `run` must write normalized evidence fields needed by reporting, including source refs, labels when provided, test case ID, batch ID, run ID, provider family/type, provider contract path, final status, and actual-output refs.
 - `report --batch-id` must calculate coverage from batch/run evidence and approved v1 test artifacts without requiring legacy-only fields.
 - A v1 test that passes execution but cannot be included in a review-ready batch report is not complete F007/F008 support.
 
@@ -617,9 +661,12 @@ The current implementation still contains legacy v1 field readers in some framew
 
 | Legacy Field | v1 Execution-Focused Field |
 |---|---|
-| `rp_id` | `traceability.package_id` |
-| `ac_id` | `traceability.acceptance_criteria_id` |
-| `source_refs.acceptance_criteria` | `traceability.source` |
+| `rp_id` | `labels.package` or `traceability_map.yaml` |
+| `ru_id` / `runtime_unit_id` | `labels.runtime_unit` or `traceability_map.yaml` |
+| `ac_id` | `source_refs.acceptance_criteria` or `traceability_map.yaml` |
+| `traceability.package_id` | `labels.package` |
+| `traceability.acceptance_criteria_id` | `source_refs.acceptance_criteria` |
+| `traceability.source` | `source_refs.acceptance_criteria` or a specific source ref |
 | `execution_target.adapter` | `targets.<target_id>.runner` |
 | `execution_target.environment_ref` | `targets.<target_id>.environment` |
 | `fixture.setup` / `fixture.cleanup` | `setup.fixtures.<name>` with `cleanup_ref` |
@@ -635,7 +682,7 @@ Implementation work after this documentation baseline must first add validation 
 Implementation sequencing rule:
 
 - First implement DSL v1 parsing and validation for the execution-focused field set.
-- Then update generation so executable drafts emit execution-focused fields, and skeleton/update proposal artifacts emit only v1 identity/status/revision, traceability, source fingerprint, replacement link when relevant, and readiness gaps.
+- Then update generation so executable drafts emit execution-focused fields, and skeleton/update proposal artifacts emit only v1 identity/status/revision, `source_refs`, optional `labels`, source fingerprint, replacement link when relevant, and readiness gaps.
 - Then keep legacy artifacts readable through compatibility behavior until migrated.
 - Then prove one active execution-focused DSL v1 artifact can pass `run` and `report --batch-id` with review-ready coverage.
 - Only after those checks pass may provider runtime dispatch or sample fixture migration claim execution-focused DSL support.

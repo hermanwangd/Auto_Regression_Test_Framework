@@ -35,7 +35,7 @@ They shall cover:
 - Product Repo bootstrap and readiness checks.
 - RP skeleton and product artifact completeness checks for product-side readiness.
 - Generated suite manifest, run plan, environment binding, provider contract, target dependency, and missing-field handling.
-- DSL schema validation for `traceability`, `targets`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`, plus execution lifecycle status checks and unsupported capability blocking.
+- DSL schema validation for `source_refs`, optional `labels`, `targets`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`, plus execution lifecycle status checks and unsupported capability blocking.
 - Expected-result approval gating.
 - Environment resolver behavior for `local_fixture`, `ci_ephemeral`, `sit_deployed`, and `evidence_only`.
 - Binding, provider, fixture, execution, assertion, evidence, and coverage-report behavior.
@@ -48,7 +48,7 @@ They shall cover:
 The sample integration fixture is a miniature Product Repo plus generated framework artifacts used only to verify the framework. The framework integration path must consume generated artifacts, not infer Product/RP/RU topology. It must include:
 
 - A sample Product Repo root marker that says fixture evidence is not downstream Product/RP release evidence.
-- One sample RP label, currently `RP-FWK-SAMPLE`, carried only through traceability metadata.
+- One sample RP label, currently `RP-FWK-SAMPLE`, carried only through optional labels or generated traceability-map metadata.
 - Generated `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, and `traceability_map.yaml`.
 - One checked-in approved DSL test case.
 - One approved expected-result artifact.
@@ -110,7 +110,7 @@ This is a pre-provider-runtime gate. FWK-008 must be green before sample fixture
 
 | DSL Area | Positive Verification | Failure Verification |
 |---|---|---|
-| Identity and traceability | Reads `dsl_version`, `test_case_id`, `status`, `revision`, and `traceability.package_id` / `acceptance_criteria_id` / `source` | Missing traceability or unsupported `status` blocks before execution. |
+| Identity and source refs | Reads `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs.acceptance_criteria`, optional `labels`, and optional `compatible_profiles` | Missing acceptance-criteria source ref, unsupported `status`, or incompatible selected profile blocks before execution. Labels must remain report metadata and must not drive runtime decisions. |
 | Targets | Resolves multiple named `targets` with `type`, `runner`, and `environment` | Missing target or execute step referencing an unknown target blocks before provider dispatch. |
 | Parameters | Resolves `parameters.ref` into reviewed parameter cases, binds them through `parameters.bind_as`, and creates separate run IDs and run evidence with `parameter_case_id` | Missing or unreadable parameter ref, missing bind namespace, duplicate case ID in the referenced set, missing values, or unresolved `${param.<bind_as>.<field>}` blocks before provider dispatch. |
 | Setup | Resolves `setup.fixtures` and `cleanup_ref` for state-mutating fixtures | State-changing fixture without cleanup reference reports a fixture-policy gap. |
@@ -118,14 +118,14 @@ This is a pre-provider-runtime gate. FWK-008 must be green before sample fixture
 | Expected results | Resolves `expected_results` refs used by verification | Duplicated legacy oracle/expected references or missing expected ref blocks before assertion evaluation. |
 | Verify | Supports captured-output actual/expected checks, provider-metadata `response_status_equals`, canonical `selector`, `db_record_exists`, and `event_published` semantics. `json_path_equals` and `json_path_absent` must keep `actual` as the captured output ref and use `selector` for the JSON/YAML path. | Missing required `actual`, missing `expected`, missing provider metadata, missing selector for JSON path verification, query ref, event ref, or unsupported verify type blocks with verify ID. |
 | Evidence and runtime | Resolves `evidence.required`, `runtime.timeout`, and `runtime.retry.max_attempts` | Evidence refs that do not point to execute/verify outputs or unbounded runtime policy block before execution. |
-| Run/report consumption | `run` executes one active v1 approved test and `report --batch-id` produces review-ready traceability and coverage | A run that passes but cannot be included in a review-ready batch report fails the gate. |
+| Run/report consumption | `run` executes one active v1 approved test and `report --batch-id` produces review-ready source refs, optional report labels, and coverage | A run that passes but cannot be included in a review-ready batch report fails the gate. |
 | Prohibited fields | Accepts execution-focused fields only in new artifacts | `rp_id`, `ac_id`, `execution_target`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, `policy`, approval fields, waiver fields, release gate fields, or risk approval fields block before execution. |
 | Legacy compatibility | Legacy sample artifacts remain readable through an explicit compatibility path until migrated | Legacy-only input must not be silently promoted as a new execution-focused artifact. |
 
 Minimum FWK-008 test cases:
 
 - Valid execution-focused DSL with multiple targets, setup fixture, `run_batch`, captured outputs, expected result, verify rules, evidence refs, timeout, and retry passes validation.
-- Missing traceability, unsupported status, missing target, unknown execute target, missing execute outputs, missing expected result ref, invalid verify rule, invalid evidence ref, or unbounded runtime policy blocks before provider dispatch.
+- Missing `source_refs.acceptance_criteria`, unsupported status, missing target, unknown execute target, missing execute outputs, missing expected result ref, invalid verify rule, invalid evidence ref, or unbounded runtime policy blocks before provider dispatch.
 - Multiple executable `execute[]` steps block before provider dispatch so the runtime cannot silently execute only the primary step.
 - `json_path_equals` without `selector` and `json_path_absent` without `selector` block during DSL validation before provider dispatch or assertion evaluation. Migrated artifacts may use compatibility aliases `path` or `json_path`, but new generated DSL must use `selector`.
 - `response_status_equals` with provider HTTP status metadata passes without `actual`; the same verify type blocks when neither provider metadata nor a captured `actual`/`selector` source is available.
@@ -133,9 +133,9 @@ Minimum FWK-008 test cases:
 - Governance-heavy fields such as approval, waiver, release gate, or risk approval state are rejected in DSL test cases.
 - `parameters.ref` with a reviewed two-case parameter set and `parameters.bind_as` creates two run IDs, two run evidence directories, recorded `parameter_case_id`, resolved `${param.<bind_as>.<field>}` values, and batch/report coverage that counts the AC once.
 - Generator output for `draft_executable_test_case` emits the v1 execution-focused field set and does not overwrite checked-in approved tests.
-- Generator output for `draft_test_skeleton` and `update_proposal` uses v1 identity/status/revision and traceability fields, avoids `rp_id`, `ac_id`, `artifact_status`, and `source_refs`, and never treats a skeleton as executable.
-- CLI dry-run reports DSL validation gaps with AP, field path, test case ID, AC ID, reason, and owner action.
-- CLI `run` accepts one `tests/approved/` v1 test with `status: active`, writes run and batch evidence, and CLI `report --batch-id` returns review-ready coverage with traceability to RP ID, AC ID, test case ID, and run ID.
+- Generator output for `draft_test_skeleton` and `update_proposal` uses v1 identity/status/revision, `source_refs`, optional `labels`, avoids `rp_id`, `ac_id`, `artifact_status`, and old `traceability.*` fields, and never treats a skeleton as executable.
+- CLI dry-run reports DSL validation gaps with AP, field path, test case ID, acceptance-criteria source ref when available, reason, and owner action.
+- CLI `run` accepts one `tests/approved/` v1 test with `status: active`, writes run and batch evidence, and CLI `report --batch-id` returns review-ready coverage with source ref, labels or traceability-map labels when provided, test case ID, and run ID.
 
 This verification may initially run against parser/generator tests, CLI dry-run tests, compatibility translation tests, and one CLI run/report consumption test. It must be green before migrating the sample fixture or changing provider runtime dispatch.
 

@@ -16,14 +16,14 @@ The DSL and 7 AP are validated through these AC rather than as separate, abstrac
 | AC-006 | Definition and Validation / Oracle and Assertion Engine | DSL `expected_results` and `verify` rules must point to explicit truth sources or deterministic decision rules. |
 | AC-007 | Planning and Binding / Fixture and State Manager / Execution Engine / Oracle and Assertion Engine / Evidence and Reporting | Checked-in DSL tests must execute through the full 7 AP flow and produce durable evidence. |
 | AC-008 | Discovery and Context / Planning and Binding / Fixture and State Manager / Execution Engine | Unsafe or incomplete DSL execution is blocked with owner-actionable reasons. |
-| AC-009 | Evidence and Reporting | DSL traceability and run evidence must support RP release review and coverage calculation. |
+| AC-009 | Evidence and Reporting | DSL source refs, optional report labels, traceability map, and run evidence must support RP release review and coverage calculation. |
 | AC-010 | Definition and Validation / Evidence and Reporting | Framework Verification and RP Regression Execution must remain separate execution lines with separate commands and evidence meaning. |
 
 Minimum verification rule for DSL/AP clarity:
 
-- Every readiness, generation, dry-run, execution, or evidence report that references DSL behavior shall include `ap`, `field_path` or `contract_path`, `test_case_id` when applicable, `ac_id` when applicable, `reason`, and `owner_action`.
-- DSL validation failures shall identify whether the problem belongs to DSL syntax, execution lifecycle state, traceability, targets, setup fixtures, execute outputs, expected results, verify rules, generated suite/run/environment artifacts, provider contract, environment readiness, runtime policy, or evidence completeness.
-- New execution-focused DSL artifacts shall use `dsl_version`, `test_case_id`, `status`, `revision`, `traceability`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime` as the always-required core contract before F007 provider runtime execution. `setup` and `expected_results` content is required when the scenario or verify rules need it.
+- Every readiness, generation, dry-run, execution, or evidence report that references DSL behavior shall include `ap`, `field_path` or `contract_path`, `test_case_id` when applicable, acceptance-criteria source ref when applicable, `reason`, and `owner_action`.
+- DSL validation failures shall identify whether the problem belongs to DSL syntax, execution lifecycle state, source refs or report-label normalization, targets, setup fixtures, execute outputs, expected results, verify rules, generated suite/run/environment artifacts, provider contract, environment readiness, runtime policy, or evidence completeness.
+- New execution-focused DSL artifacts shall use `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs.acceptance_criteria`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime` as the always-required core contract before F007 provider runtime execution. `labels`, `compatible_profiles`, `setup`, and `expected_results` content are required only when the scenario, report, selected profile, or verify rules need them.
 - M1 execution-focused DSL artifacts shall contain exactly one executable `execute[]` item. Multiple operations shall be represented as multiple approved test cases in the same batch until multi-step orchestration is designed and verified.
 - New execution-focused DSL artifacts may use `parameters.ref` and `parameters.bind_as` when the same reviewed test case must run with multiple named input variants from a checked-in parameter set. Inline `parameters.strategy`, `parameters.cases`, and `${parameters.<name>}` references are legacy-only and unsupported in new DSL artifacts.
 - New execution-focused DSL artifacts shall not contain legacy-only fields such as `rp_id`, `ac_id`, `execution_target`, `target_ru_id`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, or `policy`.
@@ -39,8 +39,8 @@ Minimum verification rule for DSL/AP clarity:
 - External runner use shall require explicit approval metadata and shall be reported as an escape hatch, not as the standard provider extension path.
 - A feature is not implementation-ready when its DSL fields, provider contract paths, expected-result source, verify rule, setup lifecycle, execute outputs, runtime policy, or evidence outputs cannot be explained through the 7 AP flow.
 - Maven framework verification evidence shall not be treated as downstream Product/RP release evidence.
-- CLI RP regression evidence shall identify the RP, batch, environment, test cases, and AC covered by the selected RP execution.
-- Execution-focused DSL v1 support is not accepted until one `tests/approved/` artifact with `status: active` can pass `run` and then produce a review-ready `report --batch-id` using v1 traceability.
+- CLI RP regression evidence shall identify the batch, environment, test cases, acceptance-criteria source refs, and optional Product/RP labels supplied by generated artifacts for the selected execution.
+- Execution-focused DSL v1 support is not accepted until one `tests/approved/` artifact with `status: active` can pass `run` and then produce a review-ready `report --batch-id` using v1 source refs and normalized report labels.
 
 Acceptance is split by evidence source:
 
@@ -126,6 +126,8 @@ And each provider contract required for execution shall resolve to one provider 
 
 And framework checks shall treat RP/RU IDs, implementation language, release manifest, and SIT topology as opaque traceability or Agent Skill input, not as runtime decision rules.
 
+And the Agent Skill shall produce a mapping explanation report that records selected runner, selected run profile, strategy selection reason, source facts used, unresolved assumptions, and validation warnings.
+
 ### Failure Path
 
 Given missing, ambiguous, unsupported, or unsafe generated suite/run/environment/provider data
@@ -156,7 +158,7 @@ Given ready RP AC and ready execution context artifacts
 When the agent skill performs readiness and test drafting
 Then the AC may produce a `draft_executable_test_case` artifact.
 
-And the draft shall use execution-focused DSL v1 sections needed by the 7 AP: identity/status/revision, traceability, targets, scenario, setup fixtures, execute operations and outputs, expected_results, verify rules, evidence requirements, and runtime policy.
+And the draft shall use execution-focused DSL v1 sections needed by the 7 AP: identity/status/revision, source refs, optional labels, targets, scenario, setup fixtures, execute operations and outputs, expected_results, verify rules, evidence requirements, and runtime policy.
 
 And the draft shall use readable operations such as `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, or `run_application`, not `call_ru` or `target_ru_id`.
 
@@ -176,11 +178,11 @@ Given ready AC with incomplete execution context
 When the agent skill performs readiness and test drafting
 Then only a `draft_test_skeleton` may be produced.
 
-The skeleton shall use v1 identity/status/revision and traceability fields, include readiness gaps, and omit executable sections that require missing target, setup, execute, expected-result, verify, evidence, or runtime context.
+The skeleton shall use v1 identity/status/revision, `source_refs`, optional `labels`, include readiness gaps, and omit executable sections that require missing target, setup, execute, expected-result, verify, evidence, or runtime context.
 
 Existing checked-in approved tests for the same RP AC shall not be silently overwritten.
 
-When an approved test already exists for the same RP AC, generation shall create an `update_proposal` with v1 identity/status/revision, traceability, `replaces`, source fingerprint, and readiness gaps instead of modifying the approved test in place.
+When an approved test already exists for the same RP AC, generation shall create an `update_proposal` with v1 identity/status/revision, `source_refs`, optional `labels`, `replaces`, source fingerprint, and readiness gaps instead of modifying the approved test in place.
 
 ## AC-006 Expected Results and Verify Rules Are Explicit
 
@@ -216,9 +218,9 @@ Then it shall declare `expected`, and it may omit `actual` only when the selecte
 
 Given execution-eligible DSL test cases for the pilot RP
 When regression is run in an allowed execution mode
-Then the RP execution shall produce one batch evidence record with RP ID, batch ID, execution mode, environment reference, included run IDs, test case IDs, AC IDs, and final batch status.
+Then the suite execution shall produce one batch evidence record with batch ID, execution mode, environment reference, included run IDs, test case IDs, acceptance-criteria source refs, optional report labels, and final batch status.
 
-And each executed test case shall produce durable run evidence with RP ID, batch ID, AC ID, test case ID, run ID, execution mode, resolved targets, setup fixture results, execute outputs, expected result refs, verify results, provider contracts used, provider family, provider type, registry status, provider contract path, adapter/provider result, cleanup result, and final pass/fail status.
+And each executed test case shall produce durable run evidence with batch ID, acceptance-criteria source ref, optional report labels, test case ID, run ID, execution mode, resolved targets, setup fixture results, execute outputs, expected result refs, verify results, provider contracts used, provider family, provider type, registry status, provider contract path, adapter/provider result, cleanup result, and final pass/fail status.
 
 And when a DSL test declares `parameters.ref` and `parameters.bind_as`, each resolved parameter-set case shall produce a separate run ID and durable run evidence containing `parameter_case_id` and resolved parameter values or safe references.
 
@@ -248,7 +250,7 @@ Then the tests shall produce two different run IDs and two different run evidenc
 
 Given one execution-eligible test references a reviewed parameter set with two cases through `parameters.ref` and `parameters.bind_as`
 When regression execution runs
-Then the two parameter cases shall produce two different run IDs and two different run evidence directories while preserving the same test case ID and AC ID.
+Then the two parameter cases shall produce two different run IDs and two different run evidence directories while preserving the same test case ID and acceptance-criteria source ref.
 
 ## AC-008 Unsafe or Incomplete Regression Execution Is Blocked
 
@@ -304,9 +306,9 @@ Then execution shall be blocked before runner invocation and the report shall st
 
 Given RP AC inventory, approved tests, batch execution evidence, run evidence, truth source artifacts, and approved exclusions
 When the evidence package is produced for a selected batch
-Then coverage shall be calculated against automatable RP-level AC, and every approved test and evidence item shall trace to RP ID, batch ID, run ID, test case ID, and AC ID.
+Then coverage shall be calculated against automatable RP-level AC, and every approved test and evidence item shall trace to `source_refs.acceptance_criteria`, batch ID, run ID, test case ID, and optional Product/RP labels supplied by generated artifacts.
 
-And execution-focused DSL v1 `traceability.package_id` and `traceability.acceptance_criteria_id` shall be sufficient for coverage reporting when normalized run evidence exists.
+And execution-focused DSL v1 `source_refs.acceptance_criteria`, optional `labels`, and generated `traceability_map.yaml` shall be sufficient for coverage reporting when normalized run evidence exists.
 
 Given two automatable AC and two approved tests in one batch
 When both runs pass and each run traces to a different AC
@@ -314,13 +316,13 @@ Then coverage shall be 100%.
 
 ### Failure Path
 
-Given missing evidence, missing traceability, unapproved exclusions, or unresolved failures
+Given missing evidence, missing source refs or required reporting labels, unapproved exclusions, or unresolved failures
 When the evidence package is produced
 Then the package shall report the gap and shall not claim review-ready coverage.
 
-Given a v1 test execution passes but the selected batch report cannot resolve the test case to RP ID and AC ID from v1 traceability
+Given a v1 test execution passes but the selected batch report cannot resolve the test case to an acceptance-criteria source ref and required reporting labels from v1 `source_refs`, optional `labels`, or `traceability_map.yaml`
 When the evidence package is produced
-Then the package shall not be review-ready and shall report the traceability normalization gap.
+Then the package shall not be review-ready and shall report the source-reference or report-label normalization gap.
 
 Given two automatable AC and two approved tests in one batch
 When one run passes and one run fails

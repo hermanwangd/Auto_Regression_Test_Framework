@@ -142,7 +142,7 @@ The DSL must answer execution questions in a package-neutral, execution-focused 
 
 | Question | DSL Responsibility | Not DSL Responsibility |
 |---|---|---|
-| What is being validated? | `traceability.package_id`, `traceability.acceptance_criteria_id`, `traceability.source`, and `scenario` | Writing or changing RP feature truth |
+| What is being validated? | `source_refs.acceptance_criteria`, optional opaque `labels`, and `scenario` | Writing or changing RP feature truth or making runtime decisions from product labels |
 | What targets are involved? | `targets` and `execute[].target` | Inferring RP/RU membership or deployment topology |
 | What data or state is needed? | `setup.fixtures` and `execute[].with` | Inline secrets, physical DB connection strings, or package-specific loaders |
 | What operation is performed? | `execute[].operation`, target, runtime inputs, and captured outputs | Shell scripts, endpoint URLs, queue drivers, or deployment commands embedded in the test |
@@ -152,7 +152,7 @@ The DSL must answer execution questions in a package-neutral, execution-focused 
 
 | DSL Area | Purpose | Primary AP Consumer |
 |---|---|---|
-| Identity and traceability | Identify DSL version, test ID, execution status, revision, package ID, AC ID, and source reference. | Definition and Validation |
+| Identity and source refs | Identify DSL version, test ID, execution status, revision, source references, and opaque report labels. | Definition and Validation |
 | Targets and scenario | Describe named targets, scenario type, scope, description, and capabilities. | Discovery and Context / Planning and Binding |
 | Setup and runtime inputs | Reference fixtures, seed data, mock setup, initial state, and operation inputs. | Planning and Binding / Fixture and State Manager |
 | Parameterization | Declare a reviewed parameter set reference when one logical test must run with multiple input variants. | Planning and Binding / Evidence and Reporting |
@@ -170,7 +170,9 @@ The DSL field set should stay minimal but complete enough to execute safely. M1 
 |---|---|---|---|
 | `dsl_version` | Always required | Selects supported schema and compatibility rules. | Definition and Validation |
 | `test_case_id`, `status`, `revision` | Always required | Gives every run stable artifact identity and execution lifecycle state. | Definition and Validation / Evidence and Reporting |
-| `traceability.package_id`, `traceability.acceptance_criteria_id`, `traceability.source` | Always required | Gives every run stable traceability to RP-level AC and source. | Definition and Validation / Evidence and Reporting |
+| `source_refs.acceptance_criteria` | Always required | Gives every run a stable source reference to the reviewed acceptance criterion without embedding product topology decisions. | Definition and Validation / Evidence and Reporting |
+| `labels` | Optional; required only when generated artifacts need product/RP/RU labels in reports | Carries opaque report metadata such as product, package, or runtime unit. Framework runtime must not branch on labels. | Evidence and Reporting |
+| `compatible_profiles` | Optional; required only when a test is limited to named run profiles | Lets the generic runner block a test when the selected run profile is not compatible. | Definition and Validation / Planning and Binding |
 | `targets` | Always required | Names the application, database, event bus, file store, batch runner, or external boundary used by the test. | Discovery and Context / Planning and Binding |
 | `scenario.type`, `scenario.scope`, `scenario.description`, `scenario.capabilities` | Always required | Tells the framework what kind of behavior and provider capability is needed. | Planning and Binding |
 | `parameters` | Optional; required only when one test case must run multiple reviewed parameter-set variants | Declares a reviewed parameter set reference without regenerating or duplicating test artifacts. | Planning and Binding / Evidence and Reporting |
@@ -203,6 +205,7 @@ Validation alone is not enough. At least one checked-in `tests/approved/` execut
 New execution-focused DSL artifacts must:
 
 - Use readable operation names such as `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, or `run_application`.
+- Use `source_refs` for source truth and `labels` for opaque product/RP/RU reporting metadata. New generated DSL must not require `traceability.package_id`, `traceability.acceptance_criteria_id`, or `traceability.source`; those fields are compatibility inputs until migrated.
 - Use `targets`, `setup` when needed, `execute`, `expected_results` when needed, `verify`, `evidence`, and `runtime` instead of framework-internal legacy fields.
 - Use one `execute[]` item per M1 test case. Multiple targets may be declared for context, state, or verify targets, but multiple executable operations in one DSL artifact are blocked until multi-step orchestration is explicitly designed and verified.
 - Capture `execute[].outputs` whenever verification or evidence references execution results.
@@ -359,7 +362,7 @@ Translate human-authored Product/RP/RU context into framework-readable artifacts
 
 The framework shall not decide which RU repos are included in an RP, which RU is Java/Maven, which runner a RU should use, or how SIT topology maps to deployed components. SA, tech lead, product developer, or the responsible owner defines RP membership in `rp_ru_mapping.yaml` and related product docs.
 
-The Agent Skill shall check that product mapping is complete enough to generate framework artifacts. It shall emit explicit `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, and `traceability_map.yaml`. The framework validates those generated artifacts and treats RP/RU labels as opaque traceability metadata.
+The Agent Skill shall check that product mapping is complete enough to generate framework artifacts. It shall emit explicit `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, and `traceability_map.yaml`. The framework validates those generated artifacts and treats RP/RU labels as opaque report metadata.
 
 ### Required Mechanism
 
@@ -370,6 +373,8 @@ The Agent Skill shall check that product mapping is complete enough to generate 
 - Generate `environment_binding.yaml` with logical target IDs bound to runner/provider contract names and environment refs.
 - Generate provider contracts with `provider_family`, `provider_type`, required fields, evidence outputs, runtime status, and safety policy.
 - Generate `traceability_map.yaml` with product/RP/RU/source labels used for reporting only.
+- Generate a mapping explanation report that records selected runner, selected run profile, strategy selection reason, source facts used, unresolved assumptions, and validation warnings.
+- For strategy-sensitive runners such as `maven_failsafe`, record the product-side reason, for example implementation stack, build tool, and supported test strategy. The framework only validates the runner contract; the Agent Skill owns eligibility reasoning.
 - Report missing or incomplete product mapping as Agent Skill readiness gaps before framework execution is requested.
 - Never require the framework core to inspect RP/RU membership, implementation language, release manifest semantics, or SIT topology.
 
@@ -390,16 +395,16 @@ Product developers own AC clarification and manual expected-result input. QA or 
 - Read `rp_feature_spec.md`, `acceptance_criteria.md`, product mapping inputs, generated `suite_manifest`, `run_plan`, `environment_binding`, target references, setup fixture references, execute operation references, expected-result references, verify rules, and validation boundaries.
 - Check AC readiness: AC ID, linked RP feature, observable input, behavior, expected output, and pass/fail condition.
 - Check execution context readiness: scenario type/scope/capabilities, named targets, target runner, environment binding, setup fixture or data source, cleanup reference when state is mutated, execute operation, execute input refs, execute output refs, deployment readiness ref, validation boundary, expected_results refs, verify type, captured-output actual/expected, provider-metadata expected, or target/query/event semantics, evidence refs, and runtime policy.
-- Map each generated DSL section to the AP that will consume it: identity and traceability to Definition and Validation, targets/setup/execute inputs to Planning and Binding, setup fixture fields to Fixture and State Manager, execute operations to Execution Engine, expected_results/verify to Oracle and Assertion Engine, and evidence/runtime fields to Evidence and Reporting.
+- Map each generated DSL section to the AP that will consume it: identity, `source_refs`, and optional `labels` to Definition and Validation, targets/setup/execute inputs to Planning and Binding, setup fixture fields to Fixture and State Manager, execute operations to Execution Engine, expected_results/verify to Oracle and Assertion Engine, and evidence/runtime fields to Evidence and Reporting.
 - Refuse executable drafting when an AP cannot be selected or when a required AP input would have to be invented by the agent.
 - Mark ambiguous AC as `not_ready_for_generation`.
-- Generate `draft_test_skeleton` only when AC is ready but execution context is incomplete. The skeleton shall use v1 identity/status/revision and traceability fields, plus `source_fingerprint` and `readiness_gaps`; it shall not include executable sections that require invented context.
+- Generate `draft_test_skeleton` only when AC is ready but execution context is incomplete. The skeleton shall use v1 identity/status/revision, `source_refs`, optional `labels`, plus `source_fingerprint` and `readiness_gaps`; it shall not include executable sections that require invented context.
 - Generate `draft_executable_test_case` using the package-neutral test case DSL only when AC and execution context are both ready.
-- Include `dsl_version` and all required DSL identity/status/revision, traceability, targets, scenario, setup, execute, expected_results, verify, evidence, and runtime fields in every generated executable draft.
-- Do not emit legacy-only fields such as `rp_id`, `ac_id`, `artifact_status`, or `source_refs` in new generated test-case drafts.
+- Include `dsl_version` and all required DSL identity/status/revision, `source_refs`, optional `labels`, targets, scenario, setup, execute, expected_results, verify, evidence, and runtime fields in every generated executable draft.
+- Do not emit legacy-only fields such as `rp_id`, `ac_id`, `artifact_status`, or old `traceability.*` fields in new generated test-case drafts.
 - Store generated test drafts as reviewable artifacts instead of transient execution state.
 - Detect existing checked-in test cases for the same RP AC before generating replacements.
-- Emit update proposals when RP AC, product mapping inputs, generated framework artifacts, targets, setup fixtures, execute operations, expected_results, verify rules, evidence refs, or runtime policy change. Update proposals shall use v1 identity/status/revision and traceability fields, include `replaces`, `source_fingerprint`, and `readiness_gaps`, and avoid legacy-only fields.
+- Emit update proposals when RP AC, product mapping inputs, generated framework artifacts, targets, setup fixtures, execute operations, expected_results, verify rules, evidence refs, or runtime policy change. Update proposals shall use v1 identity/status/revision, `source_refs`, optional `labels`, include `replaces`, `source_fingerprint`, and `readiness_gaps`, and avoid legacy-only fields.
 - Preserve checked-in test history by creating revisions or replacement links instead of silently overwriting checked-in tests.
 - Reference expected results as `pending`, `missing`, or linked to F006 output; do not generate expected-result truth in F005.
 - Emit a generation readiness report listing readiness status, generated artifact type, gaps, and owner action.
@@ -420,7 +425,7 @@ Generated expected results shall remain draft until reviewed. Product developers
 
 - Read `rp_feature_spec.md`, `acceptance_criteria.md`, input references, fixture or sample data, and linked product spec context.
 - Draft expected results as separate reviewable artifacts, not hidden runtime state.
-- Attach source references from expected results back to RP AC IDs and input references.
+- Attach source references from expected results back to RP AC source refs and input references.
 - Mark expected-result artifacts as `draft`, `blocked`, or `approved_for_regression`.
 - Record assumptions and unresolved gaps inside the expected-result artifact.
 - Mark generation as `blocked` when required business rules, input definitions, or output rules are missing.
@@ -437,7 +442,7 @@ Execute checked-in execution-eligible package-neutral DSL regression test cases 
 
 The framework shall resolve targets, setup fixtures, execute inputs, expected_results, verify rules, evidence refs, runtime policy, and provider contracts; confirm environment readiness; set up fixtures; execute operations through package adapters/providers; collect actual results; run verification; clean up fixtures; and emit raw execution evidence.
 
-One suite execution is a batch. A batch may contain one or more test runs. Each test run validates one execution-eligible DSL test case and produces run-level evidence. Product/RP labels are carried as traceability metadata so F008 can package RP-level coverage, but the runner makes decisions from framework artifacts only.
+One suite execution is a batch. A batch may contain one or more test runs. Each test run validates one execution-eligible DSL test case and produces run-level evidence. Product/RP labels are carried as report metadata so F008 can package RP-level coverage, but the runner makes decisions from framework artifacts only.
 
 The execution process and DSL shall remain package-type-neutral. M1 provider implementations shall prioritize reusable built-in providers for request/response, messaging, DB fixture, deployment readiness, and file/batch execution. External runner support is not the default extension path; it is an approved escape hatch when a legacy or specialized boundary cannot yet be represented by a reusable provider contract.
 
@@ -450,7 +455,7 @@ F007 implementation must not proceed directly to provider runtime expansion unti
 ### Required Mechanism
 
 - Read `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, checked-in DSL test cases, target definitions, setup fixture refs, execute operation refs, expected-result artifacts, verify rules, evidence refs, runtime policy, provider contracts, and `traceability_map.yaml`.
-- Check that test cases declare supported `dsl_version` and include the v1 core contract: identity/status/revision, traceability, targets, scenario, one M1 execute step, verify, evidence, and runtime fields, with setup and expected-results content required when referenced or needed by the scenario.
+- Check that test cases declare supported `dsl_version` and include the v1 core contract: identity/status/revision, `source_refs`, optional `labels`, targets, scenario, one M1 execute step, verify, evidence, and runtime fields, with setup and expected-results content required when referenced or needed by the scenario.
 - Reject new execution-focused DSL artifacts that still use legacy-only fields such as `rp_id`, `ac_id`, `execution_target`, `target_ru_id`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, or `policy`.
 - Reject new execution-focused DSL artifacts that contain governance-heavy fields such as approval, waiver, release gate, or risk approval state.
 - Check that test cases have execution lifecycle status allowed by the selected run policy.
@@ -458,7 +463,7 @@ F007 implementation must not proceed directly to provider runtime expansion unti
 - Validate that every DSL section can be consumed by exactly one AP responsibility path before adapter execution starts.
 - Validate that every DSL logical reference to a target runner, execute operation, setup fixture type, expected-result type, verify type, or evidence output has a matching provider contract or supported default.
 - Validate each provider contract against a capability registry by `provider_family`, `provider_type`, required fields, supported runtime status, and execution mode before adapter/provider execution.
-- Normalize execution-focused DSL v1 traceability into internal run/report metadata without requiring legacy `rp_id`, `ac_id`, `execution_target`, `package_inputs`, `oracles`, `assertions`, or `policy` fields in new test artifacts.
+- Normalize execution-focused DSL v1 `source_refs`, optional `labels`, and generated `traceability_map.yaml` data into internal run/report metadata without requiring legacy `rp_id`, `ac_id`, `execution_target`, `package_inputs`, `oracles`, `assertions`, or `policy` fields in new test artifacts.
 - Reject ambiguous logical target or provider contract resolution rather than falling back silently to the first match.
 - Require explicit approval metadata before using an external runner escape hatch, including reason, owner, bounded command or container ref, timeout, inputs, outputs, and evidence map.
 - Create one unique batch ID for the suite execution request.
@@ -469,13 +474,13 @@ F007 implementation must not proceed directly to provider runtime expansion unti
 - Reject or mark invalid runs when suite manifest, run plan, environment binding, target runner, execute operation, setup fixtures, expected_results, verify rules, required deployment evidence, or environment readiness are missing.
 - Resolve logical setup fixtures and execute inputs to concrete fixture or generated data.
 - Bind runtime values from setup fixtures, execute inputs, context, and previous execute outputs.
-- Run setup actions needed by the package fixture lifecycle.
-- Execute or validate through the configured release package adapter.
+- Run setup actions needed by the configured fixture lifecycle.
+- Execute or validate through the selected provider or adapter contract.
 - Collect actual outputs, logs, and execution metadata.
 - Run verification against resolved expected_results or deterministic verify rules.
 - Run cleanup actions and record cleanup evidence.
 - Emit run-level artifacts such as execution report, execution log, actual results, assertion results, observation results, postcondition results, cleanup evidence, and failure details.
-- Emit a batch-level summary that lists suite ID or trace package ID, environment profile, batch status, executed run IDs, test case IDs, AC IDs, and run statuses.
+- Emit a batch-level summary that lists suite ID, optional report labels, environment profile, batch status, executed run IDs, test case IDs, acceptance-criteria source refs, and run statuses.
 
 ## F008 — Coverage and Evidence Package
 
@@ -493,14 +498,14 @@ F008 shall not execute tests, generate tests, generate expected results, approve
 
 - Consume RP AC inventory, AC classification, approved test cases, F007 batch evidence, run-level evidence, expected-result artifacts, waiver records, manual-only approvals, and traceability links.
 - Treat `tests/approved/` location plus an allowed DSL lifecycle status such as `active` as execution eligibility; do not treat DSL `status` as expected-result approval, waiver approval, or release approval.
-- Read coverage traceability from execution-focused DSL v1 `traceability.*` fields and normalized run evidence, not from legacy-only test case fields.
+- Read coverage traceability from execution-focused DSL v1 `source_refs.acceptance_criteria`, optional `labels`, generated `traceability_map.yaml`, and normalized run evidence, not from legacy-only test case fields.
 - Calculate coverage as distinct covered automatable RP-level AC divided by distinct total automatable RP-level AC.
 - Count an AC as covered only when at least one run in the selected batch passed and traces to an approved test case for that AC.
-- De-duplicate coverage by AC ID when multiple tests cover the same AC.
+- De-duplicate coverage by acceptance-criteria source ref when multiple tests cover the same AC.
 - Exclude manual-only or waived AC only when approval records exist.
 - Keep partial AC in the denominator unless split and reclassified.
 - Keep blocked AC visible in the evidence package instead of silently dropping them.
-- Link each evidence item to RP ID, AC ID, test case ID, execution batch ID, and execution run ID.
+- Link each evidence item to the acceptance-criteria source ref, optional Product/RP labels when generated, test case ID, execution batch ID, and execution run ID.
 - Include expected result, actual result, failure reason, and source artifact links for failed checks.
 - Produce review-ready artifacts such as coverage report, traceability report, evidence index, failure summary, and release review summary.
 

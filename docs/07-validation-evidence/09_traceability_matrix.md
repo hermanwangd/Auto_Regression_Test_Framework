@@ -16,4 +16,4 @@
 | REQ-008 Unsafe or incomplete regression execution block | F007 | AC-008 | REG-RP-012 / REG-RP-013 / REG-RP-014 | EVD-007 |
 | REQ-009 Coverage and evidence package | F008 | AC-009 | REG-RP-009 / REG-RP-010 | EVD-008 |
 
-Every generated test case and evidence item shall also trace to RP ID and AC ID inside the pilot RP evidence package.
+Every generated test case and evidence item shall also trace to `source_refs.acceptance_criteria`, optional Product/RP labels, batch ID, run ID, and test case ID inside the pilot RP evidence package.

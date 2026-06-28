@@ -148,6 +148,7 @@ The Agent Skill translates product mapping into:
 - `environment_binding.yaml`: logical targets bound to runner/provider contracts for one environment.
 - `provider_contracts/*.yaml`: reusable runner, fixture, verify, and evidence provider contracts.
 - `traceability_map.yaml`: opaque product/RP/RU/source labels used for reporting, not runtime branching.
+- `mapping_explanation.md` or `.yaml`: strategy selection reason, selected runner/profile, source facts, unresolved assumptions, and validation warnings for human review.
 
 ## 1.8.1 Execution Environment Policy
 
