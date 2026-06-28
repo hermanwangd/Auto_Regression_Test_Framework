@@ -1,8 +1,8 @@
 # 16. Implementation Plan
 
-Status: Implementation-Ready Draft for M1 staged delivery
+Status: v0.2 Scope Alignment Draft
 
-This plan implements the Product/RP/RU baseline while keeping framework core product-topology agnostic. It starts with Product Repo readiness and Agent Skill translation contracts, then enables generic DSL execution and evidence once generated framework artifacts exist.
+This plan implements Auto Regression Test Framework v0.2 as a product-agnostic full pre-release execution framework while keeping Product/RP/RU interpretation outside the framework core. Product Repo readiness and Agent Skill translation remain important, but v0.2 framework implementation is judged by the generic execution contract: DSL, run profile, environment binding, suite selection, fixtures, runners, verify catalog, evidence, result schema, secret guardrails, and plugin contracts.
 
 This is an implementation plan, not the framework verification strategy itself. Framework Verification is defined in `docs/07-validation-evidence/07_regression_test_plan.md`, including unit/component tests and sample generated-artifact integration verification. Real downstream RP regression execution remains a release-package validation flow after owner-provided RP artifacts are translated into framework-readable artifacts.
 
@@ -14,9 +14,10 @@ This is an implementation plan, not the framework verification strategy itself. 
 - ADR-006 is accepted: heterogeneous RP support is handled through provider contracts, a provider capability registry, reusable built-in providers, and a governed external runner escape hatch.
 - ADR-008 is accepted: framework core is product-topology agnostic and consumes generated suite/run/environment/provider artifacts.
 - ADR-009 is accepted: new DSL metadata uses `labels` and `source_refs` instead of required product-specific `traceability.*` fields.
+- ADR-010 is accepted: v0.2 is the feature-complete pre-release execution framework contract, not a minimum MVP.
 - Minimum RP artifacts are defined: `package.yaml`, `rp_feature_spec.md`, `rp_ru_mapping.yaml`, `acceptance_criteria.md`, `tests/`, `expected-results/`, `traceability.md`, and `evidence_index.md`.
 - Architecture design defines Spring Boot 3.x / Java 17+ AP-level components, extension points, provider families, internal package boundaries, CLI commands, storage paths, execution modes, failure handling, and AC coverage.
-- Execution-focused DSL v1 is defined in the artifact contracts and must be validated and proven through CLI `run` plus `report --batch-id` before F007 provider runtime expansion.
+- Execution-focused DSL v0.2 is defined in the artifact contracts and must be validated and proven through CLI `run`, standard result JSON, evidence collection, and `report --batch-id` before provider runtime expansion is accepted.
 - Before any DSL, AP, provider runtime, evidence, or report implementation slice starts, the feature/spec, architecture design, artifact contract, AC, implementation plan, and test plan must be aligned on behavior, non-goals, required/conditional/prohibited fields, AP ownership, happy/failure/boundary paths, and verification evidence.
 
 ## Staged Readiness
@@ -26,7 +27,7 @@ Ready to implement now:
 - F001 Product Repo Bootstrap CLI and Readiness Agent Skill.
 - F002 Release Package Creation Guide and Completeness Check.
 - F004 Agent Skill Product Mapping Translation, using sample or pilot mappings to generate framework-readable artifacts.
-- Execution-focused DSL v1 parser/validator, generator guard, and run/report consumption gate before provider runtime migration.
+- Execution-focused DSL v0.2 parser/validator, run profile resolver, environment binding resolver, suite selection, secret guardrail, result schema, and run/report consumption gate before provider runtime migration.
 
 Ready after pilot RP artifacts exist:
 
@@ -36,7 +37,25 @@ Ready after pilot RP artifacts exist:
 - F007 Release Package DSL Test Execution.
 - F008 Coverage and Evidence Package.
 
-Pilot RP owner must supply RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, expected-result approval owner, adapter intent, dependency graph, required provider capabilities, and any approved external runner escape-hatch need. The Agent Skill must translate these into `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, and `traceability_map.yaml` before framework core execution.
+Pilot RP owner must supply RP ID, package type, target release, RU repos, version references, validation boundaries, execution modes, deployment requirements, environment references, fixture source, expected-result approval owner, adapter intent, dependency graph, required provider capabilities, and any approved external runner escape-hatch need. The Agent Skill must translate these into `suite_manifest.yaml`, run profiles, `environment_binding.yaml`, provider/plugin contracts, `traceability_map.yaml`, and a mapping explanation before framework core execution.
+
+## v0.2 Implementation Slices
+
+These slices supersede the earlier minimum M1/v1 execution-slice framing.
+
+| Slice | Scope | Acceptance |
+|---|---|---|
+| S01 DSL and Validation Core | `test_case_dsl.v0.2.schema.yaml`, required/conditional/prohibited fields, compatibility path, secret guardrail | AC-001, AC-014, AC-017 |
+| S02 Profile, Binding, and Suite Selection | Run profile schema, environment binding schema, selected profile compatibility, test/suite/tag/profile CLI selection | AC-002, AC-015, AC-018 |
+| S03 Parameter and Variable Resolution | `parameters.ref`, `parameters.bind_as`, per-parameter result/evidence, source-ref coverage de-duplication | AC-003 |
+| S04 Fixture Lifecycle | Fixture catalog, scope, cleanup policy, setup/cleanup evidence, unsafe fixture blocking | AC-004 |
+| S05 Runner Catalog | `cli`, `http`, `jdbc`, `nats`, `kafka`, `file`, `container`, `maven_failsafe`, `k8s_job` contracts | AC-005, AC-006, AC-007, AC-008, AC-016 |
+| S06 Verify and Polling Engine | Basic, structure, collection, numeric/time, file, state, event, custom verify types; DB/event polling | AC-009, AC-010, AC-011, AC-016 |
+| S07 Expected Results, Evidence, and Result Schema | Expected-result types, evidence collector, masking, result JSON, technical failure classification | AC-012, AC-013, AC-014 |
+| S08 Report and Explain | Coverage/report/explain over standard results and evidence without topology interpretation | AC-012, AC-013, AC-017 |
+| S09 Framework Verification Harness | Unit/component tests, sample generated-artifact integration tests, plugin catalog tests, CLI smoke | AC-001 through AC-018 |
+
+Implementation should proceed slice by slice. A slice is not ready for code until baseline, feature spec, artifact contracts, AC, implementation plan, and test plan describe the same v0.2 behavior.
 
 ## Current Implementation Status Snapshot
 
@@ -45,7 +64,7 @@ This snapshot separates framework verification progress from pilot acceptance pr
 | Area | Current Status | Evidence / Gate | Next Work |
 |---|---|---|---|
 | Product Repo and RP skeleton | Implemented for framework verification | CLI tests and sample fixture verification | Harden cross-artifact readiness as pilot artifacts arrive. |
-| AC intake and DSL drafting | Implemented for legacy framework readiness/draft flows and execution-focused DSL v1 parser/generator/run/report consumption | Unit/component tests, CLI run/report test, DSL v1 contract review, and `dsl_runtime` evidence metadata | Replace inline `explicit_cases` parameter expansion with `parameters.ref` / `parameters.bind_as`, then continue provider-family and pilot-environment hardening without regressing T003A/T003B gates. |
+| AC intake and DSL drafting | Implemented for legacy framework readiness/draft flows and being realigned to execution-focused DSL v0.2 parser/generator/run/report consumption | Unit/component tests, CLI run/report test, DSL v0.2 contract review, and runtime evidence metadata | Complete v0.2 validation, profile/binding, result schema, secret guardrail, plugin catalog, and provider-family hardening without regressing compatibility gates. |
 | Batch/run evidence and coverage | Implemented for sample and CLI flows | `./mvnw verify` and report tests | Validate against real pilot RP batch evidence. |
 | File/batch runtime | Supported | Provider registry dispatch and shell/file tests | Keep as reusable provider. |
 | REST/gRPC request-response runtime | Supported for REST and native descriptor-driven gRPC unary calls plus HTTP/status field, JSON path equality/absence, numeric tolerance, and schema/contract response assertions | Request/response provider, native gRPC invoker, runtime registry, CLI preflight, response assertion, schema/contract assertion, and evidence tests | Add pilot endpoint evidence when required. |
@@ -142,20 +161,20 @@ regress check-rp --root <product-repo> --rp-id <rp-id> --strict-schema
 
 Done when schema errors identify file path, field path, severity, owner action, and whether the error blocks generation, execution, or release evidence.
 
-### T003A - Execution-Focused DSL v1 Validation Gate
+### T003A - Execution-Focused DSL v0.2 Validation Gate
 
 Related features: F005, F006, F007
 Acceptance: AC-005, AC-006, AC-007, AC-008
 Modules: `schema`, `testcase`, `cli`
 
-Implement the execution-focused DSL v1 validation gate before provider runtime migration. The validator must accept the v1 semantic field set from `docs/02-architecture/06_artifact_contracts.md`, preserve legacy sample readability through an explicit compatibility path, and block new execution-focused artifacts that contain legacy-only fields or governance-heavy fields.
+Implement the execution-focused DSL v0.2 validation gate before provider runtime migration. The validator must accept the v0.2 semantic field set from `docs/02-architecture/06_artifact_contracts.md`, preserve legacy sample readability through an explicit compatibility path, and block new execution-focused artifacts that contain legacy-only fields, raw secrets, unsupported plugin refs, or governance-heavy fields.
 
 The gate validates:
 
 - Always-required fields: `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs.acceptance_criteria`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime`; `labels` and `compatible_profiles` are optional unless the selected report or profile needs them.
-- Conditional fields: `setup.fixtures` when precondition data or mutated state is needed, `expected_results` when verify rules use approved artifacts or reusable truth sources, `setup.fixtures.<name>.cleanup_ref` for state mutation, exactly one M1 `execute[]` item, `execute[].with`, `execute[].outputs`, `verify[].actual` when a verify rule reads captured output, `verify[].selector` for `json_path_equals`, `json_path_absent`, and structured `numeric_tolerance` checks, provider metadata for metadata-backed rules such as `response_status_equals`, `verify[].target/query/event`, and `verify[].options`.
+- Conditional fields: `setup.fixtures` when precondition data or mutated state is needed, `expected_results` when verify rules use approved artifacts or reusable truth sources, `setup.fixtures.<name>.cleanup_ref` for state mutation, explicit and uniquely named `execute[]` items, `execute[].with`, `execute[].outputs`, `verify[].actual` when a verify rule reads captured output, `verify[].selector` for structured checks, provider metadata for metadata-backed rules such as `response_status_equals`, `verify[].target/query/event`, `verify[].options`, selected profile, environment binding, and result/evidence refs.
 - Parameterization fields when used: `parameters.ref`, `parameters.bind_as`, a readable reviewed parameter set, unique case IDs in the referenced set, non-empty case values, and resolvable `${param.<bind_as>.<field>}` references.
-- Supported operations: `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, and `run_application`.
+- Supported operations: `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `run_application`, `run_container`, `run_k8s_job`, `run_maven_failsafe`, `read_file`, and `write_file`.
 - Supported verify rules: basic, structure, collection, numeric, file, state, and event checks defined in the artifact contract.
 - Prohibited fields: legacy-only fields such as `call_ru`, `target_ru_id`, `package_inputs`, and `oracles`, plus approval, waiver, release gate, and risk approval fields.
 
@@ -166,24 +185,24 @@ Verification:
 ./mvnw test
 ```
 
-Done when valid DSL v1 artifacts pass, invalid DSL blocks before provider dispatch with AP/field/test/source-ref/owner-action details, generated executable drafts use execution-focused fields, and legacy artifacts remain readable only through compatibility behavior.
+Done when valid DSL v0.2 artifacts pass, invalid DSL blocks before provider dispatch with AP/field/test/source-ref/owner-action details, generated executable drafts use execution-focused fields, and legacy artifacts remain readable only through compatibility behavior.
 
 The response status metadata gate includes `response_status_equals` with request/response provider HTTP status metadata, blocking the metadata shortcut when no request/response execute target exists, and requiring `actual` plus `selector` when the status is read from captured structured output.
 
-### T003B - Execution-Focused DSL v1 Run and Report Consumption Gate
+### T003B - Execution-Focused DSL v0.2 Run and Report Consumption Gate
 
 Related features: F007, F008
 Acceptance: AC-007, AC-009
 Modules: `cli`, `execution`, `evidence`, `report`
 
-Prove that the same execution-focused DSL v1 artifact can be consumed by execution and reporting before provider runtime expansion. The test artifact must live under `tests/approved/`, use `status: active`, and contain only v1 sections: `source_refs`, optional `labels`, optional `compatible_profiles`, `targets`, `scenario`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`.
+Prove that the same execution-focused DSL v0.2 artifact can be consumed by execution and reporting before provider runtime expansion. The test artifact must live under `tests/approved/`, use `status: active`, and contain only v0.2 sections: metadata, tags, `source_refs`, optional `labels`, optional `compatible_profiles`, `parameters`, `targets`, `scenario`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`.
 
 Required behavior:
 
 - `run` derives the reviewed AC source from `source_refs.acceptance_criteria` and copies optional report labels from `labels` or generated `traceability_map.yaml`.
-- `run` resolves v1 targets, setup fixtures, execute outputs, expected-result refs, verify rules, evidence refs, timeout, and retry into durable run and batch evidence.
-- `report --batch-id` calculates coverage from the selected batch using v1 source refs, optional labels, generated `traceability_map.yaml`, and normalized run evidence.
-- The selected batch becomes review-ready when the v1 test passes and covers the automatable RP AC through a resolvable source ref.
+- `run` resolves v0.2 targets, setup fixtures, execute outputs, expected-result refs, verify rules, evidence refs, selected profile, environment binding, timeout, retry, plugin contracts, and secret policy into durable result, run, and batch evidence.
+- `report --batch-id` calculates coverage from the selected batch using v0.2 source refs, optional labels, generated `traceability_map.yaml`, standard result JSON, and normalized run evidence.
+- The selected batch becomes review-ready when the v0.2 test passes and covers the automatable RP AC through a resolvable source ref.
 - A passing run that cannot be reported as review-ready is treated as an incomplete F007/F008 implementation.
 
 Verification:
@@ -234,7 +253,7 @@ Related feature: F005
 Acceptance: AC-005
 Modules: `testcase`
 
-Implement draft package-neutral DSL test skeleton and draft executable DSL test artifact writing under `tests/draft/`. Generated executable drafts must use execution-focused DSL v1 fields: `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs`, optional `labels`, optional `compatible_profiles`, `targets`, `scenario`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`. Detect existing checked-in test artifacts for the same source AC and create update proposals instead of overwriting.
+Implement draft package-neutral DSL test skeleton and draft executable DSL test artifact writing under `tests/draft/`. Generated executable drafts must use execution-focused DSL v0.2 fields: `dsl_version`, `test_case_id`, `status`, `revision`, tags, `source_refs`, optional `labels`, optional `compatible_profiles`, `parameters` when needed, `targets`, `scenario`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`. Detect existing checked-in test artifacts for the same source AC and create update proposals instead of overwriting.
 
 Verification:
 
@@ -283,7 +302,7 @@ Related feature: F007
 Acceptance: AC-007, AC-008
 Modules: `binding`
 
-Resolve execution-focused DSL v1 `targets`, `setup.fixtures`, `execute[].with`, `execute[].outputs`, `expected_results`, `verify`, `evidence.required`, and `runtime` into an execution plan. The initial compatibility path may still read legacy `package_inputs`, `steps`, `oracles`, `assertions`, `evidence_required`, and `policy`, but new generation and new framework tests must target the execution-focused fields. Binding types or operations outside the selected or implemented provider families must fail as unsupported before execution.
+Resolve execution-focused DSL v0.2 `targets`, `setup.fixtures`, `execute[].with`, `execute[].outputs`, `expected_results`, `verify`, `evidence.required`, selected profile, environment binding, and `runtime` into an execution plan. The initial compatibility path may still read legacy `package_inputs`, `steps`, `oracles`, `assertions`, `evidence_required`, and `policy`, but new generation and new framework tests must target the execution-focused fields. Binding types or operations outside the selected or implemented provider families must fail as unsupported before execution.
 
 Verification:
 
@@ -299,7 +318,7 @@ Related feature: F007
 Acceptance: AC-007, AC-008, AC-009
 Modules: `binding`, `execution`, `evidence`, `report`
 
-Implement the M1 parameterization subset for execution-focused DSL v1 using `parameters.ref` and `parameters.bind_as`. `parameters.ref` must point to a reviewed parameter set artifact. `parameters.bind_as` declares the namespace for `${param.<bind_as>.<field>}` references. Each referenced case must have a unique case ID and non-empty values. Runtime may resolve `${param.<bind_as>.<field>}` references from setup fixtures, execute inputs, expected results, verify rules, and evidence refs. Each case produces a separate run ID and run evidence with `parameter_case_id`; coverage counts the traced AC once per batch.
+Implement v0.2 parameterization using `parameters.ref` and `parameters.bind_as`. `parameters.ref` must point to a reviewed parameter set artifact. `parameters.bind_as` declares the namespace for `${param.<bind_as>.<field>}` references. Each referenced case must have a unique case ID and non-empty values. Runtime may resolve `${param.<bind_as>.<field>}` references from setup fixtures, execute inputs, expected results, verify rules, and evidence refs. Each case produces a separate run ID, standard result JSON, and run evidence with `parameter_case_id`; coverage counts the traced AC once per batch.
 
 Verification:
 
@@ -521,7 +540,7 @@ Parallelizable after T003, while execution runtime remains blocked until T003A a
 Gate 1 - Foundation ready:
 
 - T000, T001, T002, T003, T003A, T003B, and T004 complete.
-- F001/F002/F004 can be used to initialize and check Product Repo and RP readiness, and DSL v1 artifacts can be validated and consumed by run/report before provider runtime expansion.
+- F001/F002/F004 can be used to initialize and check Product Repo and RP readiness, and DSL v0.2 artifacts can be validated and consumed by run/result/report before provider runtime expansion.
 
 Gate 2 - Generation ready:
 

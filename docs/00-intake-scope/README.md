@@ -1,7 +1,7 @@
 # Product Spec-driven Release Package Regression Framework — Development Docs
 
-Status: M1 Staged Implementation-Ready Draft
-Version: v0.1
+Status: v0.2 Full Pre-release Scope Draft
+Version: v0.2
 
 This repo-ready development document set follows the existing spec template structure:
 
@@ -27,6 +27,6 @@ Core positioning:
 Product Repo = Source-of-truth structure
 Release Package = Release and regression evidence unit
 RP-level AC = Coverage and generation denominator
-Agent Skill = Readiness, test drafting, and expected-result drafting support
-Regression Framework = Execution, coverage, and evidence packaging
+Agent Skill = Product/RP/RU interpretation, mapping translation, strategy selection, test drafting, and expected-result drafting support
+Regression Framework v0.2 = Product-agnostic execution, validation, plugin contracts, result schema, evidence, coverage, and operability foundation
 ```

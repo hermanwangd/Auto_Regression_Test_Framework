@@ -219,3 +219,49 @@ source_refs:
 ### Consequences
 
 DSL test cases become more product-agnostic. Coverage and release evidence packaging must resolve product-specific reporting through `source_refs`, `labels`, and generated `traceability_map.yaml`. Generator, validator, run evidence, report, and compatibility tests must migrate away from required `traceability.*` fields for new artifacts.
+
+## ADR-010 Define v0.2 as Full Pre-release Execution Framework
+
+### Status
+
+Accepted
+
+### Context
+
+Earlier planning used M1 and DSL v1 language to describe a minimum executable slice. That framing is too small for the first usable framework contract. The framework must be complete enough to support local, CI, and SIT execution, runner and verify plugin contracts, fixtures, polling, evidence, result schema, suite selection, and secret guardrails before Phase 2 Agent Skill integration can be useful.
+
+At the same time, the framework must remain product-topology agnostic. Product/RP/RU mapping, topology translation, and strategy selection are product interpretation responsibilities and belong to Product Docs plus Phase 2 Agent Skill output artifacts.
+
+### Decision
+
+Auto Regression Test Framework v0.2 is the first feature-complete pre-release execution and operability contract. It is not a minimum MVP and not yet stable v1.0.
+
+Framework v0.2 owns:
+
+- DSL v0.2 schema.
+- Run profile and environment binding schemas.
+- Suite selection by test, suite, tag, and profile.
+- Parameter expansion.
+- Fixture setup and cleanup lifecycle.
+- Runner interface and runner catalog: `cli`, `http`, `jdbc`, `nats`, `kafka`, `file`, `container`, `maven_failsafe`, and `k8s_job`.
+- Execute operation catalog.
+- Verify/assertion catalog, including DB/event polling.
+- Expected-result artifact references.
+- Evidence collection and masking.
+- Standard result JSON and technical failure classification.
+- Secret guardrails.
+- Runner and verify plugin contracts.
+
+Framework v0.2 does not own:
+
+- RP/RU/product topology interpretation.
+- Strategy selection from product docs.
+- Test-case generation or expected-result generation.
+- Approval, waiver, release gate, dashboard, or governance workflow.
+- Business-level failure triage.
+
+### Consequences
+
+v0.2 implementation and verification must be judged against AC-001 through AC-018 in the acceptance criteria document. Any implementation slice that changes DSL/runtime behavior must update baseline, spec, artifact contracts, acceptance criteria, implementation plan, and framework verification test plan before code work proceeds.
+
+The Phase 2 Agent Skill will translate Product/RP/RU context into v0.2 framework-readable artifacts and must record mapping explanation, selected runner/profile, source facts, unresolved assumptions, and validation warnings.

@@ -1,6 +1,6 @@
 # 06. Artifact Contracts
 
-These contracts define the minimum artifacts needed to design or implement the M1 Release Package Regression Framework. They are specification contracts, not final runtime API design.
+These contracts define the artifacts needed to design or implement Auto Regression Test Framework v0.2 as a feature-complete pre-release execution framework. They are specification contracts, not final stable v1.0 runtime API design.
 
 Core boundary: Product/RP/RU mapping is product knowledge consumed by Phase 2 Agent Skills. The framework core consumes generated framework-readable artifacts: DSL tests, suite manifest, run plan, environment binding, provider contracts, expected results, parameter sets, and traceability map.
 
@@ -210,22 +210,86 @@ The framework owns generic schemas and catalogs. Product-specific strategy selec
 
 Framework-owned schemas:
 
-- `test_case_dsl.schema.yaml`
-- `run_profile.schema.yaml`
-- `environment_binding.schema.yaml`
+- `test_case_dsl.v0.2.schema.yaml`
+- `run_profile.v0.2.schema.yaml`
+- `environment_binding.v0.2.schema.yaml`
+- `suite_manifest.v0.2.schema.yaml`
 - `runner_plugin_contract.md`
 - `verify_plugin_contract.md`
-- `result_schema.yaml`
-- `evidence_schema.yaml`
+- `result.v0.2.schema.yaml`
+- `evidence.v0.2.schema.yaml`
 
 Framework-owned catalogs:
 
-- Runner catalog: `maven_failsafe`, `cli_command`, `http_api`, `jdbc`, `nats`, `kafka`, `file`, `container`, `k8s_job`.
-- Operation catalog: `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, `run_application`.
-- Verify catalog: `equals`, `contains`, `file_diff`, `db_record_exists`, `event_published`, `schema_match`, plus supported structured-output checks.
-- Fixture catalog: database seed/cleanup, file seed/cleanup, message seed/cleanup, mock setup, and existing-state checks when provider contracts exist.
+- Runner catalog: `cli`, `http`, `jdbc`, `nats`, `kafka`, `file`, `container`, `maven_failsafe`, `k8s_job`.
+- Operation catalog: `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `run_application`, `run_container`, `run_k8s_job`, `run_maven_failsafe`, `read_file`, `write_file`.
+- Verify catalog: `equals`, `not_equals`, `exists`, `not_exists`, `contains`, `regex_match`, `schema_match`, `list_size_equals`, `unordered_list_equals`, `subset_match`, `numeric_tolerance`, `greater_than`, `less_than`, `between`, `timestamp_tolerance`, `file_exists`, `file_not_empty`, `file_diff`, `csv_row_count_equals`, `csv_diff`, `db_record_exists`, `db_field_equals`, `db_row_count_equals`, `event_published`, `event_payload_match`, `event_not_published`, and `custom_verify`.
+- Fixture catalog: `database_seed`, `database_cleanup`, `file_seed`, `file_cleanup`, `mock_config`, `message_seed`, `container_dependency`, `environment_variable`, and `test_data_namespace`.
 
 The framework validates that a runner, operation, fixture type, verify type, and evidence ref are declared and supported. The Agent Skill decides whether a product/RU should use a catalog entry. For example, the framework may provide `maven_failsafe`, but the Agent Skill decides whether a release unit is Java/Maven and eligible for that runner.
+
+### 6.4B v0.2 Execution Contract Summary
+
+v0.2 is the full pre-release execution contract. It supersedes the earlier minimum DSL v1 subset while preserving compatibility rules for migrated artifacts.
+
+Required framework-owned artifact families:
+
+| Artifact | Purpose | Must Not Contain |
+|---|---|---|
+| Test case DSL | Generic validation intent, targets, setup, execute, expected results, verify, evidence, runtime | Raw secrets, topology decisions, approval or waiver state |
+| Run profile | Where and when to run, selected environment binding, isolation/dependency model, constraints | Raw endpoints, connection strings, credentials |
+| Environment binding | Resolve logical targets in local, CI, or SIT | Product topology decisions or unreferenced secrets |
+| Suite manifest | Select tests by suite, tag, profile, or test ID | Hidden product/RU inference |
+| Runner plugin metadata | Declare runner ID, target types, operations, and required binding fields | Product-specific strategy selection |
+| Verify plugin metadata | Declare verify type, target types, and required fields | Business truth approval |
+| Result schema | Normalize step results, verify results, evidence refs, labels, timing, and failure classification | Raw secrets |
+| Evidence schema | Index retained logs, artifacts, diffs, query results, events, runner reports, fixture logs, and cleanup logs | Raw secrets |
+
+Standard step result:
+
+```yaml
+step_result:
+  status: passed | failed | error
+  outputs: {}
+  logs: {}
+  files: {}
+  metrics:
+    duration_ms:
+  error:
+    code:
+    message:
+    details:
+```
+
+Standard verify result:
+
+```yaml
+verify_result:
+  status: passed | failed | error
+  type:
+  actual:
+  expected:
+  diff:
+  evidence_ref:
+  metrics:
+    duration_ms:
+    attempts:
+  error:
+    code:
+    message:
+```
+
+Technical failure classifications are `schema_error`, `target_resolution_error`, `fixture_setup_error`, `execution_error`, `verification_failed`, `timeout`, `environment_error`, `secret_resolution_error`, `cleanup_error`, and `framework_error`. Product defect, test data issue, expected outdated, and spec ambiguity remain Agent Skill or later triage-layer classifications.
+
+v0.2 validation must block before execution when:
+
+- `dsl_version` is not `v0.2`.
+- Test case ID, source refs, selected profile, targets, execute step IDs, verify IDs, fixture refs, expected-result refs, cleanup refs, parameter refs, evidence refs, or runtime policy are missing or invalid.
+- A selected profile is incompatible with the test case.
+- A target, runner, operation, verify type, environment binding, or plugin contract cannot be resolved.
+- `file_diff`, DB, event, or normal comparison verify rules are missing required actual, expected, target, query, event, topic/filter, or selector fields.
+- Polling timeout or poll interval is not an ISO-8601 duration.
+- Raw passwords, tokens, credentials, or connection strings appear in DSL, run profile, environment binding, result, or evidence.
 
 Current provider contract minimums enforced by the framework verification build:
 
@@ -319,7 +383,7 @@ Drafting artifacts created after the generic DSL metadata migration must use the
 Skeleton draft shape:
 
 ```yaml
-dsl_version: v1
+dsl_version: v0.2
 test_case_id: RP-AR-M1-data-pipeline-TC-001
 status: draft_skeleton
 revision: 1
@@ -340,7 +404,7 @@ Update proposal shape:
 
 ```yaml
 proposal_type: test_case_update
-dsl_version: v1
+dsl_version: v0.2
 test_case_id: RP-AR-M1-data-pipeline-TC-001
 status: needs_update
 revision: 1
@@ -359,11 +423,11 @@ readiness_gaps:
 
 An approved test case may be replaced only by an explicit update proposal that records the source change and replacement relationship.
 
-## 6.7 Execution-Focused Test Case DSL v1
+## 6.7 Execution-Focused Test Case DSL v0.2
 
 The test case artifact is a package-neutral execution DSL. It describes what reviewed behavior is validated, which targets are involved, what setup data is needed, what operation runs, what outputs are captured, which expected results are used, how verification is performed, what evidence is retained, and what runtime policy applies.
 
-DSL v1 is intentionally not a governance workflow. It must not contain `approval_status`, `approved_by`, `approval_required`, `waiver`, `release_gate`, `risk_approval`, or release governance fields. Expected-result review and release approval remain separate artifacts and processes.
+DSL v0.2 is intentionally not a governance workflow. It must not contain `approval_status`, `approved_by`, `approval_required`, `waiver`, `release_gate`, `risk_approval`, or release governance fields. Expected-result review and release approval remain separate artifacts and processes.
 
 Use clear test-case language in new DSL artifacts:
 
@@ -385,7 +449,7 @@ Use clear test-case language in new DSL artifacts:
 
 ### 6.7.0 Requirement Rules
 
-The v1 contract separates stable top-level structure from execution-required content:
+The v0.2 contract separates stable top-level structure from execution-required content:
 
 - Always required: `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs.acceptance_criteria`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime`.
 - Optional: `labels` and `compatible_profiles`. `labels` are report metadata only; `compatible_profiles` restricts the test to named generated run profiles.
@@ -395,10 +459,10 @@ The v1 contract separates stable top-level structure from execution-required con
 - Required when referenced: `execute[].outputs`, `verify[].selector` for structured output checks, `verify[].target/query/event` for state or event checks, `verify[].options` for polling/tolerance/normalization, and fixture `cleanup_ref`.
 - Prohibited in DSL: provider implementation settings, secrets, endpoint URLs, connection strings, SQL bodies, shell scripts, release gates, waivers, risk approvals, and approval workflow state.
 
-The v1 semantic model is:
+The v0.2 semantic model is:
 
 ```yaml
-dsl_version: v1
+dsl_version: v0.2
 test_case_id: RP-FWK-SAMPLE-TC-001
 status: draft_executable
 revision: 1
@@ -485,25 +549,25 @@ runtime:
 
 New DSL artifacts must use readable execution terms:
 
-| Replace Old Term | Use v1 Term | Reason |
+| Replace Old Term | Use v0.2 Term | Reason |
 |---|---|---|
 | `execution_target` | `targets` plus `execute[].target` | One test may involve multiple targets. |
 | `target_ru_id` | `target` | Tests should refer to logical target IDs, not framework-internal RU fields. |
 | `action: call_ru` | `operation: run_batch`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `run_application`, or `execute_command` | Operation names should explain what the test does. |
 | `package_inputs` | `setup.fixtures` or `execute[].with` | Setup owns preconditions; execute owns runtime inputs. |
-| `oracles` | `expected_results` | v1 uses expected result references and explicit `verify` rules instead of a heavy oracle framework. |
+| `oracles` | `expected_results` | v0.2 uses expected result references and explicit `verify` rules instead of a heavy oracle framework. |
 | `steps` | `execute` | The section is executable behavior, not an abstract workflow step. |
 | `assertions` | `verify` | The section defines pass/fail checks. |
 | `evidence_required` | `evidence.required` | Evidence should reference real execution or verification outputs. |
-| `policy` | `runtime` | Runtime policy is timeout and retry in v1. |
+| `policy` | `runtime` | Runtime policy is timeout, retry, and bounded execution behavior in v0.2. |
 
-Legacy v1 artifacts may still be read through a compatibility adapter during migration, but new generated drafts and new documentation examples must use the execution-focused shape above.
+Legacy v1 artifacts may still be read through a compatibility adapter during migration, but new generated drafts and new documentation examples must use the v0.2 execution-focused shape above.
 
 ### 6.7.2 Targets and Operations
 
 `targets` is a name-keyed map. Each target must declare `type`, `runner`, and `environment`. Common target types include `application`, `spring_boot_application`, `database`, `event_bus`, `file_storage`, `batch_runner`, `k8s_deployment`, and `vm_service`.
 
-`execute[].operation` must be one of the supported reusable operations for the selected provider family. Core v1 operations are:
+`execute[].operation` must be one of the supported reusable operations for the selected provider family. Core v0.2 operations are:
 
 - `run_batch`
 - `execute_command`
@@ -511,12 +575,16 @@ Legacy v1 artifacts may still be read through a compatibility adapter during mig
 - `execute_sql`
 - `publish_message`
 - `consume_message`
-- `request_reply_message`
 - `run_application`
+- `run_container`
+- `run_k8s_job`
+- `run_maven_failsafe`
+- `read_file`
+- `write_file`
 
 Every execute step must declare an `outputs` map when later verification or evidence depends on the result. Normal actions such as API calls, SQL queries, batch runs, or command execution belong in `execute`, not `verify`.
 
-M1 runtime supports exactly one executable `execute[]` item per test case. The array shape is retained for DSL version stability, and a test may declare multiple named `targets` for context or verification, but multiple executable operations in one artifact must block before provider dispatch. When an RP needs multiple operations, use multiple approved test cases in the same batch until multi-step orchestration is designed and verified.
+v0.2 supports one or more executable `execute[]` items when each step has a unique ID, declared operation, target, inputs, outputs, ordering semantics, and evidence refs. Ambiguous multi-step execution must block before provider dispatch.
 
 ### 6.7.3 Setup, Inputs, and Cleanup
 
@@ -526,7 +594,7 @@ Use `execute[].with` for runtime inputs passed to the target operation, such as 
 
 ### 6.7.3A Parameterization
 
-M1 parameterization uses reviewed parameter set artifacts. The DSL references the parameter set and declares the namespace used inside the test:
+v0.2 parameterization uses reviewed parameter set artifacts. The DSL references the parameter set and declares the namespace used inside the test:
 
 ```yaml
 parameters:
@@ -536,30 +604,31 @@ parameters:
 
 The referenced parameter set is a checked-in, reviewed artifact owned by the RP. It may contain one or more named cases, but the cases are not embedded in the DSL body. Parameter values may be referenced as `${param.<bind_as>.<field>}` from `setup.fixtures`, `execute[].with`, `expected_results`, `verify`, or `evidence` fields. Each resolved parameter case produces a separate run ID and run evidence record with `parameter_case_id`. Coverage still counts the traced AC once per selected batch even when multiple parameter cases pass.
 
-`parameters.strategy`, inline `parameters.cases`, `${parameters.<name>}` references, dynamic data selection, combinatorial case generation, runtime-created cases, secrets, and provider connection details do not belong in new v1 DSL artifacts. Existing `strategy: explicit_cases` artifacts may be read only through a legacy compatibility path until migrated to `ref` / `bind_as`.
+`parameters.strategy`, inline `parameters.cases`, `${parameters.<name>}` references, dynamic data selection, combinatorial case generation, runtime-created cases, secrets, and provider connection details do not belong in new v0.2 DSL artifacts. Existing `strategy: explicit_cases` artifacts may be read only through a legacy compatibility path until migrated to `ref` / `bind_as`.
 
 ### 6.7.4 Expected Results and Verification
 
 `expected_results` contains simple truth references: expected files, expected JSON/YAML, expected DB state snapshots, expected response payloads, schemas, or contracts. Do not duplicate the same expected artifact under both `expected_results` and legacy `oracles`.
 
-Core `verify[].type` values for v1 are:
+Core `verify[].type` values for v0.2 are:
 
 | Group | Verify Types |
 |---|---|
 | Basic | `equals`, `not_equals`, `exists`, `not_exists`, `contains`, `regex_match` |
 | Response and structured output | `json_path_equals`, `json_path_absent`, `response_status_equals` |
 | Structure | `schema_match`, `schema_matches`, `contract_match`, `contract_matches` |
-| Collection | `list_size_equals`, `unordered_list_equals` |
-| Numeric | `numeric_tolerance` |
-| File | `file_exists`, `file_not_empty`, `file_diff` |
-| State | `db_record_exists`, `db_row_matches` |
-| Event | `event_published` |
+| Collection | `list_size_equals`, `unordered_list_equals`, `subset_match` |
+| Numeric / Time | `numeric_tolerance`, `greater_than`, `less_than`, `between`, `timestamp_tolerance` |
+| File | `file_exists`, `file_not_empty`, `file_diff`, `csv_row_count_equals`, `csv_diff` |
+| State | `db_record_exists`, `db_field_equals`, `db_row_count_equals` |
+| Event | `event_published`, `event_payload_match`, `event_not_published` |
+| Plugin | `custom_verify` |
 
 For captured-output comparison checks, each `verify` item must define explicit `actual` and `expected`. `actual` identifies the captured output or evidence source. Use `selector` when comparing part of a structured actual result. New DSL artifacts must not overload `actual` with a JSONPath expression when a captured output ref is required.
 
 Some verify types consume provider metadata instead of a captured output body. `response_status_equals` may declare only `expected` when the selected request/response provider writes HTTP status metadata into provider evidence. It shall declare `actual` plus `selector` only when the status is read from a structured captured output.
 
-`selector` is the canonical v1 field for JSON/YAML path selection. `path` and `json_path` are accepted only as compatibility aliases while older artifacts migrate. New generator output and new checked-in RP tests must use `selector`.
+`selector` is the canonical v0.2 field for JSON/YAML path selection. `path` and `json_path` are accepted only as compatibility aliases while older artifacts migrate. New generator output and new checked-in RP tests must use `selector`.
 
 Required verify source rules:
 
@@ -630,7 +699,7 @@ verify:
 
 ### 6.7.5 Runtime, Evidence, and Status
 
-`runtime` stays small in v1:
+`runtime` stays bounded in v0.2:
 
 ```yaml
 runtime:
@@ -643,23 +712,24 @@ runtime:
 
 Allowed DSL execution statuses are `draft_skeleton`, `draft_executable`, `active`, `needs_update`, and `retired`. These are not approval states and must not be used as release gates.
 
-An execution-focused DSL v1 artifact is execution-eligible only when it is stored under the configured `tests/approved/` lifecycle location and has an allowed executable status such as `active`. Expected-result approval remains on expected-result artifacts, not on the DSL status field.
+An execution-focused DSL v0.2 artifact is execution-eligible only when it is stored under the configured `tests/approved/` lifecycle location and has an allowed executable status such as `active`. Expected-result approval remains on expected-result artifacts, not on the DSL status field.
 
 ### 6.7.6 Run and Report Consumption
 
-The same execution-focused DSL v1 artifact must be consumed consistently by validation, binding, execution evidence, and coverage reporting:
+The same execution-focused DSL v0.2 artifact must be consumed consistently by validation, binding, execution evidence, result generation, and coverage reporting:
 
 - `run` must derive the reviewed AC source from `source_refs.acceptance_criteria` and may copy opaque report labels from `labels` or `traceability_map.yaml`.
-- `run` must derive target runner, fixture type, operation, expected-result reader, verify type, evidence refs, timeout, and retry from v1 sections.
-- `run` must write normalized evidence fields needed by reporting, including source refs, labels when provided, test case ID, batch ID, run ID, provider family/type, provider contract path, final status, and actual-output refs.
-- `report --batch-id` must calculate coverage from batch/run evidence and approved v1 test artifacts without requiring legacy-only fields.
-- A v1 test that passes execution but cannot be included in a review-ready batch report is not complete F007/F008 support.
+- `run` must derive target runner, fixture type, operation, expected-result reader, verify type, evidence refs, timeout, retry, and selected run profile from v0.2 sections.
+- `run` must write normalized evidence fields needed by reporting, including source refs, labels when provided, test case ID, batch ID, run ID, parameter case ID when applicable, provider family/type, provider contract path, final status, failure classification, and actual-output refs.
+- `run` must emit a standard result JSON for each test/parameter case.
+- `report --batch-id` must calculate coverage from batch/run evidence and approved v0.2 test artifacts without requiring legacy-only fields.
+- A v0.2 test that passes execution but cannot be included in a review-ready batch report is not complete F007/F008 support.
 
 ### 6.7.7 Compatibility and Migration
 
-The current implementation still contains legacy v1 field readers in some framework modules. The migration target is:
+The current implementation still contains legacy field readers in some framework modules. The migration target is v0.2:
 
-| Legacy Field | v1 Execution-Focused Field |
+| Legacy Field | v0.2 Execution-Focused Field |
 |---|---|
 | `rp_id` | `labels.package` or `traceability_map.yaml` |
 | `ru_id` / `runtime_unit_id` | `labels.runtime_unit` or `traceability_map.yaml` |
@@ -681,10 +751,10 @@ Implementation work after this documentation baseline must first add validation 
 
 Implementation sequencing rule:
 
-- First implement DSL v1 parsing and validation for the execution-focused field set.
-- Then update generation so executable drafts emit execution-focused fields, and skeleton/update proposal artifacts emit only v1 identity/status/revision, `source_refs`, optional `labels`, source fingerprint, replacement link when relevant, and readiness gaps.
+- First implement DSL v0.2 parsing and validation for the execution-focused field set.
+- Then update generation so executable drafts emit execution-focused fields, and skeleton/update proposal artifacts emit only v0.2 identity/status/revision, `source_refs`, optional `labels`, source fingerprint, replacement link when relevant, and readiness gaps.
 - Then keep legacy artifacts readable through compatibility behavior until migrated.
-- Then prove one active execution-focused DSL v1 artifact can pass `run` and `report --batch-id` with review-ready coverage.
+- Then prove one active execution-focused DSL v0.2 artifact can pass `run`, emit standard result JSON, and pass `report --batch-id` with review-ready coverage.
 - Only after those checks pass may provider runtime dispatch or sample fixture migration claim execution-focused DSL support.
 - A new artifact that mixes execution-focused DSL with legacy-only or governance-heavy fields must be blocked before execution.
 
@@ -711,6 +781,17 @@ blocked_reason: null
 ```
 
 Allowed expected-result statuses are `draft`, `blocked`, and `approved_for_regression`.
+
+v0.2 expected-result types are:
+
+- `literal`
+- `file`
+- `json`
+- `yaml`
+- `csv`
+- `schema`
+- `db_snapshot`
+- `event_payload`
 
 Rules:
 
@@ -774,7 +855,7 @@ Adapter/provider runtime rules:
 - Contract resolution order is provider default, then generated suite/run-profile/environment-binding override.
 - Executable contracts must declare `provider_family` and `provider_type`; heuristic family inference is diagnostic only and must not silently choose a runtime.
 - Provider capability registry status must be checked before dispatch. Unsupported, ambiguous, unsafe, or unapproved escape-hatch contracts fail before execution.
-- Dispatch uses v1 DSL fields and generated artifact fields: `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures.<name>.type`, `expected_results.<name>.type`, `verify[].type`, and `evidence.required[]`.
+- Dispatch uses v0.2 DSL fields and generated artifact fields: `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures.<name>.type`, `expected_results.<name>.type`, `verify[].type`, and `evidence.required[]`.
 - The framework supplies resolved input paths and run workspace paths.
 - Adapters and providers write actual outputs, observation results, and cleanup results under the run evidence directory.
 - Messaging actions that declare `requires_correlation: true` must also declare `correlation_id`, `correlation_id_ref`, or `correlation_key` before publish, request/reply, consume, observe, or cleanup dispatch.
@@ -782,7 +863,7 @@ Adapter/provider runtime rules:
 - Messaging cleanup actions must declare `mode: cleanup`, `cleanup_strategy: drain`, and a positive bounded `max_count`. Current cleanup is bounded drain behavior for test-owned topics, subjects, or consumer groups, not broker administrator purge.
 - Non-success exit codes fail the test case and must preserve stdout, stderr, exit code, and timeout state.
 - Timeouts fail the test case and must trigger fixture cleanup.
-- Adapters must not perform deployment in M1.
+- Adapters must not perform product deployment in v0.2.
 - Provider contracts must reference secrets, SQL, payloads, and environment resources by reference, not inline sensitive values or package-specific implementation bodies.
 - External runner contracts require approval metadata, reason, bounded timeout, declared inputs/outputs, and evidence artifact map before invocation.
 - Unsupported provider actions or contract fields must fail before execution with owner action.
@@ -790,6 +871,8 @@ Adapter/provider runtime rules:
 ## 6.10 Execution Evidence
 
 One suite execution produces one batch summary and one run evidence directory per approved test case executed in that batch. Product/RP/RU labels may be copied from `traceability_map.yaml` for reporting, but runtime decisions use generated target IDs and provider contracts.
+
+v0.2 evidence types are `execution_log`, `actual_artifact`, `expected_artifact`, `assertion_diff`, `db_query_result`, `event_payload`, `http_request_response`, `screenshot`, `runner_report`, `fixture_log`, and `cleanup_log`. Evidence collection must copy or reference required artifacts, mask secrets, index evidence, and attach evidence refs to the standard result JSON.
 
 Batch evidence:
 
@@ -804,11 +887,13 @@ finished_at: 2026-06-26T10:03:00+08:00
 runs:
   - run_id: RUN-20260626-001
     test_case_id: RP-AR-M1-data-pipeline-TC-001
-    ac_id: RP-AR-M1-data-pipeline-AC-001
+    source_refs:
+      acceptance_criteria: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-001
     status: passed
   - run_id: RUN-20260626-002
     test_case_id: RP-AR-M1-data-pipeline-TC-002
-    ac_id: RP-AR-M1-data-pipeline-AC-002
+    source_refs:
+      acceptance_criteria: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-002
     status: passed
 ```
 
@@ -825,7 +910,9 @@ run_id: RUN-20260626-001
 batch_id: BATCH-20260626-001
 package_id: RP-AR-M1-data-pipeline
 test_case_id: RP-AR-M1-data-pipeline-TC-001
-ac_id: RP-AR-M1-data-pipeline-AC-001
+parameter_case_id: valid_order_001
+source_refs:
+  acceptance_criteria: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-001
 status: passed
 execution_mode: ci_ephemeral
 environment_ref: ci://pipeline/rp-ar-m1-data-pipeline
@@ -848,6 +935,45 @@ evidence_refs:
   - evidence/runs/RUN-20260626-001/assertions.yaml
   - evidence/runs/RUN-20260626-001/observations.yaml
   - evidence/runs/RUN-20260626-001/postconditions.yaml
+failure:
+  classification: null
+  message: null
+  details: null
+```
+
+Standard result JSON shape:
+
+```yaml
+test_result:
+  framework_version: v0.2
+  dsl_version: v0.2
+  test_case_id: RP-AR-M1-data-pipeline-TC-001
+  parameter_case_id: valid_order_001
+  status: passed
+  profile: ci_pr
+  environment_id: ci
+  labels:
+    package: RP-AR-M1-data-pipeline
+  steps:
+    - id: run_subject
+      operation: run_batch
+      target: subject
+      status: passed
+      outputs:
+        execution_log: evidence/logs/run_subject.log
+  verify_results:
+    - id: verify_db_record
+      type: db_record_exists
+      status: passed
+      attempts: 3
+      evidence_ref: evidence/verify/db_record.json
+  evidence:
+    - type: execution_log
+      ref: evidence/logs/run_subject.log
+  failure:
+    classification: null
+    message: null
+    details: null
 ```
 
 Run evidence is stored under:

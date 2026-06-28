@@ -1,6 +1,6 @@
 # 07. Heterogeneous RP Support and Capability Matrix
 
-Status: M1 Staged Implementation-Ready Draft
+Status: v0.2 Full Pre-release Scope Draft
 
 ## 7.1 Purpose
 
@@ -17,9 +17,9 @@ The framework supports logical targets, runner/provider contracts, fixtures, ver
 
 Java, Go, C++, VB.NET, and other languages should normally be invisible to the DSL. Language matters only when a reusable provider cannot express a legacy or specialized boundary and an approved escape-hatch contract is used.
 
-## 7.3 M1 Heterogeneous Pilot Shape
+## 7.3 v0.2 Heterogeneous Pilot Shape
 
-The selected M1 pilot should include one RP with RUs that collectively exercise:
+The selected v0.2 pilot should include one RP with RUs that collectively exercise:
 
 - Request/response interaction: REST and/or gRPC.
 - Asynchronous messaging: Kafka and/or NATS.
@@ -29,16 +29,16 @@ The selected M1 pilot should include one RP with RUs that collectively exercise:
 
 This pilot is the target adoption proof. The current framework verification fixture remains a local sample Product Repo fixture and must not be presented as downstream RP release evidence.
 
-External runner is not required for the M1 pilot unless the selected RP contains a legacy or specialized boundary that cannot be represented by a reusable built-in provider. In that case it is an approved escape hatch, not the normal extension path.
+External runner is not required for the v0.2 pilot unless the selected RP contains a legacy or specialized boundary that cannot be represented by a reusable built-in provider. In that case it is an approved escape hatch, not the normal extension path.
 
 ## 7.4 Current Capability Matrix
 
-| Capability Area | Current Repo Support | M1 Pilot Target | Gap / Next Work |
+| Capability Area | Current Repo Support | v0.2 Pre-release Target | Gap / Next Work |
 |---|---|---|---|
 | Product Repo readiness | Supported for folder/readiness checks | Keep | Harden reports and owner actions |
 | RP artifact completeness | Supported structurally | Keep | Add richer cross-artifact readiness |
 | Generated execution artifacts | Supported structurally for suite/run/environment/provider inputs; product mapping is currently product-side input | Logical target dependency-aware execution from generated run plans | Add richer Agent Skill translation checks and generated artifact readiness reporting |
-| DSL lifecycle | Draft and approved test lifecycle exists; execution-focused DSL v1 parser/generator validation, CLI run/report consumption, and `dsl_runtime` run evidence cover identity, source refs, optional labels, targets, scenario, setup, execute, expected results, verify, evidence, and runtime | Stable package-neutral DSL v1 consumed by validation, run, evidence, and report | Add parameter cases, observations, and postconditions as those execution paths mature |
+| DSL lifecycle | Draft and approved test lifecycle exists; execution-focused DSL validation, CLI run/report consumption, and `dsl_runtime` run evidence cover identity, source refs, optional labels, targets, scenario, setup, execute, expected results, verify, evidence, and runtime | Package-neutral DSL v0.2 consumed by validation, run, result, evidence, and report | Complete v0.2 parameter, suite/profile, result schema, and secret guardrail verification |
 | Binding types | Supports `input_file`, `dataset`, `db_seed`, `api_payload`, and `message_event` readiness/resolution | Add `config_file`, `env_var`, and `existing_state` as providers mature | Unsupported bindings fail before execution |
 | Fixture lifecycle | Validates cleanup policy and executes JDBC DB fixture setup, verification query counts, cleanup, and bounded messaging cleanup drain where configured | Execute DB seed/query/cleanup and test-owned message drain cleanup where needed | Add stronger fixture safety policy and persistent broker purge only if a pilot RP requires it |
 | Execution adapter | Provider runtime registry dispatches file/batch shell, REST, native descriptor-driven gRPC unary request/response, local/mock messaging, native Kafka/NATS publish, NATS request/reply, consume/observe, and cleanup messaging, JDBC DB fixture, local/mock plus native K8s/VM deployment readiness, bounded K8s direct API readiness, bounded K8s pod log capture, bounded VM SSH/WinRM command probes, and approved command-runner escape hatch paths | Provider-registry-dispatched REST/gRPC, Kafka/NATS, DB, deployment readiness, and shell/file providers | Add real pilot environment validation |
@@ -60,7 +60,7 @@ Status meanings:
 - Supported: implemented in this repo and covered by current framework tests.
 - Partial: implemented as validation/readiness or sample support, but not full runtime execution.
 - Target: required for the selected heterogeneous pilot unless the capability is explicitly marked as an escape hatch.
-- Future: useful after M1, only after the provider model proves reusable.
+- Future: useful after v0.2, only after the provider model proves reusable.
 
 ## 7.5 Provider Families
 

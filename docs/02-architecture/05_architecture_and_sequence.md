@@ -1,12 +1,12 @@
 # 05. Architecture Design
 
-Status: Implementation-Ready Draft for M1
+Status: v0.2 Full Pre-release Architecture Draft
 
 This design turns the Product/RP/RU baseline into an implementable architecture while keeping the framework core product-topology agnostic. Product Repo remains the source of truth, Release Package remains the release and evidence unit, and RU repos remain implementation workspaces; Agent Skills translate that context into framework-readable artifacts.
 
 ## 5.1 Design Scope
 
-M1 implements a local/CI-first command-line framework plus Agent Skill translation flow. Product-aware commands and skills read Product Repo artifacts, but the generic execution core consumes generated DSL tests, suite manifests, run plans, environment bindings, provider contracts, expected results, and traceability maps.
+v0.2 implements a product-agnostic command-line execution framework plus Agent Skill translation boundary. Product-aware commands and skills read Product Repo artifacts, but the generic execution core consumes generated DSL tests, suite manifests, run profiles, environment bindings, provider/plugin contracts, expected results, and traceability maps.
 
 In scope:
 
@@ -15,7 +15,8 @@ In scope:
 - AC readiness classification and agent draft generation boundaries.
 - Durable test case and expected-result lifecycle.
 - Local fixture, CI ephemeral, SIT deployed, and evidence-only execution modes.
-- Heterogeneous RP pilot support through a provider capability registry, config-driven provider contracts, reusable built-in provider families, and a governed external runner escape hatch.
+- Heterogeneous RP pilot support through a provider capability registry, config-driven provider contracts, runner/verify plugin contracts, reusable built-in provider families, and a governed external runner escape hatch.
+- v0.2 result schema, evidence schema, secret guardrail, suite selection, and profile-based execution.
 - Coverage, traceability, and release review evidence.
 
 Out of scope:
@@ -29,12 +30,12 @@ Out of scope:
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Runtime shape | CLI-first framework | Fits M1, avoids operating a service, works in local and CI. |
+| Runtime shape | CLI-first framework | Fits v0.2 pre-release, avoids operating a service, works in local, CI, and SIT contexts. |
 | Durable store | Product Repo filesystem | Specs, tests, expected results, and evidence remain reviewable and versioned. |
 | Release unit | Release Package | Package release is the real release boundary; Product is virtual. |
 | Primary AC level | RP-level AC | Coverage denominator must match release evidence ownership. |
 | Test lifecycle | Generate separately from execute | Approved tests are checked in and not regenerated on every run. |
-| Test case DSL | Minimal package-neutral DSL with explicit version | Different Products and RPs express regression tests through one artifact model without overfitting to one package type. |
+| Test case DSL | Full pre-release package-neutral DSL v0.2 with explicit version | Different Products and RPs express regression tests through one artifact model without overfitting to one package type. |
 | Adapter model | Generic runners/providers plus generated environment bindings | Execution process is generic; product topology stays outside the framework core. |
 | Heterogeneous RP support | Agent-generated run/environment artifacts plus provider capability registry | Different RU languages, deployments, and messaging styles are translated into logical targets and reusable provider contracts instead of DSL, framework-core changes, or RP-specific scripts. External runner is a governed escape hatch only. |
 | Implementation stack | Spring Boot 3.x on Java 17+ | Provides a modern Java runtime, dependency injection, validation, configuration binding, and CLI packaging path. |
@@ -146,17 +147,17 @@ For implementation clarity, each AP owns one primary question and one durable ha
 
 Provider contracts are configuration artifacts consumed by APs; they are not DSL sections. A provider contract declares a named capability such as a target runner, fixture provider, execute operation provider, expected-result reader, verify provider, or evidence collector. The DSL references those capabilities by logical name, and the AP validates that the referenced capability exists before execution.
 
-Execution-focused DSL v1 references provider behavior through `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures`, `expected_results`, and `verify` rules. It must not embed provider configuration, endpoint URLs, connection strings, shell scripts, SQL bodies, release gates, waivers, or approval workflow. Legacy fields such as `execution_target`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, and `policy` are compatibility inputs only until parser/generator migration is complete.
+Execution-focused DSL v0.2 references provider behavior through `targets.<target_id>.runner`, `execute[].operation`, `setup.fixtures`, `expected_results`, and `verify` rules. It must not embed provider configuration, endpoint URLs, connection strings, shell scripts, SQL bodies, release gates, waivers, or approval workflow. Legacy fields such as `execution_target`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, and `policy` are compatibility inputs only until parser/generator migration is complete.
 
-DSL v1 validation is the first F007 architecture gate. Definition and Validation must confirm syntax, required fields, supported execution lifecycle status, the M1 single-execute-step runtime boundary, forbidden governance fields, selector-based verify requirements, and legacy-field migration rules before Discovery, Planning, provider contract binding, fixture setup, or provider dispatch can run. New DSL artifacts that contain multiple executable `execute[]` operations, `call_ru`, `target_ru_id`, `package_inputs`, `oracles`, release gates, waivers, or approval workflow state are invalid even when equivalent legacy artifacts remain readable during migration.
+DSL v0.2 validation is the first F007 architecture gate. Definition and Validation must confirm syntax, required fields, supported execution lifecycle status, explicit execute-step IDs, forbidden governance fields, selector-based verify requirements, secret guardrails, plugin contract references, and legacy-field migration rules before Discovery, Planning, provider contract binding, fixture setup, or provider dispatch can run. New DSL artifacts that contain ambiguous executable `execute[]` operations, `call_ru`, `target_ru_id`, `package_inputs`, `oracles`, release gates, waivers, raw secrets, or approval workflow state are invalid even when equivalent legacy artifacts remain readable during migration.
 
 The gate sequence for execution-focused tests is:
 
 ```text
-DSL v1 parse and validation
+DSL v0.2 parse and validation
 -> traceability and lifecycle status check
 -> target and scenario resolution
--> setup, single execute step, execute output, expected_result, verify selector/query/event, evidence, and runtime validation
+-> setup, execute step, execute output, expected_result, verify selector/query/event, evidence, result, and runtime validation
 -> provider contract lookup through environment binding and run plan
 -> execution plan creation
 -> fixture setup and provider dispatch
@@ -444,8 +445,8 @@ Consistency model:
 Select generated suite
 -> validate suite_manifest, run_plan, environment_binding, provider contracts, and traceability_map
 -> load approved or execution-eligible DSL test cases
--> validate execution-focused DSL v1 contract and block invalid legacy/governance fields
--> normalize v1 source refs, optional report labels, and execution sections for run/report metadata
+-> validate execution-focused DSL v0.2 contract and block invalid legacy/governance fields
+-> normalize v0.2 source refs, optional report labels, and execution sections for run/report metadata
 -> validate expected-result approval status
 -> resolve execution mode and logical target dependency graph
 -> resolve provider contracts from DSL logical references
@@ -611,13 +612,13 @@ Ready to implement now:
 - F001 Product Repo Bootstrap CLI and Readiness Agent Skill.
 - F002 Release Package Creation Guide and Completeness Check.
 - F004 Agent Skill translation contract and generated artifact validation, using placeholder pilot data or fixtures.
-- Execution-focused DSL v1 validation and generator guard, before expanding provider runtime dispatch.
+- Execution-focused DSL v0.2 validation and generator guard, before expanding provider runtime dispatch.
 
 Ready after pilot RP artifacts exist:
 
 - F003 RP AC intake against real owner-authored AC.
 - F005/F006 agent draft generation and expected-result drafting.
-- F007 execution path for the selected heterogeneous pilot provider set, after the DSL v1 validation gate is green and using the adapter/provider contract model in the artifact contracts and capability matrix.
+- F007 execution path for the selected heterogeneous pilot provider set, after the DSL v0.2 validation gate is green and using the adapter/provider contract model in the artifact contracts and capability matrix.
 - F008 final coverage and evidence package using real run evidence.
 
 Implementation must start with F001/F002/F004 foundation tasks, then validate generated framework artifacts before enabling generation and execution.
