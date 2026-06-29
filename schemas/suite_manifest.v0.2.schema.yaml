@@ -1,0 +1,35 @@
+contract_version: v0.2
+artifact: suite_manifest
+status: framework_owned_current_stage
+version_compatibility:
+  supported_versions: [v0.2]
+  unsupported_version_behavior: block_before_execution
+required_fields:
+  - suite_id
+  - selection
+selection_modes:
+  - test_id
+  - suite
+  - tag
+  - profile
+must_not_contain:
+  - provider overrides
+  - product topology inference
+validation_output_fields:
+  - ap
+  - file_path
+  - field_path
+  - suite_id
+  - selection_mode
+  - severity
+  - reason
+  - owner_action
+evidence_outputs:
+  - suite_selection_report
+  - empty_selection_blocking_report
+unsupported_behavior:
+  unknown_test_id: block_before_execution
+  unknown_tag: block_before_execution
+  incompatible_profile: block_before_execution
+  provider_override: block_before_execution
+failure_classification: schema_error

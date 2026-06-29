@@ -1,0 +1,18 @@
+environment_id: ci-contract-sample
+profile: ci
+provider_bindings:
+  - provider_id: wiremock-payment-api
+    runtime_mode: mock
+    binding_values:
+      mappings_ref: fixtures/wiremock/payment-api/
+  - provider_id: oracle-database
+    runtime_mode: ephemeral
+    binding_values:
+      jdbc_url: generated://oracle-ephemeral.jdbc_url
+      username: generated://oracle-ephemeral.username
+      password:
+        secret_ref: generated://oracle-ephemeral.password
+  - provider_id: nats-event-bus
+    runtime_mode: ephemeral
+    binding_values:
+      servers: generated://nats-ephemeral.servers

@@ -1,0 +1,42 @@
+provider_contract_version: v0.2
+provider_type: external_runner
+runtime_modes: [native, stub]
+binding_keys:
+  command:
+    required: true
+    source: environment_binding
+defaults:
+  timeout_seconds: 300
+  retry: 0
+safety:
+  rules:
+    access_policy_required_when_operations_used: [run, run_and_collect, check_status]
+    provider_safety_approval_required: true
+    required_fields:
+      - safety.access_policy.allowed_commands
+      - safety.access_policy.allow_shell
+      - safety.approval.ref
+    prohibited_defaults:
+      - safety.access_policy.allow_shell_true_without_approval
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes, binding_keys, safety]
+  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
+  binding_keys: [command]
+operations:
+  run:
+    allowed_bind_as: [runner.args.*, runner.env.*, runner.timeout, runner.input_ref]
+    required_parameters: []
+    output_refs: [exit_code, stdout, stderr, result_json, output_files, duration_ms]
+  run_and_collect:
+    allowed_bind_as: [runner.args.*, runner.env.*, runner.timeout, runner.input_ref, runner.output_glob]
+    required_parameters: [runner.output_glob]
+    output_refs: [exit_code, stdout, stderr, result_json, output_files, duration_ms]
+  check_status:
+    allowed_bind_as: [runner.status_ref, runner.timeout]
+    required_parameters: [runner.status_ref]
+    output_refs: [result_json, stdout, stderr]
+evidence:
+  outputs: [command, stdout, stderr, output_files, result_json, error]
+  redact: [runner.env.*]
+failure_mapping:
+  allowed_codes: [UNAPPROVED_EXTERNAL_RUNNER, PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, OPERATION_FAILED, EVIDENCE_INVALID]

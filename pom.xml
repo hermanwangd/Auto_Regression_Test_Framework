@@ -22,6 +22,9 @@
         <jacoco.version>0.8.12</jacoco.version>
         <grpc.version>1.65.1</grpc.version>
         <protobuf.version>3.25.3</protobuf.version>
+        <wiremock.version>3.13.2</wiremock.version>
+        <httpclient5.version>5.5.1</httpclient5.version>
+        <httpcore5.version>5.3.6</httpcore5.version>
     </properties>
 
     <dependencies>
@@ -58,6 +61,26 @@
             <version>${protobuf.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-jetty12</artifactId>
+            <version>${wiremock.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+            <version>${httpclient5.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.httpcomponents.core5</groupId>
+            <artifactId>httpcore5</artifactId>
+            <version>${httpcore5.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.httpcomponents.core5</groupId>
+            <artifactId>httpcore5-h2</artifactId>
+            <version>${httpcore5.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
@@ -91,6 +114,11 @@
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>${jacoco.version}</version>
+                <configuration>
+                    <excludes>
+                        <exclude>com/specdriven/regression/RegressionApplication*</exclude>
+                    </excludes>
+                </configuration>
                 <executions>
                     <execution>
                         <goals>
@@ -118,7 +146,22 @@
                                         <limit>
                                             <counter>INSTRUCTION</counter>
                                             <value>COVEREDRATIO</value>
+                                            <minimum>0.99</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
                                             <minimum>0.90</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.98</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>METHOD</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>1.00</minimum>
                                         </limit>
                                         <limit>
                                             <counter>CLASS</counter>
@@ -134,4 +177,79 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>v02-delivery-coverage</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <version>${jacoco.version}</version>
+                        <executions>
+                            <execution>
+                                <id>v02-delivery-critical-class-check</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <rule>
+                                            <element>CLASS</element>
+                                            <includes>
+                                                <include>com.specdriven.regression.cli.RegressionCommand*</include>
+                                                <include>com.specdriven.regression.dsl.DslTestCaseValidator*</include>
+                                                <include>com.specdriven.regression.dsl.DslTestCaseNormalizer*</include>
+                                                <include>com.specdriven.regression.runtime.GeneratedRuntimeArtifacts*</include>
+                                                <include>com.specdriven.regression.binding.BindingResolver*</include>
+                                                <include>com.specdriven.regression.parameter.ParameterSetResolver*</include>
+                                                <include>com.specdriven.regression.environment.ExecutionEnvironmentResolver*</include>
+                                                <include>com.specdriven.regression.fixture.FixtureLifecycleService*</include>
+                                                <include>com.specdriven.regression.execution.ExecutionEngine*</include>
+                                                <include>com.specdriven.regression.execution.ProviderRuntimeRegistry*</include>
+                                                <include>com.specdriven.regression.provider.ProviderCapabilityRegistry*</include>
+                                                <include>com.specdriven.regression.provider.ProviderContractResolver*</include>
+                                                <include>com.specdriven.regression.provider.RequestResponseProvider*</include>
+                                                <include>com.specdriven.regression.provider.MessagingProvider*</include>
+                                                <include>com.specdriven.regression.provider.DatabaseFixtureProvider*</include>
+                                                <include>com.specdriven.regression.provider.DeploymentReadinessProvider*</include>
+                                                <include>com.specdriven.regression.assertion.AssertionEngine*</include>
+                                                <include>com.specdriven.regression.oracle.OracleResolver*</include>
+                                                <include>com.specdriven.regression.evidence.EvidenceWriter*</include>
+                                                <include>com.specdriven.regression.report.CoverageReportService*</include>
+                                                <include>com.specdriven.regression.schema.ArtifactSchemaValidator*</include>
+                                            </includes>
+                                            <excludes>
+                                                <exclude>com.specdriven.regression.RegressionApplication*</exclude>
+                                                <exclude>com.specdriven.regression.*.*Result*</exclude>
+                                                <exclude>com.specdriven.regression.*.*Report*</exclude>
+                                                <exclude>com.specdriven.regression.*.*Gap*</exclude>
+                                                <exclude>com.specdriven.regression.*.*Request*</exclude>
+                                                <exclude>com.specdriven.regression.*.*Target*</exclude>
+                                                <exclude>com.specdriven.regression.*.*Context*</exclude>
+                                            </excludes>
+                                            <limits>
+                                                <limit>
+                                                    <counter>LINE</counter>
+                                                    <value>COVEREDRATIO</value>
+                                                    <minimum>1.00</minimum>
+                                                </limit>
+                                                <limit>
+                                                    <counter>BRANCH</counter>
+                                                    <value>COVEREDRATIO</value>
+                                                    <minimum>0.90</minimum>
+                                                </limit>
+                                            </limits>
+                                        </rule>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

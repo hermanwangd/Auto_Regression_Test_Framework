@@ -1,0 +1,98 @@
+{
+  "framework_version": "v0.2",
+  "dsl_version": "v0.2",
+  "test_case_id": "RP-FWK-CONTRACT-SAMPLE-TC-001",
+  "status": "passed",
+  "profile": "ci",
+  "environment": "ci-contract-sample",
+  "timestamps": {
+    "started_at": "2026-06-29T00:00:00Z",
+    "finished_at": "2026-06-29T00:00:05Z"
+  },
+  "labels": {
+    "rp_id": "RP-FWK-CONTRACT-SAMPLE",
+    "feature_id": "F007"
+  },
+  "provider_results": [
+    {
+      "provider_id": "wiremock-payment-api",
+      "provider_type": "wiremock_http_mock",
+      "profile": "ci",
+      "runtime_mode": "mock",
+      "resolved_operation_result": {
+        "operation": "verify_requests",
+        "status": "passed",
+        "outputs": {
+          "matched_count": 1
+        }
+      },
+      "release_evidence_eligible": false
+    },
+    {
+      "provider_id": "oracle-database",
+      "provider_type": "jdbc_database",
+      "profile": "ci",
+      "runtime_mode": "ephemeral",
+      "resolved_operation_result": {
+        "operation": "query",
+        "status": "passed",
+        "outputs": {
+          "row_count": 1
+        }
+      },
+      "release_evidence_eligible": false
+    },
+    {
+      "provider_id": "nats-event-bus",
+      "provider_type": "nats_messaging",
+      "profile": "ci",
+      "runtime_mode": "ephemeral",
+      "resolved_operation_result": {
+        "operation": "publish_message",
+        "status": "passed",
+        "outputs": {
+          "ack": true
+        }
+      },
+      "release_evidence_eligible": false
+    }
+  ],
+  "steps": [
+    {
+      "id": "verify_payment_mock_request",
+      "status": "passed"
+    },
+    {
+      "id": "query_order",
+      "status": "passed"
+    },
+    {
+      "id": "publish_payment_event",
+      "status": "passed"
+    }
+  ],
+  "verify_results": [
+    {
+      "id": "mock_called_once",
+      "status": "passed"
+    },
+    {
+      "id": "order_exists",
+      "status": "passed"
+    },
+    {
+      "id": "event_payload_matches",
+      "status": "passed"
+    }
+  ],
+  "evidence_refs": [
+    "evidence/runs/RUN-CONTRACT-001/provider-evidence/payment-api/request_journal.yaml",
+    "evidence/runs/RUN-CONTRACT-001/query-evidence/order_database/query_result.yaml",
+    "evidence/runs/RUN-CONTRACT-001/event-evidence/nats_event_bus/published_message.yaml"
+  ],
+  "failure": {
+    "classification": null,
+    "reason": null,
+    "owner_action": null
+  }
+}

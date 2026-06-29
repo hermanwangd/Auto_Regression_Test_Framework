@@ -1,0 +1,11 @@
+environment_id: local-golden
+profile: local_golden
+provider_bindings:
+  - provider_id: sample-fake-runtime
+    runtime_mode: stub
+    binding_values:
+      workspace_ref: generated://golden-e2e/workspace
+      clock_ref: fixed://2026-06-29T00:00:00Z
+evidence_policy:
+  evidence_classification: framework_verification_only
+  downstream_release_evidence: false

@@ -1,0 +1,11 @@
+fixture_version: v0.2
+fixture_id: golden-e2e-setup
+type: sample_setup
+target_provider_id: sample-fake-runtime
+operation: setup_fixture
+inputs:
+  input_ref: fixtures/input.json
+expected_outputs:
+  - setup_log
+  - workspace_ref
+cleanup_ref: fixtures/cleanup_fixture.yaml

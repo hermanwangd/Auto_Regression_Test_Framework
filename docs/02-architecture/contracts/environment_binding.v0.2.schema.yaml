@@ -1,0 +1,74 @@
+contract_version: v0.2
+artifact: environment_binding
+status: framework_owned_current_stage
+version_compatibility:
+  supported_versions: [v0.2]
+  unsupported_version_behavior: block_before_execution
+required_fields:
+  - environment_id
+  - profile
+  - provider_bindings
+provider_binding_required_fields:
+  - provider_id
+  - runtime_mode
+  - binding_values
+conditional_required_alternatives:
+  sit:
+    - [readiness_ref, readiness_check]
+secret_policy:
+  allow_secret_refs: true
+  block_raw_secrets: true
+binding_value_rules:
+  keys_must_match_provider_contract_binding_keys: true
+  runtime_mode_must_be_allowed_by_execution_profile_provider_contract_and_provider_instance: true
+  raw_secret_values: prohibited
+  actual_values_allowed:
+    - url_refs
+    - mock_service_refs
+    - stub_server_refs
+    - testcontainer_refs
+    - generated_binding_outputs
+    - container_image_refs
+    - topic_names
+    - fake_topic_refs
+    - embedded_broker_refs
+    - db_connection_refs
+    - mock_db_refs
+    - ephemeral_db_refs
+    - namespaces
+    - host_refs
+    - secret_refs
+runtime_mode_rules:
+  allowed_values:
+    - native
+    - mock
+    - stub
+    - ephemeral
+  local_default_preference: mock_stub_or_ephemeral_for_external_dependencies
+  ci_default_preference: mock_stub_or_ephemeral_for_external_dependencies
+  sit_default: native
+  preprod_default: native
+  mock_evidence_must_be_marked_non_release: true
+validation_output_fields:
+  - ap
+  - file_path
+  - field_path
+  - environment_id
+  - profile
+  - provider_id
+  - runtime_mode
+  - binding_key
+  - severity
+  - reason
+  - owner_action
+evidence_outputs:
+  - target_resolution_report
+  - provider_contract_resolution_report
+unsupported_behavior:
+  missing_provider_binding: block_before_provider_dispatch
+  missing_required_binding_key: block_before_provider_dispatch
+  unsupported_runtime_mode: block_before_provider_dispatch
+  prohibited_mock_substitution: block_before_provider_dispatch
+  raw_secret: block_before_execution
+  unsafe_environment_binding: block_before_provider_dispatch
+failure_classification: target_resolution_error

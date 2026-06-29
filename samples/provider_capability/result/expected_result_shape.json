@@ -1,0 +1,38 @@
+{
+  "framework_version": "v0.2",
+  "dsl_version": "v0.2",
+  "suite_id": "PROVIDER-CAPABILITY-P0-v0.2",
+  "batch_id": "BATCH-PROVIDER-CAPABILITY-001",
+  "run_id": "RUN-PROVIDER-CAPABILITY-001",
+  "test_case_id": "PROVIDER-CAPABILITY-WIREMOCK-TC-001",
+  "profile": "local_provider",
+  "status": "passed",
+  "provider_results": [
+    {
+      "provider_id": "wiremock-payment-mock",
+      "provider_type": "wiremock_http_mock",
+      "profile": "local_provider",
+      "runtime_mode": "mock",
+      "resolved_operation_result": {
+        "operation": "verify_requests",
+        "status": "passed"
+      },
+      "release_evidence_eligible": false
+    }
+  ],
+  "verify_results": [
+    {
+      "id": "mock_called",
+      "status": "passed"
+    }
+  ],
+  "evidence_refs": [
+    "evidence_index.yaml",
+    "provider-evidence/wiremock/request_journal.yaml"
+  ],
+  "failure": {
+    "classification": null,
+    "reason": null,
+    "owner_action": null
+  }
+}

@@ -1,0 +1,20 @@
+provider_instance_version: v0.2
+provider_id: nats-event-bus
+provider_type: nats_messaging
+runtime_modes: [native, ephemeral]
+binding_keys:
+  servers:
+    required: true
+defaults:
+  timeout_seconds: 30
+operations:
+  publish_message:
+    outputs: [published_message, ack, timestamp]
+  consume_message:
+    outputs: [consumed_message, ack, timestamp]
+evidence:
+  capture: [published_message, consumed_message, ack, timing]
+failure_mapping:
+  provider_unavailable: PROVIDER_UNAVAILABLE
+  timeout: PROVIDER_TIMEOUT
+  assertion_failed: ASSERTION_FAILED

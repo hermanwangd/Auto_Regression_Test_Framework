@@ -1,0 +1,17 @@
+provider_instance_version: v0.2
+provider_id: compare-engine
+provider_type: artifact_compare
+runtime_modes: [stub]
+binding_keys: {}
+defaults:
+  timeout_seconds: 30
+operations:
+  read_artifact:
+    outputs: [actual_payload, actual_file]
+evidence:
+  capture: [actual_payload, actual_file, diff]
+failure_mapping:
+  mismatch: ASSERTION_FAILED
+  missing_input: ASSERTION_INPUT_NOT_FOUND
+labels:
+  evidence_classification: framework_provider_capability_only

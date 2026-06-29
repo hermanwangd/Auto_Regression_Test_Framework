@@ -1,0 +1,94 @@
+dsl_version: v0.2
+test_case_id: PROVIDER-CAPABILITY-JDBC-TC-001
+title: JDBC Oracle and DB2 style provider capability
+status: active
+revision: 1
+source_refs:
+  acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#track-c-jdbc
+labels:
+  capability: jdbc_database
+  evidence_classification: framework_provider_capability_only
+compatible_profiles: [local_provider]
+targets:
+  oracle_like_db:
+    provider_id: oracle-like-db
+    profile: local_provider
+  db2_like_db:
+    provider_id: db2-like-db
+    profile: local_provider
+scenario:
+  type: provider_capability
+  scope: framework_verification
+  description: Seed, query, poll, and cleanup with SQL params binding and masked evidence.
+  capabilities: [db_seed, db_cleanup, db_record_exists, polling]
+data_binding:
+  db_seed:
+    order:
+      ref: fixtures/db_seed.sql
+  db_cleanup:
+    order:
+      ref: fixtures/db_cleanup.sql
+expected_results:
+  db_expected:
+    ref: expected_results/db_expected.json
+setup:
+  fixtures:
+    seed_order:
+      type: db_seed
+      target: oracle_like_db
+      operation: execute_script
+      parameters:
+        - name: seed_sql
+          ref: ${data.db_seed.order}
+          bind_as: db.script_ref
+        - name: order_id
+          ref: expected_results/db_expected.json#/order_id
+          bind_as: db.parameters.order_id
+      cleanup_ref: ${data.db_cleanup.order}
+execute:
+  - id: query_order_oracle
+    target: oracle_like_db
+    operation: query
+    parameters:
+      - name: query
+        ref: queries/order_exists_oracle.sql
+        bind_as: db.sql_ref
+      - name: order_id
+        ref: expected_results/db_expected.json#/order_id
+        bind_as: db.parameters.order_id
+    outputs:
+      query_result: query_result
+      row_count: row_count
+      duration_ms: duration_ms
+verify:
+  - id: order_record_exists
+    type: db_record_exists
+    target: oracle_like_db
+    query:
+      ref: queries/order_exists_oracle.sql
+    expected_ref: expected_results/db_expected.json
+    options:
+      timeout: PT20S
+      poll_interval: PT2S
+cleanup:
+  fixtures:
+    cleanup_order:
+      type: db_cleanup
+      target: oracle_like_db
+      operation: execute_script
+      parameters:
+        - name: cleanup_sql
+          ref: ${data.db_cleanup.order}
+          bind_as: db.script_ref
+        - name: order_id
+          ref: expected_results/db_expected.json#/order_id
+          bind_as: db.parameters.order_id
+evidence:
+  required:
+    - query-evidence/jdbc/query_order_oracle.yaml
+    - fixture/setup/seed_order.yaml
+    - cleanup-results/cleanup_order.yaml
+runtime:
+  timeout: PT1M
+  retry:
+    max_attempts: 1

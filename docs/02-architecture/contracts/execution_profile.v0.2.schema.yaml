@@ -1,0 +1,73 @@
+contract_version: v0.2
+artifact: execution_profile
+status: framework_owned_current_stage
+public_name: execution_profile
+version_compatibility:
+  supported_versions: [v0.2]
+  unsupported_version_behavior: block_before_execution
+required_fields:
+  - profile_id
+  - execution_mode
+  - environment_binding_ref
+  - isolation_scope
+  - dependency_policy
+  - dependency_substitution_policy
+  - dependency_provisioning_policy
+  - max_duration
+  - data_policy
+allowed_execution_modes:
+  - local
+  - ci
+  - sit
+  - preprod
+execution_profile_rules:
+  local: should use mock, stub, ephemeral, file, or generated-data replacements for external service, DB, messaging, K8s, and VM dependencies unless a native local dependency is explicitly declared
+  ci: should use mock, stub, ephemeral, containerized, fake-topic, or disposable-schema replacements for external service, DB, and messaging dependencies unless a native CI dependency is explicitly declared
+  sit: requires native deployed dependency readiness evidence before runtime operations unless explicit mock substitution is approved for framework verification only
+  preprod: requires native dependencies, explicit approval, and production-data masking controls; mock substitution is prohibited for release evidence
+dependency_substitution_policy:
+  local_allowed_runtime_modes: [mock, stub, ephemeral, native]
+  ci_allowed_runtime_modes: [mock, stub, ephemeral, native]
+  sit_allowed_runtime_modes: [native]
+  preprod_allowed_runtime_modes: [native]
+  mock_evidence_release_claim: prohibited
+dependency_provisioning_policy:
+  purpose: Defines which ephemeral dependencies may be provisioned for local and CI before provider execution.
+  allowed_provisioners:
+    - testcontainers
+    - docker_compose
+    - local_process
+    - in_memory
+    - none
+  local_default_provisioners: [testcontainers, in_memory, local_process]
+  ci_default_provisioners: [testcontainers]
+  required_fields_for_testcontainer_dependency:
+    - dependency_id
+    - provider_id
+    - dependency_type
+    - image_ref_or_catalog_ref
+    - startup_timeout
+    - readiness_check
+    - output_binding_keys
+    - cleanup_scope
+  ci_container_reuse: prohibited_by_default
+  generated_values_must_flow_to_environment_binding: true
+validation_output_fields:
+  - ap
+  - file_path
+  - field_path
+  - profile_id
+  - execution_mode
+  - severity
+  - reason
+  - owner_action
+evidence_outputs:
+  - profile_resolution_report
+  - environment_blocking_report
+unsupported_behavior:
+  missing_environment_binding: block_before_provider_dispatch
+  incompatible_profile: block_before_provider_dispatch
+  unsupported_execution_mode: block_before_execution
+  missing_readiness_ref_for_sit_or_preprod: block_before_provider_dispatch
+  prohibited_mock_substitution: block_before_provider_dispatch
+failure_classification: environment_error

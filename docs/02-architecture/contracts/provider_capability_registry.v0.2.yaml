@@ -1,0 +1,129 @@
+contract_version: v0.2
+artifact: provider_capability_registry
+status: framework_owned_current_stage
+purpose: >
+  Catalogs provider_type values supported by the framework runtime and maps
+  each provider_type to its contract schema, runtime status, evidence outputs,
+  and standard failure classification.
+version_compatibility:
+  supported_versions: [v0.2]
+  unsupported_version_behavior: block_before_provider_dispatch
+registry_entry_required_fields:
+  - provider_type
+  - contract_ref
+  - runtime_status
+  - supported_runtime_modes
+  - required_binding_keys
+  - supported_operations
+  - evidence_outputs
+  - failure_classification
+provider_types:
+  shell_command:
+    contract_ref: provider-contracts/shell_command.yaml
+    runtime_status: supported
+    supported_runtime_modes: [native, mock, stub]
+    required_binding_keys: [command]
+    supported_operations: [run_batch, execute_command]
+    evidence_outputs: [command, stdout, stderr, output_files, exit_code, timing, error]
+  rest_client:
+    contract_ref: provider-contracts/rest_client.yaml
+    runtime_status: supported
+    supported_runtime_modes: [native, mock, stub]
+    required_binding_keys: [base_url]
+    supported_operations: [http_request]
+    evidence_outputs: [request, response, timing, error]
+  grpc_client:
+    contract_ref: provider-contracts/grpc_client.yaml
+    runtime_status: supported
+    supported_runtime_modes: [native, mock, stub]
+    required_binding_keys: [target]
+    supported_operations: [unary_call, server_stream_call]
+    evidence_outputs: [request, response, status, metadata, timing, error]
+  wiremock_http_mock:
+    contract_ref: provider-contracts/wiremock_http_mock.yaml
+    runtime_status: supported
+    supported_runtime_modes: [mock]
+    required_binding_keys: [mappings_ref]
+    supported_operations: [start_mock, connect_mock, load_stubs, verify_requests]
+    evidence_outputs: [base_url, request_journal, server_log, timing, error]
+  kafka_messaging:
+    contract_ref: provider-contracts/kafka_messaging.yaml
+    runtime_status: supported
+    supported_runtime_modes: [native, mock, ephemeral]
+    required_binding_keys: [bootstrap_servers]
+    supported_operations: [publish_message, consume_message]
+    evidence_outputs: [produced_message, consumed_message, offset, timing, error]
+  nats_messaging:
+    contract_ref: provider-contracts/nats_messaging.yaml
+    runtime_status: supported
+    supported_runtime_modes: [native, mock, ephemeral]
+    required_binding_keys: [servers]
+    supported_operations: [publish_message, consume_message, request_reply_message]
+    evidence_outputs: [published_message, reply_message, consumed_message, ack, timing, error]
+  jdbc_database:
+    contract_ref: provider-contracts/jdbc_database.yaml
+    runtime_status: supported
+    supported_runtime_modes: [native, mock, ephemeral]
+    required_binding_keys: [jdbc_url, username, password, dialect]
+    supported_operations: [execute_script, execute_update, query, transaction]
+    evidence_outputs: [script_result, query_result, affected_rows, transaction_status, error]
+  kubernetes_runtime:
+    contract_ref: provider-contracts/kubernetes_runtime.yaml
+    runtime_status: supported
+    supported_runtime_modes: [native, mock]
+    required_binding_keys: [context, namespace]
+    supported_operations: [check_deployment_ready, check_pod_ready, get_logs, wait_rollout, exec_command]
+    evidence_outputs: [deployment_status, pod_status, logs, events, command_output, error]
+  vm_runtime:
+    contract_ref: provider-contracts/vm_runtime.yaml
+    runtime_status: supported
+    supported_runtime_modes: [native, mock]
+    required_binding_keys: [host, user]
+    supported_operations: [check_host_ready, run_command, collect_file, collect_logs, check_process]
+    evidence_outputs: [command_output, collected_file, process_status, logs, error]
+  external_runner:
+    contract_ref: provider-contracts/external_runner.yaml
+    runtime_status: approved_escape_hatch_only
+    supported_runtime_modes: [native, stub]
+    required_binding_keys: [command]
+    supported_operations: [run, run_and_collect, check_status]
+    evidence_outputs: [command, stdout, stderr, output_files, result_json, error]
+  artifact_compare:
+    contract_ref: provider-contracts/artifact_compare.yaml
+    runtime_status: supported
+    supported_runtime_modes: [stub]
+    required_binding_keys: []
+    supported_operations: [read_artifact]
+    evidence_outputs: [actual_payload, actual_file, diff, error]
+  polling_observer:
+    contract_ref: provider-contracts/polling_observer.yaml
+    runtime_status: supported
+    supported_runtime_modes: [stub, ephemeral]
+    required_binding_keys: []
+    supported_operations: [observe_condition]
+    evidence_outputs: [last_observed, attempts, timeout_status, error]
+failure_classifications:
+  missing_contract: target_resolution_error
+  unsupported_capability: target_resolution_error
+  unsafe_contract: environment_error
+  missing_secret_ref: secret_resolution_error
+  cleanup_gap: cleanup_error
+validation_output_fields:
+  - ap
+  - provider_id
+  - provider_type
+  - profile
+  - runtime_status
+  - runtime_mode
+  - provider_contract_path
+  - affected_logical_target
+  - capability
+  - severity
+  - reason
+  - owner_action
+unsupported_behavior:
+  unknown_provider_type: block_before_provider_dispatch
+  disabled_runtime_status: block_before_provider_dispatch
+  unsupported_runtime_mode: block_before_provider_dispatch
+  ambiguous_registry_match: block_before_provider_dispatch
+  unsafe_capability: block_before_provider_dispatch

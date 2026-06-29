@@ -1,0 +1,52 @@
+provider_contract_version: v0.2
+provider_type: kubernetes_runtime
+runtime_modes: [native, mock]
+binding_keys:
+  context:
+    required: true
+    source: environment_binding
+  namespace:
+    required: true
+    source: environment_binding
+defaults:
+  timeout_seconds: 300
+  retry: 0
+safety:
+  rules:
+    access_policy_required_when_operations_used: [exec_command]
+    required_fields:
+      - safety.access_policy.allowed_namespaces
+      - safety.access_policy.allowed_pod_selectors
+      - safety.access_policy.allowed_commands
+    prohibited_defaults:
+      - safety.access_policy.allow_unbounded_exec
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
+  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
+  binding_keys: [context, namespace]
+operations:
+  check_deployment_ready:
+    allowed_bind_as: [k8s.deployment, k8s.timeout, k8s.selector]
+    required_parameters: [k8s.deployment]
+    output_refs: [deployment_status, events, duration_ms]
+  check_pod_ready:
+    allowed_bind_as: [k8s.pod, k8s.selector, k8s.timeout]
+    required_parameters: []
+    output_refs: [pod_status, events, duration_ms]
+  get_logs:
+    allowed_bind_as: [k8s.pod, k8s.deployment, k8s.container, k8s.since, k8s.tail]
+    required_parameters: []
+    output_refs: [logs]
+  wait_rollout:
+    allowed_bind_as: [k8s.deployment, k8s.timeout]
+    required_parameters: [k8s.deployment]
+    output_refs: [deployment_status, events, duration_ms]
+  exec_command:
+    allowed_bind_as: [k8s.pod, k8s.container, k8s.command, k8s.timeout]
+    required_parameters: [k8s.command]
+    output_refs: [command_output, exit_code, stderr, stdout]
+evidence:
+  outputs: [deployment_status, pod_status, logs, events, command_output, error]
+  redact: [k8s.command.env.*]
+failure_mapping:
+  allowed_codes: [PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, OPERATION_FAILED, ASSERTION_FAILED, EVIDENCE_INVALID]

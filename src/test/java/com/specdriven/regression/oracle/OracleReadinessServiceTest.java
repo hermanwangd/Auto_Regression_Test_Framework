@@ -1,7 +1,9 @@
 package com.specdriven.regression.oracle;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -111,5 +113,52 @@ class OracleReadinessServiceTest {
 
         assertThat(report.ready()).isTrue();
         assertThat(report.gaps()).isEmpty();
+    }
+
+    @Test
+    void blocksUnsupportedOracleTypeWithTraceableGap() throws Exception {
+        Path testCase = tempDir.resolve("TC-UNSUPPORTED-ORACLE.yaml");
+        Files.writeString(testCase, """
+                test_case_id: TC-UNSUPPORTED-ORACLE
+                ac_id: AC-UNSUPPORTED-ORACLE
+                oracles:
+                  inferred_quality:
+                    type: ai_judgement
+                assertions:
+                  - type: semantic_match
+                    oracle: ${oracles.inferred_quality}
+                """);
+
+        OracleReadinessReport report = new OracleReadinessService().check(testCase);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).singleElement().satisfies(gap -> {
+            OracleReadinessGap oracleGap = (OracleReadinessGap) gap;
+            assertThat(oracleGap.testCaseId()).isEqualTo("TC-UNSUPPORTED-ORACLE");
+            assertThat(oracleGap.acId()).isEqualTo("AC-UNSUPPORTED-ORACLE");
+            assertThat(oracleGap.fieldPath()).isEqualTo("oracles.inferred_quality.type");
+            assertThat(oracleGap.oracleType()).isEqualTo("ai_judgement");
+            assertThat(oracleGap.ownerAction()).contains("Use supported M1 oracle type");
+        });
+    }
+
+    @Test
+    void treatsNonMappingDslAsReadyWhenNoOracleContractExists() throws Exception {
+        Path testCase = tempDir.resolve("TC-NON-MAPPING.yaml");
+        Files.writeString(testCase, "free-form notes only\n");
+
+        OracleReadinessReport report = new OracleReadinessService().check(testCase);
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.gaps()).isEmpty();
+    }
+
+    @Test
+    void throwsUncheckedIoExceptionWhenOracleReadinessArtifactCannotBeRead() {
+        Path missingFile = tempDir.resolve("missing-test-case.yaml");
+
+        assertThatThrownBy(() -> new OracleReadinessService().check(missingFile))
+                .isInstanceOf(UncheckedIOException.class)
+                .hasMessageContaining("Failed to read oracle readiness artifact");
     }
 }

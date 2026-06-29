@@ -11,6 +11,38 @@ class ProviderCapabilityRegistryTest {
     private final ProviderCapabilityRegistry registry = new ProviderCapabilityRegistry();
 
     @Test
+    void rejectsMissingProviderMetadataBeforeFamilySpecificValidation() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "unknown_provider",
+                Map.of(),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.registryStatus()).isEqualTo("missing_metadata");
+        assertThat(validation.runtimeStatus()).isEqualTo("blocked");
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".provider_family", ".provider_type");
+    }
+
+    @Test
+    void rejectsUnsupportedProviderFamilyAndTypeCombination() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "orbix_bridge",
+                Map.of(
+                        "provider_family", "orbix",
+                        "provider_type", "iiop"),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.registryStatus()).isEqualTo("unsupported");
+        assertThat(validation.runtimeStatus()).isEqualTo("unsupported");
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".provider_type");
+    }
+
+    @Test
     void rejectsUnsupportedExecutionModeBeforeRuntimeSelection() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
                 "adapters",
@@ -29,6 +61,25 @@ class ProviderCapabilityRegistryTest {
         assertThat(validation.runtimeStatus()).isEqualTo("blocked");
         assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
                 .containsExactly(".execution_mode");
+    }
+
+    @Test
+    void blocksExecutableShellAdapterWithoutCommandTimeoutOrOutput() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "batch_runner",
+                Map.of(
+                        "provider_family", "file_batch",
+                        "provider_type", "shell",
+                        "timeout_seconds", "soon"),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .contains(
+                        ".command",
+                        ".timeout_seconds",
+                        ".outputs.actual_output_ref");
     }
 
     @Test
@@ -367,6 +418,51 @@ class ProviderCapabilityRegistryTest {
     }
 
     @Test
+    void blocksNativeGrpcContractWithUnsafeDescriptorAndMissingActionService() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "request_response",
+                Map.of(
+                        "provider_family", "request_response",
+                        "provider_type", "grpc",
+                        "service_ref", "dns:///payment-api:9090",
+                        "descriptor_ref", "../descriptors/payment.desc",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/grpc-response.json"),
+                        "actions", Map.of(
+                                "submit_payment", Map.of(
+                                        "method", "SubmitPayment",
+                                        "request_binding", "payment_payload"))),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .contains(
+                        ".descriptor_ref",
+                        ".actions.submit_payment.service");
+    }
+
+    @Test
+    void blocksNativeGrpcContractWithEmptyActionMap() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "request_response",
+                Map.of(
+                        "provider_family", "request_response",
+                        "provider_type", "grpc",
+                        "service_ref", "dns:///payment-api:9090",
+                        "descriptor_ref", "descriptors/payment.desc",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/grpc-response.json"),
+                        "actions", Map.of()),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".actions");
+    }
+
+    @Test
     void acceptsNativeK8sAndVmDeploymentReadinessContracts() {
         ProviderCapabilityRegistry.ProviderContractValidation k8s = registry.validate(
                 "adapters",
@@ -470,6 +566,27 @@ class ProviderCapabilityRegistryTest {
                 .contains(
                         ".api_server_ref",
                         ".deployment_ref");
+    }
+
+    @Test
+    void blocksNativeK8sDirectApiReadinessWithoutNamespace() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_k8s",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "k8s",
+                        "readiness_probe", "api_deployment_available",
+                        "api_server_ref", "env://K8S_API_SERVER",
+                        "deployment_ref", "deployment/payment-api",
+                        "deployed_version_ref", "build-42",
+                        "timeout_seconds", 30,
+                        "outputs", Map.of("actual_output_ref", "actual/k8s-api-readiness.txt")),
+                "sit_deployed");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".namespace_ref");
     }
 
     @Test
@@ -595,6 +712,122 @@ class ProviderCapabilityRegistryTest {
     }
 
     @Test
+    void blocksDeploymentReadinessContractWithoutCoreFields() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_ready",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "local"),
+                "sit_deployed");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .contains(
+                        ".readiness_probe",
+                        ".deployed_version_ref",
+                        ".timeout_seconds",
+                        ".outputs.actual_output_ref",
+                        ".deployment_ref");
+    }
+
+    @Test
+    void blocksNativeVmHttpAndCommandReadinessInvalidEndpointOrPort() {
+        ProviderCapabilityRegistry.ProviderContractValidation http = registry.validate(
+                "adapters",
+                "payment_vm_http",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "vm",
+                        "readiness_probe", "http_get",
+                        "deployed_version_ref", "build-43",
+                        "timeout_seconds", 15,
+                        "outputs", Map.of("actual_output_ref", "actual/vm-http.txt")),
+                "sit_deployed");
+        ProviderCapabilityRegistry.ProviderContractValidation ssh = registry.validate(
+                "adapters",
+                "payment_vm_ssh",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "vm",
+                        "readiness_probe", "ssh_command",
+                        "host_ref", "10.0.0.15",
+                        "command_ref", "systemctl is-active payment-api",
+                        "port", "ssh",
+                        "deployed_version_ref", "build-43",
+                        "timeout_seconds", 15,
+                        "outputs", Map.of("actual_output_ref", "actual/vm-ssh.txt")),
+                "sit_deployed");
+
+        assertThat(http.ready()).isFalse();
+        assertThat(http.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".health_url_ref");
+        assertThat(ssh.ready()).isFalse();
+        assertThat(ssh.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".port");
+    }
+
+    @Test
+    void blocksNativeVmTcpReadinessWithInvalidPort() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_vm_tcp",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "vm",
+                        "readiness_probe", "tcp_connect",
+                        "host_ref", "10.0.0.15",
+                        "port", "https",
+                        "deployed_version_ref", "build-43",
+                        "timeout_seconds", 15,
+                        "outputs", Map.of("actual_output_ref", "actual/vm-tcp.txt")),
+                "sit_deployed");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".port");
+    }
+
+    @Test
+    void blocksDeploymentReadinessContractWithInvalidTimeout() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_ready",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "local",
+                        "readiness_probe", "http_get",
+                        "deployment_ref", "payment-api",
+                        "deployed_version_ref", "build-42",
+                        "timeout_seconds", "soon",
+                        "outputs", Map.of("actual_output_ref", "actual/readiness.json")),
+                "sit_deployed");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".timeout_seconds");
+    }
+
+    @Test
+    void blocksNonNativeMessagingWithoutEndpointOrPositiveTimeout() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "message_bus",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "mock",
+                        "timeout_seconds", "soon",
+                        "outputs", Map.of("actual_output_ref", "actual/events.json")),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(
+                        ".topic_ref",
+                        ".timeout_seconds");
+    }
+
+    @Test
     void blocksNativeMessagingContractsWithoutConnectionActionOrCorrelation() {
         ProviderCapabilityRegistry.ProviderContractValidation kafka = registry.validate(
                 "adapters",
@@ -696,6 +929,34 @@ class ProviderCapabilityRegistryTest {
     }
 
     @Test
+    void blocksBindingAndDbFixtureWithoutRequiredMetadata() {
+        ProviderCapabilityRegistry.ProviderContractValidation binding = registry.validate(
+                "bindings",
+                "payload",
+                Map.of(
+                        "provider_family", "file_batch",
+                        "provider_type", "file_fixture"),
+                "ci_ephemeral");
+        ProviderCapabilityRegistry.ProviderContractValidation fixture = registry.validate(
+                "fixtures",
+                "relational_db",
+                Map.of(
+                        "provider_family", "db_fixture",
+                        "provider_type", "jdbc"),
+                "ci_ephemeral");
+
+        assertThat(binding.ready()).isFalse();
+        assertThat(binding.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".bind_as");
+        assertThat(fixture.ready()).isFalse();
+        assertThat(fixture.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .contains(
+                        ".connection_ref",
+                        ".cleanup_strategy",
+                        ".isolation_key");
+    }
+
+    @Test
     void acceptsFullyApprovedExternalRunnerContract() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
                 "adapters",
@@ -753,5 +1014,509 @@ class ProviderCapabilityRegistryTest {
                         ".evidence_map.parent",
                         ".built_in_provider_alternative");
         assertThat(validation.registryStatus()).isEqualTo("unapproved_escape_hatch");
+    }
+
+    @Test
+    void blocksExternalRunnerWithoutCommandOrContainerRef() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "external_runner",
+                Map.ofEntries(
+                        entry("provider_family", "external_runner"),
+                        entry("provider_type", "command_runner"),
+                        entry("approval_ref", "ADR-012"),
+                        entry("approved_by", "SA"),
+                        entry("reason", "legacy protocol bridge"),
+                        entry("timeout_seconds", 30),
+                        entry("inputs", Map.of("payload", "fixtures/request.json")),
+                        entry("outputs", Map.of("actual_output_ref", "actual/runner-output.json")),
+                        entry("evidence_map", Map.of("runner_log", "logs/external-runner.log"))),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".command");
+    }
+
+    @Test
+    void acceptsBlankExecutionModeAndSupportedMetadataOnlyProviderTypes() {
+        ProviderCapabilityRegistry.ProviderContractValidation fileFixture = registry.validate(
+                "adapters",
+                "fixture_file",
+                Map.of(
+                        "provider_family", "file_batch",
+                        "provider_type", "file_fixture"),
+                "");
+        ProviderCapabilityRegistry.ProviderContractValidation requestBody = registry.validate(
+                "adapters",
+                "request_body",
+                Map.of(
+                        "provider_family", "request_response",
+                        "provider_type", "request_body"),
+                "");
+        ProviderCapabilityRegistry.ProviderContractValidation eventPayload = registry.validate(
+                "adapters",
+                "event_payload",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "event_payload"),
+                "");
+        ProviderCapabilityRegistry.ProviderContractValidation relationalDb = registry.validate(
+                "fixtures",
+                "relational_db",
+                Map.of(
+                        "provider_family", "db_fixture",
+                        "provider_type", "relational_db"),
+                "");
+
+        assertThat(fileFixture.ready()).isTrue();
+        assertThat(requestBody.ready()).isTrue();
+        assertThat(eventPayload.ready()).isTrue();
+        assertThat(relationalDb.ready()).isTrue();
+    }
+
+    @Test
+    void rejectsExternalRunnerOutsideAdapterSection() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "fixtures",
+                "external_runner",
+                Map.of(
+                        "provider_family", "external_runner",
+                        "provider_type", "command_runner"),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.registryStatus()).isEqualTo("unsupported");
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".provider_type");
+    }
+
+    @Test
+    void acceptsShellRestK8sAndVmAlternativeContractReferences() {
+        ProviderCapabilityRegistry.ProviderContractValidation shell = registry.validate(
+                "adapters",
+                "batch_runner",
+                Map.of(
+                        "provider_family", "file_batch",
+                        "provider_type", "shell",
+                        "command", "./run.sh",
+                        "timeout_seconds", "5",
+                        "outputs", Map.of("actual_output_ref", "actual/batch.json")),
+                "local_fixture");
+        ProviderCapabilityRegistry.ProviderContractValidation rest = registry.validate(
+                "adapters",
+                "payment_api",
+                Map.of(
+                        "provider_family", "request_response",
+                        "provider_type", "rest",
+                        "service_ref", "payment-api",
+                        "timeout_seconds", 5,
+                        "outputs", Map.of("actual_output_ref", "actual/rest.json"),
+                        "actions", Map.of("submit", Map.of("method", "POST", "path", "/payments"))),
+                "ci_ephemeral");
+        ProviderCapabilityRegistry.ProviderContractValidation k8s = registry.validate(
+                "adapters",
+                "payment_k8s",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "k8s",
+                        "readiness_probe", "rollout_status",
+                        "connection_ref", "kube://sit",
+                        "namespace_ref", "payment",
+                        "service_ref", "payment-api",
+                        "deployed_version_ref", "build-42",
+                        "timeout_seconds", 30,
+                        "outputs", Map.of("actual_output_ref", "actual/readiness.txt")),
+                "sit_deployed");
+        ProviderCapabilityRegistry.ProviderContractValidation vm = registry.validate(
+                "adapters",
+                "payment_vm_http",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "vm",
+                        "readiness_probe", "http_get",
+                        "endpoint_ref", "https://payment.example.internal/health",
+                        "deployed_version_ref", "build-43",
+                        "timeout_seconds", 15,
+                        "outputs", Map.of("actual_output_ref", "actual/vm-http.txt")),
+                "sit_deployed");
+
+        assertThat(shell.ready()).isTrue();
+        assertThat(rest.ready()).isTrue();
+        assertThat(k8s.ready()).isTrue();
+        assertThat(vm.ready()).isTrue();
+    }
+
+    @Test
+    void acceptsGrpcServiceRefAndSkipsMalformedActionEntries() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "request_response",
+                Map.of(
+                        "provider_family", "request_response",
+                        "provider_type", "grpc",
+                        "base_url_ref", "dns:///payment-api:9090",
+                        "descriptor_ref", "descriptors/payment.desc",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/grpc-response.json"),
+                        "actions", Map.of(
+                                "submit_payment", Map.of(
+                                        "service_ref", "payment.PaymentService",
+                                        "method", "SubmitPayment",
+                                        "request_binding", "payment_payload"),
+                                "metadata", "not-a-map")),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isTrue();
+        assertThat(validation.registryStatus()).isEqualTo("supported");
+    }
+
+    @Test
+    void acceptsNativeMessagingDefaultModeHyphenatedModeAndBindingAliases() {
+        ProviderCapabilityRegistry.ProviderContractValidation defaultPublish = registry.validate(
+                "adapters",
+                "payment_events",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "kafka",
+                        "connection_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
+                        "subject_ref", "payment.events",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-events.json"),
+                        "actions", Map.of(
+                                "publish_payment_event", Map.of(
+                                        "event_binding", "payment_event",
+                                        "serialization", "json",
+                                        "requires_correlation", "true",
+                                        "correlation_id_ref", "bindings/payment-id"))),
+                "ci_ephemeral");
+        ProviderCapabilityRegistry.ProviderContractValidation requestReply = registry.validate(
+                "adapters",
+                "payment_authorization",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "nats",
+                        "connection_ref", "nats://127.0.0.1:4222",
+                        "subject_ref", "payment.authorization",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-authorization.json"),
+                        "actions", Map.of(
+                                "request_payment_authorization", Map.of(
+                                        "mode", "request-reply",
+                                        "message_binding", "authorization_request",
+                                        "serialization", "json"))),
+                "ci_ephemeral");
+
+        assertThat(defaultPublish.ready()).isTrue();
+        assertThat(requestReply.ready()).isTrue();
+    }
+
+    @Test
+    void blocksNativeMessagingCleanupWithUnsupportedStrategy() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_events",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "nats",
+                        "server_ref", "nats://127.0.0.1:4222",
+                        "subject_ref", "payment.events",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-events.json"),
+                        "actions", Map.of(
+                                "cleanup_payment_event", Map.of(
+                                        "mode", "cleanup",
+                                        "cleanup_strategy", "delete",
+                                        "max_count", "0"))),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(
+                        ".actions.cleanup_payment_event.cleanup_strategy",
+                        ".actions.cleanup_payment_event.max_count");
+    }
+
+    @Test
+    void blocksUnsafeProviderPathsAcrossRelativePathShapes() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "fixtures",
+                "relational_db",
+                Map.of(
+                        "provider_family", "db_fixture",
+                        "provider_type", "jdbc",
+                        "connection_ref", "vault://ci/payment-db",
+                        "cleanup_strategy", "by_test_run_id",
+                        "isolation_key", "test_run_id",
+                        "setup_actions", Map.of(
+                                "parent_only", Map.of("sql_ref", ".."),
+                                "nested_parent", Map.of("sql_ref", "seed/../payment.sql"),
+                                "trailing_parent", Map.of("sql_ref", "seed/.."),
+                                "windows_drive", Map.of("sql_ref", "C:\\seed\\payment.sql")),
+                        "cleanup_actions", Map.of(
+                                "safe_cleanup", Map.of("sql_ref", "sql/cleanup-payment.sql")),
+                        "verification_queries", Map.of(
+                                "safe_query", Map.of("sql_ref", "sql/verify-payment.sql"))),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactlyInAnyOrder(
+                        ".setup_actions.parent_only.sql_ref",
+                        ".setup_actions.nested_parent.sql_ref",
+                        ".setup_actions.trailing_parent.sql_ref",
+                        ".setup_actions.windows_drive.sql_ref");
+    }
+
+    @Test
+    void blocksUnsafeExternalRunnerBlankHomeParentAndTrailingParentOutputs() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "external_runner",
+                Map.ofEntries(
+                        entry("provider_family", "external_runner"),
+                        entry("provider_type", "command_runner"),
+                        entry("approval_ref", "ADR-012"),
+                        entry("approved_by", "SA"),
+                        entry("reason", "legacy protocol bridge"),
+                        entry("command", "./run-legacy.sh"),
+                        entry("timeout_seconds", 30),
+                        entry("inputs", Map.of("payload", "fixtures/request.json")),
+                        entry("outputs", Map.of(
+                                "blank", "",
+                                "home", "~/output.json",
+                                "parent_only", "..",
+                                "trailing_parent", "reports/..")),
+                        entry("evidence_map", Map.of(
+                                "safe_log", "logs/external-runner.log"))),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactlyInAnyOrder(
+                        ".outputs.blank",
+                        ".outputs.home",
+                        ".outputs.parent_only",
+                        ".outputs.trailing_parent");
+    }
+
+    @Test
+    void rejectsUnsupportedTypesInsideSupportedProviderFamilies() {
+        assertUnsupported(registry.validate(
+                "adapters",
+                "file_batch",
+                Map.of("provider_family", "file_batch", "provider_type", "csv"),
+                "ci_ephemeral"));
+        assertUnsupported(registry.validate(
+                "adapters",
+                "request_response",
+                Map.of("provider_family", "request_response", "provider_type", "soap"),
+                "ci_ephemeral"));
+        assertUnsupported(registry.validate(
+                "adapters",
+                "message_bus",
+                Map.of("provider_family", "messaging", "provider_type", "orbix"),
+                "ci_ephemeral"));
+        assertUnsupported(registry.validate(
+                "fixtures",
+                "document_db",
+                Map.of("provider_family", "db_fixture", "provider_type", "mongo"),
+                "ci_ephemeral"));
+        assertUnsupported(registry.validate(
+                "adapters",
+                "deployment_readiness",
+                Map.of("provider_family", "deployment_readiness", "provider_type", "bare_metal"),
+                "ci_ephemeral"));
+        assertUnsupported(registry.validate(
+                "adapters",
+                "external_runner",
+                Map.of("provider_family", "external_runner", "provider_type", "shell"),
+                "ci_ephemeral"));
+    }
+
+    @Test
+    void ignoresRequiredFieldValidationForUnknownContractSections() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "metadata",
+                "batch_runner",
+                Map.of(
+                        "provider_family", "file_batch",
+                        "provider_type", "shell"),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isTrue();
+    }
+
+    @Test
+    void acceptsMockDeploymentReadinessAndNonDbFixtureProviderMetadata() {
+        ProviderCapabilityRegistry.ProviderContractValidation deployment = registry.validate(
+                "adapters",
+                "payment_ready",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "mock",
+                        "readiness_probe", "health_check",
+                        "service_ref", "payment-api",
+                        "deployed_version_ref", "build-42",
+                        "timeout_seconds", 15,
+                        "outputs", Map.of("actual_output_ref", "actual/readiness.json")),
+                "local_fixture");
+        ProviderCapabilityRegistry.ProviderContractValidation fixtureMetadata = registry.validate(
+                "fixtures",
+                "fixture_file",
+                Map.of(
+                        "provider_family", "file_batch",
+                        "provider_type", "file_fixture"),
+                "local_fixture");
+
+        assertThat(deployment.ready()).isTrue();
+        assertThat(fixtureMetadata.ready()).isTrue();
+    }
+
+    @Test
+    void blocksGrpcWhenActionsNodeIsNotAMap() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "request_response",
+                Map.of(
+                        "provider_family", "request_response",
+                        "provider_type", "grpc",
+                        "service_ref", "dns:///payment-api:9090",
+                        "descriptor_ref", "descriptors/payment.desc",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/grpc-response.json"),
+                        "actions", "submit_payment"),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".actions");
+    }
+
+    @Test
+    void skipsMalformedNativeMessagingActionEntriesButBlocksNonMapActionSets() {
+        ProviderCapabilityRegistry.ProviderContractValidation malformedEntry = registry.validate(
+                "adapters",
+                "payment_events",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "kafka",
+                        "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
+                        "topic_ref", "payment.events",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-events.json"),
+                        "actions", Map.of(
+                                "metadata", "not-a-map")),
+                "ci_ephemeral");
+        ProviderCapabilityRegistry.ProviderContractValidation nonMapActions = registry.validate(
+                "adapters",
+                "payment_events",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "kafka",
+                        "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
+                        "topic_ref", "payment.events",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-events.json"),
+                        "actions", "publish"),
+                "ci_ephemeral");
+
+        assertThat(malformedEntry.ready()).isTrue();
+        assertThat(nonMapActions.ready()).isFalse();
+        assertThat(nonMapActions.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".actions");
+    }
+
+    @Test
+    void acceptsNativeNatsRequestModeWithPayloadAlias() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_authorization",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "nats",
+                        "server_ref", "nats://127.0.0.1:4222",
+                        "subject_ref", "payment.authorization",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-authorization.json"),
+                        "actions", Map.of(
+                                "request_payment_authorization", Map.of(
+                                        "mode", "request",
+                                        "message_binding", "authorization_request",
+                                        "serialization", "json"))),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isTrue();
+    }
+
+    @Test
+    void blocksNativeMessagingWithEmptyActionMap() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_events",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "kafka",
+                        "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
+                        "topic_ref", "payment.events",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-events.json"),
+                        "actions", Map.of()),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".actions");
+    }
+
+    @Test
+    void blocksNativeNatsContractWithUnsupportedActionMode() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_events",
+                Map.of(
+                        "provider_family", "messaging",
+                        "provider_type", "nats",
+                        "server_ref", "nats://127.0.0.1:4222",
+                        "subject_ref", "payment.events",
+                        "timeout_seconds", 10,
+                        "outputs", Map.of("actual_output_ref", "actual/payment-events.json"),
+                        "actions", Map.of(
+                                "stream_payment_event", Map.of(
+                                        "mode", "stream",
+                                        "serialization", "json"))),
+                "ci_ephemeral");
+
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".actions.stream_payment_event.mode");
+    }
+
+    @Test
+    void acceptsNativeVmCommandReadinessWithNumericPort() {
+        ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
+                "adapters",
+                "payment_vm_ssh",
+                Map.of(
+                        "provider_family", "deployment_readiness",
+                        "provider_type", "vm",
+                        "readiness_probe", "ssh_command",
+                        "host_ref", "10.0.0.15",
+                        "command_ref", "systemctl is-active payment-api",
+                        "port", "22",
+                        "deployed_version_ref", "build-43",
+                        "timeout_seconds", 15,
+                        "outputs", Map.of("actual_output_ref", "actual/vm-ssh.txt")),
+                "sit_deployed");
+
+        assertThat(validation.ready()).isTrue();
+    }
+
+    private void assertUnsupported(ProviderCapabilityRegistry.ProviderContractValidation validation) {
+        assertThat(validation.ready()).isFalse();
+        assertThat(validation.registryStatus()).isEqualTo("unsupported");
+        assertThat(validation.runtimeStatus()).isEqualTo("unsupported");
+        assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
+                .containsExactly(".provider_type");
     }
 }

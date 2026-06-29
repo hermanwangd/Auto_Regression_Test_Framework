@@ -149,7 +149,7 @@ class ProviderCapabilityRegistry {
         if (family.equals("messaging") && List.of("local", "mock", "kafka", "nats").contains(type)) {
             validateMessagingAdapter(type, providerName, contract, violations);
         }
-        if (family.equals("deployment_readiness") && List.of("local", "mock", "k8s", "vm").contains(type)) {
+        if (family.equals("deployment_readiness")) {
             validateDeploymentReadinessAdapter(type, providerName, contract, violations);
         }
         if (family.equals("external_runner")) {
@@ -365,7 +365,12 @@ class ProviderCapabilityRegistry {
             String providerName,
             Map<String, Object> contract,
             List<ProviderContractViolation> violations) {
-        if (!(contract.get("actions") instanceof Map<?, ?> actions) || actions.isEmpty()) {
+        if (!(contract.get("actions") instanceof Map<?, ?> actions)) {
+            violations.add(required(".actions",
+                    "Declare at least one native " + type + " messaging action for `" + providerName + "`."));
+            return;
+        }
+        if (actions.isEmpty()) {
             violations.add(required(".actions",
                     "Declare at least one native " + type + " messaging action for `" + providerName + "`."));
             return;
@@ -563,7 +568,8 @@ class ProviderCapabilityRegistry {
         if (!hasMap(contract, "outputs")) {
             violations.add(escapeHatch(".outputs",
                     "Declare external runner outputs before invoking `" + providerName + "`."));
-        } else if (contract.get("outputs") instanceof Map<?, ?> outputs) {
+        } else {
+            Map<?, ?> outputs = (Map<?, ?>) contract.get("outputs");
             for (Map.Entry<?, ?> output : outputs.entrySet()) {
                 String outputPath = stringValue(output.getValue());
                 if (isUnsafeRelativeOutputPath(outputPath)) {
@@ -576,7 +582,8 @@ class ProviderCapabilityRegistry {
         if (!hasMap(contract, "evidence_map")) {
             violations.add(escapeHatch(".evidence_map",
                     "Declare external runner evidence_map before invoking `" + providerName + "`."));
-        } else if (contract.get("evidence_map") instanceof Map<?, ?> evidenceMap) {
+        } else {
+            Map<?, ?> evidenceMap = (Map<?, ?>) contract.get("evidence_map");
             for (Map.Entry<?, ?> evidenceRef : evidenceMap.entrySet()) {
                 String evidencePath = stringValue(evidenceRef.getValue());
                 if (isUnsafeRelativeOutputPath(evidencePath)) {
@@ -660,8 +667,7 @@ class ProviderCapabilityRegistry {
 
     private boolean isUnsafeRelativeProviderPath(String path) {
         String normalized = path.replace('\\', '/');
-        return normalized.isBlank()
-                || normalized.startsWith("/")
+        return normalized.startsWith("/")
                 || normalized.startsWith("~/")
                 || normalized.equals("..")
                 || normalized.startsWith("../")

@@ -1,0 +1,5 @@
+{
+  "order_id": "ORD-P0-001",
+  "expected_status": "READY",
+  "expected_row_count": 1
+}

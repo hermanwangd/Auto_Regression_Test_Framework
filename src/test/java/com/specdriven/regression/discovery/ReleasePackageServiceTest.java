@@ -1,7 +1,10 @@
 package com.specdriven.regression.discovery;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -46,5 +49,56 @@ class ReleasePackageServiceTest {
                 .contains(Path.of("docs/08-release/release-packages/RP-404/package.yaml"));
         assertThat(report.gaps()).extracting(ReleasePackageGap::ownerAction)
                 .allMatch(action -> action.contains("Create required RP artifact"));
+    }
+
+    @Test
+    void initializeIsIdempotentAndDoesNotOverwriteOwnerAuthoredArtifacts() throws Exception {
+        ReleasePackageService service = new ReleasePackageService();
+        ReleasePackageResult first = service.initialize(tempDir, "RP-001", "data_pipeline");
+        Path packageYaml = first.packageRoot().resolve("package.yaml");
+        Files.writeString(packageYaml, "rp_id: RP-001\npackage_type: owner-authored\nstatus: active\n");
+
+        ReleasePackageResult second = service.initialize(tempDir, "RP-001", "service");
+
+        assertThat(second.packageRoot()).isEqualTo(first.packageRoot());
+        assertThat(Files.readString(packageYaml)).contains("package_type: owner-authored");
+    }
+
+    @Test
+    void initializeWrapsIoFailuresWithReleasePackageContext() throws Exception {
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-BLOCKED");
+        Files.createDirectories(packageRoot.getParent());
+        Files.writeString(packageRoot, "not a directory");
+
+        assertThatThrownBy(() -> new ReleasePackageService().initialize(tempDir, "RP-BLOCKED", "service"))
+                .isInstanceOf(UncheckedIOException.class)
+                .hasMessageContaining("Failed to initialize Release Package: RP-BLOCKED");
+    }
+
+    @Test
+    void strictCompletenessReportsPackageSchemaAndRuMappingGaps() throws Exception {
+        ReleasePackageService service = new ReleasePackageService();
+        ReleasePackageResult result = service.initialize(tempDir, "RP-STRICT", "service");
+        Files.writeString(result.packageRoot().resolve("package.yaml"), """
+                rp_id: RP-STRICT
+                package_type: service
+                artifact_paths:
+                  feature_spec: rp_feature_spec.md
+                """);
+        Files.writeString(result.packageRoot().resolve("rp_ru_mapping.yaml"), """
+                rp_id: RP-STRICT
+                release_units:
+                  - ru_id: RU-payment
+                """);
+
+        ReleasePackageCompletenessReport report = service.checkCompleteness(tempDir, "RP-STRICT", true);
+
+        assertThat(report.complete()).isFalse();
+        assertThat(report.status()).isEqualTo("fail");
+        assertThat(report.gaps()).isEmpty();
+        assertThat(report.packageSchemaErrors()).extracting(error -> error.fieldPath())
+                .contains("product_id", "artifact_paths.acceptance_criteria");
+        assertThat(report.mappingGaps()).extracting(gap -> gap.fieldPath())
+                .contains("release_units[0].repo", "release_units[0].unit_type");
     }
 }

@@ -1,0 +1,32 @@
+provider_contract_version: v0.2
+provider_type: nats_messaging
+runtime_modes: [native, mock, ephemeral]
+binding_keys:
+  servers:
+    required: true
+    source: environment_binding
+defaults:
+  timeout_seconds: 30
+  retry: 0
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
+  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
+  binding_keys: [servers]
+operations:
+  publish_message:
+    allowed_bind_as: [message.subject, message.headers.*, message.payload, message.timeout]
+    required_parameters: [message.subject, message.payload]
+    output_refs: [published_message, ack, timestamp]
+  consume_message:
+    allowed_bind_as: [message.subject, message.queue, message.filter, message.timeout, message.max_records, message.consume_from]
+    required_parameters: [message.subject]
+    output_refs: [consumed_message, ack, timestamp]
+  request_reply_message:
+    allowed_bind_as: [message.subject, message.headers.*, message.payload, message.timeout, message.correlation_id]
+    required_parameters: [message.subject, message.payload]
+    output_refs: [reply_message, ack, timestamp]
+evidence:
+  outputs: [published_message, reply_message, consumed_message, ack, timing, error]
+  redact: [message.headers.authorization]
+failure_mapping:
+  allowed_codes: [PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, OPERATION_FAILED, ASSERTION_FAILED, EVIDENCE_INVALID]

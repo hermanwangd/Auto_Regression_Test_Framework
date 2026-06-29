@@ -1,0 +1,18 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "/payments",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.paymentId"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": {
+      "status": "ACCEPTED",
+      "provider": "wiremock"
+    }
+  }
+}

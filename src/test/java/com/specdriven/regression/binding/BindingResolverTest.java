@@ -1,7 +1,9 @@
 package com.specdriven.regression.binding;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -75,6 +77,105 @@ class BindingResolverTest {
     }
 
     @Test
+    void resolvesV02ParameterSetReferenceAndBindNamespaceBeforeProviderExecution() throws Exception {
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        Path testCase = packageRoot.resolve("tests/approved/RP-001-TC-001.yaml");
+        Path parameterSet = packageRoot.resolve("parameter-sets/orders_regression_cases.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.createDirectories(parameterSet.getParent());
+        Files.writeString(parameterSet, """
+                parameter_set_id: orders_regression_cases
+                status: approved_for_regression
+                cases:
+                  - case_id: baseline
+                    values:
+                      orders_seed_ref: fixtures/db/orders_seed_baseline.yaml
+                  - case_id: boundary
+                    values:
+                      orders_seed_ref: fixtures/db/orders_seed_boundary.yaml
+                """);
+        Files.writeString(testCase, executionFocusedTest("""
+                parameters:
+                  ref: parameter-sets/orders_regression_cases.yaml
+                  bind_as: orders_case
+                """, "${param.orders_case.orders_seed_ref}"));
+
+        BindingResolutionReport report = new BindingResolver().resolve(testCase);
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.resolvedBindings()).extracting(ResolvedBinding::bindingName)
+                .containsExactly("orders_seed", "api_payload");
+        assertThat(report.gaps()).isEmpty();
+    }
+
+    @Test
+    void blocksMalformedV02ParameterSetBeforeProviderExecution() throws Exception {
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        Path testCase = packageRoot.resolve("tests/approved/RP-001-TC-001.yaml");
+        Path parameterSet = packageRoot.resolve("parameter-sets/orders_regression_cases.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.createDirectories(parameterSet.getParent());
+        Files.writeString(parameterSet, """
+                parameter_set_id: orders_regression_cases
+                status: approved_for_regression
+                cases:
+                  - case_id: baseline
+                    values:
+                      orders_seed_ref: fixtures/db/orders_seed_baseline.yaml
+                  - case_id: baseline
+                    values:
+                      unused_ref: fixtures/db/orders_seed_unused.yaml
+                """);
+        Files.writeString(testCase, executionFocusedTest("""
+                parameters:
+                  ref: parameter-sets/orders_regression_cases.yaml
+                  bind_as: orders_case
+                """, "${param.orders_case.orders_seed_ref}"));
+
+        BindingResolutionReport report = new BindingResolver().resolve(testCase);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(BindingGap::fieldPath)
+                .contains(
+                        "parameters.ref.cases[1].case_id",
+                        "parameters.ref.cases[1].values.orders_seed_ref");
+        assertThat(report.gaps()).extracting(BindingGap::ownerAction)
+                .contains(
+                        "Use a unique case_id for each reviewed parameter case.",
+                        "Declare a value for parameter reference `${param.orders_case.orders_seed_ref}`.");
+    }
+
+    @Test
+    void blocksV02ParameterReferencesOutsideDeclaredBindNamespace() throws Exception {
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        Path testCase = packageRoot.resolve("tests/approved/RP-001-TC-001.yaml");
+        Path parameterSet = packageRoot.resolve("parameter-sets/orders_regression_cases.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.createDirectories(parameterSet.getParent());
+        Files.writeString(parameterSet, """
+                parameter_set_id: orders_regression_cases
+                status: approved_for_regression
+                cases:
+                  - case_id: baseline
+                    values:
+                      orders_seed_ref: fixtures/db/orders_seed_baseline.yaml
+                """);
+        Files.writeString(testCase, executionFocusedTest("""
+                parameters:
+                  ref: parameter-sets/orders_regression_cases.yaml
+                  bind_as: orders_case
+                """, "${param.wrong_namespace.orders_seed_ref}"));
+
+        BindingResolutionReport report = new BindingResolver().resolve(testCase);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(BindingGap::fieldPath)
+                .contains("parameters.bind_as");
+        assertThat(report.gaps()).extracting(BindingGap::ownerAction)
+                .contains("Use declared parameter namespace `orders_case` for `${param.wrong_namespace.orders_seed_ref}`.");
+    }
+
+    @Test
     void blocksUnsupportedParameterStrategyBeforeProviderExecution() throws Exception {
         Path testCase = tempDir.resolve("tests/approved/RP-001-TC-001.yaml");
         Files.createDirectories(testCase.getParent());
@@ -125,6 +226,219 @@ class BindingResolverTest {
                         "parameters.cases[1].case_id",
                         "parameters.cases[2].case_id",
                         "parameters.cases[3].values.orders_seed_ref");
+    }
+
+    @Test
+    void blocksExecutionFocusedFixtureWithoutBindingTypeAtSourceFieldPath() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/RP-001-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, executionFocusedTest().replace("type: database_seed", "type: "));
+
+        BindingResolutionReport report = new BindingResolver().resolve(testCase);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(BindingGap::fieldPath)
+                .contains("setup.fixtures.orders_seed.type");
+        assertThat(report.gaps()).extracting(BindingGap::bindingName)
+                .contains("orders_seed");
+        assertThat(report.gaps()).extracting(BindingGap::ownerAction)
+                .contains("Declare binding type for package input `orders_seed`.");
+    }
+
+    @Test
+    void blocksEmptyExplicitParameterCaseListBeforeExpansion() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/RP-001-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, executionFocusedTest("""
+                parameters:
+                  strategy: explicit_cases
+                  cases: []
+                """));
+
+        BindingResolutionReport report = new BindingResolver().resolve(testCase);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(BindingGap::fieldPath)
+                .containsExactly("parameters.cases");
+        assertThat(report.gaps()).extracting(BindingGap::ownerAction)
+                .contains("Declare at least one explicit parameter case.");
+    }
+
+    @Test
+    void blocksNonMapParameterCaseAndEmptyValuesBeforeExpansion() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/RP-001-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, executionFocusedTest("""
+                parameters:
+                  strategy: explicit_cases
+                  cases:
+                    - malformed-case
+                    - case_id: empty_values
+                      values: {}
+                """));
+
+        BindingResolutionReport report = new BindingResolver().resolve(testCase);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(BindingGap::fieldPath)
+                .contains(
+                        "parameters.cases[0]",
+                        "parameters.cases[1].values");
+        assertThat(report.gaps()).extracting(BindingGap::ownerAction)
+                .contains(
+                        "Declare each parameter case as a map with case_id and values.",
+                        "Declare non-empty values for each explicit parameter case.");
+    }
+
+    @Test
+    void blocksScalarExplicitParameterCasesBeforeExpansion() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/RP-001-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, executionFocusedTest("""
+                parameters:
+                  strategy: explicit_cases
+                  cases: malformed-cases
+                """));
+
+        BindingResolutionReport report = new BindingResolver().resolve(testCase);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(BindingGap::fieldPath)
+                .containsExactly("parameters.cases");
+    }
+
+    @Test
+    void blocksScalarExplicitParameterValuesAndBlankReferencedValuesBeforeExpansion() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/RP-001-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, executionFocusedTest("""
+                parameters:
+                  strategy: explicit_cases
+                  cases:
+                    - case_id: scalar_values
+                      values: malformed-values
+                    - case_id: blank_ref
+                      values:
+                        orders_seed_ref: " "
+                """));
+
+        BindingResolutionReport report = new BindingResolver().resolve(testCase);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(BindingGap::fieldPath)
+                .contains(
+                        "parameters.cases[0].values",
+                        "parameters.cases[1].values.orders_seed_ref");
+    }
+
+    @Test
+    void reportsPackageInputFieldPathWhenSetupAndExecuteDoNotOwnBinding() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/RP-001-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: RP-001-TC-001
+                rp_id: RP-001
+                ac_id: RP-001-AC-001
+                artifact_status: approved_for_regression
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#RP-001-AC-001
+                expected:
+                  ref: expected-results/approved/RP-001-ER-001.yaml
+                oracles:
+                  normalized_orders:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/RP-001-ER-001.yaml
+                package_inputs:
+                  inputs:
+                    audit_payload:
+                      ref: fixtures/audit.json
+                      bind_as: ""
+                setup: {}
+                execute:
+                  - malformed-step
+                  - id: no_with
+                  - id: different_binding
+                    with:
+                      api_payload:
+                        type: api_payload
+                steps:
+                  - id: run_pipeline
+                    action: call_ru
+                assertions:
+                  - type: file_diff
+                    oracle: ${oracles.normalized_orders}
+                evidence_required:
+                  - execution_log
+                """);
+
+        BindingResolutionReport report = new BindingResolver().resolve(testCase);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(BindingGap::fieldPath)
+                .containsExactly("package_inputs.inputs.audit_payload.bind_as");
+    }
+
+    @Test
+    void ignoresMalformedPackageInputEntriesAndBlocksMissingExpectedArtifactReference() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/RP-001-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v1
+                test_case_id: RP-001-TC-001
+                rp_id: RP-001
+                ac_id: RP-001-AC-001
+                artifact_status: approved_for_regression
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#RP-001-AC-001
+                oracles:
+                  normalized_orders:
+                    type: expected_result_artifact
+                package_inputs:
+                  inputs:
+                    orders_seed: malformed-input-entry
+                steps:
+                  - id: run_pipeline
+                    action: call_ru
+                assertions:
+                  - type: file_diff
+                    oracle: ${oracles.normalized_orders}
+                evidence_required:
+                  - execution_log
+                """);
+
+        BindingResolutionReport report = new BindingResolver().resolve(testCase);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.resolvedBindings()).isEmpty();
+        assertThat(report.gaps()).extracting(BindingGap::fieldPath)
+                .containsExactly("expected.ref");
+    }
+
+    @Test
+    void treatsNonMappingDslAsEmptyDocumentWithExpectedResultReadinessGap() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/not-a-map.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, "[]\n");
+
+        BindingResolutionReport report = new BindingResolver().resolve(testCase);
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.testCaseId()).isBlank();
+        assertThat(report.acId()).isBlank();
+        assertThat(report.resolvedBindings()).isEmpty();
+        assertThat(report.gaps()).isEmpty();
+    }
+
+    @Test
+    void wrapsUnreadableDslTestCaseAsUncheckedIOException() {
+        Path missing = tempDir.resolve("tests/approved/missing-test-case.yaml");
+
+        assertThatThrownBy(() -> new BindingResolver().resolve(missing))
+                .isInstanceOf(UncheckedIOException.class)
+                .hasMessageContaining("Failed to read DSL test case");
     }
 
     private String approvedTest(String bindingType, String expectedRef) {
@@ -178,6 +492,10 @@ class BindingResolverTest {
         String fixtureRef = parametersBlock.isBlank()
                 ? "fixtures/db/orders_seed.yaml"
                 : "${parameters.orders_seed_ref}";
+        return executionFocusedTest(parametersBlock, fixtureRef);
+    }
+
+    private String executionFocusedTest(String parametersBlock, String fixtureRef) {
         return """
                 dsl_version: v1
                 test_case_id: RP-001-TC-001

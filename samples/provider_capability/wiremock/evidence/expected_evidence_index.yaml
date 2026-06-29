@@ -1,0 +1,34 @@
+evidence_index_version: v0.2
+suite_id: WIREMOCK-CAPABILITY-v0.2
+batch_id: BATCH-WIREMOCK-001
+run_id: RUN-WIREMOCK-001
+test_case_id: WIREMOCK-CAPABILITY-TC-001
+profile: local_wiremock
+provider_type: wiremock_http_mock
+provider_id: wiremock-payment-api
+evidence_classification: framework_provider_capability_only
+downstream_release_evidence: false
+entries:
+  - evidence_type: request_journal
+    ref: provider-evidence/wiremock/request_journal.json
+    masked: true
+  - evidence_type: server_log
+    ref: provider-evidence/wiremock/server_log.txt
+    masked: true
+  - evidence_type: injected_stub
+    ref: provider-evidence/wiremock/injected_stubs.yaml
+    masked: true
+  - evidence_type: execution_log
+    ref: logs/execution.log
+    masked: true
+  - evidence_type: assertion_result
+    ref: assertions/http_mock_called.yaml
+    masked: true
+  - evidence_type: assertion_result
+    ref: assertions/http_mock_request_body_match.yaml
+    masked: true
+  - evidence_type: batch_summary
+    ref: batch/batch.yaml
+    masked: true
+masking:
+  raw_secret_found: false

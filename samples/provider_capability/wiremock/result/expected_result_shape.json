@@ -1,0 +1,49 @@
+{
+  "framework_version": "v0.2",
+  "dsl_version": "v0.2",
+  "suite_id": "WIREMOCK-CAPABILITY-v0.2",
+  "batch_id": "BATCH-WIREMOCK-001",
+  "run_id": "RUN-WIREMOCK-001",
+  "test_case_id": "WIREMOCK-CAPABILITY-TC-001",
+  "profile": "local_wiremock",
+  "provider_type": "wiremock_http_mock",
+  "provider_id": "wiremock-payment-api",
+  "status": "passed",
+  "start_time": "2026-06-29T00:00:00Z",
+  "end_time": "2026-06-29T00:00:01Z",
+  "duration_ms": 1000,
+  "step_results": [
+    {
+      "id": "load_payment_stub",
+      "operation": "load_stubs",
+      "status": "passed"
+    },
+    {
+      "id": "submit_payment_to_mock",
+      "operation": "send_http_request",
+      "status": "passed"
+    }
+  ],
+  "verify_results": [
+    {
+      "id": "http_mock_called",
+      "type": "http_mock_called",
+      "status": "passed"
+    },
+    {
+      "id": "http_mock_request_body_match",
+      "type": "http_mock_request_body_match",
+      "status": "passed"
+    }
+  ],
+  "provider_evidence_refs": [
+    "provider-evidence/wiremock/request_journal.json",
+    "provider-evidence/wiremock/server_log.txt",
+    "provider-evidence/wiremock/injected_stubs.yaml"
+  ],
+  "failure": {
+    "classification": null,
+    "reason": null,
+    "owner_action": null
+  }
+}

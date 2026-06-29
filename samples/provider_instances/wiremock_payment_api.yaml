@@ -1,0 +1,19 @@
+provider_instance_version: v0.2
+provider_id: wiremock-payment-api
+provider_type: wiremock_http_mock
+runtime_modes: [mock]
+binding_keys:
+  mappings_ref:
+    required: true
+defaults:
+  timeout_seconds: 60
+operations:
+  load_stubs:
+    outputs: [loaded_stub_count, server_log]
+  verify_requests:
+    outputs: [request_journal, matched_count]
+evidence:
+  capture: [request_journal, server_log]
+failure_mapping:
+  provider_unavailable: PROVIDER_UNAVAILABLE
+  assertion_failed: ASSERTION_FAILED

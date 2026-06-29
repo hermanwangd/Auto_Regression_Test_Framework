@@ -1,0 +1,26 @@
+provider_instance_version: v0.2
+provider_id: oracle-database
+provider_type: jdbc_database
+runtime_modes: [native, ephemeral]
+binding_keys:
+  jdbc_url:
+    required: true
+  username:
+    required: true
+  password:
+    required: true
+defaults:
+  timeout_seconds: 60
+  dialect: oracle
+operations:
+  execute_script:
+    outputs: [script_result, affected_rows, duration_ms]
+  query:
+    outputs: [query_result, row_count, duration_ms]
+evidence:
+  capture: [script_result, query_result, affected_rows]
+  redact: [password]
+failure_mapping:
+  provider_unavailable: PROVIDER_UNAVAILABLE
+  operation_failed: OPERATION_FAILED
+  cleanup_failed: CLEANUP_FAILED

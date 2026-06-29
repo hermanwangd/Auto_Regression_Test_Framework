@@ -19,3 +19,9 @@
 | SPEC-014 | `docs/10-change-control/15_lightweight_change_control.md` | Lightweight Change Control | Release | Draft | All |
 | SPEC-015 | `docs/04-planning/16_implementation_plan.md` | Implementation Plan | Platform | v0.2 Scope Alignment Draft | F001-F011 |
 | SPEC-016 | `docs/02-architecture/07_heterogeneous_rp_support_capability_matrix.md` | Heterogeneous RP Support and Capability Matrix | Platform | v0.2 Full Pre-release Scope Draft | F007-F008 / F011 context |
+| SPEC-017 | `docs/02-architecture/contracts/` | Framework-Owned Runtime Contracts | Platform | v0.2 Current-Stage Contract | F007-F008 / F011 |
+| SPEC-018 | `docs/02-architecture/contracts/framework_usage_interface.v0.2.md` | Framework Public Interface | Platform | v0.2 Current-Stage Contract | F007-F008 / F011 |
+| SPEC-019 | `docs/01-specs/04_track_a_framework_contract_spec_patch.md` | Track A Framework Contract Spec Patch | Platform | v0.2 Track A Draft | F007-F008 / F011 |
+| SPEC-020 | `docs/04-planning/17_track_a_framework_contract_plan.md` | Track A Framework Contract Plan | Platform | v0.2 Track A Draft | F007-F008 / F011 |
+| SPEC-021 | `docs/04-planning/18_track_b_golden_e2e_implementation_plan.md` | Track B Golden E2E Implementation Plan | Platform | v0.2 Track B Draft | F007-F008 / F011 |
+| SPEC-022 | `docs/04-planning/19_track_c_provider_capability_implementation_plan.md` | Track C Provider Capability Implementation Plan | Platform | v0.2 Track C Draft | F007-F008 / F011 |

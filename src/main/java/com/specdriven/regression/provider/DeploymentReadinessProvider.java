@@ -38,6 +38,13 @@ public class DeploymentReadinessProvider {
             String providerType = stringValue(contract.get("provider_type"));
             String readinessProbeName = stringValue(contract.get("readiness_probe"));
             String deploymentRef = firstText(contract, "deployment_ref", "service_ref", "target_selector");
+            if (isNativeProvider(providerType) && usesMockNativeReadiness(contract)) {
+                Files.writeString(stdoutLog, providerType + " mock readiness passed for " + deploymentRef + "\n");
+                Files.writeString(stderrLog, "");
+                Files.writeString(actualOutput, "ready\n");
+                writeReadinessEvidence(runDir, providerName, contract, "passed", "", 1);
+                return new AdapterExecutionResult(0, false, stdoutLog, stderrLog, actualOutput);
+            }
             if (isNativeProvider(providerType)) {
                 DeploymentReadinessProbeResult probeResult = readinessProbe.check(new DeploymentReadinessProbeRequest(
                         providerName,
@@ -192,6 +199,23 @@ public class DeploymentReadinessProvider {
     private boolean isNativeProvider(String providerType) {
         String normalized = providerType.toLowerCase(Locale.ROOT);
         return normalized.equals("k8s") || normalized.equals("vm");
+    }
+
+    private boolean usesMockNativeReadiness(Map<String, Object> contract) {
+        for (String field : java.util.List.of(
+                "api_server_ref",
+                "endpoint_ref",
+                "kube_context_ref",
+                "connection_ref",
+                "host_ref",
+                "health_url_ref",
+                "ssh_ref",
+                "winrm_ref")) {
+            if (stringValue(contract.get(field)).startsWith("mock://")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private int intValue(Object value, int fallback) {

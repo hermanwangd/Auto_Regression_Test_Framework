@@ -1,0 +1,102 @@
+dsl_version: v0.2
+test_case_id: WIREMOCK-CAPABILITY-TC-001
+title: WireMock HTTP mock provider capability
+status: active
+revision: 1
+source_refs:
+  acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#track-c-wiremock
+labels:
+  capability: wiremock_http_mock
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false
+compatible_profiles: [local_wiremock]
+targets:
+  payment_mock:
+    provider_id: wiremock-payment-api
+    profile: local_wiremock
+scenario:
+  type: provider_capability
+  scope: framework_verification
+  description: Inject WireMock stubs, call the mock endpoint, and verify request journal evidence.
+  capabilities: [http_stub, http_mock_called, http_mock_request_body_match]
+data_binding:
+  mock_stubs:
+    payment_success:
+      ref: fixtures/payment_success_stub.json
+    payment_failure:
+      ref: fixtures/payment_failure_stub.json
+  datasets:
+    request_input:
+      ref: fixtures/request_input.json
+  expected_results:
+    expected_request:
+      ref: expected_results/expected_request.json
+setup:
+  fixtures:
+    load_payment_stub:
+      type: http_stub
+      target: payment_mock
+      operation: load_stubs
+      parameters:
+        - name: mappings
+          ref: ${data.mock_stubs.payment_success}
+          bind_as: mock.mappings_ref
+        - name: reset_before_load
+          ref: true
+          bind_as: mock.reset_before_load
+execute:
+  - id: submit_payment_to_mock
+    target: payment_mock
+    operation: send_http_request
+    parameters:
+      - name: request
+        ref: ${data.datasets.request_input}
+        bind_as: http.request_body
+      - name: expected_request
+        ref: ${data.expected_results.expected_request}
+        bind_as: mock.request_filter
+      - name: method
+        ref: POST
+        bind_as: http.method
+      - name: path
+        ref: /payments
+        bind_as: http.path
+    outputs:
+      base_url: base_url
+      http_status: http_status
+      response_body: response_body
+      matched_count: matched_count
+      request_journal: request_journal
+      server_log: server_log
+verify:
+  - id: http_mock_called
+    type: http_mock_called
+    actual:
+      ref: ${execute.submit_payment_to_mock.outputs.matched_count}
+    expected: 1
+  - id: http_mock_request_body_match
+    type: http_mock_request_body_match
+    actual:
+      ref: ${execute.submit_payment_to_mock.outputs.request_journal}
+    expected_ref: expected_results/expected_request.json
+cleanup:
+  fixtures:
+    reset_payment_mock:
+      type: http_mock_reset
+      target: payment_mock
+      operation: reset_mock
+      parameters: []
+evidence:
+  required:
+    - evidence_index.yaml
+    - provider-evidence/wiremock/request_journal.json
+    - provider-evidence/wiremock/server_log.txt
+    - provider-evidence/wiremock/injected_stubs.yaml
+    - logs/execution.log
+    - assertions/http_mock_called.yaml
+    - assertions/http_mock_request_body_match.yaml
+    - batch/batch.yaml
+runtime:
+  timeout: PT30S
+  retry:
+    max_attempts: 1

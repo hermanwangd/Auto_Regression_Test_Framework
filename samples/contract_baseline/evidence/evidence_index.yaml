@@ -1,0 +1,31 @@
+evidence_index_version: v0.2
+batch_id: BATCH-CONTRACT-001
+run_id: RUN-CONTRACT-001
+test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001
+profile: ci
+release_evidence_eligible: false
+entries:
+  - evidence_type: resolved_execution_plan
+    ref: evidence/runs/RUN-CONTRACT-001/execution_plan.yaml
+    masked: true
+  - evidence_type: provider_result
+    provider_id: wiremock-payment-api
+    provider_type: wiremock_http_mock
+    runtime_mode: mock
+    ref: evidence/runs/RUN-CONTRACT-001/provider-evidence/payment-api/request_journal.yaml
+    masked: true
+  - evidence_type: query_result
+    provider_id: oracle-database
+    provider_type: jdbc_database
+    runtime_mode: ephemeral
+    ref: evidence/runs/RUN-CONTRACT-001/query-evidence/order_database/query_result.yaml
+    masked: true
+  - evidence_type: event_result
+    provider_id: nats-event-bus
+    provider_type: nats_messaging
+    runtime_mode: ephemeral
+    ref: evidence/runs/RUN-CONTRACT-001/event-evidence/nats_event_bus/published_message.yaml
+    masked: true
+masking:
+  raw_secret_found: false
+  report_ref: evidence/runs/RUN-CONTRACT-001/masking_report.yaml

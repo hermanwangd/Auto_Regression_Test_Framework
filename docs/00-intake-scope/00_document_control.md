@@ -17,7 +17,7 @@
 - Use `spec_index.md` to track all spec files and ownership.
 - Use `feature_specs.md` and `acceptance_criteria.md` as the main implementation contract.
 - Use `architecture_and_sequence.md` for v0.2 component design, module boundaries, execution flow, and implementation readiness gates.
-- Use `artifact_contracts.md` to design or implement framework-readable artifacts, test case DSL, run profiles, environment bindings, plugin contracts, expected-result artifacts, result records, and evidence records.
+- Use `artifact_contracts.md` to design or implement framework-readable artifacts, test case DSL, Execution Profiles, Environment Bindings, Provider Contracts, Provider Instances, plugin contracts, expected-result artifacts, result records, and evidence records.
 - Use `regression_test_plan.md` for framework verification, including unit/component tests and sample Product/RP/RU integration verification.
 - Use `traceability_matrix.md` and `evidence_matrix.md` for framework, RP regression, QA, and release governance traceability.
 - Use ADRs to lock key architecture decisions.

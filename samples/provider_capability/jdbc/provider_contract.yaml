@@ -1,0 +1,40 @@
+provider_contract_version: v0.2
+provider_type: jdbc_database
+runtime_modes: [native, ephemeral]
+binding_keys:
+  jdbc_url:
+    required: true
+    source: environment_binding
+  username:
+    required: true
+    source: environment_binding
+  password:
+    required: true
+    source: environment_binding_secret_ref
+  dialect:
+    required: true
+    source: environment_binding
+defaults:
+  timeout_seconds: 60
+  retry: 0
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
+  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, labels]
+  binding_keys: [jdbc_url, username, password, dialect]
+operations:
+  execute_script:
+    allowed_bind_as: [db.script_ref, db.parameters.*, db.transaction, db.timeout]
+    required_parameters: [db.script_ref]
+    output_refs: [script_result, affected_rows, duration_ms]
+  query:
+    allowed_bind_as: [db.sql_ref, db.parameters.*, db.max_rows, db.timeout]
+    required_parameters: [db.sql_ref]
+    output_refs: [query_result, row_count, duration_ms]
+evidence:
+  outputs: [query_ref, dialect, masked_params, row_count, duration_ms, masked_sample_result, script_result, cleanup_result, error]
+  redact: [password, db.parameters.secret, db.parameters.password]
+failure_mapping:
+  allowed_codes: [PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, OPERATION_FAILED, ASSERTION_FAILED, CLEANUP_FAILED, EVIDENCE_INVALID, SECRET_RESOLUTION_ERROR]
+dialects:
+  allowed: [oracle, db2]
+  unsupported_behavior: block_before_execution

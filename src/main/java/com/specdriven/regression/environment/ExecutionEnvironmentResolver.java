@@ -7,6 +7,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import com.specdriven.regression.runtime.GeneratedRuntimeContext;
+import com.specdriven.regression.runtime.GeneratedRuntimeGap;
 import org.springframework.stereotype.Service;
 import org.yaml.snakeyaml.Yaml;
 
@@ -17,6 +19,23 @@ public class ExecutionEnvironmentResolver {
             "deployment_ref",
             "readiness_check",
             "deployed_version_ref");
+
+    public ExecutionEnvironmentReport resolve(GeneratedRuntimeContext context) {
+        List<ExecutionEnvironmentGap> gaps = new ArrayList<>();
+        for (GeneratedRuntimeGap gap : context.gaps()) {
+            gaps.add(new ExecutionEnvironmentGap(gap.fieldPath(), gap.ownerAction()));
+        }
+        if (context.targets().isEmpty()) {
+            gaps.add(new ExecutionEnvironmentGap(
+                    "generated-framework/environment_bindings.targets",
+                    "Generate at least one runtime target before execution."));
+        }
+        return new ExecutionEnvironmentReport(
+                gaps.isEmpty(),
+                context.executionMode(),
+                context.environmentRef(),
+                List.copyOf(gaps));
+    }
 
     public ExecutionEnvironmentReport resolve(Path mappingYaml, String requestedExecutionMode) {
         Map<String, Object> document = readYamlMap(mappingYaml);

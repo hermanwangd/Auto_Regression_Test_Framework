@@ -1,0 +1,63 @@
+contract_version: v0.2
+artifact: evidence
+status: framework_owned_current_stage
+version_compatibility:
+  supported_versions: [v0.2]
+  unsupported_version_behavior: evidence_not_complete
+required_fields:
+  - batch_id
+  - run_id
+  - test_case_id
+  - source_refs
+  - evidence_refs
+  - provider_context
+  - release_evidence_eligibility
+  - status
+  - failure_classification
+evidence_types:
+  - execution_log
+  - actual_artifact
+  - expected_artifact
+  - assertion_diff
+  - db_query_result
+  - query_evidence
+  - event_payload
+  - event_evidence
+  - http_request_response
+  - mock_request_journal
+  - server_log
+  - screenshot
+  - runner_report
+  - provider_report
+  - dependency_substitution_report
+  - fixture_log
+  - cleanup_log
+secret_policy:
+  mask_raw_secrets: true
+validation_output_fields:
+  - ap
+  - file_path
+  - field_path
+  - batch_id
+  - run_id
+  - test_case_id
+  - provider_id
+  - provider_type
+  - profile
+  - runtime_mode
+  - evidence_ref
+  - status
+  - severity
+  - reason
+  - owner_action
+evidence_outputs:
+  - batch_yaml
+  - run_yaml
+  - evidence_index
+  - masking_report
+unsupported_behavior:
+  missing_required_evidence: evidence_not_complete
+  unresolved_evidence_ref: evidence_not_complete
+  raw_secret: block_evidence_publication
+  unsafe_output_path: block_evidence_publication
+  mock_release_evidence_claim: block_evidence_publication

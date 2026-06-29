@@ -9,6 +9,7 @@ import com.google.protobuf.DynamicMessage;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
+import io.grpc.Status;
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.stub.ServerCalls;
@@ -92,6 +93,171 @@ class DefaultGrpcClientInvokerTest {
                 .satisfies(error -> assertThat(((GrpcClientException) error).timeout()).isFalse());
     }
 
+    @Test
+    void invokesShortServiceNameWithAuthorityOverride() throws Exception {
+        DescriptorProtos.FileDescriptorProto proto = paymentFileDescriptorProto();
+        Path descriptorPath = writeDescriptorSet(proto);
+        Descriptors.FileDescriptor fileDescriptor =
+                Descriptors.FileDescriptor.buildFrom(proto, new Descriptors.FileDescriptor[0]);
+        Descriptors.ServiceDescriptor service = fileDescriptor.findServiceByName("PaymentService");
+        Descriptors.MethodDescriptor method = service.findMethodByName("SubmitPayment");
+        Descriptors.FieldDescriptor responseStatus = method.getOutputType().findFieldByName("status");
+        Server server = NettyServerBuilder.forPort(0)
+                .directExecutor()
+                .addService(ServerServiceDefinition.builder(service.getFullName())
+                        .addMethod(grpcMethod(service, method), ServerCalls.asyncUnaryCall((request, observer) -> {
+                            observer.onNext(DynamicMessage.newBuilder(method.getOutputType())
+                                    .setField(responseStatus, "authority-ok")
+                                    .build());
+                            observer.onCompleted();
+                        }))
+                        .build())
+                .build()
+                .start();
+        try {
+            GrpcClientResult result = new DefaultGrpcClientInvoker().invoke(new GrpcClientRequest(
+                    "127.0.0.1:" + server.getPort(),
+                    descriptorPath,
+                    "PaymentService",
+                    "SubmitPayment",
+                    "{\"paymentId\":\"P-007\"}",
+                    5,
+                    true,
+                    "payment.local"));
+
+            assertThat(result.responseBody()).isEqualTo("{\"status\":\"authority-ok\"}");
+        } finally {
+            server.shutdownNow();
+            server.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    void rejectsMissingGrpcServiceAndMethodFromDescriptorSet() throws Exception {
+        Path descriptorPath = writePaymentDescriptor();
+
+        assertThatThrownBy(() -> new DefaultGrpcClientInvoker().invoke(new GrpcClientRequest(
+                        "127.0.0.1:" + unusedLocalPort(),
+                        descriptorPath,
+                        "payment.MissingService",
+                        "SubmitPayment",
+                        "{\"paymentId\":\"P-008\"}",
+                        1,
+                        true,
+                        "")))
+                .isInstanceOf(java.io.IOException.class)
+                .hasMessageContaining("gRPC service `payment.MissingService` not found");
+        assertThatThrownBy(() -> new DefaultGrpcClientInvoker().invoke(new GrpcClientRequest(
+                        "127.0.0.1:" + unusedLocalPort(),
+                        descriptorPath,
+                        "payment.PaymentService",
+                        "MissingMethod",
+                        "{\"paymentId\":\"P-008\"}",
+                        1,
+                        true,
+                        "")))
+                .isInstanceOf(java.io.IOException.class)
+                .hasMessageContaining("gRPC method `MissingMethod` not found");
+    }
+
+    @Test
+    void resolvesDescriptorDependenciesWhenDescriptorSetContainsImportedFiles() throws Exception {
+        DescriptorProtos.FileDescriptorProto common = commonFileDescriptorProto();
+        DescriptorProtos.FileDescriptorProto payment = paymentFileDescriptorProto()
+                .toBuilder()
+                .addDependency("common.proto")
+                .build();
+        Path descriptorPath = writeDescriptorSet(common, payment);
+        Descriptors.FileDescriptor commonDescriptor =
+                Descriptors.FileDescriptor.buildFrom(common, new Descriptors.FileDescriptor[0]);
+        Descriptors.FileDescriptor paymentDescriptor =
+                Descriptors.FileDescriptor.buildFrom(payment, new Descriptors.FileDescriptor[] {commonDescriptor});
+
+        assertThat(paymentDescriptor.findServiceByName("PaymentService")).isNotNull();
+        assertThatThrownBy(() -> new DefaultGrpcClientInvoker().invoke(new GrpcClientRequest(
+                        "127.0.0.1:" + unusedLocalPort(),
+                        descriptorPath,
+                        "payment.PaymentService",
+                        "MissingMethod",
+                        "{\"paymentId\":\"P-009\"}",
+                        1,
+                        true,
+                        "")))
+                .isInstanceOf(java.io.IOException.class)
+                .hasMessageContaining("gRPC method `MissingMethod` not found");
+    }
+
+    @Test
+    void rejectsDescriptorSetWithMissingOrInvalidDependencies() throws Exception {
+        DescriptorProtos.FileDescriptorProto missingDependency = paymentFileDescriptorProto()
+                .toBuilder()
+                .addDependency("missing.proto")
+                .build();
+        DescriptorProtos.FileDescriptorProto invalid = paymentFileDescriptorProto()
+                .toBuilder()
+                .clearMessageType()
+                .build();
+        Path missingDependencyPath = writeDescriptorSet("missing-dependency.desc", missingDependency);
+        Path invalidPath = writeDescriptorSet("invalid.desc", invalid);
+
+        assertThatThrownBy(() -> new DefaultGrpcClientInvoker().invoke(new GrpcClientRequest(
+                        "127.0.0.1:" + unusedLocalPort(),
+                        missingDependencyPath,
+                        "payment.PaymentService",
+                        "SubmitPayment",
+                        "{\"paymentId\":\"P-010\"}",
+                        1,
+                        true,
+                        "")))
+                .isInstanceOf(java.io.IOException.class)
+                .hasMessageContaining("Descriptor dependency `missing.proto` is missing");
+        assertThatThrownBy(() -> new DefaultGrpcClientInvoker().invoke(new GrpcClientRequest(
+                        "127.0.0.1:" + unusedLocalPort(),
+                        invalidPath,
+                        "payment.PaymentService",
+                        "SubmitPayment",
+                        "{\"paymentId\":\"P-010\"}",
+                        1,
+                        true,
+                        "")))
+                .isInstanceOf(java.io.IOException.class)
+                .hasMessageContaining("Invalid gRPC descriptor `payment.proto`");
+    }
+
+    @Test
+    void reportsGrpcStatusCodeWhenServerReturnsStatusWithoutDescription() throws Exception {
+        DescriptorProtos.FileDescriptorProto proto = paymentFileDescriptorProto();
+        Path descriptorPath = writeDescriptorSet(proto);
+        Descriptors.FileDescriptor fileDescriptor =
+                Descriptors.FileDescriptor.buildFrom(proto, new Descriptors.FileDescriptor[0]);
+        Descriptors.ServiceDescriptor service = fileDescriptor.findServiceByName("PaymentService");
+        Descriptors.MethodDescriptor method = service.findMethodByName("SubmitPayment");
+        Server server = NettyServerBuilder.forPort(0)
+                .directExecutor()
+                .addService(ServerServiceDefinition.builder(service.getFullName())
+                        .addMethod(grpcMethod(service, method), ServerCalls.asyncUnaryCall((request, observer) ->
+                                observer.onError(Status.UNAVAILABLE.asRuntimeException())))
+                        .build())
+                .build()
+                .start();
+        try {
+            assertThatThrownBy(() -> new DefaultGrpcClientInvoker().invoke(new GrpcClientRequest(
+                            "127.0.0.1:" + server.getPort(),
+                            descriptorPath,
+                            "payment.PaymentService",
+                            "SubmitPayment",
+                            "{\"paymentId\":\"P-011\"}",
+                            5,
+                            true,
+                            "")))
+                    .isInstanceOf(GrpcClientException.class)
+                    .hasMessage("gRPC call failed with status UNAVAILABLE");
+        } finally {
+            server.shutdownNow();
+            server.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
+
     private MethodDescriptor<DynamicMessage, DynamicMessage> grpcMethod(
             Descriptors.ServiceDescriptor service,
             Descriptors.MethodDescriptor method) {
@@ -138,12 +304,33 @@ class DefaultGrpcClientInvokerTest {
                 .build();
     }
 
+    private DescriptorProtos.FileDescriptorProto commonFileDescriptorProto() {
+        return DescriptorProtos.FileDescriptorProto.newBuilder()
+                .setName("common.proto")
+                .setPackage("common")
+                .setSyntax("proto3")
+                .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
+                        .setName("Audit")
+                        .addField(stringField("trace_id", 1))
+                        .build())
+                .build();
+    }
+
     private Path writePaymentDescriptor() throws Exception {
-        Path descriptorPath = tempDir.resolve("payment.desc");
-        Files.write(descriptorPath, DescriptorProtos.FileDescriptorSet.newBuilder()
-                .addFile(paymentFileDescriptorProto())
-                .build()
-                .toByteArray());
+        return writeDescriptorSet(paymentFileDescriptorProto());
+    }
+
+    private Path writeDescriptorSet(DescriptorProtos.FileDescriptorProto... protos) throws Exception {
+        return writeDescriptorSet("payment.desc", protos);
+    }
+
+    private Path writeDescriptorSet(String fileName, DescriptorProtos.FileDescriptorProto... protos) throws Exception {
+        DescriptorProtos.FileDescriptorSet.Builder descriptorSet = DescriptorProtos.FileDescriptorSet.newBuilder();
+        for (DescriptorProtos.FileDescriptorProto proto : protos) {
+            descriptorSet.addFile(proto);
+        }
+        Path descriptorPath = tempDir.resolve(fileName);
+        Files.write(descriptorPath, descriptorSet.build().toByteArray());
         return descriptorPath;
     }
 

@@ -1,0 +1,21 @@
+provider_contract_version: v0.2
+provider_type: polling_observer
+runtime_modes: [stub, ephemeral]
+binding_keys: {}
+defaults:
+  timeout_seconds: 30
+  retry: 0
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
+  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, operations, evidence, failure_mapping, labels]
+  binding_keys: []
+operations:
+  observe_condition:
+    allowed_bind_as: [poll.expected_state, poll.timeout, poll.interval]
+    required_parameters: [poll.expected_state]
+    output_refs: [last_observed, attempts]
+evidence:
+  outputs: [last_observed, attempts, timeout_status, error]
+  redact: []
+failure_mapping:
+  allowed_codes: [PROVIDER_TIMEOUT, OPERATION_FAILED, ASSERTION_FAILED, EVIDENCE_INVALID]

@@ -145,7 +145,7 @@ public class EvidenceWriter {
     }
 
     private String dslRuntimeYaml(Map<String, Object> testCase) {
-        if (!"v1".equals(stringValue(testCase.get("dsl_version")))) {
+        if (!List.of("v0.2", "v1").contains(stringValue(testCase.get("dsl_version")))) {
             return "  []";
         }
         StringBuilder builder = new StringBuilder();

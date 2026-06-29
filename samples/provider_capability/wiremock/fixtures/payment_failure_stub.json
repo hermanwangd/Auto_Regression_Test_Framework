@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "/payments/failure"
+  },
+  "response": {
+    "status": 500,
+    "jsonBody": {
+      "status": "FAILED",
+      "provider": "wiremock"
+    }
+  }
+}

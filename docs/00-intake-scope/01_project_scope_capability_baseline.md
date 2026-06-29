@@ -33,9 +33,10 @@ The platform should help this user:
 
 - Improve auto regression test coverage for the first release package pilot to greater than 80%.
 - Build Auto Regression Test Framework v0.2 as a complete product-agnostic pre-release execution and operability foundation, not a minimum MVP.
-- Support local, CI, and SIT execution contexts through run profiles, environment bindings, runner/plugin contracts, fixture lifecycle, verification catalog, result schema, and evidence collection.
+- Support local, CI, SIT, and preprod execution contexts through Execution Profiles, Environment Bindings, Provider Contracts, Provider Instances, provider/verify plugin contracts, provider capability registry, fixture lifecycle, verification catalog, result schema, and evidence collection.
+- Treat local/CI mock, stub, Testcontainers-backed ephemeral DB/broker/service, fake-topic, embedded-broker, disposable-schema, and generated-data replacements as explicit runtime modes and dependency provisioning policy, not hidden fallback behavior.
 - Allow the agent to generate expected results from RP acceptance criteria when the AC is explicit, reviewable, and traceable.
-- Standardize test case DSL, package input catalog, package binding, assertions, expected outputs, evidence, and coverage reporting.
+- Standardize test case DSL, parameter sets, fixture bindings, provider contracts, expected-result references, assertions, evidence, and coverage reporting.
 - Make every generated test artifact traceable back to RP acceptance criteria and source specs.
 - Keep release approval human-owned even when test creation is agent-assisted.
 
@@ -51,16 +52,16 @@ Auto Regression Test Framework v0.2
 Framework v0.2 owns:
 
 - Test DSL schema validation.
-- Run profile and environment binding resolution.
+- Execution Profile and Environment Binding resolution.
 - Parameter expansion and variable resolution.
 - Fixture setup, cleanup, and state safety.
-- Runner execution through built-in and plugin runner contracts.
+- Provider execution through built-in Provider Contracts and provider plugin contracts.
 - Verify/assertion execution, including DB, event, file, API, and batch checks.
 - Eventual verification through polling.
 - Evidence collection, masking, indexing, and attachment to result records.
 - Standard result JSON generation.
 - CLI, CI, suite, tag, profile, and test-id execution entrypoints.
-- Runner and verify plugin contract validation.
+- Provider and verify plugin contract validation.
 
 Framework v0.2 does not own:
 
@@ -76,7 +77,7 @@ The control boundary is:
 | Layer | Responsibility |
 |---|---|
 | Product Docs / Release Docs | RP/RU mapping, specs, AC, architecture, release, deployment, and topology truth. |
-| Phase 2 Agent Skill | Translate product context into framework-readable DSL, suite, run profile, environment binding, provider contract, traceability map, and mapping explanation artifacts. |
+| Phase 2 Agent Skill | Translate product context into framework-readable DSL, suite, Execution Profile, Environment Binding, Provider Contract, Provider Instance, traceability map, and mapping explanation artifacts. |
 | Framework v0.2 | Execute generated artifacts, verify results, collect evidence, and produce standard results without interpreting product topology. |
 
 ## 1.4 Product, RP, and RU Role Model
@@ -178,39 +179,40 @@ Each RP/RU mapping entry should include enough information for the Agent Skill t
 | `execution_mode` | Local fixture, CI ephemeral, SIT deployed, or evidence-only validation mode |
 | `environment_ref` | Target environment, CI job, SIT namespace, endpoint set, or local fixture reference |
 | `deployment_required` | Whether this RU must be deployed before RP regression execution |
-| `adapter` | Candidate runner or provider mode for Agent Skill translation |
+| `provider_intent` | Candidate provider type or provider_id hint for Agent Skill translation |
 | `evidence_responsibility` | Evidence this RU must produce or contribute |
 | `dependency_order` | Product topology hint; generated `run_plan.yaml` must express executable target dependencies |
 
 The Agent Skill translates product mapping into:
 
 - `suite_manifest.yaml`: selected tests, trace labels, and coverage source refs.
-- `run_plan.yaml`: logical target dependency graph, run profile, and selected execution mode.
-- `environment_binding.yaml`: logical targets bound to runner/provider contracts for one environment.
-- `provider_contracts/*.yaml`: reusable runner, fixture, verify, and evidence provider contracts.
+- `run_plan.yaml`: logical target dependency graph, Execution Profile, and selected execution mode.
+- `provider-instances/*.yaml`: RP logical runtime targets with provider_id and provider_type.
+- `environment-bindings/*.yaml`: profile-specific values for Provider Instance binding keys.
+- `provider-contracts/*.yaml`: reusable Provider Contracts that define provider_type, operations, allowed `bind_as` values, output refs, evidence outputs, and failure codes.
 - `traceability_map.yaml`: opaque product/RP/RU/source labels used for reporting, not runtime branching.
-- `mapping_explanation.md` or `.yaml`: strategy selection reason, selected runner/profile, source facts, unresolved assumptions, and validation warnings for human review.
+- `mapping_explanation.md` or `.yaml`: strategy selection reason, selected provider_id/profile, source facts, unresolved assumptions, and validation warnings for human review.
 
 ## 1.8.1 Execution Environment Policy
 
-RP regression execution may run in different modes. Product topology determines which mode is appropriate, but the Agent Skill records the selected mode in framework-readable run profiles and environment bindings. The framework shall not infer deployment need from RP/RU names or product topology.
+RP regression execution may run in different modes. Product topology determines which mode is appropriate, but the Agent Skill records the selected mode in framework-readable Execution Profiles and Environment Bindings. The framework shall not infer deployment need from RP/RU names or product topology.
 
 | Execution Mode | Use When | Deployment Ownership |
 |---|---|---|
-| `local_fixture` | RP behavior can be validated with local fixtures, files, mocks, or deterministic package inputs | No SIT deployment required |
-| `ci_ephemeral` | Multiple RUs can be built or composed in CI using temporary services, containers, schemas, or jobs | CI pipeline provisions and tears down the environment |
-| `sit_deployed` | RP behavior depends on deployed RU services, jobs, schemas, configuration, or endpoints in SIT | CD or environment owner deploys RUs before regression |
-| `evidence_only` | The framework cannot execute the RU directly, but approved build, unit, component, or manual evidence can support RP AC | RU owner provides mapped evidence |
+| `local` | RP behavior can be validated with local fixtures, files, mocks, or deterministic package inputs | No SIT deployment required |
+| `ci` | Multiple RUs can be built or composed in CI using temporary services, containers, schemas, or jobs | CI pipeline provisions and tears down the environment |
+| `sit` | RP behavior depends on deployed RU services, jobs, schemas, configuration, or endpoints in SIT | CD or environment owner deploys RUs before regression |
+| `preprod` | RP behavior must run in a production-like environment with stricter approval and masking | Environment owner supplies readiness evidence and approved safety controls |
 
-For RPs that include multiple RUs, the RP/RU mapping must declare enough topology for the Agent Skill to generate explicit target dependencies, execution mode, deployment readiness refs, environment binding, and evidence responsibilities.
+For RPs that include multiple RUs, the RP/RU mapping must declare enough topology for the Agent Skill to generate explicit target dependencies, execution mode, deployment readiness refs, Provider Instances, Environment Bindings, and evidence responsibilities.
 
 CI/CD boundary:
 
-- CI may run readiness checks, artifact validation, agent generation, local fixture tests, and CI-ephemeral integration tests.
+- CI may run readiness checks, artifact validation, agent generation, local fixture tests, and CI integration tests.
 - CD may deploy RU versions to SIT or another target environment.
-- SIT regression may run only after the generated environment binding references readiness evidence for the selected deployed targets.
+- SIT regression may run only after the generated Environment Binding references readiness evidence for the selected deployed targets.
 - The framework orchestrates regression execution and evidence collection, but it does not own CD deployment in v0.2.
-- Evidence may retain RP/RU/version labels as opaque traceability metadata, but framework decisions must use generated target IDs, provider contracts, run profiles, and environment bindings.
+- Evidence may retain RP/RU/version labels as opaque traceability metadata, but framework decisions must use generated target IDs, Provider Contracts, Provider Instances, Execution Profiles, and Environment Bindings.
 
 ## 1.9 AC Level and Coverage Policy
 
@@ -234,7 +236,7 @@ Rules:
 
 The regression DSL is the checked-in RP-level test contract. In one sentence: it is the durable description of what RP behavior is validated and how the framework shall execute and judge that validation repeatably. It states which RP behavior is validated, which AC it traces to, what input or state is needed, what logical action is performed, what oracle/assertion decides pass/fail, and what evidence must be retained.
 
-The DSL is not a BDD-only story, package-specific script, provider configuration file, secret store, generated run log, or replacement for owner-authored RP AC. Provider-specific details such as endpoints, commands, DB loaders, queue clients, credentials, and adapter implementation settings belong in generated provider contracts or environment bindings.
+The DSL is not a BDD-only story, package-specific script, provider configuration file, secret store, generated run log, or replacement for owner-authored RP AC. Provider-specific details such as endpoints, commands, DB loaders, queue clients, credentials, and implementation settings belong in Provider Contracts, Provider Instances, or Environment Bindings.
 
 The 7 AP are framework processing areas. In one sentence: they are the lifecycle responsibility boundaries that convert reviewed RP artifacts into executable and reviewable regression evidence. An AP is not necessarily a separate Java package, deployable service, or RP-specific plugin.
 
@@ -244,18 +246,18 @@ The baseline ownership model is:
 |---|---|---|
 | RP feature spec and RP AC | Product owner, PM, SA, or RP owner | Define business behavior and acceptance truth. |
 | RP/RU mapping | RP/RU owner or platform owner | Declare product topology and release boundary for Agent Skill translation. |
-| Generated framework artifacts | Agent Skill with reviewer approval | Translate product topology into suite manifest, run plan, environment bindings, provider contracts, and traceability map. |
+| Generated framework artifacts | Agent Skill with reviewer approval | Translate product topology into suite manifest, run plan, Execution Profiles, Provider Instances, Provider Contracts, Environment Bindings, and traceability map. |
 | DSL test case | Product developer or agent-assisted reviewer | Preserve reviewed regression validation intent as a repeatable artifact. |
 | Expected result or oracle truth | RP owner or delegated reviewer | Approve the truth source used by assertions. |
 | 7 AP execution flow | Framework | Validate, plan, bind, execute, assert, and report without inventing business truth. |
 
 | AP | Consumes | Produces | Clear Boundary |
 |---|---|---|---|
-| Definition and Validation | DSL files, suite manifest, run plan, environment bindings, expected-result artifacts | Schema, lifecycle, approval, and compatibility findings | Validates framework-readable artifacts; does not infer business truth. |
-| Discovery and Context | Suite manifest, run plan, environment binding, requested profile | Resolved execution context, target list, artifact paths, traceability labels | Finds declared context; does not understand product topology. |
-| Planning and Binding | DSL tests, parameters, package inputs, provider contracts | Execution plan with resolved bindings and step placeholders | Resolves logical references; does not execute package behavior. |
+| Definition and Validation | DSL files, suite manifest, run plan, Execution Profiles, Provider Instances, Environment Bindings, expected-result artifacts | Schema, lifecycle, approval, and compatibility findings | Validates framework-readable artifacts; does not infer business truth. |
+| Discovery and Context | Suite manifest, run plan, Execution Profile, Provider Instances, Provider Contracts, Environment Binding, requested profile | Resolved execution context, target list, artifact paths, traceability labels | Finds declared context; does not understand product topology. |
+| Planning and Binding | DSL tests, parameters, package inputs, Provider Contracts, Provider Instances, Environment Bindings | Execution plan with resolved bindings and step placeholders | Resolves logical references; does not execute package behavior. |
 | Fixture and State Manager | Preconditions, fixture setup/cleanup, lifecycle policy | Prepared state, cleanup plan, cleanup evidence | Owns state safety; does not hide destructive actions. |
-| Execution Engine | Execution plan, adapter contracts, environment policy | Step results, adapter outputs, logs, runtime metadata | Executes configured actions; does not embed RP-specific logic. |
+| Execution Engine | Execution plan, Provider Contracts, Provider Instances, Environment Binding policy | Step results, provider outputs, logs, runtime metadata | Executes configured actions; does not embed RP-specific logic. |
 | Oracle and Assertion Engine | Actual outputs, approved truth sources, assertion rules | Pass/fail decisions with expected, actual, and reason | Evaluates evidence; does not approve truth. |
 | Evidence and Reporting | Outputs from all APs, traceability, waiver records | Durable evidence, coverage, failure, and release-review reports | Reports readiness; does not decide release approval. |
 
@@ -264,7 +266,7 @@ Ownership split:
 - RP owners define feature behavior, RP AC, RP/RU membership, and release decisions.
 - Agent skills translate product topology into framework-readable artifacts and may draft DSL tests or expected results only from ready owner-authored context.
 - The DSL owns validation intent and logical references.
-- Generated run plans, environment bindings, and provider contracts own executable configuration.
+- Generated run plans, Execution Profiles, Provider Instances, Environment Bindings, and Provider Contracts own executable configuration.
 - The 7 AP own deterministic validation, planning, execution orchestration, assertion evaluation, and evidence production over generated framework-readable artifacts only.
 
 ## 1.10 Success Metrics
@@ -280,7 +282,8 @@ Ownership split:
 ## 1.11 v0.2 Non-Functional Constraints
 
 - Test execution should be deterministic for the same package inputs and expected results.
-- v0.2 should support local, CI, and SIT execution contexts through run profiles and environment bindings.
+- v0.2 should support local, CI, SIT, and preprod execution contexts through Execution Profiles and Environment Bindings.
+- Local and CI should normally replace external service, DB, messaging, K8s, and VM dependencies with explicit mock/stub/ephemeral bindings, including Testcontainers or equivalent provisioned dependencies when real protocol behavior matters; SIT/preprod release evidence should use native dependencies unless explicitly classified as framework verification only.
 - SIT execution is required only when the RP validation boundary depends on deployed RU behavior that cannot be reproduced with local fixtures or CI-ephemeral composition.
 - Fixture and sample data should be small enough to review and commit safely, or generated by a documented command.
 - Production data must not be used unless masked and approved.
@@ -302,16 +305,18 @@ Ownership split:
 
 ## 1.13 Milestone Definition
 
+Framework maturity is evaluated before Phase 2 Agent Skill maturity. The current stage must make the generic framework executable, verifiable, and contract-complete without requiring Product/RP/RU interpretation. Phase 2 Agent Skills may be improved in the next stage as long as the framework-owned contracts they will consume are stable enough to validate.
+
 | Milestone | Meaning | Exit Criteria |
 |---|---|---|
-| v0.2 Full Pre-release Framework | Product-agnostic execution foundation is feature-complete enough for pilot project execution and Phase 2 Agent Skill integration | DSL v0.2, run profiles, environment bindings, suite selection, runner catalog, verify catalog, fixture lifecycle, polling, parameter expansion, result schema, evidence schema, CLI, secret guardrail, and plugin contracts are specified and verifiable |
-| Phase 2 Agent Skill Integration | Agent translates Product/RP/RU context into framework-readable artifacts | Mapping explanation, strategy selection reason, generated suite/run/environment/provider artifacts, and test/expected-result drafts are reviewable |
+| v0.2 Full Pre-release Framework | Product-agnostic execution foundation is feature-complete enough for local/CI framework verification and later pilot project execution | DSL v0.2, Execution Profiles, Environment Bindings, Provider Contracts, Provider Instances, suite selection, provider capability registry, verify catalog, fixture lifecycle, polling, parameter expansion, result schema, evidence schema, CLI, secret guardrail, and plugin contracts are materialized, aligned, and verifiable |
+| Phase 2 Agent Skill Integration | Agent translates Product/RP/RU context into framework-readable artifacts | Next-stage hardening; mapping explanation, strategy selection reason, generated suite/run/environment/provider artifacts, and test/expected-result drafts are reviewable after framework contracts are stable |
 | v1.0 Stabilization | Framework contract becomes stable enough for wider adoption | Breaking changes are controlled; compatibility and migration policy are accepted |
 | Governance / Dashboard | Regression output supports release review and waiver decisions | P1/P2/P3 policy, approval flow, waiver record, Go/No-Go report, and dashboard views |
 
 ## 1.13.1 Current Acceptance Boundary
 
-Current framework verification can be accepted only for the framework capabilities covered by Maven tests and sample Product Repo fixtures. It is not enough to declare the M1 heterogeneous pilot accepted.
+Current framework verification can be accepted only for the framework capabilities covered by Maven tests and sample Product Repo fixtures. It is not enough to declare v0.2 delivery, M1 heterogeneous pilot validation, or downstream RP release evidence accepted.
 
 | Area | Current Framework Status | Pilot Acceptance Requirement |
 |---|---|---|
@@ -327,26 +332,28 @@ Current framework verification can be accepted only for the framework capabiliti
 | Capability ID | Capability | v0.2 Scope | Owner | Acceptance Evidence |
 |---|---|---|---|---|
 | CAP-001 | Test Case DSL v0.2 | Metadata, tags, labels, source refs, compatible profiles, parameters, targets, setup, execute, expected results, verify, evidence, runtime | Platform | Schema validation and DSL contract tests |
-| CAP-002 | Run Profile | `local_debug`, `ci_pr`, `ci_nightly`, `sit_regression` style profiles with isolation, dependency, duration, data, mock, and destructive-operation constraints | Platform | Run profile validation and selected-profile blocking tests |
+| CAP-002 | Execution Profile | `local`, `ci`, `sit`, and `preprod` profiles with isolation, dependency, duration, data, mock, readiness, and destructive-operation constraints | Platform | Execution Profile validation and selected-profile blocking tests |
 | CAP-003 | Environment Binding | Logical targets resolved to local process, testcontainer, deployed runtime, shared infrastructure, file store, or secret/runtime-generated references | Platform | Environment binding validation and resolution evidence |
 | CAP-004 | Suite Selection | Execute by test ID, suite, tag, and profile | Platform | CLI selection tests and suite manifest validation |
-| CAP-005 | Parameter Expansion | `parameters.ref` and `parameters.bind_as` with per-parameter result and evidence folders | Platform | Parameterized run evidence and coverage de-duplication |
+| CAP-005 | Parameter Expansion | Operation-level `parameters[].ref` and `parameters[].bind_as` with per-parameter result and evidence folders | Platform | Parameterized run evidence and coverage de-duplication |
 | CAP-006 | Fixture Manager | Database, file, mock, message, container dependency, environment variable, and test-data namespace fixtures with scope and cleanup policy | Platform | Setup/cleanup evidence and unsafe cleanup blocking |
-| CAP-007 | Runner Interface and Catalog | `cli`, `http`, `jdbc`, `nats`, `kafka`, `file`, `container`, `maven_failsafe`, and `k8s_job` runner contracts | Platform | Runner catalog and plugin metadata validation |
+| CAP-007 | Provider Interface and Catalog | Provider types such as `shell_command`, `rest_client`, `grpc_client`, `jdbc_database`, `nats_messaging`, `kafka_messaging`, `kubernetes_runtime`, `vm_runtime`, and approved `external_runner` Provider Contracts | Platform | Provider catalog and plugin metadata validation |
 | CAP-008 | Execute Operation Catalog | `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `run_application`, `run_container`, `run_k8s_job`, `run_maven_failsafe`, `read_file`, `write_file` | Platform | Operation dispatch and unsupported-operation blocking |
 | CAP-009 | Verify / Assertion Catalog | Basic, structure, collection, numeric/time, file, state, event, and custom verify types | Platform | Verify engine tests and verify plugin metadata validation |
 | CAP-010 | State / Event Polling | DB and event verification polling with bounded timeout, poll interval, and retained final observation evidence | Platform | Polling pass/fail/timeout evidence |
 | CAP-011 | Expected Result Handling | `literal`, `file`, `json`, `yaml`, `csv`, `schema`, `db_snapshot`, and `event_payload` truth artifacts | Platform / Reviewer | Expected-result resolution and approval-gate tests |
-| CAP-012 | Evidence Collector | Execution logs, actual/expected artifacts, assertion diffs, DB query results, event payloads, HTTP request/response, screenshots, runner reports, fixture logs, cleanup logs | Platform | Evidence index, masking, and attachment to result |
+| CAP-012 | Evidence Collector | Execution logs, actual/expected artifacts, assertion diffs, DB query results, event payloads, HTTP request/response, screenshots, provider reports, fixture logs, cleanup logs | Platform | Evidence index, masking, and attachment to result |
 | CAP-013 | Result Schema | Standard result JSON with framework/dsl version, profile, environment, labels, steps, verify results, evidence, failure classification, and timing | Platform | Result schema validation |
-| CAP-014 | Secret Guardrail | Block raw secrets in DSL, run profiles, environment bindings, result, and evidence; allow secret refs and runtime-generated values | Platform / Security | Secret validation tests and evidence masking checks |
-| CAP-015 | Plugin Contracts | Runner and verify plugin metadata validated at startup or preflight | Platform | Catalog/plugin compatibility checks |
+| CAP-014 | Secret Guardrail | Block raw secrets in DSL, Execution Profiles, Environment Bindings, result, and evidence; allow secret refs and runtime-generated values | Platform / Security | Secret validation tests and evidence masking checks |
+| CAP-015 | Plugin Contracts | Provider and verify plugin metadata validated at startup or preflight | Platform | Catalog/plugin compatibility checks |
 | CAP-016 | Technical Failure Classification | `schema_error`, `target_resolution_error`, `fixture_setup_error`, `execution_error`, `verification_failed`, `timeout`, `environment_error`, `secret_resolution_error`, `cleanup_error`, `framework_error` | Platform | Failed/blocked result classification tests |
 | CAP-017 | Product Mapping Translation | Product/RP/RU interpretation and strategy selection into framework-readable artifacts | Phase 2 Agent Skill | Mapping explanation and generated artifact review |
 | CAP-018 | Test and Expected-Result Drafting | Agent-assisted draft test cases and expected results from owner-authored AC | Phase 2 Agent Skill | Readiness report and draft artifact review |
 | CAP-019 | Governance / Release Gate | Approval, waiver, Go/No-Go workflow, dashboard, business triage | Later Governance Layer | Release decision artifacts |
 
 CAP-001 through CAP-016 are framework v0.2 responsibilities. CAP-017 and CAP-018 are Phase 2 Agent Skill responsibilities that consume product truth and generate framework-readable artifacts. CAP-019 is explicitly outside v0.2 framework runtime scope.
+
+Current-stage framework maturity is judged only by CAP-001 through CAP-016. CAP-017 and CAP-018 remain required for end-to-end Product/RP adoption, but they are not blockers for raising framework implementation maturity in the current stage.
 
 ## 1.15 AC Readiness and Fallback Policy
 
@@ -387,5 +394,5 @@ Rules:
 - UI regression support: excluded from v0.2 unless a runner/verify plugin is explicitly added later.
 - Multi-project dashboard: deferred until the first pilot proves repeatable evidence value.
 - Fully automated release decisions: excluded because release truth remains human-owned.
-- Broad adapter marketplace: deferred until the release package adapter pattern stabilizes.
+- Broad provider marketplace: deferred until the Provider Contract / Provider Instance pattern stabilizes.
 - Agent-only golden baseline approval: excluded because expected results must remain reviewable and auditable.

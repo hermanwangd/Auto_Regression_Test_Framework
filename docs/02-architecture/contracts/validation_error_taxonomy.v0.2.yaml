@@ -1,0 +1,77 @@
+contract_version: v0.2
+artifact: validation_error_taxonomy
+status: framework_owned_current_stage
+purpose: >
+  Defines deterministic, owner-actionable validation error categories used by
+  regress validate, regress run --dry-run, evidence publication, and report
+  readiness checks.
+required_error_fields:
+  - error_id
+  - classification
+  - severity
+  - ap
+  - file_path
+  - field_path
+  - reason
+  - owner_action
+  - blocking_scope
+severity_values:
+  - info
+  - warning
+  - blocking
+blocking_scope_values:
+  - validate
+  - dry_run
+  - execution
+  - evidence_publication
+  - report_readiness
+classifications:
+  schema_error:
+    owner: framework_contract
+    blocks: [validate, dry_run, execution]
+    examples: [missing_required_field, unsupported_enum, prohibited_section]
+  target_resolution_error:
+    owner: framework_contract
+    blocks: [dry_run, execution]
+    examples: [missing_provider_instance, missing_provider_contract, invalid_bind_as, missing_output_ref]
+  environment_error:
+    owner: environment_owner
+    blocks: [dry_run, execution]
+    examples: [missing_environment_binding, unsupported_runtime_mode, prohibited_mock_substitution]
+  secret_resolution_error:
+    owner: environment_owner
+    blocks: [validate, dry_run, execution, evidence_publication, report_readiness]
+    examples: [raw_secret, missing_secret_ref, unmasked_secret_in_evidence]
+  fixture_setup_error:
+    owner: test_owner
+    blocks: [execution]
+    examples: [missing_fixture_ref, unsafe_cleanup_scope, setup_failed]
+  execution_error:
+    owner: provider_owner
+    blocks: [execution]
+    examples: [provider_unavailable, operation_failed, non_success_exit_code]
+  timeout:
+    owner: provider_owner
+    blocks: [execution]
+    examples: [operation_timeout, polling_timeout]
+  verification_failed:
+    owner: product_or_test_owner
+    blocks: [report_readiness]
+    examples: [assertion_failed, selector_not_found, expected_result_missing]
+  cleanup_error:
+    owner: test_owner
+    blocks: [report_readiness]
+    examples: [cleanup_failed, cleanup_evidence_missing]
+  evidence_not_complete:
+    owner: framework_or_provider_owner
+    blocks: [report_readiness]
+    examples: [missing_required_evidence, unresolved_evidence_ref]
+  framework_error:
+    owner: framework_owner
+    blocks: [execution, evidence_publication, report_readiness]
+    examples: [unclassified_failure, result_write_failed]
+output_rules:
+  deterministic_order: [severity, classification, file_path, field_path, error_id]
+  machine_readable_formats: [yaml, json]
+  human_text_allowed: true
+  raw_secret_values: prohibited

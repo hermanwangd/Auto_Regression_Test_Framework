@@ -1,0 +1,20 @@
+contract_version: v0.2
+artifact: run_profile
+status: compatibility_alias
+canonical_artifact: execution_profile.v0.2.schema.yaml
+purpose: >
+  Compatibility alias for older framework contract tests and generated
+  artifact references. New v0.2 docs and artifacts should use
+  Execution Profile naming.
+required_fields:
+  - profile_id
+  - execution_mode
+  - environment_binding_ref
+  - isolation_scope
+  - dependency_policy
+  - dependency_substitution_policy
+  - dependency_provisioning_policy
+  - max_duration
+  - data_policy
+unsupported_behavior:
+  new_authoring_target: use_execution_profile_v0_2_schema

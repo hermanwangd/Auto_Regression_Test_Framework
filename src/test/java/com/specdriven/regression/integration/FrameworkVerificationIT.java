@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.specdriven.regression.cli.RegressionCommand;
 import com.specdriven.regression.discovery.ReleasePackageService;
+import com.specdriven.regression.mapping.RpRuMappingService;
 import com.specdriven.regression.productrepo.ProductRepoService;
 import com.specdriven.regression.provider.ProviderContractGap;
 import com.specdriven.regression.provider.ProviderContractResolutionReport;
@@ -14,11 +15,15 @@ import java.io.PrintStream;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.yaml.snakeyaml.Yaml;
 
 class FrameworkVerificationIT {
 
@@ -28,7 +33,7 @@ class FrameworkVerificationIT {
     Path tempDir;
 
     @Test
-    @DisplayName("FWK-IT-001 | AC-002 AC-004 AC-007 AC-009 AC-010 | happy path check-run-report")
+    @DisplayName("FWK-IT-001 | AC-001 AC-002 AC-004 AC-005 AC-009 AC-012 AC-013 AC-015 AC-017 | happy path check-run-report")
     void sampleProductRepoFixtureRunsThroughCheckRunAndReportWithoutSitDeployment() throws Exception {
         Path productRepo = sampleProductRepo();
         Path packageRoot = packageRoot(productRepo);
@@ -62,7 +67,7 @@ class FrameworkVerificationIT {
     }
 
     @Test
-    @DisplayName("FWK-IT-002 | AC-002 AC-004 AC-010 | readiness gaps block before execution evidence")
+    @DisplayName("SUP-IT-002 | SUP-AC-002 | RP completeness gaps block readiness before execution evidence")
     void strictRpCheckReportsPackageSchemaAndMappingGapsBeforeExecution() throws Exception {
         Path productRepo = sampleProductRepo();
         Path packageRoot = packageRoot(productRepo);
@@ -84,7 +89,7 @@ class FrameworkVerificationIT {
     }
 
     @Test
-    @DisplayName("FWK-IT-003 | AC-004 AC-008 AC-010 | provider contract gap blocks adapter execution")
+    @DisplayName("FWK-IT-003 | AC-002 AC-005 AC-016 | provider contract gap blocks adapter execution")
     void runBlocksBeforeAdapterExecutionWhenProviderContractIsIncomplete() throws Exception {
         Path productRepo = sampleProductRepo();
         Path packageRoot = packageRoot(productRepo);
@@ -111,11 +116,11 @@ class FrameworkVerificationIT {
                 .contains("provider_family: file_batch")
                 .contains("affected_ru: RU-framework-sample-adapter")
                 .contains("Declare executable adapter command for `spring_boot_cli`")
-                .contains("Affected RU: `RU-framework-sample-adapter`");
+                .contains("Affected target: `RU-framework-sample-adapter`");
     }
 
     @Test
-    @DisplayName("FWK-IT-004 | AC-006 AC-008 AC-010 | unapproved expected result blocks before assertion")
+    @DisplayName("SUP-IT-006 | SUP-AC-006 | unapproved expected result is not regression truth")
     void runBlocksBeforeAdapterExecutionWhenExpectedResultIsNotApproved() throws Exception {
         Path productRepo = sampleProductRepo();
         Path packageRoot = packageRoot(productRepo);
@@ -142,7 +147,7 @@ class FrameworkVerificationIT {
     }
 
     @Test
-    @DisplayName("FWK-IT-005 | AC-007 AC-008 AC-010 | missing approved DSL test blocks execution")
+    @DisplayName("FWK-IT-005 | AC-015 | missing approved DSL test blocks execution")
     void runBlocksWhenNoApprovedDslTestCaseIsCheckedIn() throws Exception {
         Path productRepo = sampleProductRepo();
         Path packageRoot = packageRoot(productRepo);
@@ -166,7 +171,7 @@ class FrameworkVerificationIT {
     }
 
     @Test
-    @DisplayName("FWK-IT-006 | AC-007 AC-009 | failed assertion creates failed evidence and not-review-ready report")
+    @DisplayName("FWK-IT-006 | AC-005 AC-009 AC-012 AC-013 | failed assertion creates failed evidence and not-review-ready report")
     void failedAssertionProducesRunEvidenceAndNotReviewReadyReport() throws Exception {
         Path productRepo = sampleProductRepo();
         Path packageRoot = packageRoot(productRepo);
@@ -200,7 +205,7 @@ class FrameworkVerificationIT {
     }
 
     @Test
-    @DisplayName("FWK-IT-007 | AC-001 AC-010 | product repo bootstrap readiness and idempotency")
+    @DisplayName("SUP-IT-001 | SUP-AC-001 | product repo bootstrap readiness and idempotency")
     void productRepoBootstrapReadinessAndIdempotencyAreDeterministic() throws Exception {
         Path productRepo = tempDir.resolve("empty-product-repo");
         RegressionCommand command = command();
@@ -229,7 +234,7 @@ class FrameworkVerificationIT {
     }
 
     @Test
-    @DisplayName("FWK-IT-008 | AC-003 AC-010 | AC readiness preserves owner-authored truth")
+    @DisplayName("SUP-IT-003 | SUP-AC-003 | AC readiness preserves owner-authored truth")
     void acReadinessPreservesOwnerAuthoredTruthWithoutRewritingRpAc() throws Exception {
         Path productRepo = sampleProductRepo();
         Path packageRoot = packageRoot(productRepo);
@@ -248,7 +253,29 @@ class FrameworkVerificationIT {
     }
 
     @Test
-    @DisplayName("FWK-IT-009 | AC-005 AC-010 | test drafting is gated by AC and execution context readiness")
+    @DisplayName("SUP-IT-004 | SUP-AC-004 | RP mapping translation boundary is explicit")
+    void rpMappingTranslationBoundaryIsExplicit() throws Exception {
+        Path productRepo = sampleProductRepo();
+        Path packageRoot = packageRoot(productRepo);
+
+        var mappingReport = new RpRuMappingService().validate(packageRoot.resolve("rp_ru_mapping.yaml"));
+
+        assertThat(mappingReport.valid()).isTrue();
+        assertThat(mappingReport.releaseUnits()).hasSize(1);
+        assertThat(mappingReport.releaseUnits().get(0).ruId()).isEqualTo("RU-framework-sample-adapter");
+        assertThat(mappingReport.releaseUnits().get(0).adapter()).isEqualTo("spring_boot_cli");
+        assertThat(mappingReport.releaseUnits().get(0).environmentRef())
+                .isEqualTo("ci://framework-verification/RP-FWK-SAMPLE");
+        assertThat(Files.readString(packageRoot.resolve("rp_ru_mapping.yaml")))
+                .contains("provider_contracts:")
+                .contains("provider_family: file_batch")
+                .contains("provider_type: shell");
+        assertThat(Files.exists(packageRoot.resolve("generated-framework"))).isTrue();
+        assertThat(Files.exists(packageRoot.resolve("generated-framework/run_plan.yaml"))).isTrue();
+    }
+
+    @Test
+    @DisplayName("SUP-IT-005 | SUP-AC-005 | test drafting is gated by AC and execution context readiness")
     void testDraftingIsGatedByAcAndExecutionContextReadiness() throws Exception {
         Path readyRepo = sampleProductRepo();
         Path readyPackageRoot = packageRoot(readyRepo);
@@ -259,10 +286,13 @@ class FrameworkVerificationIT {
         assertThat(readyDraft.stdout()).contains("generated_artifact_type: draft_executable_test_case");
         assertThat(Files.readString(readyPackageRoot.resolve(
                         "tests/draft/RP-FWK-SAMPLE-TC-001-draft_executable_test_case.yaml")))
-                .contains("dsl_version: v1")
+                .contains("dsl_version: v0.2")
                 .contains("status: draft_executable")
-                .contains("traceability:")
-                .contains("acceptance_criteria_id: RP-FWK-SAMPLE-AC-001")
+                .contains("labels:")
+                .contains("package: RP-FWK-SAMPLE")
+                .contains("runtime_unit: RU-framework-sample-adapter")
+                .contains("source_refs:")
+                .contains("acceptance_criteria: acceptance_criteria.md#RP-FWK-SAMPLE-AC-001")
                 .contains("scenario:")
                 .contains("targets:")
                 .contains("setup:")
@@ -271,6 +301,10 @@ class FrameworkVerificationIT {
                 .contains("verify:")
                 .contains("evidence:")
                 .contains("runtime:")
+                .doesNotContain("traceability:")
+                .doesNotContain("rp_id:")
+                .doesNotContain("ac_id:")
+                .doesNotContain("artifact_status:")
                 .doesNotContain("execution_target:")
                 .doesNotContain("package_inputs:")
                 .doesNotContain("oracles:")
@@ -290,14 +324,17 @@ class FrameworkVerificationIT {
         assertThat(Files.readString(existingPackageRoot.resolve(
                         "tests/draft/RP-FWK-SAMPLE-TC-001-update_proposal.yaml")))
                 .contains("proposal_type: test_case_update")
-                .contains("dsl_version: v1")
+                .contains("dsl_version: v0.2")
                 .contains("status: needs_update")
-                .contains("traceability:")
+                .contains("labels:")
+                .contains("package: RP-FWK-SAMPLE")
+                .contains("source_refs:")
+                .contains("acceptance_criteria: acceptance_criteria.md#RP-FWK-SAMPLE-AC-001")
                 .contains("replaces: tests/approved/RP-FWK-SAMPLE-TC-001.yaml")
                 .doesNotContain("rp_id:")
                 .doesNotContain("ac_id:")
                 .doesNotContain("artifact_status:")
-                .doesNotContain("source_refs:");
+                .doesNotContain("traceability:");
 
         Path ambiguousRepo = sampleProductRepo();
         Path ambiguousPackageRoot = packageRoot(ambiguousRepo);
@@ -323,18 +360,20 @@ class FrameworkVerificationIT {
         assertThat(skeletonDraft.stdout()).contains("gap: release_units[0].repo");
         assertThat(Files.readString(incompleteContextPackageRoot.resolve(
                         "tests/draft/RP-FWK-SAMPLE-TC-001-draft_test_skeleton.yaml")))
+                .contains("dsl_version: v0.2")
                 .contains("status: draft_skeleton")
-                .contains("traceability:")
+                .contains("source_refs:")
+                .contains("acceptance_criteria: acceptance_criteria.md#RP-FWK-SAMPLE-AC-001")
                 .contains("readiness_gaps:")
                 .contains("release_units[0].repo")
                 .doesNotContain("rp_id:")
                 .doesNotContain("ac_id:")
                 .doesNotContain("artifact_status:")
-                .doesNotContain("source_refs:");
+                .doesNotContain("traceability:");
     }
 
     @Test
-    @DisplayName("FWK-IT-010 | AC-004 AC-007 AC-008 | provider-family contract dry-run")
+    @DisplayName("FWK-IT-010 | AC-002 AC-004 AC-016 | provider-family contract dry-run")
     void providerFamilyContractDryRunReportsMetadataAndBlocking() throws Exception {
         Path mapping = tempDir.resolve("heterogeneous-rp_ru_mapping.yaml");
         Files.writeString(mapping, providerFamilyMapping());
@@ -500,12 +539,12 @@ class FrameworkVerificationIT {
                 .contains("runtime_status: blocked")
                 .contains("affected_ru: RU-payment-api-blue,RU-payment-api-green")
                 .contains("contract_path: release_units[0].provider_contracts.adapters.request_response")
-                .contains("Select target RU")
+                .contains("Select target ID")
                 .contains("ap: Planning and Binding");
     }
 
     @Test
-    @DisplayName("FWK-IT-011 | AC-007 AC-008 AC-009 | provider-family evidence normalization")
+    @DisplayName("FWK-IT-011 | AC-012 AC-013 AC-016 | provider-family evidence normalization")
     void sampleRunEvidenceNormalizesProviderContractsAndBindings() throws Exception {
         Path productRepo = sampleProductRepo();
         Path packageRoot = packageRoot(productRepo);
@@ -530,6 +569,10 @@ class FrameworkVerificationIT {
     private Path sampleProductRepo() throws Exception {
         Path productRepo = tempDir.resolve("sample-product-repo-" + System.nanoTime());
         copyResourceDirectory("framework-verification/sample-product-repo", productRepo);
+        Path packageRoot = packageRoot(productRepo);
+        writeGeneratedRuntimeArtifactsFromMapping(
+                packageRoot,
+                Files.readString(packageRoot.resolve("rp_ru_mapping.yaml")));
         return productRepo;
     }
 
@@ -561,10 +604,183 @@ class FrameworkVerificationIT {
 
     private void writeMappingYaml(Path packageRoot, String content) throws Exception {
         Files.writeString(packageRoot.resolve("rp_ru_mapping.yaml"), content);
+        writeGeneratedRuntimeArtifactsFromMapping(packageRoot, content);
     }
 
     private void writeAcceptanceCriteria(Path packageRoot, String content) throws Exception {
         Files.writeString(packageRoot.resolve("acceptance_criteria.md"), content);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void writeGeneratedRuntimeArtifactsFromMapping(Path packageRoot, String mappingYaml) throws Exception {
+        Object loaded = new Yaml().load(mappingYaml);
+        if (!(loaded instanceof Map<?, ?> root)
+                || !(root.get("release_units") instanceof List<?> releaseUnits)
+                || releaseUnits.isEmpty()) {
+            return;
+        }
+        Path generated = packageRoot.resolve("generated-framework");
+        Files.createDirectories(generated.resolve("run_profiles"));
+        Files.createDirectories(generated.resolve("environment_bindings"));
+        Files.createDirectories(generated.resolve("provider_contracts"));
+        String executionMode = firstUnitText(releaseUnits, "execution_mode", "ci_ephemeral");
+        Files.writeString(generated.resolve("suite_manifest.yaml"), """
+                suite_id: generated-regression
+                tests: []
+                coverage_source_ref: acceptance_criteria.md
+                traceability_map_ref: traceability_map.yaml
+                """);
+        Files.writeString(generated.resolve("run_plan.yaml"), generatedRunPlanYaml(releaseUnits, executionMode));
+        Files.writeString(generated.resolve("run_profiles/" + executionMode + ".yaml"), """
+                profile_id: %s
+                execution_mode: %s
+                environment_binding_ref: environment_bindings/%s.yaml
+                isolation_scope: target_graph
+                dependency_policy: generated_target_graph
+                max_duration: PT10M
+                data_policy:
+                  cleanup_required: true
+                """.formatted(executionMode, executionMode, executionMode));
+        Files.writeString(generated.resolve("environment_bindings/" + executionMode + ".yaml"),
+                generatedEnvironmentBindingYaml(releaseUnits, executionMode));
+        Files.writeString(generated.resolve("traceability_map.yaml"), generatedTraceabilityMapYaml(releaseUnits));
+        for (int index = 0; index < releaseUnits.size(); index++) {
+            if (releaseUnits.get(index) instanceof Map<?, ?> unit) {
+                writeGeneratedProviderContracts(generated, (Map<String, Object>) unit, index);
+            }
+        }
+    }
+
+    private String generatedRunPlanYaml(List<?> releaseUnits, String executionMode) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("run_profile_ref: run_profiles/").append(executionMode).append(".yaml\n");
+        builder.append("environment_binding_ref: environment_bindings/").append(executionMode).append(".yaml\n");
+        builder.append("execution_mode: ").append(executionMode).append("\n");
+        builder.append("target_dependencies:\n");
+        for (Object entry : releaseUnits) {
+            if (!(entry instanceof Map<?, ?> unit)) {
+                continue;
+            }
+            String targetId = text(unit, "ru_id");
+            Object dependencies = unit.get("dependencies");
+            if (!(dependencies instanceof List<?> list) || list.isEmpty()) {
+                builder.append("  ").append(targetId).append(": []\n");
+                continue;
+            }
+            builder.append("  ").append(targetId).append(":\n");
+            for (Object dependency : list) {
+                builder.append("    - target_id: ").append(dependency).append("\n");
+                builder.append("      required: true\n");
+            }
+        }
+        builder.append("runtime:\n");
+        builder.append("  timeout: PT10M\n");
+        return builder.toString();
+    }
+
+    private String generatedEnvironmentBindingYaml(List<?> releaseUnits, String executionMode) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("environment_id: ").append(executionMode).append("\n");
+        builder.append("environment_type: isolated\n");
+        builder.append("targets:\n");
+        for (Object entry : releaseUnits) {
+            if (!(entry instanceof Map<?, ?> unit)) {
+                continue;
+            }
+            String targetId = text(unit, "ru_id");
+            String adapter = text(unit, "adapter");
+            builder.append("  ").append(targetId).append(":\n");
+            builder.append("    target_id: ").append(targetId).append("\n");
+            builder.append("    runner: ").append(adapter).append("\n");
+            builder.append("    execution_mode: ").append(executionMode).append("\n");
+            builder.append("    environment_ref: ").append(text(unit, "environment_ref")).append("\n");
+            builder.append("    provider_contract_ref: provider_contracts/")
+                    .append(safeFileName(targetId))
+                    .append(".yaml#adapters.")
+                    .append(adapter)
+                    .append("\n");
+        }
+        return builder.toString();
+    }
+
+    private String generatedTraceabilityMapYaml(List<?> releaseUnits) {
+        StringBuilder builder = new StringBuilder("source_labels:\n");
+        for (Object entry : releaseUnits) {
+            if (entry instanceof Map<?, ?> unit) {
+                String targetId = text(unit, "ru_id");
+                builder.append("  ").append(targetId).append(":\n");
+                builder.append("    ru_id: ").append(targetId).append("\n");
+                builder.append("    version_ref: ").append(text(unit, "version_ref")).append("\n");
+            }
+        }
+        return builder.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void writeGeneratedProviderContracts(Path generated, Map<String, Object> unit, int unitIndex) throws Exception {
+        Object contractsValue = unit.get("provider_contracts");
+        Map<String, Object> contracts = contractsValue instanceof Map<?, ?> map
+                ? deepCopy((Map<String, Object>) map)
+                : new LinkedHashMap<>();
+        addContractPaths(contracts, unitIndex);
+        Files.writeString(
+                generated.resolve("provider_contracts/" + safeFileName(text(unit, "ru_id")) + ".yaml"),
+                new Yaml().dump(Map.of("provider_contracts", contracts)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> deepCopy(Map<String, Object> source) {
+        Map<String, Object> copied = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : source.entrySet()) {
+            Object value = entry.getValue();
+            if (value instanceof Map<?, ?> map) {
+                copied.put(entry.getKey(), deepCopy((Map<String, Object>) map));
+            } else if (value instanceof List<?> list) {
+                copied.put(entry.getKey(), new ArrayList<>(list));
+            } else {
+                copied.put(entry.getKey(), value);
+            }
+        }
+        return copied;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void addContractPaths(Map<String, Object> contracts, int unitIndex) {
+        for (Map.Entry<String, Object> sectionEntry : contracts.entrySet()) {
+            if (!(sectionEntry.getValue() instanceof Map<?, ?> section)) {
+                continue;
+            }
+            for (Map.Entry<?, ?> contractEntry : section.entrySet()) {
+                if (contractEntry.getValue() instanceof Map<?, ?> contract
+                        && !contract.containsKey("contract_path")) {
+                    ((Map<String, Object>) contract).put(
+                            "contract_path",
+                            "release_units[" + unitIndex + "].provider_contracts."
+                                    + sectionEntry.getKey() + "." + contractEntry.getKey());
+                }
+            }
+        }
+    }
+
+    private String firstUnitText(List<?> releaseUnits, String field, String fallback) {
+        for (Object entry : releaseUnits) {
+            if (entry instanceof Map<?, ?> unit) {
+                String value = text(unit, field);
+                if (!value.isBlank()) {
+                    return value;
+                }
+            }
+        }
+        return fallback;
+    }
+
+    private String text(Map<?, ?> map, String field) {
+        Object value = map.get(field);
+        return value == null ? "" : value.toString();
+    }
+
+    private String safeFileName(String value) {
+        return value.replaceAll("[^A-Za-z0-9._-]", "_");
     }
 
     private void writeProviderFamilyDryRunArtifacts(Path packageRoot) throws Exception {

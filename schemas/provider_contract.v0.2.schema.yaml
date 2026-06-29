@@ -1,0 +1,72 @@
+contract_version: v0.2
+artifact: provider_contract
+status: framework_owned_current_stage
+purpose: >
+  Defines one reusable provider type, the valid Provider Instance shape for
+  that provider type, allowed operations, allowed bind_as values, output refs,
+  evidence outputs, runtime modes, defaults, required fields, and failure codes.
+version_compatibility:
+  supported_versions: [v0.2]
+  unsupported_version_behavior: block_before_provider_dispatch
+required_fields:
+  - provider_contract_version
+  - provider_type
+  - runtime_modes
+  - binding_keys
+  - operations
+  - evidence
+  - failure_mapping
+provider_contract_required_sections:
+  runtime_modes:
+    purpose: Defines whether this provider type supports native, mock, stub, or ephemeral dependency execution for selected profiles.
+  binding_keys:
+    purpose: Names values that must be supplied by Environment Binding for a selected profile.
+  defaults:
+    purpose: Defines provider-level default timeout, retry, and safety values.
+  readiness:
+    purpose: Defines optional provider readiness operations and required fields.
+  safety:
+    purpose: Defines contract-owned safety rules for command-capable provider operations under safety.rules. Provider Instances select safety.access_policy and safety.approval values when required.
+  operations:
+    purpose: Defines allowed operations, allowed parameter bind_as values, and output refs.
+  evidence:
+    purpose: Defines allowed evidence capture and redaction behavior.
+  failure_mapping:
+    purpose: Defines allowed framework failure codes for this provider type.
+validation_rules:
+  provider_instance_same_shape: provider_instance_must_use_contract_top_level_shape
+  unknown_instance_field: block_before_provider_dispatch
+  unknown_operation: block_before_provider_dispatch
+  unsupported_bind_as: block_before_provider_dispatch
+  unsupported_runtime_mode: block_before_provider_dispatch
+  missing_output_ref: block_before_provider_dispatch
+  missing_required_binding_key: block_before_provider_dispatch
+  missing_environment_binding_value: block_before_provider_dispatch
+  missing_required_safety_policy: block_before_provider_dispatch
+validation_output_fields:
+  - ap
+  - file_path
+  - field_path
+  - provider_id
+  - provider_type
+  - profile
+  - operation
+  - runtime_status
+  - runtime_mode
+  - severity
+  - reason
+  - owner_action
+evidence_outputs:
+  - provider_contract_resolution_report
+  - provider_instance_validation_report
+  - dry_run_provider_evidence
+  - blocked_provider_evidence
+unsupported_behavior:
+  missing_provider_contract: block_before_provider_dispatch
+  missing_provider_type: block_before_provider_dispatch
+  unsupported_provider_type: block_before_provider_dispatch
+  unsupported_runtime_mode: block_before_provider_dispatch
+  invalid_provider_instance_shape: block_before_provider_dispatch
+  unsafe_contract: block_before_provider_dispatch
+  unapproved_external_runner: block_before_provider_dispatch
+failure_classification: target_resolution_error

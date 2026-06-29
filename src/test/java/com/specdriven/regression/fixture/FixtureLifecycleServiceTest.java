@@ -1,7 +1,9 @@
 package com.specdriven.regression.fixture;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -111,6 +113,76 @@ class FixtureLifecycleServiceTest {
         assertThat(report.cleanupRequired()).isTrue();
         assertThat(report.fixtureProviders()).containsExactly("relational_db");
         assertThat(report.gaps()).isEmpty();
+    }
+
+    @Test
+    void treatsNonMappingDslAsNoFixtureLifecycleWork() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/non-mapping.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, "free-form notes only\n");
+
+        FixtureLifecycleReport report = new FixtureLifecycleService().validate(testCase);
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.cleanupRequired()).isFalse();
+        assertThat(report.fixtureProviders()).isEmpty();
+        assertThat(report.gaps()).isEmpty();
+    }
+
+    @Test
+    void ignoresMalformedFixtureSetupRowsWithoutInventingProviders() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/RP-001-TC-002.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, testCaseWithFixture("""
+                fixture:
+                  setup:
+                    - scalar setup row
+                    - action: inspect_without_provider
+                      lifecycle: read_only
+                    - provider: " "
+                      action: inspect_orders
+                      lifecycle: read_only
+                  cleanup: []
+                policy:
+                  cleanup_required: false
+                """));
+
+        FixtureLifecycleReport report = new FixtureLifecycleService().validate(testCase);
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.cleanupRequired()).isFalse();
+        assertThat(report.fixtureProviders()).isEmpty();
+        assertThat(report.gaps()).isEmpty();
+    }
+
+    @Test
+    void ignoresFixtureSetupWhenSetupSectionIsNotAList() throws Exception {
+        Path testCase = tempDir.resolve("tests/approved/RP-001-TC-003.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, testCaseWithFixture("""
+                fixture:
+                  setup: not-a-list
+                  cleanup:
+                    - provider: relational_db
+                      action: cleanup_orders
+                policy:
+                  cleanup_required: false
+                """));
+
+        FixtureLifecycleReport report = new FixtureLifecycleService().validate(testCase);
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.fixtureProviders()).isEmpty();
+        assertThat(report.cleanupRequired()).isFalse();
+    }
+
+    @Test
+    void throwsUncheckedIoExceptionWhenDslFileCannotBeRead() {
+        Path missingFile = tempDir.resolve("tests/approved/missing.yaml");
+
+        assertThatThrownBy(() -> new FixtureLifecycleService().validate(missingFile))
+                .isInstanceOf(UncheckedIOException.class)
+                .hasMessageContaining("Failed to read DSL test fixture lifecycle");
     }
 
     private String testCaseWithFixture(String fixtureBlock) {

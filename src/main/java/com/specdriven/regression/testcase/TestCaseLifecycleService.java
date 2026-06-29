@@ -59,14 +59,15 @@ public class TestCaseLifecycleService {
             String testCaseId,
             ExecutionContextReadiness executionContext) {
         return """
-                dsl_version: v1
+                dsl_version: v0.2
                 test_case_id: %s
                 status: draft_executable
                 revision: 1
-                traceability:
-                  package_id: %s
-                  acceptance_criteria_id: %s
-                  source: acceptance_criteria.md#%s
+                labels:
+                  package: %s
+                  runtime_unit: %s
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
                 source_fingerprint: %s
                 scenario:
                   type: integration
@@ -115,7 +116,7 @@ public class TestCaseLifecycleService {
                 """.formatted(
                 testCaseId,
                 ac.rpId(),
-                ac.acId(),
+                executionContext.ruId(),
                 ac.acId(),
                 fingerprint(ac),
                 yamlList(executionContext.capabilities()),
@@ -226,21 +227,20 @@ public class TestCaseLifecycleService {
             String testCaseId,
             ExecutionContextReadiness executionContext) {
         return """
-                dsl_version: v1
+                dsl_version: v0.2
                 test_case_id: %s
                 status: draft_skeleton
                 revision: 1
-                traceability:
-                  package_id: %s
-                  acceptance_criteria_id: %s
-                  source: acceptance_criteria.md#%s
+                labels:
+                  package: %s
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
                 source_fingerprint: %s
                 readiness_gaps:
                 %s
                 """.formatted(
                 testCaseId,
                 ac.rpId(),
-                ac.acId(),
                 ac.acId(),
                 fingerprint(ac),
                 readinessGapsYaml(executionContext.gaps()));
@@ -257,14 +257,14 @@ public class TestCaseLifecycleService {
         }
         return """
                 proposal_type: test_case_update
-                dsl_version: v1
+                dsl_version: v0.2
                 test_case_id: %s
                 status: needs_update
                 revision: 1
-                traceability:
-                  package_id: %s
-                  acceptance_criteria_id: %s
-                  source: acceptance_criteria.md#%s
+                labels:
+                  package: %s
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
                 replaces: %s
                 source_fingerprint: %s
                 readiness_gaps:
@@ -272,7 +272,6 @@ public class TestCaseLifecycleService {
                 """.formatted(
                 testCaseId,
                 ac.rpId(),
-                ac.acId(),
                 ac.acId(),
                 approvedPath.toString(),
                 fingerprint(ac),

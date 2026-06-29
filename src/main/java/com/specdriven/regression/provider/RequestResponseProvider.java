@@ -51,6 +51,9 @@ public class RequestResponseProvider {
             Files.createDirectories(actualOutput.getParent());
 
             action = selectedAction(contract, testCase);
+            if (isMockEndpoint(contract)) {
+                return executeMock(contract, action, stdoutLog, stderrLog, actualOutput, runDir);
+            }
             if ("grpc".equalsIgnoreCase(stringValue(contract.get("provider_type")))) {
                 return executeGrpc(
                         packageRoot,
@@ -99,6 +102,39 @@ public class RequestResponseProvider {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Request/response provider interrupted.", e);
         }
+    }
+
+    private AdapterExecutionResult executeMock(
+            Map<String, Object> contract,
+            Map<?, ?> action,
+            Path stdoutLog,
+            Path stderrLog,
+            Path actualOutput,
+            Path runDir) throws IOException {
+        String response = firstText(action, "mock_response", "response_body", "sample_response");
+        if (response.isBlank()) {
+            response = firstText(contract, "mock_response", "response_body", "sample_response");
+        }
+        int statusCode = intValue(firstText(action, "mock_status", "http_status", "status_code"),
+                intValue(firstText(contract, "mock_status", "http_status", "status_code"), 200));
+        Files.writeString(stdoutLog, response);
+        Files.writeString(stderrLog, "");
+        Files.writeString(actualOutput, response);
+        boolean success = statusCode >= 200 && statusCode < 300;
+        writeRequestResponseEvidence(
+                runDir,
+                contract,
+                action,
+                success ? "passed" : "failed",
+                false,
+                "",
+                actualOutput,
+                "grpc".equalsIgnoreCase(stringValue(contract.get("provider_type"))) ? null : statusCode);
+        return new AdapterExecutionResult(success ? 0 : 1, false, stdoutLog, stderrLog, actualOutput);
+    }
+
+    private boolean isMockEndpoint(Map<String, Object> contract) {
+        return firstText(contract, "endpoint_ref", "base_url_ref", "service_ref").startsWith("mock://");
     }
 
     private AdapterExecutionResult executeGrpc(

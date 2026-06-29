@@ -1,0 +1,27 @@
+provider_instance_version: v0.2
+provider_id: sample-fake-runtime
+provider_type: sample_fake_provider
+runtime_modes: [stub]
+binding_keys:
+  workspace_ref:
+    required: true
+  clock_ref:
+    required: true
+defaults:
+  timeout_seconds: 30
+operations:
+  setup_fixture:
+    outputs: [setup_log, workspace_ref]
+  execute_sample:
+    outputs: [actual_json, actual_text, execution_log]
+  cleanup_fixture:
+    outputs: [cleanup_log]
+evidence:
+  capture: [setup_log, cleanup_log, actual_json, execution_log, assertion_result, diff]
+failure_mapping:
+  validation_failed: SCHEMA_INVALID
+  expected_missing: EXPECTED_RESULT_MISSING
+  assertion_failed: ASSERTION_FAILED
+  evidence_missing: EVIDENCE_INVALID
+labels:
+  evidence_classification: framework_verification_only

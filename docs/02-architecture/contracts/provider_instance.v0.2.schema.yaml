@@ -1,0 +1,70 @@
+contract_version: v0.2
+artifact: provider_instance
+status: framework_owned_current_stage
+purpose: >
+  Defines one RP logical runtime target using a Provider Contract. The Provider
+  Instance uses the same top-level shape as its Provider Contract and fills
+  RP-level logical selections only; actual profile-specific URLs, topics,
+  credentials, namespaces, mock/stub/ephemeral endpoints, and secret refs are
+  supplied by Environment Binding.
+version_compatibility:
+  supported_versions: [v0.2]
+  unsupported_version_behavior: block_before_provider_dispatch
+required_fields:
+  - provider_instance_version
+  - provider_id
+  - provider_type
+  - runtime_modes
+  - binding_keys
+shape_rules:
+  provider_contract_shape: top_level_sections_must_match_referenced_provider_contract
+  unknown_top_level_field: block_before_provider_dispatch
+  unknown_nested_field: block_before_provider_dispatch
+  operation_not_in_contract: block_before_provider_dispatch
+  bind_as_not_in_contract: block_before_provider_dispatch
+  runtime_modes_not_subset_of_contract: block_before_provider_dispatch
+  output_ref_not_in_contract: block_before_provider_dispatch
+  evidence_output_not_in_contract: block_before_provider_dispatch
+  failure_code_not_in_contract: block_before_provider_dispatch
+allowed_sections:
+  - provider_instance_version
+  - provider_id
+  - provider_type
+  - runtime_modes
+  - binding_keys
+  - defaults
+  - readiness
+  - operations
+  - evidence
+  - failure_mapping
+  - safety
+binding_key_rules:
+  keys_must_match_provider_contract_binding_keys: true
+  actual_values_must_be_supplied_by_environment_binding: true
+  raw_urls_topics_db_strings_namespaces_credentials: prohibited
+runtime_mode_rules:
+  provider_instance_runtime_modes_must_be_subset_of_contract: true
+  local_ci_may_select_mock_stub_or_ephemeral_modes: true
+  sit_preprod_mock_substitution_requires_explicit_profile_allowance: true
+validation_output_fields:
+  - ap
+  - file_path
+  - field_path
+  - provider_id
+  - provider_type
+  - profile
+  - operation
+  - runtime_mode
+  - severity
+  - reason
+  - owner_action
+evidence_outputs:
+  - provider_instance_validation_report
+  - resolved_execution_plan
+unsupported_behavior:
+  missing_provider_instance: block_before_provider_dispatch
+  missing_provider_contract: block_before_provider_dispatch
+  missing_environment_binding: block_before_provider_dispatch
+  missing_required_binding_key: block_before_provider_dispatch
+  unsupported_runtime_mode: block_before_provider_dispatch
+failure_classification: target_resolution_error

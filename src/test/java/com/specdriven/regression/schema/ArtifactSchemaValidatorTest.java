@@ -1,7 +1,9 @@
 package com.specdriven.regression.schema;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -63,5 +65,50 @@ class ArtifactSchemaValidatorTest {
                 .contains("generation", "execution", "release_evidence");
         assertThat(report.errors()).extracting(ArtifactValidationError::ownerAction)
                 .allMatch(action -> action.contains("Add required field"));
+    }
+
+    @Test
+    void reportsBlankRequiredFieldsAndNonMappingArtifactPaths() throws Exception {
+        Path packageYaml = tempDir.resolve("package.yaml");
+        Files.writeString(packageYaml, """
+                product_id: PROD-auto-regression
+                rp_id: RP-AR-M1-data-pipeline
+                name: M1 Data Pipeline Regression Pilot
+                owner: " "
+                target_release: M1
+                package_type: data_pipeline
+                lifecycle_status: draft
+                default_execution_mode: ci_ephemeral
+                artifact_paths: not-a-map
+                """);
+
+        ArtifactValidationReport report = new ArtifactSchemaValidator().validatePackageYaml(packageYaml);
+
+        assertThat(report.valid()).isFalse();
+        assertThat(report.errors()).extracting(ArtifactValidationError::fieldPath)
+                .contains("owner", "artifact_paths");
+        assertThat(report.errors()).extracting(ArtifactValidationError::blocks)
+                .contains("generation", "execution");
+    }
+
+    @Test
+    void treatsNonMappingYamlAsEmptyPackageDocument() throws Exception {
+        Path packageYaml = tempDir.resolve("package.yaml");
+        Files.writeString(packageYaml, "free-form package notes only\n");
+
+        ArtifactValidationReport report = new ArtifactSchemaValidator().validatePackageYaml(packageYaml);
+
+        assertThat(report.valid()).isFalse();
+        assertThat(report.errors()).extracting(ArtifactValidationError::fieldPath)
+                .contains("product_id", "rp_id", "name", "owner", "artifact_paths");
+    }
+
+    @Test
+    void throwsUncheckedIoExceptionWhenPackageYamlCannotBeRead() {
+        Path missingPackageYaml = tempDir.resolve("missing-package.yaml");
+
+        assertThatThrownBy(() -> new ArtifactSchemaValidator().validatePackageYaml(missingPackageYaml))
+                .isInstanceOf(UncheckedIOException.class)
+                .hasMessageContaining("Failed to read YAML artifact");
     }
 }

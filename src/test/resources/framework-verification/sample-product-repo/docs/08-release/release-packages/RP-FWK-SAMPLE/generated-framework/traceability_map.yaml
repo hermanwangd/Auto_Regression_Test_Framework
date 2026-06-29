@@ -1,0 +1,5 @@
+package_id: RP-FWK-SAMPLE
+source_labels:
+  RU-framework-sample-adapter:
+    ru_id: RU-framework-sample-adapter
+    version_ref: framework-verification-fixture

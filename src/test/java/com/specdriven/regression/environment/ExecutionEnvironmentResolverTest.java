@@ -56,6 +56,31 @@ class ExecutionEnvironmentResolverTest {
     }
 
     @Test
+    void resolvesExecutionModeFromMappingWhenRequestIsNull() throws Exception {
+        Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
+        Files.writeString(mapping, mapping("ci_ephemeral", "deployment_required: false\n", ""));
+
+        ExecutionEnvironmentReport report = new ExecutionEnvironmentResolver().resolve(mapping, null);
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.executionMode()).isEqualTo("ci_ephemeral");
+        assertThat(report.environmentRef()).isEqualTo("ci://pipeline/RP-001");
+    }
+
+    @Test
+    void resolvesLocalFixtureWithoutEnvironmentRef() throws Exception {
+        Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
+        Files.writeString(mapping, mappingWithoutEnvironmentRef("local_fixture", "deployment_required: false\n", ""));
+
+        ExecutionEnvironmentReport report = new ExecutionEnvironmentResolver().resolve(mapping, "local_fixture");
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.executionMode()).isEqualTo("local_fixture");
+        assertThat(report.environmentRef()).isEmpty();
+        assertThat(report.gaps()).isEmpty();
+    }
+
+    @Test
     void blocksEnvironmentAwareExecutionWhenEnvironmentRefIsMissing() throws Exception {
         Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
         Files.writeString(mapping, mappingWithoutEnvironmentRef("ci_ephemeral", "deployment_required: false\n", ""));
@@ -88,6 +113,23 @@ class ExecutionEnvironmentResolverTest {
     }
 
     @Test
+    void acceptsPresentNonStringSitDeploymentEvidenceValues() throws Exception {
+        Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
+        Files.writeString(mapping, mapping("sit_deployed", "deployment_required: true\n",
+                """
+                    deployment:
+                      deployment_ref: 42
+                      readiness_check: true
+                      deployed_version_ref: 20260628
+                """));
+
+        ExecutionEnvironmentReport report = new ExecutionEnvironmentResolver().resolve(mapping, "sit_deployed");
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.gaps()).isEmpty();
+    }
+
+    @Test
     void blocksReadinessWhenYamlDoesNotDeclareReleaseUnits() throws Exception {
         Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
         Files.writeString(mapping, "- not-a-mapping-document\n");
@@ -96,6 +138,37 @@ class ExecutionEnvironmentResolverTest {
 
         assertThat(report.ready()).isFalse();
         assertThat(report.executionMode()).isEqualTo("ci_ephemeral");
+        assertThat(report.gaps()).extracting(ExecutionEnvironmentGap::fieldPath)
+                .containsExactly("release_units");
+    }
+
+    @Test
+    void blocksReadinessWhenReleaseUnitsListIsEmpty() throws Exception {
+        Path mapping = tempDir.resolve("empty-release-units.yaml");
+        Files.writeString(mapping, """
+                rp_id: RP-EMPTY
+                release_units: []
+                """);
+
+        ExecutionEnvironmentReport report = new ExecutionEnvironmentResolver().resolve(mapping, "ci_ephemeral");
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(ExecutionEnvironmentGap::fieldPath)
+                .containsExactly("release_units");
+    }
+
+    @Test
+    void blocksReadinessWhenFirstReleaseUnitIsNotMapping() throws Exception {
+        Path mapping = tempDir.resolve("scalar-release-unit.yaml");
+        Files.writeString(mapping, """
+                rp_id: RP-SCALAR
+                release_units:
+                  - RU-not-a-map
+                """);
+
+        ExecutionEnvironmentReport report = new ExecutionEnvironmentResolver().resolve(mapping, "ci_ephemeral");
+
+        assertThat(report.ready()).isFalse();
         assertThat(report.gaps()).extracting(ExecutionEnvironmentGap::fieldPath)
                 .containsExactly("release_units");
     }

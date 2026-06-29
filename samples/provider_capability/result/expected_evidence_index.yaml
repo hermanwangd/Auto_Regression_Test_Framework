@@ -1,0 +1,28 @@
+evidence_index_version: v0.2
+suite_id: PROVIDER-CAPABILITY-P0-v0.2
+batch_id: BATCH-PROVIDER-CAPABILITY-001
+profile: local_provider
+evidence_classification: framework_provider_capability_only
+downstream_release_evidence: false
+entries:
+  - evidence_type: wiremock_request_journal
+    provider_id: wiremock-payment-mock
+    provider_type: wiremock_http_mock
+    ref: provider-evidence/wiremock/request_journal.yaml
+    masked: true
+  - evidence_type: jdbc_query
+    provider_id: oracle-like-db
+    provider_type: jdbc_database
+    ref: query-evidence/jdbc/query_order_oracle.yaml
+    masked: true
+  - evidence_type: nats_event
+    provider_id: nats-local-provider
+    provider_type: nats_messaging
+    ref: event-evidence/nats/observed_event.yaml
+    masked: true
+  - evidence_type: assertion_diff
+    ref: diffs/file_diff_matches.diff
+    masked: true
+masking:
+  raw_secret_found: false
+  report_ref: masking_report.yaml

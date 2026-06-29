@@ -1,0 +1,22 @@
+contract_version: v0.2
+suite_id: PROVIDER-CAPABILITY-P0-v0.2
+purpose: Framework provider capability verification suite for Track C P0.
+profile: local_provider
+selection:
+  mode: suite
+  suite: provider-capability-p0
+tests:
+  - wiremock/test_case.yaml
+  - jdbc/test_case.yaml
+  - nats/test_case.yaml
+  - compare/test_case.yaml
+  - polling/test_case.yaml
+artifact_roots:
+  wiremock: wiremock/
+  jdbc: jdbc/
+  nats: nats/
+  compare: compare/
+  polling: polling/
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

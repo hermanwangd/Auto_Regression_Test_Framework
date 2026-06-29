@@ -25,6 +25,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -35,18 +36,38 @@ import org.apache.kafka.common.serialization.StringSerializer;
 class DefaultMessagingTransport implements MessagingTransport {
 
     private final Function<Properties, Consumer<String, String>> kafkaConsumerFactory;
+    private final Function<Properties, Producer<String, String>> kafkaProducerFactory;
+    private final Function<String, String> environmentResolver;
 
     DefaultMessagingTransport() {
-        this(KafkaConsumer::new);
+        this(KafkaConsumer::new, KafkaProducer::new);
     }
 
     DefaultMessagingTransport(Function<Properties, Consumer<String, String>> kafkaConsumerFactory) {
+        this(kafkaConsumerFactory, KafkaProducer::new);
+    }
+
+    DefaultMessagingTransport(
+            Function<Properties, Consumer<String, String>> kafkaConsumerFactory,
+            Function<Properties, Producer<String, String>> kafkaProducerFactory) {
+        this(kafkaConsumerFactory, kafkaProducerFactory, System::getenv);
+    }
+
+    DefaultMessagingTransport(
+            Function<Properties, Consumer<String, String>> kafkaConsumerFactory,
+            Function<Properties, Producer<String, String>> kafkaProducerFactory,
+            Function<String, String> environmentResolver) {
         this.kafkaConsumerFactory = kafkaConsumerFactory;
+        this.kafkaProducerFactory = kafkaProducerFactory;
+        this.environmentResolver = environmentResolver;
     }
 
     @Override
     public MessagingTransportResult publish(MessagingTransportRequest request)
             throws IOException, InterruptedException {
+        if (isMockConnection(request)) {
+            return localPublish(request);
+        }
         return switch (request.providerType().toLowerCase(Locale.ROOT)) {
             case "local", "mock" -> localPublish(request);
             case "kafka" -> kafkaPublish(request);
@@ -66,6 +87,9 @@ class DefaultMessagingTransport implements MessagingTransport {
     @Override
     public MessagingTransportResult observe(MessagingTransportRequest request)
             throws IOException {
+        if (isMockConnection(request)) {
+            return localObserve(request);
+        }
         return switch (request.providerType().toLowerCase(Locale.ROOT)) {
             case "local", "mock" -> localObserve(request);
             case "kafka" -> kafkaObserve(request);
@@ -87,6 +111,9 @@ class DefaultMessagingTransport implements MessagingTransport {
     @Override
     public MessagingTransportResult requestReply(MessagingTransportRequest request)
             throws IOException {
+        if (isMockConnection(request)) {
+            return localRequestReply(request);
+        }
         return switch (request.providerType().toLowerCase(Locale.ROOT)) {
             case "local", "mock" -> localRequestReply(request);
             case "nats" -> natsRequestReply(request);
@@ -111,6 +138,9 @@ class DefaultMessagingTransport implements MessagingTransport {
     @Override
     public MessagingTransportResult cleanup(MessagingTransportRequest request)
             throws IOException {
+        if (isMockConnection(request)) {
+            return localCleanup(request);
+        }
         return switch (request.providerType().toLowerCase(Locale.ROOT)) {
             case "local", "mock" -> localCleanup(request);
             case "kafka" -> kafkaCleanup(request);
@@ -126,6 +156,10 @@ class DefaultMessagingTransport implements MessagingTransport {
                 cleanupStdout(request, cleanedCount),
                 "",
                 cleanedCount);
+    }
+
+    private boolean isMockConnection(MessagingTransportRequest request) {
+        return request.connectionRef().startsWith("mock://");
     }
 
     private MessagingTransportResult kafkaPublish(MessagingTransportRequest request)
@@ -145,7 +179,7 @@ class DefaultMessagingTransport implements MessagingTransport {
                 topic,
                 blankToNull(request.correlationId()),
                 request.payload());
-        try (KafkaProducer<String, String> producer = new KafkaProducer<>(properties)) {
+        try (Producer<String, String> producer = kafkaProducerFactory.apply(properties)) {
             RecordMetadata metadata = producer.send(record).get(request.timeoutSeconds(), TimeUnit.SECONDS);
             String stdout = "published 1 native message to " + request.targetRef()
                     + " partition=" + metadata.partition()
@@ -404,11 +438,10 @@ class DefaultMessagingTransport implements MessagingTransport {
     }
 
     private URI natsUri(String connectionRef) {
-        URI uri = URI.create(connectionRef);
-        if (uri.getScheme() == null) {
+        if (!connectionRef.contains("://")) {
             return URI.create("nats://" + connectionRef);
         }
-        return uri;
+        return URI.create(connectionRef);
     }
 
     private int natsPort(URI uri) {
@@ -479,7 +512,7 @@ class DefaultMessagingTransport implements MessagingTransport {
     private String resolveRef(String ref) throws IOException {
         if (ref.startsWith("env://")) {
             String envName = ref.substring("env://".length());
-            String value = System.getenv(envName);
+            String value = environmentResolver.apply(envName);
             if (value == null || value.isBlank()) {
                 throw new IOException("Environment variable `" + envName + "` is not set for messaging connection.");
             }

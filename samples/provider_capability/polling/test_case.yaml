@@ -1,0 +1,52 @@
+dsl_version: v0.2
+test_case_id: PROVIDER-CAPABILITY-POLLING-TC-001
+title: Polling verification capability
+status: active
+revision: 1
+source_refs:
+  acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#track-c-polling
+labels:
+  capability: polling
+  evidence_classification: framework_provider_capability_only
+compatible_profiles: [local_provider]
+targets:
+  polling_observer:
+    provider_id: polling-observer
+    profile: local_provider
+scenario:
+  type: verify_capability
+  scope: framework_verification
+  description: Poll until condition, honor poll interval, and capture last observed evidence.
+  capabilities: [poll_until_condition, last_observed_evidence]
+expected_results:
+  expected_timeout_result:
+    ref: expected_results/expected_timeout_result.json
+execute:
+  - id: observe_until_ready
+    target: polling_observer
+    operation: observe_condition
+    parameters:
+      - name: expected_state
+        ref: expected_results/expected_timeout_result.json#/expected_state
+        bind_as: poll.expected_state
+    outputs:
+      last_observed: last_observed
+      attempts: attempts
+verify:
+  - id: state_eventually_ready
+    type: poll_until_condition
+    actual:
+      ref: ${execute.observe_until_ready.outputs.last_observed}
+    expected_ref: expected_results/expected_timeout_result.json
+    options:
+      timeout: PT10S
+      poll_interval: PT1S
+      last_observed_evidence: true
+evidence:
+  required:
+    - polling/last_observed.yaml
+    - assertions/state_eventually_ready.yaml
+runtime:
+  timeout: PT20S
+  retry:
+    max_attempts: 1

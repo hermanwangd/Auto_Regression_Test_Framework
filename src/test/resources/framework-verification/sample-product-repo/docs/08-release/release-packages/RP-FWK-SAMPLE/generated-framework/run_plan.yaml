@@ -1,0 +1,7 @@
+run_profile_ref: run_profiles/ci_ephemeral.yaml
+environment_binding_ref: environment_bindings/ci_ephemeral.yaml
+execution_mode: ci_ephemeral
+target_dependencies:
+  RU-framework-sample-adapter: []
+runtime:
+  timeout: PT10M

@@ -1,0 +1,71 @@
+dsl_version: v0.2
+test_case_id: PROVIDER-CAPABILITY-NATS-TC-001
+title: NATS event provider capability
+status: active
+revision: 1
+source_refs:
+  acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#track-c-nats
+labels:
+  capability: nats_messaging
+  evidence_classification: framework_provider_capability_only
+compatible_profiles: [local_provider]
+targets:
+  event_bus:
+    provider_id: nats-local-provider
+    profile: local_provider
+scenario:
+  type: provider_capability
+  scope: framework_verification
+  description: Publish or observe NATS events from test start time with payload matching and evidence.
+  capabilities: [event_published, event_payload_match, polling]
+data_binding:
+  datasets:
+    event_input:
+      ref: fixtures/event_input.json
+expected_results:
+  event_expected:
+    ref: expected_results/event_expected.json
+execute:
+  - id: publish_event
+    target: event_bus
+    operation: publish_message
+    parameters:
+      - name: subject
+        ref: expected_results/event_expected.json#/subject
+        bind_as: message.subject
+      - name: payload
+        ref: fixtures/event_input.json
+        bind_as: message.payload
+    outputs:
+      published_message: published_message
+      timestamp: timestamp
+verify:
+  - id: event_published
+    type: event_published
+    target: event_bus
+    event:
+      subject_ref: expected_results/event_expected.json#/subject
+      consume_from: test_start_time
+    expected_ref: expected_results/event_expected.json
+    options:
+      timeout: PT20S
+      poll_interval: PT2S
+  - id: event_payload_match
+    type: event_payload_match
+    target: event_bus
+    event:
+      subject_ref: expected_results/event_expected.json#/subject
+      consume_from: test_start_time
+    expected_ref: expected_results/event_expected.json#/payload
+    options:
+      timeout: PT20S
+      poll_interval: PT2S
+evidence:
+  required:
+    - event-evidence/nats/observed_event.yaml
+    - assertions/event_published.yaml
+    - assertions/event_payload_match.yaml
+runtime:
+  timeout: PT1M
+  retry:
+    max_attempts: 1

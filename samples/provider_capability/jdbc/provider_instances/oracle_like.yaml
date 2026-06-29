@@ -1,0 +1,28 @@
+provider_instance_version: v0.2
+provider_id: oracle-like-db
+provider_type: jdbc_database
+runtime_modes: [ephemeral]
+binding_keys:
+  jdbc_url:
+    required: true
+  username:
+    required: true
+  password:
+    required: true
+  dialect:
+    required: true
+defaults:
+  timeout_seconds: 60
+operations:
+  execute_script:
+    outputs: [script_result, affected_rows, duration_ms]
+  query:
+    outputs: [query_result, row_count, duration_ms]
+evidence:
+  capture: [query_ref, dialect, masked_params, row_count, duration_ms, masked_sample_result, cleanup_result]
+  redact: [password]
+failure_mapping:
+  record_not_found: ASSERTION_FAILED
+  cleanup_failed: CLEANUP_FAILED
+labels:
+  dialect_family: oracle

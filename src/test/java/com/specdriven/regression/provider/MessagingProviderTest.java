@@ -1,9 +1,12 @@
 package com.specdriven.regression.provider;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.specdriven.regression.adapter.AdapterExecutionResult;
 import com.specdriven.regression.binding.ResolvedBinding;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -194,6 +197,39 @@ class MessagingProviderTest {
     }
 
     @Test
+    void observesWithDeclaredPayloadBindingWithoutRequiringPayloadResolution() throws Exception {
+        RecordingMessagingTransport transport = new RecordingMessagingTransport(
+                new MessagingTransportResult(
+                        "observed 1 native message from payment.events\n",
+                        "{\"eventId\":\"EVT-observed\"}\n",
+                        1));
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "payment_events",
+                Map.of(
+                        "provider_type", "kafka",
+                        "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
+                        "topic_ref", "payment.events",
+                        "actions", Map.of(
+                                "observe_payment_event", Map.of(
+                                        "mode", "observe",
+                                        "payload_binding", "optional_observe_filter"))),
+                Map.of("steps", List.of(Map.of("action", "observe_payment_event"))),
+                List.of());
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(transport.request.mode()).isEqualTo("observe");
+        assertThat(transport.request.payloadBinding()).isEqualTo("optional_observe_filter");
+        assertThat(transport.request.payload()).isEmpty();
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("status: passed")
+                .contains("mode: observe")
+                .contains("payload_binding: optional_observe_filter")
+                .contains("message_count: 1");
+    }
+
+    @Test
     void cleansKafkaThroughNativeTransportWithoutPayloadBindingAndWritesEvidence() throws Exception {
         RecordingMessagingTransport transport = new RecordingMessagingTransport(
                 new MessagingTransportResult(
@@ -302,6 +338,372 @@ class MessagingProviderTest {
                 .contains("subject_ref: mock://payment.events")
                 .contains("payload_binding: payment_event")
                 .contains("message_count: 1");
+    }
+
+    @Test
+    void requestsMessageThroughNativeTransportWithPayloadAndFallbackTimeout() throws Exception {
+        writePayload("fixtures/requests/payment.json", "{\"paymentId\":\"PAY-REQUEST-001\"}\n");
+        RecordingMessagingTransport transport = new RecordingMessagingTransport(
+                new MessagingTransportResult(
+                        "requested 1 native message from payment.requests\n",
+                        "{\"accepted\":true}\n",
+                        1));
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "payment_requests",
+                Map.of(
+                        "provider_type", "nats",
+                        "server_ref", "nats://127.0.0.1:4222",
+                        "subject_ref", "payment.requests",
+                        "timeout_seconds", "",
+                        "actions", Map.of(
+                                "request_payment", Map.of(
+                                        "mode", "request",
+                                        "payload_binding", "payment_request"))),
+                Map.of("steps", List.of(Map.of("action", "request_payment"))),
+                List.of(new ResolvedBinding("payment_request", "message_event", "fixtures/requests/payment.json")));
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(transport.request.mode()).isEqualTo("request");
+        assertThat(transport.request.timeoutSeconds()).isEqualTo(300);
+        assertThat(transport.request.payload()).isEqualTo("{\"paymentId\":\"PAY-REQUEST-001\"}\n");
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("mode: request")
+                .contains("payload_binding: payment_request")
+                .contains("message_count: 1");
+    }
+
+    @Test
+    void usesEmptyActionWhenConfiguredActionValueIsNotAMap() throws Exception {
+        writePayload("fixtures/events/payment.json", "{\"eventId\":\"EVT-FALLBACK\"}\n");
+        RecordingMessagingTransport transport = new RecordingMessagingTransport();
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "payment_events",
+                Map.of(
+                        "provider_type", "mock",
+                        "endpoint_ref", "mock://payment.events",
+                        "actions", Map.of("publish_payment_event", "invalid-action-shape")),
+                Map.of("steps", List.of("not-a-map")),
+                List.of(new ResolvedBinding("payment_event", "message_event", "fixtures/events/payment.json")));
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(transport.request.actionName()).isEmpty();
+        assertThat(transport.request.mode()).isEqualTo("publish");
+        assertThat(transport.request.payloadBinding()).isEqualTo("payment_event");
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("endpoint_ref: mock://payment.events")
+                .contains("action: ")
+                .contains("mode: publish")
+                .contains("payload_binding: payment_event");
+    }
+
+    @Test
+    void usesEmptyActionWhenNamedActionValueIsNotAMap() throws Exception {
+        writePayload("fixtures/events/payment.json", "{\"eventId\":\"EVT-NAMED-FALLBACK\"}\n");
+        RecordingMessagingTransport transport = new RecordingMessagingTransport();
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "payment_events",
+                Map.of(
+                        "provider_type", "mock",
+                        "endpoint_ref", "mock://payment.events",
+                        "actions", Map.of("publish_payment_event", "invalid-action-shape")),
+                Map.of("steps", List.of(Map.of("action", "publish_payment_event"))),
+                List.of(new ResolvedBinding("payment_event", "message_event", "fixtures/events/payment.json")));
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(transport.request.actionName()).isEqualTo("publish_payment_event");
+        assertThat(transport.request.mode()).isEqualTo("publish");
+        assertThat(transport.request.payloadBinding()).isEqualTo("payment_event");
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("action: publish_payment_event")
+                .contains("mode: publish")
+                .contains("payload_binding: payment_event");
+    }
+
+    @Test
+    void usesEmptyActionWhenActionMapIsEmpty() throws Exception {
+        writePayload("fixtures/events/payment.json", "{\"eventId\":\"EVT-EMPTY-ACTION\"}\n");
+        RecordingMessagingTransport transport = new RecordingMessagingTransport();
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "payment_events",
+                Map.of(
+                        "provider_type", "mock",
+                        "endpoint_ref", "mock://payment.events",
+                        "actions", Map.of()),
+                Map.of("steps", List.of(Map.of("action", "publish_payment_event"))),
+                List.of(new ResolvedBinding("payment_event", "message_event", "fixtures/events/payment.json")));
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(transport.request.actionName()).isEqualTo("publish_payment_event");
+        assertThat(transport.request.mode()).isEqualTo("publish");
+        assertThat(transport.request.payloadBinding()).isEqualTo("payment_event");
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("action: publish_payment_event")
+                .contains("mode: publish")
+                .contains("payload_binding: payment_event");
+    }
+
+    @Test
+    void allowsObservationWithoutTargetRefAndOmitsTargetEvidenceField() throws Exception {
+        RecordingMessagingTransport transport = new RecordingMessagingTransport(
+                new MessagingTransportResult("observed local broker\n", "", 0));
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "broker_observer",
+                Map.of(
+                        "provider_type", "mock",
+                        "connection_ref", "mock://broker",
+                        "actions", Map.of(
+                                "observe_broker", Map.of("mode", "observe"))),
+                Map.of("steps", List.of()),
+                List.of());
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(transport.request.actionName()).isEmpty();
+        assertThat(transport.request.targetRef()).isEmpty();
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("connection_ref: mock://broker")
+                .contains("mode: observe")
+                .doesNotContain("endpoint_ref:")
+                .doesNotContain("topic_ref:")
+                .doesNotContain("subject_ref:")
+                .doesNotContain("stream_ref:");
+    }
+
+    @Test
+    void failsUnsupportedMessagingProviderTypeBeforeTransportInvocation() throws Exception {
+        writePayload("fixtures/events/payment.json", "{\"eventId\":\"EVT-unsupported\"}\n");
+        RecordingMessagingTransport transport = new RecordingMessagingTransport();
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "legacy_events",
+                Map.of(
+                        "provider_type", "rabbitmq",
+                        "endpoint_ref", "amqp://legacy/events",
+                        "actions", Map.of(
+                                "publish_legacy_event", Map.of(
+                                        "mode", "publish",
+                                        "payload_binding", "payment_event"))),
+                Map.of("steps", List.of(Map.of("action", "publish_legacy_event"))),
+                List.of(new ResolvedBinding("payment_event", "message_event", "fixtures/events/payment.json")));
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(transport.request).isNull();
+        assertThat(Files.readString(result.stderrLog()))
+                .contains("Unsupported messaging provider_type `rabbitmq`");
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("status: failed")
+                .contains("provider_type: rabbitmq")
+                .contains("endpoint_ref: amqp://legacy/events")
+                .contains("payload_binding: payment_event")
+                .contains("error: Unsupported messaging provider_type `rabbitmq`");
+    }
+
+    @Test
+    void failsWhenRequiredPayloadBindingCannotBeResolved() throws Exception {
+        RecordingMessagingTransport transport = new RecordingMessagingTransport();
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "payment_events",
+                Map.of(
+                        "provider_type", "local",
+                        "subject_ref", "mock://payment.events",
+                        "actions", Map.of(
+                                "publish_payment_event", Map.of(
+                                        "mode", "publish",
+                                        "payload_binding", "missing_event"))),
+                Map.of("steps", List.of(Map.of("action", "publish_payment_event"))),
+                List.of());
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(transport.request).isNull();
+        assertThat(Files.readString(result.stderrLog()))
+                .contains("Cannot resolve messaging payload binding `missing_event`");
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("status: failed")
+                .contains("payload_binding: missing_event")
+                .contains("message_count: 0");
+    }
+
+    @Test
+    void usesFirstConfiguredActionWhenTestCaseDoesNotNameActionAndParsesStringTimeout() throws Exception {
+        writePayload("fixtures/events/payment.json", "{\"eventId\":\"EVT-stream\"}\n");
+        RecordingMessagingTransport transport = new RecordingMessagingTransport();
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "payment_stream",
+                Map.of(
+                        "provider_type", "mock",
+                        "connection_ref", "mock://broker",
+                        "stream_ref", "payment.stream",
+                        "timeout_seconds", "7",
+                        "actions", Map.of(
+                                "publish_stream_event", Map.of(
+                                        "mode", "publish",
+                                        "message_binding", "payment_event",
+                                        "correlation_id_ref", "PAY-STREAM-001"))),
+                Map.of(),
+                List.of(new ResolvedBinding("payment_event", "message_event", "fixtures/events/payment.json")));
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(transport.request.actionName()).isEmpty();
+        assertThat(transport.request.targetField()).isEqualTo("stream_ref");
+        assertThat(transport.request.targetRef()).isEqualTo("payment.stream");
+        assertThat(transport.request.timeoutSeconds()).isEqualTo(7);
+        assertThat(transport.request.payloadBinding()).isEqualTo("payment_event");
+        assertThat(transport.request.correlationId()).isEqualTo("PAY-STREAM-001");
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("stream_ref: payment.stream")
+                .contains("payload_binding: payment_event")
+                .contains("correlation_id: PAY-STREAM-001");
+    }
+
+    @Test
+    void convertsPayloadReadFailureIntoFailedMessagingEvidence() throws Exception {
+        AdapterExecutionResult result = executeProvider(
+                "payment_events",
+                Map.of(
+                        "provider_type", "local",
+                        "topic_ref", "payment.events",
+                        "actions", Map.of(
+                                "publish_payment_event", Map.of(
+                                        "mode", "publish",
+                                        "payload_binding", "missing_event"))),
+                Map.of("steps", List.of(Map.of("action", "publish_payment_event"))),
+                List.of(new ResolvedBinding("missing_event", "message_event", "fixtures/events/missing.json")));
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(Files.readString(result.stderrLog())).contains("fixtures/events/missing.json");
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("status: failed")
+                .contains("payload_binding: missing_event")
+                .contains("error:");
+    }
+
+    @Test
+    void convertsTransportFailureWithoutMessageIntoDefaultFailedMessagingEvidence() throws Exception {
+        MessagingTransport transport = new RecordingMessagingTransport() {
+            @Override
+            public MessagingTransportResult execute(MessagingTransportRequest request) throws IOException {
+                throw new IOException();
+            }
+        };
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "payment_events",
+                Map.of(
+                        "provider_type", "mock",
+                        "topic_ref", "payment.events",
+                        "actions", Map.of(
+                                "observe_payment_event", Map.of("mode", "observe"))),
+                Map.of("steps", List.of(Map.of("action", "observe_payment_event"))),
+                List.of());
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(Files.readString(result.stderrLog())).contains("Failed to execute messaging provider.");
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("status: failed")
+                .contains("error: Failed to execute messaging provider.");
+    }
+
+    @Test
+    void failsWhenNoActionCanResolvePayloadBindingAndUsesEndpointFallback() throws Exception {
+        RecordingMessagingTransport transport = new RecordingMessagingTransport();
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "payment_events",
+                Map.of(
+                        "provider_type", "mock",
+                        "endpoint_ref", "mock://payment.events"),
+                Map.of(),
+                List.of(new ResolvedBinding("audit_payload", "audit_record", "fixtures/events/audit.json")));
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(transport.request).isNull();
+        assertThat(Files.readString(result.stderrLog()))
+                .contains("Cannot resolve messaging payload binding ``.");
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("provider_type: mock")
+                .contains("endpoint_ref: mock://payment.events")
+                .contains("action: ")
+                .contains("mode: publish")
+                .contains("message_count: 0")
+                .doesNotContain("payload_binding:");
+    }
+
+    @Test
+    void reinterruptsThreadWhenMessagingTransportIsInterrupted() {
+        MessagingTransport transport = new MessagingTransport() {
+            @Override
+            public MessagingTransportResult execute(MessagingTransportRequest request) throws InterruptedException {
+                throw new InterruptedException("interrupted while polling topic");
+            }
+
+            @Override
+            public MessagingTransportResult publish(MessagingTransportRequest request) {
+                throw new AssertionError("execute should be used");
+            }
+        };
+
+        try {
+            assertThatThrownBy(() -> executeProvider(
+                            new MessagingProvider(transport),
+                            "payment_events",
+                            Map.of(
+                                    "provider_type", "mock",
+                                    "topic_ref", "payment.events",
+                                    "actions", Map.of(
+                                            "observe_payment_event", Map.of("mode", "observe"))),
+                            Map.of("steps", List.of(Map.of("action", "observe_payment_event"))),
+                            List.of()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Messaging provider interrupted.");
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void throwsUncheckedIoWhenFailureEvidenceCannotBeWritten() throws Exception {
+        Path blockedParent = tempDir.resolve("blocked-logs");
+        Files.writeString(blockedParent, "not a directory");
+        MessagingProvider provider = new MessagingProvider(new RecordingMessagingTransport() {
+            @Override
+            public MessagingTransportResult execute(MessagingTransportRequest request) throws IOException {
+                throw new IOException("broker unavailable");
+            }
+        });
+
+        assertThatThrownBy(() -> provider.execute(
+                        "payment_events",
+                        tempDir,
+                        Map.of(
+                                "provider_type", "mock",
+                                "topic_ref", "payment.events",
+                                "actions", Map.of(
+                                        "observe_payment_event", Map.of("mode", "observe"))),
+                        Map.of("steps", List.of(Map.of("action", "observe_payment_event"))),
+                        List.of(),
+                        tempDir.resolve("run-failure-write"),
+                        blockedParent.resolve("stdout.log"),
+                        tempDir.resolve("logs/stderr.log"),
+                        tempDir.resolve("actual/message.json")))
+                .isInstanceOf(UncheckedIOException.class)
+                .hasMessageContaining("Failed to execute messaging provider.");
     }
 
     private AdapterExecutionResult executeProvider(

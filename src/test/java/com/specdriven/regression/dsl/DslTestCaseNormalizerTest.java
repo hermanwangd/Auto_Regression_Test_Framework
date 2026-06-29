@@ -10,7 +10,15 @@ import org.junit.jupiter.api.Test;
 class DslTestCaseNormalizerTest {
 
     @Test
-    void normalizesExecutionFocusedDslV1IntoRuntimeShape() {
+    void returnsEmptyMapForNullOrEmptyInput() {
+        DslTestCaseNormalizer normalizer = new DslTestCaseNormalizer();
+
+        assertThat(normalizer.normalize(null)).isEmpty();
+        assertThat(normalizer.normalize(Map.of())).isEmpty();
+    }
+
+    @Test
+    void normalizesLegacyTraceabilityDslIntoRuntimeShape() {
         Map<String, Object> testCase = new LinkedHashMap<>();
         testCase.put("dsl_version", "v1");
         testCase.put("test_case_id", "RP-001-TC-001");
@@ -120,5 +128,214 @@ class DslTestCaseNormalizerTest {
                     assertThat(assertionMap.get("path")).isEqualTo("$.status");
                     assertThat(assertionMap.get("expected_value")).isEqualTo("ACCEPTED");
                 });
+    }
+
+    @Test
+    void normalizesListFixturesScalarInputsFallbackTargetsAndSitEnvironment() {
+        Map<String, Object> testCase = new LinkedHashMap<>();
+        testCase.put("test_case_id", "RP-002-TC-001");
+        testCase.put("labels", Map.of("package", "RP-002"));
+        testCase.put("source_refs", Map.of("acceptance_criteria", "docs/ac.md#RP-002-AC-009"));
+        testCase.put("targets", Map.of(
+                "RU-api", Map.of(
+                        "ru_id", "RU-payment-api",
+                        "runner", "spring_boot_cli",
+                        "environment", "sit://payment/api")));
+        testCase.put("setup", Map.of(
+                "fixtures", List.of(
+                        Map.of(
+                                "id", "orders_file",
+                                "type", "file_input",
+                                "data_ref", "fixtures/orders.csv",
+                                "provider", "file_fixture",
+                                "action", "prepare_file",
+                                "cleanup_action", "delete_file"),
+                        Map.of(
+                                "type", "message_event",
+                                "payload_ref", "fixtures/event.json"))));
+        testCase.put("execute", List.of(Map.of(
+                "id", "run_cli",
+                "target", "RU-missing-but-fallback-is-used",
+                "operation", "execute_command",
+                "with", Map.of(
+                        "raw_arg", "fixtures/raw.txt",
+                        "event_payload", Map.of(
+                                "binding_type", "message",
+                                "payload_ref", "fixtures/event.json")),
+                "outputs", Map.of(
+                        "actual_output", Map.of("ref", "actual/output.json")))));
+        testCase.put("expected_results", Map.of(
+                "golden", Map.of(
+                        "type", "golden",
+                        "file", "expected/golden.json"),
+                "db_count", Map.of(
+                        "type", "query",
+                        "fixture_provider", "relational_db",
+                        "query_name", "orders_count",
+                        "sql_ref", "queries/count_orders.sql",
+                        "row_count", 2)));
+        testCase.put("verify", List.of(
+                Map.of(
+                        "id", "verify_status",
+                        "type", "output_equals",
+                        "actual", "$.status",
+                        "expected", "APPROVED"),
+                Map.of(
+                        "id", "verify_db",
+                        "type", "db_row_matches",
+                        "expected", "db_count")));
+        testCase.put("evidence", Map.of("required", List.of("${execute.run_cli.outputs.actual_output}")));
+        testCase.put("runtime", Map.of("timeout", "PT5M"));
+
+        Map<String, Object> normalized = new DslTestCaseNormalizer().normalize(testCase);
+
+        assertThat(normalized).containsEntry("rp_id", "RP-002");
+        assertThat(normalized).containsEntry("ac_id", "RP-002-AC-009");
+        Map<?, ?> executionTarget = (Map<?, ?>) normalized.get("execution_target");
+        assertThat(executionTarget.get("ru_id")).isEqualTo("RU-payment-api");
+        assertThat(executionTarget.get("execution_mode")).isEqualTo("sit_deployed");
+        Map<?, ?> inputs = (Map<?, ?>) ((Map<?, ?>) normalized.get("package_inputs")).get("inputs");
+        assertThat(inputs.keySet().stream().map(Object::toString).toList())
+                .contains("orders_file", "fixture_2", "raw_arg", "event_payload");
+        Map<?, ?> ordersFile = (Map<?, ?>) inputs.get("orders_file");
+        assertThat(ordersFile.get("bind_as")).isEqualTo("input_file");
+        assertThat(ordersFile.get("lifecycle")).isEqualTo("read_only");
+        Map<?, ?> secondFixture = (Map<?, ?>) inputs.get("fixture_2");
+        assertThat(secondFixture.get("bind_as")).isEqualTo("message_event");
+        assertThat(secondFixture.get("lifecycle")).isEqualTo("state_mutating");
+        assertThat(((Map<?, ?>) inputs.get("raw_arg")).get("ref")).isEqualTo("fixtures/raw.txt");
+        Map<?, ?> eventPayload = (Map<?, ?>) inputs.get("event_payload");
+        assertThat(eventPayload.get("bind_as")).isEqualTo("message_event");
+        assertThat(eventPayload.get("lifecycle")).isEqualTo("state_mutating");
+        Map<?, ?> fixture = (Map<?, ?>) normalized.get("fixture");
+        assertThat((List<?>) fixture.get("setup")).singleElement().satisfies(action -> {
+            Map<?, ?> actionMap = (Map<?, ?>) action;
+            assertThat(actionMap.get("id")).isEqualTo("setup_orders_file");
+            assertThat(actionMap.get("provider")).isEqualTo("file_fixture");
+            assertThat(actionMap.get("action")).isEqualTo("prepare_file");
+        });
+        assertThat((List<?>) fixture.get("cleanup")).singleElement().satisfies(action -> {
+            Map<?, ?> actionMap = (Map<?, ?>) action;
+            assertThat(actionMap.get("id")).isEqualTo("cleanup_orders_file");
+            assertThat(actionMap.get("action")).isEqualTo("delete_file");
+        });
+        Map<?, ?> oracles = (Map<?, ?>) normalized.get("oracles");
+        Map<?, ?> golden = (Map<?, ?>) oracles.get("golden");
+        assertThat(golden.get("type")).isEqualTo("golden_file");
+        assertThat(golden.get("ref")).isEqualTo("expected/golden.json");
+        Map<?, ?> dbCount = (Map<?, ?>) oracles.get("db_count");
+        assertThat(dbCount.get("type")).isEqualTo("query_result");
+        assertThat(dbCount.get("fixture_provider")).isEqualTo("relational_db");
+        assertThat(dbCount.get("query_name")).isEqualTo("orders_count");
+        assertThat(dbCount.get("ref")).isEqualTo("queries/count_orders.sql");
+        assertThat(dbCount.get("row_count")).isEqualTo(2);
+        assertThat((List<?>) normalized.get("assertions"))
+                .anySatisfy(assertion -> {
+                    Map<?, ?> assertionMap = (Map<?, ?>) assertion;
+                    assertThat(assertionMap.get("type")).isEqualTo("file_diff");
+                    assertThat(assertionMap.get("path")).isEqualTo("$.status");
+                    assertThat(assertionMap.get("oracle").toString()).startsWith("${oracles.");
+                })
+                .anySatisfy(assertion -> {
+                    Map<?, ?> assertionMap = (Map<?, ?>) assertion;
+                    assertThat(assertionMap.get("type")).isEqualTo("db_row_matches");
+                    assertThat(assertionMap.get("oracle")).isEqualTo("${oracles.db_count}");
+                });
+    }
+
+    @Test
+    void preservesExistingLegacyRuntimeShapeWhenPresent() {
+        Map<String, Object> testCase = new LinkedHashMap<>();
+        testCase.put("rp_id", "RP-existing");
+        testCase.put("ac_id", "AC-existing");
+        testCase.put("artifact_status", "active");
+        testCase.put("source_refs", Map.of("acceptance_criteria", "kept"));
+        testCase.put("execution_target", Map.of("ru_id", "RU-existing"));
+        testCase.put("package_inputs", Map.of("inputs", Map.of("kept", Map.of("ref", "kept"))));
+        testCase.put("fixture", Map.of("setup", List.of()));
+        testCase.put("steps", List.of(Map.of("id", "kept")));
+        testCase.put("expected", Map.of("ref", "kept"));
+        testCase.put("oracles", Map.of("kept", Map.of("type", "kept")));
+        testCase.put("assertions", List.of(Map.of("type", "kept")));
+        testCase.put("evidence_required", List.of("kept"));
+        testCase.put("policy", Map.of("kept", true));
+        testCase.put("labels", Map.of("package", "RP-derived"));
+        testCase.put("targets", Map.of(
+                "RU-local", Map.of(
+                        "runner", "local_runner",
+                        "environment_ref", "local://fixture")));
+        testCase.put("execute", List.of(Map.of(
+                "id", "run_local",
+                "operation", "run_application",
+                "outputs", Map.of("actual_output", Map.of("ref", "actual/local.txt")))));
+
+        Map<String, Object> normalized = new DslTestCaseNormalizer().normalize(testCase);
+
+        assertThat(normalized).containsEntry("rp_id", "RP-existing")
+                .containsEntry("ac_id", "AC-existing")
+                .containsEntry("artifact_status", "active");
+        assertThat(normalized.get("execution_target")).isEqualTo(Map.of("ru_id", "RU-existing"));
+        assertThat(normalized.get("package_inputs")).isEqualTo(Map.of("inputs", Map.of("kept", Map.of("ref", "kept"))));
+        assertThat(normalized.get("fixture")).isEqualTo(Map.of("setup", List.of()));
+        assertThat(normalized.get("steps")).isEqualTo(List.of(Map.of("id", "kept")));
+        assertThat(normalized.get("expected")).isEqualTo(Map.of("ref", "kept"));
+        assertThat(normalized.get("oracles")).isEqualTo(Map.of("kept", Map.of("type", "kept")));
+        assertThat(normalized.get("assertions")).isEqualTo(List.of(Map.of("type", "kept")));
+        assertThat(normalized.get("evidence_required")).isEqualTo(List.of("kept"));
+        assertThat(normalized.get("policy")).isEqualTo(Map.of("kept", true));
+        assertThat(normalized.get("source_refs")).isEqualTo(Map.of("acceptance_criteria", "kept"));
+    }
+
+    @Test
+    void normalizesFallbacksForLocalEnvironmentDatasetBindingsAndImplicitExpectedResultOracle() {
+        Map<String, Object> testCase = new LinkedHashMap<>();
+        testCase.put("test_case_id", "RP-003-TC-001");
+        testCase.put("source_refs", Map.of("acceptance_criteria", "RP-003-AC-001"));
+        testCase.put("targets", Map.of(
+                "RU-local", Map.of(
+                        "runner", "local_cli",
+                        "environment", "local://fixture/RP-003")));
+        testCase.put("setup", Map.of(
+                "fixtures", Map.of(
+                        "customer_dataset", Map.of(
+                                "type", "dataset",
+                                "ref", "fixtures/customer-dataset.csv"))));
+        testCase.put("expected_results", Map.of(
+                "implicit_expected", Map.of("ref", "expected/default.json")));
+        testCase.put("verify", List.of(Map.of(
+                "type", "contains",
+                "expected", "literal-value")));
+        testCase.put("execute", List.of(Map.of(
+                "operation", "run_application",
+                "with", Map.of())));
+
+        Map<String, Object> normalized = new DslTestCaseNormalizer().normalize(testCase);
+
+        assertThat(normalized).containsEntry("ac_id", "RP-003-AC-001");
+        Map<?, ?> executionTarget = (Map<?, ?>) normalized.get("execution_target");
+        assertThat(executionTarget.get("execution_mode")).isEqualTo("local_fixture");
+        Map<?, ?> inputs = (Map<?, ?>) ((Map<?, ?>) normalized.get("package_inputs")).get("inputs");
+        Map<?, ?> customerDataset = (Map<?, ?>) inputs.get("customer_dataset");
+        assertThat(customerDataset.get("bind_as")).isEqualTo("dataset");
+        assertThat(customerDataset.get("lifecycle")).isEqualTo("read_only");
+        Map<?, ?> oracle = (Map<?, ?>) ((Map<?, ?>) normalized.get("oracles")).get("implicit_expected");
+        assertThat(oracle.get("type")).isEqualTo("expected_result_artifact");
+        assertThat((List<?>) normalized.get("assertions"))
+                .singleElement()
+                .satisfies(assertion -> {
+                    Map<?, ?> assertionMap = (Map<?, ?>) assertion;
+                    assertThat(assertionMap.get("type")).isEqualTo("contains");
+                    assertThat(assertionMap.get("oracle")).isEqualTo("${oracles.implicit_expected}");
+                });
+    }
+
+    @Test
+    void doesNotInventExpectedRefWhenExpectedResultsFirstEntryIsNotAMapping() {
+        Map<String, Object> normalized = new DslTestCaseNormalizer().normalize(Map.of(
+                "test_case_id", "RP-004-TC-001",
+                "expected_results", Map.of("literal_expected", "plain text expected result")));
+
+        assertThat(normalized).doesNotContainKey("expected");
+        assertThat((Map<?, ?>) normalized.get("oracles")).isEmpty();
     }
 }

@@ -4,6 +4,16 @@ import com.specdriven.regression.binding.BindingGap;
 import com.specdriven.regression.binding.BindingResolutionReport;
 import com.specdriven.regression.binding.BindingResolver;
 import com.specdriven.regression.binding.ResolvedBinding;
+import com.specdriven.regression.contract.ContractBaselineService;
+import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
+import com.specdriven.regression.contract.ContractBaselineService.DryRunResult;
+import com.specdriven.regression.contract.ContractBaselineService.ReportResult;
+import com.specdriven.regression.contract.ContractBaselineService.ResolvedTarget;
+import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
+import com.specdriven.regression.contract.GoldenE2eService;
+import com.specdriven.regression.contract.GoldenE2eService.GoldenRunResult;
+import com.specdriven.regression.contract.WireMockProviderCapabilityService;
+import com.specdriven.regression.contract.WireMockProviderCapabilityService.WireMockRunResult;
 import com.specdriven.regression.discovery.ReleasePackageCompletenessReport;
 import com.specdriven.regression.discovery.ReleasePackageGap;
 import com.specdriven.regression.discovery.ReleasePackageResult;
@@ -31,6 +41,9 @@ import com.specdriven.regression.mapping.RpRuMappingValidationReport;
 import com.specdriven.regression.oracle.OracleReadinessGap;
 import com.specdriven.regression.oracle.OracleReadinessReport;
 import com.specdriven.regression.oracle.OracleReadinessService;
+import com.specdriven.regression.parameter.ParameterCase;
+import com.specdriven.regression.parameter.ParameterSetResolution;
+import com.specdriven.regression.parameter.ParameterSetResolver;
 import com.specdriven.regression.productrepo.ProductRepoReadinessReport;
 import com.specdriven.regression.productrepo.ProductRepoResult;
 import com.specdriven.regression.productrepo.ProductRepoService;
@@ -45,6 +58,9 @@ import com.specdriven.regression.readiness.AcIntakeReport;
 import com.specdriven.regression.readiness.AcIntakeService;
 import com.specdriven.regression.readiness.AcReadinessGap;
 import com.specdriven.regression.readiness.AcReadinessItem;
+import com.specdriven.regression.runtime.GeneratedRuntimeArtifacts;
+import com.specdriven.regression.runtime.GeneratedRuntimeContext;
+import com.specdriven.regression.runtime.GeneratedRuntimeTarget;
 import com.specdriven.regression.schema.ArtifactValidationError;
 import com.specdriven.regression.testcase.ExecutionContextReadiness;
 import com.specdriven.regression.testcase.TestCaseDraftResult;
@@ -54,9 +70,10 @@ import java.io.PrintStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.Yaml;
 
@@ -71,6 +88,20 @@ public class RegressionCommand {
             "Execution Engine",
             "Oracle and Assertion Engine",
             "Evidence and Reporting");
+    private static final Set<String> VALUE_OPTIONS = Set.of(
+            "--batch-id",
+            "--env",
+            "--format",
+            "--mode",
+            "--package-type",
+            "--profile",
+            "--root",
+            "--rp-id",
+            "--run-id",
+            "--result",
+            "--suite",
+            "--tag",
+            "--test-case");
 
     private final ProductRepoService productRepoService;
     private final ReleasePackageService releasePackageService;
@@ -88,6 +119,12 @@ public class RegressionCommand {
     private final CoverageReportService coverageReportService;
     private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
     private final DslTestCaseValidator dslTestCaseValidator = new DslTestCaseValidator();
+    private final GeneratedRuntimeArtifacts generatedRuntimeArtifacts = new GeneratedRuntimeArtifacts();
+    private final ParameterSetResolver parameterSetResolver = new ParameterSetResolver();
+    private final ContractBaselineService contractBaselineService = new ContractBaselineService();
+    private final GoldenE2eService goldenE2eService = new GoldenE2eService();
+    private final WireMockProviderCapabilityService wireMockProviderCapabilityService =
+            new WireMockProviderCapabilityService();
 
     public RegressionCommand(ProductRepoService productRepoService, ReleasePackageService releasePackageService) {
         this(
@@ -149,11 +186,12 @@ public class RegressionCommand {
 
         return switch (command) {
             case "init-product-repo" -> initProductRepo(root, out);
-            case "check-readiness" -> checkReadiness(root, options, out);
+            case "check-readiness" -> checkReadiness(root, options, out, err);
             case "init-rp" -> initReleasePackage(root, options, out, err);
             case "check-rp" -> checkReleasePackage(root, options, out, err);
             case "generate-tests" -> generateTests(root, options, out, err);
             case "draft-expected-results" -> draftExpectedResults(root, options, out, err);
+            case "validate" -> validate(root, options, out, err);
             case "run" -> runRegression(root, options, out, err);
             case "report" -> report(root, options, out, err);
             default -> {
@@ -163,15 +201,49 @@ public class RegressionCommand {
         };
     }
 
+    private int validate(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
+        String suite = requiredOption(options, "--suite", err);
+        if (suite == null) {
+            return 2;
+        }
+        ValidationResult result = contractBaselineService.validateSuite(root.resolve(suite).normalize());
+        out.println("validation_status: " + (result.valid() ? "passed" : "failed"));
+        out.println("suite_id: " + result.suiteId());
+        out.println("provider_instances_used:");
+        for (String providerId : result.providerInstancesUsed()) {
+            out.println("  - " + providerId);
+        }
+        out.println("provider_types_used:");
+        for (String providerType : result.providerTypesUsed()) {
+            out.println("  - " + providerType);
+        }
+        printContractFindings(out, result.findings());
+        return result.valid() ? 0 : 1;
+    }
+
     private int report(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
+        if (options.containsKey("--result")) {
+            return reportResult(root, options, out, err);
+        }
         String rpId = requiredOption(options, "--rp-id", err);
+        String format = options.getOrDefault("--format", "text");
         String batchId = options.get("--batch-id");
         String runId = options.get("--run-id");
         if (rpId == null) {
             return 2;
         }
+        if (format.isBlank()) {
+            err.println("Missing required option: --format");
+            return 2;
+        }
+        if (!"text".equals(format)) {
+            err.println("Unsupported --format: " + format);
+            return 2;
+        }
         if ((batchId == null || batchId.isBlank()) && (runId == null || runId.isBlank())) {
-            err.println("Missing required option: --batch-id");
+            err.println(options.containsKey("--run-id")
+                    ? "Missing required option: --run-id"
+                    : "Missing required option: --batch-id");
             return 2;
         }
         Path packageRoot = packageRoot(root, rpId);
@@ -190,6 +262,46 @@ public class RegressionCommand {
         return result.reviewReady() ? 0 : 1;
     }
 
+    private int reportResult(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
+        String resultPath = requiredOption(options, "--result", err);
+        if (resultPath == null) {
+            return 2;
+        }
+        Path resolvedResult = root.resolve(resultPath).normalize();
+        ReportResult result = contractBaselineService.report(resolvedResult);
+        if (!result.valid() && result.findings().stream().anyMatch(finding -> "missing_result_json".equals(finding.reason()))) {
+            err.println("Missing result JSON: " + resolvedResult);
+            return 1;
+        }
+        if (!result.valid()) {
+            out.println("report_status: invalid");
+            printContractFindings(out, result.findings());
+            return 1;
+        }
+        if (result.suiteId().isBlank()) {
+            out.println("report_status: " + result.status());
+        } else {
+            out.println("report_status: "
+                    + ("passed".equals(result.status()) ? "review_ready" : "review_ready_with_failures"));
+            out.println("suite_id: " + result.suiteId());
+            out.println("batch_id: " + result.batchId());
+            out.println("run_id: " + result.runId());
+            out.println("status: " + result.status());
+        }
+        out.println("test_case_id: " + result.testCaseId());
+        out.println("profile: " + result.profile());
+        out.println("provider_results_count: " + result.providerResultsCount());
+        out.println("verify_results_count: " + result.verifyResultsCount());
+        if (!result.failedVerifySummary().isEmpty()) {
+            out.println("failed_verify_summary:");
+            for (String failedVerify : result.failedVerifySummary()) {
+                out.println("  - " + failedVerify);
+            }
+        }
+        out.println("release_evidence_eligible: " + result.releaseEvidenceEligible());
+        return 0;
+    }
+
     private int initProductRepo(Path root, PrintStream out) {
         ProductRepoResult result = productRepoService.initialize(root);
         out.println("status: pass");
@@ -198,7 +310,7 @@ public class RegressionCommand {
         return 0;
     }
 
-    private int checkReadiness(Path root, Map<String, String> options, PrintStream out) {
+    private int checkReadiness(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
         ProductRepoReadinessReport report = productRepoService.checkReadiness(root);
         out.println("status: " + report.status());
         out.println("ready: " + report.ready());
@@ -214,7 +326,12 @@ public class RegressionCommand {
             Path relativeReport = Path.of("docs/08-release/release-packages")
                     .resolve(rpId)
                     .resolve("evidence/readiness/readiness.yaml");
-            writeReadinessReport(root.resolve(relativeReport), report);
+            try {
+                writeReadinessReport(root.resolve(relativeReport), report);
+            } catch (UncheckedIOException e) {
+                err.println(e.getMessage());
+                return 1;
+            }
             out.println("report_path: " + relativeReport);
         }
         return report.ready() ? 0 : 1;
@@ -366,14 +483,26 @@ public class RegressionCommand {
     }
 
     private int runRegression(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
+        if (options.containsKey("--suite") && !options.containsKey("--rp-id")) {
+            return runSuite(root, options, out, err);
+        }
         String rpId = requiredOption(options, "--rp-id", err);
-        if (rpId == null) {
+        String requestedEnv = requiredOption(options, "--env", err);
+        if (rpId == null || requestedEnv == null) {
             return 2;
         }
         Path packageRoot = packageRoot(root, rpId);
-        String requestedEnv = options.getOrDefault("--env", "");
         boolean dryRun = options.containsKey("--dry-run");
-        PreflightResult preflight = runPreflight(packageRoot, requestedEnv, dryRun, out);
+        GeneratedRuntimeContext runtimeContext = generatedRuntimeArtifacts.resolve(packageRoot, requestedEnv);
+        TestSelection testSelection = selectApprovedTests(packageRoot, options);
+        PreflightResult preflight = runPreflight(
+                packageRoot,
+                requestedEnv,
+                dryRun,
+                out,
+                runtimeContext,
+                testSelection.tests(),
+                testSelection.gaps());
         if (dryRun) {
             return preflight.blocked() ? 1 : 0;
         }
@@ -409,9 +538,8 @@ public class RegressionCommand {
         int runNumber = nextAvailableNumber(packageRoot.resolve("evidence/runs"), "RUN");
         boolean passed = true;
         List<ExecutionResult> results = new java.util.ArrayList<>();
-        Map<String, String> ruStatuses = new LinkedHashMap<>();
-        Path mappingYaml = packageRoot.resolve("rp_ru_mapping.yaml");
-        List<Path> executionTests = dependencyOrderedApprovedTests(packageRoot, preflight.approvedTests());
+        Map<String, String> targetStatuses = new LinkedHashMap<>();
+        List<Path> executionTests = dependencyOrderedApprovedTests(runtimeContext, preflight.approvedTests());
         out.println("adapter_execution_started: " + hasPreflightRunnableTest(preflight, executionTests));
         out.println("batch_id: " + batchId);
         out.println("execution_results:");
@@ -423,7 +551,7 @@ public class RegressionCommand {
                     runId = formatSequentialId("RUN", runNumber++);
                 }
                 String targetRuId = targetRuId(approvedTest);
-                List<String> dependencies = targetDependencies(mappingYaml, targetRuId);
+                List<String> dependencies = targetDependencies(runtimeContext, targetRuId, adapterName(approvedTest));
                 ExecutionResult result = evidenceWriter.writeBlockedRun(
                         packageRoot,
                         batchId,
@@ -435,7 +563,7 @@ public class RegressionCommand {
                         dependencies);
                 results.add(result);
                 passed = false;
-                recordRuStatus(ruStatuses, targetRuId, result.status());
+                recordRuStatus(targetStatuses, targetRuId, result.status());
                 printExecutionResult(out, packageRoot, result);
                 continue;
             }
@@ -447,9 +575,10 @@ public class RegressionCommand {
                 Path executionTest = parameterizedTestCase(approvedTest, parameterCase);
                 try {
                     String targetRuId = targetRuId(executionTest);
-                    List<String> dependencies = targetDependencies(mappingYaml, targetRuId);
+                    String adapterName = adapterName(executionTest);
+                    List<String> dependencies = targetDependencies(runtimeContext, targetRuId, adapterName);
                     DependencyBlock dependencyBlock =
-                            dependencyBlock(mappingYaml, executionTest, targetRuId, dependencies, ruStatuses);
+                            dependencyBlock(runtimeContext, executionTest, targetRuId, adapterName, dependencies, targetStatuses);
                     ExecutionResult result;
                     if (dependencyBlock.blocked()) {
                         result = evidenceWriter.writeBlockedRun(
@@ -462,11 +591,11 @@ public class RegressionCommand {
                                 preflight.environmentRef(),
                                 dependencies);
                     } else {
-                        result = executionEngine.execute(packageRoot, executionTest, batchId, runId);
+                        result = executionEngine.execute(packageRoot, executionTest, batchId, runId, requestedEnv);
                     }
                     results.add(result);
                     passed = passed && result.passed();
-                    recordRuStatus(ruStatuses, targetRuId, result.status());
+                    recordRuStatus(targetStatuses, targetRuId, result.status());
                     printExecutionResult(out, packageRoot, result);
                 } finally {
                     deleteParameterizedTestCase(approvedTest, executionTest);
@@ -484,6 +613,102 @@ public class RegressionCommand {
                 results);
         out.println("run_status: " + runStatus);
         return passed ? 0 : 1;
+    }
+
+    private int runSuite(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
+        String suite = requiredOption(options, "--suite", err);
+        if (suite == null) {
+            return 2;
+        }
+        if (!options.containsKey("--dry-run")) {
+            String profile = requiredOption(options, "--profile", err);
+            if (profile == null) {
+                return 2;
+            }
+            ValidationResult validation = contractBaselineService.validateSuite(root.resolve(suite).normalize());
+            if (validation.valid() && validation.providerTypesUsed().equals(List.of("wiremock_http_mock"))) {
+                WireMockRunResult result = wireMockProviderCapabilityService.run(
+                        root.resolve(suite).normalize(),
+                        profile,
+                        root.resolve("target/provider-capability/wiremock").normalize());
+                out.println("run_status: " + result.status());
+                out.println("suite_id: " + result.suiteId());
+                if (result.resultJson() != null) {
+                    out.println("batch_id: " + result.batchId());
+                    out.println("run_id: " + result.runId());
+                    out.println("test_case_id: " + result.testCaseId());
+                    out.println("profile: " + result.profile());
+                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
+                    out.println("provider_type: " + result.providerType());
+                    out.println("provider_id: " + result.providerId());
+                    out.println("base_url: " + result.baseUrl());
+                    out.println("evidence_classification: framework_provider_capability_only");
+                    out.println("result_json: " + result.resultJson());
+                    out.println("evidence_dir: " + result.evidenceDir());
+                }
+                printContractFindings(out, result.findings());
+                return result.passed() ? 0 : 1;
+            }
+            GoldenRunResult result = goldenE2eService.run(
+                    root.resolve(suite).normalize(),
+                    profile,
+                    root.resolve("target/golden-e2e").normalize());
+            out.println("run_status: " + result.status());
+            out.println("suite_id: " + result.suiteId());
+            if (result.resultJson() != null) {
+                out.println("batch_id: " + result.batchId());
+                out.println("run_id: " + result.runId());
+                out.println("test_case_id: " + result.testCaseId());
+                out.println("profile: " + result.profile());
+                out.println("fake_provider_executed: " + result.fakeProviderExecuted());
+                out.println("evidence_classification: framework_verification_only");
+                out.println("result_json: " + result.resultJson());
+                out.println("evidence_dir: " + result.evidenceDir());
+            }
+            printContractFindings(out, result.findings());
+            return result.passed() ? 0 : 1;
+        }
+        DryRunResult result = contractBaselineService.dryRun(root.resolve(suite).normalize());
+        out.println("provider_runtime_invoked: false");
+        out.println("run_status: " + (result.ready() ? "dry_run_ready" : "blocked"));
+        out.println("suite_id: " + result.validation().suiteId());
+        out.println("resolved_execution_plan:");
+        for (ResolvedTarget target : result.plan()) {
+            out.println("  - test_case_id: " + target.testCaseId());
+            out.println("    target: " + target.target());
+            out.println("    provider_id: " + target.providerId());
+            out.println("    provider_type: " + target.providerType());
+            out.println("    profile: " + target.profile());
+            out.println("    runtime_mode: " + target.runtimeMode());
+        }
+        printContractFindings(out, result.validation().findings());
+        return result.ready() ? 0 : 1;
+    }
+
+    private void printContractFindings(PrintStream out, List<ContractFinding> findings) {
+        out.println("findings:");
+        if (findings.isEmpty()) {
+            out.println("  []");
+            return;
+        }
+        for (ContractFinding finding : findings) {
+            out.println("  - file_path: " + finding.filePath());
+            out.println("    field_path: " + finding.fieldPath());
+            out.println("    reason: " + finding.reason());
+            if (!finding.providerId().isBlank()) {
+                out.println("    provider_id: " + finding.providerId());
+            }
+            if (!finding.providerType().isBlank()) {
+                out.println("    provider_type: " + finding.providerType());
+            }
+            if (!finding.profile().isBlank()) {
+                out.println("    profile: " + finding.profile());
+            }
+            if (!finding.operation().isBlank()) {
+                out.println("    operation: " + finding.operation());
+            }
+            out.println("    owner_action: " + finding.ownerAction());
+        }
     }
 
     private void printExecutionResult(PrintStream out, Path packageRoot, ExecutionResult result) {
@@ -511,16 +736,13 @@ public class RegressionCommand {
         return "failed";
     }
 
-    private List<Path> dependencyOrderedApprovedTests(Path packageRoot, List<Path> approvedTests) {
-        Map<String, Integer> ruOrder = new LinkedHashMap<>();
-        RpRuMappingValidationReport mappingReport = rpRuMappingService.validate(packageRoot.resolve("rp_ru_mapping.yaml"));
-        for (int index = 0; index < mappingReport.releaseUnits().size(); index++) {
-            ruOrder.put(mappingReport.releaseUnits().get(index).ruId(), index);
-        }
+    private List<Path> dependencyOrderedApprovedTests(
+            GeneratedRuntimeContext runtimeContext,
+            List<Path> approvedTests) {
         return approvedTests.stream()
                 .sorted((left, right) -> {
-                    int leftOrder = ruOrder.getOrDefault(targetRuId(left), Integer.MAX_VALUE);
-                    int rightOrder = ruOrder.getOrDefault(targetRuId(right), Integer.MAX_VALUE);
+                    int leftOrder = runtimeContext.order(targetRuId(left), adapterName(left));
+                    int rightOrder = runtimeContext.order(targetRuId(right), adapterName(right));
                     int orderComparison = Integer.compare(leftOrder, rightOrder);
                     if (orderComparison != 0) {
                         return orderComparison;
@@ -540,12 +762,20 @@ public class RegressionCommand {
     }
 
     private List<ParameterCase> parameterCases(Path approvedTest) {
-        Object parametersValue = readYamlMap(approvedTest).get("parameters");
+        Map<String, Object> testCase = readYamlMap(approvedTest);
+        ParameterSetResolution parameterSetResolution = parameterSetResolver.resolve(approvedTest, testCase);
+        if (parameterSetResolution.parameterized() && parameterSetResolution.gaps().isEmpty()) {
+            return parameterSetResolution.cases().isEmpty()
+                    ? List.of(new ParameterCase("", "", Map.of()))
+                    : parameterSetResolution.cases();
+        }
+
+        Object parametersValue = testCase.get("parameters");
         if (!(parametersValue instanceof Map<?, ?> parameters)
                 || !"explicit_cases".equals(stringValue(parameters.get("strategy")))
                 || !(parameters.get("cases") instanceof List<?> cases)
                 || cases.isEmpty()) {
-            return List.of(new ParameterCase("", Map.of()));
+            return List.of(new ParameterCase("", "", Map.of()));
         }
         List<ParameterCase> parameterCases = new java.util.ArrayList<>();
         for (Object caseValue : cases) {
@@ -561,9 +791,9 @@ public class RegressionCommand {
             for (Map.Entry<?, ?> entry : values.entrySet()) {
                 copiedValues.put(stringValue(entry.getKey()), entry.getValue());
             }
-            parameterCases.add(new ParameterCase(caseId, copiedValues));
+            parameterCases.add(new ParameterCase(caseId, "", copiedValues));
         }
-        return parameterCases.isEmpty() ? List.of(new ParameterCase("", Map.of())) : List.copyOf(parameterCases);
+        return parameterCases.isEmpty() ? List.of(new ParameterCase("", "", Map.of())) : List.copyOf(parameterCases);
     }
 
     private Path parameterizedTestCase(Path approvedTest, ParameterCase parameterCase) {
@@ -574,6 +804,10 @@ public class RegressionCommand {
         resolved.put("parameter_case_id", parameterCase.caseId());
         resolved.put("resolved_parameters", parameterCase.values());
         resolved.replaceAll((key, value) -> resolveParameterReferences(value, parameterCase.values()));
+        if (!parameterCase.bindAs().isBlank()) {
+            resolved.replaceAll((key, value) ->
+                    parameterSetResolver.resolveReferences(value, parameterCase.bindAs(), parameterCase.values()));
+        }
         // replaceAll will also process parameters; restore resolved metadata after substitution.
         resolved.put("parameter_case_id", parameterCase.caseId());
         resolved.put("resolved_parameters", parameterCase.values());
@@ -623,17 +857,18 @@ public class RegressionCommand {
     }
 
     private DependencyBlock dependencyBlock(
-            Path mappingYaml,
+            GeneratedRuntimeContext runtimeContext,
             Path approvedTest,
             String targetRuId,
+            String adapter,
             List<String> dependencies,
-            Map<String, String> ruStatuses) {
+            Map<String, String> targetStatuses) {
         for (String dependency : dependencies) {
-            String dependencyStatus = ruStatuses.get(dependency);
+            String dependencyStatus = targetStatuses.get(dependency);
             if (dependencyStatus != null && !"passed".equals(dependencyStatus)) {
                 String failureDetail = failureDetail(
                         "Planning and Binding",
-                        dependencyFieldPath(mappingYaml, targetRuId, dependency),
+                        dependencyFieldPath(runtimeContext, targetRuId, adapter, dependency),
                         "Resolve failed or blocked upstream RU `" + dependency
                                 + "` before running dependent RU `" + targetRuId + "`.",
                         "test_case_id: " + testCaseId(approvedTest),
@@ -673,10 +908,15 @@ public class RegressionCommand {
         return "%s-%03d".formatted(prefix, number);
     }
 
-    private PreflightResult runPreflight(Path packageRoot, String requestedEnv, boolean dryRun, PrintStream out) {
-        ExecutionEnvironmentReport environmentReport =
-                executionEnvironmentResolver.resolve(packageRoot.resolve("rp_ru_mapping.yaml"), requestedEnv);
-        List<Path> approvedTests = approvedTests(packageRoot);
+    private PreflightResult runPreflight(
+            Path packageRoot,
+            String requestedEnv,
+            boolean dryRun,
+            PrintStream out,
+            GeneratedRuntimeContext runtimeContext,
+            List<Path> approvedTests,
+            List<SelectionGap> selectionGaps) {
+        ExecutionEnvironmentReport environmentReport = executionEnvironmentResolver.resolve(runtimeContext);
         List<String> failureDetails = new java.util.ArrayList<>();
         Map<Path, List<String>> blockedTestFailureDetails = new LinkedHashMap<>();
         boolean globalBlocked = !environmentReport.ready() || approvedTests.isEmpty();
@@ -699,14 +939,26 @@ public class RegressionCommand {
         if (approvedTests.isEmpty()) {
             blocked = true;
             out.println("test_case_gaps:");
-            out.println("  - ap: Definition and Validation");
-            out.println("    field_path: tests/approved");
-            out.println("    reason: " + failureReason("Definition and Validation", "tests/approved"));
-            out.println("    owner_action: Add approved_for_regression DSL test cases before run.");
-            failureDetails.add(failureDetail(
-                    "Definition and Validation",
-                    "tests/approved",
-                    "Add approved_for_regression DSL test cases before run."));
+            if (selectionGaps.isEmpty()) {
+                out.println("  - ap: Definition and Validation");
+                out.println("    field_path: tests/approved");
+                out.println("    reason: " + failureReason("Definition and Validation", "tests/approved"));
+                out.println("    owner_action: Add approved_for_regression DSL test cases before run.");
+                failureDetails.add(failureDetail(
+                        "Definition and Validation",
+                        "tests/approved",
+                        "Add approved_for_regression DSL test cases before run."));
+            }
+            for (SelectionGap gap : selectionGaps) {
+                out.println("  - ap: Definition and Validation");
+                out.println("    field_path: " + gap.fieldPath());
+                out.println("    reason: " + failureReason("Definition and Validation", gap.fieldPath()));
+                out.println("    owner_action: " + gap.ownerAction());
+                failureDetails.add(failureDetail(
+                        "Definition and Validation",
+                        gap.fieldPath(),
+                        gap.ownerAction()));
+            }
         }
 
         Map<Path, DslValidationReport> dslReports = new LinkedHashMap<>();
@@ -714,9 +966,19 @@ public class RegressionCommand {
         for (Path approvedTest : approvedTests) {
             List<String> testFailureDetails = new java.util.ArrayList<>();
             DslValidationReport dslReport = dslTestCaseValidator.validate(approvedTest);
-            dslReports.put(approvedTest, dslReport);
-            blocked = blocked || !dslReport.ready();
-            for (DslValidationGap gap : dslReport.gaps()) {
+            List<DslValidationGap> dslGaps = new java.util.ArrayList<>(dslReport.gaps());
+            DslValidationGap profileGap = profileCompatibilityGap(approvedTest, requestedEnv);
+            if (profileGap != null) {
+                dslGaps.add(profileGap);
+            }
+            DslValidationReport effectiveDslReport = new DslValidationReport(
+                    dslGaps.isEmpty(),
+                    dslReport.testCaseId(),
+                    dslReport.acId(),
+                    List.copyOf(dslGaps));
+            dslReports.put(approvedTest, effectiveDslReport);
+            blocked = blocked || !effectiveDslReport.ready();
+            for (DslValidationGap gap : effectiveDslReport.gaps()) {
                 out.println("  - ap: Definition and Validation");
                 out.println("    test_case_id: " + gap.testCaseId());
                 out.println("    ac_id: " + gap.acId());
@@ -825,19 +1087,22 @@ public class RegressionCommand {
                         "ac_id: " + bindingReport.acId()));
             }
 
-            ProviderContractResolutionReport providerReport = providerContractResolver.resolve(
-                    packageRoot.resolve("rp_ru_mapping.yaml"),
+            ProviderContractResolutionReport providerReport = providerContractResolver.resolveGenerated(
+                    packageRoot,
+                    requestedEnv,
                     targetRuId(approvedTest),
                     adapterName(approvedTest),
                     bindingReport.resolvedBindings().stream().map(ResolvedBinding::bindingType).toList(),
                     fixtureReport.fixtureProviders());
             List<ProviderContractGap> providerGaps = new java.util.ArrayList<>(providerReport.gaps());
             providerGaps.addAll(requestResponseTestContextGaps(
-                    packageRoot.resolve("rp_ru_mapping.yaml"),
+                    packageRoot,
+                    requestedEnv,
                     approvedTest,
                     bindingReport));
             providerGaps.addAll(messagingTestContextGaps(
-                    packageRoot.resolve("rp_ru_mapping.yaml"),
+                    packageRoot,
+                    requestedEnv,
                     approvedTest,
                     bindingReport));
             blocked = blocked || !providerGaps.isEmpty();
@@ -909,11 +1174,15 @@ public class RegressionCommand {
     }
 
     private List<ProviderContractGap> requestResponseTestContextGaps(
-            Path mappingYaml,
+            Path packageRoot,
+            String requestedEnv,
             Path approvedTest,
             BindingResolutionReport bindingReport) {
-        AdapterContractContext context =
-                adapterContractContext(mappingYaml, targetRuId(approvedTest), adapterName(approvedTest));
+        AdapterContractContext context = adapterContractContext(
+                packageRoot,
+                requestedEnv,
+                targetRuId(approvedTest),
+                adapterName(approvedTest));
         if (!"request_response".equals(context.providerFamily())
                 || !List.of("rest", "grpc").contains(context.providerType())) {
             return List.of();
@@ -927,9 +1196,6 @@ public class RegressionCommand {
                 .toList();
         List<ProviderContractGap> gaps = new java.util.ArrayList<>();
         for (String actionName : stepActions(approvedTest)) {
-            if (actionName.isBlank()) {
-                continue;
-            }
             Object actionValue = actions.get(actionName);
             if (!(actionValue instanceof Map<?, ?> action)) {
                 gaps.add(new ProviderContractGap(
@@ -979,11 +1245,15 @@ public class RegressionCommand {
     }
 
     private List<ProviderContractGap> messagingTestContextGaps(
-            Path mappingYaml,
+            Path packageRoot,
+            String requestedEnv,
             Path approvedTest,
             BindingResolutionReport bindingReport) {
-        AdapterContractContext context =
-                adapterContractContext(mappingYaml, targetRuId(approvedTest), adapterName(approvedTest));
+        AdapterContractContext context = adapterContractContext(
+                packageRoot,
+                requestedEnv,
+                targetRuId(approvedTest),
+                adapterName(approvedTest));
         if (!"messaging".equals(context.providerFamily())
                 || !List.of("local", "mock", "kafka", "nats").contains(context.providerType())) {
             return List.of();
@@ -997,9 +1267,6 @@ public class RegressionCommand {
                 .toList();
         List<ProviderContractGap> gaps = new java.util.ArrayList<>();
         for (String actionName : stepActions(approvedTest)) {
-            if (actionName.isBlank()) {
-                continue;
-            }
             Object actionValue = actions.get(actionName);
             if (!(actionValue instanceof Map<?, ?> action)) {
                 gaps.add(new ProviderContractGap(
@@ -1163,6 +1430,14 @@ public class RegressionCommand {
         return false;
     }
 
+    private boolean isTruthy(Object value) {
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        String text = stringValue(value);
+        return "true".equalsIgnoreCase(text) || "yes".equalsIgnoreCase(text);
+    }
+
     private List<String> stepActions(Path approvedTest) {
         Object stepsValue = testCaseMap(approvedTest).get("steps");
         if (!(stepsValue instanceof List<?> steps)) {
@@ -1176,56 +1451,32 @@ public class RegressionCommand {
                 .toList();
     }
 
-    @SuppressWarnings("unchecked")
-    private AdapterContractContext adapterContractContext(Path mappingYaml, String targetRuId, String adapter) {
-        Object unitsValue = readYamlMap(mappingYaml).get("release_units");
-        if (!(unitsValue instanceof List<?> units)) {
+    private AdapterContractContext adapterContractContext(
+            Path packageRoot,
+            String requestedEnv,
+            String targetRuId,
+            String adapter) {
+        GeneratedRuntimeContext runtimeContext = generatedRuntimeArtifacts.resolve(packageRoot, requestedEnv);
+        GeneratedRuntimeTarget target = runtimeContext.target(targetRuId, adapter);
+        if (target == null) {
             return AdapterContractContext.empty(adapter);
         }
-        AdapterContractContext adapterMatch = AdapterContractContext.empty(adapter);
-        for (int index = 0; index < units.size(); index++) {
-            Object entry = units.get(index);
-            if (!(entry instanceof Map<?, ?> unit)) {
-                continue;
-            }
-            String ruId = stringValue(unit.get("ru_id"));
-            String unitAdapter = stringValue(unit.get("adapter"));
-            Map<String, Object> adapterContract = adapterContract(unit, adapter);
-            if (adapterContract.isEmpty()) {
-                continue;
-            }
-            AdapterContractContext context = new AdapterContractContext(
-                    index,
-                    ruId,
-                    adapter,
-                    stringValue(adapterContract.get("provider_family")),
-                    stringValue(adapterContract.get("provider_type")),
-                    adapterContract);
-            if (!targetRuId.isBlank() && targetRuId.equals(ruId)) {
-                return context;
-            }
-            if (unitAdapter.equals(adapter)) {
-                adapterMatch = context;
-            }
-        }
-        return adapterMatch;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> adapterContract(Map<?, ?> unit, String adapter) {
-        Object contractsValue = unit.get("provider_contracts");
-        if (!(contractsValue instanceof Map<?, ?> contracts)) {
-            return Map.of();
-        }
-        Object adaptersValue = contracts.get("adapters");
-        if (!(adaptersValue instanceof Map<?, ?> adapters)) {
-            return Map.of();
-        }
-        Object adapterValue = adapters.get(adapter);
-        if (adapterValue instanceof Map<?, ?> adapterMap) {
-            return (Map<String, Object>) adapterMap;
-        }
-        return Map.of();
+        Map<String, Object> adapterContract = providerContractResolver.generatedAdapterContract(
+                packageRoot,
+                requestedEnv,
+                targetRuId,
+                adapter);
+        String contractPath = generatedRuntimeArtifacts.contractPath(
+                target.providerContractRef(),
+                adapterContract);
+        return new AdapterContractContext(
+                target.order(),
+                target.targetId(),
+                adapter,
+                stringValue(adapterContract.get("provider_family")),
+                stringValue(adapterContract.get("provider_type")),
+                adapterContract,
+                contractPath);
     }
 
     private String firstText(Map<?, ?> map, String... fields) {
@@ -1236,14 +1487,6 @@ public class RegressionCommand {
             }
         }
         return "";
-    }
-
-    private boolean isTruthy(Object value) {
-        if (value instanceof Boolean booleanValue) {
-            return booleanValue;
-        }
-        String text = stringValue(value);
-        return "true".equalsIgnoreCase(text) || "yes".equalsIgnoreCase(text);
     }
 
     private void printApGateStatus(PrintStream out, List<String> failureDetails) {
@@ -1300,6 +1543,9 @@ public class RegressionCommand {
         }
         if (fieldPath.startsWith("tests/approved")) {
             return "approved_test_case_missing";
+        }
+        if (fieldPath.startsWith("run.selection.") || "compatible_profiles".equals(fieldPath)) {
+            return "suite_selection_failed";
         }
         if (fieldPath.contains(".deployment.") || "Discovery and Context".equals(ap)) {
             return "environment_readiness_failed";
@@ -1419,6 +1665,101 @@ public class RegressionCommand {
         }
     }
 
+    private TestSelection selectApprovedTests(Path packageRoot, Map<String, String> options) {
+        String requestedTestCase = options.getOrDefault("--test-case", "").trim();
+        String requestedTag = options.getOrDefault("--tag", "").trim();
+        String requestedSuite = options.getOrDefault("--suite", "").trim();
+        Set<String> suiteTestIds = requestedSuite.isBlank() ? Set.of() : suiteTestIds(packageRoot, requestedSuite);
+        List<Path> approvedTests = approvedTests(packageRoot);
+        List<Path> selected = approvedTests.stream()
+                .filter(path -> requestedSuite.isBlank() || suiteTestIds.contains(testCaseId(path)))
+                .filter(path -> requestedTestCase.isBlank() || requestedTestCase.equals(testCaseId(path)))
+                .filter(path -> requestedTag.isBlank() || testCaseTags(path).contains(requestedTag))
+                .toList();
+        if (selected.isEmpty()
+                && !approvedTests.isEmpty()
+                && (!requestedSuite.isBlank() || !requestedTestCase.isBlank() || !requestedTag.isBlank())) {
+            return new TestSelection(selected, List.of(selectionGap(requestedSuite, requestedTestCase, requestedTag)));
+        }
+        return new TestSelection(selected, List.of());
+    }
+
+    private SelectionGap selectionGap(String requestedSuite, String requestedTestCase, String requestedTag) {
+        if (!requestedTestCase.isBlank()) {
+            return new SelectionGap(
+                    "run.selection.test_case",
+                    "Select a test case ID that matches one approved DSL test case.");
+        }
+        if (!requestedTag.isBlank()) {
+            return new SelectionGap(
+                    "run.selection.tag",
+                    "Select a tag that matches at least one approved DSL test case.");
+        }
+        return new SelectionGap(
+                "run.selection.suite",
+                "Select a suite ID whose generated suite manifest lists at least one approved DSL test case.");
+    }
+
+    private Set<String> suiteTestIds(Path packageRoot, String requestedSuite) {
+        Map<String, Object> suiteManifest = readYamlMap(packageRoot.resolve("generated-framework/suite_manifest.yaml"));
+        if (!requestedSuite.equals(stringValue(suiteManifest.get("suite_id")))) {
+            return Set.of();
+        }
+        Object testsValue = suiteManifest.get("tests");
+        if (!(testsValue instanceof List<?> tests)) {
+            return Set.of();
+        }
+        return tests.stream()
+                .map(this::stringValue)
+                .map(this::testCaseIdFromSuitePath)
+                .filter(id -> !id.isBlank())
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    private String testCaseIdFromSuitePath(String suitePath) {
+        if (suitePath.isBlank()) {
+            return "";
+        }
+        String fileName = Path.of(suitePath).getFileName().toString();
+        return fileName.endsWith(".yaml") ? fileName.substring(0, fileName.length() - ".yaml".length()) : fileName;
+    }
+
+    private List<String> testCaseTags(Path testCasePath) {
+        Object tagsValue = testCaseMap(testCasePath).get("tags");
+        if (!(tagsValue instanceof List<?> tags)) {
+            return List.of();
+        }
+        return tags.stream()
+                .map(this::stringValue)
+                .filter(tag -> !tag.isBlank())
+                .toList();
+    }
+
+    private DslValidationGap profileCompatibilityGap(Path testCasePath, String requestedProfile) {
+        List<String> compatibleProfiles = compatibleProfiles(testCasePath);
+        if (compatibleProfiles.isEmpty() || compatibleProfiles.contains(requestedProfile)) {
+            return null;
+        }
+        return new DslValidationGap(
+                testCaseId(testCasePath),
+                acId(testCasePath),
+                "profile",
+                "compatible_profiles",
+                "",
+                "Select a compatible run profile or update compatible_profiles before execution.");
+    }
+
+    private List<String> compatibleProfiles(Path testCasePath) {
+        Object profilesValue = testCaseMap(testCasePath).get("compatible_profiles");
+        if (!(profilesValue instanceof List<?> profiles)) {
+            return List.of();
+        }
+        return profiles.stream()
+                .map(this::stringValue)
+                .filter(profile -> !profile.isBlank())
+                .toList();
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> readYamlMap(Path path) {
         try {
@@ -1484,52 +1825,21 @@ public class RegressionCommand {
         return false;
     }
 
-    private List<String> targetDependencies(Path mappingYaml, String targetRuId) {
-        if (targetRuId.isBlank()) {
-            return List.of();
-        }
-        Object unitsValue = readYamlMap(mappingYaml).get("release_units");
-        if (!(unitsValue instanceof List<?> units)) {
-            return List.of();
-        }
-        for (Object entry : units) {
-            if (!(entry instanceof Map<?, ?> unit) || !targetRuId.equals(stringValue(unit.get("ru_id")))) {
-                continue;
-            }
-            Object dependenciesValue = unit.get("dependencies");
-            if (!(dependenciesValue instanceof List<?> dependencyValues)) {
-                return List.of();
-            }
-            return dependencyValues.stream()
-                    .map(this::stringValue)
-                    .filter(dependency -> !dependency.isBlank())
-                    .toList();
-        }
-        return List.of();
+    private List<String> targetDependencies(
+            GeneratedRuntimeContext runtimeContext,
+            String targetRuId,
+            String adapter) {
+        return runtimeContext.dependencies(targetRuId, adapter);
     }
 
-    private String dependencyFieldPath(Path mappingYaml, String targetRuId, String dependencyRuId) {
-        Object unitsValue = readYamlMap(mappingYaml).get("release_units");
-        if (!(unitsValue instanceof List<?> units)) {
-            return "release_units.dependencies";
-        }
-        for (int unitIndex = 0; unitIndex < units.size(); unitIndex++) {
-            Object entry = units.get(unitIndex);
-            if (!(entry instanceof Map<?, ?> unit) || !targetRuId.equals(stringValue(unit.get("ru_id")))) {
-                continue;
-            }
-            Object dependenciesValue = unit.get("dependencies");
-            if (!(dependenciesValue instanceof List<?> dependencies)) {
-                return "release_units[" + unitIndex + "].dependencies";
-            }
-            for (int dependencyIndex = 0; dependencyIndex < dependencies.size(); dependencyIndex++) {
-                if (dependencyRuId.equals(stringValue(dependencies.get(dependencyIndex)))) {
-                    return "release_units[" + unitIndex + "].dependencies[" + dependencyIndex + "]";
-                }
-            }
-            return "release_units[" + unitIndex + "].dependencies";
-        }
-        return "release_units.dependencies";
+    private String dependencyFieldPath(
+            GeneratedRuntimeContext runtimeContext,
+            String targetRuId,
+            String adapter,
+            String dependencyRuId) {
+        GeneratedRuntimeTarget target = runtimeContext.target(targetRuId, adapter);
+        String targetId = target == null ? targetRuId : target.targetId();
+        return "generated-framework/run_plan.yaml#target_dependencies." + targetId + " -> " + dependencyRuId;
     }
 
     private String stringValue(Object value) {
@@ -1550,7 +1860,10 @@ public class RegressionCommand {
         }
     }
 
-    private record ParameterCase(String caseId, Map<String, Object> values) {
+    private record TestSelection(List<Path> tests, List<SelectionGap> gaps) {
+    }
+
+    private record SelectionGap(String fieldPath, String ownerAction) {
     }
 
     private record DependencyBlock(boolean blocked, String failureDetail) {
@@ -1562,16 +1875,18 @@ public class RegressionCommand {
             String providerName,
             String providerFamily,
             String providerType,
-            Map<String, Object> contract) {
+            Map<String, Object> contract,
+            String contractPath) {
 
         static AdapterContractContext empty(String providerName) {
-            return new AdapterContractContext(-1, "", providerName, "", "", Map.of());
-        }
-
-        String contractPath() {
-            return index < 0
-                    ? "release_units.provider_contracts.adapters." + providerName
-                    : "release_units[" + index + "].provider_contracts.adapters." + providerName;
+            return new AdapterContractContext(
+                    -1,
+                    "",
+                    providerName,
+                    "",
+                    "",
+                    Map.of(),
+                    "generated-framework/provider_contracts.adapters." + providerName);
         }
     }
 
@@ -1582,7 +1897,7 @@ public class RegressionCommand {
                 options.put(args[i], args[i + 1]);
                 i++;
             } else if (args[i].startsWith("--")) {
-                options.put(args[i], "true");
+                options.put(args[i], VALUE_OPTIONS.contains(args[i]) ? "" : "true");
             }
         }
         return options;

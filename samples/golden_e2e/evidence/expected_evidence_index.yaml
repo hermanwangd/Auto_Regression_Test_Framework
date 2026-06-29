@@ -1,0 +1,42 @@
+evidence_index_version: v0.2
+suite_id: GOLDEN-E2E-v0.2
+batch_id: BATCH-GOLDEN-E2E-001
+run_id: RUN-GOLDEN-E2E-001
+test_case_id: GOLDEN-E2E-TC-001
+profile: local_golden
+evidence_classification: framework_verification_only
+downstream_release_evidence: false
+entries:
+  - evidence_type: execution_log
+    ref: logs/execution.log
+    masked: true
+  - evidence_type: fixture_setup
+    ref: fixture/setup.yaml
+    masked: true
+  - evidence_type: fixture_cleanup
+    ref: fixture/cleanup.yaml
+    masked: true
+  - evidence_type: actual_output
+    ref: actual/actual_output.json
+    masked: true
+  - evidence_type: actual_output
+    ref: actual/actual_output.txt
+    masked: true
+  - evidence_type: expected_result_ref
+    ref: expected/expected_output.ref
+    masked: true
+  - evidence_type: assertion_result
+    ref: assertions/status_is_ok.yaml
+    masked: true
+  - evidence_type: assertion_result
+    ref: assertions/output_matches_expected_json.yaml
+    masked: true
+  - evidence_type: diff
+    ref: diffs/output_matches_expected_json.diff
+    masked: true
+  - evidence_type: batch_summary
+    ref: batch/batch.yaml
+    masked: true
+masking:
+  raw_secret_found: false
+  report_ref: masking_report.yaml

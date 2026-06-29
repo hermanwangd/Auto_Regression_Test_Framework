@@ -1,0 +1,55 @@
+contract_version: v0.2
+artifact: result
+status: framework_owned_current_stage
+version_compatibility:
+  supported_versions: [v0.2]
+  unsupported_version_behavior: run_not_complete
+required_fields:
+  - framework_version
+  - dsl_version
+  - test_case_id
+  - status
+  - profile
+  - environment
+  - timestamps
+  - provider_results
+  - steps
+  - verify_results
+  - evidence_refs
+  - failure
+optional_fields:
+  - labels
+  - parameter_case_id
+provider_result_required_fields:
+  - provider_id
+  - provider_type
+  - profile
+  - runtime_mode
+  - resolved_operation_result
+  - release_evidence_eligible
+validation_output_fields:
+  - ap
+  - file_path
+  - field_path
+  - test_case_id
+  - run_id
+  - status
+  - provider_id
+  - provider_type
+  - profile
+  - runtime_mode
+  - failure_classification
+  - severity
+  - reason
+  - owner_action
+evidence_outputs:
+  - result_json
+  - result_schema_validation_report
+unsupported_behavior:
+  missing_required_field: run_not_complete
+  unclassified_failure: run_not_complete
+  raw_secret: block_result_publication
+  invalid_status: run_not_complete
+  missing_runtime_mode: run_not_complete
+  mock_release_evidence_claim: block_result_publication
+failure_classification: framework_error

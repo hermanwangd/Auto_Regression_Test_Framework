@@ -1,0 +1,51 @@
+provider_contract_version: v0.2
+provider_type: vm_runtime
+runtime_modes: [native, mock]
+binding_keys:
+  host:
+    required: true
+    source: environment_binding
+  user:
+    required: true
+    source: environment_binding
+defaults:
+  timeout_seconds: 300
+  retry: 0
+safety:
+  rules:
+    access_policy_required_when_operations_used: [run_command, collect_file, collect_logs]
+    required_fields:
+      - safety.access_policy.allowed_commands
+      - safety.access_policy.allowed_paths
+    prohibited_defaults:
+      - safety.access_policy.allow_shell_true_without_approval
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
+  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
+  binding_keys: [host, user]
+operations:
+  check_host_ready:
+    allowed_bind_as: [vm.port, vm.timeout, vm.command]
+    required_parameters: []
+    output_refs: [process_status, command_output, duration_ms]
+  run_command:
+    allowed_bind_as: [vm.command, vm.args.*, vm.env.*, vm.timeout]
+    required_parameters: [vm.command]
+    output_refs: [command_output, exit_code, stdout, stderr, duration_ms]
+  collect_file:
+    allowed_bind_as: [vm.path, vm.destination_ref]
+    required_parameters: [vm.path]
+    output_refs: [collected_file]
+  collect_logs:
+    allowed_bind_as: [vm.path, vm.since, vm.tail]
+    required_parameters: [vm.path]
+    output_refs: [logs]
+  check_process:
+    allowed_bind_as: [vm.process_name, vm.pid, vm.expected_state]
+    required_parameters: []
+    output_refs: [process_status]
+evidence:
+  outputs: [command_output, collected_file, process_status, logs, error]
+  redact: [vm.env.*]
+failure_mapping:
+  allowed_codes: [PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, OPERATION_FAILED, ASSERTION_FAILED, EVIDENCE_INVALID]

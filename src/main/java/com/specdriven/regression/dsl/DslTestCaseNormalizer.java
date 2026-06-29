@@ -13,8 +13,14 @@ public class DslTestCaseNormalizer {
         }
         Map<String, Object> normalized = new LinkedHashMap<>(testCase);
         Map<?, ?> traceability = map(testCase.get("traceability"));
-        putIfMissing(normalized, "rp_id", firstText(traceability, "package_id", "rp_id"));
-        putIfMissing(normalized, "ac_id", firstText(traceability, "acceptance_criteria_id", "ac_id"));
+        Map<?, ?> sourceRefs = map(testCase.get("source_refs"));
+        Map<?, ?> labels = map(testCase.get("labels"));
+        putIfMissing(normalized, "rp_id",
+                firstNonBlank(firstText(traceability, "package_id", "rp_id"),
+                        firstText(labels, "package", "rp_id")));
+        putIfMissing(normalized, "ac_id",
+                firstNonBlank(firstText(traceability, "acceptance_criteria_id", "ac_id"),
+                        acIdFromSourceRef(firstText(sourceRefs, "acceptance_criteria"))));
         putIfMissing(normalized, "artifact_status", stringValue(testCase.get("status")));
         addSourceRefs(normalized, traceability);
 
@@ -415,6 +421,17 @@ public class DslTestCaseNormalizer {
             return "local_fixture";
         }
         return "";
+    }
+
+    private String acIdFromSourceRef(String sourceRef) {
+        if (sourceRef.isBlank()) {
+            return "";
+        }
+        int fragment = sourceRef.indexOf('#');
+        if (fragment >= 0 && fragment + 1 < sourceRef.length()) {
+            return sourceRef.substring(fragment + 1);
+        }
+        return sourceRef.contains("-AC-") ? sourceRef : "";
     }
 
     private void putIfMissing(Map<String, Object> map, String key, String value) {

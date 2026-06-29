@@ -1,6 +1,9 @@
 package com.specdriven.regression.binding;
 
 import com.specdriven.regression.dsl.DslTestCaseNormalizer;
+import com.specdriven.regression.parameter.ParameterSetGap;
+import com.specdriven.regression.parameter.ParameterSetResolution;
+import com.specdriven.regression.parameter.ParameterSetResolver;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -23,6 +26,7 @@ public class BindingResolver {
             List.of("input_file", "dataset", "db_seed", "api_payload", "message_event");
     private static final Pattern PARAMETER_REFERENCE = Pattern.compile("\\$\\{parameters\\.([A-Za-z0-9_-]+)}");
     private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
+    private final ParameterSetResolver parameterSetResolver = new ParameterSetResolver();
 
     public BindingResolutionReport resolve(Path testCasePath) {
         Map<String, Object> rawTestCase = readYamlMap(testCasePath);
@@ -55,7 +59,12 @@ public class BindingResolver {
             }
         }
 
-        gaps.addAll(parameterGaps(rawTestCase, testCaseId, acId));
+        ParameterSetResolution parameterSetResolution = parameterSetResolver.resolve(testCasePath, rawTestCase);
+        if (parameterSetResolution.parameterized()) {
+            gaps.addAll(parameterSetGaps(parameterSetResolution, testCaseId, acId));
+        } else {
+            gaps.addAll(parameterGaps(rawTestCase, testCaseId, acId));
+        }
 
         if (usesExpectedResultArtifact(testCase) && missingExpectedRef(testCase)) {
             gaps.add(gap(testCaseId, acId, "expected.ref", "", "",
@@ -68,6 +77,17 @@ public class BindingResolver {
                 acId,
                 List.copyOf(resolvedBindings),
                 List.copyOf(gaps));
+    }
+
+    private List<BindingGap> parameterSetGaps(
+            ParameterSetResolution parameterSetResolution,
+            String testCaseId,
+            String acId) {
+        List<BindingGap> gaps = new ArrayList<>();
+        for (ParameterSetGap parameterGap : parameterSetResolution.gaps()) {
+            gaps.add(gap(testCaseId, acId, parameterGap.fieldPath(), "", "", parameterGap.ownerAction()));
+        }
+        return gaps;
     }
 
     private List<BindingGap> parameterGaps(Map<String, Object> rawTestCase, String testCaseId, String acId) {

@@ -3,6 +3,7 @@ package com.specdriven.regression.cli;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.specdriven.regression.discovery.ReleasePackageService;
+import com.specdriven.regression.productrepo.ProductRepoReadinessReport;
 import com.specdriven.regression.productrepo.ProductRepoService;
 import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayOutputStream;
@@ -11,14 +12,142 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.DriverManager;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.yaml.snakeyaml.Yaml;
 
 class RegressionCommandTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void commandReturnsUsageErrorForMissingAndUnknownCommand() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream missingError = new ByteArrayOutputStream();
+        ByteArrayOutputStream unknownError = new ByteArrayOutputStream();
+
+        int missingExit = command.execute(new String[] {},
+                print(new ByteArrayOutputStream()), print(missingError));
+        int unknownExit = command.execute(new String[] {"dance"},
+                print(new ByteArrayOutputStream()), print(unknownError));
+
+        assertThat(missingExit).isEqualTo(2);
+        assertThat(unknownExit).isEqualTo(2);
+        assertThat(missingError.toString()).contains("Missing command.");
+        assertThat(unknownError.toString()).contains("Unknown command: dance");
+    }
+
+    @Test
+    void reportReturnsUsageErrorWhenFormatOptionHasNoValue() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "report", "--root", tempDir.toString(), "--rp-id", "RP-001", "--batch-id", "BATCH-001", "--format"},
+                print(new ByteArrayOutputStream()), print(error));
+
+        assertThat(exit).isEqualTo(2);
+        assertThat(error.toString()).contains("Missing required option: --format");
+    }
+
+    @Test
+    void reportReturnsUsageErrorWhenRpIdIsMissing() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "report", "--root", tempDir.toString(), "--batch-id", "BATCH-001"},
+                print(new ByteArrayOutputStream()), print(error));
+
+        assertThat(exit).isEqualTo(2);
+        assertThat(error.toString()).contains("Missing required option: --rp-id");
+    }
+
+    @Test
+    void reportReturnsUsageErrorWhenFormatIsBlank() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "report", "--root", tempDir.toString(), "--rp-id", "RP-001", "--batch-id", "BATCH-001", "--format", ""},
+                print(new ByteArrayOutputStream()), print(error));
+
+        assertThat(exit).isEqualTo(2);
+        assertThat(error.toString()).contains("Missing required option: --format");
+    }
+
+    @Test
+    void reportRequiresBatchIdOrRunId() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "report", "--root", tempDir.toString(), "--rp-id", "RP-001"},
+                print(new ByteArrayOutputStream()), print(error));
+
+        assertThat(exit).isEqualTo(2);
+        assertThat(error.toString()).contains("Missing required option: --batch-id");
+    }
+
+    @Test
+    void reportReturnsUsageErrorWhenRunIdOptionHasNoValue() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "report", "--root", tempDir.toString(), "--rp-id", "RP-001", "--run-id"},
+                print(new ByteArrayOutputStream()), print(error));
+
+        assertThat(exit).isEqualTo(2);
+        assertThat(error.toString()).contains("Missing required option: --run-id");
+    }
+
+    @Test
+    void initRpRequiresRpIdEvenWhenPackageTypeIsPresent() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--package-type", "service"},
+                print(new ByteArrayOutputStream()), print(error));
+
+        assertThat(exit).isEqualTo(2);
+        assertThat(error.toString()).contains("Missing required option: --rp-id");
+    }
+
+    @Test
+    void lifecycleCommandsRequireExplicitReleasePackageOptions() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream initError = new ByteArrayOutputStream();
+        ByteArrayOutputStream checkError = new ByteArrayOutputStream();
+        ByteArrayOutputStream generateError = new ByteArrayOutputStream();
+        ByteArrayOutputStream expectedResultError = new ByteArrayOutputStream();
+
+        int initExit = command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001"},
+                print(new ByteArrayOutputStream()), print(initError));
+        int checkExit = command.execute(new String[] {"check-rp", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(checkError));
+        int generateExit = command.execute(new String[] {"generate-tests", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(generateError));
+        int expectedResultExit = command.execute(new String[] {"draft-expected-results", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(expectedResultError));
+
+        assertThat(initExit).isEqualTo(2);
+        assertThat(checkExit).isEqualTo(2);
+        assertThat(generateExit).isEqualTo(2);
+        assertThat(expectedResultExit).isEqualTo(2);
+        assertThat(initError.toString()).contains("Missing required option: --package-type");
+        assertThat(checkError.toString()).contains("Missing required option: --rp-id");
+        assertThat(generateError.toString()).contains("Missing required option: --rp-id");
+        assertThat(expectedResultError.toString()).contains("Missing required option: --rp-id");
+    }
 
     @Test
     void initProductRepoAndCheckReadinessReturnSuccessOutput() {
@@ -63,6 +192,81 @@ class RegressionCommandTest {
     }
 
     @Test
+    void checkReadinessWriteReportIncludesMissingPathGapsWhenRepoIsIncomplete() throws Exception {
+        RegressionCommand command = command();
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "check-readiness", "--root", tempDir.toString(), "--rp-id", "RP-001", "--write-report"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path report = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/evidence/readiness/readiness.yaml");
+        assertThat(exit).as(output.toString()).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("status: fail")
+                .contains("report_path: docs/08-release/release-packages/RP-001/evidence/readiness/readiness.yaml");
+        assertThat(Files.readString(report))
+                .contains("ready: false")
+                .contains("gaps:")
+                .contains("path: docs/00-intake-scope")
+                .contains("reason: missing_product_repo_path")
+                .contains("owner_action: Create required Product Repo path `docs/00-intake-scope`");
+    }
+
+    @Test
+    void checkReadinessWriteReportHandlesEmptyCheckedItemsFromReadinessProvider() throws Exception {
+        ProductRepoService emptyReadinessService = new ProductRepoService() {
+            @Override
+            public ProductRepoReadinessReport checkReadiness(Path root) {
+                return new ProductRepoReadinessReport(
+                        true,
+                        "pass",
+                        List.of(),
+                        List.of(),
+                        "No readiness items configured.",
+                        false,
+                        false);
+            }
+        };
+        RegressionCommand command = new RegressionCommand(emptyReadinessService, new ReleasePackageService());
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "check-readiness", "--root", tempDir.toString(), "--rp-id", "RP-EMPTY", "--write-report"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path report = tempDir.resolve(
+                "docs/08-release/release-packages/RP-EMPTY/evidence/readiness/readiness.yaml");
+        assertThat(exit).isZero();
+        assertThat(output.toString()).contains("report_path:");
+        assertThat(Files.readString(report))
+                .contains("checked_items:\n  []")
+                .contains("gaps:\n  []");
+    }
+
+    @Test
+    void checkReadinessWriteReportReturnsStableErrorWhenReportCannotBeWritten() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        Path blockedEvidencePath = tempDir.resolve(
+                "docs/08-release/release-packages/RP-BLOCKED/evidence");
+        Files.createDirectories(blockedEvidencePath.getParent());
+        Files.writeString(blockedEvidencePath, "not a directory");
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "check-readiness", "--root", tempDir.toString(), "--rp-id", "RP-BLOCKED", "--write-report"},
+                print(new ByteArrayOutputStream()), print(error));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(error.toString())
+                .contains("Failed to write readiness report")
+                .contains("docs/08-release/release-packages/RP-BLOCKED/evidence/readiness/readiness.yaml");
+    }
+
+    @Test
     void checkReadinessWithRpIdDoesNotCreateReportUnlessWriteReportIsRequested() {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -82,6 +286,29 @@ class RegressionCommandTest {
     }
 
     @Test
+    void checkReadinessWriteReportRequiresNonBlankRpId() {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        ByteArrayOutputStream missingRpOutput = new ByteArrayOutputStream();
+        ByteArrayOutputStream blankRpOutput = new ByteArrayOutputStream();
+
+        int missingRpExit = command.execute(new String[] {
+                "check-readiness", "--root", tempDir.toString(), "--write-report"},
+                print(missingRpOutput), print(new ByteArrayOutputStream()));
+        int blankRpExit = command.execute(new String[] {
+                "check-readiness", "--root", tempDir.toString(), "--rp-id", "", "--write-report"},
+                print(blankRpOutput), print(new ByteArrayOutputStream()));
+
+        assertThat(missingRpExit).isZero();
+        assertThat(blankRpExit).isZero();
+        assertThat(missingRpOutput.toString()).doesNotContain("report_path:");
+        assertThat(blankRpOutput.toString()).doesNotContain("report_path:");
+        assertThat(Files.exists(tempDir.resolve(
+                "docs/08-release/release-packages/evidence/readiness/readiness.yaml"))).isFalse();
+    }
+
+    @Test
     void checkReadinessReturnsFailureWhenProductRepoIsIncomplete() {
         RegressionCommand command = command();
         ByteArrayOutputStream output = new ByteArrayOutputStream();
@@ -89,7 +316,7 @@ class RegressionCommandTest {
         int exit = command.execute(new String[] {"check-readiness", "--root", tempDir.toString(), "--format", "yaml"},
                 print(output), print(new ByteArrayOutputStream()));
 
-        assertThat(exit).isEqualTo(1);
+        assertThat(exit).as(output.toString()).isEqualTo(1);
         assertThat(output.toString()).contains("status: fail");
         assertThat(output.toString()).contains("reason: missing_product_repo_path");
         assertThat(output.toString()).contains("owner_action:");
@@ -224,14 +451,16 @@ class RegressionCommandTest {
         assertThat(exit).isZero();
         assertThat(Files.exists(draft)).isTrue();
         assertThat(Files.readString(draft))
+                .contains("dsl_version: v0.2")
                 .contains("status: draft_skeleton")
-                .contains("traceability:")
-                .contains("package_id: RP-001")
-                .contains("acceptance_criteria_id: RP-001-AC-001")
+                .contains("labels:")
+                .contains("package: RP-001")
+                .contains("source_refs:")
+                .contains("acceptance_criteria: acceptance_criteria.md#RP-001-AC-001")
                 .doesNotContain("rp_id:")
                 .doesNotContain("ac_id:")
                 .doesNotContain("artifact_status:")
-                .doesNotContain("source_refs:");
+                .doesNotContain("traceability:");
         assertThat(output.toString()).contains("generated_artifact_type: draft_test_skeleton");
         assertThat(output.toString()).contains("ap: Planning and Binding");
         assertThat(output.toString()).contains("field_path: release_units");
@@ -261,6 +490,46 @@ class RegressionCommandTest {
         assertThat(Files.readString(draft)).contains("status: draft");
         assertThat(Files.readString(draft)).contains("acceptance_criteria.md#RP-001-AC-001");
         assertThat(output.toString()).contains("expected_result_status: draft");
+    }
+
+    @Test
+    void draftExpectedResultsBlocksIncompleteAcWithoutInventingInputsOrExpectedOutputs() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        Path acFile = tempDir.resolve("docs/08-release/release-packages/RP-001/acceptance_criteria.md");
+        Files.writeString(acFile, """
+                acceptance_criteria:
+                  - ac_id: RP-001-AC-001
+                    rp_id: RP-001
+                    title: Missing owner-authored data and oracle
+                    owner: product_owner
+                    classification: automatable
+                    behavior: transform valid orders
+                    pass_fail_rule: output matches approved expected output
+                    status: ready_for_generation
+                """);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "draft-expected-results", "--root", tempDir.toString(), "--rp-id", "RP-001"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path draft = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/expected-results/draft/RP-001-ER-001.yaml");
+        String draftYaml = Files.readString(draft);
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("expected_result_status: blocked");
+        assertThat(draftYaml)
+                .contains("status: blocked")
+                .contains("input_refs:\n  []")
+                .contains("output_ref: pending")
+                .contains("input: Clarify owner-authored AC")
+                .contains("expected_output: Clarify owner-authored AC")
+                .contains("blocked_reason: AC is not ready for expected-result drafting");
     }
 
     @Test
@@ -302,7 +571,7 @@ class RegressionCommandTest {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
-                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
@@ -328,7 +597,7 @@ class RegressionCommandTest {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
-                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
@@ -342,7 +611,79 @@ class RegressionCommandTest {
     }
 
     @Test
-    void runExecutesExecutionFocusedDslV1ExplicitParameterCasesAsSeparateRuns() throws Exception {
+    void runUsesGeneratedFrameworkArtifactsWithoutProductMapping() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        Files.deleteIfExists(packageRoot.resolve("rp_ru_mapping.yaml"));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeGeneratedRuntimeArtifacts("RP-001", "spring_boot_cli", "RU-transform-job", "adapter-ok", List.of());
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedTestCase("RP-001", "db_seed");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).as(output.toString()).isZero();
+        assertThat(Files.exists(packageRoot.resolve("rp_ru_mapping.yaml"))).isFalse();
+        assertThat(output.toString())
+                .contains("adapter_execution_started: true")
+                .contains("provider_contracts_used:")
+                .contains("contract_path: generated-framework/provider_contracts/providers.yaml#adapters.spring_boot_cli")
+                .contains("run_status: passed");
+    }
+
+    @Test
+    void runIgnoresConflictingProductRpRuLabelsWhenResolvingRuntimeTarget() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeGeneratedRuntimeArtifacts("RP-001", "spring_boot_cli", "RU-transform-job", "adapter-ok", List.of());
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExecutionFocusedTestCase("RP-001");
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/tests/approved/RP-001-TC-001.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("""
+                        labels:
+                          package: RP-001
+                        """, """
+                        labels:
+                          product: PROD-wrong
+                          package: RP-wrong
+                          runtime_unit: RU-wrong
+                          team: unrelated
+                        """));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001");
+        String runEvidence = Files.readString(runDir.resolve("run.yaml"));
+        assertThat(exit).as(output.toString()).isZero();
+        assertThat(output.toString()).contains("run_status: passed");
+        assertThat(runEvidence)
+                .contains("rp_id: RP-wrong")
+                .contains("ru_refs:\n  - RU-transform-job")
+                .contains("environment_ref: ci://pipeline/RP-001")
+                .contains("affected_ru: RU-transform-job")
+                .doesNotContain("RU-wrong");
+    }
+
+    @Test
+    void runExecutesLegacyExplicitParameterCasesAsSeparateRuns() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
@@ -395,7 +736,78 @@ class RegressionCommandTest {
     }
 
     @Test
-    void runDryRunBlocksMalformedExecutionFocusedDslV1ParametersBeforeAdapterExecution() throws Exception {
+    void runExecutesV02ParameterSetReferenceAsSeparateRuns() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedV02ParameterizedTestCase("RP-001");
+        writeApprovedParameterSet("RP-001");
+        ByteArrayOutputStream runOutput = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(runOutput), print(new ByteArrayOutputStream()));
+
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        String runOne = Files.readString(packageRoot.resolve("evidence/runs/RUN-001/run.yaml"));
+        String runTwo = Files.readString(packageRoot.resolve("evidence/runs/RUN-002/run.yaml"));
+        assertThat(exit).as(runOutput.toString()).isZero();
+        assertThat(runOutput.toString())
+                .contains("run_status: passed")
+                .contains("parameter_case_id: baseline")
+                .contains("parameter_case_id: boundary");
+        assertThat(runOne)
+                .contains("parameter_case_id: baseline")
+                .contains("orders_seed_ref: fixtures/input/orders_seed_baseline.csv")
+                .doesNotContain("${param.orders_case.orders_seed_ref}");
+        assertThat(runTwo)
+                .contains("parameter_case_id: boundary")
+                .contains("orders_seed_ref: fixtures/input/orders_seed_boundary.csv")
+                .doesNotContain("${param.orders_case.orders_seed_ref}");
+        assertThat(Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml")))
+                .contains("parameter_case_id: baseline")
+                .contains("parameter_case_id: boundary");
+    }
+
+    @Test
+    void runDryRunBlocksMalformedV02ParameterSetBeforeAdapterExecution() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedV02ParameterizedTestCase("RP-001");
+        writeMalformedParameterSet("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("binding_gaps:")
+                .contains("field_path: parameters.ref.cases[1].case_id")
+                .contains("field_path: parameters.ref.cases[1].values.orders_seed_ref")
+                .contains("reason: parameter_resolution_failed")
+                .contains("owner_action: Use a unique case_id for each reviewed parameter case.")
+                .contains("owner_action: Declare a value for parameter reference `${param.orders_case.orders_seed_ref}`.")
+                .contains("run_status: blocked");
+    }
+
+    @Test
+    void runDryRunBlocksMalformedLegacyExplicitParametersBeforeAdapterExecution() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
@@ -409,7 +821,7 @@ class RegressionCommandTest {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
-                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
@@ -428,7 +840,7 @@ class RegressionCommandTest {
     }
 
     @Test
-    void runBlocksMalformedExecutionFocusedDslV1ParametersBeforeParameterExpansion() throws Exception {
+    void runBlocksMalformedLegacyExplicitParametersBeforeParameterExpansion() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
@@ -467,6 +879,43 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runMarksBatchBlockedWhenEverySelectedTestHasPreflightFailure() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001", "RP-001-AC-002");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-002");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "existing_state");
+        writeApprovedTestCase("RP-001", "RP-001-TC-002", "RP-001-AC-002", "existing_state");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("run_id: RUN-001")
+                .contains("run_id: RUN-002")
+                .contains("status: blocked")
+                .contains("run_status: blocked");
+        assertThat(Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml")))
+                .contains("status: blocked")
+                .contains("RUN-001")
+                .contains("RUN-002");
+        assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/failure_details.yaml")))
+                .contains("reason: binding_resolution_failed");
+        assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-002/failure_details.yaml")))
+                .contains("reason: binding_resolution_failed");
+    }
+
+    @Test
     void runDryRunReportsPassedApGatesBeforeAdapterExecution() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -481,7 +930,7 @@ class RegressionCommandTest {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
-                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isZero();
@@ -537,7 +986,7 @@ class RegressionCommandTest {
     }
 
     @Test
-    void blockedExecutionFocusedDslV1RunPreservesDslRuntimeEvidence() throws Exception {
+    void blockedExecutionFocusedDslV02RunPreservesDslRuntimeEvidence() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
@@ -563,7 +1012,7 @@ class RegressionCommandTest {
                 .contains("status: blocked")
                 .contains("adapter_execution_started: false")
                 .contains("dsl_runtime:")
-                .contains("dsl_version: v1")
+                .contains("dsl_version: v0.2")
                 .contains("target_id: RU-transform-job")
                 .contains("fixture_name: orders_seed")
                 .contains("type: existing_state")
@@ -606,6 +1055,42 @@ class RegressionCommandTest {
     }
 
     @Test
+    void blockedPerTestPreflightRunSkipsExistingRunIdWhenAssigningEvidence() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001", "RP-001-AC-002");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-002");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "api_payload");
+        writeApprovedTestCase("RP-001", "RP-001-TC-002", "RP-001-AC-002", "api_payload");
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        Files.createDirectories(packageRoot.resolve("evidence/runs/RUN-002"));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("run_id: RUN-001")
+                .contains("run_id: RUN-003")
+                .doesNotContain("run_id: RUN-002");
+        assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/run.yaml")))
+                .contains("status: blocked")
+                .contains("test_case_id: RP-001-TC-001");
+        assertThat(Files.exists(packageRoot.resolve("evidence/runs/RUN-002/run.yaml"))).isFalse();
+        assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-003/run.yaml")))
+                .contains("status: blocked")
+                .contains("test_case_id: RP-001-TC-002");
+    }
+
+    @Test
     void runDryRunBlocksMissingProviderContractBeforeAdapterExecution() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -620,19 +1105,16 @@ class RegressionCommandTest {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
-                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString()).contains("provider_contract_gaps:");
         assertThat(output.toString()).contains("ap: Planning and Binding");
-        assertThat(output.toString()).contains("provider_contracts.adapters.spring_boot_cli");
-        assertThat(output.toString()).contains("provider_contracts.bindings.db_seed");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.bindings.db_seed");
+        assertThat(output.toString()).contains("provider_contracts/RU-transform-job.yaml#adapters.spring_boot_cli");
+        assertThat(output.toString()).contains("provider_contracts/RU-transform-job.yaml#bindings.db_seed");
         assertThat(output.toString()).contains("reason: provider_contract_resolution_failed");
-        assertThat(output.toString()).contains("provider_family: file_batch");
-        assertThat(output.toString()).contains("provider_family: db_fixture");
+        assertThat(output.toString()).contains("registry_status: missing");
         assertThat(output.toString()).contains("affected_ru: RU-transform-job");
         assertThat(output.toString()).contains("capability: spring_boot_cli");
         assertThat(output.toString()).contains("capability: db_seed");
@@ -655,7 +1137,7 @@ class RegressionCommandTest {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
-                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
@@ -684,7 +1166,7 @@ class RegressionCommandTest {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
-                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
@@ -713,7 +1195,7 @@ class RegressionCommandTest {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
-                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
@@ -739,7 +1221,7 @@ class RegressionCommandTest {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
-                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--dry-run"},
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
@@ -748,6 +1230,40 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("oracles.normalized_orders.type");
         assertThat(output.toString()).contains("invariant");
         assertThat(output.toString()).contains("adapter_execution_started: false");
+    }
+
+    @Test
+    void runDryRunReportsProviderGapWhenApprovedTestReferencesUnmappedAdapter() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeCompleteCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/tests/approved/RP-001-TC-001.yaml");
+        Files.writeString(testCase, Files.readString(testCase).replace(
+                "adapter: spring_boot_cli",
+                "adapter: missing_adapter"));
+        assertThat(Files.readString(testCase)).contains("adapter: missing_adapter");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).as(output.toString()).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("provider_contract_gaps:")
+                .contains("provider_name: missing_adapter")
+                .contains("contract_path: generated-framework/environment_bindings.targets")
+                .contains("Generate environment binding target for `RU-transform-job` before execution.")
+                .contains("adapter_execution_started: false")
+                .contains("run_status: blocked");
     }
 
     @Test
@@ -781,11 +1297,11 @@ class RegressionCommandTest {
         assertThat(runEvidence).contains("environment_ref: sit://payment/k8s");
         assertThat(batchEvidence).contains("status: blocked");
         assertThat(batchEvidence).contains("execution_mode: sit_deployed");
-        assertThat(failureDetails).contains("ap: Discovery and Context");
-        assertThat(failureDetails).contains("field_path: release_units[0].deployment.deployment_ref");
-        assertThat(failureDetails).contains("field_path: release_units[0].deployment.readiness_check");
-        assertThat(failureDetails).contains("field_path: release_units[0].deployment.deployed_version_ref");
-        assertThat(failureDetails).contains("owner_action: Provide SIT deployment readiness evidence");
+        assertThat(failureDetails).contains("ap: Planning and Binding");
+        assertThat(failureDetails).contains("field_path: release_units[0].provider_contracts.adapters.k8s_readiness.deployed_version_ref");
+        assertThat(failureDetails).contains("provider_family: deployment_readiness");
+        assertThat(failureDetails).contains("provider_type: local");
+        assertThat(failureDetails).contains("owner_action: Declare deployed_version_ref for `k8s_readiness` before execution.");
     }
 
     @Test
@@ -1118,7 +1634,7 @@ class RegressionCommandTest {
                 .contains("adapter_execution_started: false")
                 .contains("failure_details: failure_details.yaml");
         assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-002/failure_details.yaml")))
-                .contains("release_units[1].provider_contracts.adapters.missing_cli")
+                .contains("generated-framework/provider_contracts/RU-missing-provider-job.yaml#adapters.missing_cli")
                 .contains("affected_ru: RU-missing-provider-job");
         assertThat(Files.exists(packageRoot.resolve("evidence/runs/RUN-002/logs/stdout.log"))).isFalse();
         assertThat(Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml")))
@@ -1258,6 +1774,39 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunAllowsRestProviderContextCheckWhenActionsSectionIsAbsent() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-REST-NO-ACTIONS";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_api"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeRestProviderMapping(rpId, 65535);
+        Path generatedContract = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId
+                        + "/generated-framework/provider_contracts/RU-payment-api.yaml");
+        Files.writeString(generatedContract, Files.readString(generatedContract)
+                .replace("actions:", "omitted_actions:"));
+        writeRestPayload(rpId);
+        writeApprovedExpectedResult(rpId, acId, "{\"status\":\"accepted\",\"paymentId\":\"PAY-001\"}\n");
+        writeApprovedRestTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("provider_contract_gaps:")
+                .contains("provider_family: request_response")
+                .contains("run_status: blocked");
+    }
+
+    @Test
     void runDryRunBlocksRestProviderWithMissingPayloadBindingBeforeInvocation() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-REST-BINDING";
@@ -1286,6 +1835,37 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("provider_type: rest");
         assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.request_response.actions.submit_payment.request_binding");
         assertThat(output.toString()).contains("Add package input binding `missing_payload` before invoking request/response action `submit_payment`");
+    }
+
+    @Test
+    void runDryRunBlocksRestProviderWithBlankRequestBindingBeforeInvocation() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-REST-BLANK-BINDING";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_api"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeRestProviderMapping(rpId, 65535, "submit_payment", "");
+        writeRestPayload(rpId);
+        writeApprovedExpectedResult(rpId, acId, "{\"status\":\"accepted\",\"paymentId\":\"PAY-001\"}\n");
+        writeApprovedRestTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: request_response");
+        assertThat(output.toString()).contains("provider_type: rest");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.request_response.actions.submit_payment.request_binding");
+        assertThat(output.toString()).contains("Declare request_binding for request/response action `submit_payment`");
     }
 
     @Test
@@ -1379,6 +1959,45 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("provider_type: rest");
         assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.request_response.outputs.actual_output_ref");
         assertThat(output.toString()).contains("Declare actual_output_ref for request/response provider `request_response`");
+    }
+
+    @Test
+    void runDryRunAllowsRestProviderContextCheckWhenLegacyStepsAreNotAList() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-REST-NO-STEPS";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_api"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeRestProviderMapping(rpId, 65535);
+        writeRestPayload(rpId);
+        writeApprovedExpectedResult(rpId, acId, "{\"status\":\"accepted\",\"paymentId\":\"PAY-001\"}\n");
+        writeApprovedRestTestCase(rpId, acId);
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("""
+                        steps:
+                          - id: submit_payment
+                            action: submit_payment
+                            target_ru_id: RU-payment-api
+                        """, """
+                        steps: {}
+                        """));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isZero();
+        assertThat(output.toString())
+                .contains("provider_contracts_used:")
+                .contains("provider_family: request_response")
+                .contains("run_status: dry_run_ready");
     }
 
     @Test
@@ -1566,6 +2185,77 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksMessagingProviderWithoutPayloadBindingBeforeInvocation() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-NO-PAYLOAD-BINDING";
+        String acId = rpId + "-AC-001";
+        String payload = "{\"eventId\":\"EVT-001\",\"status\":\"published\"}\n";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingProviderMapping(rpId, "local", "mock://payment.events", "");
+        writeMessagingEventPayload(rpId, payload);
+        writeApprovedExpectedResult(rpId, acId, payload);
+        writeApprovedMessagingTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("run_status: blocked")
+                .contains("provider_contract_gaps:")
+                .contains("provider_family: messaging")
+                .contains("provider_type: local")
+                .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.publish_payment_event.payload_binding")
+                .contains("Declare payload_binding, message_binding, or event_binding for messaging action `publish_payment_event`");
+    }
+
+    @Test
+    void runDryRunTreatsMissingMessagingModeAsPublishAndRequiresPayloadBinding() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-DEFAULT-MODE";
+        String acId = rpId + "-AC-001";
+        String payload = "{\"eventId\":\"EVT-001\",\"status\":\"published\"}\n";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingProviderMapping(rpId, "local", "mock://payment.events", "");
+        Path generatedContract = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId
+                        + "/generated-framework/provider_contracts/RU-payment-events.yaml");
+        Files.writeString(generatedContract, Files.readString(generatedContract)
+                .replace("                              mode: publish\n", ""));
+        writeMessagingEventPayload(rpId, payload);
+        writeApprovedExpectedResult(rpId, acId, payload);
+        writeApprovedMessagingTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("run_status: blocked")
+                .contains("provider_contract_gaps:")
+                .contains("provider_family: messaging")
+                .contains("provider_type: local")
+                .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.publish_payment_event.payload_binding")
+                .contains("Declare payload_binding, message_binding, or event_binding for messaging action `publish_payment_event`");
+    }
+
+    @Test
     void runDryRunAllowsMessagingObservationWithoutPayloadBinding() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-MSG-OBSERVE";
@@ -1618,6 +2308,79 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunAllowsMessagingCleanupWhenMaxCountIsStringPositiveInteger() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-CLEANUP-STRING-MAX";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingCleanupProviderMapping(rpId);
+        Path generatedContract = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId
+                        + "/generated-framework/provider_contracts/RU-payment-events.yaml");
+        Files.writeString(generatedContract, Files.readString(generatedContract)
+                .replace("                              max_count: 25\n", "                              max_count: \"25\"\n"));
+        writeApprovedExpectedResult(rpId, acId, "");
+        writeApprovedMessagingCleanupTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isZero();
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: dry_run_ready");
+        assertThat(output.toString()).doesNotContain(".actions.cleanup_payment_event.max_count");
+    }
+
+    @Test
+    void runDryRunBlocksMessagingCleanupWhenStrategyIsMissing() throws Exception {
+        assertMessagingCleanupPreflightGap(
+                "RP-MSG-CLEANUP-MISSING-STRATEGY",
+                content -> content
+                        .replaceAll("(?m)^\\s*cleanup_strategy: drain\\R", "")
+                        .replace("cleanup_strategy: drain, ", "")
+                        .replace(", cleanup_strategy: drain", ""),
+                ".actions.cleanup_payment_event.cleanup_strategy",
+                "Declare cleanup_strategy for messaging cleanup action `cleanup_payment_event` before invocation.");
+    }
+
+    @Test
+    void runDryRunBlocksMessagingCleanupWhenStrategyIsUnsupported() throws Exception {
+        assertMessagingCleanupPreflightGap(
+                "RP-MSG-CLEANUP-BAD-STRATEGY",
+                content -> content.replace("cleanup_strategy: drain", "cleanup_strategy: purge"),
+                ".actions.cleanup_payment_event.cleanup_strategy",
+                "Use supported messaging cleanup_strategy `drain` before invoking messaging cleanup action `cleanup_payment_event`.");
+    }
+
+    @Test
+    void runDryRunBlocksMessagingCleanupWhenMaxCountIsMissing() throws Exception {
+        assertMessagingCleanupPreflightGap(
+                "RP-MSG-CLEANUP-MISSING-MAX",
+                content -> content
+                        .replaceAll("(?m)^\\s*max_count: 25\\R", "")
+                        .replace("max_count: 25, ", "")
+                        .replace(", max_count: 25", ""),
+                ".actions.cleanup_payment_event.max_count",
+                "Declare max_count as a positive bounded integer for messaging cleanup action `cleanup_payment_event` before invocation.");
+    }
+
+    @Test
+    void runDryRunBlocksMessagingCleanupWhenMaxCountIsNotNumeric() throws Exception {
+        assertMessagingCleanupPreflightGap(
+                "RP-MSG-CLEANUP-BAD-MAX",
+                content -> content.replace("max_count: 25", "max_count: many"),
+                ".actions.cleanup_payment_event.max_count",
+                "Declare max_count as a positive bounded integer for messaging cleanup action `cleanup_payment_event` before invocation.");
+    }
+
+    @Test
     void runDryRunAllowsNativeMessagingRequestReplyWithPayloadBinding() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-MSG-REQUEST-REPLY";
@@ -1630,6 +2393,41 @@ class RegressionCommandTest {
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
         writeReadyAcceptanceCriteria(rpId, acId);
         writeMessagingRequestReplyProviderMapping(rpId);
+        writeMessagingEventPayload(rpId, payload);
+        writeApprovedExpectedResult(rpId, acId, payload);
+        writeApprovedMessagingTestCase(rpId, acId, "request_payment_status");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isZero();
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: dry_run_ready");
+        assertThat(output.toString()).doesNotContain("Use supported messaging action mode");
+        assertThat(output.toString()).doesNotContain("Add package input binding `payment_event`");
+    }
+
+    @Test
+    void runDryRunAllowsNativeMessagingRequestReplyHyphenModeAlias() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-REQUEST-REPLY-HYPHEN";
+        String acId = rpId + "-AC-001";
+        String payload = "{\"requestId\":\"REQ-001\",\"status\":\"accepted\"}\n";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingRequestReplyProviderMapping(rpId);
+        Path generatedContract = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId
+                        + "/generated-framework/provider_contracts/RU-payment-events.yaml");
+        Files.writeString(generatedContract, Files.readString(generatedContract)
+                .replace("                              mode: request_reply\n",
+                        "                              mode: request-reply\n"));
         writeMessagingEventPayload(rpId, payload);
         writeApprovedExpectedResult(rpId, acId, payload);
         writeApprovedMessagingTestCase(rpId, acId, "request_payment_status");
@@ -1712,6 +2510,43 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunBlocksMessagingProviderWithUnsupportedModeBeforeInvocation() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-MODE";
+        String acId = rpId + "-AC-001";
+        String payload = "{\"eventId\":\"EVT-001\",\"status\":\"published\"}\n";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingProviderMapping(rpId);
+        Path generatedContract = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId
+                        + "/generated-framework/provider_contracts/RU-payment-events.yaml");
+        Files.writeString(generatedContract, Files.readString(generatedContract)
+                .replace("mode: publish", "mode: stream"));
+        writeMessagingEventPayload(rpId, payload);
+        writeApprovedExpectedResult(rpId, acId, payload);
+        writeApprovedMessagingTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("run_status: blocked");
+        assertThat(output.toString()).contains("provider_contract_gaps:");
+        assertThat(output.toString()).contains("provider_family: messaging");
+        assertThat(output.toString()).contains("provider_type: local");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.publish_payment_event.mode");
+        assertThat(output.toString()).contains("Use supported messaging action mode `publish`, `request_reply`, `consume`, `observe`, or `cleanup`");
+    }
+
+    @Test
     void runDryRunBlocksMessagingProviderWithMissingRequiredCorrelationBeforeInvocation() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-MSG-CORRELATION";
@@ -1741,6 +2576,40 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("provider_type: local");
         assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.publish_payment_event.correlation_id_ref");
         assertThat(output.toString()).contains("Declare correlation_id, correlation_id_ref, or correlation_key");
+    }
+
+    @Test
+    void runDryRunTreatsStringYesAsRequiredMessagingCorrelation() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-CORRELATION-YES";
+        String acId = rpId + "-AC-001";
+        String payload = "{\"eventId\":\"EVT-001\",\"status\":\"published\"}\n";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingProviderMapping(rpId, "local", "mock://payment.events", "payment_event",
+                "publish_payment_event", "", "\n                              requires_correlation: yes");
+        writeMessagingEventPayload(rpId, payload);
+        writeApprovedExpectedResult(rpId, acId, payload);
+        writeApprovedMessagingTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("run_status: blocked")
+                .contains("provider_contract_gaps:")
+                .contains("provider_family: messaging")
+                .contains("provider_type: local")
+                .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.publish_payment_event.correlation_id_ref")
+                .contains("Declare correlation_id, correlation_id_ref, or correlation_key");
     }
 
     @Test
@@ -2101,7 +2970,486 @@ class RegressionCommandTest {
     }
 
     @Test
-    void runBatchEvidenceUsesResolvedExecutionModeWhenEnvOptionIsOmitted() throws Exception {
+    void runSkipsExistingRunIdWhenAssigningMultipleExecutionRuns() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001", "RP-001-AC-002");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-002");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        writeApprovedTestCase("RP-001", "RP-001-TC-002", "RP-001-AC-002", "db_seed");
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        Files.createDirectories(packageRoot.resolve("evidence/runs/RUN-002"));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).as(output.toString()).isZero();
+        assertThat(output.toString())
+                .contains("run_id: RUN-001")
+                .contains("run_id: RUN-003")
+                .doesNotContain("run_id: RUN-002");
+        assertThat(Files.exists(packageRoot.resolve("evidence/runs/RUN-001/run.yaml"))).isTrue();
+        assertThat(Files.exists(packageRoot.resolve("evidence/runs/RUN-002/run.yaml"))).isFalse();
+        assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-003/run.yaml")))
+                .contains("test_case_id: RP-001-TC-002");
+    }
+
+    @Test
+    void runWithTestCaseOptionExecutesOnlySelectedApprovedTest() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001", "RP-001-AC-002");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-002");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        writeApprovedTestCase("RP-001", "RP-001-TC-002", "RP-001-AC-002", "db_seed");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral",
+                "--test-case", "RP-001-TC-002"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        String batchEvidence = Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml"));
+        String runEvidence = Files.readString(packageRoot.resolve("evidence/runs/RUN-001/run.yaml"));
+        assertThat(exit).as(output.toString()).isZero();
+        assertThat(output.toString())
+                .contains("test_case_id: RP-001-TC-002")
+                .doesNotContain("test_case_id: RP-001-TC-001");
+        assertThat(batchEvidence)
+                .contains("run_id: RUN-001")
+                .contains("test_case_id: RP-001-TC-002")
+                .doesNotContain("RUN-002")
+                .doesNotContain("test_case_id: RP-001-TC-001");
+        assertThat(runEvidence)
+                .contains("test_case_id: RP-001-TC-002")
+                .contains("ac_id: RP-001-AC-002");
+        assertThat(Files.exists(packageRoot.resolve("evidence/runs/RUN-002/run.yaml"))).isFalse();
+    }
+
+    @Test
+    void runWithTagOptionExecutesOnlyMatchingApprovedTests() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001", "RP-001-AC-002");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-002");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        writeApprovedTestCase("RP-001", "RP-001-TC-002", "RP-001-AC-002", "db_seed");
+        Path taggedTest = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/tests/approved/RP-001-TC-001.yaml");
+        Files.writeString(taggedTest, Files.readString(taggedTest)
+                .replace("revision: 1\n", "revision: 1\ntags: [smoke, ci]\n"));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral",
+                "--tag", "smoke"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        String batchEvidence = Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml"));
+        assertThat(exit).as(output.toString()).isZero();
+        assertThat(output.toString())
+                .contains("test_case_id: RP-001-TC-001")
+                .doesNotContain("test_case_id: RP-001-TC-002");
+        assertThat(batchEvidence)
+                .contains("test_case_id: RP-001-TC-001")
+                .doesNotContain("test_case_id: RP-001-TC-002");
+        assertThat(Files.exists(packageRoot.resolve("evidence/runs/RUN-002/run.yaml"))).isFalse();
+    }
+
+    @Test
+    void runWithTagOptionIgnoresBlankTagEntries() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001", "RP-001-AC-002");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-002");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        writeApprovedTestCase("RP-001", "RP-001-TC-002", "RP-001-AC-002", "db_seed");
+        Path taggedTest = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/tests/approved/RP-001-TC-001.yaml");
+        Files.writeString(taggedTest, Files.readString(taggedTest)
+                .replace("revision: 1\n", "revision: 1\ntags: [\"\", smoke]\n"));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral",
+                "--tag", "smoke"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        String batchEvidence = Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml"));
+        assertThat(exit).as(output.toString()).isZero();
+        assertThat(output.toString())
+                .contains("test_case_id: RP-001-TC-001")
+                .doesNotContain("test_case_id: RP-001-TC-002");
+        assertThat(batchEvidence)
+                .contains("test_case_id: RP-001-TC-001")
+                .doesNotContain("test_case_id: RP-001-TC-002");
+        assertThat(Files.exists(packageRoot.resolve("evidence/runs/RUN-002/run.yaml"))).isFalse();
+    }
+
+    @Test
+    void runWithSuiteOptionExecutesOnlyTestsListedBySuiteManifest() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001", "RP-001-AC-002");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-002");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        writeApprovedTestCase("RP-001", "RP-001-TC-002", "RP-001-AC-002", "db_seed");
+        Path suiteManifest = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/generated-framework/suite_manifest.yaml");
+        Files.writeString(suiteManifest, """
+                suite_id: smoke-suite
+                tests:
+                  - ""
+                  - tests/approved/RP-001-TC-002
+                coverage_source_ref: acceptance_criteria.md
+                traceability_map_ref: traceability_map.yaml
+                """);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral",
+                "--suite", "smoke-suite"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        String batchEvidence = Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml"));
+        String runEvidence = Files.readString(packageRoot.resolve("evidence/runs/RUN-001/run.yaml"));
+        assertThat(exit).as(output.toString()).isZero();
+        assertThat(output.toString())
+                .contains("test_case_id: RP-001-TC-002")
+                .doesNotContain("test_case_id: RP-001-TC-001");
+        assertThat(batchEvidence)
+                .contains("test_case_id: RP-001-TC-002")
+                .doesNotContain("test_case_id: RP-001-TC-001");
+        assertThat(runEvidence).contains("test_case_id: RP-001-TC-002");
+        assertThat(Files.exists(packageRoot.resolve("evidence/runs/RUN-002/run.yaml"))).isFalse();
+    }
+
+    @Test
+    void runWithSuiteOptionAcceptsYamlManifestTestPaths() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001", "RP-001-AC-002");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-002");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        writeApprovedTestCase("RP-001", "RP-001-TC-002", "RP-001-AC-002", "db_seed");
+        Path suiteManifest = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/generated-framework/suite_manifest.yaml");
+        Files.writeString(suiteManifest, """
+                suite_id: smoke-suite
+                tests:
+                  - tests/approved/RP-001-TC-001.yaml
+                coverage_source_ref: acceptance_criteria.md
+                traceability_map_ref: traceability_map.yaml
+                """);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral",
+                "--suite", "smoke-suite"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
+        String batchEvidence = Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml"));
+        String runEvidence = Files.readString(packageRoot.resolve("evidence/runs/RUN-001/run.yaml"));
+        assertThat(exit).as(output.toString()).isZero();
+        assertThat(output.toString())
+                .contains("test_case_id: RP-001-TC-001")
+                .doesNotContain("test_case_id: RP-001-TC-002");
+        assertThat(batchEvidence)
+                .contains("test_case_id: RP-001-TC-001")
+                .doesNotContain("test_case_id: RP-001-TC-002");
+        assertThat(runEvidence).contains("test_case_id: RP-001-TC-001");
+        assertThat(Files.exists(packageRoot.resolve("evidence/runs/RUN-002/run.yaml"))).isFalse();
+    }
+
+    @Test
+    void runDryRunReportsSelectionGapWhenTagMatchesNoApprovedTests() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        Files.deleteIfExists(tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/generated-framework/suite_manifest.yaml"));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral",
+                "--tag", "missing-tag", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("field_path: run.selection.tag")
+                .contains("reason: suite_selection_failed")
+                .contains("Select a tag that matches at least one approved DSL test case.")
+                .contains("run_status: blocked")
+                .doesNotContain("field_path: tests/approved");
+    }
+
+    @Test
+    void runDryRunReportsSelectionGapWhenTestCaseMatchesNoApprovedTests() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral",
+                "--test-case", "RP-001-TC-404", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("field_path: run.selection.test_case")
+                .contains("reason: suite_selection_failed")
+                .contains("Select a test case ID that matches one approved DSL test case.")
+                .contains("run_status: blocked")
+                .doesNotContain("field_path: tests/approved");
+    }
+
+    @Test
+    void runDryRunReportsSelectionGapWhenSuiteMatchesNoApprovedTests() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        Path suiteManifest = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/generated-framework/suite_manifest.yaml");
+        Files.writeString(suiteManifest, """
+                suite_id: other-suite
+                tests:
+                  - tests/approved/RP-001-TC-001.yaml
+                """);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral",
+                "--suite", "smoke-suite", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("field_path: run.selection.suite")
+                .contains("reason: suite_selection_failed")
+                .contains("Select a suite ID whose generated suite manifest lists at least one approved DSL test case.")
+                .contains("run_status: blocked")
+                .doesNotContain("field_path: tests/approved");
+    }
+
+    @Test
+    void runDryRunReportsSelectionGapWhenSuiteManifestTestsIsNotAList() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        Path suiteManifest = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/generated-framework/suite_manifest.yaml");
+        Files.writeString(suiteManifest, """
+                suite_id: smoke-suite
+                tests: tests/approved/RP-001-TC-001.yaml
+                """);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral",
+                "--suite", "smoke-suite", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("field_path: run.selection.suite")
+                .contains("reason: suite_selection_failed")
+                .contains("run_status: blocked");
+    }
+
+    @Test
+    void runDryRunReportsSelectionGapWhenSuiteManifestIsMissing() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedTestCase("RP-001", "RP-001-TC-001", "RP-001-AC-001", "db_seed");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral",
+                "--suite", "smoke-suite", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("field_path: run.selection.suite")
+                .contains("reason: suite_selection_failed")
+                .contains("Select a suite ID whose generated suite manifest lists at least one approved DSL test case.")
+                .contains("run_status: blocked");
+    }
+
+    @Test
+    void runRequiresExplicitEnvOption() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001"},
+                print(new ByteArrayOutputStream()), print(error));
+
+        assertThat(exit).isEqualTo(2);
+        assertThat(error.toString()).contains("Missing required option: --env");
+    }
+
+    @Test
+    void runRequiresExplicitRpIdEvenWhenEnvIsPresent() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "--env", "ci_ephemeral"},
+                print(new ByteArrayOutputStream()), print(error));
+
+        assertThat(exit).isEqualTo(2);
+        assertThat(error.toString()).contains("Missing required option: --rp-id");
+    }
+
+    @Test
+    void runDryRunBlocksWhenApprovedTestYamlIsNotAMap() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteriaForAcs("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        Path approvedDir = tempDir.resolve("docs/08-release/release-packages/RP-001/tests/approved");
+        Files.createDirectories(approvedDir);
+        Files.writeString(approvedDir.resolve("RP-001-TC-001.yaml"), "[]\n");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("field_path: dsl")
+                .contains("reason: definition_validation_failed")
+                .contains("Provide a YAML mapping for the DSL test case.")
+                .contains("run_status: blocked");
+    }
+
+    @Test
+    void runReturnsUsageErrorWhenEnvOptionHasNoValue() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env"},
+                print(new ByteArrayOutputStream()), print(error));
+
+        assertThat(exit).isEqualTo(2);
+        assertThat(error.toString()).contains("Missing required option: --env");
+    }
+
+    @Test
+    void runDryRunBlocksWhenApprovedTestDirectoryIsMissing() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("field_path: tests/approved")
+                .contains("Add approved_for_regression DSL test cases before run.")
+                .contains("run_status: blocked");
+        assertThat(Files.exists(tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/tests/approved"))).isFalse();
+    }
+
+    @Test
+    void runWritesBlockedEvidenceWhenApprovedDslHasNoExecutionTarget() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
@@ -2111,23 +3459,193 @@ class RegressionCommandTest {
         writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
         writeExecutableCiMapping("RP-001");
         writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
-        writeApprovedTestCase("RP-001", "db_seed");
+        writeApprovedTestCaseWithoutExecutionTarget("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
-                "run", "--root", tempDir.toString(), "--rp-id", "RP-001"},
-                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
+                print(output), print(new ByteArrayOutputStream()));
 
-        Path batchYaml = tempDir.resolve(
-                "docs/08-release/release-packages/RP-001/evidence/batches/BATCH-001/batch.yaml");
-        assertThat(exit).isZero();
-        String batchEvidence = Files.readString(batchYaml);
-        assertThat(batchEvidence).contains("execution_mode: ci_ephemeral");
-        assertThat(batchEvidence).contains("environment_ref: ci://pipeline/RP-001");
-        assertThat(batchEvidence).doesNotContain("env:");
+        Path runDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001");
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("run_status: blocked")
+                .contains("field_path: targets")
+                .contains("field_path: execute[0].target");
+        assertThat(Files.readString(runDir.resolve("run.yaml")))
+                .contains("status: blocked")
+                .contains("adapter_execution_started: false");
+        assertThat(Files.readString(runDir.resolve("failure_details.yaml")))
+                .contains("field_path: targets")
+                .contains("field_path: execute[0].target")
+                .contains("test_case_id: RP-001-TC-001")
+                .contains("ac_id: RP-001-AC-001");
     }
 
     @Test
-    void runExecutesExecutionFocusedDslV1AndProducesReviewReadyBatchReport() throws Exception {
+    void runDryRunBlocksExecutionFocusedTestWhenSelectedProfileIsNotCompatible() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExecutionFocusedTestCase("RP-001");
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/tests/approved/RP-001-TC-001.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("revision: 1\n", "revision: 1\ncompatible_profiles: [sit_deployed]\n"));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("dsl_gaps:")
+                .contains("test_case_id: RP-001-TC-001")
+                .contains("field_path: compatible_profiles")
+                .contains("reason: suite_selection_failed")
+                .contains("Select a compatible run profile or update compatible_profiles before execution.")
+                .contains("run_status: blocked");
+    }
+
+    @Test
+    void runDryRunBlocksWhenGeneratedEnvironmentBindingTargetOmitsEnvironmentRef() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeGeneratedRuntimeArtifacts("RP-001", "spring_boot_cli", "RU-transform-job", "adapter-ok", List.of());
+        Path environmentBinding = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/generated-framework/environment_bindings/ci_ephemeral.yaml");
+        Files.writeString(environmentBinding, Files.readString(environmentBinding)
+                .replace("    environment_ref: ci://pipeline/RP-001\n", ""));
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExecutionFocusedTestCase("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("environment_gaps:")
+                .contains("field_path: generated-framework/environment_bindings.targets.RU-transform-job.environment_ref")
+                .contains("reason: environment_readiness_failed")
+                .contains("Generate environment_ref for target `RU-transform-job` before execution.")
+                .contains("run_status: blocked");
+    }
+
+    @Test
+    void runDryRunBlocksWhenGeneratedRunProfileOmitsRequiredField() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeGeneratedRuntimeArtifacts("RP-001", "spring_boot_cli", "RU-transform-job", "adapter-ok", List.of());
+        Path runProfile = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/generated-framework/run_profiles/ci_ephemeral.yaml");
+        Files.writeString(runProfile, Files.readString(runProfile)
+                .replace("max_duration: PT10M\n", ""));
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExecutionFocusedTestCase("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("environment_gaps:")
+                .contains("field_path: generated-framework/run_profiles/ci_ephemeral.yaml#max_duration")
+                .contains("reason: environment_readiness_failed")
+                .contains("Declare run profile max_duration before execution.")
+                .contains("run_status: blocked");
+    }
+
+    @Test
+    void runDryRunBlocksWhenGeneratedRunProfileUsesUnsupportedExecutionMode() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeGeneratedRuntimeArtifacts("RP-001", "spring_boot_cli", "RU-transform-job", "adapter-ok", List.of());
+        Path runProfile = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/generated-framework/run_profiles/ci_ephemeral.yaml");
+        Files.writeString(runProfile, Files.readString(runProfile)
+                .replace("execution_mode: ci_ephemeral\n", "execution_mode: unsafe_prod\n"));
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExecutionFocusedTestCase("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("environment_gaps:")
+                .contains("field_path: generated-framework/run_profiles/ci_ephemeral.yaml#execution_mode")
+                .contains("reason: environment_readiness_failed")
+                .contains("Use supported execution_mode for run profile `ci_ephemeral`.")
+                .contains("run_status: blocked");
+    }
+
+    @Test
+    void runDryRunBlocksSitProfileWhenEnvironmentBindingOmitsReadinessRef() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeGeneratedRuntimeArtifacts("RP-001", "spring_boot_cli", "RU-transform-job", "adapter-ok", List.of());
+        Path runProfile = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/generated-framework/run_profiles/ci_ephemeral.yaml");
+        Files.writeString(runProfile, Files.readString(runProfile)
+                .replace("execution_mode: ci_ephemeral\n", "execution_mode: sit_deployed\n"));
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExecutionFocusedTestCase("RP-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("environment_gaps:")
+                .contains("field_path: generated-framework/environment_bindings.targets.RU-transform-job.readiness_ref")
+                .contains("reason: environment_readiness_failed")
+                .contains("Declare readiness_ref for target `RU-transform-job` before sit_deployed execution.")
+                .contains("run_status: blocked");
+    }
+
+    @Test
+    void runExecutesExecutionFocusedDslV02AndProducesReviewReadyBatchReport() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
@@ -2154,7 +3672,7 @@ class RegressionCommandTest {
                 .contains("ac_id: RP-001-AC-001")
                 .contains("status: passed")
                 .contains("dsl_runtime:")
-                .contains("dsl_version: v1")
+                .contains("dsl_version: v0.2")
                 .contains("targets:")
                 .contains("target_id: RU-transform-job")
                 .contains("runner: spring_boot_cli")
@@ -2191,7 +3709,7 @@ class RegressionCommandTest {
     }
 
     @Test
-    void runExecutesExecutionFocusedDslV1JsonPathSelectorVerify() throws Exception {
+    void runExecutesExecutionFocusedDslV02JsonPathSelectorVerify() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
@@ -2220,7 +3738,7 @@ class RegressionCommandTest {
     }
 
     @Test
-    void runExecutesExecutionFocusedDslV1NumericToleranceSelectorVerify() throws Exception {
+    void runExecutesExecutionFocusedDslV02NumericToleranceSelectorVerify() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
@@ -2249,7 +3767,7 @@ class RegressionCommandTest {
     }
 
     @Test
-    void runExecutesExecutionFocusedDslV1ResponseStatusFromProviderMetadata() throws Exception {
+    void runExecutesExecutionFocusedDslV02ResponseStatusFromProviderMetadata() throws Exception {
         AtomicReference<String> requestBody = new AtomicReference<>("");
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/payments", exchange -> {
@@ -2407,6 +3925,33 @@ class RegressionCommandTest {
     }
 
     @Test
+    void reportReturnsUsageErrorForUnsupportedFormat() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "report", "--root", tempDir.toString(), "--rp-id", "RP-001",
+                "--batch-id", "BATCH-001", "--format", "json"},
+                print(new ByteArrayOutputStream()), print(error));
+
+        assertThat(exit).isEqualTo(2);
+        assertThat(error.toString()).contains("Unsupported --format: json");
+    }
+
+    @Test
+    void reportReturnsUsageErrorWhenBatchIdOptionHasNoValue() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream error = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "report", "--root", tempDir.toString(), "--rp-id", "RP-001", "--batch-id"},
+                print(new ByteArrayOutputStream()), print(error));
+
+        assertThat(exit).isEqualTo(2);
+        assertThat(error.toString()).contains("Missing required option: --batch-id");
+    }
+
+    @Test
     void reportWritesNotReadyEvidenceWhenRunEvidenceIsMissing() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
@@ -2430,6 +3975,30 @@ class RegressionCommandTest {
         assertThat(Files.readString(reviewDir.resolve("failure_summary.yaml"))).contains("unresolved_failures: 1");
         assertThat(Files.readString(reviewDir.resolve("failure_summary.yaml"))).contains("missing_evidence");
         assertThat(Files.readString(reviewDir.resolve("release_review_summary.yaml"))).contains("review_ready: false");
+    }
+
+    @Test
+    void reportUsesRunIdWhenBatchIdOptionIsBlank() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "report", "--root", tempDir.toString(), "--rp-id", "RP-001",
+                "--batch-id", "", "--run-id", "RUN-404"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        Path reviewDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/review/RUN-404");
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString()).contains("review_dir: evidence/review/RUN-404");
+        assertThat(Files.exists(reviewDir.resolve("coverage_report.yaml"))).isTrue();
+        assertThat(Files.exists(tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/evidence/review/BATCH-001"))).isFalse();
     }
 
     @Test
@@ -2756,6 +4325,274 @@ class RegressionCommandTest {
                 """.formatted(rpId));
     }
 
+    private void writeGeneratedRuntimeArtifacts(
+            String rpId,
+            String adapter,
+            String targetId,
+            String stdoutValue,
+            List<String> dependencies) throws Exception {
+        Path generated = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/generated-framework");
+        Files.createDirectories(generated.resolve("run_profiles"));
+        Files.createDirectories(generated.resolve("environment_bindings"));
+        Files.createDirectories(generated.resolve("provider_contracts"));
+        Files.writeString(generated.resolve("suite_manifest.yaml"), """
+                suite_id: %s-regression
+                tests:
+                  - tests/approved/%s-TC-001.yaml
+                coverage_source_ref: acceptance_criteria.md
+                traceability_map_ref: traceability_map.yaml
+                """.formatted(rpId, rpId));
+        Files.writeString(generated.resolve("run_plan.yaml"), """
+                run_profile_ref: run_profiles/ci_ephemeral.yaml
+                environment_binding_ref: environment_bindings/ci_ephemeral.yaml
+                execution_mode: ci_ephemeral
+                target_dependencies:
+                %s
+                runtime:
+                  timeout: PT10M
+                """.formatted(targetDependenciesYaml(targetId, dependencies).indent(2)));
+        Files.writeString(generated.resolve("run_profiles/ci_ephemeral.yaml"), """
+                profile_id: ci_ephemeral
+                execution_mode: ci_ephemeral
+                environment_binding_ref: environment_bindings/ci_ephemeral.yaml
+                isolation_scope: single_target
+                dependency_policy: generated_target_graph
+                max_duration: PT10M
+                data_policy:
+                  cleanup_required: true
+                """);
+        Files.writeString(generated.resolve("environment_bindings/ci_ephemeral.yaml"), """
+                environment_id: ci_ephemeral
+                environment_type: isolated
+                targets:
+                  %s:
+                    target_id: %s
+                    runner: %s
+                    execution_mode: ci_ephemeral
+                    environment_ref: ci://pipeline/%s
+                    provider_contract_ref: provider_contracts/providers.yaml#adapters.%s
+                """.formatted(targetId, targetId, adapter, rpId, adapter));
+        Files.writeString(generated.resolve("provider_contracts/providers.yaml"), """
+                provider_contracts:
+                  adapters:
+                    %s:
+                      provider_family: file_batch
+                      provider_type: shell
+                      contract_path: generated-framework/provider_contracts/providers.yaml#adapters.%s
+                      command: /bin/sh -c 'echo %s; echo adapter-warn >&2'
+                      working_directory: .
+                      timeout_seconds: 10
+                      success_exit_codes: [0]
+                      logs:
+                        stdout: logs/stdout.log
+                        stderr: logs/stderr.log
+                      outputs:
+                        actual_output_ref: actual/output.txt
+                  bindings:
+                    db_seed:
+                      provider_family: file_batch
+                      provider_type: file_fixture
+                      contract_path: generated-framework/provider_contracts/providers.yaml#bindings.db_seed
+                      materialize_as: input_file
+                  fixtures: {}
+                """.formatted(adapter, adapter, stdoutValue));
+        Files.writeString(generated.resolve("traceability_map.yaml"), """
+                package_id: %s
+                source_labels:
+                  %s:
+                    logical_target_id: %s
+                """.formatted(rpId, targetId, targetId));
+    }
+
+    private String targetDependenciesYaml(String targetId, List<String> dependencies) {
+        if (dependencies.isEmpty()) {
+            return targetId + ": []\n";
+        }
+        StringBuilder builder = new StringBuilder(targetId + ":\n");
+        for (String dependency : dependencies) {
+            builder.append("  - target_id: ").append(dependency).append("\n");
+            builder.append("    required: true\n");
+        }
+        return builder.toString();
+    }
+
+    private void writeMappingAndGeneratedArtifacts(Path mapping, String content) throws Exception {
+        Files.writeString(mapping, content);
+        writeGeneratedRuntimeArtifactsFromMapping(mapping.getParent(), content);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void writeGeneratedRuntimeArtifactsFromMapping(Path packageRoot, String mappingYaml) throws Exception {
+        Object loaded = new Yaml().load(mappingYaml);
+        if (!(loaded instanceof Map<?, ?> root)
+                || !(root.get("release_units") instanceof List<?> releaseUnits)
+                || releaseUnits.isEmpty()) {
+            return;
+        }
+        Path generated = packageRoot.resolve("generated-framework");
+        Files.createDirectories(generated.resolve("run_profiles"));
+        Files.createDirectories(generated.resolve("environment_bindings"));
+        Files.createDirectories(generated.resolve("provider_contracts"));
+        String executionMode = firstUnitText(releaseUnits, "execution_mode", "ci_ephemeral");
+        Files.writeString(generated.resolve("suite_manifest.yaml"), """
+                suite_id: generated-regression
+                tests: []
+                coverage_source_ref: acceptance_criteria.md
+                traceability_map_ref: traceability_map.yaml
+                """);
+        Files.writeString(generated.resolve("run_plan.yaml"), generatedRunPlanYaml(releaseUnits, executionMode));
+        Files.writeString(generated.resolve("run_profiles/" + executionMode + ".yaml"), """
+                profile_id: %s
+                execution_mode: %s
+                environment_binding_ref: environment_bindings/%s.yaml
+                isolation_scope: target_graph
+                dependency_policy: generated_target_graph
+                max_duration: PT10M
+                data_policy:
+                  cleanup_required: true
+                """.formatted(executionMode, executionMode, executionMode));
+        Files.writeString(generated.resolve("environment_bindings/" + executionMode + ".yaml"),
+                generatedEnvironmentBindingYaml(releaseUnits, executionMode));
+        Files.writeString(generated.resolve("traceability_map.yaml"), generatedTraceabilityMapYaml(releaseUnits));
+        for (int index = 0; index < releaseUnits.size(); index++) {
+            if (releaseUnits.get(index) instanceof Map<?, ?> unit) {
+                writeGeneratedProviderContracts(generated, (Map<String, Object>) unit, index);
+            }
+        }
+    }
+
+    private String generatedRunPlanYaml(List<?> releaseUnits, String executionMode) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("run_profile_ref: run_profiles/").append(executionMode).append(".yaml\n");
+        builder.append("environment_binding_ref: environment_bindings/").append(executionMode).append(".yaml\n");
+        builder.append("execution_mode: ").append(executionMode).append("\n");
+        builder.append("target_dependencies:\n");
+        for (Object entry : releaseUnits) {
+            if (!(entry instanceof Map<?, ?> unit)) {
+                continue;
+            }
+            String targetId = text(unit, "ru_id");
+            Object dependencies = unit.get("dependencies");
+            if (!(dependencies instanceof List<?> list) || list.isEmpty()) {
+                builder.append("  ").append(targetId).append(": []\n");
+                continue;
+            }
+            builder.append("  ").append(targetId).append(":\n");
+            for (Object dependency : list) {
+                builder.append("    - target_id: ").append(dependency).append("\n");
+                builder.append("      required: true\n");
+            }
+        }
+        builder.append("runtime:\n");
+        builder.append("  timeout: PT10M\n");
+        return builder.toString();
+    }
+
+    private String generatedEnvironmentBindingYaml(List<?> releaseUnits, String executionMode) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("environment_id: ").append(executionMode).append("\n");
+        builder.append("environment_type: isolated\n");
+        builder.append("targets:\n");
+        for (Object entry : releaseUnits) {
+            if (!(entry instanceof Map<?, ?> unit)) {
+                continue;
+            }
+            String targetId = text(unit, "ru_id");
+            String adapter = text(unit, "adapter");
+            builder.append("  ").append(targetId).append(":\n");
+            builder.append("    target_id: ").append(targetId).append("\n");
+            builder.append("    runner: ").append(adapter).append("\n");
+            builder.append("    execution_mode: ").append(executionMode).append("\n");
+            builder.append("    environment_ref: ").append(text(unit, "environment_ref")).append("\n");
+            builder.append("    provider_contract_ref: provider_contracts/")
+                    .append(safeFileName(targetId))
+                    .append(".yaml#adapters.")
+                    .append(adapter)
+                    .append("\n");
+        }
+        return builder.toString();
+    }
+
+    private String generatedTraceabilityMapYaml(List<?> releaseUnits) {
+        StringBuilder builder = new StringBuilder("source_labels:\n");
+        for (Object entry : releaseUnits) {
+            if (entry instanceof Map<?, ?> unit) {
+                String targetId = text(unit, "ru_id");
+                builder.append("  ").append(targetId).append(":\n");
+                builder.append("    ru_id: ").append(targetId).append("\n");
+                builder.append("    version_ref: ").append(text(unit, "version_ref")).append("\n");
+            }
+        }
+        return builder.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void writeGeneratedProviderContracts(Path generated, Map<String, Object> unit, int unitIndex) throws Exception {
+        Object contractsValue = unit.get("provider_contracts");
+        Map<String, Object> contracts = contractsValue instanceof Map<?, ?> map
+                ? deepCopy((Map<String, Object>) map)
+                : new LinkedHashMap<>();
+        addContractPaths(contracts, unitIndex);
+        Files.writeString(
+                generated.resolve("provider_contracts/" + safeFileName(text(unit, "ru_id")) + ".yaml"),
+                new Yaml().dump(Map.of("provider_contracts", contracts)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> deepCopy(Map<String, Object> source) {
+        Map<String, Object> copied = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : source.entrySet()) {
+            Object value = entry.getValue();
+            if (value instanceof Map<?, ?> map) {
+                copied.put(entry.getKey(), deepCopy((Map<String, Object>) map));
+            } else if (value instanceof List<?> list) {
+                copied.put(entry.getKey(), new ArrayList<>(list));
+            } else {
+                copied.put(entry.getKey(), value);
+            }
+        }
+        return copied;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void addContractPaths(Map<String, Object> contracts, int unitIndex) {
+        for (Map.Entry<String, Object> sectionEntry : contracts.entrySet()) {
+            if (!(sectionEntry.getValue() instanceof Map<?, ?> section)) {
+                continue;
+            }
+            for (Map.Entry<?, ?> contractEntry : section.entrySet()) {
+                if (contractEntry.getValue() instanceof Map<?, ?> contract
+                        && !contract.containsKey("contract_path")) {
+                    ((Map<String, Object>) contract).put(
+                            "contract_path",
+                            "release_units[" + unitIndex + "].provider_contracts."
+                                    + sectionEntry.getKey() + "." + contractEntry.getKey());
+                }
+            }
+        }
+    }
+
+    private String firstUnitText(List<?> releaseUnits, String field, String fallback) {
+        for (Object entry : releaseUnits) {
+            if (entry instanceof Map<?, ?> unit) {
+                String value = text(unit, field);
+                if (!value.isBlank()) {
+                    return value;
+                }
+            }
+        }
+        return fallback;
+    }
+
+    private String text(Map<?, ?> map, String field) {
+        Object value = map.get(field);
+        return value == null ? "" : value.toString();
+    }
+
+    private String safeFileName(String value) {
+        return value.replaceAll("[^A-Za-z0-9._-]", "_");
+    }
+
     private void writeAcceptanceCriteriaWithUnapprovedManualOnly(String rpId) throws Exception {
         Path acFile = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/acceptance_criteria.md");
         Files.writeString(acFile, """
@@ -2812,7 +4649,7 @@ class RegressionCommandTest {
 
     private void writeCompleteCiMapping(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-transform-job
@@ -2853,7 +4690,7 @@ class RegressionCommandTest {
 
     private void writeCompleteCiMappingWithoutProviderContracts(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-transform-job
@@ -2899,7 +4736,7 @@ class RegressionCommandTest {
                 ? "                          outputs:\n"
                         + "                            actual_output_ref: actual/output.txt\n"
                 : "                          outputs: {}\n";
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-transform-job
@@ -3022,12 +4859,12 @@ class RegressionCommandTest {
                 """.formatted(rpId, rpId, timeoutSeconds, actualOutputRef, runnerStdoutRef, extraEvidenceMapEntry)
                 .replace("__BUILT_IN_PROVIDER_ALTERNATIVE__",
                         builtInProviderAlternativeLine);
-        Files.writeString(mapping, mappingContent);
+        writeMappingAndGeneratedArtifacts(mapping, mappingContent);
     }
 
     private void writeExecutableMultiRuMapping(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-unrelated-job
@@ -3101,7 +4938,7 @@ class RegressionCommandTest {
 
     private void writeSameAdapterMultiRuMapping(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-upstream-job
@@ -3179,7 +5016,7 @@ class RegressionCommandTest {
 
     private void writePartialBlockMultiRuMapping(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-ready-job
@@ -3235,7 +5072,7 @@ class RegressionCommandTest {
 
     private void writeDependencyFailureMultiRuMapping(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-upstream-job
@@ -3336,7 +5173,7 @@ class RegressionCommandTest {
                 ? "                          outputs:\n"
                         + "                            actual_output_ref: actual/response.json\n"
                 : "                          outputs: {}\n";
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-payment-api
@@ -3382,7 +5219,7 @@ class RegressionCommandTest {
             String actionName,
             String requestBinding) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-payment-api
@@ -3436,6 +5273,43 @@ class RegressionCommandTest {
 
     private void writeMessagingProviderMapping(String rpId) throws Exception {
         writeMessagingProviderMapping(rpId, "local", "mock://payment.events", "payment_event");
+    }
+
+    private void assertMessagingCleanupPreflightGap(
+            String rpId,
+            java.util.function.UnaryOperator<String> contractMutation,
+            String expectedPathSuffix,
+            String expectedOwnerAction) throws Exception {
+        RegressionCommand command = command();
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingCleanupProviderMapping(rpId);
+        Path generatedContract = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId
+                        + "/generated-framework/provider_contracts/RU-payment-events.yaml");
+        Files.writeString(generatedContract, contractMutation.apply(Files.readString(generatedContract)));
+        writeApprovedExpectedResult(rpId, acId, "");
+        writeApprovedMessagingCleanupTestCase(rpId, acId);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(output.toString())
+                .contains("adapter_execution_started: false")
+                .contains("run_status: blocked")
+                .contains("provider_contract_gaps:")
+                .contains("provider_family: messaging")
+                .contains("provider_type: kafka")
+                .contains(expectedPathSuffix)
+                .contains(expectedOwnerAction);
     }
 
     private void writeMessagingProviderMapping(String rpId, String providerType, String topicRef) throws Exception {
@@ -3508,7 +5382,7 @@ class RegressionCommandTest {
                 ? "                          outputs:\n"
                         + "                            actual_output_ref: actual/message.json\n"
                 : "";
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-payment-events
@@ -3551,7 +5425,7 @@ class RegressionCommandTest {
 
     private void writeMessagingObservationProviderMapping(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-payment-events
@@ -3596,7 +5470,7 @@ class RegressionCommandTest {
 
     private void writeMessagingCleanupProviderMapping(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-payment-events
@@ -3640,7 +5514,7 @@ class RegressionCommandTest {
 
     private void writeMessagingRequestReplyProviderMapping(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-payment-events
@@ -3727,7 +5601,7 @@ class RegressionCommandTest {
                 ? "                          outputs:\n"
                         + "                            actual_output_ref: actual/readiness.txt\n"
                 : "";
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-payment-k8s
@@ -3770,7 +5644,7 @@ class RegressionCommandTest {
 
     private void writeSitMappingWithoutDeploymentReadiness(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-payment-k8s
@@ -3826,7 +5700,7 @@ class RegressionCommandTest {
             boolean includeIsolationKey) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
         String isolationKeyLine = includeIsolationKey ? "                          isolation_key: test_run_id\n" : "";
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-order-db
@@ -3899,7 +5773,7 @@ class RegressionCommandTest {
 
     private void writeExecutableCiMappingWithFixtureProvider(String rpId) throws Exception {
         Path mapping = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/rp_ru_mapping.yaml");
-        Files.writeString(mapping, """
+        writeMappingAndGeneratedArtifacts(mapping, """
                 rp_id: %s
                 release_units:
                   - ru_id: RU-transform-job
@@ -4004,14 +5878,14 @@ class RegressionCommandTest {
                 "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
         Files.createDirectories(testCase.getParent());
         Files.writeString(testCase, """
-                dsl_version: v1
+                dsl_version: v0.2
                 test_case_id: %s-TC-001
                 status: active
                 revision: 1
-                traceability:
-                  package_id: %s
-                  acceptance_criteria_id: %s
-                  source: acceptance_criteria.md#%s
+                labels:
+                  package: %s
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
                 targets:
                   RU-transform-job:
                     type: batch_runner
@@ -4062,14 +5936,14 @@ class RegressionCommandTest {
                 "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
         Files.createDirectories(testCase.getParent());
         Files.writeString(testCase, """
-                dsl_version: v1
+                dsl_version: v0.2
                 test_case_id: %s-TC-001
                 status: active
                 revision: 1
-                traceability:
-                  package_id: %s
-                  acceptance_criteria_id: %s
-                  source: acceptance_criteria.md#%s
+                labels:
+                  package: %s
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
                 targets:
                   RU-transform-job:
                     type: batch_runner
@@ -4115,7 +5989,7 @@ class RegressionCommandTest {
                   timeout: PT10M
                   retry:
                     max_attempts: 0
-                """.formatted(rpId, rpId, acId, acId, rpId, fixtureType, expectedResultId));
+                """.formatted(rpId, rpId, acId, rpId, fixtureType, expectedResultId));
     }
 
     private void writeApprovedExecutionFocusedJsonSelectorTestCase(String rpId) throws Exception {
@@ -4124,14 +5998,14 @@ class RegressionCommandTest {
                 "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
         Files.createDirectories(testCase.getParent());
         Files.writeString(testCase, """
-                dsl_version: v1
+                dsl_version: v0.2
                 test_case_id: %s-TC-001
                 status: active
                 revision: 1
-                traceability:
-                  package_id: %s
-                  acceptance_criteria_id: %s
-                  source: acceptance_criteria.md#%s
+                labels:
+                  package: %s
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
                 targets:
                   RU-transform-job:
                     type: batch_runner
@@ -4170,7 +6044,7 @@ class RegressionCommandTest {
                   timeout: PT10M
                   retry:
                     max_attempts: 0
-                """.formatted(rpId, rpId, acId, acId, rpId));
+                """.formatted(rpId, rpId, acId, rpId));
     }
 
     private void writeApprovedExecutionFocusedNumericToleranceTestCase(String rpId) throws Exception {
@@ -4179,14 +6053,14 @@ class RegressionCommandTest {
                 "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
         Files.createDirectories(testCase.getParent());
         Files.writeString(testCase, """
-                dsl_version: v1
+                dsl_version: v0.2
                 test_case_id: %s-TC-001
                 status: active
                 revision: 1
-                traceability:
-                  package_id: %s
-                  acceptance_criteria_id: %s
-                  source: acceptance_criteria.md#%s
+                labels:
+                  package: %s
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
                 targets:
                   RU-transform-job:
                     type: batch_runner
@@ -4227,7 +6101,7 @@ class RegressionCommandTest {
                   timeout: PT10M
                   retry:
                     max_attempts: 0
-                """.formatted(rpId, rpId, acId, acId, rpId));
+                """.formatted(rpId, rpId, acId, rpId));
     }
 
     private void writeApprovedExecutionFocusedRestStatusTestCase(String rpId, String acId) throws Exception {
@@ -4235,14 +6109,14 @@ class RegressionCommandTest {
                 "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
         Files.createDirectories(testCase.getParent());
         Files.writeString(testCase, """
-                dsl_version: v1
+                dsl_version: v0.2
                 test_case_id: %s-TC-001
                 status: active
                 revision: 1
-                traceability:
-                  package_id: %s
-                  acceptance_criteria_id: %s
-                  source: acceptance_criteria.md#%s
+                labels:
+                  package: %s
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
                 targets:
                   RU-payment-api:
                     type: application
@@ -4282,7 +6156,7 @@ class RegressionCommandTest {
                   timeout: PT10M
                   retry:
                     max_attempts: 0
-                """.formatted(rpId, rpId, acId, acId));
+                """.formatted(rpId, rpId, acId));
     }
 
     private void writeApprovedTestCase(String rpId, String testCaseId, String acId, String bindingType)
@@ -4401,6 +6275,102 @@ class RegressionCommandTest {
                   retry:
                     max_attempts: 0
                 """.formatted(testCaseId, rpId, acId, acId, rpId, expectedResultId));
+    }
+
+    private void writeApprovedV02ParameterizedTestCase(String rpId) throws Exception {
+        String testCaseId = rpId + "-TC-001";
+        String acId = rpId + "-AC-001";
+        String expectedResultId = rpId + "-ER-001";
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + testCaseId + ".yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v0.2
+                test_case_id: %s
+                status: active
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s
+                targets:
+                  RU-transform-job:
+                    type: spring_boot_application
+                    runner: spring_boot_cli
+                    environment: ci://pipeline/%s
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [db_seed, batch_execution, file_assertion]
+                parameters:
+                  ref: parameter-sets/orders_regression_cases.yaml
+                  bind_as: orders_case
+                setup:
+                  fixtures:
+                    orders_seed:
+                      type: db_seed
+                      ref: ${param.orders_case.orders_seed_ref}
+                      cleanup_ref: fixtures/cleanup/orders_seed_cleanup.sql
+                execute:
+                  - id: run_pipeline
+                    operation: run_batch
+                    target: RU-transform-job
+                    with:
+                      orders_seed: ${setup.fixtures.orders_seed}
+                    outputs:
+                      exit_code: ${result.exit_code}
+                      normalized_orders_file: ${result.files.normalized_orders}
+                      execution_log: ${result.logs.execution_log}
+                expected_results:
+                  normalized_orders:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
+                verify:
+                  - id: verify_output
+                    type: file_diff
+                    actual: ${execute.run_pipeline.outputs.normalized_orders_file}
+                    expected: ${expected_results.normalized_orders.ref}
+                evidence:
+                  required:
+                    - ${execute.run_pipeline.outputs.execution_log}
+                    - ${verify.verify_output.result}
+                runtime:
+                  timeout: PT10M
+                  retry:
+                    max_attempts: 0
+                """.formatted(testCaseId, acId, rpId, expectedResultId));
+    }
+
+    private void writeApprovedParameterSet(String rpId) throws Exception {
+        Path parameterSet = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/parameter-sets/orders_regression_cases.yaml");
+        Files.createDirectories(parameterSet.getParent());
+        Files.writeString(parameterSet, """
+                parameter_set_id: orders_regression_cases
+                status: approved_for_regression
+                cases:
+                  - case_id: baseline
+                    values:
+                      orders_seed_ref: fixtures/input/orders_seed_baseline.csv
+                  - case_id: boundary
+                    values:
+                      orders_seed_ref: fixtures/input/orders_seed_boundary.csv
+                """);
+    }
+
+    private void writeMalformedParameterSet(String rpId) throws Exception {
+        Path parameterSet = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/parameter-sets/orders_regression_cases.yaml");
+        Files.createDirectories(parameterSet.getParent());
+        Files.writeString(parameterSet, """
+                parameter_set_id: orders_regression_cases
+                status: approved_for_regression
+                cases:
+                  - case_id: baseline
+                    values:
+                      orders_seed_ref: fixtures/input/orders_seed_baseline.csv
+                  - case_id: baseline
+                    values:
+                      unused_ref: fixtures/input/orders_seed_unused.csv
+                """);
     }
 
     private void writeMalformedParameterizedTestCase(String rpId) throws Exception {
@@ -5041,6 +7011,53 @@ class RegressionCommandTest {
                   - execution_log
                   - cleanup_result
                 """.formatted(rpId, rpId, rpId, rpId, rpId, rpId, rpId));
+    }
+
+    private void writeApprovedTestCaseWithoutExecutionTarget(String rpId) throws Exception {
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/" + rpId + "/tests/approved/" + rpId + "-TC-001.yaml");
+        Files.createDirectories(testCase.getParent());
+        Files.writeString(testCase, """
+                dsl_version: v0.2
+                test_case_id: %s-TC-001
+                status: active
+                revision: 1
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#%s-AC-001
+                source_fingerprint: sha256:test
+                labels:
+                  package: %s
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [batch_execution, file_assertion]
+                setup:
+                  fixtures:
+                    orders_seed:
+                      ref: fixtures/input/orders.csv
+                      bind_as: db_seed
+                execute:
+                  - id: run_pipeline
+                    operation: run_batch
+                    with: {}
+                    outputs:
+                      actual_output:
+                        ref: actual/output.txt
+                expected_results:
+                  primary:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s-ER-001.yaml
+                verify:
+                  - id: verify_output
+                    type: file_diff
+                    actual: ${execute.run_pipeline.outputs.actual_output}
+                    expected: ${expected_results.primary.ref}
+                evidence:
+                  collect:
+                    - execution_log
+                runtime:
+                  execution_mode: ci_ephemeral
+                """.formatted(rpId, rpId, rpId, rpId));
     }
 
     private int countOrders(String jdbcUrl) throws Exception {

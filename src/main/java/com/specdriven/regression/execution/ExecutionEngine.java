@@ -16,6 +16,8 @@ import com.specdriven.regression.provider.ProviderContractResolutionReport;
 import com.specdriven.regression.provider.ProviderContractResolver;
 import com.specdriven.regression.provider.RequestResponseProvider;
 import com.specdriven.regression.provider.ResolvedProviderContract;
+import com.specdriven.regression.runtime.GeneratedRuntimeArtifacts;
+import com.specdriven.regression.runtime.GeneratedRuntimeContext;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -37,6 +39,7 @@ public class ExecutionEngine {
     private final DatabaseFixtureProvider databaseFixtureProvider;
     private final ProviderRuntimeRegistry providerRuntimeRegistry;
     private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
+    private final GeneratedRuntimeArtifacts generatedRuntimeArtifacts = new GeneratedRuntimeArtifacts();
 
     public ExecutionEngine() {
         this(new DataPipelineAdapter(), new AssertionEngine(), new EvidenceWriter());
@@ -145,22 +148,40 @@ public class ExecutionEngine {
     }
 
     public ExecutionResult execute(Path packageRoot, Path testCasePath, String batchId, String runId) {
+        return execute(packageRoot, testCasePath, batchId, runId, "ci_ephemeral");
+    }
+
+    public ExecutionResult execute(
+            Path packageRoot,
+            Path testCasePath,
+            String batchId,
+            String runId,
+            String requestedProfile) {
         Map<String, Object> testCase = dslTestCaseNormalizer.normalize(readYamlMap(testCasePath));
         String testCaseId = stringValue(testCase.get("test_case_id"));
         String acId = stringValue(testCase.get("ac_id"));
         String adapterName = adapterName(testCase);
         String targetRuId = targetRuId(testCase);
-        Path mappingYaml = packageRoot.resolve("rp_ru_mapping.yaml");
         BindingResolutionReport bindingReport = bindingResolver.resolve(testCasePath);
-        ProviderContractResolutionReport providerReport = providerContractResolver.resolve(
-                mappingYaml,
+        ProviderContractResolutionReport providerReport = providerContractResolver.resolveGenerated(
+                packageRoot,
+                requestedProfile,
                 targetRuId,
                 adapterName,
                 bindingReport.resolvedBindings().stream().map(ResolvedBinding::bindingType).toList(),
                 fixtureProviders(testCase));
         ResolvedProviderContract adapterProviderContract = adapterProviderContract(providerReport);
-        Map<String, Object> contract = adapterContract(mappingYaml, adapterName, targetRuId);
-        Map<String, Map<String, Object>> dbFixtureContracts = dbFixtureContracts(mappingYaml, providerReport);
+        Map<String, Object> contract = providerContractResolver.generatedAdapterContract(
+                packageRoot,
+                requestedProfile,
+                targetRuId,
+                adapterName);
+        Map<String, Map<String, Object>> dbFixtureContracts = dbFixtureContracts(
+                packageRoot,
+                requestedProfile,
+                targetRuId,
+                adapterName,
+                providerReport);
         Path runDir = packageRoot.resolve("evidence/runs").resolve(runId);
         Path stdoutLog = runDir.resolve(pathValue(contract, "logs", "stdout", "logs/stdout.log"));
         Path stderrLog = runDir.resolve(pathValue(contract, "logs", "stderr", "logs/stderr.log"));
@@ -210,7 +231,7 @@ public class ExecutionEngine {
                 adapterResult,
                 assertionEvaluation,
                 bindingReport.resolvedBindings(),
-                targetDependencies(mappingYaml, targetRuId),
+                targetDependencies(packageRoot, requestedProfile, targetRuId, adapterName),
                 providerReport.resolvedContracts());
         return new ExecutionResult(
                 runId,
@@ -363,57 +384,21 @@ public class ExecutionEngine {
         throw new IllegalStateException("No resolved adapter provider contract available.");
     }
 
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> adapterContract(Path mappingYaml, String adapterName, String targetRuId) {
-        Map<String, Object> root = readYamlMap(mappingYaml);
-        Object unitsValue = root.get("release_units");
-        if (!(unitsValue instanceof List<?> units)) {
-            return Map.of();
-        }
-        Map<String, Object> fallback = Map.of();
-        for (Object entry : units) {
-            if (!(entry instanceof Map<?, ?> unit)) {
-                continue;
-            }
-            Map<String, Object> contract = adapterContract(unit, adapterName);
-            if (contract.isEmpty()) {
-                continue;
-            }
-            if (!targetRuId.isBlank() && targetRuId.equals(stringValue(unit.get("ru_id")))) {
-                return contract;
-            }
-            if (fallback.isEmpty()) {
-                fallback = contract;
-            }
-        }
-        return fallback;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> adapterContract(Map<?, ?> unit, String adapterName) {
-        Object contracts = unit.get("provider_contracts");
-        if (!(contracts instanceof Map<?, ?> contractMap)) {
-            return Map.of();
-        }
-        Object adapters = contractMap.get("adapters");
-        if (!(adapters instanceof Map<?, ?> adapterMap)) {
-            return Map.of();
-        }
-        Object contract = adapterMap.get(adapterName);
-        if (contract instanceof Map<?, ?> map) {
-            return (Map<String, Object>) map;
-        }
-        return Map.of();
-    }
-
     private Map<String, Map<String, Object>> dbFixtureContracts(
-            Path mappingYaml,
+            Path packageRoot,
+            String requestedProfile,
+            String targetRuId,
+            String adapterName,
             ProviderContractResolutionReport providerReport) {
         Map<String, Map<String, Object>> contracts = new LinkedHashMap<>();
         for (ResolvedProviderContract contract : providerReport.resolvedContracts()) {
             if ("fixture".equals(contract.contractType()) && "db_fixture".equals(contract.providerFamily())) {
-                Map<String, Object> fixtureContract =
-                        fixtureContract(mappingYaml, contract.providerName(), contract.affectedRu());
+                Map<String, Object> fixtureContract = providerContractResolver.generatedFixtureContract(
+                        packageRoot,
+                        requestedProfile,
+                        targetRuId,
+                        adapterName,
+                        contract.providerName());
                 if (isJdbcFixtureContract(fixtureContract)) {
                     contracts.put(contract.providerName(), fixtureContract);
                 }
@@ -425,49 +410,6 @@ public class ExecutionEngine {
     private boolean isJdbcFixtureContract(Map<String, Object> contract) {
         return "jdbc".equalsIgnoreCase(stringValue(contract.get("provider_type")))
                 && !stringValue(contract.get("connection_ref")).isBlank();
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> fixtureContract(Path mappingYaml, String providerName, String affectedRu) {
-        Map<String, Object> root = readYamlMap(mappingYaml);
-        Object unitsValue = root.get("release_units");
-        if (!(unitsValue instanceof List<?> units)) {
-            return Map.of();
-        }
-        Map<String, Object> fallback = Map.of();
-        for (Object entry : units) {
-            if (!(entry instanceof Map<?, ?> unit)) {
-                continue;
-            }
-            Map<String, Object> contract = fixtureContract(unit, providerName);
-            if (contract.isEmpty()) {
-                continue;
-            }
-            if (!affectedRu.isBlank() && affectedRu.equals(stringValue(unit.get("ru_id")))) {
-                return contract;
-            }
-            if (fallback.isEmpty()) {
-                fallback = contract;
-            }
-        }
-        return fallback;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> fixtureContract(Map<?, ?> unit, String providerName) {
-        Object contracts = unit.get("provider_contracts");
-        if (!(contracts instanceof Map<?, ?> contractMap)) {
-            return Map.of();
-        }
-        Object fixtures = contractMap.get("fixtures");
-        if (!(fixtures instanceof Map<?, ?> fixtureMap)) {
-            return Map.of();
-        }
-        Object contract = fixtureMap.get(providerName);
-        if (contract instanceof Map<?, ?> map) {
-            return (Map<String, Object>) map;
-        }
-        return Map.of();
     }
 
     private String adapterName(Map<String, Object> testCase) {
@@ -542,34 +484,13 @@ public class ExecutionEngine {
         return List.copyOf(codes);
     }
 
-    @SuppressWarnings("unchecked")
-    private List<String> targetDependencies(Path mappingYaml, String targetRuId) {
-        if (targetRuId.isBlank()) {
-            return List.of();
-        }
-        Map<String, Object> root = readYamlMap(mappingYaml);
-        Object unitsValue = root.get("release_units");
-        if (!(unitsValue instanceof List<?> units)) {
-            return List.of();
-        }
-        for (Object entry : units) {
-            if (!(entry instanceof Map<?, ?> unit) || !targetRuId.equals(stringValue(unit.get("ru_id")))) {
-                continue;
-            }
-            Object dependencies = unit.get("dependencies");
-            if (!(dependencies instanceof List<?> list) || list.isEmpty()) {
-                return List.of();
-            }
-            List<String> resolved = new ArrayList<>();
-            for (Object dependency : list) {
-                String dependencyId = stringValue(dependency);
-                if (!dependencyId.isBlank()) {
-                    resolved.add(dependencyId);
-                }
-            }
-            return List.copyOf(resolved);
-        }
-        return List.of();
+    private List<String> targetDependencies(
+            Path packageRoot,
+            String requestedProfile,
+            String targetRuId,
+            String adapterName) {
+        GeneratedRuntimeContext context = generatedRuntimeArtifacts.resolve(packageRoot, requestedProfile);
+        return context.dependencies(targetRuId, adapterName);
     }
 
     @SuppressWarnings("unchecked")

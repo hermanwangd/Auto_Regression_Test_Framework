@@ -1,0 +1,10 @@
+{
+  "method": "POST",
+  "path": "/payments",
+  "expected_count": 1,
+  "body": {
+    "paymentId": "PAY-001",
+    "amount": 100,
+    "currency": "USD"
+  }
+}

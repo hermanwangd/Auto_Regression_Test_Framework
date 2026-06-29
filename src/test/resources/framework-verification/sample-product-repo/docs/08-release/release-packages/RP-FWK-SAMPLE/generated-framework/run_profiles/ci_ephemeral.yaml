@@ -1,0 +1,8 @@
+profile_id: ci_ephemeral
+execution_mode: ci_ephemeral
+environment_binding_ref: environment_bindings/ci_ephemeral.yaml
+isolation_scope: target_graph
+dependency_policy: generated_target_graph
+max_duration: PT10M
+data_policy:
+  cleanup_required: true

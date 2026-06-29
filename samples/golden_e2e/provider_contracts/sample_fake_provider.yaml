@@ -1,0 +1,36 @@
+provider_contract_version: v0.2
+provider_type: sample_fake_provider
+purpose: Framework-owned deterministic fake provider for Golden E2E lifecycle verification only.
+runtime_modes: [stub]
+binding_keys:
+  workspace_ref:
+    required: true
+    source: environment_binding
+  clock_ref:
+    required: true
+    source: environment_binding
+defaults:
+  timeout_seconds: 30
+  retry: 0
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
+  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, labels]
+  binding_keys: [workspace_ref, clock_ref]
+operations:
+  setup_fixture:
+    allowed_bind_as: [fixture.setup_ref, fixture.input_ref, fixture.workspace_ref]
+    required_parameters: [fixture.setup_ref, fixture.input_ref]
+    output_refs: [setup_log, workspace_ref]
+  execute_sample:
+    allowed_bind_as: [sample.input_ref, sample.expected_ref, sample.output_ref]
+    required_parameters: [sample.input_ref]
+    output_refs: [actual_json, actual_text, execution_log]
+  cleanup_fixture:
+    allowed_bind_as: [fixture.cleanup_ref, fixture.workspace_ref]
+    required_parameters: [fixture.cleanup_ref]
+    output_refs: [cleanup_log]
+evidence:
+  outputs: [setup_log, cleanup_log, actual_json, actual_text, execution_log, assertion_result, diff]
+  redact: []
+failure_mapping:
+  allowed_codes: [SCHEMA_INVALID, TARGET_RESOLUTION_FAILED, EXPECTED_RESULT_MISSING, ASSERTION_FAILED, EVIDENCE_INVALID, FRAMEWORK_ERROR]

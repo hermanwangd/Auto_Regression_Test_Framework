@@ -1,0 +1,21 @@
+provider_contract_version: v0.2
+provider_type: artifact_compare
+runtime_modes: [stub]
+binding_keys: {}
+defaults:
+  timeout_seconds: 30
+  retry: 0
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
+  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, operations, evidence, failure_mapping, labels]
+  binding_keys: []
+operations:
+  read_artifact:
+    allowed_bind_as: [file.path]
+    required_parameters: [file.path]
+    output_refs: [actual_payload, actual_file]
+evidence:
+  outputs: [actual_payload, actual_file, diff, error]
+  redact: []
+failure_mapping:
+  allowed_codes: [OPERATION_FAILED, ASSERTION_FAILED, ASSERTION_INPUT_NOT_FOUND, SCHEMA_MISMATCH, EVIDENCE_INVALID]

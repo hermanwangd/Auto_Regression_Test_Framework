@@ -1,0 +1,36 @@
+provider_contract_version: v0.2
+provider_type: wiremock_http_mock
+runtime_modes: [mock]
+binding_keys:
+  mappings_ref:
+    required: true
+    source: environment_binding
+defaults:
+  timeout_seconds: 60
+  retry: 0
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
+  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
+  binding_keys: [mappings_ref]
+operations:
+  start_mock:
+    allowed_bind_as: [mock.port, mock.mappings_ref, mock.files_ref]
+    required_parameters: []
+    output_refs: [base_url, server_log]
+  connect_mock:
+    allowed_bind_as: [mock.base_url]
+    required_parameters: []
+    output_refs: [base_url]
+  load_stubs:
+    allowed_bind_as: [mock.mappings_ref, mock.reset_before_load]
+    required_parameters: [mock.mappings_ref]
+    output_refs: [loaded_stub_count, server_log]
+  verify_requests:
+    allowed_bind_as: [mock.request_filter, mock.expected_count, mock.body_pattern]
+    required_parameters: [mock.request_filter]
+    output_refs: [request_journal, matched_count]
+evidence:
+  outputs: [base_url, request_journal, server_log, timing, error]
+  redact: []
+failure_mapping:
+  allowed_codes: [PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, OPERATION_FAILED, ASSERTION_FAILED, EVIDENCE_INVALID]

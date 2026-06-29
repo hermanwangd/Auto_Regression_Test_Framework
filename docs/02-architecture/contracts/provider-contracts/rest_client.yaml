@@ -1,0 +1,24 @@
+provider_contract_version: v0.2
+provider_type: rest_client
+runtime_modes: [native, mock, stub]
+binding_keys:
+  base_url:
+    required: true
+    source: environment_binding
+defaults:
+  timeout_seconds: 30
+  retry: 0
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
+  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
+  binding_keys: [base_url]
+operations:
+  http_request:
+    allowed_bind_as: [request.method, request.path, request.query.*, request.headers.*, request.body, request.timeout]
+    required_parameters: [request.method, request.path]
+    output_refs: [response.status, response.headers, response.body, response.duration_ms]
+evidence:
+  outputs: [request, response, timing, error]
+  redact: [request.headers.authorization, request.headers.cookie]
+failure_mapping:
+  allowed_codes: [PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, OPERATION_FAILED, ASSERTION_FAILED, EVIDENCE_INVALID]

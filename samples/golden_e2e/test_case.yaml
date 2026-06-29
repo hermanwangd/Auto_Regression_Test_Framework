@@ -1,0 +1,108 @@
+dsl_version: v0.2
+test_case_id: GOLDEN-E2E-TC-001
+title: Framework Golden E2E sample
+status: active
+revision: 1
+source_refs:
+  acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#track-b-golden-e2e
+  expected_result: expected_results/expected_output.json
+labels:
+  evidence_classification: framework_verification_only
+  sample_id: GOLDEN-E2E
+  tags: [golden-e2e, framework-sample]
+compatible_profiles: [local_golden]
+targets:
+  sample_runtime:
+    provider_id: sample-fake-runtime
+    profile: local_golden
+scenario:
+  type: framework_lifecycle
+  scope: framework_verification
+  description: Prove validation, target resolution, fixture, execute, verify, evidence, result, and report lifecycle through a deterministic local fake provider.
+  capabilities: [sample_fixture, sample_execute, value_equals, json_match]
+data_binding:
+  datasets:
+    input:
+      ref: fixtures/input.json
+  fixtures:
+    setup:
+      ref: fixtures/setup_fixture.yaml
+    cleanup:
+      ref: fixtures/cleanup_fixture.yaml
+  expected_results:
+    expected_output:
+      ref: expected_results/expected_output.json
+setup:
+  fixtures:
+    prepare_sample_workspace:
+      type: sample_setup
+      target: sample_runtime
+      operation: setup_fixture
+      parameters:
+        - name: setup_ref
+          ref: ${data.fixtures.setup}
+          bind_as: fixture.setup_ref
+        - name: input_ref
+          ref: ${data.datasets.input}
+          bind_as: fixture.input_ref
+      cleanup_ref: ${data.fixtures.cleanup}
+execute:
+  - id: produce_sample_output
+    target: sample_runtime
+    operation: execute_sample
+    parameters:
+      - name: input
+        ref: ${data.datasets.input}
+        bind_as: sample.input_ref
+      - name: expected_shape
+        ref: ${data.expected_results.expected_output}
+        bind_as: sample.expected_ref
+    outputs:
+      actual_json: actual_json
+      actual_text: actual_text
+      execution_log: execution_log
+expected_results:
+  expected_output:
+    ref: expected_results/expected_output.json
+verify:
+  - id: status_is_ok
+    type: value_equals
+    actual:
+      ref: ${execute.produce_sample_output.outputs.actual_json}
+    selector: $.status
+    expected: OK
+  - id: output_matches_expected_json
+    type: json_match
+    actual:
+      ref: ${execute.produce_sample_output.outputs.actual_json}
+    expected_ref: expected_results/expected_output.json
+    options:
+      ignore_order: true
+      ignore_paths:
+        - $.generatedAt
+cleanup:
+  fixtures:
+    cleanup_sample_workspace:
+      type: sample_cleanup
+      target: sample_runtime
+      operation: cleanup_fixture
+      parameters:
+        - name: cleanup_ref
+          ref: ${data.fixtures.cleanup}
+          bind_as: fixture.cleanup_ref
+evidence:
+  required:
+    - evidence_index.yaml
+    - logs/execution.log
+    - fixture/setup.yaml
+    - fixture/cleanup.yaml
+    - actual/actual_output.json
+    - expected/expected_output.ref
+    - assertions/status_is_ok.yaml
+    - assertions/output_matches_expected_json.yaml
+    - diffs/output_matches_expected_json.diff
+    - batch/batch.yaml
+runtime:
+  timeout: PT30S
+  retry:
+    max_attempts: 1

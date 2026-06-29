@@ -1,0 +1,9 @@
+fixture_version: v0.2
+fixture_id: sample-db-cleanup
+type: db_cleanup
+target_provider_id: oracle-database
+operation: execute_script
+sql_ref: fixtures/sql/cleanup_order.sql
+parameters:
+  order_id: ORD-CONTRACT-001
+cleanup_policy: always

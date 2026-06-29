@@ -1,5 +1,10 @@
 package com.specdriven.regression.provider;
 
+import com.specdriven.regression.runtime.GeneratedRuntimeArtifacts;
+import com.specdriven.regression.runtime.GeneratedRuntimeArtifacts.ProviderContractRef;
+import com.specdriven.regression.runtime.GeneratedRuntimeContext;
+import com.specdriven.regression.runtime.GeneratedRuntimeGap;
+import com.specdriven.regression.runtime.GeneratedRuntimeTarget;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -15,13 +20,106 @@ import org.yaml.snakeyaml.Yaml;
 public class ProviderContractResolver {
 
     private final ProviderCapabilityRegistry providerCapabilityRegistry;
+    private final GeneratedRuntimeArtifacts generatedRuntimeArtifacts;
 
     public ProviderContractResolver() {
-        this(new ProviderCapabilityRegistry());
+        this(new ProviderCapabilityRegistry(), new GeneratedRuntimeArtifacts());
     }
 
     ProviderContractResolver(ProviderCapabilityRegistry providerCapabilityRegistry) {
+        this(providerCapabilityRegistry, new GeneratedRuntimeArtifacts());
+    }
+
+    ProviderContractResolver(
+            ProviderCapabilityRegistry providerCapabilityRegistry,
+            GeneratedRuntimeArtifacts generatedRuntimeArtifacts) {
         this.providerCapabilityRegistry = providerCapabilityRegistry;
+        this.generatedRuntimeArtifacts = generatedRuntimeArtifacts;
+    }
+
+    public ProviderContractResolutionReport resolveGenerated(
+            Path packageRoot,
+            String requestedProfile,
+            String targetId,
+            String adapter,
+            List<String> bindingTypes,
+            List<String> fixtureProviders) {
+        GeneratedRuntimeContext context = generatedRuntimeArtifacts.resolve(packageRoot, requestedProfile);
+        List<ResolvedProviderContract> resolved = new ArrayList<>();
+        List<ProviderContractGap> gaps = new ArrayList<>();
+        for (GeneratedRuntimeGap gap : context.gaps()) {
+            gaps.add(new ProviderContractGap(
+                    gap.fieldPath(),
+                    "runtime_config",
+                    "",
+                    "",
+                    "",
+                    "missing",
+                    "blocked",
+                    targetId,
+                    "",
+                    gap.ownerAction()));
+        }
+        List<GeneratedRuntimeTarget> matchingTargets = context.matchingTargets(targetId, adapter);
+        if (targetId.isBlank() && matchingTargets.size() > 1) {
+            gaps.add(ambiguousGeneratedGap(packageRoot, matchingTargets, adapter));
+            return new ProviderContractResolutionReport(false, List.of(), List.copyOf(gaps));
+        }
+        GeneratedRuntimeTarget target = context.target(targetId, adapter);
+        if (target == null) {
+            gaps.add(new ProviderContractGap(
+                    "generated-framework/environment_bindings.targets",
+                    "adapter",
+                    adapter,
+                    "",
+                    "",
+                    "missing",
+                    "blocked",
+                    targetId,
+                    adapter,
+                    "Generate environment binding target for `" + targetId + "` before execution."));
+            return new ProviderContractResolutionReport(false, List.of(), List.copyOf(gaps));
+        }
+
+        ProviderContractRef adapterRef = generatedRuntimeArtifacts.providerContractRef(target.providerContractRef());
+        String fileRef = adapterRef.fileRef();
+        String adapterProviderName = firstNonBlank(adapterRef.providerName(), adapter);
+        resolveGeneratedContract(
+                packageRoot,
+                resolved,
+                gaps,
+                target,
+                fileRef,
+                "adapters",
+                "adapter",
+                adapterProviderName,
+                context.executionMode());
+
+        for (String bindingType : bindingTypes) {
+            resolveGeneratedContract(
+                    packageRoot,
+                    resolved,
+                    gaps,
+                    target,
+                    fileRef,
+                    "bindings",
+                    "binding",
+                    bindingType,
+                    context.executionMode());
+        }
+        for (String fixtureProvider : fixtureProviders) {
+            resolveGeneratedContract(
+                    packageRoot,
+                    resolved,
+                    gaps,
+                    target,
+                    fileRef,
+                    "fixtures",
+                    "fixture",
+                    fixtureProvider,
+                    context.executionMode());
+        }
+        return new ProviderContractResolutionReport(gaps.isEmpty(), List.copyOf(resolved), List.copyOf(gaps));
     }
 
     public ProviderContractResolutionReport resolve(
@@ -30,6 +128,39 @@ public class ProviderContractResolver {
             List<String> bindingTypes,
             List<String> fixtureProviders) {
         return resolve(mappingYaml, "", adapter, bindingTypes, fixtureProviders);
+    }
+
+    public Map<String, Object> generatedAdapterContract(
+            Path packageRoot,
+            String requestedProfile,
+            String targetId,
+            String adapter) {
+        GeneratedRuntimeContext context = generatedRuntimeArtifacts.resolve(packageRoot, requestedProfile);
+        GeneratedRuntimeTarget target = context.target(targetId, adapter);
+        if (target == null) {
+            return Map.of();
+        }
+        ProviderContractRef ref = generatedRuntimeArtifacts.providerContractRef(target.providerContractRef());
+        return generatedRuntimeArtifacts.providerContract(
+                packageRoot,
+                ref.fileRef(),
+                "adapters",
+                firstNonBlank(ref.providerName(), adapter));
+    }
+
+    public Map<String, Object> generatedFixtureContract(
+            Path packageRoot,
+            String requestedProfile,
+            String targetId,
+            String adapter,
+            String fixtureProvider) {
+        GeneratedRuntimeContext context = generatedRuntimeArtifacts.resolve(packageRoot, requestedProfile);
+        GeneratedRuntimeTarget target = context.target(targetId, adapter);
+        if (target == null) {
+            return Map.of();
+        }
+        ProviderContractRef ref = generatedRuntimeArtifacts.providerContractRef(target.providerContractRef());
+        return generatedRuntimeArtifacts.providerContract(packageRoot, ref.fileRef(), "fixtures", fixtureProvider);
     }
 
     public ProviderContractResolutionReport resolve(
@@ -47,7 +178,7 @@ public class ProviderContractResolver {
             gaps.add(ambiguousGap(adapterOwners, "adapters", "adapter", adapter));
             return new ProviderContractResolutionReport(false, List.of(), List.copyOf(gaps));
         }
-        ReleaseUnitContracts adapterOwner = adapterOwners.isEmpty() ? fallbackUnit(releaseUnits) : adapterOwners.get(0);
+        ReleaseUnitContracts adapterOwner = adapterOwners.get(0);
         if (hasContract(adapterOwner.contracts(), "adapters", adapter)) {
             resolveContract(resolved, gaps, adapterOwner, "adapters", "adapter", adapter);
         } else {
@@ -63,7 +194,7 @@ public class ProviderContractResolver {
                 gaps.add(ambiguousGap(owners, "bindings", "binding", bindingType));
                 continue;
             }
-            ReleaseUnitContracts owner = owners.isEmpty() ? adapterOwner : owners.get(0);
+            ReleaseUnitContracts owner = owners.get(0);
             if (hasContract(owner.contracts(), "bindings", bindingType)) {
                 resolveContract(resolved, gaps, owner, "bindings", "binding", bindingType);
             } else {
@@ -80,7 +211,7 @@ public class ProviderContractResolver {
                 gaps.add(ambiguousGap(owners, "fixtures", "fixture", fixtureProvider));
                 continue;
             }
-            ReleaseUnitContracts owner = owners.isEmpty() ? adapterOwner : owners.get(0);
+            ReleaseUnitContracts owner = owners.get(0);
             if (hasContract(owner.contracts(), "fixtures", fixtureProvider)) {
                 resolveContract(resolved, gaps, owner, "fixtures", "fixture", fixtureProvider);
             } else {
@@ -95,6 +226,109 @@ public class ProviderContractResolver {
                 gaps.isEmpty(),
                 List.copyOf(resolved),
                 List.copyOf(gaps));
+    }
+
+    private void resolveGeneratedContract(
+            Path packageRoot,
+            List<ResolvedProviderContract> resolved,
+            List<ProviderContractGap> gaps,
+            GeneratedRuntimeTarget target,
+            String fileRef,
+            String section,
+            String contractType,
+            String providerName,
+            String executionMode) {
+        if (providerName.isBlank()) {
+            gaps.add(new ProviderContractGap(
+                    "generated-framework/provider_contracts",
+                    contractType,
+                    providerName,
+                    "",
+                    "",
+                    "missing",
+                    "blocked",
+                    target.targetId(),
+                    providerName,
+                    "Generate " + contractType + " provider contract before execution."));
+            return;
+        }
+        Map<String, Object> contract =
+                generatedRuntimeArtifacts.providerContract(packageRoot, fileRef, section, providerName);
+        String contractPath = generatedRuntimeArtifacts.contractPath(
+                fileRef + "#" + section + "." + providerName,
+                contract);
+        if (contract.isEmpty()) {
+            gaps.add(new ProviderContractGap(
+                    contractPath,
+                    contractType,
+                    providerName,
+                    "",
+                    "",
+                    "missing",
+                    "blocked",
+                    target.targetId(),
+                    providerName,
+                    "Generate provider contract `" + providerName + "` under generated provider contracts before execution."));
+            return;
+        }
+        ProviderCapabilityRegistry.ProviderContractValidation validation =
+                providerCapabilityRegistry.validate(section, providerName, contract, executionMode);
+        if (validation.ready()) {
+            resolved.add(new ResolvedProviderContract(
+                    contractType,
+                    providerName,
+                    "generated",
+                    validation.providerFamily(),
+                    validation.providerType(),
+                    validation.registryStatus(),
+                    validation.runtimeStatus(),
+                    target.targetId(),
+                    providerName,
+                    contractPath));
+            return;
+        }
+        for (ProviderCapabilityRegistry.ProviderContractViolation violation : validation.violations()) {
+            gaps.add(new ProviderContractGap(
+                    contractPath + violation.pathSuffix(),
+                    contractType,
+                    providerName,
+                    validation.providerFamily(),
+                    validation.providerType(),
+                    violation.registryStatus(),
+                    violation.runtimeStatus(),
+                    target.targetId(),
+                    providerName,
+                    ownerAction(target.targetId(), violation.ownerAction())));
+        }
+    }
+
+    private ProviderContractGap ambiguousGeneratedGap(
+            Path packageRoot,
+            List<GeneratedRuntimeTarget> targets,
+            String providerName) {
+        GeneratedRuntimeTarget first = targets.get(0);
+        ProviderContractRef ref = generatedRuntimeArtifacts.providerContractRef(first.providerContractRef());
+        String resolvedProviderName = firstNonBlank(ref.providerName(), providerName);
+        Map<String, Object> contract = generatedRuntimeArtifacts.providerContract(
+                packageRoot,
+                ref.fileRef(),
+                "adapters",
+                resolvedProviderName);
+        return new ProviderContractGap(
+                generatedRuntimeArtifacts.contractPath(
+                        ref.fileRef() + "#adapters." + resolvedProviderName,
+                        contract),
+                "adapter",
+                resolvedProviderName,
+                stringValue(contract.get("provider_family")),
+                stringValue(contract.get("provider_type")),
+                "ambiguous",
+                "blocked",
+                targetIds(targets),
+                resolvedProviderName,
+                "Select target ID so provider contract `" + resolvedProviderName
+                        + "` resolves to one execution target only. Candidate targets: "
+                        + targetIds(targets) + ".");
     }
 
     private void resolveContract(
@@ -193,6 +427,13 @@ public class ProviderContractResolver {
         return ownerAction + " Affected RU: `" + owner.ruId() + "`.";
     }
 
+    private String ownerAction(String targetId, String ownerAction) {
+        if (targetId.isBlank() || ownerAction.contains(targetId)) {
+            return ownerAction;
+        }
+        return ownerAction + " Affected target: `" + targetId + "`.";
+    }
+
     private List<ReleaseUnitContracts> ownersForAdapter(
             List<ReleaseUnitContracts> releaseUnits,
             String targetRuId,
@@ -269,6 +510,13 @@ public class ProviderContractResolver {
         return String.join(",", owners.stream()
                 .map(ReleaseUnitContracts::ruId)
                 .filter(ruId -> !ruId.isBlank())
+                .toList());
+    }
+
+    private String targetIds(List<GeneratedRuntimeTarget> targets) {
+        return String.join(",", targets.stream()
+                .map(GeneratedRuntimeTarget::targetId)
+                .filter(targetId -> !targetId.isBlank())
                 .toList());
     }
 
@@ -378,6 +626,15 @@ public class ProviderContractResolver {
 
     private String stringValue(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private record ReleaseUnitContracts(

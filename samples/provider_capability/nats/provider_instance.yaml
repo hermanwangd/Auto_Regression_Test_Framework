@@ -1,0 +1,22 @@
+provider_instance_version: v0.2
+provider_id: nats-local-provider
+provider_type: nats_messaging
+runtime_modes: [ephemeral]
+binding_keys:
+  servers:
+    required: true
+defaults:
+  timeout_seconds: 30
+operations:
+  publish_message:
+    outputs: [published_message, ack, timestamp]
+  consume_message:
+    outputs: [consumed_message, ack, timestamp]
+evidence:
+  capture: [subject, observed_payload, matched_fields, observation_window, attempts, timeout_status]
+failure_mapping:
+  event_not_found: ASSERTION_FAILED
+  payload_mismatch: ASSERTION_FAILED
+  timeout: PROVIDER_TIMEOUT
+labels:
+  evidence_classification: framework_provider_capability_only

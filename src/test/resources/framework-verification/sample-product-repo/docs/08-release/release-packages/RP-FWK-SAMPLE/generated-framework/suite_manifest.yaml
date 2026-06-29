@@ -1,0 +1,5 @@
+suite_id: RP-FWK-SAMPLE-regression
+tests:
+  - tests/approved/RP-FWK-SAMPLE-TC-001.yaml
+coverage_source_ref: acceptance_criteria.md
+traceability_map_ref: traceability_map.yaml

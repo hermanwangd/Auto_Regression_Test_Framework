@@ -1,0 +1,28 @@
+provider_contract_version: v0.2
+provider_type: grpc_client
+runtime_modes: [native, mock, stub]
+binding_keys:
+  target:
+    required: true
+    source: environment_binding
+defaults:
+  timeout_seconds: 30
+  retry: 0
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
+  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
+  binding_keys: [target]
+operations:
+  unary_call:
+    allowed_bind_as: [grpc.service, grpc.method, grpc.metadata.*, grpc.message, grpc.timeout]
+    required_parameters: [grpc.service, grpc.method, grpc.message]
+    output_refs: [response.message, response.status, response.metadata, response.duration_ms]
+  server_stream_call:
+    allowed_bind_as: [grpc.service, grpc.method, grpc.metadata.*, grpc.message, grpc.timeout, grpc.max_messages]
+    required_parameters: [grpc.service, grpc.method, grpc.message]
+    output_refs: [response.messages, response.status, response.metadata, response.duration_ms]
+evidence:
+  outputs: [request, response, status, metadata, timing, error]
+  redact: [grpc.metadata.authorization]
+failure_mapping:
+  allowed_codes: [PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, OPERATION_FAILED, ASSERTION_FAILED, EVIDENCE_INVALID]

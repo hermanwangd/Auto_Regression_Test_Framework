@@ -1,0 +1,11 @@
+environment_id: local-provider-wiremock
+profile: local_provider
+provider_bindings:
+  - provider_id: wiremock-payment-mock
+    runtime_mode: mock
+    binding_values:
+      mappings_ref: wiremock/fixtures/
+      base_url_output_ref: generated://wiremock-payment-mock.base_url
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

@@ -34,7 +34,6 @@ public class DslTestCaseValidator {
             "rp_id",
             "ac_id",
             "artifact_status",
-            "source_refs",
             "execution_target",
             "fixture",
             "package_inputs",
@@ -152,10 +151,12 @@ public class DslTestCaseValidator {
 
     private void validateIdentity(Map<?, ?> document, String testCaseId, String acId, List<DslValidationGap> gaps) {
         requireText(document, "dsl_version", "identity", testCaseId, acId, gaps,
-                "Declare dsl_version v1 before execution.");
-        if (!isMissing(document.get("dsl_version")) && !"v1".equals(stringValue(document.get("dsl_version")))) {
+                "Declare dsl_version v0.2 before execution.");
+        String dslVersion = stringValue(document.get("dsl_version"));
+        if (!isMissing(document.get("dsl_version"))
+                && !Set.of("v0.2", "v1").contains(dslVersion)) {
             gaps.add(gap(testCaseId, acId, "identity", "dsl_version", "",
-                    "Use supported DSL version `v1`."));
+                    "Use supported DSL version `v0.2`; `v1` is legacy compatibility only."));
         }
         requireText(document, "test_case_id", "identity", testCaseId, acId, gaps,
                 "Declare stable test_case_id before execution.");
@@ -171,6 +172,18 @@ public class DslTestCaseValidator {
             gaps.add(gap(testCaseId, acId, "identity", "revision", "",
                     "Declare revision before execution."));
         }
+        if ("v1".equals(dslVersion)) {
+            validateLegacyTraceability(document, testCaseId, acId, gaps);
+        } else {
+            validateSourceRefs(document, testCaseId, acId, gaps);
+        }
+    }
+
+    private void validateLegacyTraceability(
+            Map<?, ?> document,
+            String testCaseId,
+            String acId,
+            List<DslValidationGap> gaps) {
         Map<?, ?> traceability = map(document.get("traceability"));
         if (traceability.isEmpty()) {
             gaps.add(gap(testCaseId, acId, "traceability", "traceability", "",
@@ -186,6 +199,22 @@ public class DslTestCaseValidator {
                 "Declare traceability.source for AC/source linkage.", "traceability.source");
     }
 
+    private void validateSourceRefs(
+            Map<?, ?> document,
+            String testCaseId,
+            String acId,
+            List<DslValidationGap> gaps) {
+        Map<?, ?> sourceRefs = map(document.get("source_refs"));
+        if (sourceRefs.isEmpty()) {
+            gaps.add(gap(testCaseId, acId, "source_refs", "source_refs", "",
+                    "Declare source_refs.acceptance_criteria for AC/source linkage."));
+            return;
+        }
+        requireText(sourceRefs, "acceptance_criteria", "source_refs", testCaseId, acId, gaps,
+                "Declare source_refs.acceptance_criteria for AC/source linkage.",
+                "source_refs.acceptance_criteria");
+    }
+
     private void validateLegacyAndGovernanceFields(
             Map<?, ?> document,
             String testCaseId,
@@ -194,8 +223,12 @@ public class DslTestCaseValidator {
         for (String field : LEGACY_FIELDS) {
             if (document.containsKey(field)) {
                 gaps.add(gap(testCaseId, acId, "compatibility", field, "",
-                        "Use execution-focused DSL v1 fields instead of legacy field `" + field + "`."));
+                        "Use execution-focused DSL v0.2 fields instead of legacy field `" + field + "`."));
             }
+        }
+        if ("v0.2".equals(stringValue(document.get("dsl_version"))) && document.containsKey("traceability")) {
+            gaps.add(gap(testCaseId, acId, "compatibility", "traceability", "",
+                    "Use source_refs and labels instead of old traceability fields in DSL v0.2."));
         }
         collectGovernanceFields(document, "", testCaseId, acId, gaps);
     }
@@ -324,7 +357,7 @@ public class DslTestCaseValidator {
                         "Use operation `run_batch`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, `run_application`, or `execute_command` instead of legacy `call_ru`."));
             } else if (!SUPPORTED_OPERATIONS.contains(operation)) {
                 gaps.add(gap(testCaseId, acId, "execute", prefix + ".operation", "",
-                        "Use supported v1 operation run_batch, call_api, execute_sql, publish_message, consume_message, request_reply_message, run_application, or execute_command."));
+                        "Use supported v0.2 operation run_batch, call_api, execute_sql, publish_message, consume_message, request_reply_message, run_application, or execute_command."));
             }
             if (!(step.get("outputs") instanceof Map<?, ?> outputs) || outputs.isEmpty()) {
                 gaps.add(gap(testCaseId, acId, "execute", prefix + ".outputs", "",
@@ -439,7 +472,7 @@ public class DslTestCaseValidator {
                         "Declare expected event match for verify rule `" + verifyId + "`.", prefix + ".expected", verifyId);
             } else {
                 gaps.add(gap(testCaseId, acId, "verify", prefix + ".type", verifyId,
-                        "Use a supported v1 verify type before assertion evaluation."));
+                        "Use a supported v0.2 verify type before assertion evaluation."));
             }
         }
     }
