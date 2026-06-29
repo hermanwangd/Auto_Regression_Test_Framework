@@ -60,13 +60,13 @@ provider_types:
     required_binding_keys: [servers]
     supported_operations: [publish_message, consume_message, request_reply_message]
     evidence_outputs: [published_message, reply_message, consumed_message, ack, timing, error]
-  jdbc_database:
-    contract_ref: provider-contracts/jdbc_database.yaml
+  jdbc:
+    contract_ref: provider-contracts/jdbc.yaml
     runtime_status: supported
-    supported_runtime_modes: [native, mock, ephemeral]
-    required_binding_keys: [jdbc_url, username, password, dialect]
-    supported_operations: [execute_script, execute_update, query, transaction]
-    evidence_outputs: [script_result, query_result, affected_rows, transaction_status, error]
+    supported_runtime_modes: [native, ephemeral]
+    required_binding_keys: [connection.secret_ref, dialect]
+    supported_operations: [db_seed, db_cleanup, db_query, db_record_exists]
+    evidence_outputs: [seed_evidence, cleanup_evidence, query_evidence, error]
   kubernetes_runtime:
     contract_ref: provider-contracts/kubernetes_runtime.yaml
     runtime_status: supported

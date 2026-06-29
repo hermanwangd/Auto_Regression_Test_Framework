@@ -48,7 +48,7 @@ public class ProviderRuntimeResolver {
             }
         }
         for (String bindingKey : requiredBindingKeys(context.providerContract())) {
-            if (isMissing(context.bindingValues().get(bindingKey))) {
+            if (isMissing(valueAtPath(context.bindingValues(), bindingKey))) {
                 return ProviderRuntimeResolution.failed(ProviderFailure.of(
                         "MISSING_BINDING_KEY",
                         "TARGET_RESOLUTION_FAILED",
@@ -103,6 +103,20 @@ public class ProviderRuntimeResolver {
                 || value instanceof String text && text.isBlank()
                 || value instanceof Collection<?> collection && collection.isEmpty()
                 || value instanceof Map<?, ?> map && map.isEmpty();
+    }
+
+    private Object valueAtPath(Map<String, Object> map, String path) {
+        if (map.containsKey(path)) {
+            return map.get(path);
+        }
+        Object current = map;
+        for (String part : path.split("\\.")) {
+            if (!(current instanceof Map<?, ?> currentMap)) {
+                return null;
+            }
+            current = currentMap.get(part);
+        }
+        return current;
     }
 
     private String stringValue(Object value) {

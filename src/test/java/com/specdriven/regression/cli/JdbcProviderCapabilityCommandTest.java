@@ -1,0 +1,352 @@
+package com.specdriven.regression.cli;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.specdriven.regression.discovery.ReleasePackageService;
+import com.specdriven.regression.productrepo.ProductRepoService;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+class JdbcProviderCapabilityCommandTest {
+
+    private static final Path JDBC_SUITE = Path.of("samples/provider_capability/jdbc/suite_manifest.yaml");
+
+    @TempDir
+    Path tempDir;
+
+    @Test
+    void jdbcSampleArtifactsAreCheckedInAtRequiredPaths() {
+        List<String> requiredPaths = List.of(
+                "samples/provider_capability/jdbc/suite_manifest.yaml",
+                "samples/provider_capability/jdbc/test_case.yaml",
+                "samples/provider_capability/jdbc/provider_contracts/jdbc.yaml",
+                "samples/provider_capability/jdbc/provider_instances/oracle_like.yaml",
+                "samples/provider_capability/jdbc/provider_instances/db2_like.yaml",
+                "samples/provider_capability/jdbc/execution_profiles/local_jdbc.yaml",
+                "samples/provider_capability/jdbc/environment_bindings/local_jdbc.yaml",
+                "samples/provider_capability/jdbc/fixtures/db_seed.sql",
+                "samples/provider_capability/jdbc/fixtures/db_cleanup.sql",
+                "samples/provider_capability/jdbc/queries/order_exists_oracle.sql",
+                "samples/provider_capability/jdbc/queries/order_exists_db2.sql",
+                "samples/provider_capability/jdbc/expected_results/db_expected.json",
+                "samples/provider_capability/jdbc/result/expected_result_shape.json",
+                "samples/provider_capability/jdbc/evidence/expected_evidence_index.yaml");
+
+        assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
+                .as(path + " should be checked in")
+                .isTrue());
+    }
+
+    @Test
+    void jdbcSuiteValidatesThroughPublicCli() {
+        CommandResult result = execute("validate", "--suite", JDBC_SUITE.toString());
+
+        assertThat(result.exit()).as(result.stderr() + result.stdout()).isZero();
+        assertThat(result.stdout())
+                .contains("validation_status: passed")
+                .contains("suite_id: JDBC-CAPABILITY-v0.2")
+                .contains("oracle-like-db")
+                .contains("db2-like-db")
+                .contains("jdbc");
+    }
+
+    @Test
+    void jdbcSuiteRunsProviderRuntimeAndReportConsumesGeneratedResult() {
+        CommandResult run = execute("run", "--suite", JDBC_SUITE.toString(), "--profile", "local_jdbc");
+
+        assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+        assertThat(run.stdout())
+                .contains("run_status: passed")
+                .contains("provider_runtime_executed: true")
+                .contains("provider_type: jdbc")
+                .contains("provider_id: oracle-like-db")
+                .contains("runtime_mode: ephemeral")
+                .contains("dialect: oracle")
+                .contains("evidence_classification: framework_provider_capability_only");
+
+        Path resultJson = extractPath(run.stdout(), "result_json");
+        Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
+        assertThat(resultJson).isRegularFile();
+        assertThat(evidenceDir).isDirectory();
+        assertEvidenceFilesExist(evidenceDir);
+
+        String resultText = read(resultJson);
+        assertThat(resultText)
+                .contains("\"suite_id\": \"JDBC-CAPABILITY-v0.2\"")
+                .contains("\"provider_type\": \"jdbc\"")
+                .contains("\"provider_id\": \"oracle-like-db\"")
+                .contains("\"runtime_mode\": \"ephemeral\"")
+                .contains("\"dialect\": \"oracle\"")
+                .contains("\"status\": \"passed\"")
+                .contains("\"seed_evidence_ref\"")
+                .contains("\"query_evidence_ref\"")
+                .contains("\"cleanup_evidence_ref\"")
+                .contains("\"release_evidence_eligible\": false")
+                .doesNotContain("plain-text-secret")
+                .doesNotContain("jdbc:h2:");
+
+        CommandResult report = execute("report", "--result", resultJson.toString());
+        assertThat(report.exit()).as(report.stderr() + report.stdout()).isZero();
+        assertThat(report.stdout())
+                .contains("report_status: review_ready")
+                .contains("suite_id: JDBC-CAPABILITY-v0.2")
+                .contains("batch_id: BATCH-JDBC-")
+                .contains("run_id: RUN-JDBC-")
+                .contains("test_case_id: JDBC-CAPABILITY-TC-001")
+                .contains("status: passed");
+    }
+
+    @Test
+    void jdbcRunRejectsUnsupportedDialectBeforeExecution() throws Exception {
+        Path suite = mutableJdbc();
+        Path binding = suite.getParent().resolve("environment_bindings/local_jdbc.yaml");
+        Files.writeString(binding, read(binding).replace("dialect: oracle", "dialect: mariadb"));
+
+        CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("run_status: blocked")
+                .contains("reason: unsupported_dialect")
+                .contains("provider_type: jdbc");
+        assertThat(result.stdout()).doesNotContain("provider_runtime_executed: true");
+    }
+
+    @Test
+    void jdbcRunSupportsDb2DialectQueryPath() throws Exception {
+        Path suite = mutableJdbc();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, read(testCase)
+                .replace("target: oracle_like_db", "target: db2_like_db")
+                .replace("queries/order_exists_oracle.sql", "queries/order_exists_db2.sql")
+                .replace("query_order_oracle", "query_order_db2"));
+
+        CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
+
+        assertThat(result.exit()).as(result.stderr() + result.stdout()).isZero();
+        assertThat(result.stdout())
+                .contains("provider_id: db2-like-db")
+                .contains("dialect: db2");
+        Path evidenceDir = extractPath(result.stdout(), "evidence_dir");
+        assertThat(read(evidenceDir.resolve("provider-evidence/jdbc/query_query_order_db2.yaml")))
+                .contains("dialect: db2")
+                .contains("query_ref: queries/order_exists_db2.sql")
+                .contains("status: passed");
+    }
+
+    @Test
+    void jdbcValidateRejectsUnsupportedProviderInstanceDialect() throws Exception {
+        Path suite = mutableJdbc();
+        Path instance = suite.getParent().resolve("provider_instances/oracle_like.yaml");
+        Files.writeString(instance, read(instance).replace("dialect: oracle", "dialect: mariadb"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("reason: unsupported_dialect")
+                .contains("provider_type: jdbc")
+                .contains("mariadb");
+    }
+
+    @Test
+    void jdbcValidateRejectsMissingProviderInstanceDialect() throws Exception {
+        Path suite = mutableJdbc();
+        Path instance = suite.getParent().resolve("provider_instances/oracle_like.yaml");
+        Files.writeString(instance, read(instance).replace("dialect: oracle\n", ""));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("reason: missing_required_field")
+                .contains("field_path: dialect")
+                .contains("provider_type: jdbc");
+    }
+
+    @Test
+    void jdbcValidateRejectsMongoProviderTypeInThisPr() throws Exception {
+        Path suite = mutableJdbc();
+        Path instance = suite.getParent().resolve("provider_instances/oracle_like.yaml");
+        Files.writeString(instance, read(instance).replace("provider_type: jdbc", "provider_type: mongodb"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("reason: unknown_provider_type")
+                .contains("provider_type: mongodb");
+    }
+
+    @Test
+    void jdbcValidateRejectsUnsupportedOperationBeforeExecution() throws Exception {
+        Path suite = mutableJdbc();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, read(testCase).replace("operation: db_query", "operation: db_delete"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("reason: unsupported_operation")
+                .contains("operation: db_delete")
+                .contains("provider_type: jdbc");
+    }
+
+    @Test
+    void jdbcRunRejectsMissingSecretRefBeforeExecution() throws Exception {
+        Path suite = mutableJdbc();
+        Path binding = suite.getParent().resolve("environment_bindings/local_jdbc.yaml");
+        Files.writeString(binding, read(binding)
+                .replace("secret_ref: generated://provider-capability/oracle-like/connection", "value: raw-connection"));
+
+        CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("run_status: blocked")
+                .contains("reason: raw_secret");
+    }
+
+    @Test
+    void jdbcRunFailsOwnerActionablyWhenSqlParamIsMissing() throws Exception {
+        Path suite = mutableJdbc();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, read(testCase)
+                .replace("      - name: query_order_id\n"
+                        + "        ref: expected_results/db_expected.json#/order_id\n"
+                        + "        bind_as: params.order_id\n", ""));
+
+        CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout()).contains("run_status: failed");
+        Path resultJson = extractPath(result.stdout(), "result_json");
+        assertThat(read(resultJson))
+                .contains("\"status\": \"failed\"")
+                .contains("\"classification\": \"DB_QUERY_FAILED\"")
+                .contains("SQL_PARAM_MISSING")
+                .contains("order_id");
+    }
+
+    @Test
+    void jdbcRunCapturesCleanupFailureWithoutHidingRecordFailure() throws Exception {
+        Path suite = mutableJdbc();
+        Path expected = suite.getParent().resolve("expected_results/db_expected.json");
+        Files.writeString(expected, read(expected).replace("\"min_rows\": 1", "\"min_rows\": 2"));
+        Path cleanup = suite.getParent().resolve("fixtures/db_cleanup.sql");
+        Files.writeString(cleanup, "DELETE FROM missing_table WHERE order_id = :order_id");
+
+        CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
+
+        assertThat(result.exit()).isEqualTo(1);
+        Path resultJson = extractPath(result.stdout(), "result_json");
+        Path evidenceDir = extractPath(result.stdout(), "evidence_dir");
+        assertThat(read(resultJson))
+                .contains("\"status\": \"failed\"")
+                .contains("\"classification\": \"ASSERTION_FAILED\"")
+                .contains("\"cleanup_failure\"")
+                .contains("DB_CLEANUP_FAILED");
+        assertThat(read(evidenceDir.resolve("provider-evidence/jdbc/cleanup_cleanup_order.yaml")))
+                .contains("status: failed")
+                .contains("failure_code: DB_CLEANUP_FAILED");
+    }
+
+    @Test
+    void jdbcReportRejectsMissingRequiredEvidenceRef() {
+        CommandResult run = execute("run", "--suite", JDBC_SUITE.toString(), "--profile", "local_jdbc");
+        Path resultJson = extractPath(run.stdout(), "result_json");
+        Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
+        delete(evidenceDir.resolve("provider-evidence/jdbc/query_query_order_oracle.yaml"));
+
+        CommandResult report = execute("report", "--result", resultJson.toString());
+
+        assertThat(report.exit()).isEqualTo(1);
+        assertThat(report.stdout())
+                .contains("report_status: invalid")
+                .contains("reason: missing_evidence_ref")
+                .contains("provider-evidence/jdbc/query_query_order_oracle.yaml");
+    }
+
+    private void assertEvidenceFilesExist(Path evidenceDir) {
+        List<String> evidenceFiles = List.of(
+                "evidence_index.yaml",
+                "provider-evidence/jdbc/seed_seed_order.yaml",
+                "provider-evidence/jdbc/query_query_order_oracle.yaml",
+                "provider-evidence/jdbc/cleanup_cleanup_order.yaml",
+                "logs/execution.log",
+                "assertions/order_record_exists.yaml",
+                "batch/batch.yaml");
+
+        assertThat(evidenceFiles).allSatisfy(path -> assertThat(evidenceDir.resolve(path))
+                .as(path)
+                .isRegularFile());
+    }
+
+    private Path mutableJdbc() throws IOException {
+        Path target = tempDir.resolve("jdbc_" + System.nanoTime());
+        copyDirectory(Path.of("samples/provider_capability/jdbc"), target);
+        return target.resolve("suite_manifest.yaml");
+    }
+
+    private void copyDirectory(Path source, Path target) throws IOException {
+        try (var paths = Files.walk(source)) {
+            for (Path path : paths.toList()) {
+                Path relative = source.relativize(path);
+                Path destination = target.resolve(relative);
+                if (Files.isDirectory(path)) {
+                    Files.createDirectories(destination);
+                } else {
+                    Files.createDirectories(destination.getParent());
+                    Files.copy(path, destination);
+                }
+            }
+        }
+    }
+
+    private Path extractPath(String stdout, String key) {
+        return stdout.lines()
+                .filter(line -> line.startsWith(key + ": "))
+                .map(line -> line.substring((key + ": ").length()).trim())
+                .map(Path::of)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing path line for " + key + " in:\n" + stdout));
+    }
+
+    private String read(Path path) {
+        try {
+            return Files.readString(path);
+        } catch (IOException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private void delete(Path path) {
+        try {
+            Files.delete(path);
+        } catch (IOException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private CommandResult execute(String... args) {
+        RegressionCommand command = new RegressionCommand(new ProductRepoService(), new ReleasePackageService());
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        int exit = command.execute(args, print(stdout), print(stderr));
+        return new CommandResult(exit, stdout.toString(), stderr.toString());
+    }
+
+    private PrintStream print(ByteArrayOutputStream stream) {
+        return new PrintStream(stream);
+    }
+
+    private record CommandResult(int exit, String stdout, String stderr) {
+    }
+}

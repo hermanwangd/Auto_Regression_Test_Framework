@@ -32,6 +32,7 @@ public class ContractBaselineService {
             "risk_approval");
     private static final Set<String> ALLOWED_PROVIDER_TYPES = Set.of(
             "wiremock_http_mock",
+            "jdbc",
             "jdbc_database",
             "nats_messaging",
             "sample_fake_provider");
@@ -62,6 +63,7 @@ public class ContractBaselineService {
         validateRawSecrets(graph, findings);
         validateTargets(graph, findings);
         validateExecutionProfiles(graph, findings);
+        validateJdbcContractsAndInstances(graph, findings);
         validateOperations(graph, findings);
         validateOutputRefs(graph, findings);
         validateEnvironmentBindings(graph, findings);
@@ -467,7 +469,7 @@ public class ContractBaselineService {
                 }
                 Map<String, Object> bindingValues = mapValue(providerBinding.get("binding_values"));
                 for (String requiredKey : requiredBindingKeys) {
-                    if (isMissing(bindingValues.get(requiredKey))) {
+                    if (isMissing(valueAtPath(bindingValues, requiredKey))) {
                         findings.add(new ContractFinding(
                                 graph.environmentBindingsByProfile().get(profile).path().toString(),
                                 "provider_bindings." + providerId + ".binding_values." + requiredKey,
@@ -479,7 +481,147 @@ public class ContractBaselineService {
                                 "Supply binding key `" + requiredKey + "` for provider `" + providerId + "`."));
                     }
                 }
+                if ("jdbc".equals(providerType)) {
+                    validateJdbcEnvironmentBinding(
+                            graph.environmentBindingsByProfile().get(profile).path(),
+                            providerId,
+                            providerType,
+                            profile,
+                            contract,
+                            bindingValues,
+                            findings);
+                }
             }
+        }
+    }
+
+    private void validateJdbcContractsAndInstances(ContractGraph graph, List<ContractFinding> findings) {
+        Map<String, Object> contract = graph.providerContracts().get("jdbc");
+        if (contract != null) {
+            List<String> supportedDialects = jdbcSupportedDialects(contract);
+            for (String requiredDialect : List.of("oracle", "db2")) {
+                if (!supportedDialects.contains(requiredDialect)) {
+                    findings.add(new ContractFinding(
+                            graph.suitePath().toString(),
+                            "provider_contracts.jdbc.dialects.supported",
+                            "missing_supported_dialect",
+                            "",
+                            "jdbc",
+                            "",
+                            "",
+                            "Declare JDBC dialect `" + requiredDialect + "` in Provider Contract."));
+                }
+            }
+            for (String requiredOperation : List.of("db_seed", "db_cleanup", "db_query", "db_record_exists")) {
+                if (mapValue(contract.get("operations")).get(requiredOperation) == null) {
+                    findings.add(new ContractFinding(
+                            graph.suitePath().toString(),
+                            "provider_contracts.jdbc.operations." + requiredOperation,
+                            "unsupported_operation",
+                            "",
+                            "jdbc",
+                            "",
+                            requiredOperation,
+                            "Declare JDBC operation `" + requiredOperation + "` in Provider Contract."));
+                }
+            }
+            if (listValue(mapValue(contract.get("evidence")).get("outputs")).isEmpty()) {
+                findings.add(new ContractFinding(
+                        graph.suitePath().toString(),
+                        "provider_contracts.jdbc.evidence.outputs",
+                        "missing_evidence_output_definition",
+                        "",
+                        "jdbc",
+                        "",
+                        "",
+                        "Define JDBC seed, query, and cleanup evidence outputs."));
+            }
+        }
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.providerInstancesByPath().entrySet()) {
+            Map<String, Object> instance = entry.getValue();
+            if (!"jdbc".equals(stringValue(instance.get("provider_type")))) {
+                continue;
+            }
+            String providerId = stringValue(instance.get("provider_id"));
+            String dialect = stringValue(instance.get("dialect"));
+            if (dialect.isBlank()) {
+                findings.add(new ContractFinding(
+                        entry.getKey().toString(),
+                        "dialect",
+                        "missing_required_field",
+                        providerId,
+                        "jdbc",
+                        stringValue(instance.get("profile")),
+                        "",
+                        "Set JDBC Provider Instance dialect to `oracle` or `db2`."));
+            } else if (contract != null && !jdbcSupportedDialects(contract).contains(dialect)) {
+                findings.add(new ContractFinding(
+                        entry.getKey().toString(),
+                        "dialect",
+                        "unsupported_dialect",
+                        providerId,
+                        "jdbc",
+                        stringValue(instance.get("profile")),
+                        "",
+                        "Use supported JDBC dialect `oracle` or `db2`; unsupported dialect `" + dialect
+                                + "` is outside PR-004."));
+            }
+            if (isMissing(valueAtPath(instance, "connection.secret_ref"))) {
+                findings.add(new ContractFinding(
+                        entry.getKey().toString(),
+                        "connection.secret_ref",
+                        "missing_required_binding_key",
+                        providerId,
+                        "jdbc",
+                        stringValue(instance.get("profile")),
+                        "",
+                        "Declare connection.secret_ref on the JDBC Provider Instance shape."));
+            }
+        }
+    }
+
+    private void validateJdbcEnvironmentBinding(
+            Path bindingPath,
+            String providerId,
+            String providerType,
+            String profile,
+            Map<String, Object> contract,
+            Map<String, Object> bindingValues,
+            List<ContractFinding> findings) {
+        String dialect = stringValue(valueAtPath(bindingValues, "dialect"));
+        if (dialect.isBlank()) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    "provider_bindings." + providerId + ".binding_values.dialect",
+                    "missing_required_binding_key",
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Supply JDBC dialect `oracle` or `db2` in Environment Binding."));
+        } else if (!jdbcSupportedDialects(contract).contains(dialect)) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    "provider_bindings." + providerId + ".binding_values.dialect",
+                    "unsupported_dialect",
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Use supported JDBC dialect `oracle` or `db2`; unsupported dialect `" + dialect
+                            + "` is outside PR-004."));
+        }
+        String secretRef = stringValue(valueAtPath(bindingValues, "connection.secret_ref"));
+        if (secretRef.isBlank()) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    "provider_bindings." + providerId + ".binding_values.connection.secret_ref",
+                    "missing_required_binding_key",
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Supply JDBC connection.secret_ref; raw DB URLs, usernames, and passwords are prohibited."));
         }
     }
 
@@ -641,6 +783,15 @@ public class ContractBaselineService {
             }
         }
         return keys;
+    }
+
+    private List<String> jdbcSupportedDialects(Map<String, Object> contract) {
+        Map<String, Object> dialects = mapValue(contract.get("dialects"));
+        List<String> supported = stringList(dialects.get("supported"));
+        if (supported.isEmpty()) {
+            supported = stringList(dialects.get("allowed"));
+        }
+        return supported;
     }
 
     private List<OperationRef> operationRefs(Map<String, Object> testCase) {
@@ -830,6 +981,7 @@ public class ContractBaselineService {
                 || normalized.equals("credential")
                 || normalized.equals("credentials")
                 || normalized.equals("secret")
+                || normalized.equals("connection")
                 || normalized.equals("api_key")
                 || normalized.equals("authorization");
     }
@@ -883,6 +1035,20 @@ public class ContractBaselineService {
                 || value instanceof String text && text.isBlank()
                 || value instanceof Collection<?> collection && collection.isEmpty()
                 || value instanceof Map<?, ?> map && map.isEmpty();
+    }
+
+    private Object valueAtPath(Map<String, Object> map, String path) {
+        if (map.containsKey(path)) {
+            return map.get(path);
+        }
+        Object current = map;
+        for (String part : path.split("\\.")) {
+            if (!(current instanceof Map<?, ?> currentMap)) {
+                return null;
+            }
+            current = currentMap.get(part);
+        }
+        return current;
     }
 
     private String stringValue(Object value) {

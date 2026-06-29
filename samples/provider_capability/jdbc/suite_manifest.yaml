@@ -1,0 +1,20 @@
+contract_version: v0.2
+suite_id: JDBC-CAPABILITY-v0.2
+purpose: Framework-owned JDBC provider capability verification sample for Oracle and DB2 style databases.
+profile: local_jdbc
+selection:
+  mode: suite
+  suite: provider-capability-jdbc
+tests:
+  - test_case.yaml
+artifact_roots:
+  provider_contracts: provider_contracts/
+  provider_instances: provider_instances/
+  execution_profiles: execution_profiles/
+  environment_bindings: environment_bindings/
+  expected_results: expected_results/
+  fixtures: fixtures/
+  queries: queries/
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

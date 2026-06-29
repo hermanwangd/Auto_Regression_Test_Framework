@@ -30,7 +30,11 @@ allowed_sections:
   - provider_instance_version
   - provider_id
   - provider_type
+  - profile
+  - runtime_mode
   - runtime_modes
+  - dialect
+  - connection
   - binding_keys
   - defaults
   - readiness
@@ -38,6 +42,7 @@ allowed_sections:
   - evidence
   - failure_mapping
   - safety
+  - labels
 binding_key_rules:
   keys_must_match_provider_contract_binding_keys: true
   actual_values_must_be_supplied_by_environment_binding: true

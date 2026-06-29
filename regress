@@ -8,7 +8,7 @@ if [ ! -d "$ROOT_DIR/target/classes" ]; then
   "$ROOT_DIR/mvnw" -q -DskipTests compile >/dev/null
 fi
 
-if [ ! -f "$ROOT_DIR/target/runtime-classpath.txt" ]; then
+if [ ! -f "$ROOT_DIR/target/runtime-classpath.txt" ] || [ "$ROOT_DIR/pom.xml" -nt "$ROOT_DIR/target/runtime-classpath.txt" ]; then
   "$ROOT_DIR/mvnw" -q -DincludeScope=runtime dependency:build-classpath -Dmdep.outputFile=target/runtime-classpath.txt >/dev/null
 fi
 

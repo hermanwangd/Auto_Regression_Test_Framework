@@ -1,0 +1,15 @@
+{
+  "framework_version": "v0.2",
+  "dsl_version": "v0.2",
+  "suite_id": "JDBC-CAPABILITY-v0.2",
+  "provider_type": "jdbc",
+  "provider_id": "oracle-like-db",
+  "runtime_mode": "ephemeral",
+  "dialect": "oracle",
+  "status": "passed",
+  "required_refs": [
+    "provider-evidence/jdbc/seed_seed_order.yaml",
+    "provider-evidence/jdbc/query_query_order_oracle.yaml",
+    "provider-evidence/jdbc/cleanup_cleanup_order.yaml"
+  ]
+}

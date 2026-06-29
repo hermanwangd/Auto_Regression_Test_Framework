@@ -1,0 +1,71 @@
+provider_contract_version: v0.2
+provider_type: jdbc
+purpose: Framework-owned JDBC provider for Oracle and DB2 style database verification.
+runtime_modes: [native, ephemeral]
+dialects:
+  supported: [oracle, db2]
+  unsupported: [mariadb, mysql, postgres, mongodb]
+binding_keys:
+  connection.secret_ref:
+    required: true
+    source: environment_binding_secret_ref
+  dialect:
+    required: true
+    source: environment_binding
+  schema:
+    required: false
+    source: environment_binding
+  query_timeout:
+    required: false
+    source: environment_binding
+  masking_policy:
+    required: false
+    source: environment_binding
+  strict_params:
+    required: false
+    source: environment_binding
+defaults:
+  default_timeout: PT30S
+  query_timeout: PT10S
+  strict_params: true
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes, binding_keys, dialect, connection]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, profile, runtime_mode, runtime_modes, dialect, connection, binding_keys, defaults, operations, evidence, failure_mapping, labels]
+  binding_keys: [connection.secret_ref, dialect, schema, query_timeout, masking_policy, strict_params]
+supported_verifiers: [db_record_exists]
+operations:
+  db_seed:
+    allowed_bind_as: [sql_ref, params.*]
+    required_parameters: [sql_ref]
+    output_refs: [affected_rows, duration_ms, seed_evidence_ref]
+  db_cleanup:
+    allowed_bind_as: [sql_ref, params.*]
+    required_parameters: [sql_ref]
+    output_refs: [affected_rows, duration_ms, cleanup_evidence_ref]
+  db_query:
+    allowed_bind_as: [query_ref, params.*]
+    required_parameters: [query_ref]
+    output_refs: [row_count, sample_rows, duration_ms, query_evidence_ref]
+  db_record_exists:
+    allowed_bind_as: [query_ref, params.*, expected.min_rows, expected.row_count]
+    required_parameters: [query_ref]
+    output_refs: [matched, row_count, duration_ms, query_evidence_ref]
+evidence:
+  outputs: [seed_evidence, cleanup_evidence, query_evidence]
+  query_evidence: [provider_type, provider_id, dialect, query_ref, masked_params, row_count, duration_ms, masked_sample_result, status, failure_code]
+  seed_evidence: [provider_type, provider_id, dialect, sql_ref, masked_params, affected_rows, duration_ms, status, failure_code]
+  cleanup_evidence: [provider_type, provider_id, dialect, sql_ref, masked_params, affected_rows, duration_ms, status, failure_code]
+  redact: [connection, password, secret, token]
+failure_mapping:
+  allowed_codes:
+    - SQL_REF_MISSING
+    - SQL_PARAM_MISSING
+    - QUERY_REF_MISSING
+    - UNSUPPORTED_DIALECT
+    - DB_CONNECTION_FAILED
+    - DB_EXECUTION_FAILED
+    - DB_CLEANUP_FAILED
+    - DB_QUERY_FAILED
+    - RECORD_NOT_FOUND
+    - EVIDENCE_INVALID
+    - SECRET_RESOLUTION_ERROR

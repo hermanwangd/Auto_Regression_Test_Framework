@@ -191,11 +191,11 @@ setup:
     seed_customer:
       type: db_seed
       target: payment_db
-      operation: execute_script
+      operation: db_seed
       parameters:
         - name: script
           ref: ${data.db_seed.customer}
-          bind_as: db.script_ref
+          bind_as: sql_ref
       cleanup_ref: ${data.db_cleanup.customer}
 
 execute:
@@ -230,11 +230,11 @@ cleanup:
   fixtures:
     cleanup_customer:
       target: payment_db
-      operation: execute_script
+      operation: db_cleanup
       parameters:
         - name: script
           ref: ${data.db_cleanup.customer}
-          bind_as: db.script_ref
+          bind_as: sql_ref
 
 evidence:
   required:
@@ -296,7 +296,8 @@ bind_as: grpc.message
 bind_as: message.topic
 bind_as: message.subject
 bind_as: message.payload
-bind_as: db.script_ref
+bind_as: sql_ref
+bind_as: query_ref
 bind_as: k8s.deployment
 bind_as: vm.command
 bind_as: runner.args.businessDate
@@ -738,7 +739,7 @@ A Provider Instance defines one logical runtime target for an RP. It must use th
 | `wiremock_http_mock` | `provider-contracts/wiremock_http_mock.yaml` | `mappings_ref` | `start_mock`, `connect_mock`, `load_stubs`, `verify_requests` |
 | `kafka_messaging` | `provider-contracts/kafka_messaging.yaml` | `bootstrap_servers` | `publish_message`, `consume_message` |
 | `nats_messaging` | `provider-contracts/nats_messaging.yaml` | `servers` | `publish_message`, `consume_message`, `request_reply_message` |
-| `jdbc_database` | `provider-contracts/jdbc_database.yaml` | `jdbc_url`, `username`, `password`, `dialect` | `execute_script`, `execute_update`, `query`, `transaction` |
+| `jdbc` | `provider-contracts/jdbc.yaml` | `connection.secret_ref`, `dialect` | `db_seed`, `db_cleanup`, `db_query`, `db_record_exists` |
 | `kubernetes_runtime` | `provider-contracts/kubernetes_runtime.yaml` | `context`, `namespace` | `check_deployment_ready`, `check_pod_ready`, `get_logs`, `wait_rollout`, `exec_command` |
 | `vm_runtime` | `provider-contracts/vm_runtime.yaml` | `host`, `user` | `check_host_ready`, `run_command`, `collect_file`, `collect_logs`, `check_process` |
 | `external_runner` | `provider-contracts/external_runner.yaml` | `command` | `run`, `run_and_collect`, `check_status` |
@@ -776,23 +777,24 @@ JDBC Provider Instance:
 ```yaml
 provider_instance_version: v0.2
 provider_id: payment-db
-provider_type: jdbc_database
+dialect: oracle
+provider_type: jdbc
 runtime_modes: [native, ephemeral]
+connection:
+  secret_ref: ${environment.connection.secret_ref}
 binding_keys:
-  jdbc_url:
+  connection.secret_ref:
     required: true
-  username:
-    required: true
-  password:
+  dialect:
     required: true
 readiness:
-  operation: query
+  operation: db_query
   parameters:
     - name: readiness_query
       ref: fixtures/payment/db/readiness.sql
-      bind_as: db.sql_ref
+      bind_as: query_ref
 defaults:
-  timeout_seconds: 60
+  query_timeout: PT10S
 ```
 
 Command-capable Provider Instance:
@@ -1020,11 +1022,11 @@ Golden E2E suite-path mode may execute only deterministic framework-owned fake p
 Provider Capability suite-path mode proves selected v0.2 P0 provider capabilities as framework evidence:
 
 ```bash
-regress validate --suite samples/provider_capability/suite_manifest.yaml
+regress validate --suite samples/provider_capability/jdbc/suite_manifest.yaml
 
 regress run \
-  --suite samples/provider_capability/suite_manifest.yaml \
-  --profile local_provider
+  --suite samples/provider_capability/jdbc/suite_manifest.yaml \
+  --profile local_jdbc
 
 regress report --result <generated_result_json>
 ```

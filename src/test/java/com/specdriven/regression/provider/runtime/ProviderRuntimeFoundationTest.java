@@ -33,6 +33,7 @@ class ProviderRuntimeFoundationTest {
                 "wiremock-payment-api",
                 "wiremock_http_mock",
                 "local_wiremock",
+                "mock",
                 Path.of("."),
                 Path.of("target/provider-capability-test"),
                 Map.of(
@@ -60,6 +61,7 @@ class ProviderRuntimeFoundationTest {
                 context.providerId(),
                 context.providerType(),
                 context.profile(),
+                context.runtimeMode(),
                 context.suiteRoot(),
                 context.runDir(),
                 context.providerContract(),

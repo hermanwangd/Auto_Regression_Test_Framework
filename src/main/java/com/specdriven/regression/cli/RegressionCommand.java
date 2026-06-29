@@ -12,6 +12,8 @@ import com.specdriven.regression.contract.ContractBaselineService.ResolvedTarget
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.contract.GoldenE2eService;
 import com.specdriven.regression.contract.GoldenE2eService.GoldenRunResult;
+import com.specdriven.regression.contract.JdbcProviderCapabilityService;
+import com.specdriven.regression.contract.JdbcProviderCapabilityService.JdbcRunResult;
 import com.specdriven.regression.contract.WireMockProviderCapabilityService;
 import com.specdriven.regression.contract.WireMockProviderCapabilityService.WireMockRunResult;
 import com.specdriven.regression.discovery.ReleasePackageCompletenessReport;
@@ -125,6 +127,8 @@ public class RegressionCommand {
     private final GoldenE2eService goldenE2eService = new GoldenE2eService();
     private final WireMockProviderCapabilityService wireMockProviderCapabilityService =
             new WireMockProviderCapabilityService();
+    private final JdbcProviderCapabilityService jdbcProviderCapabilityService =
+            new JdbcProviderCapabilityService();
 
     public RegressionCommand(ProductRepoService productRepoService, ReleasePackageService releasePackageService) {
         this(
@@ -642,6 +646,30 @@ public class RegressionCommand {
                     out.println("provider_type: " + result.providerType());
                     out.println("provider_id: " + result.providerId());
                     out.println("base_url: " + result.baseUrl());
+                    out.println("evidence_classification: framework_provider_capability_only");
+                    out.println("result_json: " + result.resultJson());
+                    out.println("evidence_dir: " + result.evidenceDir());
+                }
+                printContractFindings(out, result.findings());
+                return result.passed() ? 0 : 1;
+            }
+            if (validation.providerTypesUsed().equals(List.of("jdbc")) || suite.contains("provider_capability/jdbc")) {
+                JdbcRunResult result = jdbcProviderCapabilityService.run(
+                        root.resolve(suite).normalize(),
+                        profile,
+                        root.resolve("target/provider-capability/jdbc").normalize());
+                out.println("run_status: " + result.status());
+                out.println("suite_id: " + result.suiteId());
+                if (result.resultJson() != null) {
+                    out.println("batch_id: " + result.batchId());
+                    out.println("run_id: " + result.runId());
+                    out.println("test_case_id: " + result.testCaseId());
+                    out.println("profile: " + result.profile());
+                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
+                    out.println("provider_type: " + result.providerType());
+                    out.println("provider_id: " + result.providerId());
+                    out.println("runtime_mode: " + result.runtimeMode());
+                    out.println("dialect: " + result.dialect());
                     out.println("evidence_classification: framework_provider_capability_only");
                     out.println("result_json: " + result.resultJson());
                     out.println("evidence_dir: " + result.evidenceDir());

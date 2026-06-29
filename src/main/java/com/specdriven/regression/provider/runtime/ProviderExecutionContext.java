@@ -7,6 +7,7 @@ public record ProviderExecutionContext(
         String providerId,
         String providerType,
         String profile,
+        String runtimeMode,
         Path suiteRoot,
         Path runDir,
         Map<String, Object> providerContract,
