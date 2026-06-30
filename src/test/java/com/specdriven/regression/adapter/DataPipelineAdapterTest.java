@@ -62,7 +62,7 @@ class DataPipelineAdapterTest {
                         tempDir.resolve("run/logs/stderr.log"),
                         tempDir.resolve("run/actual/output.txt"))))
                 .isInstanceOf(UncheckedIOException.class)
-                .hasMessage("Failed to execute adapter command.");
+                .hasMessage("Failed to execute provider command.");
     }
 
     @Test
@@ -71,7 +71,7 @@ class DataPipelineAdapterTest {
 
         assertThatThrownBy(() -> adapter.execute(request("sleep 1", 5)))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Adapter execution interrupted.");
+                .hasMessage("Provider execution interrupted.");
         assertThat(Thread.currentThread().isInterrupted()).isTrue();
         Thread.interrupted();
     }

@@ -17,7 +17,7 @@ entries:
     masked: true
   - evidence_type: nats_event
     provider_id: nats-local-provider
-    provider_type: nats_messaging
+    provider_type: nats
     ref: event-evidence/nats/observed_event.yaml
     masked: true
   - evidence_type: assertion_diff

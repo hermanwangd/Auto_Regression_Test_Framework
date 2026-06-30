@@ -31,7 +31,7 @@ Generated Regression Artifacts
         ↓
 Auto Regression Framework
 - Data Binding Resolver
-- Adapter-based Executor
+- Provider-based Executor
 - Assertion Engine
 - Oracle Engine
 - Evidence Collector
@@ -89,7 +89,7 @@ Resolve data binding
         ↓
 Setup fixture
         ↓
-Execute steps through adapters
+Execute steps through providers
         ↓
 Collect actual result
         ↓

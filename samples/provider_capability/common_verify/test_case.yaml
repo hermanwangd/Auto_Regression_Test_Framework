@@ -12,12 +12,6 @@ compatible_profiles: [local_verify]
 targets:
   verifier:
     provider_id: local-common-verifier
-    profile: local_verify
-scenario:
-  type: framework_capability
-  scope: verifier
-  description: Validate P0 JSON match, schema match, file diff, normalize, ignore_paths, and ignore_order.
-  capabilities: [json_match, schema_match, file_diff]
 execute: []
 expected_results:
   payload:

@@ -13,12 +13,6 @@ compatible_profiles: [local_wiremock]
 targets:
   payment_mock:
     provider_id: wiremock-payment-api
-    profile: local_wiremock
-scenario:
-  type: provider_capability
-  scope: framework_verification
-  description: Inject WireMock stubs, call the mock endpoint, and verify request journal evidence.
-  capabilities: [http_stub, http_mock_called, http_mock_request_body_match]
 data_binding:
   mock_stubs:
     payment_success:

@@ -13,8 +13,6 @@ required_sections:
   - revision
   - source_refs.acceptance_criteria
   - targets.<target>.provider_id
-  - targets.<target>.profile
-  - scenario
   - execute
   - verify
   - evidence.required
@@ -58,7 +56,8 @@ data_binding_rules:
     - broker_url
 target_rules:
   provider_id_required: true
-  profile_required: true
+  profile_required: false
+  selected_profile_source: cli_or_suite_manifest
   endpoint_topic_db_credential_values: prohibited
 operation_rules:
   setup_execute_cleanup_operations_must_exist_in_provider_contract: true
@@ -80,7 +79,7 @@ validation_output_fields:
   - test_case_id
   - provider_id
   - provider_type
-  - profile
+  - selected_profile
   - source_refs.acceptance_criteria
   - severity
   - blocking_scope
@@ -100,6 +99,7 @@ prohibited_sections:
   - evidence_required
   - policy
   - approval_status
+  - scenario
   - waiver
   - release_gate
   - risk_approval

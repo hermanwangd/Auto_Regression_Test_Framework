@@ -25,7 +25,7 @@ class GoldenE2eCommandTest {
         List<String> requiredPaths = List.of(
                 "samples/golden_e2e/suite_manifest.yaml",
                 "samples/golden_e2e/test_case.yaml",
-                "samples/golden_e2e/provider_contracts/sample_fake_provider.yaml",
+                "docs/02-architecture/contracts/provider-contracts/sample_fake_provider.yaml",
                 "samples/golden_e2e/provider_instances/sample_fake_instance.yaml",
                 "samples/golden_e2e/execution_profiles/local_golden.yaml",
                 "samples/golden_e2e/environment_bindings/local_golden.yaml",
@@ -95,6 +95,22 @@ class GoldenE2eCommandTest {
     }
 
     @Test
+    void goldenRunUsesCliProfileAndFrameworkProviderContractCatalog() throws Exception {
+        Path suite = mutableGolden();
+        Path suiteRoot = suite.getParent();
+        Path testCase = suiteRoot.resolve("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase).replace("    profile: local_golden\n", ""));
+        deleteDirectory(suiteRoot.resolve("provider_contracts"));
+
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_golden");
+
+        assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+        assertThat(run.stdout())
+                .contains("run_status: passed")
+                .contains("fake_provider_executed: true");
+    }
+
+    @Test
     void goldenRunRejectsInvalidDslBeforeExecution() throws Exception {
         Path suite = mutableGolden();
         Path testCase = suite.getParent().resolve("test_case.yaml");
@@ -126,9 +142,11 @@ class GoldenE2eCommandTest {
     }
 
     @Test
-    void goldenRunRejectsMissingProviderContractBeforeExecution() throws Exception {
+    void goldenRunRejectsUnknownProviderTypeBeforeExecution() throws Exception {
         Path suite = mutableGolden();
-        Files.delete(suite.getParent().resolve("provider_contracts/sample_fake_provider.yaml"));
+        Path providerInstance = suite.getParent().resolve("provider_instances/sample_fake_instance.yaml");
+        Files.writeString(providerInstance, Files.readString(providerInstance)
+                .replace("provider_type: sample_fake_provider", "provider_type: missing_fake_provider"));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_golden");
 
@@ -136,7 +154,7 @@ class GoldenE2eCommandTest {
         assertThat(result.stdout())
                 .contains("run_status: blocked")
                 .contains("reason: unknown_provider_type")
-                .contains("provider_type: sample_fake_provider");
+                .contains("provider_type: missing_fake_provider");
         assertThat(result.stdout()).doesNotContain("fake_provider_executed: true");
     }
 
@@ -187,20 +205,18 @@ class GoldenE2eCommandTest {
     }
 
     @Test
-    void goldenRunFailsWhenExpectedResultIsMissingAndStillRunsCleanup() throws Exception {
+    void goldenRunBlocksWhenExpectedResultReferenceIsMissingBeforeExecution() throws Exception {
         Path suite = mutableGolden();
         Files.delete(suite.getParent().resolve("expected_results/expected_output.json"));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_golden");
 
         assertThat(result.exit()).isEqualTo(1);
-        assertThat(result.stdout()).contains("run_status: failed");
-        Path resultJson = extractPath(result.stdout(), "result_json");
-        Path evidenceDir = extractPath(result.stdout(), "evidence_dir");
-        assertThat(Files.readString(resultJson))
-                .contains("\"status\": \"failed\"")
-                .contains("\"classification\": \"EXPECTED_RESULT_MISSING\"");
-        assertThat(evidenceDir.resolve("fixture/cleanup.yaml")).isRegularFile();
+        assertThat(result.stdout())
+                .contains("run_status: blocked")
+                .contains("reason: unresolved_artifact_ref")
+                .contains("category: CONFIGURATION_ERROR");
+        assertThat(result.stdout()).doesNotContain("fake_provider_executed: true");
     }
 
     @Test
@@ -314,6 +330,17 @@ class GoldenE2eCommandTest {
                     Files.createDirectories(destination.getParent());
                     Files.copy(path, destination);
                 }
+            }
+        }
+    }
+
+    private void deleteDirectory(Path directory) throws IOException {
+        if (!Files.exists(directory)) {
+            return;
+        }
+        try (var paths = Files.walk(directory)) {
+            for (Path path : paths.sorted((left, right) -> right.compareTo(left)).toList()) {
+                Files.delete(path);
             }
         }
     }

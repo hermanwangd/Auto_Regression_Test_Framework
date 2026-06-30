@@ -119,13 +119,13 @@ Different Products, Release Packages, and Release Units may use different implem
 
 ### Decision
 
-Use config-driven Provider Contracts, Provider Instances, and Environment Bindings as the heterogeneous execution boundary. The DSL remains package-neutral and references logical capabilities such as inputs, actions, fixtures, expected results, verify rules, observations, and evidence through `provider_id`, `profile`, operation, `parameters.ref`, `parameters.bind_as`, and output refs. Product-owned `rp_ru_mapping.yaml` declares RU membership, execution mode, deployment requirement, dependencies, and provider intent for Agent Skill translation. The framework runtime consumes generated `suite_manifest.yaml`, `run_plan.yaml`, Execution Profiles, Provider Instances, Provider Contracts, Environment Bindings, and `traceability_map.yaml`. A provider capability registry validates `provider_type`, required binding keys, supported runtime status, execution modes, safety policy, and evidence outputs before execution. Reusable built-in provider types implement concrete behavior for request/response APIs, messaging, DB fixtures, deployment readiness, and file/batch execution.
+Use framework-owned Provider Contracts, Provider Instances, and Environment Bindings as the heterogeneous execution boundary. The DSL remains package-neutral and references logical capabilities such as inputs, actions, fixtures, expected results, verify rules, observations, and evidence through `provider_id`, operation, `parameters.ref`, `parameters.bind_as`, and output refs. The selected profile is supplied by CLI or suite manifest, not by each DSL target. Product-owned `rp_ru_mapping.yaml` declares RU membership, execution mode, deployment requirement, dependencies, and provider intent for Agent Skill translation. The framework runtime consumes generated `suite_manifest.yaml`, `run_plan.yaml`, Execution Profiles, Provider Instances, Environment Bindings, and `traceability_map.yaml`, then resolves Provider Contracts from the framework catalog by `provider_type` unless an explicit custom or snapshot contract mode is declared. A provider capability registry validates `provider_type`, required binding keys, supported runtime status, execution modes, safety policy, and evidence outputs before execution. Reusable built-in provider types implement concrete behavior for request/response APIs, messaging, DB fixtures, deployment readiness, and file/batch execution.
 
 The selected M1 pilot shall exercise one heterogeneous RP that includes REST and/or gRPC, Kafka and/or NATS, DB fixture setup/cleanup, and K8s/VM readiness as needed by the RP boundary. External runner is not a required pilot capability. It is an approved escape hatch only when a legacy or specialized boundary cannot yet be represented by a reusable built-in provider contract.
 
 ### Consequences
 
-Provider contract validation becomes part of the execution gate. New RP-specific needs should be handled by Agent Skill translation and provider configuration first, reusable provider code second, and DSL changes only when a recurring cross-RP concept cannot be represented by the existing DSL. External runner use must be explicit, bounded, owner-approved, and evidenced; it must not become the standard way for each RP to develop its own test tool or script.
+Framework Provider Contract catalog validation becomes part of the execution gate. New RP-specific needs should be handled by Agent Skill translation and provider configuration first, reusable provider code second, and DSL changes only when a recurring cross-RP concept cannot be represented by the existing DSL. External runner use must be explicit, bounded, owner-approved, and evidenced; it must not become the standard way for each RP to develop its own test tool or script.
 
 ---
 
@@ -329,18 +329,18 @@ DSL target
   -> provider_id
   -> Provider Instance
   -> provider_type
-  -> Provider Contract
-  -> profile
+  -> Framework built-in Provider Contract catalog
+  -> selected profile
   -> Environment Binding
 ```
 
-Provider Contract defines provider_type, allowed operations, allowed `bind_as` values, binding keys, output refs, evidence outputs, failure codes, defaults, and valid Provider Instance shape.
+Provider Contract defines provider_type, allowed operations, allowed `bind_as` values, binding keys, output refs, evidence outputs, failure codes, defaults, and valid Provider Instance shape. Built-in Provider Contracts are owned by the framework and resolved by `provider_type`; suite-local contracts are allowed only for explicit custom provider or snapshot pinning mode.
 
 Provider Instance defines one RP logical runtime target with provider_id and provider_type using the same top-level shape as the Provider Contract.
 
 Environment Binding supplies profile-specific actual values such as URLs, topics, DB strings, namespaces, host refs, and secret refs.
 
-DSL Test Cases reference only provider_id and profile for runtime targets and must not contain endpoint, topic, DB credential, namespace, or secret values.
+DSL Test Cases reference only `provider_id` for runtime targets. The active profile is selected by CLI or suite manifest. Test cases must not contain endpoint, topic, DB credential, namespace, or secret values.
 
 Remove implementation-hook terminology from user-facing docs. Any legacy internal package names are implementation details only and are not public runtime contracts.
 
@@ -348,6 +348,6 @@ Remove implementation-hook terminology from user-facing docs. Any legacy interna
 
 Feature/spec, architecture, AC, test plan, user guide, and contract artifacts must use Provider Contract, Provider Instance, Environment Binding, Execution Profile, DSL Test Case, CLI, and Evidence Contract consistently.
 
-Provider validation must fail before execution when Provider Instance, Provider Contract, Environment Binding, required binding key, allowed operation, allowed `bind_as`, or output ref is missing or invalid.
+Provider validation must fail before execution when Provider Instance, framework Provider Contract catalog entry, explicit custom Provider Contract, Environment Binding, required binding key, allowed operation, allowed `bind_as`, or output ref is missing or invalid.
 
 Dry-run must produce a resolved execution plan without executing real operations. Evidence must include provider_id, provider_type, profile, and resolved operation result.

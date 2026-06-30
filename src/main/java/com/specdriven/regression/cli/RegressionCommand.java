@@ -16,6 +16,8 @@ import com.specdriven.regression.contract.GoldenE2eService;
 import com.specdriven.regression.contract.GoldenE2eService.GoldenRunResult;
 import com.specdriven.regression.contract.JdbcProviderCapabilityService;
 import com.specdriven.regression.contract.JdbcProviderCapabilityService.JdbcRunResult;
+import com.specdriven.regression.contract.NatsProviderCapabilityService;
+import com.specdriven.regression.contract.NatsProviderCapabilityService.NatsRunResult;
 import com.specdriven.regression.contract.WireMockProviderCapabilityService;
 import com.specdriven.regression.contract.WireMockProviderCapabilityService.WireMockRunResult;
 import com.specdriven.regression.discovery.ReleasePackageCompletenessReport;
@@ -31,6 +33,9 @@ import com.specdriven.regression.environment.ExecutionEnvironmentReport;
 import com.specdriven.regression.environment.ExecutionEnvironmentResolver;
 import com.specdriven.regression.execution.ExecutionEngine;
 import com.specdriven.regression.execution.ExecutionResult;
+import com.specdriven.regression.evidence.EvidenceHardeningService;
+import com.specdriven.regression.evidence.EvidenceHardeningService.EvidenceValidationResult;
+import com.specdriven.regression.evidence.EvidenceHardeningService.ProviderEvidenceSummary;
 import com.specdriven.regression.evidence.EvidenceWriter;
 import com.specdriven.regression.expectedresult.ExpectedResultDraftResult;
 import com.specdriven.regression.expectedresult.ExpectedResultEligibilityReport;
@@ -126,12 +131,15 @@ public class RegressionCommand {
     private final GeneratedRuntimeArtifacts generatedRuntimeArtifacts = new GeneratedRuntimeArtifacts();
     private final ParameterSetResolver parameterSetResolver = new ParameterSetResolver();
     private final ContractBaselineService contractBaselineService = new ContractBaselineService();
+    private final EvidenceHardeningService evidenceHardeningService = new EvidenceHardeningService();
     private final CommonVerifyService commonVerifyService = new CommonVerifyService();
     private final GoldenE2eService goldenE2eService = new GoldenE2eService();
     private final WireMockProviderCapabilityService wireMockProviderCapabilityService =
             new WireMockProviderCapabilityService();
     private final JdbcProviderCapabilityService jdbcProviderCapabilityService =
             new JdbcProviderCapabilityService();
+    private final NatsProviderCapabilityService natsProviderCapabilityService =
+            new NatsProviderCapabilityService();
 
     public RegressionCommand(ProductRepoService productRepoService, ReleasePackageService releasePackageService) {
         this(
@@ -199,6 +207,7 @@ public class RegressionCommand {
             case "generate-tests" -> generateTests(root, options, out, err);
             case "draft-expected-results" -> draftExpectedResults(root, options, out, err);
             case "validate" -> validate(root, options, out, err);
+            case "validate-evidence" -> validateEvidence(root, options, out, err);
             case "run" -> runRegression(root, options, out, err);
             case "report" -> report(root, options, out, err);
             default -> {
@@ -224,6 +233,17 @@ public class RegressionCommand {
         for (String providerType : result.providerTypesUsed()) {
             out.println("  - " + providerType);
         }
+        printContractFindings(out, result.findings());
+        return result.valid() ? 0 : 1;
+    }
+
+    private int validateEvidence(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
+        String resultPath = requiredOption(options, "--result", err);
+        if (resultPath == null) {
+            return 2;
+        }
+        EvidenceValidationResult result = evidenceHardeningService.validateResult(root.resolve(resultPath).normalize());
+        printEvidenceValidationSummary(out, result, "evidence_validation_status");
         printContractFindings(out, result.findings());
         return result.valid() ? 0 : 1;
     }
@@ -285,11 +305,17 @@ public class RegressionCommand {
             printContractFindings(out, result.findings());
             return 1;
         }
+        EvidenceValidationResult evidenceResult = evidenceHardeningService.hasEvidenceIndexReference(resolvedResult)
+                ? evidenceHardeningService.validateResult(resolvedResult)
+                : null;
+        boolean evidenceInvalid = evidenceResult != null && !evidenceResult.valid();
         if (result.suiteId().isBlank()) {
-            out.println("report_status: " + result.status());
+            out.println("report_status: " + (evidenceInvalid ? "invalid" : result.status()));
         } else {
-            out.println("report_status: "
-                    + ("passed".equals(result.status()) ? "review_ready" : "review_ready_with_failures"));
+            String reportStatus = evidenceInvalid
+                    ? "invalid"
+                    : ("passed".equals(result.status()) ? "review_ready" : "review_ready_with_failures");
+            out.println("report_status: " + reportStatus);
             out.println("suite_id: " + result.suiteId());
             out.println("batch_id: " + result.batchId());
             out.println("run_id: " + result.runId());
@@ -306,7 +332,64 @@ public class RegressionCommand {
             }
         }
         out.println("release_evidence_eligible: " + result.releaseEvidenceEligible());
+        if (evidenceResult != null) {
+            printEvidenceReportSummary(out, evidenceResult);
+            printContractFindings(out, evidenceResult.findings());
+            return evidenceResult.valid() ? 0 : 1;
+        }
         return 0;
+    }
+
+    private void printEvidenceValidationSummary(
+            PrintStream out,
+            EvidenceValidationResult result,
+            String statusLabel) {
+        out.println(statusLabel + ": " + (result.valid() ? "passed" : "failed"));
+        out.println("suite_id: " + result.suiteId());
+        out.println("batch_id: " + result.batchId());
+        out.println("run_id: " + result.runId());
+        out.println("test_count: " + result.testCount());
+        out.println("pass_count: " + result.passCount());
+        out.println("fail_count: " + result.failCount());
+        out.println("evidence_folder_path: " + result.evidenceDir());
+        out.println("missing_evidence_count: " + result.missingEvidenceCount());
+        out.println("failed_evidence_count: " + result.failedEvidenceCount());
+        printFailedEvidenceSummary(out, result);
+        printProviderEvidenceSummary(out, result.providerEvidenceSummary());
+        out.println("masking_status: " + (result.maskingPassed() ? "passed" : "failed"));
+    }
+
+    private void printEvidenceReportSummary(PrintStream out, EvidenceValidationResult result) {
+        out.println("evidence_folder_path: " + result.evidenceDir());
+        out.println("missing_evidence_count: " + result.missingEvidenceCount());
+        out.println("failed_evidence_count: " + result.failedEvidenceCount());
+        printFailedEvidenceSummary(out, result);
+        printProviderEvidenceSummary(out, result.providerEvidenceSummary());
+        out.println("masking_status: " + (result.maskingPassed() ? "passed" : "failed"));
+    }
+
+    private void printFailedEvidenceSummary(PrintStream out, EvidenceValidationResult result) {
+        out.println("failed_evidence_summary:");
+        if (result.failedEvidenceSummary().isEmpty()) {
+            out.println("  []");
+            return;
+        }
+        for (String failedEvidence : result.failedEvidenceSummary()) {
+            out.println("  - " + failedEvidence);
+        }
+    }
+
+    private void printProviderEvidenceSummary(PrintStream out, List<ProviderEvidenceSummary> summaries) {
+        out.println("provider_evidence_summary:");
+        if (summaries.isEmpty()) {
+            out.println("  []");
+            return;
+        }
+        for (ProviderEvidenceSummary summary : summaries) {
+            out.println("  - provider_type: " + summary.providerType());
+            out.println("    provider_id: " + summary.providerId());
+            out.println("    evidence_count: " + summary.evidenceCount());
+        }
     }
 
     private int initProductRepo(Path root, PrintStream out) {
@@ -533,7 +616,7 @@ public class RegressionCommand {
                     batchStartedAt,
                     "blocked",
                     List.of(blockedRun));
-            out.println("adapter_execution_started: false");
+            out.println("provider_runtime_started: false");
             out.println("batch_id: " + batchId);
             out.println("run_id: " + runId);
             out.println("run_status: blocked");
@@ -547,7 +630,7 @@ public class RegressionCommand {
         List<ExecutionResult> results = new java.util.ArrayList<>();
         Map<String, String> targetStatuses = new LinkedHashMap<>();
         List<Path> executionTests = dependencyOrderedApprovedTests(runtimeContext, preflight.approvedTests());
-        out.println("adapter_execution_started: " + hasPreflightRunnableTest(preflight, executionTests));
+        out.println("provider_runtime_started: " + hasPreflightRunnableTest(preflight, executionTests));
         out.println("batch_id: " + batchId);
         out.println("execution_results:");
         for (Path approvedTest : executionTests) {
@@ -680,6 +763,30 @@ public class RegressionCommand {
                 printContractFindings(out, result.findings());
                 return result.passed() ? 0 : 1;
             }
+            if (validation.providerTypesUsed().equals(List.of("nats")) || suite.contains("provider_capability/nats")) {
+                NatsRunResult result = natsProviderCapabilityService.run(
+                        root.resolve(suite).normalize(),
+                        profile,
+                        root.resolve("target/provider-capability/nats").normalize());
+                out.println("run_status: " + result.status());
+                out.println("suite_id: " + result.suiteId());
+                if (result.resultJson() != null) {
+                    out.println("batch_id: " + result.batchId());
+                    out.println("run_id: " + result.runId());
+                    out.println("test_case_id: " + result.testCaseId());
+                    out.println("profile: " + result.profile());
+                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
+                    out.println("provider_type: " + result.providerType());
+                    out.println("provider_id: " + result.providerId());
+                    out.println("runtime_mode: " + result.runtimeMode());
+                    out.println("subject: " + result.subject());
+                    out.println("evidence_classification: framework_provider_capability_only");
+                    out.println("result_json: " + result.resultJson());
+                    out.println("evidence_dir: " + result.evidenceDir());
+                }
+                printContractFindings(out, result.findings());
+                return result.passed() ? 0 : 1;
+            }
             if (validation.providerTypesUsed().equals(List.of("common_verify"))
                     || suite.contains("provider_capability/common_verify")
                     || suite.contains("provider_capability/polling")) {
@@ -750,6 +857,8 @@ public class RegressionCommand {
             out.println("  - file_path: " + finding.filePath());
             out.println("    field_path: " + finding.fieldPath());
             out.println("    reason: " + finding.reason());
+            out.println("    failure_code: " + finding.failureCode());
+            out.println("    category: " + finding.category());
             if (!finding.providerId().isBlank()) {
                 out.println("    provider_id: " + finding.providerId());
             }
@@ -761,6 +870,9 @@ public class RegressionCommand {
             }
             if (!finding.operation().isBlank()) {
                 out.println("    operation: " + finding.operation());
+            }
+            if (!finding.originalCause().isBlank()) {
+                out.println("    original_cause: " + finding.originalCause());
             }
             out.println("    owner_action: " + finding.ownerAction());
         }
@@ -978,7 +1090,7 @@ public class RegressionCommand {
         boolean blocked = globalBlocked;
 
         if (dryRun) {
-            out.println("adapter_execution_started: false");
+            out.println("provider_runtime_started: false");
         }
         out.println("environment_gaps:");
         for (ExecutionEnvironmentGap gap : environmentReport.gaps()) {
@@ -1168,7 +1280,7 @@ public class RegressionCommand {
                 out.println("    ac_id: " + bindingReport.acId());
                 out.println("    contract_type: " + contract.contractType());
                 out.println("    provider_name: " + contract.providerName());
-                out.println("    provider_family: " + contract.providerFamily());
+                out.println("    provider_contract_kind: " + contract.providerFamily());
                 out.println("    provider_type: " + contract.providerType());
                 out.println("    registry_status: " + contract.registryStatus());
                 out.println("    runtime_status: " + contract.runtimeStatus());
@@ -1186,7 +1298,7 @@ public class RegressionCommand {
                 out.println("    reason: " + failureReason("Planning and Binding", gap.fieldPath()));
                 out.println("    contract_type: " + gap.contractType());
                 out.println("    provider_name: " + gap.providerName());
-                out.println("    provider_family: " + gap.providerFamily());
+                out.println("    provider_contract_kind: " + gap.providerFamily());
                 out.println("    provider_type: " + gap.providerType());
                 out.println("    registry_status: " + gap.registryStatus());
                 out.println("    runtime_status: " + gap.runtimeStatus());
@@ -1202,7 +1314,7 @@ public class RegressionCommand {
                         "contract_path: " + gap.fieldPath(),
                         "contract_type: " + gap.contractType(),
                         "provider_name: " + gap.providerName(),
-                        "provider_family: " + gap.providerFamily(),
+                        "provider_contract_kind: " + gap.providerFamily(),
                         "provider_type: " + gap.providerType(),
                         "registry_status: " + gap.registryStatus(),
                         "runtime_status: " + gap.runtimeStatus(),
@@ -1255,7 +1367,7 @@ public class RegressionCommand {
             if (!(actionValue instanceof Map<?, ?> action)) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName,
-                        "adapter",
+                        "provider",
                         context.providerName(),
                         context.providerFamily(),
                         context.providerType(),
@@ -1271,7 +1383,7 @@ public class RegressionCommand {
             if (requestBinding.isBlank()) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName + ".request_binding",
-                        "adapter",
+                        "provider",
                         context.providerName(),
                         context.providerFamily(),
                         context.providerType(),
@@ -1284,7 +1396,7 @@ public class RegressionCommand {
             } else if (!bindingNames.contains(requestBinding)) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName + ".request_binding",
-                        "adapter",
+                        "provider",
                         context.providerName(),
                         context.providerFamily(),
                         context.providerType(),
@@ -1326,7 +1438,7 @@ public class RegressionCommand {
             if (!(actionValue instanceof Map<?, ?> action)) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName,
-                        "adapter",
+                        "provider",
                         context.providerName(),
                         context.providerFamily(),
                         context.providerType(),
@@ -1342,7 +1454,7 @@ public class RegressionCommand {
             if (!List.of("publish", "request", "request_reply", "consume", "observe", "cleanup").contains(mode)) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName + ".mode",
-                        "adapter",
+                        "provider",
                         context.providerName(),
                         context.providerFamily(),
                         context.providerType(),
@@ -1357,7 +1469,7 @@ public class RegressionCommand {
             if (messagingRequiresPayload(mode) && payloadBinding.isBlank()) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName + ".payload_binding",
-                        "adapter",
+                        "provider",
                         context.providerName(),
                         context.providerFamily(),
                         context.providerType(),
@@ -1370,7 +1482,7 @@ public class RegressionCommand {
             } else if (messagingRequiresPayload(mode) && !bindingNames.contains(payloadBinding)) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName + ".payload_binding",
-                        "adapter",
+                        "provider",
                         context.providerName(),
                         context.providerFamily(),
                         context.providerType(),
@@ -1386,7 +1498,7 @@ public class RegressionCommand {
                 if (cleanupStrategy.isBlank()) {
                     gaps.add(new ProviderContractGap(
                             context.contractPath() + ".actions." + actionName + ".cleanup_strategy",
-                            "adapter",
+                            "provider",
                             context.providerName(),
                             context.providerFamily(),
                             context.providerType(),
@@ -1399,7 +1511,7 @@ public class RegressionCommand {
                 } else if (!"drain".equalsIgnoreCase(cleanupStrategy)) {
                     gaps.add(new ProviderContractGap(
                             context.contractPath() + ".actions." + actionName + ".cleanup_strategy",
-                            "adapter",
+                            "provider",
                             context.providerName(),
                             context.providerFamily(),
                             context.providerType(),
@@ -1413,7 +1525,7 @@ public class RegressionCommand {
                 if (!isPositiveInteger(action.get("max_count"))) {
                     gaps.add(new ProviderContractGap(
                             context.contractPath() + ".actions." + actionName + ".max_count",
-                            "adapter",
+                            "provider",
                             context.providerName(),
                             context.providerFamily(),
                             context.providerType(),
@@ -1429,7 +1541,7 @@ public class RegressionCommand {
             if (!serialization.isBlank() && !"json".equalsIgnoreCase(serialization)) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName + ".serialization",
-                        "adapter",
+                        "provider",
                         context.providerName(),
                         context.providerFamily(),
                         context.providerType(),
@@ -1444,7 +1556,7 @@ public class RegressionCommand {
                     && firstText(action, "correlation_id", "correlation_id_ref", "correlation_key").isBlank()) {
                 gaps.add(new ProviderContractGap(
                         context.contractPath() + ".actions." + actionName + ".correlation_id_ref",
-                        "adapter",
+                        "provider",
                         context.providerName(),
                         context.providerFamily(),
                         context.providerType(),
@@ -1528,7 +1640,7 @@ public class RegressionCommand {
                 target.order(),
                 target.targetId(),
                 adapter,
-                stringValue(adapterContract.get("provider_family")),
+                stringValue(adapterContract.get("provider_contract_kind")),
                 stringValue(adapterContract.get("provider_type")),
                 adapterContract,
                 contractPath);
@@ -1831,8 +1943,7 @@ public class RegressionCommand {
     private String adapterName(Path testCasePath) {
         Object executionTarget = testCaseMap(testCasePath).get("execution_target");
         if (executionTarget instanceof Map<?, ?> target) {
-            Object adapter = target.get("adapter");
-            return adapter == null ? "" : adapter.toString();
+            return firstText(target, "provider", "runner");
         }
         return "";
     }
@@ -1941,7 +2052,7 @@ public class RegressionCommand {
                     "",
                     "",
                     Map.of(),
-                    "generated-framework/provider_contracts.adapters." + providerName);
+                    "generated-framework/provider_contracts.providers." + providerName);
         }
     }
 

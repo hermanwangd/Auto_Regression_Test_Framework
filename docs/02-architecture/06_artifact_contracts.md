@@ -342,9 +342,9 @@ Framework-owned schemas and contract files:
 
 Framework-owned catalogs:
 
-- Provider type catalog: `shell_command`, `rest_client`, `grpc_client`, `wiremock_http_mock`, `jdbc_database`, `kafka_messaging`, `nats_messaging`, `kubernetes_runtime`, `vm_runtime`, `external_runner`, `artifact_compare`, and `polling_observer`.
+- Provider type catalog: `shell_command`, `rest_client`, `grpc_client`, `wiremock_http_mock`, `jdbc_database`, `kafka_messaging`, `nats`, `kubernetes_runtime`, `vm_runtime`, `external_runner`, `artifact_compare`, and `polling_observer`.
 - Provider capability registry: supported `provider_type` values, required binding keys, supported operations, runtime support status, evidence outputs, and safety constraints.
-- Operation catalog: Provider Contract-backed operations, including `run_batch`, `execute_command`, `http_request`, `unary_call`, `server_stream_call`, `execute_script`, `execute_update`, `query`, `transaction`, `publish_message`, `consume_message`, `request_reply_message`, `check_deployment_ready`, `check_pod_ready`, `get_logs`, `wait_rollout`, `exec_command`, `check_host_ready`, `run_command`, `collect_file`, `collect_logs`, `check_process`, `run`, `run_and_collect`, `check_status`, `start_mock`, `connect_mock`, `load_stubs`, `verify_requests`, `read_artifact`, and `observe_condition`.
+- Operation catalog: Provider Contract-backed operations, including `run_batch`, `execute_command`, `http_request`, `unary_call`, `server_stream_call`, `execute_script`, `execute_update`, `query`, `transaction`, `publish_message`, `consume_message`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match`, `check_deployment_ready`, `check_pod_ready`, `get_logs`, `wait_rollout`, `exec_command`, `check_host_ready`, `run_command`, `collect_file`, `collect_logs`, `check_process`, `run`, `run_and_collect`, `check_status`, `start_mock`, `connect_mock`, `load_stubs`, `verify_requests`, `read_artifact`, and `observe_condition`.
 - Verify catalog: `equals`, `not_equals`, `exists`, `not_exists`, `contains`, `regex_match`, `json_match`, `schema_match`, `list_size_equals`, `unordered_list_equals`, `subset_match`, `partial_match`, `numeric_tolerance`, `greater_than`, `less_than`, `between`, `timestamp_tolerance`, `file_exists`, `file_not_empty`, `file_diff`, `json_diff`, `yaml_diff`, `csv_row_count_equals`, `csv_diff`, `db_record_exists`, `db_field_equals`, `db_row_count_equals`, `event_published`, `event_payload_match`, `event_not_published`, `http_mock_called`, `http_mock_request_body_match`, `http_mock_request_count`, `http_mock_not_called`, and `custom_verify`.
 - Fixture catalog: `data_binding`, `database_seed`, `database_cleanup`, `db_seed`, `db_cleanup`, `http_stub`, `event_seed`, `event_expectation`, `file_seed`, `file_cleanup`, `config_injection`, `env_injection`, `mock_config`, `message_seed`, `container_dependency`, `environment_variable`, and `test_data_namespace`.
 
@@ -352,7 +352,7 @@ The framework validates that a Provider Instance, Provider Contract, selected ru
 
 DSL `targets.<target_id>` must contain `provider_id` and `profile`. Concrete URLs, topics, database strings, namespaces, and secret refs belong in Environment Bindings, not in the DSL.
 
-Messaging request/reply uses the canonical `request_reply_message` operation plus provider contract `mode: request_reply`, payload binding, timeout, correlation when required, and an output ref for the reply. Kafka request/reply is unsupported until a selected RP requires an approved reusable Provider Contract.
+Messaging request/reply is outside the P0 NATS runtime. A future reusable Provider Contract may introduce a `request_reply_message` operation with `mode: request_reply`, payload binding, timeout, correlation when required, and an output ref for the reply.
 
 Contract materialization is a framework maturity gate. The public interface contract must be fixed before runtime implementation and test-plan expansion. That interface includes invocation commands, DSL/test definition fields, Execution Profile fields, Environment Binding fields, Provider Instance fields, Provider Contract fields, result/evidence schemas, and support-command boundaries. A contract is not implementation-ready until the corresponding file path exists, declares required fields, version compatibility behavior, unsupported capability behavior, evidence outputs, and failure classification, and is referenced by the AC and test-plan rows that verify it.
 
@@ -433,7 +433,7 @@ Current provider contract minimums enforced by the framework verification build:
 | `rest_client` | `base_url` binding key, allowed `http_request` operation, allowed request `bind_as` values, positive timeout, declared output refs |
 | `grpc_client` | service/descriptor refs, allowed request `bind_as` values, positive timeout, declared output refs |
 | `kafka_messaging` | broker/topic binding keys, allowed publish/consume/observe/cleanup operations, payload `bind_as`, bounded cleanup, declared output refs |
-| `nats_messaging` | server/subject binding keys, allowed publish/request-reply/consume/observe/cleanup operations, payload `bind_as`, bounded cleanup, declared output refs |
+| `nats` | connection/subject binding keys, allowed publish/observe/event verification operations, payload `bind_as`, bounded observation, declared output refs |
 | `jdbc_database` | connection binding key, isolation key, cleanup strategy, setup/cleanup SQL refs, verification SQL refs, declared output refs |
 | `kubernetes_runtime` | namespace/context/API binding keys, readiness operation, deployed version ref, bounded log tail, declared output refs |
 | `vm_runtime` | host/health binding keys, command refs for SSH/WinRM when selected, deployed version ref, declared output refs |
@@ -572,7 +572,6 @@ Use clear test-case language in new DSL artifacts:
 | `labels` | Optional opaque metadata for reporting, such as product, package, runtime unit, team, or domain. |
 | `source_refs` | Link the test to reviewed source artifacts such as acceptance criteria and feature specs. |
 | `targets` | Name each application, database, event bus, file store, batch runner, or external boundary used by the test. |
-| `scenario` | Describe test type, scope, behavior, and required capabilities. |
 | `parameters` | Optionally reference a reviewed parameter set for repeated execution of the same logical test. |
 | `setup` | Declare fixtures, seed data, mock setup, or initial state needed before execution. |
 | `execute` | Declare readable operations, target, runtime inputs, and output capture. |
@@ -585,13 +584,13 @@ Use clear test-case language in new DSL artifacts:
 
 The v0.2 contract separates stable top-level structure from execution-required content:
 
-- Always required: `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs.acceptance_criteria`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime`.
+- Always required: `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs.acceptance_criteria`, `targets`, `execute`, `verify`, `evidence`, and `runtime`.
 - Optional: `labels` and `compatible_profiles`. `labels` are report metadata only; `compatible_profiles` restricts the test to named Execution Profiles.
-- Conditionally required: `setup.fixtures` when the scenario needs precondition data, state mutation, mock setup, seed data, or cleanup.
+- Conditionally required: `setup.fixtures` when the test needs precondition data, state mutation, mock setup, seed data, or cleanup.
 - Conditionally required: `expected_results` when a verify item references an approved artifact, schema, contract, payload, file, DB state snapshot, or other reusable truth source. Simple deterministic expected values may be declared directly in `verify[].expected`.
 - Conditionally required: operation-level `parameters[].ref` and `parameters[].bind_as` when setup, execute, or cleanup passes data to a provider. `ref` identifies the source value or artifact; `bind_as` identifies the provider input location and must be allowed by the referenced Provider Contract.
 - Required when referenced: `execute[].outputs`, `verify[].selector` for structured output checks, `verify[].target/query/event` for state or event checks, `verify[].options` for polling/tolerance/normalization, and fixture `cleanup_ref`.
-- Prohibited in DSL: provider implementation settings, secrets, endpoint URLs, topics, namespaces, connection strings, SQL bodies, shell scripts, release gates, waivers, risk approvals, and approval workflow state.
+- Prohibited in DSL: `scenario`, provider implementation settings, secrets, endpoint URLs, topics, namespaces, connection strings, SQL bodies, shell scripts, release gates, waivers, risk approvals, and approval workflow state.
 
 The v0.2 semantic model is:
 
@@ -620,12 +619,6 @@ targets:
   order_database:
     provider_id: order-db
     profile: ci
-
-scenario:
-  type: integration
-  scope: release_package
-  description: Run the sample pipeline and verify normalized output.
-  capabilities: [db_seed, batch_execution, file_assertion]
 
 setup:
   fixtures:
@@ -692,7 +685,7 @@ New DSL artifacts must use readable execution terms:
 |---|---|---|
 | `execution_target` | `targets` plus `execute[].target` | One test may involve multiple targets. |
 | `target_ru_id` | `target` | Tests should refer to logical target IDs, not framework-internal RU fields. |
-| `action: call_ru` | `operation: run_batch`, `execute_command`, `http_request`, `unary_call`, `execute_script`, `query`, `publish_message`, `consume_message`, `request_reply_message`, or another operation declared by the referenced Provider Contract | Operation names should explain what the test does and must be contract-backed. |
+| `action: call_ru` | `operation: run_batch`, `execute_command`, `http_request`, `unary_call`, `execute_script`, `query`, `publish_message`, `consume_message`, `nats_publish`, `nats_observe`, or another operation declared by the referenced Provider Contract | Operation names should explain what the test does and must be contract-backed. |
 | `package_inputs` | `setup.fixtures` or `execute[].parameters` | Setup owns preconditions; execute owns runtime inputs. |
 | `oracles` | `expected_results` | v0.2 uses expected result references and explicit `verify` rules instead of a heavy oracle framework. |
 | `steps` | `execute` | The section is executable behavior, not an abstract workflow step. |
@@ -719,7 +712,8 @@ Legacy v1 artifacts may still be read through an explicit compatibility path dur
 - `transaction`
 - `publish_message`
 - `consume_message`
-- `request_reply_message`
+- `nats_publish`
+- `nats_observe`
 - `check_deployment_ready`
 - `check_pod_ready`
 - `get_logs`
@@ -1055,7 +1049,7 @@ Provider runtime rules:
 - Provider Instances cannot introduce fields, operations, `bind_as` values, output refs, evidence outputs, or failure codes that are not allowed by the Provider Contract.
 - Environment Bindings must supply all required binding keys for the selected profile.
 - Messaging actions that declare `requires_correlation: true` must also declare `correlation_id`, `correlation_id_ref`, or `correlation_key` before publish, request/reply, consume, observe, or cleanup dispatch.
-- Messaging request/reply actions use `request_reply_message` plus `mode: request_reply`, `payload_binding`, `message_binding`, or `event_binding`. Current native request/reply support is implemented for NATS; Kafka request/reply remains unsupported until a selected RP requires a reusable contract.
+- Messaging request/reply actions are not part of the P0 NATS runtime; they remain future reusable Provider Contract scope.
 - Messaging cleanup actions must declare `mode: cleanup`, `cleanup_strategy: drain`, and a positive bounded `max_count`. Current cleanup is bounded drain behavior for test-owned topics, subjects, or consumer groups, not broker administrator purge.
 - Non-success exit codes fail the test case and must preserve stdout, stderr, exit code, and timeout state.
 - Timeouts fail the test case and must trigger fixture cleanup.
@@ -1120,7 +1114,7 @@ providers:
     provider_type: shell_command
     profile: ci
     provider_instance_ref: generated-framework/provider_instances/transform-job.yaml
-    provider_contract_ref: generated-framework/provider_contracts/shell_command.yaml
+    provider_contract_ref: docs/02-architecture/contracts/provider-contracts/shell_command.yaml
 started_at: 2026-06-26T10:00:00+08:00
 finished_at: 2026-06-26T10:01:00+08:00
 operation_results:

@@ -1,0 +1,14 @@
+evidence_index_version: v0.2
+suite_id: NATS-CAPABILITY-v0.2
+provider_type: nats
+provider_id: local-nats-event-bus
+runtime_mode: local
+subject: orders.ready
+evidence_classification: framework_provider_capability_only
+downstream_release_evidence: false
+entries:
+  - ref: provider-evidence/nats/publish_event.yaml
+  - ref: provider-evidence/nats/event_published.yaml
+  - ref: provider-evidence/nats/event_payload_match.yaml
+masking:
+  raw_secret_found: false

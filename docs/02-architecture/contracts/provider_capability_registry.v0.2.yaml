@@ -53,13 +53,13 @@ provider_types:
     required_binding_keys: [bootstrap_servers]
     supported_operations: [publish_message, consume_message]
     evidence_outputs: [produced_message, consumed_message, offset, timing, error]
-  nats_messaging:
-    contract_ref: provider-contracts/nats_messaging.yaml
+  nats:
+    contract_ref: provider-contracts/nats.yaml
     runtime_status: supported
-    supported_runtime_modes: [native, mock, ephemeral]
-    required_binding_keys: [servers]
-    supported_operations: [publish_message, consume_message, request_reply_message]
-    evidence_outputs: [published_message, reply_message, consumed_message, ack, timing, error]
+    supported_runtime_modes: [local, ci, sit, preprod]
+    required_binding_keys: [connection, subject]
+    supported_operations: [nats_publish, nats_observe, event_published, event_payload_match]
+    evidence_outputs: [event_evidence, assertion_evidence, timing, error]
   jdbc:
     contract_ref: provider-contracts/jdbc.yaml
     runtime_status: supported

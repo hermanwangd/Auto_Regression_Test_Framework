@@ -38,7 +38,7 @@ Track C may start only when `samples/provider_capability/` exists and parses.
 |---|---|---|
 | WireMock | `wiremock_http_mock`, `http_stub`, `http_mock_called`, `http_mock_request_body_match` | Framework starts/uses local WireMock, injects checked-in stubs, records request journal and server log. |
 | JDBC Oracle/DB2 | `jdbc_database`, `db_seed`, `db_cleanup`, `db_record_exists`, SQL params, dialect | Executes against configured JDBC binding or controlled fixture; validates Oracle/DB2 dialect contracts. |
-| NATS | `nats_messaging`, `event_published`, `event_payload_match` | Uses local test broker, embedded/test broker, or controlled CI binding without SIT. |
+| NATS | `nats`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match` | Uses framework local capability binding or controlled CI binding without SIT release evidence claims. |
 | JSON/Schema/File Diff | `artifact_compare`, `json_match`, `schema_match`, `file_diff` | Framework-owned compare target with ignore paths, normalization, ignore order, and diff evidence. |
 | Polling | `polling_observer`, `poll_until_condition`, timeout, poll interval, last observed evidence | Polls observation-style verify checks only; does not retry product execute actions. |
 | Evidence | result JSON, evidence index, provider evidence, assertion diff | Every provider result is indexed and report-consumable with secret masking. |

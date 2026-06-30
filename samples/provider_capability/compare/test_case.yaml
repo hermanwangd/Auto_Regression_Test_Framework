@@ -12,12 +12,6 @@ compatible_profiles: [local_provider]
 targets:
   compare_engine:
     provider_id: compare-engine
-    profile: local_provider
-scenario:
-  type: verify_capability
-  scope: framework_verification
-  description: Verify json_match, schema_match, file_diff, ignore_paths, normalize, and ignore_order.
-  capabilities: [json_match, schema_match, file_diff]
 expected_results:
   expected_payload:
     ref: expected_results/expected_payload.json

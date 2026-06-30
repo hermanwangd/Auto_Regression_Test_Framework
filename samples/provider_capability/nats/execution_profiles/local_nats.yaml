@@ -1,0 +1,27 @@
+profile_id: local_nats
+execution_mode: local
+trigger: framework_provider_capability_verification
+environment_binding_ref: environment_bindings/local_nats.yaml
+isolation_scope: per_run
+dependency_policy:
+  require_readiness_evidence: false
+  allow_framework_managed_dependencies: true
+dependency_substitution_policy:
+  allowed_runtime_modes: [local]
+  mock_evidence_release_claim: prohibited
+dependency_provisioning_policy:
+  allowed_provisioners: [framework_local_nats]
+  dependency_types: [local_event_bus]
+  startup_policy: per_run
+  readiness_policy: in_process_ready
+  cleanup_scope: per_run
+  output_binding_keys: [connection.local_ref, subject]
+max_duration: PT1M
+data_policy:
+  approved_expected_results_required: true
+  production_data_allowed: false
+  generated_data_allowed: true
+  secrets_must_use_refs: true
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

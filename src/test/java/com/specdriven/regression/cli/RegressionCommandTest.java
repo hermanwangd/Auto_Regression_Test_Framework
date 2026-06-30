@@ -579,7 +579,7 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("binding_gaps:");
         assertThat(output.toString()).contains("reason: binding_resolution_failed");
         assertThat(output.toString()).contains("existing_state");
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
     }
 
     @Test
@@ -601,7 +601,7 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("dsl_gaps:");
         assertThat(output.toString()).contains("ap: Definition and Validation");
         assertThat(output.toString()).contains("field_path: execute[0].operation");
@@ -633,9 +633,9 @@ class RegressionCommandTest {
         assertThat(exit).as(output.toString()).isZero();
         assertThat(Files.exists(packageRoot.resolve("rp_ru_mapping.yaml"))).isFalse();
         assertThat(output.toString())
-                .contains("adapter_execution_started: true")
+                .contains("provider_runtime_started: true")
                 .contains("provider_contracts_used:")
-                .contains("contract_path: generated-framework/provider_contracts/providers.yaml#adapters.spring_boot_cli")
+                .contains("contract_path: generated-framework/provider_contracts/providers.yaml#providers.spring_boot_cli")
                 .contains("run_status: passed");
     }
 
@@ -796,7 +796,7 @@ class RegressionCommandTest {
 
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("binding_gaps:")
                 .contains("field_path: parameters.ref.cases[1].case_id")
                 .contains("field_path: parameters.ref.cases[1].values.orders_seed_ref")
@@ -826,7 +826,7 @@ class RegressionCommandTest {
 
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("binding_gaps:")
                 .contains("ap: Planning and Binding")
                 .contains("test_case_id: RP-001-TC-001")
@@ -860,7 +860,7 @@ class RegressionCommandTest {
         Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("run_id: RUN-001")
                 .doesNotContain("run_id: RUN-002")
                 .contains("run_status: blocked");
@@ -870,7 +870,7 @@ class RegressionCommandTest {
                 .doesNotContain("parameter_case_id:");
         assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/run.yaml")))
                 .contains("status: blocked")
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .doesNotContain("parameter_case_id: baseline");
         assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/failure_details.yaml")))
                 .contains("field_path: parameters.cases[1].case_id")
@@ -934,7 +934,7 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isZero();
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: dry_run_ready");
         assertThat(output.toString())
                 .contains("ap_gate_status:")
@@ -971,13 +971,13 @@ class RegressionCommandTest {
         String runEvidence = Files.readString(runDir.resolve("run.yaml"));
         String failureDetails = Files.readString(runDir.resolve("failure_details.yaml"));
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(runEvidence).contains("rp_id: RP-001");
         assertThat(runEvidence).contains("test_case_id: RP-001-TC-001");
         assertThat(runEvidence).contains("ac_id: RP-001-AC-001");
         assertThat(runEvidence).contains("status: blocked");
-        assertThat(runEvidence).contains("adapter_execution_started: false");
+        assertThat(runEvidence).contains("provider_runtime_started: false");
         assertThat(runEvidence).contains("execution_mode: ci_ephemeral");
         assertThat(runEvidence).contains("environment_ref: ci://pipeline/RP-001");
         assertThat(failureDetails).contains("reason: binding_resolution_failed");
@@ -1010,7 +1010,7 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(runEvidence)
                 .contains("status: blocked")
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("dsl_runtime:")
                 .contains("dsl_version: v0.2")
                 .contains("target_id: RU-transform-job")
@@ -1111,14 +1111,14 @@ class RegressionCommandTest {
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString()).contains("provider_contract_gaps:");
         assertThat(output.toString()).contains("ap: Planning and Binding");
-        assertThat(output.toString()).contains("provider_contracts/RU-transform-job.yaml#adapters.spring_boot_cli");
+        assertThat(output.toString()).contains("provider_contracts/RU-transform-job.yaml#providers.spring_boot_cli");
         assertThat(output.toString()).contains("provider_contracts/RU-transform-job.yaml#bindings.db_seed");
         assertThat(output.toString()).contains("reason: provider_contract_resolution_failed");
         assertThat(output.toString()).contains("registry_status: missing");
         assertThat(output.toString()).contains("affected_ru: RU-transform-job");
         assertThat(output.toString()).contains("capability: spring_boot_cli");
         assertThat(output.toString()).contains("capability: db_seed");
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).doesNotContain("run_status: dry_run_ready");
     }
 
@@ -1143,11 +1143,11 @@ class RegressionCommandTest {
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString()).contains("provider_contract_gaps:");
         assertThat(output.toString()).contains("ap: Planning and Binding");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli.outputs.actual_output_ref");
-        assertThat(output.toString()).contains("provider_family: file_batch");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.spring_boot_cli.outputs.actual_output_ref");
+        assertThat(output.toString()).contains("provider_contract_kind: file_batch");
         assertThat(output.toString()).contains("provider_type: shell");
-        assertThat(output.toString()).contains("Declare actual_output_ref for executable adapter `spring_boot_cli`");
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("Declare actual_output_ref for executable provider `spring_boot_cli`");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).doesNotContain("run_status: dry_run_ready");
     }
 
@@ -1172,11 +1172,11 @@ class RegressionCommandTest {
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString()).contains("provider_contract_gaps:");
         assertThat(output.toString()).contains("ap: Planning and Binding");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli.timeout_seconds");
-        assertThat(output.toString()).contains("provider_family: file_batch");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.spring_boot_cli.timeout_seconds");
+        assertThat(output.toString()).contains("provider_contract_kind: file_batch");
         assertThat(output.toString()).contains("provider_type: shell");
         assertThat(output.toString()).contains("Declare timeout_seconds as a positive bounded integer");
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).doesNotContain("run_status: dry_run_ready");
     }
 
@@ -1203,7 +1203,7 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("ap: Fixture and State Manager");
         assertThat(output.toString()).contains("fixture.cleanup");
         assertThat(output.toString()).contains("policy.cleanup_required");
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
     }
 
     @Test
@@ -1229,7 +1229,7 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("ap: Oracle and Assertion Engine");
         assertThat(output.toString()).contains("oracles.normalized_orders.type");
         assertThat(output.toString()).contains("invariant");
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
     }
 
     @Test
@@ -1247,9 +1247,9 @@ class RegressionCommandTest {
         Path testCase = tempDir.resolve(
                 "docs/08-release/release-packages/RP-001/tests/approved/RP-001-TC-001.yaml");
         Files.writeString(testCase, Files.readString(testCase).replace(
-                "adapter: spring_boot_cli",
-                "adapter: missing_adapter"));
-        assertThat(Files.readString(testCase)).contains("adapter: missing_adapter");
+                "provider: spring_boot_cli",
+                "provider: missing_adapter"));
+        assertThat(Files.readString(testCase)).contains("provider: missing_adapter");
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
@@ -1262,7 +1262,7 @@ class RegressionCommandTest {
                 .contains("provider_name: missing_adapter")
                 .contains("contract_path: generated-framework/environment_bindings.targets")
                 .contains("Generate environment binding target for `RU-transform-job` before execution.")
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("run_status: blocked");
     }
 
@@ -1290,7 +1290,7 @@ class RegressionCommandTest {
         String batchEvidence = Files.readString(tempDir.resolve(
                 "docs/08-release/release-packages/RP-001/evidence/batches/BATCH-001/batch.yaml"));
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(runEvidence).contains("status: blocked");
         assertThat(runEvidence).contains("execution_mode: sit_deployed");
@@ -1298,8 +1298,8 @@ class RegressionCommandTest {
         assertThat(batchEvidence).contains("status: blocked");
         assertThat(batchEvidence).contains("execution_mode: sit_deployed");
         assertThat(failureDetails).contains("ap: Planning and Binding");
-        assertThat(failureDetails).contains("field_path: release_units[0].provider_contracts.adapters.k8s_readiness.deployed_version_ref");
-        assertThat(failureDetails).contains("provider_family: deployment_readiness");
+        assertThat(failureDetails).contains("field_path: release_units[0].provider_contracts.providers.k8s_readiness.deployed_version_ref");
+        assertThat(failureDetails).contains("provider_contract_kind: deployment_readiness");
         assertThat(failureDetails).contains("provider_type: local");
         assertThat(failureDetails).contains("owner_action: Declare deployed_version_ref for `k8s_readiness` before execution.");
     }
@@ -1324,7 +1324,7 @@ class RegressionCommandTest {
 
         Path runDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001");
         assertThat(exit).isZero();
-        assertThat(output.toString()).contains("adapter_execution_started: true");
+        assertThat(output.toString()).contains("provider_runtime_started: true");
         assertThat(output.toString()).contains("run_status: passed");
         assertThat(output.toString()).contains("exit_code: 0");
         assertThat(Files.readString(runDir.resolve("logs/stdout.log"))).contains("adapter-ok");
@@ -1339,9 +1339,9 @@ class RegressionCommandTest {
         assertThat(runEvidence).contains("resolved_bindings:");
         assertThat(runEvidence).contains("binding_type: db_seed");
         assertThat(runEvidence).contains("provider_contracts_used:");
-        assertThat(runEvidence).contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli");
+        assertThat(runEvidence).contains("contract_path: release_units[0].provider_contracts.providers.spring_boot_cli");
         assertThat(runEvidence).contains("contract_path: release_units[0].provider_contracts.bindings.db_seed");
-        assertThat(runEvidence).contains("provider_family: file_batch");
+        assertThat(runEvidence).contains("provider_contract_kind: file_batch");
         assertThat(runEvidence).contains("provider_type: file_fixture");
         assertThat(runEvidence).contains("affected_ru: RU-transform-job");
     }
@@ -1366,10 +1366,10 @@ class RegressionCommandTest {
 
         Path runDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001");
         assertThat(exit).isZero();
-        assertThat(output.toString()).contains("adapter_execution_started: true");
+        assertThat(output.toString()).contains("provider_runtime_started: true");
         assertThat(output.toString()).contains("run_status: passed");
         String runEvidence = Files.readString(runDir.resolve("run.yaml"));
-        assertThat(runEvidence).contains("provider_family: external_runner");
+        assertThat(runEvidence).contains("provider_contract_kind: external_runner");
         assertThat(runEvidence).contains("provider_type: command_runner");
         assertThat(runEvidence).contains("provider_evidence:");
         assertThat(runEvidence).contains("external_runner: external_runner.yaml");
@@ -1402,7 +1402,7 @@ class RegressionCommandTest {
 
         Path runDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001");
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: true");
+        assertThat(output.toString()).contains("provider_runtime_started: true");
         assertThat(output.toString()).contains("run_status: failed");
         String runEvidence = Files.readString(runDir.resolve("run.yaml"));
         assertThat(runEvidence).contains("status: failed");
@@ -1433,13 +1433,13 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: external_runner");
+        assertThat(output.toString()).contains("provider_contract_kind: external_runner");
         assertThat(output.toString()).contains("provider_type: command_runner");
         assertThat(output.toString()).contains("registry_status: unapproved_escape_hatch");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.external_runner.built_in_provider_alternative");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.external_runner.built_in_provider_alternative");
         assertThat(output.toString()).contains("Configure built-in provider `request_response/rest` before using external runner");
     }
 
@@ -1462,13 +1462,13 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: external_runner");
+        assertThat(output.toString()).contains("provider_contract_kind: external_runner");
         assertThat(output.toString()).contains("provider_type: command_runner");
         assertThat(output.toString()).contains("registry_status: unapproved_escape_hatch");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.external_runner.outputs.actual_output_ref");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.external_runner.outputs.actual_output_ref");
         assertThat(output.toString()).contains("Keep external runner output path `../outside/output.txt` under the run evidence directory");
     }
 
@@ -1491,13 +1491,13 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: external_runner");
+        assertThat(output.toString()).contains("provider_contract_kind: external_runner");
         assertThat(output.toString()).contains("provider_type: command_runner");
         assertThat(output.toString()).contains("registry_status: unapproved_escape_hatch");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.external_runner.evidence_map.runner_stdout");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.external_runner.evidence_map.runner_stdout");
         assertThat(output.toString()).contains("Keep external runner evidence map path `../outside/stdout.log` under the run evidence directory");
     }
 
@@ -1520,13 +1520,13 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: external_runner");
+        assertThat(output.toString()).contains("provider_contract_kind: external_runner");
         assertThat(output.toString()).contains("provider_type: command_runner");
         assertThat(output.toString()).contains("registry_status: unapproved_escape_hatch");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.external_runner.timeout_seconds");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.external_runner.timeout_seconds");
         assertThat(output.toString()).contains("Declare timeout_seconds as a positive bounded integer");
     }
 
@@ -1557,7 +1557,7 @@ class RegressionCommandTest {
                 .contains("status: passed")
                 .contains("resolved_dependencies:")
                 .contains("RU-unrelated-job")
-                .contains("contract_path: release_units[1].provider_contracts.adapters.spring_boot_cli")
+                .contains("contract_path: release_units[1].provider_contracts.providers.spring_boot_cli")
                 .contains("affected_ru: RU-transform-job");
     }
 
@@ -1585,11 +1585,11 @@ class RegressionCommandTest {
         assertThat(exit).isZero();
         assertThat(Files.readString(runDir.resolve("logs/stdout.log"))).contains("downstream-ok");
         assertThat(runEvidence)
-                .contains("contract_path: release_units[1].provider_contracts.adapters.spring_boot_cli")
+                .contains("contract_path: release_units[1].provider_contracts.providers.spring_boot_cli")
                 .contains("contract_path: release_units[1].provider_contracts.bindings.db_seed")
                 .contains("affected_ru: RU-downstream-job");
         assertThat(runEvidence)
-                .doesNotContain("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli")
+                .doesNotContain("contract_path: release_units[0].provider_contracts.providers.spring_boot_cli")
                 .doesNotContain("contract_path: release_units[0].provider_contracts.bindings.db_seed")
                 .doesNotContain("affected_ru: RU-upstream-job");
     }
@@ -1625,16 +1625,16 @@ class RegressionCommandTest {
         assertThat(Files.readString(readyRun))
                 .contains("test_case_id: RP-001-TC-001")
                 .contains("status: passed")
-                .contains("adapter_execution_started: true");
+                .contains("provider_runtime_started: true");
         assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/logs/stdout.log")))
                 .contains("adapter-ok");
         assertThat(Files.readString(blockedRun))
                 .contains("test_case_id: RP-001-TC-002")
                 .contains("status: blocked")
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("failure_details: failure_details.yaml");
         assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-002/failure_details.yaml")))
-                .contains("generated-framework/provider_contracts/RU-missing-provider-job.yaml#adapters.missing_cli")
+                .contains("generated-framework/provider_contracts/RU-missing-provider-job.yaml#providers.missing_cli")
                 .contains("affected_ru: RU-missing-provider-job");
         assertThat(Files.exists(packageRoot.resolve("evidence/runs/RUN-002/logs/stdout.log"))).isFalse();
         assertThat(Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml")))
@@ -1675,7 +1675,7 @@ class RegressionCommandTest {
         assertThat(Files.readString(upstreamRun)).contains("status: failed");
         assertThat(downstreamEvidence)
                 .contains("status: blocked")
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("resolved_dependencies:")
                 .contains("RU-upstream-job")
                 .contains("failure_details: failure_details.yaml");
@@ -1727,14 +1727,14 @@ class RegressionCommandTest {
             String runEvidence = Files.readString(runDir.resolve("run.yaml"));
             assertThat(exit).isZero();
             assertThat(requestBody.get()).isEqualTo("{\"amount\":100,\"currency\":\"USD\"}\n");
-            assertThat(output.toString()).contains("adapter_execution_started: true");
+            assertThat(output.toString()).contains("provider_runtime_started: true");
             assertThat(Files.readString(runDir.resolve("actual/response.json")))
                     .isEqualTo("{\"status\":\"accepted\",\"paymentId\":\"PAY-001\"}\n");
             assertThat(runEvidence)
                     .contains("status: passed")
                     .contains("binding_type: api_payload")
-                    .contains("provider_family: request_response")
-                    .contains("contract_path: release_units[0].provider_contracts.adapters.request_response")
+                    .contains("provider_contract_kind: request_response")
+                    .contains("contract_path: release_units[0].provider_contracts.providers.request_response")
                     .contains("actual_output: actual/response.json")
                     .contains("assertion_status: passed");
         } finally {
@@ -1764,12 +1764,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: request_response");
+        assertThat(output.toString()).contains("provider_contract_kind: request_response");
         assertThat(output.toString()).contains("provider_type: rest");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.request_response.actions.authorize_payment");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.request_response.actions.authorize_payment");
         assertThat(output.toString()).contains("Declare request/response action `authorize_payment` before invocation");
     }
 
@@ -1802,7 +1802,7 @@ class RegressionCommandTest {
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
                 .contains("provider_contract_gaps:")
-                .contains("provider_family: request_response")
+                .contains("provider_contract_kind: request_response")
                 .contains("run_status: blocked");
     }
 
@@ -1828,12 +1828,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: request_response");
+        assertThat(output.toString()).contains("provider_contract_kind: request_response");
         assertThat(output.toString()).contains("provider_type: rest");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.request_response.actions.submit_payment.request_binding");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.request_response.actions.submit_payment.request_binding");
         assertThat(output.toString()).contains("Add package input binding `missing_payload` before invoking request/response action `submit_payment`");
     }
 
@@ -1859,12 +1859,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: request_response");
+        assertThat(output.toString()).contains("provider_contract_kind: request_response");
         assertThat(output.toString()).contains("provider_type: rest");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.request_response.actions.submit_payment.request_binding");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.request_response.actions.submit_payment.request_binding");
         assertThat(output.toString()).contains("Declare request_binding for request/response action `submit_payment`");
     }
 
@@ -1890,12 +1890,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: request_response");
+        assertThat(output.toString()).contains("provider_contract_kind: request_response");
         assertThat(output.toString()).contains("provider_type: grpc");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.request_response.actions.submit_payment.request_binding");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.request_response.actions.submit_payment.request_binding");
         assertThat(output.toString()).contains("Add package input binding `missing_payload` before invoking request/response action `submit_payment`");
     }
 
@@ -1921,12 +1921,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: request_response");
+        assertThat(output.toString()).contains("provider_contract_kind: request_response");
         assertThat(output.toString()).contains("provider_type: rest");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.request_response.timeout_seconds");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.request_response.timeout_seconds");
         assertThat(output.toString()).contains("Declare timeout_seconds as a positive bounded integer for request/response provider `request_response`");
     }
 
@@ -1952,12 +1952,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: request_response");
+        assertThat(output.toString()).contains("provider_contract_kind: request_response");
         assertThat(output.toString()).contains("provider_type: rest");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.request_response.outputs.actual_output_ref");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.request_response.outputs.actual_output_ref");
         assertThat(output.toString()).contains("Declare actual_output_ref for request/response provider `request_response`");
     }
 
@@ -1996,7 +1996,7 @@ class RegressionCommandTest {
         assertThat(exit).isZero();
         assertThat(output.toString())
                 .contains("provider_contracts_used:")
-                .contains("provider_family: request_response")
+                .contains("provider_contract_kind: request_response")
                 .contains("run_status: dry_run_ready");
     }
 
@@ -2036,8 +2036,8 @@ class RegressionCommandTest {
         assertThat(runEvidence)
                 .contains("status: passed")
                 .contains("binding_type: message_event")
-                .contains("provider_family: messaging")
-                .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus")
+                .contains("provider_contract_kind: messaging")
+                .contains("contract_path: release_units[0].provider_contracts.providers.message_bus")
                 .contains("actual_output: actual/message.json")
                 .contains("assertion_status: passed")
                 .contains("provider_evidence:")
@@ -2067,12 +2067,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: messaging");
+        assertThat(output.toString()).contains("provider_contract_kind: messaging");
         assertThat(output.toString()).contains("provider_type: local");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.timeout_seconds");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.message_bus.timeout_seconds");
         assertThat(output.toString()).contains("Declare timeout_seconds as a positive bounded integer for messaging provider `message_bus`");
     }
 
@@ -2099,12 +2099,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: messaging");
+        assertThat(output.toString()).contains("provider_contract_kind: messaging");
         assertThat(output.toString()).contains("provider_type: local");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.outputs.actual_output_ref");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.message_bus.outputs.actual_output_ref");
         assertThat(output.toString()).contains("Declare actual_output_ref for messaging provider `message_bus`");
     }
 
@@ -2134,15 +2134,15 @@ class RegressionCommandTest {
         Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.bootstrap_servers_ref")
-                .contains("provider_family: messaging")
+                .contains("contract_path: release_units[0].provider_contracts.providers.message_bus.bootstrap_servers_ref")
+                .contains("provider_contract_kind: messaging")
                 .contains("provider_type: kafka")
                 .contains("registry_status: incomplete")
                 .contains("Declare bootstrap_servers_ref or connection_ref");
         assertThat(Files.exists(runDir.resolve("messaging.yaml"))).isFalse();
         assertThat(Files.readString(runDir.resolve("run.yaml")))
                 .contains("status: blocked")
-                .contains("adapter_execution_started: false");
+                .contains("provider_runtime_started: false");
     }
 
     @Test
@@ -2171,17 +2171,17 @@ class RegressionCommandTest {
         Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("run_status: blocked")
                 .contains("provider_contract_gaps:")
-                .contains("provider_family: messaging")
+                .contains("provider_contract_kind: messaging")
                 .contains("provider_type: local")
-                .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.publish_payment_event.payload_binding")
+                .contains("contract_path: release_units[0].provider_contracts.providers.message_bus.actions.publish_payment_event.payload_binding")
                 .contains("Add package input binding `missing_event` before invoking messaging action `publish_payment_event`");
         assertThat(Files.exists(runDir.resolve("messaging.yaml"))).isFalse();
         assertThat(Files.readString(runDir.resolve("run.yaml")))
                 .contains("status: blocked")
-                .contains("adapter_execution_started: false");
+                .contains("provider_runtime_started: false");
     }
 
     @Test
@@ -2208,12 +2208,12 @@ class RegressionCommandTest {
 
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("run_status: blocked")
                 .contains("provider_contract_gaps:")
-                .contains("provider_family: messaging")
+                .contains("provider_contract_kind: messaging")
                 .contains("provider_type: local")
-                .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.publish_payment_event.payload_binding")
+                .contains("contract_path: release_units[0].provider_contracts.providers.message_bus.actions.publish_payment_event.payload_binding")
                 .contains("Declare payload_binding, message_binding, or event_binding for messaging action `publish_payment_event`");
     }
 
@@ -2246,12 +2246,12 @@ class RegressionCommandTest {
 
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("run_status: blocked")
                 .contains("provider_contract_gaps:")
-                .contains("provider_family: messaging")
+                .contains("provider_contract_kind: messaging")
                 .contains("provider_type: local")
-                .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.publish_payment_event.payload_binding")
+                .contains("contract_path: release_units[0].provider_contracts.providers.message_bus.actions.publish_payment_event.payload_binding")
                 .contains("Declare payload_binding, message_binding, or event_binding for messaging action `publish_payment_event`");
     }
 
@@ -2276,7 +2276,7 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isZero();
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: dry_run_ready");
         assertThat(output.toString()).doesNotContain("payload_binding");
     }
@@ -2302,7 +2302,7 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isZero();
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: dry_run_ready");
         assertThat(output.toString()).doesNotContain("payload_binding");
     }
@@ -2333,7 +2333,7 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isZero();
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: dry_run_ready");
         assertThat(output.toString()).doesNotContain(".actions.cleanup_payment_event.max_count");
     }
@@ -2403,7 +2403,7 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isZero();
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: dry_run_ready");
         assertThat(output.toString()).doesNotContain("Use supported messaging action mode");
         assertThat(output.toString()).doesNotContain("Add package input binding `payment_event`");
@@ -2438,7 +2438,7 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isZero();
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: dry_run_ready");
         assertThat(output.toString()).doesNotContain("Use supported messaging action mode");
         assertThat(output.toString()).doesNotContain("Add package input binding `payment_event`");
@@ -2467,12 +2467,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: messaging");
+        assertThat(output.toString()).contains("provider_contract_kind: messaging");
         assertThat(output.toString()).contains("provider_type: local");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.consume_payment_event");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.message_bus.actions.consume_payment_event");
         assertThat(output.toString()).contains("Declare messaging action `consume_payment_event` before invocation");
     }
 
@@ -2500,12 +2500,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: messaging");
+        assertThat(output.toString()).contains("provider_contract_kind: messaging");
         assertThat(output.toString()).contains("provider_type: local");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.publish_payment_event.serialization");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.message_bus.actions.publish_payment_event.serialization");
         assertThat(output.toString()).contains("Use supported messaging serialization `json` before invoking messaging action `publish_payment_event`");
     }
 
@@ -2537,12 +2537,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: messaging");
+        assertThat(output.toString()).contains("provider_contract_kind: messaging");
         assertThat(output.toString()).contains("provider_type: local");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.publish_payment_event.mode");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.message_bus.actions.publish_payment_event.mode");
         assertThat(output.toString()).contains("Use supported messaging action mode `publish`, `request_reply`, `consume`, `observe`, or `cleanup`");
     }
 
@@ -2569,12 +2569,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: messaging");
+        assertThat(output.toString()).contains("provider_contract_kind: messaging");
         assertThat(output.toString()).contains("provider_type: local");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.publish_payment_event.correlation_id_ref");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.message_bus.actions.publish_payment_event.correlation_id_ref");
         assertThat(output.toString()).contains("Declare correlation_id, correlation_id_ref, or correlation_key");
     }
 
@@ -2603,12 +2603,12 @@ class RegressionCommandTest {
 
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("run_status: blocked")
                 .contains("provider_contract_gaps:")
-                .contains("provider_family: messaging")
+                .contains("provider_contract_kind: messaging")
                 .contains("provider_type: local")
-                .contains("contract_path: release_units[0].provider_contracts.adapters.message_bus.actions.publish_payment_event.correlation_id_ref")
+                .contains("contract_path: release_units[0].provider_contracts.providers.message_bus.actions.publish_payment_event.correlation_id_ref")
                 .contains("Declare correlation_id, correlation_id_ref, or correlation_key");
     }
 
@@ -2646,8 +2646,8 @@ class RegressionCommandTest {
         assertThat(Files.readString(runDir.resolve("actual/readiness.txt"))).isEqualTo("ready\n");
         assertThat(runEvidence)
                 .contains("status: passed")
-                .contains("provider_family: deployment_readiness")
-                .contains("contract_path: release_units[0].provider_contracts.adapters.k8s_readiness")
+                .contains("provider_contract_kind: deployment_readiness")
+                .contains("contract_path: release_units[0].provider_contracts.providers.k8s_readiness")
                 .contains("actual_output: actual/readiness.txt")
                 .contains("assertion_status: passed");
     }
@@ -2674,12 +2674,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: deployment_readiness");
+        assertThat(output.toString()).contains("provider_contract_kind: deployment_readiness");
         assertThat(output.toString()).contains("provider_type: local");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.k8s_readiness.deployed_version_ref");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.k8s_readiness.deployed_version_ref");
         assertThat(output.toString()).contains("Declare deployed_version_ref for `k8s_readiness`");
     }
 
@@ -2705,12 +2705,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: deployment_readiness");
+        assertThat(output.toString()).contains("provider_contract_kind: deployment_readiness");
         assertThat(output.toString()).contains("provider_type: local");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.k8s_readiness.timeout_seconds");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.k8s_readiness.timeout_seconds");
         assertThat(output.toString()).contains("Declare timeout_seconds as a positive bounded integer for deployment readiness provider `k8s_readiness`");
     }
 
@@ -2736,12 +2736,12 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: deployment_readiness");
+        assertThat(output.toString()).contains("provider_contract_kind: deployment_readiness");
         assertThat(output.toString()).contains("provider_type: local");
-        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.adapters.k8s_readiness.outputs.actual_output_ref");
+        assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.providers.k8s_readiness.outputs.actual_output_ref");
         assertThat(output.toString()).contains("Declare actual_output_ref for deployment readiness provider `k8s_readiness`");
     }
 
@@ -2774,7 +2774,7 @@ class RegressionCommandTest {
                 .contains("Deployment readiness marker not found");
         assertThat(Files.readString(runDir.resolve("run.yaml")))
                 .contains("status: failed")
-                .contains("provider_family: deployment_readiness")
+                .contains("provider_contract_kind: deployment_readiness")
                 .contains("assertion_status: not_run");
     }
 
@@ -2816,7 +2816,7 @@ class RegressionCommandTest {
         assertThat(countOrders(jdbcUrl)).isZero();
         assertThat(runEvidence)
                 .contains("status: passed")
-                .contains("provider_family: db_fixture")
+                .contains("provider_contract_kind: db_fixture")
                 .contains("contract_path: release_units[0].provider_contracts.fixtures.relational_db")
                 .contains("cleanup_result: cleanup.yaml");
     }
@@ -2878,10 +2878,10 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: db_fixture");
+        assertThat(output.toString()).contains("provider_contract_kind: db_fixture");
         assertThat(output.toString()).contains("provider_type: jdbc");
         assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.fixtures.relational_db.verification_queries.seeded_orders.sql");
         assertThat(output.toString()).contains("Move DB fixture verification SQL for `seeded_orders` into sql_ref");
@@ -2910,10 +2910,10 @@ class RegressionCommandTest {
                 print(output), print(new ByteArrayOutputStream()));
 
         assertThat(exit).isEqualTo(1);
-        assertThat(output.toString()).contains("adapter_execution_started: false");
+        assertThat(output.toString()).contains("provider_runtime_started: false");
         assertThat(output.toString()).contains("run_status: blocked");
         assertThat(output.toString()).contains("provider_contract_gaps:");
-        assertThat(output.toString()).contains("provider_family: db_fixture");
+        assertThat(output.toString()).contains("provider_contract_kind: db_fixture");
         assertThat(output.toString()).contains("provider_type: jdbc");
         assertThat(output.toString()).contains("contract_path: release_units[0].provider_contracts.fixtures.relational_db.isolation_key");
         assertThat(output.toString()).contains("Declare isolation_key for DB fixture `relational_db` before setup.");
@@ -3440,7 +3440,7 @@ class RegressionCommandTest {
 
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("field_path: tests/approved")
                 .contains("Add approved_for_regression DSL test cases before run.")
                 .contains("run_status: blocked");
@@ -3469,13 +3469,13 @@ class RegressionCommandTest {
         Path runDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001");
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("run_status: blocked")
                 .contains("field_path: targets")
                 .contains("field_path: execute[0].target");
         assertThat(Files.readString(runDir.resolve("run.yaml")))
                 .contains("status: blocked")
-                .contains("adapter_execution_started: false");
+                .contains("provider_runtime_started: false");
         assertThat(Files.readString(runDir.resolve("failure_details.yaml")))
                 .contains("field_path: targets")
                 .contains("field_path: execute[0].target")
@@ -3507,7 +3507,7 @@ class RegressionCommandTest {
 
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("dsl_gaps:")
                 .contains("test_case_id: RP-001-TC-001")
                 .contains("field_path: compatible_profiles")
@@ -3540,7 +3540,7 @@ class RegressionCommandTest {
 
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("environment_gaps:")
                 .contains("field_path: generated-framework/environment_bindings.targets.RU-transform-job.environment_ref")
                 .contains("reason: environment_readiness_failed")
@@ -3572,7 +3572,7 @@ class RegressionCommandTest {
 
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("environment_gaps:")
                 .contains("field_path: generated-framework/run_profiles/ci_ephemeral.yaml#max_duration")
                 .contains("reason: environment_readiness_failed")
@@ -3604,7 +3604,7 @@ class RegressionCommandTest {
 
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("environment_gaps:")
                 .contains("field_path: generated-framework/run_profiles/ci_ephemeral.yaml#execution_mode")
                 .contains("reason: environment_readiness_failed")
@@ -3636,7 +3636,7 @@ class RegressionCommandTest {
 
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("environment_gaps:")
                 .contains("field_path: generated-framework/environment_bindings.targets.RU-transform-job.readiness_ref")
                 .contains("reason: environment_readiness_failed")
@@ -3665,7 +3665,7 @@ class RegressionCommandTest {
         Path packageRoot = tempDir.resolve("docs/08-release/release-packages/RP-001");
         Path runDir = packageRoot.resolve("evidence/runs/RUN-001");
         assertThat(runExit).isZero();
-        assertThat(runOutput.toString()).contains("adapter_execution_started: true");
+        assertThat(runOutput.toString()).contains("provider_runtime_started: true");
         assertThat(runOutput.toString()).contains("run_status: passed");
         assertThat(Files.readString(runDir.resolve("run.yaml")))
                 .contains("test_case_id: RP-001-TC-001")
@@ -3675,7 +3675,7 @@ class RegressionCommandTest {
                 .contains("dsl_version: v0.2")
                 .contains("targets:")
                 .contains("target_id: RU-transform-job")
-                .contains("runner: spring_boot_cli")
+                .contains("provider: spring_boot_cli")
                 .contains("setup_fixtures:")
                 .contains("fixture_name: orders_seed")
                 .contains("execute_steps:")
@@ -3688,9 +3688,9 @@ class RegressionCommandTest {
                 .contains("evidence_required:")
                 .contains("runtime:")
                 .contains("timeout: PT10M")
-                .contains("provider_family: file_batch")
+                .contains("provider_contract_kind: file_batch")
                 .contains("provider_type: shell")
-                .contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli");
+                .contains("contract_path: release_units[0].provider_contracts.providers.spring_boot_cli");
         assertThat(Files.readString(runDir.resolve("actual/output.txt"))).isEqualTo("adapter-ok\n");
         assertThat(Files.readString(runDir.resolve("assertions.yaml"))).contains("status: passed");
 
@@ -3801,7 +3801,7 @@ class RegressionCommandTest {
             assertThat(runExit).as(runOutput.toString()).isZero();
             assertThat(requestBody.get()).isEqualTo("{\"amount\":100,\"currency\":\"USD\"}\n");
             assertThat(Files.readString(runDir.resolve("request_response.yaml")))
-                    .contains("provider_family: request_response")
+                    .contains("provider_contract_kind: request_response")
                     .contains("http_status: 202")
                     .contains("actual_output: actual/response.json");
             assertThat(Files.readString(runDir.resolve("run.yaml")))
@@ -3809,7 +3809,7 @@ class RegressionCommandTest {
                     .contains("dsl_runtime:")
                     .contains("type: response_status_equals")
                     .contains("expected: 202")
-                    .contains("provider_family: request_response")
+                    .contains("provider_contract_kind: request_response")
                     .contains("assertion_status: passed");
             assertThat(Files.readString(runDir.resolve("assertions.yaml")))
                     .contains("type: response_status_equals")
@@ -4367,18 +4367,18 @@ class RegressionCommandTest {
                 targets:
                   %s:
                     target_id: %s
-                    runner: %s
+                    provider: %s
                     execution_mode: ci_ephemeral
                     environment_ref: ci://pipeline/%s
-                    provider_contract_ref: provider_contracts/providers.yaml#adapters.%s
+                    provider_contract_ref: provider_contracts/providers.yaml#providers.%s
                 """.formatted(targetId, targetId, adapter, rpId, adapter));
         Files.writeString(generated.resolve("provider_contracts/providers.yaml"), """
                 provider_contracts:
-                  adapters:
+                  providers:
                     %s:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: shell
-                      contract_path: generated-framework/provider_contracts/providers.yaml#adapters.%s
+                      contract_path: generated-framework/provider_contracts/providers.yaml#providers.%s
                       command: /bin/sh -c 'echo %s; echo adapter-warn >&2'
                       working_directory: .
                       timeout_seconds: 10
@@ -4390,7 +4390,7 @@ class RegressionCommandTest {
                         actual_output_ref: actual/output.txt
                   bindings:
                     db_seed:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: file_fixture
                       contract_path: generated-framework/provider_contracts/providers.yaml#bindings.db_seed
                       materialize_as: input_file
@@ -4498,15 +4498,15 @@ class RegressionCommandTest {
                 continue;
             }
             String targetId = text(unit, "ru_id");
-            String adapter = text(unit, "adapter");
+            String adapter = firstText(unit, "provider", "runner");
             builder.append("  ").append(targetId).append(":\n");
             builder.append("    target_id: ").append(targetId).append("\n");
-            builder.append("    runner: ").append(adapter).append("\n");
+            builder.append("    provider: ").append(adapter).append("\n");
             builder.append("    execution_mode: ").append(executionMode).append("\n");
             builder.append("    environment_ref: ").append(text(unit, "environment_ref")).append("\n");
             builder.append("    provider_contract_ref: provider_contracts/")
                     .append(safeFileName(targetId))
-                    .append(".yaml#adapters.")
+                    .append(".yaml#providers.")
                     .append(adapter)
                     .append("\n");
         }
@@ -4589,6 +4589,16 @@ class RegressionCommandTest {
         return value == null ? "" : value.toString();
     }
 
+    private String firstText(Map<?, ?> map, String... fields) {
+        for (String field : fields) {
+            String value = text(map, field);
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
     private String safeFileName(String value) {
         return value.replaceAll("[^A-Za-z0-9._-]", "_");
     }
@@ -4661,11 +4671,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://pipeline/%s
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         spring_boot_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: java -jar ${repo}/target/release-unit.jar
                           timeout_seconds: 10
@@ -4676,7 +4686,7 @@ class RegressionCommandTest {
                             actual_output_ref: actual/output.txt
                       bindings:
                         db_seed:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: file_fixture
                           materialize_as: input_file
                       fixtures: {}
@@ -4702,7 +4712,7 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://pipeline/%s
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []
@@ -4748,11 +4758,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://pipeline/%s
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         spring_boot_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: /bin/sh -c 'echo %s; echo adapter-warn >&2'
                           working_directory: .
@@ -4762,7 +4772,7 @@ class RegressionCommandTest {
                             stderr: logs/stderr.log
 %s                      bindings:
                         db_seed:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: file_fixture
                           materialize_as: input_file
                       fixtures: {}
@@ -4834,11 +4844,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://runner/%s
-                    adapter: external_runner
+                    provider: external_runner
                     provider_contracts:
-                      adapters:
+                      providers:
                         external_runner:
-                          provider_family: external_runner
+                          provider_contract_kind: external_runner
                           provider_type: command_runner
                           approval_ref: docs/10-change-control/runner-approval.md
                           approved_by: qa_lead
@@ -4876,11 +4886,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://pipeline/%s/unrelated
-                    adapter: other_cli
+                    provider: other_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         other_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: /bin/sh -c 'echo wrong-ru'
                           working_directory: .
@@ -4907,11 +4917,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://pipeline/%s
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         spring_boot_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: /bin/sh -c 'echo adapter-ok; echo adapter-warn >&2'
                           working_directory: .
@@ -4924,7 +4934,7 @@ class RegressionCommandTest {
                             actual_output_ref: actual/output.txt
                       bindings:
                         db_seed:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: file_fixture
                           materialize_as: input_file
                       fixtures: {}
@@ -4950,11 +4960,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://pipeline/%s/upstream
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         spring_boot_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: /bin/sh -c 'echo upstream-wrong'
                           working_directory: .
@@ -4967,7 +4977,7 @@ class RegressionCommandTest {
                             actual_output_ref: actual/output.txt
                       bindings:
                         db_seed:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: file_fixture
                           materialize_as: input_file
                       fixtures: {}
@@ -4985,11 +4995,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://pipeline/%s/downstream
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         spring_boot_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: /bin/sh -c 'echo downstream-ok'
                           working_directory: .
@@ -5002,7 +5012,7 @@ class RegressionCommandTest {
                             actual_output_ref: actual/output.txt
                       bindings:
                         db_seed:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: file_fixture
                           materialize_as: input_file
                       fixtures: {}
@@ -5028,11 +5038,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://pipeline/%s/ready
-                    adapter: ready_cli
+                    provider: ready_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         ready_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: /bin/sh -c 'echo adapter-ok'
                           working_directory: .
@@ -5045,7 +5055,7 @@ class RegressionCommandTest {
                             actual_output_ref: actual/output.txt
                       bindings:
                         db_seed:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: file_fixture
                           materialize_as: input_file
                       fixtures: {}
@@ -5063,7 +5073,7 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://pipeline/%s/missing-provider
-                    adapter: missing_cli
+                    provider: missing_cli
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []
@@ -5084,11 +5094,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://pipeline/%s/upstream
-                    adapter: upstream_cli
+                    provider: upstream_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         upstream_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: /bin/sh -c 'echo upstream-actual'
                           working_directory: .
@@ -5115,11 +5125,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://pipeline/%s/downstream
-                    adapter: downstream_cli
+                    provider: downstream_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         downstream_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: /bin/sh -c 'echo downstream-ok'
                           working_directory: .
@@ -5185,11 +5195,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/api
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: rest
                           endpoint_ref: http://127.0.0.1:%s
 %s                          actions:
@@ -5202,7 +5212,7 @@ class RegressionCommandTest {
                             stderr: logs/error.log
 %s                      bindings:
                         api_payload:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: request_body
                           bind_as: request_body
                       fixtures: {}
@@ -5231,11 +5241,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/api
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: grpc
                           service_ref: 127.0.0.1:9090
                           descriptor_ref: descriptors/payment.desc
@@ -5252,7 +5262,7 @@ class RegressionCommandTest {
                             actual_output_ref: actual/response.json
                       bindings:
                         api_payload:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: request_body
                           bind_as: request_body
                       fixtures: {}
@@ -5303,10 +5313,10 @@ class RegressionCommandTest {
 
         assertThat(exit).isEqualTo(1);
         assertThat(output.toString())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("run_status: blocked")
                 .contains("provider_contract_gaps:")
-                .contains("provider_family: messaging")
+                .contains("provider_contract_kind: messaging")
                 .contains("provider_type: kafka")
                 .contains(expectedPathSuffix)
                 .contains(expectedOwnerAction);
@@ -5394,11 +5404,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/events
-                    adapter: message_bus
+                    provider: message_bus
                     provider_contracts:
-                      adapters:
+                      providers:
                         message_bus:
-                          provider_family: messaging
+                          provider_contract_kind: messaging
                           provider_type: %s
                           topic_ref: %s
 %s                          actions:
@@ -5410,7 +5420,7 @@ class RegressionCommandTest {
                             stderr: logs/message-error.log
 %s                      bindings:
                         message_event:
-                          provider_family: messaging
+                          provider_contract_kind: messaging
                           provider_type: event_payload
                           bind_as: event_payload
                       fixtures: {}
@@ -5437,11 +5447,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/events
-                    adapter: message_bus
+                    provider: message_bus
                     provider_contracts:
-                      adapters:
+                      providers:
                         message_bus:
-                          provider_family: messaging
+                          provider_contract_kind: messaging
                           provider_type: kafka
                           bootstrap_servers_ref: env://KAFKA_BOOTSTRAP_SERVERS
                           topic_ref: payment.events
@@ -5482,11 +5492,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/events
-                    adapter: message_bus
+                    provider: message_bus
                     provider_contracts:
-                      adapters:
+                      providers:
                         message_bus:
-                          provider_family: messaging
+                          provider_contract_kind: messaging
                           provider_type: kafka
                           bootstrap_servers_ref: env://KAFKA_BOOTSTRAP_SERVERS
                           topic_ref: payment.events
@@ -5526,11 +5536,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/events
-                    adapter: message_bus
+                    provider: message_bus
                     provider_contracts:
-                      adapters:
+                      providers:
                         message_bus:
-                          provider_family: messaging
+                          provider_contract_kind: messaging
                           provider_type: nats
                           server_ref: env://NATS_SERVER
                           subject_ref: payment.status.request
@@ -5549,7 +5559,7 @@ class RegressionCommandTest {
                             actual_output_ref: actual/message.json
                       bindings:
                         message_event:
-                          provider_family: messaging
+                          provider_contract_kind: messaging
                           provider_type: event_payload
                           bind_as: event_payload
                       fixtures: {}
@@ -5613,11 +5623,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: true
                     environment_ref: ci://payment/k8s
-                    adapter: k8s_readiness
+                    provider: k8s_readiness
                     provider_contracts:
-                      adapters:
+                      providers:
                         k8s_readiness:
-                          provider_family: deployment_readiness
+                          provider_contract_kind: deployment_readiness
                           provider_type: local
                           readiness_probe: file_exists
                           target_selector: deployment/payment-api
@@ -5656,11 +5666,11 @@ class RegressionCommandTest {
                     execution_mode: sit_deployed
                     deployment_required: true
                     environment_ref: sit://payment/k8s
-                    adapter: k8s_readiness
+                    provider: k8s_readiness
                     provider_contracts:
-                      adapters:
+                      providers:
                         k8s_readiness:
-                          provider_family: deployment_readiness
+                          provider_contract_kind: deployment_readiness
                           provider_type: local
                           readiness_probe: file_exists
                           target_selector: deployment/payment-api
@@ -5712,11 +5722,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://order/db
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         spring_boot_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: /bin/sh -c 'echo db-fixture-ok'
                           working_directory: .
@@ -5729,12 +5739,12 @@ class RegressionCommandTest {
                             actual_output_ref: actual/output.txt
                       bindings:
                         db_seed:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: file_fixture
                           materialize_as: jdbc_seed
                       fixtures:
                         relational_db:
-                          provider_family: db_fixture
+                          provider_contract_kind: db_fixture
                           provider_type: jdbc
                           connection_ref: %s
 %s                          cleanup_strategy: by_test_run_id
@@ -5785,11 +5795,11 @@ class RegressionCommandTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://pipeline/%s
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         spring_boot_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: /bin/sh -c 'echo adapter-ok; echo adapter-warn >&2'
                           working_directory: .
@@ -5802,12 +5812,12 @@ class RegressionCommandTest {
                             actual_output_ref: actual/output.txt
                       bindings:
                         db_seed:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: file_fixture
                           materialize_as: input_file
                       fixtures:
                         relational_db:
-                          provider_family: db_fixture
+                          provider_contract_kind: db_fixture
                           provider_type: jdbc
                           connection_ref: jdbc:h2:mem:cleanup_fixture;DB_CLOSE_DELAY=-1
                           isolation_key: test_run_id
@@ -5889,12 +5899,8 @@ class RegressionCommandTest {
                 targets:
                   RU-transform-job:
                     type: batch_runner
-                    runner: spring_boot_cli
+                    provider: spring_boot_cli
                     environment: ci://pipeline/%s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [db_seed, batch_execution, file_assertion]
                 setup:
                   fixtures:
                     orders_seed:
@@ -5947,13 +5953,8 @@ class RegressionCommandTest {
                 targets:
                   RU-transform-job:
                     type: batch_runner
-                    runner: spring_boot_cli
+                    provider: spring_boot_cli
                     environment: ci://pipeline/%s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  description: Run the transform job and compare output to the approved expected result.
-                  capabilities: [db_seed, batch_execution, file_assertion]
                 setup:
                   fixtures:
                     orders_seed:
@@ -6009,13 +6010,8 @@ class RegressionCommandTest {
                 targets:
                   RU-transform-job:
                     type: batch_runner
-                    runner: spring_boot_cli
+                    provider: spring_boot_cli
                     environment: ci://pipeline/%s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  description: Run the transform job and verify a structured output field.
-                  capabilities: [batch_execution, response_assertion]
                 setup:
                   fixtures: {}
                 execute:
@@ -6064,13 +6060,8 @@ class RegressionCommandTest {
                 targets:
                   RU-transform-job:
                     type: batch_runner
-                    runner: spring_boot_cli
+                    provider: spring_boot_cli
                     environment: ci://pipeline/%s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  description: Run the transform job and verify a numeric structured output field.
-                  capabilities: [batch_execution, response_assertion]
                 setup:
                   fixtures: {}
                 execute:
@@ -6122,11 +6113,6 @@ class RegressionCommandTest {
                     type: application
                     runner: request_response
                     environment: ci://payment/api
-                scenario:
-                  type: integration
-                  scope: release_package
-                  description: Submit a payment request and verify the HTTP status from provider metadata.
-                  capabilities: [api_payload, request_response, response_assertion]
                 setup:
                   fixtures: {}
                 execute:
@@ -6177,13 +6163,9 @@ class RegressionCommandTest {
                 source_fingerprint: sha256:test
                 execution_target:
                   ru_id: RU-transform-job
-                  adapter: spring_boot_cli
+                  provider: spring_boot_cli
                   execution_mode: ci_ephemeral
                   environment_ref: ci://pipeline/%s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [db_seed, batch_execution, file_assertion]
                 expected:
                   ref: expected-results/approved/%s.yaml
                 oracles:
@@ -6226,12 +6208,8 @@ class RegressionCommandTest {
                 targets:
                   RU-transform-job:
                     type: spring_boot_application
-                    runner: spring_boot_cli
+                    provider: spring_boot_cli
                     environment: ci://pipeline/%s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [db_seed, batch_execution, file_assertion]
                 parameters:
                   strategy: explicit_cases
                   cases:
@@ -6294,12 +6272,8 @@ class RegressionCommandTest {
                 targets:
                   RU-transform-job:
                     type: spring_boot_application
-                    runner: spring_boot_cli
+                    provider: spring_boot_cli
                     environment: ci://pipeline/%s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [db_seed, batch_execution, file_assertion]
                 parameters:
                   ref: parameter-sets/orders_regression_cases.yaml
                   bind_as: orders_case
@@ -6404,13 +6378,9 @@ class RegressionCommandTest {
                 source_fingerprint: sha256:test
                 execution_target:
                   ru_id: RU-legacy-runner
-                  adapter: external_runner
+                  provider: external_runner
                   execution_mode: ci_ephemeral
                   environment_ref: ci://runner/%s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [batch_execution, file_assertion]
                 expected:
                   ref: expected-results/approved/%s.yaml
                 oracles:
@@ -6454,13 +6424,9 @@ class RegressionCommandTest {
                 source_fingerprint: sha256:test
                 execution_target:
                   ru_id: %s
-                  adapter: %s
+                  provider: %s
                   execution_mode: ci_ephemeral
                   environment_ref: ci://pipeline/%s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [batch_execution, file_assertion]
                 expected:
                   ref: expected-results/approved/%s.yaml
                 oracles:
@@ -6514,13 +6480,9 @@ class RegressionCommandTest {
                 source_fingerprint: sha256:test
                 execution_target:
                   ru_id: %s
-                  adapter: %s
+                  provider: %s
                   execution_mode: ci_ephemeral
                   environment_ref: ci://pipeline/%s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [db_seed, batch_execution, file_assertion]
                 expected:
                   ref: expected-results/approved/%s.yaml
                 oracles:
@@ -6576,13 +6538,9 @@ class RegressionCommandTest {
                 source_fingerprint: sha256:test
                 execution_target:
                   ru_id: RU-payment-api
-                  adapter: request_response
+                  provider: request_response
                   execution_mode: ci_ephemeral
                   environment_ref: ci://payment/api
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [api_payload, request_response, file_assertion]
                 expected:
                   ref: expected-results/approved/%s.yaml
                 oracles:
@@ -6627,13 +6585,9 @@ class RegressionCommandTest {
                 source_fingerprint: sha256:test
                 execution_target:
                   ru_id: RU-payment-events
-                  adapter: message_bus
+                  provider: message_bus
                   execution_mode: ci_ephemeral
                   environment_ref: ci://payment/events
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [message_event, messaging, file_assertion]
                 expected:
                   ref: expected-results/approved/%s.yaml
                 oracles:
@@ -6675,13 +6629,9 @@ class RegressionCommandTest {
                 source_fingerprint: sha256:test
                 execution_target:
                   ru_id: RU-payment-events
-                  adapter: message_bus
+                  provider: message_bus
                   execution_mode: ci_ephemeral
                   environment_ref: ci://payment/events
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [messaging, file_assertion]
                 expected:
                   ref: expected-results/approved/%s.yaml
                 oracles:
@@ -6720,13 +6670,9 @@ class RegressionCommandTest {
                 source_fingerprint: sha256:test
                 execution_target:
                   ru_id: RU-payment-events
-                  adapter: message_bus
+                  provider: message_bus
                   execution_mode: ci_ephemeral
                   environment_ref: ci://payment/events
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [messaging, cleanup, file_assertion]
                 expected:
                   ref: expected-results/approved/%s.yaml
                 oracles:
@@ -6765,13 +6711,9 @@ class RegressionCommandTest {
                 source_fingerprint: sha256:test
                 execution_target:
                   ru_id: RU-payment-k8s
-                  adapter: k8s_readiness
+                  provider: k8s_readiness
                   execution_mode: ci_ephemeral
                   environment_ref: ci://payment/k8s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [deployment_readiness, file_assertion]
                 expected:
                   ref: expected-results/approved/%s.yaml
                 oracles:
@@ -6810,13 +6752,9 @@ class RegressionCommandTest {
                 source_fingerprint: sha256:test
                 execution_target:
                   ru_id: RU-order-db
-                  adapter: spring_boot_cli
+                  provider: spring_boot_cli
                   execution_mode: ci_ephemeral
                   environment_ref: ci://order/db
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [db_seed, db_fixture, batch_execution, file_assertion]
                 expected:
                   ref: expected-results/approved/%s.yaml
                 oracles:
@@ -6871,13 +6809,9 @@ class RegressionCommandTest {
                 source_fingerprint: sha256:test
                 execution_target:
                   ru_id: RU-transform-job
-                  adapter: spring_boot_cli
+                  provider: spring_boot_cli
                   execution_mode: ci_ephemeral
                   environment_ref: ci://pipeline/%s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [db_seed, batch_execution, file_assertion]
                 expected:
                   ref: expected-results/approved/%s-ER-001.yaml
                 oracles:
@@ -6917,13 +6851,9 @@ class RegressionCommandTest {
                 source_fingerprint: sha256:test
                 execution_target:
                   ru_id: RU-transform-job
-                  adapter: spring_boot_cli
+                  provider: spring_boot_cli
                   execution_mode: ci_ephemeral
                   environment_ref: ci://pipeline/%s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [db_seed, batch_execution, file_assertion]
                 expected:
                   ref: expected-results/approved/%s-ER-001.yaml
                 oracles:
@@ -6971,13 +6901,9 @@ class RegressionCommandTest {
                 source_fingerprint: sha256:test
                 execution_target:
                   ru_id: RU-transform-job
-                  adapter: spring_boot_cli
+                  provider: spring_boot_cli
                   execution_mode: ci_ephemeral
                   environment_ref: ci://pipeline/%s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [db_seed, batch_execution, file_assertion]
                 expected:
                   ref: expected-results/approved/%s-ER-001.yaml
                 oracles:
@@ -7027,10 +6953,6 @@ class RegressionCommandTest {
                 source_fingerprint: sha256:test
                 labels:
                   package: %s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [batch_execution, file_assertion]
                 setup:
                   fixtures:
                     orders_seed:

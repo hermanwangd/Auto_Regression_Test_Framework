@@ -46,7 +46,7 @@ class FrameworkVerificationIT {
         assertThat(check.exitCode()).isZero();
         assertThat(check.stdout()).contains("status: pass");
         assertThat(run.exitCode()).isZero();
-        assertThat(run.stdout()).contains("adapter_execution_started: true");
+        assertThat(run.stdout()).contains("provider_runtime_started: true");
         assertThat(run.stdout()).contains("batch_id: BATCH-001");
         assertThat(report.exitCode()).isZero();
         assertThat(report.stdout()).contains("coverage_percent: 100.0");
@@ -99,23 +99,23 @@ class FrameworkVerificationIT {
         CommandResult run = execute(command(), "run", productRepo, "--env", "ci_ephemeral");
 
         assertThat(run.exitCode()).isEqualTo(1);
-        assertThat(run.stdout()).contains("adapter_execution_started: false");
+        assertThat(run.stdout()).contains("provider_runtime_started: false");
         assertThat(run.stdout()).contains(
-                "contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli.command");
-        assertThat(run.stdout()).contains("provider_family: file_batch");
+                "contract_path: release_units[0].provider_contracts.providers.spring_boot_cli.command");
+        assertThat(run.stdout()).contains("provider_contract_kind: file_batch");
         assertThat(run.stdout()).contains("affected_ru: RU-framework-sample-adapter");
         assertThat(run.stdout()).contains("run_status: blocked");
         assertThat(Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml")))
                 .contains("status: blocked");
         assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/run.yaml")))
                 .contains("status: blocked")
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("failure_details: failure_details.yaml");
         assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/failure_details.yaml")))
-                .contains("release_units[0].provider_contracts.adapters.spring_boot_cli.command")
-                .contains("provider_family: file_batch")
+                .contains("release_units[0].provider_contracts.providers.spring_boot_cli.command")
+                .contains("provider_contract_kind: file_batch")
                 .contains("affected_ru: RU-framework-sample-adapter")
-                .contains("Declare executable adapter command for `spring_boot_cli`")
+                .contains("Declare executable provider command for `spring_boot_cli`")
                 .contains("Affected target: `RU-framework-sample-adapter`");
     }
 
@@ -131,7 +131,7 @@ class FrameworkVerificationIT {
         CommandResult run = execute(command(), "run", productRepo, "--env", "ci_ephemeral");
 
         assertThat(run.exitCode()).isEqualTo(1);
-        assertThat(run.stdout()).contains("adapter_execution_started: false");
+        assertThat(run.stdout()).contains("provider_runtime_started: false");
         assertThat(run.stdout()).contains("expected_result_eligibility:");
         assertThat(run.stdout()).contains("eligible: false");
         assertThat(run.stdout()).contains("field_path: status");
@@ -139,7 +139,7 @@ class FrameworkVerificationIT {
         assertThat(run.stdout()).contains("run_status: blocked");
         assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/run.yaml")))
                 .contains("status: blocked")
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("failure_details: failure_details.yaml");
         assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/failure_details.yaml")))
                 .contains("field_path: status")
@@ -156,7 +156,7 @@ class FrameworkVerificationIT {
         CommandResult run = execute(command(), "run", productRepo, "--env", "ci_ephemeral");
 
         assertThat(run.exitCode()).isEqualTo(1);
-        assertThat(run.stdout()).contains("adapter_execution_started: false");
+        assertThat(run.stdout()).contains("provider_runtime_started: false");
         assertThat(run.stdout()).contains("field_path: tests/approved");
         assertThat(run.stdout()).contains("run_status: blocked");
         assertThat(Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml")))
@@ -164,7 +164,7 @@ class FrameworkVerificationIT {
         assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/run.yaml")))
                 .contains("status: blocked")
                 .contains("test_case_id: ")
-                .contains("adapter_execution_started: false");
+                .contains("provider_runtime_started: false");
         assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/failure_details.yaml")))
                 .contains("tests/approved")
                 .contains("Add approved_for_regression DSL test cases before run.");
@@ -183,7 +183,7 @@ class FrameworkVerificationIT {
         CommandResult report = execute(command(), "report", productRepo, "--batch-id", "BATCH-001");
 
         assertThat(run.exitCode()).isEqualTo(1);
-        assertThat(run.stdout()).contains("adapter_execution_started: true");
+        assertThat(run.stdout()).contains("provider_runtime_started: true");
         assertThat(run.stdout()).contains("status: failed");
         assertThat(run.stdout()).contains("run_status: failed");
         assertThat(Files.readString(packageRoot.resolve("evidence/runs/RUN-001/run.yaml")))
@@ -268,7 +268,7 @@ class FrameworkVerificationIT {
                 .isEqualTo("ci://framework-verification/RP-FWK-SAMPLE");
         assertThat(Files.readString(packageRoot.resolve("rp_ru_mapping.yaml")))
                 .contains("provider_contracts:")
-                .contains("provider_family: file_batch")
+                .contains("provider_contract_kind: file_batch")
                 .contains("provider_type: shell");
         assertThat(Files.exists(packageRoot.resolve("generated-framework"))).isTrue();
         assertThat(Files.exists(packageRoot.resolve("generated-framework/run_plan.yaml"))).isTrue();
@@ -293,7 +293,6 @@ class FrameworkVerificationIT {
                 .contains("runtime_unit: RU-framework-sample-adapter")
                 .contains("source_refs:")
                 .contains("acceptance_criteria: acceptance_criteria.md#RP-FWK-SAMPLE-AC-001")
-                .contains("scenario:")
                 .contains("targets:")
                 .contains("setup:")
                 .contains("execute:")
@@ -306,6 +305,8 @@ class FrameworkVerificationIT {
                 .doesNotContain("ac_id:")
                 .doesNotContain("artifact_status:")
                 .doesNotContain("execution_target:")
+                .doesNotContain("scenario:")
+                .doesNotContain("capabilities:")
                 .doesNotContain("package_inputs:")
                 .doesNotContain("oracles:")
                 .doesNotContain("steps:")
@@ -413,7 +414,7 @@ class FrameworkVerificationIT {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/events
-                    adapter: message_bus
+                    provider: message_bus
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []
@@ -429,7 +430,7 @@ class FrameworkVerificationIT {
                     assertThat(gap.affectedRu()).isEqualTo("RU-payment-events");
                     assertThat(gap.capability()).isEqualTo("message_bus");
                     assertThat(gap.fieldPath())
-                            .isEqualTo("release_units[0].provider_contracts.adapters.message_bus");
+                            .isEqualTo("release_units[0].provider_contracts.providers.message_bus");
                     assertThat(gap.ownerAction()).contains("RU-payment-events");
                 })
                 .extracting(ProviderContractGap::fieldPath)
@@ -443,33 +444,33 @@ class FrameworkVerificationIT {
         CommandResult dryRun = execute(command(), "run", productRepo, "--env", "ci_ephemeral", "--dry-run");
 
         assertThat(dryRun.exitCode()).isZero();
-        assertThat(dryRun.stdout()).contains("adapter_execution_started: false");
+        assertThat(dryRun.stdout()).contains("provider_runtime_started: false");
         assertThat(dryRun.stdout()).contains("run_status: dry_run_ready");
         assertThat(dryRun.stdout())
-                .contains("provider_family: request_response")
+                .contains("provider_contract_kind: request_response")
                 .contains("provider_type: rest")
                 .contains("affected_ru: RU-payment-api")
-                .contains("contract_path: release_units[0].provider_contracts.adapters.request_response")
-                .contains("provider_family: messaging")
+                .contains("contract_path: release_units[0].provider_contracts.providers.request_response")
+                .contains("provider_contract_kind: messaging")
                 .contains("provider_type: local")
                 .contains("affected_ru: RU-payment-events")
-                .contains("contract_path: release_units[1].provider_contracts.adapters.message_bus")
-                .contains("provider_family: db_fixture")
+                .contains("contract_path: release_units[1].provider_contracts.providers.message_bus")
+                .contains("provider_contract_kind: db_fixture")
                 .contains("provider_type: relational_db")
                 .contains("affected_ru: RU-payment-db")
-                .contains("contract_path: release_units[2].provider_contracts.adapters.db_fixture")
-                .contains("provider_family: deployment_readiness")
+                .contains("contract_path: release_units[2].provider_contracts.providers.db_fixture")
+                .contains("provider_contract_kind: deployment_readiness")
                 .contains("provider_type: local")
                 .contains("affected_ru: RU-payment-k8s")
-                .contains("contract_path: release_units[3].provider_contracts.adapters.k8s_readiness")
-                .contains("provider_family: external_runner")
+                .contains("contract_path: release_units[3].provider_contracts.providers.k8s_readiness")
+                .contains("provider_contract_kind: external_runner")
                 .contains("provider_type: command_runner")
                 .contains("affected_ru: RU-legacy-runner")
-                .contains("contract_path: release_units[4].provider_contracts.adapters.external_runner")
-                .contains("provider_family: file_batch")
+                .contains("contract_path: release_units[4].provider_contracts.providers.external_runner")
+                .contains("provider_contract_kind: file_batch")
                 .contains("provider_type: shell")
                 .contains("affected_ru: RU-batch-job")
-                .contains("contract_path: release_units[5].provider_contracts.adapters.spring_boot_cli")
+                .contains("contract_path: release_units[5].provider_contracts.providers.spring_boot_cli")
                 .contains("registry_status: supported")
                 .contains("ap: Planning and Binding");
         assertThat(Files.exists(packageRoot.resolve("evidence/runs"))).isFalse();
@@ -489,7 +490,6 @@ class FrameworkVerificationIT {
                 "RP-FWK-SAMPLE-AC-RUNNER",
                 "RU-legacy-runner",
                 "external_runner",
-                "external_runner",
                 "");
 
         CommandResult blockedDryRun = execute(command(), "run", blockedRepo, "--env", "ci_ephemeral", "--dry-run");
@@ -498,13 +498,13 @@ class FrameworkVerificationIT {
         assertThat(blockedDryRun.stdout()).contains("run_status: blocked");
         assertThat(blockedDryRun.stdout())
                 .contains("provider_contract_gaps:")
-                .contains("provider_family: external_runner")
+                .contains("provider_contract_kind: external_runner")
                 .contains("provider_type: command_runner")
                 .contains("registry_status: unapproved_escape_hatch")
                 .contains("runtime_status: blocked")
                 .contains("affected_ru: RU-legacy-runner")
                 .contains("capability: external_runner")
-                .contains("contract_path: release_units[4].provider_contracts.adapters.external_runner.approval_ref")
+                .contains("contract_path: release_units[4].provider_contracts.providers.external_runner.approval_ref")
                 .contains("Declare external runner approval metadata")
                 .contains("ap: Planning and Binding");
 
@@ -519,7 +519,6 @@ class FrameworkVerificationIT {
                 "RP-FWK-SAMPLE-AC-AMBIGUOUS",
                 "",
                 "request_response",
-                "request_response",
                 """
                   payment_payload:
                     ref: fixtures/api/payment_payload.json
@@ -531,14 +530,14 @@ class FrameworkVerificationIT {
 
         assertThat(ambiguousDryRun.exitCode()).isEqualTo(1);
         assertThat(ambiguousDryRun.stdout())
-                .contains("adapter_execution_started: false")
+                .contains("provider_runtime_started: false")
                 .contains("run_status: blocked")
                 .contains("provider_contract_gaps:")
-                .contains("provider_family: request_response")
+                .contains("provider_contract_kind: request_response")
                 .contains("registry_status: ambiguous")
                 .contains("runtime_status: blocked")
                 .contains("affected_ru: RU-payment-api-blue,RU-payment-api-green")
-                .contains("contract_path: release_units[0].provider_contracts.adapters.request_response")
+                .contains("contract_path: release_units[0].provider_contracts.providers.request_response")
                 .contains("Select target ID")
                 .contains("ap: Planning and Binding");
     }
@@ -557,10 +556,10 @@ class FrameworkVerificationIT {
                 .contains("resolved_bindings:")
                 .contains("binding_type: db_seed")
                 .contains("provider_contracts_used:")
-                .contains("provider_family: file_batch")
+                .contains("provider_contract_kind: file_batch")
                 .contains("provider_type: file_fixture")
                 .contains("registry_status: supported")
-                .contains("contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli")
+                .contains("contract_path: release_units[0].provider_contracts.providers.spring_boot_cli")
                 .contains("contract_path: release_units[0].provider_contracts.bindings.db_seed")
                 .contains("affected_ru: RU-framework-sample-adapter")
                 .contains("status: passed");
@@ -688,15 +687,15 @@ class FrameworkVerificationIT {
                 continue;
             }
             String targetId = text(unit, "ru_id");
-            String adapter = text(unit, "adapter");
+            String adapter = firstText(unit, "provider", "runner");
             builder.append("  ").append(targetId).append(":\n");
             builder.append("    target_id: ").append(targetId).append("\n");
-            builder.append("    runner: ").append(adapter).append("\n");
+            builder.append("    provider: ").append(adapter).append("\n");
             builder.append("    execution_mode: ").append(executionMode).append("\n");
             builder.append("    environment_ref: ").append(text(unit, "environment_ref")).append("\n");
             builder.append("    provider_contract_ref: provider_contracts/")
                     .append(safeFileName(targetId))
-                    .append(".yaml#adapters.")
+                    .append(".yaml#providers.")
                     .append(adapter)
                     .append("\n");
         }
@@ -779,6 +778,16 @@ class FrameworkVerificationIT {
         return value == null ? "" : value.toString();
     }
 
+    private String firstText(Map<?, ?> map, String... fields) {
+        for (String field : fields) {
+            String value = text(map, field);
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
     private String safeFileName(String value) {
         return value.replaceAll("[^A-Za-z0-9._-]", "_");
     }
@@ -797,7 +806,6 @@ class FrameworkVerificationIT {
                 "RP-FWK-SAMPLE-AC-API",
                 "RU-payment-api",
                 "request_response",
-                "request_response",
                 """
                   payment_payload:
                     ref: fixtures/api/payment_payload.json
@@ -809,7 +817,6 @@ class FrameworkVerificationIT {
                 "RP-FWK-SAMPLE-AC-EVENTS",
                 "RU-payment-events",
                 "message_bus",
-                "messaging",
                 """
                   payment_event:
                     ref: fixtures/events/payment_event.json
@@ -821,7 +828,6 @@ class FrameworkVerificationIT {
                 "RP-FWK-SAMPLE-AC-DB",
                 "RU-payment-db",
                 "db_fixture",
-                "db_fixture",
                 "");
         writeDryRunTestCase(
                 packageRoot,
@@ -829,14 +835,12 @@ class FrameworkVerificationIT {
                 "RP-FWK-SAMPLE-AC-K8S",
                 "RU-payment-k8s",
                 "k8s_readiness",
-                "deployment_readiness",
                 "");
         writeDryRunTestCase(
                 packageRoot,
                 "RP-FWK-SAMPLE-TC-RUNNER",
                 "RP-FWK-SAMPLE-AC-RUNNER",
                 "RU-legacy-runner",
-                "external_runner",
                 "external_runner",
                 "");
         writeDryRunTestCase(
@@ -845,7 +849,6 @@ class FrameworkVerificationIT {
                 "RP-FWK-SAMPLE-AC-BATCH",
                 "RU-batch-job",
                 "spring_boot_cli",
-                "file_batch",
                 """
                   orders_seed:
                     ref: fixtures/db/orders_seed.yaml
@@ -894,7 +897,6 @@ class FrameworkVerificationIT {
             String acId,
             String ruId,
             String adapter,
-            String capability,
             String inputsYaml) throws Exception {
         String expectedResultId = acId.replace("-AC-", "-ER-");
         Path testCase = packageRoot.resolve("tests/approved/" + testCaseId + ".yaml");
@@ -911,13 +913,9 @@ class FrameworkVerificationIT {
                 source_fingerprint: sha256:provider-family-dry-run
                 execution_target:
                 %s\
-                  adapter: %s
+                  provider: %s
                   execution_mode: ci_ephemeral
                   environment_ref: ci://framework-verification/%s
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [%s, file_assertion]
                 expected:
                   ref: expected-results/approved/%s.yaml
                 oracles:
@@ -943,7 +941,6 @@ class FrameworkVerificationIT {
                 targetRuYaml(ruId),
                 adapter,
                 ruId,
-                capability,
                 expectedResultId,
                 expectedResultId,
                 inputsYaml.isBlank() ? "    {}\n" : inputsYaml.indent(4),
@@ -980,11 +977,11 @@ class FrameworkVerificationIT {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/api
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: rest
                           endpoint_ref: env://PAYMENT_API
                           timeout_seconds: 10
@@ -997,7 +994,7 @@ class FrameworkVerificationIT {
                             actual_output_ref: actual/response.json
                       bindings:
                         api_payload:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: request_body
                           bind_as: request_body
                       fixtures: {}
@@ -1012,11 +1009,11 @@ class FrameworkVerificationIT {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/events
-                    adapter: message_bus
+                    provider: message_bus
                     provider_contracts:
-                      adapters:
+                      providers:
                         message_bus:
-                          provider_family: messaging
+                          provider_contract_kind: messaging
                           provider_type: local
                           topic_ref: mock://payment.events
                           timeout_seconds: 10
@@ -1024,7 +1021,7 @@ class FrameworkVerificationIT {
                             actual_output_ref: actual/message.json
                       bindings:
                         message_event:
-                          provider_family: messaging
+                          provider_contract_kind: messaging
                           provider_type: event_payload
                           bind_as: event_payload
                       fixtures: {}
@@ -1039,16 +1036,16 @@ class FrameworkVerificationIT {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/db
-                    adapter: db_fixture
+                    provider: db_fixture
                     provider_contracts:
-                      adapters:
+                      providers:
                         db_fixture:
-                          provider_family: db_fixture
+                          provider_contract_kind: db_fixture
                           provider_type: relational_db
                           command: validate-db-fixture
                       fixtures:
                         relational_db:
-                          provider_family: db_fixture
+                          provider_contract_kind: db_fixture
                           provider_type: jdbc
                           connection_ref: secret://ci/payment-db
                           isolation_key: test_run_id
@@ -1064,11 +1061,11 @@ class FrameworkVerificationIT {
                     execution_mode: ci_ephemeral
                     deployment_required: true
                     environment_ref: ci://payment/k8s
-                    adapter: k8s_readiness
+                    provider: k8s_readiness
                     provider_contracts:
-                      adapters:
+                      providers:
                         k8s_readiness:
-                          provider_family: deployment_readiness
+                          provider_contract_kind: deployment_readiness
                           provider_type: local
                           readiness_probe: file_exists
                           deployment_ref: fixtures/readiness/payment-api.ready
@@ -1087,11 +1084,11 @@ class FrameworkVerificationIT {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://runner
-                    adapter: external_runner
+                    provider: external_runner
                     provider_contracts:
-                      adapters:
+                      providers:
                         external_runner:
-                          provider_family: external_runner
+                          provider_contract_kind: external_runner
                           provider_type: command_runner
                           approval_ref: docs/10-change-control/runner-approval.md
                           approved_by: release_owner
@@ -1115,11 +1112,11 @@ class FrameworkVerificationIT {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://batch
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         spring_boot_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: java -jar batch.jar
                           timeout_seconds: 60
@@ -1130,7 +1127,7 @@ class FrameworkVerificationIT {
                             actual_output_ref: actual/batch-output.txt
                       bindings:
                         db_seed:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: file_fixture
                           materialize_as: input_file
                     evidence_responsibility: [execution_log]
@@ -1151,11 +1148,11 @@ class FrameworkVerificationIT {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/api-blue
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: rest
                           endpoint_ref: env://PAYMENT_API_BLUE
                           timeout_seconds: 10
@@ -1168,7 +1165,7 @@ class FrameworkVerificationIT {
                             actual_output_ref: actual/blue-response.json
                       bindings:
                         api_payload:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: request_body
                           bind_as: request_body
                     evidence_responsibility: [execution_log]
@@ -1182,11 +1179,11 @@ class FrameworkVerificationIT {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/api-green
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: rest
                           endpoint_ref: env://PAYMENT_API_GREEN
                           timeout_seconds: 10
@@ -1199,7 +1196,7 @@ class FrameworkVerificationIT {
                             actual_output_ref: actual/green-response.json
                       bindings:
                         api_payload:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: request_body
                           bind_as: request_body
                     evidence_responsibility: [execution_log]

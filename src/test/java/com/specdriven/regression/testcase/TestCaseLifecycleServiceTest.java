@@ -48,7 +48,7 @@ class TestCaseLifecycleServiceTest {
         assertThat(yaml).contains("acceptance_criteria: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-001");
         assertThat(yaml).contains("source_fingerprint:");
         assertThat(yaml).contains("targets:");
-        assertThat(yaml).contains("runner: spring_boot_cli");
+        assertThat(yaml).contains("provider: spring_boot_cli");
         assertThat(yaml).contains("environment: ci://pipeline/rp-ar-m1-data-pipeline");
         assertThat(yaml).contains("setup:");
         assertThat(yaml).contains("execute:");
@@ -117,7 +117,8 @@ class TestCaseLifecycleServiceTest {
                 List.of("dataset_input"));
 
         String yaml = Files.readString(result.writtenPath());
-        assertThat(yaml).contains("capabilities: [dataset_input]");
+        assertThat(yaml).doesNotContain("scenario:");
+        assertThat(yaml).doesNotContain("capabilities:");
         assertThat(yaml).contains("type: dataset");
         assertThat(yaml).contains("lifecycle: read_only");
         assertThat(yaml).contains("type: application");
@@ -179,7 +180,8 @@ class TestCaseLifecycleServiceTest {
                 List.of());
 
         String yaml = Files.readString(result.writtenPath());
-        assertThat(yaml).contains("capabilities: []");
+        assertThat(yaml).doesNotContain("scenario:");
+        assertThat(yaml).doesNotContain("capabilities:");
         assertThat(yaml).contains("type: existing_state");
         assertThat(yaml).contains("type: application");
         assertThat(yaml).contains("operation: run_application");
@@ -196,7 +198,7 @@ class TestCaseLifecycleServiceTest {
                 List.of());
 
         TestCaseDraftResult result = new TestCaseLifecycleService().generateDraft(
-                tempDir, readyAc, ExecutionContextReadiness.incomplete(List.of("execution_target.adapter")));
+                tempDir, readyAc, ExecutionContextReadiness.incomplete(List.of("execution_target.provider")));
 
         assertThat(result.generatedArtifactType()).isEqualTo("draft_test_skeleton");
         String yaml = Files.readString(result.writtenPath());
@@ -209,7 +211,7 @@ class TestCaseLifecycleServiceTest {
         assertThat(yaml).contains("source_refs:");
         assertThat(yaml).contains("acceptance_criteria: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-002");
         assertThat(yaml).contains("readiness_gaps:");
-        assertThat(yaml).contains("field_path: execution_target.adapter");
+        assertThat(yaml).contains("field_path: execution_target.provider");
         assertThat(yaml).contains("reason: execution_context_incomplete");
         assertThat(yaml).contains("owner_action: Complete RP/RU mapping execution context before executable test generation.");
         assertThat(yaml)
@@ -298,7 +300,7 @@ class TestCaseLifecycleServiceTest {
         AcReadinessItem readyAc = readyAc("RP-AR-M1-data-pipeline-AC-005");
 
         assertThatThrownBy(() -> new TestCaseLifecycleService().generateDraft(
-                        tempDir, readyAc, ExecutionContextReadiness.incomplete(List.of("execution_target.adapter"))))
+                        tempDir, readyAc, ExecutionContextReadiness.incomplete(List.of("execution_target.provider"))))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("Failed to write test case draft:");
     }

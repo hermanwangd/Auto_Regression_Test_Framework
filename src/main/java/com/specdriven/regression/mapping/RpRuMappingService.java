@@ -26,7 +26,7 @@ public class RpRuMappingService {
             "execution_mode",
             "deployment_required",
             "environment_ref",
-            "adapter",
+            "provider",
             "provider_contracts",
             "evidence_responsibility",
             "dependencies");
@@ -92,7 +92,7 @@ public class RpRuMappingService {
                             stringValue(unit.get("unit_type")),
                             stringValue(unit.get("execution_mode")),
                             stringValue(unit.get("environment_ref")),
-                            stringValue(unit.get("adapter"))),
+                            firstText(unit, "provider", "runner")),
                     dependencies(index, unit, gaps)));
         }
 
@@ -224,6 +224,16 @@ public class RpRuMappingService {
 
     private String stringValue(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private String firstText(Map<?, ?> map, String... fields) {
+        for (String field : fields) {
+            String value = stringValue(map.get(field));
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private record ParsedReleaseUnit(int index, ReleaseUnitMapping mapping, List<DependencyRef> dependencies) {

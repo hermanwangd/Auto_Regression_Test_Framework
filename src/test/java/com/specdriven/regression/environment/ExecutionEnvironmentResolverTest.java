@@ -195,7 +195,7 @@ class ExecutionEnvironmentResolverTest {
                     execution_mode: %s
                     %s\
                     environment_ref: ci://pipeline/RP-001
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []
@@ -215,7 +215,7 @@ class ExecutionEnvironmentResolverTest {
                     validation_boundary: execute_pipeline_with_fixture
                     execution_mode: %s
                     %s\
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []

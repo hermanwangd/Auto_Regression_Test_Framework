@@ -52,7 +52,6 @@ class DslTestCaseValidatorTest {
                         "revision",
                         "source_refs",
                         "targets",
-                        "scenario",
                         "setup",
                         "execute",
                         "expected_results",
@@ -66,7 +65,7 @@ class DslTestCaseValidatorTest {
         String yaml = validExecutionFocusedDsl()
                 + """
                 execution_target:
-                  adapter: spring_boot_cli
+                  provider: spring_boot_cli
                 approval_status: approved
                 waiver:
                   id: W-001
@@ -96,6 +95,28 @@ class DslTestCaseValidatorTest {
         assertThat(report.ready()).isFalse();
         assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
                 .contains("traceability", "metadata.reviewers[0].approval_required");
+    }
+
+    @Test
+    void blocksDeprecatedScenarioSectionInV02Dsl() {
+        String yaml = validExecutionFocusedDsl()
+                .replace("""
+                targets:
+                """, """
+                scenario:
+                  type: integration
+                  scope: release_package
+                  capabilities: [file_input, batch_execution, file_assertion]
+                targets:
+                """);
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains("scenario");
+        assertThat(report.gaps()).extracting(DslValidationGap::ownerAction)
+                .contains("Remove `scenario`; declare behavior through setup/execute/verify and provider capability through Provider Contract.");
     }
 
     @Test
@@ -670,7 +691,6 @@ class DslTestCaseValidatorTest {
                         "revision",
                         "source_refs",
                         "targets",
-                        "scenario",
                         "setup",
                         "execute",
                         "expected_results",
@@ -736,8 +756,6 @@ class DslTestCaseValidatorTest {
     @Test
     void acceptsEventVerificationAndStringRetryPolicy() {
         String yaml = validExecutionFocusedDsl()
-                .replace("capabilities: [file_input, batch_execution, file_assertion]",
-                        "capabilities: [message_event, event_assertion]")
                 .replace("""
                   - id: verify_output
                     type: file_diff
@@ -789,10 +807,6 @@ class DslTestCaseValidatorTest {
                     type: batch_runner
                     runner: spring_boot_cli
                     environment: ci://pipeline/RP-001
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [file_input, batch_execution, file_assertion]
                 setup:
                   fixtures: {}
                 execute:

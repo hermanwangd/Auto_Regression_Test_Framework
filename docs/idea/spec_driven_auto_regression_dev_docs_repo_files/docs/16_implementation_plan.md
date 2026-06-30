@@ -7,8 +7,8 @@ Deliverables:
 - Test case YAML schema
 - Test data catalog schema
 - Data binding resolver
-- API adapter
-- DB adapter
+- API provider
+- DB provider
 - Basic assertion library
 - Fixture setup / cleanup
 - HTML / JSON report
@@ -75,7 +75,7 @@ Regression results can support Go / No-Go release decisions.
 
 Deliverables:
 
-- More adapters
+- More providers
 - More assertion plugins
 - Custom oracle SDK
 - Project onboarding template

@@ -1,0 +1,11 @@
+{
+  "verifier_type": "json_match",
+  "expected_ref": "expected_results/expected_payload.json",
+  "actual_ref": "actual_samples/actual_payload.json",
+  "ignore_paths": [],
+  "normalize": "canonical_json",
+  "ignore_order": true,
+  "comparison_status": "passed",
+  "diff_ref": "",
+  "masked_actual_sample": "***MASKED***"
+}

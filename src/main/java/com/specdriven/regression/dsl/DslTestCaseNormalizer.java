@@ -65,7 +65,7 @@ public class DslTestCaseNormalizer {
         String environment = firstText(target, "environment", "environment_ref");
         Map<String, Object> executionTarget = new LinkedHashMap<>();
         putIfNotBlank(executionTarget, "ru_id", ruId);
-        putIfNotBlank(executionTarget, "adapter", firstText(target, "runner", "adapter", "provider"));
+        putIfNotBlank(executionTarget, "provider", firstText(target, "provider", "runner"));
         putIfNotBlank(executionTarget, "execution_mode",
                 firstNonBlank(firstText(target, "execution_mode"), firstText(runtime, "execution_mode"),
                         executionModeFromEnvironment(environment)));

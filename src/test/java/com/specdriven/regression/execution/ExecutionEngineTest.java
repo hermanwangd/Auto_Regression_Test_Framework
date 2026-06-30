@@ -199,7 +199,7 @@ class ExecutionEngineTest {
                         {"status":"ACCEPTED","riskScore":0.049}
                         """);
                 Files.writeString(request.runDir().resolve("request_response.yaml"), """
-                        provider_family: request_response
+                        provider_contract_kind: request_response
                         provider_type: rest
                         status: passed
                         http_status: 202
@@ -284,7 +284,7 @@ class ExecutionEngineTest {
                 .contains("decision_rule: db_row_matches")
                 .contains("query `count_payment_orders` returned expected row_count `1`");
         assertThat(Files.readString(runDir.resolve("run.yaml")))
-                .contains("provider_family: db_fixture")
+                .contains("provider_contract_kind: db_fixture")
                 .contains("assertion_status: passed")
                 .contains("cleanup_result: cleanup.yaml");
     }
@@ -379,7 +379,7 @@ class ExecutionEngineTest {
                 "BATCH-NO-ADAPTER",
                 "RUN-NO-ADAPTER"))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("No resolved adapter provider contract available");
+                .hasMessageContaining("No resolved execution provider contract available");
     }
 
     @Test
@@ -400,7 +400,7 @@ class ExecutionEngineTest {
                         "BATCH-FIXTURE-ONLY",
                         "RUN-FIXTURE-ONLY"))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("No resolved adapter provider contract available");
+                .hasMessageContaining("No resolved execution provider contract available");
     }
 
     @Test
@@ -413,7 +413,7 @@ class ExecutionEngineTest {
                 rp_id: RP-REGISTRY
                 execution_target:
                   ru_id: RU-api
-                  adapter: request_response
+                  provider: request_response
                 fixture:
                   setup:
                     - malformed-setup-entry
@@ -458,7 +458,7 @@ class ExecutionEngineTest {
 
     private ResolvedProviderContract resolvedAdapter(String providerFamily, String providerType) {
         return new ResolvedProviderContract(
-                "adapter",
+                "provider",
                 providerFamily,
                 "ru",
                 providerFamily,
@@ -467,7 +467,7 @@ class ExecutionEngineTest {
                 "supported",
                 "RU-native",
                 providerFamily,
-                "release_units[0].provider_contracts.adapters." + providerFamily);
+                "release_units[0].provider_contracts.providers." + providerFamily);
     }
 
     @Test
@@ -673,7 +673,7 @@ class ExecutionEngineTest {
                         "BATCH-NON-MAP",
                         "RUN-NON-MAP"))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("No resolved adapter provider contract available");
+                .hasMessageContaining("No resolved execution provider contract available");
     }
 
     @Test
@@ -780,7 +780,7 @@ class ExecutionEngineTest {
                 rp_id: RP-NO-ADAPTER
                 execution_target:
                   ru_id: RU-api
-                  adapter: request_response
+                  provider: request_response
                 """.formatted(testCaseId));
     }
 
@@ -803,7 +803,7 @@ class ExecutionEngineTest {
                 status: approved
                 execution_target:
                   ru_id: RU-external
-                  adapter: external_runner
+                  provider: external_runner
                 expected:
                   ref: expected-results/approved/ER-EXTERNAL.yaml
                 oracles:
@@ -826,11 +826,11 @@ class ExecutionEngineTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://external
-                    adapter: external_runner
+                    provider: external_runner
                     provider_contracts:
-                      adapters:
+                      providers:
                         external_runner:
-                          provider_family: external_runner
+                          provider_contract_kind: external_runner
                           provider_type: command_runner
                           approval_ref: ADR-EXTERNAL
                           approved_by: SA
@@ -871,7 +871,7 @@ class ExecutionEngineTest {
                 status: approved
                 execution_target:
                   ru_id: RU-external
-                  adapter: external_runner
+                  provider: external_runner
                 fixture:
                   setup: {}
                   cleanup: {}
@@ -897,11 +897,11 @@ class ExecutionEngineTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://external
-                    adapter: external_runner
+                    provider: external_runner
                     provider_contracts:
-                      adapters:
+                      providers:
                         external_runner:
-                          provider_family: external_runner
+                          provider_contract_kind: external_runner
                           provider_type: command_runner
                           approval_ref: ADR-EXTERNAL
                           approved_by: SA
@@ -922,7 +922,7 @@ class ExecutionEngineTest {
 
     private Map<String, Object> externalRunnerContractWithEmptyEvidenceMap() {
         Map<String, Object> contract = new LinkedHashMap<>();
-        contract.put("provider_family", "external_runner");
+        contract.put("provider_contract_kind", "external_runner");
         contract.put("provider_type", "command_runner");
         contract.put("approval_ref", "ADR-EXTERNAL");
         contract.put("approved_by", "SA");
@@ -959,7 +959,7 @@ class ExecutionEngineTest {
                 status: approved
                 execution_target:
                   ru_id: RU-api
-                  adapter: request_response
+                  provider: request_response
                 package_inputs:
                   inputs:
                     api_payload:
@@ -990,11 +990,11 @@ class ExecutionEngineTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://api
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: rest
                           endpoint_ref: http://127.0.0.1:1
                           timeout_seconds: 1
@@ -1011,7 +1011,7 @@ class ExecutionEngineTest {
                               request_binding: api_payload
                       bindings:
                         api_payload:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: request_body
                           bind_as: request_body
                       fixtures: {}
@@ -1032,7 +1032,7 @@ class ExecutionEngineTest {
                 status: approved
                 execution_target:
                   ru_id: RU-api
-                  adapter: request_response
+                  provider: request_response
                   execution_mode: ci_ephemeral
                   environment_ref: ci://api
                 package_inputs:
@@ -1060,11 +1060,11 @@ class ExecutionEngineTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://api
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: rest
                           endpoint_ref: http://127.0.0.1:1
                           timeout_seconds: 1
@@ -1081,7 +1081,7 @@ class ExecutionEngineTest {
                               request_binding: api_payload
                       bindings:
                         api_payload:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: request_body
                           bind_as: request_body
                       fixtures: {}
@@ -1102,7 +1102,7 @@ class ExecutionEngineTest {
                 status: approved
                 execution_target:
                   ru_id: RU-api
-                  adapter: request_response
+                  provider: request_response
                   execution_mode: ci_ephemeral
                   environment_ref: ci://api
                 package_inputs:
@@ -1138,11 +1138,11 @@ class ExecutionEngineTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://api
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: rest
                           endpoint_ref: http://127.0.0.1:1
                           timeout_seconds: 1
@@ -1159,7 +1159,7 @@ class ExecutionEngineTest {
                               request_binding: api_payload
                       bindings:
                         api_payload:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: request_body
                           bind_as: request_body
                       fixtures: {}
@@ -1196,7 +1196,7 @@ class ExecutionEngineTest {
                 status: approved
                 execution_target:
                   ru_id: RU-api
-                  adapter: request_response
+                  provider: request_response
                   execution_mode: ci_ephemeral
                   environment_ref: ci://api
                 package_inputs:
@@ -1234,11 +1234,11 @@ class ExecutionEngineTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://api
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: rest
                           endpoint_ref: http://127.0.0.1:1
                           timeout_seconds: 1
@@ -1254,12 +1254,12 @@ class ExecutionEngineTest {
                               path: /submit
                       bindings:
                         order_seed:
-                          provider_family: db_fixture
+                          provider_contract_kind: db_fixture
                           provider_type: jdbc
                           bind_as: jdbc_seed
                       fixtures:
                         relational_db:
-                          provider_family: db_fixture
+                          provider_contract_kind: db_fixture
                           provider_type: jdbc
                           connection_ref: %s
                           isolation_key: test_run_id
@@ -1351,15 +1351,15 @@ class ExecutionEngineTest {
                 continue;
             }
             String targetId = text(unit, "ru_id");
-            String adapter = text(unit, "adapter");
+            String adapter = firstText(unit, "provider", "runner");
             builder.append("  ").append(targetId).append(":\n");
             builder.append("    target_id: ").append(targetId).append("\n");
-            builder.append("    runner: ").append(adapter).append("\n");
+            builder.append("    provider: ").append(adapter).append("\n");
             builder.append("    execution_mode: ").append(executionMode).append("\n");
             builder.append("    environment_ref: ").append(text(unit, "environment_ref")).append("\n");
             builder.append("    provider_contract_ref: provider_contracts/")
                     .append(safeFileName(targetId))
-                    .append(".yaml#adapters.")
+                    .append(".yaml#providers.")
                     .append(adapter)
                     .append("\n");
         }
@@ -1427,6 +1427,16 @@ class ExecutionEngineTest {
     private String text(Map<?, ?> map, String field) {
         Object value = map.get(field);
         return value == null ? "" : value.toString();
+    }
+
+    private String firstText(Map<?, ?> map, String... fields) {
+        for (String field : fields) {
+            String value = text(map, field);
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private String safeFileName(String value) {
@@ -1499,7 +1509,7 @@ class ExecutionEngineTest {
                     true,
                     List.of(
                             new ResolvedProviderContract(
-                                    "adapter",
+                                    "provider",
                                     "request_response",
                                     "generated",
                                     "request_response",
@@ -1508,7 +1518,7 @@ class ExecutionEngineTest {
                                     "supported",
                                     "RU-api",
                                     "request_response",
-                                    "generated-framework/provider_contracts/RU-api.yaml#adapters.request_response"),
+                                    "generated-framework/provider_contracts/RU-api.yaml#providers.request_response"),
                             new ResolvedProviderContract(
                                     "fixture",
                                     "db_fixture",
@@ -1541,7 +1551,7 @@ class ExecutionEngineTest {
                 String targetId,
                 String adapter) {
             return Map.of(
-                    "provider_family", "request_response",
+                    "provider_contract_kind", "request_response",
                     "provider_type", "rest",
                     "endpoint_ref", "mock://api",
                     "actions", Map.of("submit", Map.of("method", "POST")));
@@ -1555,7 +1565,7 @@ class ExecutionEngineTest {
                 String adapter,
                 String fixtureProvider) {
             return Map.of(
-                    "provider_family", "db_fixture",
+                    "provider_contract_kind", "db_fixture",
                     "provider_type", "jdbc");
         }
     }
@@ -1579,7 +1589,7 @@ class ExecutionEngineTest {
             return new ProviderContractResolutionReport(
                     true,
                     List.of(new ResolvedProviderContract(
-                            "adapter",
+                            "provider",
                             "external_runner",
                             "generated",
                             "external_runner",
@@ -1588,7 +1598,7 @@ class ExecutionEngineTest {
                             "supported",
                             "RU-external",
                             "external_runner",
-                            "generated-framework/provider_contracts/RU-external.yaml#adapters.external_runner")),
+                            "generated-framework/provider_contracts/RU-external.yaml#providers.external_runner")),
                     List.of());
         }
 

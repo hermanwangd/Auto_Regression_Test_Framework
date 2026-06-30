@@ -377,11 +377,11 @@ public class ExecutionEngine {
 
     private ResolvedProviderContract adapterProviderContract(ProviderContractResolutionReport providerReport) {
         for (ResolvedProviderContract contract : providerReport.resolvedContracts()) {
-            if ("adapter".equals(contract.contractType())) {
+            if ("provider".equals(contract.contractType()) ) {
                 return contract;
             }
         }
-        throw new IllegalStateException("No resolved adapter provider contract available.");
+        throw new IllegalStateException("No resolved execution provider contract available.");
     }
 
     private Map<String, Map<String, Object>> dbFixtureContracts(
@@ -415,7 +415,7 @@ public class ExecutionEngine {
     private String adapterName(Map<String, Object> testCase) {
         Object executionTarget = testCase.get("execution_target");
         if (executionTarget instanceof Map<?, ?> target) {
-            return stringValue(target.get("adapter"));
+            return firstText(target, "provider", "runner");
         }
         return "";
     }
@@ -518,5 +518,15 @@ public class ExecutionEngine {
 
     private String stringValue(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private String firstText(Map<?, ?> map, String... fields) {
+        for (String field : fields) {
+            String value = stringValue(map.get(field));
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 }

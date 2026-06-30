@@ -2,6 +2,7 @@ package com.specdriven.regression.contract;
 
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
+import com.specdriven.regression.evidence.EvidenceIndexFormatter;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -74,17 +75,26 @@ public class CommonVerifyService {
         }
         Path testCasePath = suiteRoot.resolve(stringValue(tests.get(0))).normalize();
         Map<String, Object> testCase = readMap(testCasePath);
+        List<ContractFinding> profileFindings = SuiteProfileGate.validate(
+                suiteManifest,
+                suite,
+                List.of(new SuiteProfileGate.TestCaseDocument(testCasePath, testCase)),
+                requestedProfile,
+                PROVIDER_TYPE);
+        if (!profileFindings.isEmpty()) {
+            return CommonVerifyRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, profileFindings);
+        }
         TargetSelection selection = selectTarget(testCase, requestedProfile);
         if (selection.providerId().isBlank()) {
             return CommonVerifyRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, List.of(new ContractFinding(
                     testCasePath.toString(),
                     "targets",
-                    "profile_mismatch",
+                    "missing_provider_instance",
                     "",
                     PROVIDER_TYPE,
                     requestedProfile,
                     "",
-                    "Run with a profile declared by a common verifier DSL target.")));
+                    "Declare a DSL target with provider_id for the common verifier runtime.")));
         }
         List<ContractFinding> configFindings = pollingConfigFindings(testCasePath, testCase, requestedProfile);
         if (!configFindings.isEmpty()) {
@@ -807,9 +817,7 @@ public class CommonVerifyService {
     private TargetSelection selectTarget(Map<String, Object> testCase, String profile) {
         for (Map.Entry<String, Object> entry : mapValue(testCase.get("targets")).entrySet()) {
             Map<String, Object> target = mapValue(entry.getValue());
-            if (profile.equals(stringValue(target.get("profile")))) {
-                return new TargetSelection(entry.getKey(), stringValue(target.get("provider_id")), "local");
-            }
+            return new TargetSelection(entry.getKey(), stringValue(target.get("provider_id")), "local");
         }
         return new TargetSelection("", "", "");
     }
@@ -949,24 +957,17 @@ public class CommonVerifyService {
             String profile,
             TargetSelection selection,
             List<String> evidenceRefs) {
-        StringBuilder index = new StringBuilder();
-        index.append("evidence_index_version: v0.2\n");
-        index.append("suite_id: ").append(suite.get("suite_id")).append('\n');
-        index.append("batch_id: ").append(ids.batchId()).append('\n');
-        index.append("run_id: ").append(ids.runId()).append('\n');
-        index.append("test_case_id: ").append(testCase.get("test_case_id")).append('\n');
-        index.append("profile: ").append(profile).append('\n');
-        index.append("provider_type: ").append(PROVIDER_TYPE).append('\n');
-        index.append("provider_id: ").append(selection.providerId()).append('\n');
-        index.append("evidence_classification: ").append(EVIDENCE_CLASSIFICATION).append('\n');
-        index.append("downstream_release_evidence: false\n");
-        index.append("entries:\n");
-        for (String ref : distinct(evidenceRefs)) {
-            index.append("  - ref: ").append(ref).append('\n');
-            index.append("    masked: true\n");
-        }
-        index.append("masking:\n  raw_secret_found: false\n");
-        write(runDir.resolve("evidence_index.yaml"), index.toString());
+        write(runDir.resolve("evidence_index.yaml"), EvidenceIndexFormatter.format(
+                new EvidenceIndexFormatter.Context(
+                        stringValue(suite.get("suite_id")),
+                        ids.batchId(),
+                        ids.runId(),
+                        stringValue(testCase.get("test_case_id")),
+                        profile,
+                        PROVIDER_TYPE,
+                        selection.providerId()),
+                runDir,
+                evidenceRefs));
     }
 
     private Path writeResult(

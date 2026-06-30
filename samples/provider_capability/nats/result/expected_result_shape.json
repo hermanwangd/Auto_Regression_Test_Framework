@@ -1,0 +1,10 @@
+{
+  "framework_version": "v0.2",
+  "suite_id": "NATS-CAPABILITY-v0.2",
+  "provider_type": "nats",
+  "provider_id": "local-nats-event-bus",
+  "runtime_mode": "local",
+  "subject": "orders.ready",
+  "status": "passed",
+  "release_evidence_eligible": false
+}

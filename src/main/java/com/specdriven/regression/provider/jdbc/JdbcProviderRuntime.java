@@ -90,8 +90,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
             String evidenceOutputName) {
         String sqlRef = firstParameter(request, refBindAs);
         if (sqlRef.isBlank()) {
-            String code = "cleanup".equals(evidenceKind) ? "SQL_REF_MISSING" : "SQL_REF_MISSING";
-            return failed(context, request, Map.of(), code, classificationFor(request.operation()),
+            return failed(context, request, Map.of(), "SQL_REF_MISSING", classificationFor(request.operation()),
                     "JDBC operation `" + request.operation() + "` requires sql_ref.",
                     "Add a checked-in SQL ref parameter with bind_as `sql_ref`.");
         }
@@ -99,7 +98,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         Map<String, Object> params = parameterValues(context, request);
         int affectedRows = 0;
         try (Connection connection = open(secretConnection)) {
-            List<PreparedSql> preparedStatements = statements(readRef(context.suiteRoot(), sqlRef)).stream()
+            List<PreparedSql> preparedStatements = statements(readRef(context.suiteRoot(), sqlRef, request.operation(), "SQL_REF_MISSING")).stream()
                     .map(this::prepareSql)
                     .toList();
             validateScriptParams(request, preparedStatements, params);
@@ -176,7 +175,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         List<Map<String, Object>> sampleRows = List.of();
         int rowCount = 0;
         try (Connection connection = open(secretConnection)) {
-            PreparedSql preparedSql = prepareSql(readRef(context.suiteRoot(), queryRef));
+            PreparedSql preparedSql = prepareSql(readRef(context.suiteRoot(), queryRef, request.operation(), "QUERY_REF_MISSING"));
             validateParams(request, preparedSql, params);
             try (PreparedStatement statement = connection.prepareStatement(preparedSql.sql())) {
                 bindParams(statement, preparedSql.params(), params);
@@ -639,27 +638,31 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         return List.copyOf(statements);
     }
 
-    private String readRef(Path suiteRoot, String ref) {
+    private String readRef(Path suiteRoot, String ref, String operation, String missingCode) {
         Path normalizedRoot = suiteRoot.toAbsolutePath().normalize();
         Path path = normalizedRoot.resolve(ref).normalize();
         if (!path.startsWith(normalizedRoot)) {
             throw new JdbcRuntimeFailure(ProviderFailure.of(
-                    ref.contains("query") ? "QUERY_REF_MISSING" : "SQL_REF_MISSING",
-                    "DB_QUERY_FAILED",
+                    missingCode,
+                    classificationFor(operation),
                     "SQL ref must stay under the suite root: " + ref,
                     "Use a checked-in SQL ref under the suite."));
         }
         if (!Files.isRegularFile(path)) {
             throw new JdbcRuntimeFailure(ProviderFailure.of(
-                    ref.contains("query") ? "QUERY_REF_MISSING" : "SQL_REF_MISSING",
-                    "DB_QUERY_FAILED",
+                    missingCode,
+                    classificationFor(operation),
                     "SQL ref not found: " + ref,
                     "Restore the checked-in SQL ref."));
         }
         try {
             return Files.readString(path);
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read SQL ref: " + ref, e);
+            throw new JdbcRuntimeFailure(ProviderFailure.of(
+                    missingCode,
+                    classificationFor(operation),
+                    "SQL ref could not be read: " + ref,
+                    "Restore readable permissions for the checked-in SQL ref."));
         }
     }
 

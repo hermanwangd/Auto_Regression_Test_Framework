@@ -1,23 +1,17 @@
 dsl_version: v0.2
-test_case_id: PROVIDER-CAPABILITY-NATS-TC-001
+test_case_id: NATS-CAPABILITY-TC-001
 title: NATS event provider capability
 status: active
 revision: 1
 source_refs:
   acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#track-c-nats
 labels:
-  capability: nats_messaging
+  capability: nats
   evidence_classification: framework_provider_capability_only
-compatible_profiles: [local_provider]
+compatible_profiles: [local_nats]
 targets:
   event_bus:
-    provider_id: nats-local-provider
-    profile: local_provider
-scenario:
-  type: provider_capability
-  scope: framework_verification
-  description: Publish or observe NATS events from test start time with payload matching and evidence.
-  capabilities: [event_published, event_payload_match, polling]
+    provider_id: local-nats-event-bus
 data_binding:
   datasets:
     event_input:
@@ -28,38 +22,61 @@ expected_results:
 execute:
   - id: publish_event
     target: event_bus
-    operation: publish_message
+    operation: nats_publish
     parameters:
       - name: subject
         ref: expected_results/event_expected.json#/subject
-        bind_as: message.subject
+        bind_as: subject
       - name: payload
         ref: fixtures/event_input.json
-        bind_as: message.payload
+        bind_as: payload_ref
     outputs:
-      published_message: published_message
-      timestamp: timestamp
+      subject: subject
+      published: published
+      published_at: published_at
+      event_evidence_ref: event_evidence_ref
 verify:
   - id: event_published
     type: event_published
     target: event_bus
-    event:
-      subject_ref: expected_results/event_expected.json#/subject
-      consume_from: test_start_time
-    expected_ref: expected_results/event_expected.json
+    parameters:
+      - name: subject
+        ref: expected_results/event_expected.json#/subject
+        bind_as: subject
+      - name: consume_from
+        ref: test_start_time
+        bind_as: consume_from
+      - name: timeout
+        ref: PT5S
+        bind_as: timeout
+      - name: poll_interval
+        ref: PT0.05S
+        bind_as: poll_interval
     options:
-      timeout: PT20S
-      poll_interval: PT2S
+      timeout: PT5S
+      poll_interval: PT0.05S
   - id: event_payload_match
     type: event_payload_match
     target: event_bus
-    event:
-      subject_ref: expected_results/event_expected.json#/subject
-      consume_from: test_start_time
-    expected_ref: expected_results/event_expected.json#/payload
+    parameters:
+      - name: subject
+        ref: expected_results/event_expected.json#/subject
+        bind_as: subject
+      - name: expected
+        ref: expected_results/event_expected.json#/payload
+        bind_as: expected_ref
+      - name: consume_from
+        ref: test_start_time
+        bind_as: consume_from
+      - name: timeout
+        ref: PT5S
+        bind_as: timeout
+      - name: poll_interval
+        ref: PT0.05S
+        bind_as: poll_interval
     options:
-      timeout: PT20S
-      poll_interval: PT2S
+      timeout: PT5S
+      poll_interval: PT0.05S
 evidence:
   required:
     - event-evidence/nats/observed_event.yaml

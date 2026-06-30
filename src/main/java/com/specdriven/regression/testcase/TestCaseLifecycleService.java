@@ -69,14 +69,10 @@ public class TestCaseLifecycleService {
                 source_refs:
                   acceptance_criteria: acceptance_criteria.md#%s
                 source_fingerprint: %s
-                scenario:
-                  type: integration
-                  scope: rp
-                  capabilities: %s
                 targets:
                   %s:
                     type: %s
-                    runner: %s
+                    provider: %s
                     execution_mode: %s
                     environment: %s
                 %s
@@ -119,10 +115,9 @@ public class TestCaseLifecycleService {
                 executionContext.ruId(),
                 ac.acId(),
                 fingerprint(ac),
-                yamlList(executionContext.capabilities()),
                 executionContext.ruId(),
                 targetType(executionContext.capabilities()),
-                executionContext.adapter(),
+                executionContext.provider(),
                 executionContext.executionMode(),
                 executionContext.environmentRef(),
                 fixtureYaml(executionContext.capabilities()),
@@ -284,13 +279,6 @@ public class TestCaseLifecycleService {
 
     private String fingerprint(AcReadinessItem ac) {
         return Integer.toHexString((ac.acId() + ac.ownerAuthoredTitle() + Instant.now(clock)).hashCode());
-    }
-
-    private String yamlList(List<String> values) {
-        if (values.isEmpty()) {
-            return "[]";
-        }
-        return "[" + String.join(", ", values) + "]";
     }
 
     private String readinessGapsYaml(List<String> gaps) {

@@ -14,4 +14,8 @@ provider_bindings:
     runtime_mode: native
     readiness_ref: evidence/readiness/nats-event-bus-sit.yaml
     binding_values:
-      servers: nats://nats-sit.example.internal:4222
+      connection:
+        secret_ref: vault://sit/payment/nats-connection
+      subject: payments.accepted
+      timeout: PT30S
+      poll_interval: PT0.5S

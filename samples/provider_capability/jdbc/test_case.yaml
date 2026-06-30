@@ -12,15 +12,8 @@ compatible_profiles: [local_jdbc]
 targets:
   oracle_like_db:
     provider_id: oracle-like-db
-    profile: local_jdbc
   db2_like_db:
     provider_id: db2-like-db
-    profile: local_jdbc
-scenario:
-  type: provider_capability
-  scope: framework_verification
-  description: Seed, query, verify record existence, and cleanup with SQL params binding and masked JDBC evidence.
-  capabilities: [db_seed, db_query, db_record_exists, db_cleanup]
 data_binding:
   db_seed:
     order:

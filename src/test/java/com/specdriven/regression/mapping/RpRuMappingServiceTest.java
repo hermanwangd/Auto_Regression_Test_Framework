@@ -48,7 +48,7 @@ class RpRuMappingServiceTest {
                 .contains("release_units[0].unit_type", "release_units[0].owner",
                         "release_units[0].version_ref", "release_units[0].validation_boundary",
                         "release_units[0].deployment_required", "release_units[0].environment_ref",
-                        "release_units[0].adapter", "release_units[0].provider_contracts",
+                        "release_units[0].provider", "release_units[0].provider_contracts",
                         "release_units[0].evidence_responsibility", "release_units[0].dependencies");
         assertThat(report.gaps()).extracting(RpRuMappingGap::ownerAction)
                 .allMatch(action -> action.contains("Update owner-authored rp_ru_mapping.yaml"));
@@ -85,7 +85,7 @@ class RpRuMappingServiceTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://pipeline/load
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependency_order: 1
@@ -116,7 +116,7 @@ class RpRuMappingServiceTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://events
-                    adapter: message_bus
+                    provider: message_bus
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: [RU-transform-job]
@@ -129,7 +129,7 @@ class RpRuMappingServiceTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://transform
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []
@@ -157,7 +157,7 @@ class RpRuMappingServiceTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://events
-                    adapter: message_bus
+                    provider: message_bus
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: [RU-missing]
@@ -207,7 +207,7 @@ class RpRuMappingServiceTest {
                     execution_mode: sit_deployed
                     deployment_required: true
                     environment_ref: sit://payment/api
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []
@@ -240,7 +240,7 @@ class RpRuMappingServiceTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://api
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: RU-db
@@ -258,7 +258,7 @@ class RpRuMappingServiceTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://api
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: [" "]
@@ -288,7 +288,7 @@ class RpRuMappingServiceTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://api-blue
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []
@@ -301,7 +301,7 @@ class RpRuMappingServiceTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://api-green
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []
@@ -331,7 +331,7 @@ class RpRuMappingServiceTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://api
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: [RU-events]
@@ -344,7 +344,7 @@ class RpRuMappingServiceTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://events
-                    adapter: message_bus
+                    provider: message_bus
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: [RU-api]
@@ -393,9 +393,9 @@ class RpRuMappingServiceTest {
                     execution_mode: %s
                     %s\
                     environment_ref: ci://pipeline/rp-ar-m1-data-pipeline
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         spring_boot_cli:
                           command: java -jar ${repo}/target/release-unit.jar
                     evidence_responsibility:

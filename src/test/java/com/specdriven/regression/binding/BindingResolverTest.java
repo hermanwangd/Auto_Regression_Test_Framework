@@ -455,7 +455,7 @@ class BindingResolverTest {
                 source_fingerprint: sha256:test
                 execution_target:
                   ru_id: RU-transform-job
-                  adapter: spring_boot_cli
+                  provider: spring_boot_cli
                   execution_mode: ci_ephemeral
                   environment_ref: ci://pipeline/RP-001
                 scenario:

@@ -13,8 +13,8 @@ The user-facing public interfaces are:
 | Interface | Purpose |
 | --- | --- |
 | DSL Test Case | Defines executable regression behavior. |
-| Provider Contract | Defines a provider type, allowed operations, bindings, outputs, evidence, failure codes, and valid provider instance shape. |
-| Provider Instance | Defines an RP logical runtime target using a provider contract. |
+| Provider Contract | Framework-owned contract for a provider type, allowed operations, bindings, outputs, evidence, failure codes, and valid provider instance shape. |
+| Provider Instance | Defines an RP logical runtime target using a built-in or explicitly declared custom provider contract. |
 | Environment Binding | Supplies profile-specific values such as URLs, topics, DB strings, namespaces, and secret refs. |
 | Execution Profile | Defines what may run in `local`, `ci`, `sit`, or `preprod`. |
 | CLI | Initializes, validates, executes, and reports. |
@@ -27,12 +27,12 @@ DSL target
   -> provider_id
   -> Provider Instance
   -> provider_type
-  -> Provider Contract
-  -> profile
+  -> Framework built-in Provider Contract catalog
+  -> selected profile
   -> Environment Binding
 ```
 
-There is no additional user-facing runtime interface beyond provider contracts, provider instances, environment bindings, execution profiles, DSL, CLI, and evidence.
+There is no additional user-facing runtime interface beyond provider instances, environment bindings, execution profiles, DSL, CLI, evidence, and framework-owned provider contracts. RP/suite repositories do not copy built-in Provider Contracts by default.
 
 ## 3. Role Responsibilities
 
@@ -60,17 +60,17 @@ docs/08-release/release-packages/<RP-ID>/
   expected-results/
     draft/
     approved/
-  provider-contracts/
   provider-instances/
   environment-bindings/
   execution-profiles/
+  custom-provider-contracts/   # optional, only for approved custom providers or pinned contract snapshots
   traceability.md
   evidence_index.md
 ```
 
 Approved tests and expected results are versioned assets. Do not regenerate or overwrite them on every run.
 
-Provider and environment authoring folders are owner/Agent Skill working areas. Runtime execution consumes canonical generated artifacts under `generated-framework/provider_contracts/`, `generated-framework/provider_instances/`, `generated-framework/environment_bindings/`, and `generated-framework/execution_profiles/`.
+Provider instance and environment authoring folders are owner/Agent Skill working areas. Runtime execution consumes canonical generated artifacts under `generated-framework/provider_instances/`, `generated-framework/environment_bindings/`, and `generated-framework/execution_profiles/`. Built-in Provider Contracts are resolved from the framework catalog by `provider_type`. Suite-local Provider Contracts are optional and only valid for approved custom providers or explicit contract snapshot pinning.
 
 ## 5. End-to-End Workflow
 
@@ -124,7 +124,7 @@ MAVEN_OPTS='-Xmx1024m' ./mvnw verify
 The DSL defines:
 
 - Source truth: feature spec, AC, expected result.
-- Runtime target: provider instance and profile.
+- Runtime target: provider instance. The active profile is selected by CLI or suite manifest.
 - Test data: `ref` and `bind_as`.
 - Setup and cleanup.
 - Execution action.
@@ -154,16 +154,8 @@ compatible_profiles: [ci, sit]
 targets:
   payment_api:
     provider_id: payment-api
-    profile: sit
   payment_db:
     provider_id: payment-db
-    profile: sit
-
-scenario:
-  type: integration
-  scope: release_package
-  description: Submit a valid payment request and verify the accepted status.
-  capabilities: [db_seed, http_request, json_assertion]
 
 data_binding:
   datasets:
@@ -303,11 +295,11 @@ bind_as: vm.command
 bind_as: runner.args.businessDate
 ```
 
-A DSL test case is invalid if it uses a `bind_as` that is not allowed by the referenced provider contract.
+A DSL test case is invalid if it uses a `bind_as` that is not allowed by the Provider Contract resolved from the target Provider Instance `provider_type`.
 
 Runtime connection and authentication values belong to provider instances and environment bindings, not test-case data binding. DSL test cases must not bind `secret.*` directly. Runtime endpoints, tokens, DB credentials, broker credentials, kubeconfig, SSH keys, and runner credentials must be supplied through `provider-instances/` and `environment-bindings/`.
 
-Authentication headers such as `Authorization` should be injected by provider configuration. Test cases may bind ordinary request headers, such as correlation IDs, only when the provider contract allows `request.headers.*`.
+Authentication headers such as `Authorization` should be injected by provider configuration. Test cases may bind ordinary request headers, such as correlation IDs, only when the resolved Provider Contract allows `request.headers.*`.
 
 ## 8. DSL Verify / Oracle Model
 
@@ -395,7 +387,7 @@ Rules:
 - Use `expected` for small technical constants such as status code, count, or boolean readiness.
 - Use `expected_ref` for owner-approved business output, event payloads, DB state, files, or complex JSON.
 - `expected_ref` must point to an approved artifact for release-readiness tests.
-- `actual.ref` must resolve to a provider contract output ref or framework-generated evidence ref.
+- `actual.ref` must resolve to an output ref allowed by the resolved Provider Contract or to a framework-generated evidence ref.
 
 ### 8.3 Verify Contract Catalog
 
@@ -647,6 +639,8 @@ AC -> test case -> execute step -> verify item -> evidence -> result
 
 ## 9. Provider Contract Rule
 
+Built-in Provider Contracts are owned by the framework. RP/suite repositories should not copy them into each suite. A suite-local Provider Contract is allowed only when the suite explicitly declares a custom provider or contract snapshot pinning mode.
+
 A provider contract and provider instance should use the same top-level domains.
 
 The contract defines allowed fields, allowed operations, allowed values, required fields, defaults, output refs, evidence outputs, access policy shape, and failure codes. The instance fills concrete RP-level selections using those contract-defined domains.
@@ -712,7 +706,19 @@ If a command-capable provider instance does not define required `safety.access_p
 
 ## 10. Provider Contracts and Provider Instances
 
-The canonical built-in Provider Contracts are materialized under `docs/02-architecture/contracts/provider-contracts/` and indexed by `docs/02-architecture/contracts/provider_capability_registry.v0.2.yaml`. The user guide must not redefine a second provider contract catalog.
+The canonical built-in Provider Contracts are materialized under `docs/02-architecture/contracts/provider-contracts/` and indexed by `docs/02-architecture/contracts/provider_capability_registry.v0.2.yaml`. The user guide must not redefine a second provider contract catalog. Runtime suite manifests use this built-in catalog by default.
+
+RP/suite repositories do not need a `provider_contracts/` folder for built-in provider types such as `wiremock_http_mock`, `jdbc`, `nats`, `artifact_compare`, or `polling_observer`. Suite-local contracts are an explicit opt-in for custom provider plugins or contract snapshot pinning:
+
+```yaml
+provider_contract_resolution:
+  mode: suite_override
+  custom_provider_contracts: custom-provider-contracts/
+  allowed_provider_types:
+    - custom_runner
+```
+
+When this section is absent, the resolution mode is `framework_builtin`.
 
 A Provider Contract defines reusable rules for one `provider_type`:
 
@@ -738,7 +744,7 @@ A Provider Instance defines one logical runtime target for an RP. It must use th
 | `grpc_client` | `provider-contracts/grpc_client.yaml` | `target` | `unary_call`, `server_stream_call` |
 | `wiremock_http_mock` | `provider-contracts/wiremock_http_mock.yaml` | `mappings_ref` | `start_mock`, `connect_mock`, `load_stubs`, `verify_requests` |
 | `kafka_messaging` | `provider-contracts/kafka_messaging.yaml` | `bootstrap_servers` | `publish_message`, `consume_message` |
-| `nats_messaging` | `provider-contracts/nats_messaging.yaml` | `servers` | `publish_message`, `consume_message`, `request_reply_message` |
+| `nats` | `provider-contracts/nats.yaml` | `connection`, `subject` | `nats_publish`, `nats_observe`, `event_published`, `event_payload_match` |
 | `jdbc` | `provider-contracts/jdbc.yaml` | `connection.secret_ref`, `dialect` | `db_seed`, `db_cleanup`, `db_query`, `db_record_exists` |
 | `kubernetes_runtime` | `provider-contracts/kubernetes_runtime.yaml` | `context`, `namespace` | `check_deployment_ready`, `check_pod_ready`, `get_logs`, `wait_rollout`, `exec_command` |
 | `vm_runtime` | `provider-contracts/vm_runtime.yaml` | `host`, `user` | `check_host_ready`, `run_command`, `collect_file`, `collect_logs`, `check_process` |
@@ -829,7 +835,7 @@ safety:
 Before dispatch, the framework validates:
 
 - Provider Instance exists for the DSL `provider_id`.
-- Provider Contract exists for the Provider Instance `provider_type`.
+- Provider Contract exists in the framework built-in catalog for the Provider Instance `provider_type`, unless an explicit custom/snapshot resolution mode is declared.
 - Provider Instance fields are allowed by `valid_provider_instance_shape`.
 - Provider Instance `runtime_modes` are a subset of Provider Contract `runtime_modes`.
 - Environment Binding exists for the selected profile and provider_id.
@@ -992,7 +998,7 @@ Typical profiles:
 
 ## 13. Running Tests
 
-Validate checks the DSL, suite manifest, Execution Profile, Provider Contract, Provider Instance, Environment Binding, secret guardrails, result schema, and evidence contract without provider execution.
+Validate checks the DSL, suite manifest, Execution Profile, Provider Instance, Environment Binding, framework built-in Provider Contract catalog, secret guardrails, result schema, and evidence contract without provider execution.
 
 ```bash
 regress validate \
@@ -1125,7 +1131,7 @@ Agents must:
 3. Never overwrite approved tests or expected results without explicit instruction.
 4. Run `check-rp` before generation work.
 5. Run `validate` and `run --dry-run` before real execution.
-6. Report missing AC, expected result, provider contract, provider instance, environment binding, fixture, or evidence as gaps.
+6. Report missing AC, expected result, unknown provider type or custom provider contract, provider instance, environment binding, fixture, or evidence as gaps.
 7. Preserve owner-authored truth.
 8. Produce evidence and report paths after execution.
 9. Never place runtime secrets or credentials in DSL test cases.
@@ -1169,9 +1175,9 @@ An RP regression package is ready when:
 - AC includes happy path, failure path, and boundary path where relevant.
 - Approved tests trace to AC.
 - Approved expected results are available.
-- Provider contracts exist for all used provider types.
+- Framework Provider Contracts exist for all used provider types, or explicit custom contracts are declared for approved custom mode.
 - Provider instances exist for all DSL targets.
-- Environment bindings exist for target profiles.
+- Environment bindings exist for the selected profiles.
 - Execution profile exists.
 - Dry run passes.
 - Full run produces required evidence.

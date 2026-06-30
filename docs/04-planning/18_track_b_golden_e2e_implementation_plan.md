@@ -81,7 +81,7 @@ Checked-in sample files:
 
 - `samples/golden_e2e/suite_manifest.yaml`
 - `samples/golden_e2e/test_case.yaml`
-- `samples/golden_e2e/provider_contracts/sample_fake_provider.yaml`
+- `docs/02-architecture/contracts/provider-contracts/sample_fake_provider.yaml`
 - `samples/golden_e2e/provider_instances/sample_fake_instance.yaml`
 - `samples/golden_e2e/execution_profiles/local_golden.yaml`
 - `samples/golden_e2e/environment_bindings/local_golden.yaml`

@@ -1,7 +1,6 @@
 provider_instance_version: v0.2
 provider_id: oracle-like-db
 provider_type: jdbc
-profile: local_jdbc
 runtime_modes: [native, ephemeral]
 dialect: oracle
 connection:

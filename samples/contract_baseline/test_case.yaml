@@ -14,18 +14,10 @@ compatible_profiles: [ci, sit]
 targets:
   payment_api_mock:
     provider_id: wiremock-payment-api
-    profile: ci
   order_database:
     provider_id: oracle-database
-    profile: ci
   event_bus:
     provider_id: nats-event-bus
-    profile: ci
-scenario:
-  type: integration_contract
-  scope: release_package
-  description: Validate the v0.2 contract graph for mock HTTP, JDBC, and NATS targets.
-  capabilities: [http_stub, db_seed, db_cleanup, event_published, json_match]
 data_binding:
   datasets:
     payment_request:
@@ -111,7 +103,7 @@ execute:
         bind_as: subject
       - name: payload
         ref: expected_results/sample_expected.json#/event/payload
-        bind_as: payload
+        bind_as: payload_ref
     outputs:
       subject: subject
       published: published

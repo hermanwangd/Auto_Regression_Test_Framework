@@ -53,7 +53,7 @@ These slices supersede the earlier minimum M1/v1 execution-slice framing.
 | S02 Profile, Provider Resolution, Binding, and Suite Selection | Execution Profile schema, Provider Instance schema, Provider Contract schema, Environment Binding schema, runtime mode validation, local/CI dependency substitution policy, selected profile compatibility, test/suite/tag/profile CLI selection | AC-002, AC-015, AC-018 |
 | S03 Parameter and Variable Resolution | operation-level `parameters[].ref`, `parameters[].bind_as`, per-parameter result/evidence, source-ref coverage de-duplication | AC-003 |
 | S04 Fixture Lifecycle | Fixture catalog, scope, cleanup policy, setup/cleanup evidence, unsafe fixture blocking | AC-004 |
-| S05 Provider Public Interface and Runtime Catalog | `shell_command`, `rest_client`, `grpc_client`, `jdbc_database`, `nats_messaging`, `kafka_messaging`, `kubernetes_runtime`, `vm_runtime`, and `external_runner` Provider Contracts, Provider Instances, Environment Bindings, runtime modes, and provider_type registry metadata | AC-005, AC-006, AC-007, AC-008, AC-016 |
+| S05 Provider Public Interface and Runtime Catalog | `shell_command`, `rest_client`, `grpc_client`, `jdbc_database`, `nats`, `kafka_messaging`, `kubernetes_runtime`, `vm_runtime`, and `external_runner` Provider Contracts, Provider Instances, Environment Bindings, runtime modes, and provider_type registry metadata | AC-005, AC-006, AC-007, AC-008, AC-016 |
 | S06 Verify and Polling Engine | Basic, structure, collection, numeric/time, file, state, event, custom verify types; DB/event polling | AC-009, AC-010, AC-011, AC-016 |
 | S07 Expected Results, Evidence, and Result Schema | Expected-result types, evidence collector, masking, result JSON, technical failure classification | AC-012, AC-013, AC-014 |
 | S08 Report and Evidence Review | `regress report` coverage and evidence review over standard results without topology interpretation | AC-012, AC-013, AC-017 |
@@ -164,7 +164,7 @@ Verification:
 ```bash
 test -f docs/04-planning/18_track_b_golden_e2e_implementation_plan.md
 test -f samples/golden_e2e/suite_manifest.yaml
-test -f samples/golden_e2e/provider_contracts/sample_fake_provider.yaml
+test -f docs/02-architecture/contracts/provider-contracts/sample_fake_provider.yaml
 ruby -e 'require "yaml"; Dir["samples/golden_e2e/**/*.yaml"].each { |f| YAML.load_file(f) }'
 ruby -e 'require "json"; Dir["samples/golden_e2e/**/*.json"].each { |f| JSON.parse(File.read(f)) }'
 ```
@@ -261,10 +261,10 @@ Implement the execution-focused DSL v0.2 validation gate before provider runtime
 
 The gate validates:
 
-- Always-required fields: `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs.acceptance_criteria`, `targets`, `scenario`, `execute`, `verify`, `evidence`, and `runtime`; `labels` and `compatible_profiles` are optional unless the selected report or profile needs them.
+- Always-required fields: `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs.acceptance_criteria`, `targets`, `execute`, `verify`, `evidence`, and `runtime`; `labels` and `compatible_profiles` are optional unless the selected report or profile needs them.
 - Conditional fields: `setup.fixtures` when precondition data or mutated state is needed, `expected_results` when verify rules use approved artifacts or reusable truth sources, `setup.fixtures.<name>.cleanup_ref` for state mutation, explicit and uniquely named `execute[]` items, `execute[].with`, `execute[].outputs`, `verify[].actual` when a verify rule reads captured output, `verify[].selector` for structured checks, provider metadata for metadata-backed rules such as `response_status_equals`, `verify[].target/query/event`, `verify[].options`, selected profile, environment binding, and result/evidence refs.
 - Parameterization fields when used: `parameters.ref`, `parameters.bind_as`, a readable reviewed parameter set, unique case IDs in the referenced set, non-empty case values, and resolvable `${param.<bind_as>.<field>}` references.
-- Supported operations must come from the referenced Provider Contract, such as `run_batch`, `execute_command`, `http_request`, `unary_call`, `publish_message`, `consume_message`, `request_reply_message`, `execute_script`, `query`, `check_deployment_ready`, `run_command`, `run_and_collect`, `load_stubs`, and `verify_requests`.
+- Supported operations must come from the referenced Provider Contract, such as `run_batch`, `execute_command`, `http_request`, `unary_call`, `publish_message`, `consume_message`, `nats_publish`, `nats_observe`, `execute_script`, `query`, `check_deployment_ready`, `run_command`, `run_and_collect`, `load_stubs`, and `verify_requests`.
 - Supported verify rules: basic, structure, collection, numeric, file, state, and event checks defined in the artifact contract.
 - Prohibited fields: legacy-only fields such as `call_ru`, `target_ru_id`, `package_inputs`, and `oracles`, plus approval, waiver, release gate, and risk approval fields.
 
@@ -285,7 +285,7 @@ Related features: F007, F008
 Acceptance: AC-001, AC-002, AC-012, AC-013, AC-015, AC-017, AC-018
 Modules: `cli`, `execution`, `evidence`, `report`
 
-Prove that the same execution-focused DSL v0.2 artifact can be consumed by execution and reporting before provider runtime expansion. The test artifact must live under `tests/approved/`, use `status: active`, and contain only v0.2 sections: `dsl_version`, `test_case_id`, `status`, `revision`, optional tags, `source_refs`, optional `labels`, optional `compatible_profiles`, `parameters`, `targets`, `scenario`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`.
+Prove that the same execution-focused DSL v0.2 artifact can be consumed by execution and reporting before provider runtime expansion. The test artifact must live under `tests/approved/`, use `status: active`, and contain only v0.2 sections: `dsl_version`, `test_case_id`, `status`, `revision`, optional tags, `source_refs`, optional `labels`, optional `compatible_profiles`, `parameters`, `targets`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`.
 
 Required behavior:
 
@@ -348,7 +348,7 @@ Support AC: SUP-AC-005
 Support evidence: EVD-005
 Modules: `testcase`
 
-Implement draft package-neutral DSL test skeleton and draft executable DSL test artifact writing under `tests/draft/`. Generated executable drafts must use execution-focused DSL v0.2 fields: `dsl_version`, `test_case_id`, `status`, `revision`, tags, `source_refs`, optional `labels`, optional `compatible_profiles`, `parameters` when needed, `targets`, `scenario`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`. Detect existing checked-in test artifacts for the same source AC and create update proposals instead of overwriting.
+Implement draft package-neutral DSL test skeleton and draft executable DSL test artifact writing under `tests/draft/`. Generated executable drafts must use execution-focused DSL v0.2 fields: `dsl_version`, `test_case_id`, `status`, `revision`, tags, `source_refs`, optional `labels`, optional `compatible_profiles`, `parameters` when needed, `targets`, `setup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime`. Detect existing checked-in test artifacts for the same source AC and create update proposals instead of overwriting.
 
 Verification:
 

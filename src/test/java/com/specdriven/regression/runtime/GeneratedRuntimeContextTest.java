@@ -84,7 +84,7 @@ class GeneratedRuntimeContextTest {
         return new GeneratedRuntimeTarget(
                 targetId,
                 runner,
-                "provider_contracts/" + targetId + ".yaml#adapters." + runner,
+                "provider_contracts/" + targetId + ".yaml#providers." + runner,
                 "ci://" + targetId,
                 List.of(),
                 0);

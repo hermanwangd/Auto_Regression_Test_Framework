@@ -10,7 +10,7 @@ defaults:
   retry: 0
 valid_provider_instance_shape:
   required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
-  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
   binding_keys: [bootstrap_servers]
 operations:
   publish_message:

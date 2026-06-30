@@ -42,10 +42,10 @@ public class DataPipelineAdapter implements ExecutionAdapter {
                     request.stderrLog(),
                     request.actualOutput());
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to execute adapter command.", e);
+            throw new UncheckedIOException("Failed to execute provider command.", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Adapter execution interrupted.", e);
+            throw new IllegalStateException("Provider execution interrupted.", e);
         }
     }
 

@@ -54,7 +54,7 @@ class GeneratedRuntimeArtifactsTest {
                         targets:
                           api:
                             runner: request_response
-                            provider_contract_ref: provider_contracts/api.yaml#adapters.request_response
+                            provider_contract_ref: provider_contracts/api.yaml#providers.request_response
                             environment_ref: ci://api
                         """);
 
@@ -72,20 +72,20 @@ class GeneratedRuntimeArtifactsTest {
         Files.createDirectories(providerContracts.getParent());
         Files.writeString(providerContracts, """
                 provider_contracts:
-                  adapters:
+                  providers:
                     request_response:
-                      contract_path: generated-framework/contracts/request_response.yaml#adapters.request_response
-                      provider_family: request_response
+                      contract_path: generated-framework/contracts/request_response.yaml#providers.request_response
+                      provider_contract_kind: request_response
                       provider_type: rest
                       endpoint_ref: env://PAYMENT_API
                 """);
 
         GeneratedRuntimeArtifacts.ProviderContractRef ref =
-                artifacts.providerContractRef("provider_contracts/runtime.yaml#adapters.request_response");
+                artifacts.providerContractRef("provider_contracts/runtime.yaml#providers.request_response");
         Map<String, Object> contract = artifacts.providerContract(tempDir, ref);
 
         assertThat(ref.fileRef()).isEqualTo("provider_contracts/runtime.yaml");
-        assertThat(ref.section()).isEqualTo("adapters");
+        assertThat(ref.section()).isEqualTo("providers");
         assertThat(ref.providerName()).isEqualTo("request_response");
         GeneratedRuntimeArtifacts.ProviderContractRef fileOnlyRef =
                 artifacts.providerContractRef("provider_contracts/runtime.yaml");
@@ -95,16 +95,16 @@ class GeneratedRuntimeArtifactsTest {
         assertThat(ref.with("bindings", "api_payload"))
                 .isEqualTo("provider_contracts/runtime.yaml#bindings.api_payload");
         assertThat(contract).containsEntry("provider_type", "rest");
-        assertThat(artifacts.contractPath("provider_contracts/runtime.yaml#adapters.request_response", contract))
-                .isEqualTo("generated-framework/contracts/request_response.yaml#adapters.request_response");
+        assertThat(artifacts.contractPath("provider_contracts/runtime.yaml#providers.request_response", contract))
+                .isEqualTo("generated-framework/contracts/request_response.yaml#providers.request_response");
         assertThat(artifacts.contractPath(
-                "generated-framework/provider_contracts/runtime.yaml#adapters.request_response",
+                "generated-framework/provider_contracts/runtime.yaml#providers.request_response",
                 Map.of()))
-                .isEqualTo("generated-framework/provider_contracts/runtime.yaml#adapters.request_response");
-        assertThat(artifacts.providerContract(tempDir, "", "adapters", "request_response")).isEmpty();
+                .isEqualTo("generated-framework/provider_contracts/runtime.yaml#providers.request_response");
+        assertThat(artifacts.providerContract(tempDir, "", "providers", "request_response")).isEmpty();
         assertThat(artifacts.providerContract(tempDir, "provider_contracts/runtime.yaml", null, "request_response"))
                 .isEmpty();
-        assertThat(artifacts.providerContract(tempDir, "provider_contracts/runtime.yaml", "adapters", null))
+        assertThat(artifacts.providerContract(tempDir, "provider_contracts/runtime.yaml", "providers", null))
                 .isEmpty();
         assertThat(artifacts.generatedPath(tempDir, "generated-framework/provider_contracts/runtime.yaml"))
                 .isEqualTo(providerContracts.normalize());
@@ -121,7 +121,7 @@ class GeneratedRuntimeArtifactsTest {
         assertThat(artifacts.providerContract(
                 tempDir,
                 "provider_contracts/runtime.yaml",
-                "adapters",
+                "providers",
                 "request_response"))
                 .isEmpty();
     }
@@ -154,13 +154,13 @@ class GeneratedRuntimeArtifactsTest {
                   downstream:
                     target_id: downstream
                     runner: downstream_cli
-                    provider_contract_ref: provider_contracts/downstream.yaml#adapters.downstream_cli
+                    provider_contract_ref: provider_contracts/downstream.yaml#providers.downstream_cli
                     environment_ref: sit://downstream
                     readiness_ref: readiness/downstream.yaml
                   upstream:
                     target_id: upstream
                     runner: upstream_cli
-                    provider_contract_ref: provider_contracts/upstream.yaml#adapters.upstream_cli
+                    provider_contract_ref: provider_contracts/upstream.yaml#providers.upstream_cli
                     environment_ref: sit://upstream
                     readiness_ref: readiness/upstream.yaml
                   broken: not-a-map
@@ -177,7 +177,7 @@ class GeneratedRuntimeArtifactsTest {
                 .containsExactly("upstream", "external-target");
         assertThat(context.gaps()).extracting(GeneratedRuntimeGap::fieldPath)
                 .contains(
-                        "generated-framework/environment_bindings.targets.broken.runner",
+                        "generated-framework/environment_bindings.targets.broken.provider",
                         "generated-framework/environment_bindings.targets.broken.provider_contract_ref",
                         "generated-framework/environment_bindings.targets.broken.environment_ref",
                         "generated-framework/environment_bindings.targets.broken.readiness_ref");
@@ -200,7 +200,7 @@ class GeneratedRuntimeArtifactsTest {
                 targets:
                   api:
                     runner: request_response
-                    provider_contract_ref: provider_contracts/api.yaml#adapters.request_response
+                    provider_contract_ref: provider_contracts/api.yaml#providers.request_response
                     environment_ref: sit://api
                     readiness_ref: readiness/api.yaml
                 """);
@@ -241,15 +241,15 @@ class GeneratedRuntimeArtifactsTest {
                 targets:
                   api:
                     runner: request_response
-                    provider_contract_ref: provider_contracts/api.yaml#adapters.request_response
+                    provider_contract_ref: provider_contracts/api.yaml#providers.request_response
                     environment_ref: ci://api
                   worker:
                     runner: messaging
-                    provider_contract_ref: provider_contracts/worker.yaml#adapters.messaging
+                    provider_contract_ref: provider_contracts/worker.yaml#providers.messaging
                     environment_ref: ci://worker
                   batch:
                     runner: external_runner
-                    provider_contract_ref: provider_contracts/batch.yaml#adapters.external_runner
+                    provider_contract_ref: provider_contracts/batch.yaml#providers.external_runner
                     environment_ref: ci://batch
                 """);
 
@@ -269,7 +269,7 @@ class GeneratedRuntimeArtifactsTest {
         assertThatThrownBy(() -> artifacts.providerContract(
                 tempDir,
                 "provider_contracts/runtime.yaml",
-                "adapters",
+                "providers",
                 "request_response"))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("Failed to read generated runtime artifact");

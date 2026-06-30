@@ -157,13 +157,13 @@ public class GeneratedRuntimeArtifacts {
             String targetKey = entry.getKey();
             Map<String, Object> target = entry.getValue() instanceof Map<?, ?> map ? copyMap(map) : Map.of();
             String targetId = firstNonBlank(firstText(target, "target_id"), targetKey);
-            String runner = firstText(target, "runner", "adapter");
+            String runner = firstText(target, "provider", "runner");
             String providerContractRef = firstText(target, "provider_contract_ref");
             String environmentRef = firstText(target, "environment_ref");
             if (runner.isBlank()) {
                 gaps.add(new GeneratedRuntimeGap(
-                        "generated-framework/environment_bindings.targets." + targetKey + ".runner",
-                        "Generate runner for target `" + targetId + "` before execution."));
+                        "generated-framework/environment_bindings.targets." + targetKey + ".provider",
+                        "Generate provider for target `" + targetId + "` before execution."));
             }
             if (providerContractRef.isBlank()) {
                 gaps.add(new GeneratedRuntimeGap(

@@ -1,0 +1,47 @@
+provider_contract_version: v0.2
+provider_type: common_verify
+runtime_modes: [local]
+binding_keys:
+  workspace_ref:
+    required: true
+    source: environment_binding
+defaults:
+  timeout: PT5S
+  poll_interval: PT0S
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, binding_keys, defaults, operations, evidence, failure_mapping, labels]
+  binding_keys: [workspace_ref]
+operations:
+  json_match:
+    allowed_bind_as: [expected_ref, actual_ref, ignore_paths, normalize, ignore_order]
+    required_parameters: [expected_ref, actual_ref]
+    output_refs: [assertion_evidence_ref, diff_ref]
+  schema_match:
+    allowed_bind_as: [schema_ref, actual_ref, normalize]
+    required_parameters: [schema_ref, actual_ref]
+    output_refs: [assertion_evidence_ref, diff_ref]
+  file_diff:
+    allowed_bind_as: [expected_ref, actual_ref, normalize, ignore_order]
+    required_parameters: [expected_ref, actual_ref]
+    output_refs: [assertion_evidence_ref, diff_ref]
+  event_published:
+    allowed_bind_as: [expected_ref, actual_ref, timeout, poll_interval, consume_from]
+    required_parameters: [expected_ref, actual_ref]
+    output_refs: [polling_evidence_ref, last_observed_ref]
+  db_record_exists:
+    allowed_bind_as: [expected_ref, actual_ref, timeout, poll_interval]
+    required_parameters: [expected_ref, actual_ref]
+    output_refs: [polling_evidence_ref, last_observed_ref]
+evidence:
+  outputs: [assertion_result, assertion_diff, polling_result, evidence_index, result_json]
+  redact: [masked_actual_sample, last_observed_value]
+failure_mapping:
+  allowed_codes:
+    - ASSERTION_MISMATCH
+    - SCHEMA_MISMATCH
+    - EXPECTED_ARTIFACT_MISSING
+    - ACTUAL_ARTIFACT_MISSING
+    - INVALID_POLLING_CONFIG
+    - POLLING_TIMEOUT
+    - EVIDENCE_REF_MISSING

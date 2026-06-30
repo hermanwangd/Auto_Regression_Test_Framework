@@ -1,13 +1,19 @@
 environment_id: sit-contract-sample
 profile: sit
 provider_bindings:
+  - provider_id: wiremock-payment-api
+    runtime_mode: mock
+    readiness_ref: evidence/readiness/wiremock-payment-api-sit.yaml
+    binding_values:
+      mappings_ref: fixtures/wiremock/payment-api/
   - provider_id: oracle-database
     runtime_mode: native
     readiness_ref: evidence/readiness/oracle-database-sit.yaml
     binding_values:
-      jdbc_url: jdbc:oracle:thin:@//oracle-sit.example.internal:1521/PAYMENT
+      jdbc_url: vault://sit/payment/db-jdbc-url
       username:
         secret_ref: vault://sit/payment/db-username
+      dialect: oracle
       password:
         secret_ref: vault://sit/payment/db-password
   - provider_id: nats-event-bus

@@ -1,28 +1,58 @@
 provider_contract_version: v0.2
-provider_type: nats_messaging
+provider_type: nats
 runtime_modes: [native, mock, ephemeral]
 binding_keys:
-  servers:
+  connection:
+    required: true
+    source: environment_binding_secret_ref_or_approved_local_ref
+  subject:
     required: true
     source: environment_binding
+  timeout:
+    required: false
+    source: environment_binding
+  poll_interval:
+    required: false
+    source: environment_binding
 defaults:
-  timeout_seconds: 30
-  retry: 0
+  timeout: PT30S
+  poll_interval: PT0.5S
+  consume_from: test_start_time
 valid_provider_instance_shape:
-  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
-  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
-  binding_keys: [servers]
+  required_fields: [provider_id, provider_type, runtime_modes, connection, subject, binding_keys]
+  allowed_fields: [provider_id, provider_type, runtime_mode, runtime_modes, connection, subject, timeout, poll_interval, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
+  binding_keys: [connection, subject, timeout, poll_interval]
 operations:
-  publish_message:
-    allowed_bind_as: [message.subject, message.headers.*, message.payload, message.timeout]
-    required_parameters: [message.subject, message.payload]
-    output_refs: [published_message, ack, timestamp]
-  consume_message:
-    allowed_bind_as: [message.subject, message.queue, message.filter, message.timeout, message.max_records]
-    required_parameters: [message.subject]
-    output_refs: [consumed_message, ack, timestamp]
+  nats_publish:
+    allowed_bind_as: [subject, payload_ref, payload, correlation_key]
+    required_parameters: [subject, payload]
+    output_refs: [subject, published, published_at, event_evidence_ref]
+  nats_observe:
+    allowed_bind_as: [subject, consume_from, timeout, poll_interval, expected_ref, correlation_key]
+    required_parameters: [subject]
+    output_refs: [subject, observed_count, matched, duration_ms, event_evidence_ref]
+  event_published:
+    allowed_bind_as: [subject, consume_from, timeout, poll_interval, correlation_key]
+    required_parameters: [subject]
+    output_refs: [subject, observed_count, matched, duration_ms, event_evidence_ref]
+  event_payload_match:
+    allowed_bind_as: [subject, expected_ref, consume_from, timeout, poll_interval, correlation_key]
+    required_parameters: [subject, expected_ref]
+    output_refs: [subject, observed_count, matched, matched_fields, duration_ms, event_evidence_ref]
 evidence:
-  outputs: [published_message, consumed_message, ack, timing, error]
-  redact: [message.headers.authorization]
+  outputs: [event_evidence, assertion_evidence]
+  redact: [connection, password, secret, token, authorization]
 failure_mapping:
-  allowed_codes: [PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, OPERATION_FAILED, ASSERTION_FAILED, EVIDENCE_INVALID]
+  allowed_codes:
+    - SUBJECT_MISSING
+    - PAYLOAD_REF_MISSING
+    - PAYLOAD_PARAM_MISSING
+    - NATS_CONNECTION_FAILED
+    - NATS_PUBLISH_FAILED
+    - NATS_OBSERVE_FAILED
+    - EVENT_NOT_FOUND
+    - PAYLOAD_MISMATCH
+    - NATS_TIMEOUT
+    - INVALID_DURATION
+    - INVALID_INSTANT
+    - REF_OUTSIDE_SUITE_ROOT

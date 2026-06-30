@@ -9,11 +9,11 @@ release_units:
     execution_mode: ci_ephemeral
     deployment_required: false
     environment_ref: ci://framework-verification/RP-FWK-SAMPLE
-    adapter: spring_boot_cli
+    provider: spring_boot_cli
     provider_contracts:
-      adapters:
+      providers:
         spring_boot_cli:
-          provider_family: file_batch
+          provider_contract_kind: file_batch
           provider_type: shell
           command: 'echo framework-sample-ok; echo framework-sample-warn >&2'
           working_directory: .
@@ -26,8 +26,9 @@ release_units:
             actual_output_ref: actual/output.txt
       bindings:
         db_seed:
-          provider_family: file_batch
+          provider_contract_kind: file_batch
           provider_type: file_fixture
+          bind_as: input_file
           materialize_as: input_file
       fixtures: {}
       oracles: {}

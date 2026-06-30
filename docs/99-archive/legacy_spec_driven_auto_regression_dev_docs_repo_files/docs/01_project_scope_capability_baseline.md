@@ -28,7 +28,7 @@ Spec Template
 - Not fully automating release approval.
 - Not auto-approving expected results or golden baselines.
 - Not allowing agent-generated tests to merge without review.
-- Not supporting every adapter in MVP.
+- Not supporting every provider in MVP.
 - Not executing destructive operations without approval.
 - Not using production data without masking and approval.
 
@@ -36,7 +36,7 @@ Spec Template
 
 | Milestone | Meaning | Exit Criteria |
 |---|---|---|
-| M1 Must Vertical Slice | Framework can execute manually authored test artifacts for one pilot feature | YAML schema, data catalog, API adapter, DB adapter, basic assertions, report, CLI runner |
+| M1 Must Vertical Slice | Framework can execute manually authored test artifacts for one pilot feature | YAML schema, data catalog, API provider, DB provider, basic assertions, report, CLI runner |
 | M2 Agent Draft Generation | Agent can generate draft regression artifacts from existing specs | Spec readiness check, regression matrix, test case YAML, input/expected data |
 | M3 Governance Integration | Regression results support release gate | P1/P2/P3 policy, approval, waiver, failure classification, Go/No-Go report |
 | M4 Scale-out | Multiple projects can adopt the same framework | Plugin SDK, onboarding guide, dashboard, reusable templates |
@@ -48,8 +48,8 @@ Spec Template
 | CAP-001 | Test Case YAML DSL | M1 | Platform | Planned | Schema + validation report |
 | CAP-002 | Test Data Catalog | M1 | Platform | Planned | Catalog schema + sample datasets |
 | CAP-003 | Data Binding Resolver | M1 | Platform | Planned | Binding unit tests |
-| CAP-004 | API Adapter | M1 | Platform | Planned | API execution evidence |
-| CAP-005 | DB Adapter | M1 | Platform | Planned | DB state assertion evidence |
+| CAP-004 | API Provider | M1 | Platform | Planned | API execution evidence |
+| CAP-005 | DB Provider | M1 | Platform | Planned | DB state assertion evidence |
 | CAP-006 | Basic Assertion Library | M1 | Platform | Planned | Assertion test report |
 | CAP-007 | Fixture Setup / Cleanup | M1 | Platform | Planned | Cleanup evidence |
 | CAP-008 | HTML / JSON Report | M1 | Platform | Planned | Sample report |

@@ -24,7 +24,7 @@ Virtual Product
 - RP-level feature specs and formal RP acceptance criteria.
 - Product-owned RP/RU repo mapping for Agent Skill translation into framework-readable execution artifacts.
 - Next-stage Phase 2 Agent Skill-assisted Product Repo initialization, RU implementation repo scanning, reverse-engineered draft documentation, and new spec creation support when source docs are missing.
-- Next-stage Phase 2 Agent Skill generation of regression tests, expected results, suite manifests, Execution Profiles, Provider Contracts, Provider Instances, Environment Bindings, and mapping explanations from RP AC and product context.
+- Next-stage Phase 2 Agent Skill generation of regression tests, expected results, suite manifests, Execution Profiles, Provider Instances, Environment Bindings, and mapping explanations from RP AC and product context. Built-in Provider Contracts are framework-owned and resolved by `provider_type`.
 - Auto Regression Test Framework v0.2 as the product-agnostic execution, validation, plugin, result, evidence, and CLI foundation.
 - Coverage, traceability, evidence, and release review inputs.
 
@@ -48,7 +48,7 @@ Framework v0.2 includes:
 
 - DSL v0.2 schema for identity, status, revision, tags, labels, source refs, compatible profiles, parameters, targets, setup fixtures, execute steps, expected results, verify/assertions, evidence, and runtime policy.
 - Execution Profiles for local, CI, SIT, and preprod execution permissions.
-- Provider Contracts, Provider Instances, and Environment Bindings for isolated local/CI targets and deployed SIT targets.
+- Framework-owned Provider Contracts plus Provider Instances and Environment Bindings for isolated local/CI targets and deployed SIT targets.
 - Suite selection by test ID, suite, tag, and profile.
 - Provider type catalog for REST, gRPC, Kafka, NATS, JDBC, Kubernetes, VM, file/batch, and approved external runner boundaries.
 - Execute operation catalog defined by Provider Contracts, including command, API, SQL, message, readiness, runtime, and file operations.
@@ -108,10 +108,10 @@ Track C implements only the selected v0.2 P0 provider capability runtime after T
 | F001 | Product Repo Bootstrap, RU Repo Discovery, and Readiness Agent Skill | Initialize the Product Repo structure, optionally scan RU implementation repos to draft missing docs/specs, produce deterministic readiness reports, and use an agent skill to explain owner-actionable next steps | Phase 2 Agent Skill next stage; CLI foundation optional |
 | F002 | Release Package Creation Guide and Completeness Agent Skill | Tell owners how to create an RP, scaffold required RP artifact locations, and check whether required RP artifacts are complete | Phase 2 Agent Skill next stage; CLI foundation optional |
 | F003 | RP Feature Spec and AC Intake Agent Skill | Consume owner-authored or draft RP feature specs, preserve approval/source state, and validate formal Product Owner / PM / SA-owned acceptance criteria | Phase 2 Agent Skill next stage |
-| F004 | Agent Skill: Product Mapping Translation | Translate human-authored Product/RP/RU context into framework-readable suite, execution profile, Provider Contract, Provider Instance, Environment Binding, traceability, and mapping explanation artifacts | Phase 2 Agent Skill next stage |
+| F004 | Agent Skill: Product Mapping Translation | Translate human-authored Product/RP/RU context into framework-readable suite, execution profile, Provider Instance, Environment Binding, traceability, and mapping explanation artifacts | Phase 2 Agent Skill next stage |
 | F005 | Agent Skill: AC and Execution Context Readiness with DSL Test Drafting | Use agent reasoning to classify AC/execution readiness and draft package-neutral DSL test skeletons or executable regression test cases | Phase 2 Agent Skill next stage |
 | F006 | Agent Skill: Expected Result Drafting | Draft reviewable expected-result artifacts from explicit RP AC and source context | Phase 2 Agent Skill next stage |
-| F007 | Generic DSL Test Execution | Execute checked-in package-neutral DSL v0.2 test cases using Execution Profiles, Provider Instances, Provider Contracts, Environment Bindings, fixture lifecycle, verify rules, polling, result schema, and evidence collection | Framework v0.2 core |
+| F007 | Generic DSL Test Execution | Execute checked-in package-neutral DSL v0.2 test cases using Execution Profiles, Provider Instances, framework-owned Provider Contracts, Environment Bindings, fixture lifecycle, verify rules, polling, result schema, and evidence collection | Framework v0.2 core |
 | F008 | Coverage and Evidence Package | Report RP AC coverage, traceability, execution evidence, failures, waivers, and release review inputs from normalized framework results | Framework v0.2 core |
 | F009 | Advanced Spec Readiness | Detect deeper cross-artifact spec gaps and drift across product, RP, architecture, data, and change history | Later Agent Skill |
 | F010 | Release Governance Integration | Apply release gate policy, waiver workflow, and Go/No-Go records | Later Governance |
@@ -130,8 +130,8 @@ The baseline is ready for architecture design when these conditions are true:
 
 Implementation may start only for framework slices whose inputs are ready:
 
-- Current-stage framework work starts with F007, F008, and F011 foundation: DSL v0.2 validation, generated artifact validation, Execution Profile and Environment Binding resolution, suite selection, parameter expansion, fixture lifecycle, Provider Contract validation, Provider Instance validation, provider capability registry, provider/verify plugin contracts, result schema, evidence schema, report, and secret guardrails.
-- F007 requires checked-in execution-eligible DSL v0.2 test artifacts, Execution Profiles, Provider Instances, Provider Contracts, Environment Bindings, targets, setup fixtures, parameter sets, execute operations and outputs, expected_results, verify rules, polling policy, evidence requirements, runtime policy, provider registry support, plugin contracts, and result schema validation.
+- Current-stage framework work starts with F007, F008, and F011 foundation: DSL v0.2 validation, generated artifact validation, Execution Profile and Environment Binding resolution, suite selection, parameter expansion, fixture lifecycle, framework Provider Contract catalog validation, Provider Instance validation, provider capability registry, provider/verify plugin contracts, result schema, evidence schema, report, and secret guardrails.
+- F007 requires checked-in execution-eligible DSL v0.2 test artifacts, Execution Profiles, Provider Instances, Environment Bindings, targets, setup fixtures, parameter sets, execute operations and outputs, expected_results, verify rules, polling policy, evidence requirements, runtime policy, provider registry support, plugin contracts, and result schema validation.
 - F008 requires source-ref based AC inventory, execution evidence format, traceability rules, batch/run evidence, result JSON, and approved waiver or manual-only records when those records are consumed as evidence metadata.
 - F011 requires materialized Provider Contract, Provider Instance, Environment Binding, provider plugin, and verify plugin contract documents, provider capability registry rules, version compatibility behavior, required field validation, unsupported capability blocking, and dry-run evidence.
 
@@ -166,7 +166,7 @@ The framework may verify deployment readiness through generated Environment Bind
 
 Regression test cases are managed as durable RP artifacts. The framework shall not regenerate test cases on every execution run.
 
-The framework uses a package-neutral regression test case DSL so different Products and Release Packages can express repeatable auto regression tests through the same artifact model. The DSL describes what RP behavior must be validated, while package-specific execution remains isolated behind Provider Contracts, Provider Instances, and Environment Bindings.
+The framework uses a package-neutral regression test case DSL so different Products and Release Packages can express repeatable auto regression tests through the same artifact model. The DSL describes what RP behavior must be validated, while package-specific execution remains isolated behind framework-owned Provider Contracts, Provider Instances, and Environment Bindings.
 
 The DSL is not a BDD story, shell script, provider configuration, or generated run log. It is a versioned test contract with enough structured data for the framework to validate, plan, bind, execute, assert, and report a regression test repeatedly.
 
@@ -174,8 +174,8 @@ The DSL must answer execution questions in a package-neutral, execution-focused 
 
 | Question | DSL Responsibility | Not DSL Responsibility |
 |---|---|---|
-| What is being validated? | `source_refs.acceptance_criteria`, optional opaque `labels`, and `scenario` | Writing or changing RP feature truth or making runtime decisions from product labels |
-| What targets are involved? | `targets.<name>.provider_id`, `targets.<name>.profile`, and `execute[].target` | Inferring RP/RU membership, endpoint, topic, credential, or deployment topology |
+| What is being validated? | `source_refs.acceptance_criteria`, optional opaque `labels`, setup/execute intent, and `verify[]` | Writing or changing RP feature truth or making runtime decisions from product labels |
+| What targets are involved? | `targets.<name>.provider_id` and `execute[].target`; the active profile is selected by CLI or suite manifest | Inferring RP/RU membership, endpoint, topic, credential, or deployment topology |
 | What data or state is needed? | `setup.fixtures` and `execute[].parameters` | Inline secrets, physical DB connection strings, or package-specific loaders |
 | What operation is performed? | `setup.fixtures.<name>.operation`, `execute[].operation`, `cleanup.fixtures.<name>.operation`, target, `ref`, `bind_as`, and captured outputs | Shell scripts, endpoint URLs, queue drivers, DB credentials, or deployment commands embedded in the test |
 | How is pass/fail decided? | `expected_results` and `verify[]` with explicit captured-output actual/expected, provider-metadata expected, or target/query/event semantics | Approving expected-result truth or inventing business rules |
@@ -185,18 +185,18 @@ The DSL must answer execution questions in a package-neutral, execution-focused 
 | DSL Area | Purpose | Primary AP Consumer |
 |---|---|---|
 | Identity and source refs | Identify DSL version, test ID, execution status, revision, source references, and opaque report labels. | Definition and Validation |
-| Targets and scenario | Describe named targets, scenario type, scope, description, and capabilities. | Discovery and Context / Planning and Binding |
+| Targets and provider references | Describe named targets by `provider_id`; provider capability comes from the referenced Provider Contract. | Discovery and Context / Planning and Binding |
 | Setup and runtime inputs | Reference fixtures, seed data, mock setup, initial state, and operation inputs. | Planning and Binding / Fixture and State Manager |
 | Parameterization | Declare a reviewed parameter set reference when one logical test must run with multiple input variants. | Planning and Binding / Evidence and Reporting |
 | Execution | Declare readable operations, target IDs, runtime inputs, and captured outputs without embedding provider-specific scripts. | Execution Engine |
 | Expected results and verification | Reference expected artifacts and define explicit `verify` checks over captured outputs, DB state, events, or files. | Oracle and Assertion Engine |
 | Evidence and runtime | Declare concrete evidence refs, timeout, and retry. | Evidence and Reporting |
 
-The 7 AP are the framework capability areas behind the DSL lifecycle: Definition and Validation, Discovery and Context, Planning and Binding, Fixture and State Manager, Execution Engine, Oracle and Assertion Engine, and Evidence and Reporting. Provider configuration belongs in Provider Contracts, Provider Instances, and Environment Bindings; DSL tests may reference Provider Instances only by `provider_id` and `profile`.
+The 7 AP are the framework capability areas behind the DSL lifecycle: Definition and Validation, Discovery and Context, Planning and Binding, Fixture and State Manager, Execution Engine, Oracle and Assertion Engine, and Evidence and Reporting. Provider configuration belongs in framework-owned Provider Contracts, Provider Instances, and Environment Bindings; DSL tests may reference Provider Instances only by `provider_id`.
 
 Each AP must be independently explainable in readiness and execution reports. A report that says only "DSL invalid" or "execution failed" is not sufficient; it must name the AP, field path or Provider Contract, affected test case, affected AC, reason, and owner action.
 
-The DSL field set should stay execution-focused but complete enough for v0.2 pre-release execution. v0.2 supersedes the earlier minimum v1 subset and defines the framework-owned generic execution contract. Top-level sections may be present as empty maps for schema stability, but content is required only when the scenario references or needs it.
+The DSL field set should stay execution-focused but complete enough for v0.2 pre-release execution. v0.2 supersedes the earlier minimum v1 subset and defines the framework-owned generic execution contract. Top-level sections may be present as empty maps for schema stability, but content is required only when setup, execute, cleanup, verify, or evidence references need them.
 
 | Field or Section | Requirement Rule | Why It Is Required | Consuming AP |
 |---|---|---|---|
@@ -205,17 +205,16 @@ The DSL field set should stay execution-focused but complete enough for v0.2 pre
 | `source_refs.acceptance_criteria` | Always required | Gives every run a stable source reference to the reviewed acceptance criterion without embedding product topology decisions. | Definition and Validation / Evidence and Reporting |
 | `labels` | Optional; required only when generated artifacts need product/RP/RU labels in reports | Carries opaque report metadata such as product, package, or runtime unit. Framework runtime must not branch on labels. | Evidence and Reporting |
 | `compatible_profiles` | Optional; required only when a test is limited to named Execution Profiles | Lets the runtime block a test when the selected Execution Profile is not compatible. | Definition and Validation / Planning and Binding |
-| `targets.<name>.provider_id`, `targets.<name>.profile` | Always required | Names the Provider Instance and Execution Profile used by the test without exposing physical environment values. | Discovery and Context / Planning and Binding |
-| `scenario.type`, `scenario.scope`, `scenario.description`, `scenario.capabilities` | Always required | Tells the framework what kind of behavior and provider capability is needed. | Planning and Binding |
+| `targets.<name>.provider_id` | Always required | Names the Provider Instance used by the test without exposing physical environment values. The active Execution Profile is selected by CLI or suite manifest. | Discovery and Context / Planning and Binding |
 | `parameters` | Optional; required only when one test case must run multiple reviewed parameter-set variants | Declares a reviewed parameter set reference without regenerating or duplicating test artifacts. | Planning and Binding / Evidence and Reporting |
-| `setup.fixtures` | Required when the scenario needs precondition data, mutated state, mock setup, seed data, or cleanup | Declares fixture lifecycle before and after execution. | Fixture and State Manager |
+| `setup.fixtures` | Required when the test needs precondition data, mutated state, mock setup, seed data, or cleanup | Declares fixture lifecycle before and after execution. | Fixture and State Manager |
 | `execute[]` | Always required; each step ID must be unique | Declares operations allowed by the selected Provider Contract, target IDs, `ref`/`bind_as` runtime inputs, and contract-defined observable outputs. v0.2 may run one or more ordered execute steps when each step is explicit and evidence-addressable. | Execution Engine |
 | `expected_results` | Required when `verify[]` uses approved artifacts, payloads, schemas, contracts, or state snapshots | Declares reusable truth references used by verification. Inline deterministic expected values may live directly under `verify[].expected`. | Oracle and Assertion Engine |
 | `verify[]` | Always required | Declares how pass/fail is evaluated. | Oracle and Assertion Engine |
 | `evidence.required[]` | Always required | Declares what concrete execution or verification outputs must be retained. | Evidence and Reporting |
 | `runtime.timeout`, `runtime.retry` | Always required | Bounds execution duration and retry behavior. | Execution Engine |
 
-Conditional fields are required only when the scenario needs them:
+Conditional fields are required only when setup, execute, cleanup, verify, or evidence references need them:
 
 | Conditional Field | Required When | Not Allowed To Contain |
 |---|---|---|
@@ -236,8 +235,8 @@ Validation alone is not enough. At least one checked-in `tests/approved/` execut
 
 New execution-focused DSL artifacts must:
 
-- Reference runtime targets through `targets.<name>.provider_id` and `targets.<name>.profile`.
-- Use operations allowed by the referenced Provider Contract, such as `http_request`, `unary_call`, `publish_message`, `consume_message`, `request_reply_message`, `execute_script`, `query`, `check_deployment_ready`, `run_command`, or `run_and_collect`.
+- Reference runtime targets through `targets.<name>.provider_id`. Use `compatible_profiles` only to restrict allowed profiles; do not select runtime behavior from labels.
+- Use operations allowed by the referenced Provider Contract, such as `http_request`, `unary_call`, `publish_message`, `consume_message`, `nats_publish`, `nats_observe`, `execute_script`, `query`, `check_deployment_ready`, `run_command`, or `run_and_collect`.
 - Use `source_refs` for source truth and `labels` for opaque product/RP/RU reporting metadata. New generated DSL must not require `traceability.package_id`, `traceability.acceptance_criteria_id`, or `traceability.source`; those fields are compatibility inputs until migrated.
 - Use `targets`, `setup` when needed, `execute`, `expected_results` when needed, `verify`, `evidence`, and `runtime` instead of framework-internal legacy fields.
 - Allow multiple `execute[]` items only when each step has a unique ID, declared target, operation, inputs, outputs, ordering semantics, and evidence refs. The framework must block ambiguous or unsupported multi-step execution.
@@ -247,7 +246,7 @@ New execution-focused DSL artifacts must:
 - Use `parameters[].ref` and `parameters[].bind_as` to declare reviewed reusable parameter sources when the same behavior must run against multiple named input variants from checked-in data.
 - Pass parameter sources to provider operations through `setup.fixtures.<name>.parameters[]`, `execute[].parameters[]`, or `cleanup.fixtures.<name>.parameters[]` entries that use `ref` and `bind_as`. Operation-level `bind_as` must be allowed by the referenced Provider Contract.
 - Reference named parameter sources from operation `ref` fields with `parameters.<name>` or a reviewed field under that source. New DSL artifacts must not use `parameters.strategy`, inline `parameters.cases`, or `${parameters.<name>}` references.
-- Keep provider implementation details in Provider Contracts, Provider Instances, or Environment Bindings, not inside the test case body.
+- Keep provider implementation details in framework-owned Provider Contracts, Provider Instances, or Environment Bindings, not inside the test case body.
 - Fail validation when any `bind_as` value is not allowed by the referenced Provider Contract.
 - Fail validation when any setup/execute/cleanup operation is not allowed by the referenced Provider Contract.
 - Fail validation when a referenced output ref is not declared by the referenced Provider Contract.
@@ -299,11 +298,11 @@ This document uses two different execution terms:
 | Execution Line | Subject Under Test | Primary Command | Evidence Meaning |
 |---|---|---|---|
 | Framework Verification | This regression framework product | `./mvnw test` and `./mvnw verify` | Proves framework code, contracts, and sample fixture flows behave correctly. |
-| RP Regression Execution | A downstream Product Release Package | Product-aware wrapper or pipeline generates framework artifacts, then invokes the generic runtime with `suite_manifest`, `run_plan`, Execution Profiles, Provider Instances, Provider Contracts, and Environment Bindings | Produces Product Repo RP evidence for release review. |
+| RP Regression Execution | A downstream Product Release Package | Product-aware wrapper or pipeline generates framework artifacts, then invokes the generic runtime with `suite_manifest`, `run_plan`, Execution Profiles, Provider Instances, Environment Bindings, and framework-owned Provider Contract catalog lookup | Produces Product Repo RP evidence for release review. |
 
 `./mvnw test` is the fast framework unit/component verification layer. `./mvnw verify` is the framework integration verification layer and should use a sample Product Repo fixture with local or mock Provider Instances. Neither Maven command requires SIT/UAT deployment, and neither command by itself produces downstream product release evidence.
 
-RP Regression Execution is the runtime capability delivered by F007. Product-aware tooling first turns Product/RP/RU context into framework-readable artifacts. The framework core then reads checked-in DSL tests, `suite_manifest`, `run_plan`, Execution Profiles, Provider Contracts, Provider Instances, Environment Bindings, and approved truth sources, executes or validates the selected suite, and writes batch/run evidence.
+RP Regression Execution is the runtime capability delivered by F007. Product-aware tooling first turns Product/RP/RU context into framework-readable artifacts. The framework core then reads checked-in DSL tests, `suite_manifest`, `run_plan`, Execution Profiles, Provider Instances, Environment Bindings, approved truth sources, and the framework Provider Contract catalog, executes or validates the selected suite, and writes batch/run evidence.
 
 SIT/UAT regression is a release package pipeline concern. The framework may verify SIT/UAT readiness and run against an already deployed environment, but v0.2 does not deploy release units as part of Maven framework verification.
 
@@ -593,7 +592,7 @@ Translate human-authored Product/RP/RU context into framework-readable artifacts
 
 The framework shall not decide which RU repos are included in an RP, which RU is Java/Maven, which provider type a RU should use, or how SIT topology maps to deployed components. SA, tech lead, product developer, or the responsible owner defines RP membership in `rp_ru_mapping.yaml` and related product docs.
 
-The Agent Skill shall check that product mapping is complete enough to generate framework artifacts. It shall emit explicit `suite_manifest.yaml`, `run_plan.yaml`, Execution Profiles, Provider Contracts, Provider Instances, Environment Bindings, and `traceability_map.yaml`. The framework validates those generated artifacts and treats RP/RU labels as opaque report metadata.
+The Agent Skill shall check that product mapping is complete enough to generate framework artifacts. It shall emit explicit `suite_manifest.yaml`, `run_plan.yaml`, Execution Profiles, Provider Instances, Environment Bindings, and `traceability_map.yaml`. The framework validates those generated artifacts, resolves Provider Contracts from the framework catalog, and treats RP/RU labels as opaque report metadata.
 
 ### Required Mechanism
 
@@ -604,7 +603,7 @@ The Agent Skill shall check that product mapping is complete enough to generate 
 - Generate Execution Profile artifacts with trigger, isolation/dependency model, constraints, data policy, max duration, and Environment Binding refs.
 - Generate Provider Instances that declare `provider_id`, `provider_type`, operation selections, binding keys, defaults, evidence choices, and failure mappings.
 - Generate Environment Bindings that supply profile-specific actual values for Provider Instance binding keys.
-- Generate Provider Contracts with `provider_type`, valid Provider Instance shape, allowed operations, allowed `bind_as` values, output refs, evidence outputs, runtime status, and safety policy.
+- Reference existing framework-owned Provider Contracts through each Provider Instance `provider_type`. Generate suite-local Provider Contracts only when an approved custom provider or explicit contract snapshot pinning mode is selected.
 - Generate `traceability_map.yaml` with product/RP/RU/source labels used for reporting only.
 - Generate a mapping explanation report that records selected provider type, Provider Instance ID, selected Execution Profile, strategy selection reason, source facts used, unresolved assumptions, and validation warnings.
 - For strategy-sensitive provider types such as an external runner or build-tool driven provider, record the product-side reason, for example implementation stack, build tool, and supported test strategy. The framework only validates the Provider Contract and Provider Instance; the Agent Skill owns eligibility reasoning.
@@ -627,13 +626,13 @@ Product developers own AC clarification and manual expected-result input. QA or 
 
 - Read `rp_feature_spec.md`, `acceptance_criteria.md`, product mapping inputs, generated `suite_manifest`, `run_plan`, `environment_binding`, target references, setup fixture references, execute operation references, expected-result references, verify rules, and validation boundaries.
 - Check AC readiness: AC ID, linked RP feature, observable input, behavior, expected output, and pass/fail condition.
-- Check execution context readiness: scenario type/scope/capabilities, named targets, provider_id, provider_type, profile, Environment Binding, setup fixture or data source, cleanup reference when state is mutated, execute operation, execute input refs, execute output refs, deployment readiness ref, validation boundary, expected_results refs, verify type, captured-output actual/expected, provider-metadata expected, or target/query/event semantics, evidence refs, and runtime policy.
+- Check execution context readiness: named targets, provider_id, provider_type, profile, Environment Binding, setup fixture or data source, cleanup reference when state is mutated, execute operation, execute input refs, execute output refs, deployment readiness ref, validation boundary, expected_results refs, verify type, captured-output actual/expected, provider-metadata expected, or target/query/event semantics, evidence refs, and runtime policy.
 - Map each generated DSL section to the AP that will consume it: identity, `source_refs`, and optional `labels` to Definition and Validation, targets/setup/execute inputs to Planning and Binding, setup fixture fields to Fixture and State Manager, execute operations to Execution Engine, expected_results/verify to Oracle and Assertion Engine, and evidence/runtime fields to Evidence and Reporting.
 - Refuse executable drafting when an AP cannot be selected or when a required AP input would have to be invented by the agent.
 - Mark ambiguous AC as `not_ready_for_generation`.
 - Generate `draft_test_skeleton` only when AC is ready but execution context is incomplete. The skeleton shall use v0.2 identity/status/revision, `source_refs`, optional `labels`, plus `source_fingerprint` and `readiness_gaps`; it shall not include executable sections that require invented context.
 - Generate `draft_executable_test_case` using the package-neutral test case DSL only when AC and execution context are both ready.
-- Include `dsl_version` and all required DSL identity/status/revision, `source_refs`, optional `labels`, targets, scenario, setup, execute, expected_results, verify, evidence, and runtime fields in every generated executable draft.
+- Include `dsl_version` and all required DSL identity/status/revision, `source_refs`, optional `labels`, targets, setup, execute, expected_results, verify, evidence, and runtime fields in every generated executable draft.
 - Do not emit legacy-only fields such as `rp_id`, `ac_id`, `artifact_status`, or old `traceability.*` fields in new generated test-case drafts.
 - Store generated test drafts as reviewable artifacts instead of transient execution state.
 - Detect existing checked-in test cases for the same RP AC before generating replacements.
@@ -673,7 +672,7 @@ Execute checked-in execution-eligible package-neutral DSL regression test cases 
 
 ### Expected Behavior
 
-The framework shall resolve targets, setup inputs, execute inputs, cleanup inputs, expected_results, verify rules, evidence refs, runtime policy, Provider Instances, Provider Contracts, Execution Profiles, and Environment Bindings; confirm environment readiness; set up fixtures; execute operations through selected provider runtimes; collect actual results; run verification; clean up fixtures; and emit raw execution evidence.
+The framework shall resolve targets, setup inputs, execute inputs, cleanup inputs, expected_results, verify rules, evidence refs, runtime policy, Provider Instances, framework-owned Provider Contracts, Execution Profiles, and Environment Bindings; confirm environment readiness; set up fixtures; execute operations through selected provider runtimes; collect actual results; run verification; clean up fixtures; and emit raw execution evidence.
 
 One suite execution is a batch. A batch may contain one or more test runs. Each test run validates one execution-eligible DSL test case and produces run-level evidence. Product/RP labels are carried as report metadata so F008 can package RP-level coverage, but runtime decisions come from framework artifacts only.
 
@@ -687,17 +686,17 @@ F007 implementation must not proceed directly to provider runtime expansion unti
 
 ### Required Mechanism
 
-- Read `suite_manifest.yaml`, Execution Profiles, Provider Contracts, Provider Instances, Environment Bindings, checked-in DSL test cases, target definitions, setup parameter refs, execute operation refs, cleanup refs, expected-result artifacts, verify rules, evidence refs, runtime policy, plugin catalogs, and `traceability_map.yaml`.
-- Check that test cases declare `dsl_version: v0.2` and include the v0.2 core contract: identity/status/revision, tags, `source_refs`, optional `labels`, compatible profiles, parameters when used, targets, scenario, execute steps, verify, evidence, and runtime fields, with setup and expected-results content required when referenced or needed by the scenario.
+- Read `suite_manifest.yaml`, Execution Profiles, Provider Instances, Environment Bindings, checked-in DSL test cases, target definitions, setup parameter refs, execute operation refs, cleanup refs, expected-result artifacts, verify rules, evidence refs, runtime policy, plugin catalogs, `traceability_map.yaml`, and the framework Provider Contract catalog.
+- Check that test cases declare `dsl_version: v0.2` and include the v0.2 core contract: identity/status/revision, tags, `source_refs`, optional `labels`, compatible profiles, parameters when used, targets, execute steps, verify, evidence, and runtime fields, with setup and expected-results content required when referenced by setup, execute, cleanup, verify, or evidence.
 - Reject new execution-focused DSL artifacts that still use legacy-only fields such as `rp_id`, `ac_id`, `execution_target`, `target_ru_id`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, or `policy`.
 - Reject new execution-focused DSL artifacts that contain governance-heavy fields such as approval, waiver, release gate, or risk approval state.
 - Check that test cases have execution lifecycle status allowed by the selected run policy.
 - Check that required expected-result artifacts are eligible under the expected-result process before they are used by `verify`.
 - Validate that every DSL section can be consumed by exactly one AP responsibility path before provider execution starts.
-- Validate that every DSL target resolves `provider_id + profile` to one Provider Instance, one Provider Contract for its `provider_type`, and one Environment Binding for the selected profile.
+- Validate that every DSL target resolves `provider_id + selected profile` to one Provider Instance, one framework Provider Contract for its `provider_type`, and one Environment Binding for the selected profile.
 - Validate each Provider Instance against its Provider Contract, including allowed operations, allowed `bind_as` values, required binding keys, output refs, evidence outputs, failure codes, supported runtime status, and Execution Profile before provider execution.
 - Normalize execution-focused DSL v0.2 `source_refs`, optional `labels`, and generated `traceability_map.yaml` data into internal run/report metadata without requiring legacy `rp_id`, `ac_id`, `execution_target`, `package_inputs`, `oracles`, `assertions`, or `policy` fields in new test artifacts.
-- Reject ambiguous Provider Instance, Provider Contract, or Environment Binding resolution rather than falling back silently to the first match.
+- Reject ambiguous Provider Instance, custom Provider Contract, or Environment Binding resolution rather than falling back silently to the first match.
 - Block raw secrets in DSL, Execution Profile, Environment Binding, result, and evidence; allow only `secret_ref`, runtime-generated secrets, CI secret references, or vault references.
 - Require explicit approval metadata before using an external runner escape hatch, including reason, owner, bounded command or container ref, timeout, inputs, outputs, and evidence map.
 - Create one unique batch ID for the suite execution request.
@@ -705,7 +704,7 @@ F007 implementation must not proceed directly to provider runtime expansion unti
 - Resolve the execution mode from the selected Execution Profile, including local, CI, SIT, and preprod constraints.
 - Follow the generated logical target dependency graph and stop downstream execution when a required upstream target validation fails.
 - Check deployment and environment readiness before running `sit` or `preprod` tests.
-- Reject or mark invalid runs when suite manifest, run plan, Execution Profile, Provider Instance, Provider Contract, Environment Binding, execute operation, setup inputs, expected_results, verify rules, required deployment evidence, or environment readiness are missing.
+- Reject or mark invalid runs when suite manifest, run plan, Execution Profile, Provider Instance, framework Provider Contract for the selected `provider_type`, Environment Binding, execute operation, setup inputs, expected_results, verify rules, required deployment evidence, or environment readiness are missing.
 - Resolve logical setup fixtures and execute inputs to concrete fixture or generated data.
 - Bind runtime values from setup fixtures, execute inputs, context, and previous execute outputs.
 - Run setup actions needed by the configured fixture lifecycle.
@@ -802,6 +801,6 @@ The framework shall expose contract metadata for provider IDs, provider types, v
 
 - Define framework-owned schemas/catalogs for Provider Contracts, Provider Instances, Environment Bindings, provider plugin contracts, verify plugin contracts, and `provider_capability_registry.v0.2.yaml`.
 - Require Provider Contracts to declare `provider_type`, valid Provider Instance shape, required binding keys, allowed operations, allowed `bind_as` values, output refs, evidence outputs, runtime status, failure codes, and safety policy.
-- Resolve contracts through one explicit chain: DSL target `provider_id + profile`, Provider Instance, Provider Contract by `provider_type`, Execution Profile, and Environment Binding by profile; suite manifests select tests and must not override provider fields.
+- Resolve contracts through one explicit chain: DSL target `provider_id` plus selected profile, Provider Instance, framework Provider Contract by `provider_type`, Execution Profile, and Environment Binding by profile; suite manifests select tests and may select the active profile but must not override provider fields.
 - Block unsupported, ambiguous, unsafe, missing, or provider-safety-unapproved `external_runner` Provider Contracts before provider dispatch, with logical target, Provider Instance ID, provider type, profile, contract path, AP gate, and owner action.
 - Keep product strategy selection outside the framework. The Phase 2 Agent Skill may decide which generated contract to reference; the framework only validates and executes declared generic contracts.

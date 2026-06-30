@@ -50,6 +50,8 @@ public class DslTestCaseValidator {
             "waiver",
             "release_gate",
             "risk_approval");
+    private static final Set<String> DEPRECATED_DSL_FIELDS = Set.of(
+            "scenario");
     private static final Set<String> SUPPORTED_OPERATIONS = Set.of(
             "run_batch",
             "execute_command",
@@ -130,7 +132,6 @@ public class DslTestCaseValidator {
         validateIdentity(document, testCaseId, acId, gaps);
         validateLegacyAndGovernanceFields(document, testCaseId, acId, gaps);
         validateTargets(document, testCaseId, acId, gaps);
-        validateScenario(document, testCaseId, acId, gaps);
         validateSetup(document, testCaseId, acId, gaps);
         validateExecute(document, testCaseId, acId, gaps);
         validateExpectedResults(document, testCaseId, acId, gaps);
@@ -230,6 +231,12 @@ public class DslTestCaseValidator {
             gaps.add(gap(testCaseId, acId, "compatibility", "traceability", "",
                     "Use source_refs and labels instead of old traceability fields in DSL v0.2."));
         }
+        for (String field : DEPRECATED_DSL_FIELDS) {
+            if (document.containsKey(field)) {
+                gaps.add(gap(testCaseId, acId, "compatibility", field, "",
+                        "Remove `scenario`; declare behavior through setup/execute/verify and provider capability through Provider Contract."));
+            }
+        }
         collectGovernanceFields(document, "", testCaseId, acId, gaps);
     }
 
@@ -261,7 +268,7 @@ public class DslTestCaseValidator {
         Map<?, ?> targets = map(document.get("targets"));
         if (targets.isEmpty()) {
             gaps.add(gap(testCaseId, acId, "targets", "targets", "",
-                    "Declare at least one named target with type, runner, and environment."));
+                    "Declare at least one named target with type, provider, and environment."));
             return;
         }
         for (Map.Entry<?, ?> entry : targets.entrySet()) {
@@ -269,18 +276,10 @@ public class DslTestCaseValidator {
             Map<?, ?> target = map(entry.getValue());
             requireText(target, "type", "targets", testCaseId, acId, gaps,
                     "Declare targets." + targetName + ".type.", "targets." + targetName + ".type");
-            requireText(target, "runner", "targets", testCaseId, acId, gaps,
-                    "Declare targets." + targetName + ".runner.", "targets." + targetName + ".runner");
+            requireAnyText(target, List.of("provider", "runner"), "targets", testCaseId, acId, gaps,
+                    "Declare targets." + targetName + ".provider.", "targets." + targetName + ".provider");
             requireText(target, "environment", "targets", testCaseId, acId, gaps,
                     "Declare targets." + targetName + ".environment.", "targets." + targetName + ".environment");
-        }
-    }
-
-    private void validateScenario(Map<?, ?> document, String testCaseId, String acId, List<DslValidationGap> gaps) {
-        Map<?, ?> scenario = map(document.get("scenario"));
-        if (scenario.isEmpty()) {
-            gaps.add(gap(testCaseId, acId, "scenario", "scenario", "",
-                    "Declare scenario type, scope, and capabilities."));
         }
     }
 
@@ -481,7 +480,7 @@ public class DslTestCaseValidator {
         Map<?, ?> targets = map(document.get("targets"));
         for (Map<?, ?> step : mapList(document.get("execute"))) {
             Map<?, ?> target = map(targets.get(stringValue(step.get("target"))));
-            if ("request_response".equals(stringValue(target.get("runner")))) {
+            if ("request_response".equals(firstText(target, "provider", "runner"))) {
                 return true;
             }
         }
@@ -732,6 +731,20 @@ public class DslTestCaseValidator {
         }
     }
 
+    private void requireAnyText(
+            Map<?, ?> map,
+            List<String> fields,
+            String section,
+            String testCaseId,
+            String acId,
+            List<DslValidationGap> gaps,
+            String ownerAction,
+            String fieldPath) {
+        if (fields.stream().allMatch(field -> isMissing(map.get(field)))) {
+            gaps.add(gap(testCaseId, acId, section, fieldPath, "", ownerAction));
+        }
+    }
+
     private void requirePresent(
             Map<?, ?> map,
             String field,
@@ -780,5 +793,15 @@ public class DslTestCaseValidator {
 
     private String stringValue(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private String firstText(Map<?, ?> map, String... fields) {
+        for (String field : fields) {
+            String value = stringValue(map.get(field));
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 }

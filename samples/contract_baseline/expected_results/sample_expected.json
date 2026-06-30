@@ -1,0 +1,16 @@
+{
+  "http": {
+    "expected_count": 1
+  },
+  "db": {
+    "order_id": "ORDER-1001",
+    "status": "READY"
+  },
+  "event": {
+    "subject": "payments.accepted",
+    "payload": {
+      "order_id": "ORDER-1001",
+      "status": "READY"
+    }
+  }
+}

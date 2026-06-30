@@ -26,7 +26,7 @@ class CommonVerifyCapabilityCommandTest {
         List<String> requiredPaths = List.of(
                 "samples/provider_capability/common_verify/suite_manifest.yaml",
                 "samples/provider_capability/common_verify/test_case.yaml",
-                "samples/provider_capability/common_verify/provider_contracts/common_verify.yaml",
+                "docs/02-architecture/contracts/provider-contracts/common_verify.yaml",
                 "samples/provider_capability/common_verify/provider_instances/local_verify.yaml",
                 "samples/provider_capability/common_verify/execution_profiles/local_verify.yaml",
                 "samples/provider_capability/common_verify/environment_bindings/local_verify.yaml",
@@ -37,7 +37,7 @@ class CommonVerifyCapabilityCommandTest {
                 "samples/provider_capability/common_verify/actual_samples/actual_file.txt",
                 "samples/provider_capability/polling/suite_manifest.yaml",
                 "samples/provider_capability/polling/test_case.yaml",
-                "samples/provider_capability/polling/provider_contracts/common_verify.yaml",
+                "docs/02-architecture/contracts/provider-contracts/common_verify.yaml",
                 "samples/provider_capability/polling/provider_instances/local_polling.yaml",
                 "samples/provider_capability/polling/execution_profiles/local_polling.yaml",
                 "samples/provider_capability/polling/environment_bindings/local_polling.yaml",
@@ -185,7 +185,7 @@ class CommonVerifyCapabilityCommandTest {
     }
 
     @Test
-    void commonVerifyRunFailsClearlyForMissingExpectedOrActualArtifact() throws Exception {
+    void commonVerifyRunBlocksClearlyForMissingExpectedOrActualArtifactRefs() throws Exception {
         Path missingExpected = mutableCommonVerify("missing_expected");
         Files.delete(missingExpected.getParent().resolve("expected_results/expected_payload.json"));
         Path missingActual = mutableCommonVerify("missing_actual");
@@ -195,13 +195,15 @@ class CommonVerifyCapabilityCommandTest {
         CommandResult actualResult = execute("run", "--suite", missingActual.toString(), "--profile", "local_verify");
 
         assertThat(expectedResult.exit()).isEqualTo(1);
-        assertThat(read(extractPath(expectedResult.stdout(), "result_json")))
-                .contains("EXPECTED_ARTIFACT_MISSING")
-                .contains("Restore expected artifact");
+        assertThat(expectedResult.stdout())
+                .contains("run_status: blocked")
+                .contains("reason: unresolved_artifact_ref")
+                .contains("expected_results/expected_payload.json");
         assertThat(actualResult.exit()).isEqualTo(1);
-        assertThat(read(extractPath(actualResult.stdout(), "result_json")))
-                .contains("ACTUAL_ARTIFACT_MISSING")
-                .contains("Restore actual artifact");
+        assertThat(actualResult.stdout())
+                .contains("run_status: blocked")
+                .contains("reason: unresolved_artifact_ref")
+                .contains("actual_samples/actual_payload.json");
     }
 
     @Test

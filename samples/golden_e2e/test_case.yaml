@@ -14,12 +14,6 @@ compatible_profiles: [local_golden]
 targets:
   sample_runtime:
     provider_id: sample-fake-runtime
-    profile: local_golden
-scenario:
-  type: framework_lifecycle
-  scope: framework_verification
-  description: Prove validation, target resolution, fixture, execute, verify, evidence, result, and report lifecycle through a deterministic local fake provider.
-  capabilities: [sample_fixture, sample_execute, value_equals, json_match]
 data_binding:
   datasets:
     input:

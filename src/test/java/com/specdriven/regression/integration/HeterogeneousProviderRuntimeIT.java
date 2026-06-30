@@ -33,32 +33,32 @@ class HeterogeneousProviderRuntimeIT {
 
         assertThat(exit).as(stdout.toString()).isZero();
         assertThat(stdout.toString())
-                .contains("adapter_execution_started: true")
+                .contains("provider_runtime_started: true")
                 .contains("batch_id: BATCH-001")
                 .contains("run_status: passed");
         assertThat(Files.readString(packageRoot.resolve("evidence/batches/BATCH-001/batch.yaml")))
                 .contains("status: passed")
                 .contains("run_id: RUN-001")
                 .contains("run_id: RUN-012");
-        assertRunPassed(packageRoot, "RP-HET-TC-DB", "provider_family: db_fixture", "fixture_setup.yaml",
+        assertRunPassed(packageRoot, "RP-HET-TC-DB", "provider_contract_kind: db_fixture", "fixture_setup.yaml",
                 "cleanup.yaml");
-        assertRunPassed(packageRoot, "RP-HET-TC-REST", "provider_family: request_response", "request_response.yaml");
-        assertRunPassed(packageRoot, "RP-HET-TC-GRPC", "provider_family: request_response", "provider_type: grpc");
-        assertRunPassed(packageRoot, "RP-HET-TC-KAFKA-PUBLISH", "provider_family: messaging", "provider_type: kafka",
+        assertRunPassed(packageRoot, "RP-HET-TC-REST", "provider_contract_kind: request_response", "request_response.yaml");
+        assertRunPassed(packageRoot, "RP-HET-TC-GRPC", "provider_contract_kind: request_response", "provider_type: grpc");
+        assertRunPassed(packageRoot, "RP-HET-TC-KAFKA-PUBLISH", "provider_contract_kind: messaging", "provider_type: kafka",
                 "mode: publish");
-        assertRunPassed(packageRoot, "RP-HET-TC-KAFKA-OBSERVE", "provider_family: messaging", "provider_type: kafka",
+        assertRunPassed(packageRoot, "RP-HET-TC-KAFKA-OBSERVE", "provider_contract_kind: messaging", "provider_type: kafka",
                 "mode: observe");
-        assertRunPassed(packageRoot, "RP-HET-TC-KAFKA-CLEANUP", "provider_family: messaging", "provider_type: kafka",
+        assertRunPassed(packageRoot, "RP-HET-TC-KAFKA-CLEANUP", "provider_contract_kind: messaging", "provider_type: kafka",
                 "mode: cleanup", "cleanup_strategy: drain");
-        assertRunPassed(packageRoot, "RP-HET-TC-NATS-REQUEST", "provider_family: messaging", "provider_type: nats",
+        assertRunPassed(packageRoot, "RP-HET-TC-NATS-REQUEST", "provider_contract_kind: messaging", "provider_type: nats",
                 "mode: request_reply");
-        assertRunPassed(packageRoot, "RP-HET-TC-NATS-OBSERVE", "provider_family: messaging", "provider_type: nats",
+        assertRunPassed(packageRoot, "RP-HET-TC-NATS-OBSERVE", "provider_contract_kind: messaging", "provider_type: nats",
                 "mode: observe");
-        assertRunPassed(packageRoot, "RP-HET-TC-NATS-CLEANUP", "provider_family: messaging", "provider_type: nats",
+        assertRunPassed(packageRoot, "RP-HET-TC-NATS-CLEANUP", "provider_contract_kind: messaging", "provider_type: nats",
                 "mode: cleanup", "cleanup_strategy: drain");
-        assertRunPassed(packageRoot, "RP-HET-TC-K8S", "provider_family: deployment_readiness", "provider_type: k8s");
-        assertRunPassed(packageRoot, "RP-HET-TC-VM", "provider_family: deployment_readiness", "provider_type: vm");
-        assertRunPassed(packageRoot, "RP-HET-TC-RUNNER", "provider_family: external_runner", "external_runner.yaml");
+        assertRunPassed(packageRoot, "RP-HET-TC-K8S", "provider_contract_kind: deployment_readiness", "provider_type: k8s");
+        assertRunPassed(packageRoot, "RP-HET-TC-VM", "provider_contract_kind: deployment_readiness", "provider_type: vm");
+        assertRunPassed(packageRoot, "RP-HET-TC-RUNNER", "provider_contract_kind: external_runner", "external_runner.yaml");
         assertThat(countOrders("jdbc:h2:mem:heterogeneous_runtime;DB_CLOSE_DELAY=-1")).isZero();
     }
 
@@ -225,7 +225,7 @@ class HeterogeneousProviderRuntimeIT {
         builder.append("    environment_ref: ci://framework-verification/").append(targetId).append("\n");
         builder.append("    provider_contract_ref: provider_contracts/")
                 .append(targetId)
-                .append(".yaml#adapters.")
+                .append(".yaml#providers.")
                 .append(runner)
                 .append("\n");
     }
@@ -233,9 +233,9 @@ class HeterogeneousProviderRuntimeIT {
     private String providerContractDb() {
         return """
                 provider_contracts:
-                  adapters:
+                  providers:
                     spring_boot_cli:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: shell
                       command: printf 'db-fixture-ok'
                       timeout_seconds: 10
@@ -245,16 +245,16 @@ class HeterogeneousProviderRuntimeIT {
                         stderr: logs/db-stderr.log
                       outputs:
                         actual_output_ref: actual/db-output.txt
-                      contract_path: release_units[0].provider_contracts.adapters.spring_boot_cli
+                      contract_path: release_units[0].provider_contracts.providers.spring_boot_cli
                   bindings:
                     db_seed:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: file_fixture
                       bind_as: jdbc_seed
                       contract_path: release_units[0].provider_contracts.bindings.db_seed
                   fixtures:
                     relational_db:
-                      provider_family: db_fixture
+                      provider_contract_kind: db_fixture
                       provider_type: jdbc
                       connection_ref: jdbc:h2:mem:heterogeneous_runtime;DB_CLOSE_DELAY=-1
                       isolation_key: test_run_id
@@ -275,9 +275,9 @@ class HeterogeneousProviderRuntimeIT {
     private String providerContractRest() {
         return """
                 provider_contracts:
-                  adapters:
+                  providers:
                     request_response:
-                      provider_family: request_response
+                      provider_contract_kind: request_response
                       provider_type: rest
                       endpoint_ref: mock://payment-api
                       timeout_seconds: 10
@@ -289,10 +289,10 @@ class HeterogeneousProviderRuntimeIT {
                           mock_response: '{"status":"approved","channel":"rest"}'
                       outputs:
                         actual_output_ref: actual/rest-response.json
-                      contract_path: release_units[1].provider_contracts.adapters.request_response
+                      contract_path: release_units[1].provider_contracts.providers.request_response
                   bindings:
                     api_payload:
-                      provider_family: request_response
+                      provider_contract_kind: request_response
                       provider_type: request_body
                       bind_as: request_body
                       contract_path: release_units[1].provider_contracts.bindings.api_payload
@@ -302,9 +302,9 @@ class HeterogeneousProviderRuntimeIT {
     private String providerContractGrpc() {
         return """
                 provider_contracts:
-                  adapters:
+                  providers:
                     grpc_request_response:
-                      provider_family: request_response
+                      provider_contract_kind: request_response
                       provider_type: grpc
                       service_ref: mock://payment-grpc
                       descriptor_ref: descriptors/payment.desc
@@ -317,10 +317,10 @@ class HeterogeneousProviderRuntimeIT {
                           mock_response: '{"status":"approved","channel":"grpc"}'
                       outputs:
                         actual_output_ref: actual/grpc-response.json
-                      contract_path: release_units[2].provider_contracts.adapters.grpc_request_response
+                      contract_path: release_units[2].provider_contracts.providers.grpc_request_response
                   bindings:
                     api_payload:
-                      provider_family: request_response
+                      provider_contract_kind: request_response
                       provider_type: request_body
                       bind_as: request_body
                       contract_path: release_units[2].provider_contracts.bindings.api_payload
@@ -330,9 +330,9 @@ class HeterogeneousProviderRuntimeIT {
     private String providerContractKafkaPublish() {
         return """
                 provider_contracts:
-                  adapters:
+                  providers:
                     kafka_publish_bus:
-                      provider_family: messaging
+                      provider_contract_kind: messaging
                       provider_type: kafka
                       bootstrap_servers_ref: mock://kafka
                       topic_ref: kafka://payments.accepted
@@ -345,10 +345,10 @@ class HeterogeneousProviderRuntimeIT {
                           correlation_id: P-100
                       outputs:
                         actual_output_ref: actual/kafka-message.json
-                      contract_path: release_units[3].provider_contracts.adapters.kafka_publish_bus
+                      contract_path: release_units[3].provider_contracts.providers.kafka_publish_bus
                   bindings:
                     message_event:
-                      provider_family: messaging
+                      provider_contract_kind: messaging
                       provider_type: event_payload
                       bind_as: event_payload
                       contract_path: release_units[3].provider_contracts.bindings.message_event
@@ -358,9 +358,9 @@ class HeterogeneousProviderRuntimeIT {
     private String providerContractKafkaObserve() {
         return """
                 provider_contracts:
-                  adapters:
+                  providers:
                     kafka_observe_bus:
-                      provider_family: messaging
+                      provider_contract_kind: messaging
                       provider_type: kafka
                       bootstrap_servers_ref: mock://kafka
                       topic_ref: kafka://payments.accepted
@@ -373,16 +373,16 @@ class HeterogeneousProviderRuntimeIT {
                           observed_payload: '{"event":"payment.observed","paymentId":"P-100"}'
                       outputs:
                         actual_output_ref: actual/kafka-observed.json
-                      contract_path: release_units[4].provider_contracts.adapters.kafka_observe_bus
+                      contract_path: release_units[4].provider_contracts.providers.kafka_observe_bus
                 """;
     }
 
     private String providerContractKafkaCleanup() {
         return """
                 provider_contracts:
-                  adapters:
+                  providers:
                     kafka_cleanup_bus:
-                      provider_family: messaging
+                      provider_contract_kind: messaging
                       provider_type: kafka
                       bootstrap_servers_ref: mock://kafka
                       topic_ref: kafka://payments.accepted
@@ -395,16 +395,16 @@ class HeterogeneousProviderRuntimeIT {
                           max_count: 1
                       outputs:
                         actual_output_ref: actual/kafka-cleanup.txt
-                      contract_path: release_units[5].provider_contracts.adapters.kafka_cleanup_bus
+                      contract_path: release_units[5].provider_contracts.providers.kafka_cleanup_bus
                 """;
     }
 
     private String providerContractNatsRequest() {
         return """
                 provider_contracts:
-                  adapters:
+                  providers:
                     nats_request_bus:
-                      provider_family: messaging
+                      provider_contract_kind: messaging
                       provider_type: nats
                       server_ref: mock://nats
                       subject_ref: nats://payments.accepted
@@ -417,10 +417,10 @@ class HeterogeneousProviderRuntimeIT {
                           reply_payload: '{"reply":"accepted","paymentId":"P-100"}'
                       outputs:
                         actual_output_ref: actual/nats-reply.json
-                      contract_path: release_units[6].provider_contracts.adapters.nats_request_bus
+                      contract_path: release_units[6].provider_contracts.providers.nats_request_bus
                   bindings:
                     message_event:
-                      provider_family: messaging
+                      provider_contract_kind: messaging
                       provider_type: event_payload
                       bind_as: event_payload
                       contract_path: release_units[4].provider_contracts.bindings.message_event
@@ -430,9 +430,9 @@ class HeterogeneousProviderRuntimeIT {
     private String providerContractNatsObserve() {
         return """
                 provider_contracts:
-                  adapters:
+                  providers:
                     nats_observe_bus:
-                      provider_family: messaging
+                      provider_contract_kind: messaging
                       provider_type: nats
                       server_ref: mock://nats
                       subject_ref: nats://payments.accepted
@@ -445,16 +445,16 @@ class HeterogeneousProviderRuntimeIT {
                           observed_payload: '{"event":"nats.observed","paymentId":"P-100"}'
                       outputs:
                         actual_output_ref: actual/nats-observed.json
-                      contract_path: release_units[7].provider_contracts.adapters.nats_observe_bus
+                      contract_path: release_units[7].provider_contracts.providers.nats_observe_bus
                 """;
     }
 
     private String providerContractNatsCleanup() {
         return """
                 provider_contracts:
-                  adapters:
+                  providers:
                     nats_cleanup_bus:
-                      provider_family: messaging
+                      provider_contract_kind: messaging
                       provider_type: nats
                       server_ref: mock://nats
                       subject_ref: nats://payments.accepted
@@ -467,16 +467,16 @@ class HeterogeneousProviderRuntimeIT {
                           max_count: 1
                       outputs:
                         actual_output_ref: actual/nats-cleanup.txt
-                      contract_path: release_units[8].provider_contracts.adapters.nats_cleanup_bus
+                      contract_path: release_units[8].provider_contracts.providers.nats_cleanup_bus
                 """;
     }
 
     private String providerContractK8s() {
         return """
                 provider_contracts:
-                  adapters:
+                  providers:
                     k8s_readiness:
-                      provider_family: deployment_readiness
+                      provider_contract_kind: deployment_readiness
                       provider_type: k8s
                       readiness_probe: rollout_status
                       kube_context_ref: mock://k8s
@@ -486,16 +486,16 @@ class HeterogeneousProviderRuntimeIT {
                       timeout_seconds: 10
                       outputs:
                         actual_output_ref: actual/k8s-readiness.txt
-                      contract_path: release_units[5].provider_contracts.adapters.k8s_readiness
+                      contract_path: release_units[5].provider_contracts.providers.k8s_readiness
                 """;
     }
 
     private String providerContractVm() {
         return """
                 provider_contracts:
-                  adapters:
+                  providers:
                     vm_readiness:
-                      provider_family: deployment_readiness
+                      provider_contract_kind: deployment_readiness
                       provider_type: vm
                       readiness_probe: tcp_connect
                       host_ref: mock://payment-vm
@@ -505,16 +505,16 @@ class HeterogeneousProviderRuntimeIT {
                       timeout_seconds: 10
                       outputs:
                         actual_output_ref: actual/vm-readiness.txt
-                      contract_path: release_units[6].provider_contracts.adapters.vm_readiness
+                      contract_path: release_units[6].provider_contracts.providers.vm_readiness
                 """;
     }
 
     private String providerContractExternalRunner() {
         return """
                 provider_contracts:
-                  adapters:
+                  providers:
                     external_runner:
-                      provider_family: external_runner
+                      provider_contract_kind: external_runner
                       provider_type: command_runner
                       approval_ref: docs/10-change-control/external-runner-approval.md
                       approved_by: release_owner
@@ -527,7 +527,7 @@ class HeterogeneousProviderRuntimeIT {
                         actual_output_ref: actual/legacy-output.txt
                       evidence_map:
                         runner_output: actual/legacy-output.txt
-                      contract_path: release_units[7].provider_contracts.adapters.external_runner
+                      contract_path: release_units[7].provider_contracts.providers.external_runner
                 """;
     }
 
@@ -619,10 +619,6 @@ class HeterogeneousProviderRuntimeIT {
                   package: %s
                   runtime_unit: %s
                 compatible_profiles: [ci_ephemeral]
-                scenario:
-                  type: integration
-                  scope: release_package
-                  capabilities: [heterogeneous_provider_runtime]
                 targets:
                   %s:
                     type: runtime_target
@@ -707,7 +703,7 @@ class HeterogeneousProviderRuntimeIT {
                 .contains("test_case_id: " + testCaseId)
                 .contains("status: passed")
                 .contains("assertion_status: passed")
-                .contains("adapter_execution_started: true");
+                .contains("provider_runtime_started: true");
         for (String expected : expectedEvidence) {
             assertThat(run + "\n" + evidenceFiles(runDir)).contains(expected);
         }

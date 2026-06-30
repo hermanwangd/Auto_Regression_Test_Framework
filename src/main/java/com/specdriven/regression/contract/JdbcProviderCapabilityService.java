@@ -2,6 +2,7 @@ package com.specdriven.regression.contract;
 
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
+import com.specdriven.regression.evidence.EvidenceIndexFormatter;
 import com.specdriven.regression.provider.jdbc.JdbcProviderRuntime;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderFailure;
@@ -30,7 +31,8 @@ import org.yaml.snakeyaml.Yaml;
 public class JdbcProviderCapabilityService {
 
     private static final String PROVIDER_TYPE = "jdbc";
-    private static final String EVIDENCE_CLASSIFICATION = "framework_provider_capability_only";
+    private static final Path FRAMEWORK_PROVIDER_CONTRACTS =
+            Path.of("docs/02-architecture/contracts/provider-contracts");
     private static final AtomicLong RUN_SEQUENCE = new AtomicLong();
     private static final DateTimeFormatter RUN_ID_TIME_FORMAT =
             DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS").withZone(ZoneOffset.UTC);
@@ -64,6 +66,10 @@ public class JdbcProviderCapabilityService {
                     "",
                     "",
                     "Provide --profile for JDBC provider capability run.")));
+        }
+        List<ContractFinding> profileFindings = requestedProfileFindings(suiteManifest, requestedProfile);
+        if (!profileFindings.isEmpty()) {
+            return JdbcRunResult.blocked(validation.suiteId(), requestedProfile, profileFindings);
         }
 
         RuntimeSelection selection = selectJdbcRuntime(suiteManifest, requestedProfile, outputBase);
@@ -239,15 +245,12 @@ public class JdbcProviderCapabilityService {
         Map<String, Map<String, Object>> instancesById =
                 readDirectoryByField(suiteRoot.resolve("provider_instances"), "provider_id");
         Map<String, Map<String, Object>> contractsByType =
-                readDirectoryByField(suiteRoot.resolve("provider_contracts"), "provider_type");
+                readDirectoryByField(frameworkProviderContractsDirectory(suiteRoot), "provider_type");
         Map<String, Object> environmentBinding = environmentBinding(suiteRoot, requestedProfile);
         for (Object testRef : listValue(suite.get("tests"))) {
             Map<String, Object> testCase = readMap(suiteRoot.resolve(stringValue(testRef)).normalize());
             for (Map.Entry<String, Object> targetEntry : mapValue(testCase.get("targets")).entrySet()) {
                 Map<String, Object> target = mapValue(targetEntry.getValue());
-                if (!requestedProfile.equals(stringValue(target.get("profile")))) {
-                    continue;
-                }
                 if (!targetReferencedByLifecycle(testCase, targetEntry.getKey())) {
                     continue;
                 }
@@ -290,6 +293,31 @@ public class JdbcProviderCapabilityService {
             }
         }
         return null;
+    }
+
+    private List<ContractFinding> requestedProfileFindings(Path suiteManifest, String requestedProfile) {
+        Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
+        Map<String, Object> suite = readMap(suiteManifest);
+        List<SuiteProfileGate.TestCaseDocument> testCases = new ArrayList<>();
+        for (Object testRef : listValue(suite.get("tests"))) {
+            Path testCasePath = suiteRoot.resolve(stringValue(testRef)).normalize();
+            testCases.add(new SuiteProfileGate.TestCaseDocument(testCasePath, readMap(testCasePath)));
+        }
+        return SuiteProfileGate.validate(suiteManifest, suite, testCases, requestedProfile, PROVIDER_TYPE);
+    }
+
+    private Path frameworkProviderContractsDirectory(Path suiteRoot) {
+        Path cwdCandidate = Path.of("").toAbsolutePath().normalize().resolve(FRAMEWORK_PROVIDER_CONTRACTS);
+        if (Files.isDirectory(cwdCandidate)) {
+            return cwdCandidate;
+        }
+        for (Path cursor = suiteRoot; cursor != null; cursor = cursor.getParent()) {
+            Path candidate = cursor.resolve(FRAMEWORK_PROVIDER_CONTRACTS).normalize();
+            if (Files.isDirectory(candidate)) {
+                return candidate;
+            }
+        }
+        return cwdCandidate;
     }
 
     private boolean targetReferencedByLifecycle(Map<String, Object> testCase, String targetName) {
@@ -508,9 +536,17 @@ public class JdbcProviderCapabilityService {
                 downstream_release_evidence: false
                 provider_type: %s
                 provider_id: %s
+                profile: %s
+                runtime_mode: %s
                 dialect: %s
                 status: %s
-                """.formatted(selection.providerType(), selection.providerId(), selection.dialect(), status));
+                """.formatted(
+                        selection.providerType(),
+                        selection.providerId(),
+                        selection.profile(),
+                        selection.runtimeMode(),
+                        selection.dialect(),
+                        status));
     }
 
     private void writeBatch(Path runDir, RuntimeSelection selection, String status) {
@@ -522,42 +558,37 @@ public class JdbcProviderCapabilityService {
                 batch_id: %s
                 run_id: %s
                 test_case_id: %s
+                profile: %s
                 provider_type: %s
                 provider_id: %s
+                runtime_mode: %s
                 dialect: %s
                 status: %s
                 """.formatted(
-                selection.suite().get("suite_id"),
-                selection.batchId(),
-                selection.runId(),
-                selection.testCase().get("test_case_id"),
-                selection.providerType(),
-                selection.providerId(),
-                selection.dialect(),
-                status));
+                        selection.suite().get("suite_id"),
+                        selection.batchId(),
+                        selection.runId(),
+                        selection.testCase().get("test_case_id"),
+                        selection.profile(),
+                        selection.providerType(),
+                        selection.providerId(),
+                        selection.runtimeMode(),
+                        selection.dialect(),
+                        status));
     }
 
     private void writeEvidenceIndex(Path runDir, RuntimeSelection selection, List<String> evidenceRefs) {
-        StringBuilder index = new StringBuilder();
-        index.append("evidence_index_version: v0.2\n");
-        index.append("suite_id: ").append(selection.suite().get("suite_id")).append('\n');
-        index.append("batch_id: ").append(selection.batchId()).append('\n');
-        index.append("run_id: ").append(selection.runId()).append('\n');
-        index.append("test_case_id: ").append(selection.testCase().get("test_case_id")).append('\n');
-        index.append("profile: ").append(selection.profile()).append('\n');
-        index.append("provider_type: ").append(selection.providerType()).append('\n');
-        index.append("provider_id: ").append(selection.providerId()).append('\n');
-        index.append("runtime_mode: ").append(selection.runtimeMode()).append('\n');
-        index.append("dialect: ").append(selection.dialect()).append('\n');
-        index.append("evidence_classification: framework_provider_capability_only\n");
-        index.append("downstream_release_evidence: false\n");
-        index.append("entries:\n");
-        for (String ref : distinct(evidenceRefs)) {
-            index.append("  - ref: ").append(ref).append('\n');
-            index.append("    masked: true\n");
-        }
-        index.append("masking:\n  raw_secret_found: false\n");
-        write(runDir.resolve("evidence_index.yaml"), index.toString());
+        write(runDir.resolve("evidence_index.yaml"), EvidenceIndexFormatter.format(
+                new EvidenceIndexFormatter.Context(
+                        stringValue(selection.suite().get("suite_id")),
+                        selection.batchId(),
+                        selection.runId(),
+                        stringValue(selection.testCase().get("test_case_id")),
+                        selection.profile(),
+                        selection.providerType(),
+                        selection.providerId()),
+                runDir,
+                evidenceRefs));
     }
 
     private void writeFailureDetail(
@@ -574,6 +605,7 @@ public class JdbcProviderCapabilityService {
         detail.append("downstream_release_evidence: false\n");
         detail.append("provider_type: ").append(selection.providerType()).append('\n');
         detail.append("provider_id: ").append(selection.providerId()).append('\n');
+        detail.append("profile: ").append(selection.profile()).append('\n');
         detail.append("runtime_mode: ").append(selection.runtimeMode()).append('\n');
         detail.append("dialect: ").append(selection.dialect()).append('\n');
         detail.append("classification: ").append(resolvedFailure.classification()).append('\n');
@@ -612,7 +644,7 @@ public class JdbcProviderCapabilityService {
         result.put("run_id", selection.runId());
         result.put("test_case_id", selection.testCase().get("test_case_id"));
         result.put("profile", profile);
-        result.put("environment", "local_jdbc");
+        result.put("environment", profile);
         result.put("provider_type", selection.providerType());
         result.put("provider_id", selection.providerId());
         result.put("runtime_mode", selection.runtimeMode());

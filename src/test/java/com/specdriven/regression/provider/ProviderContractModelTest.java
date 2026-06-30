@@ -27,7 +27,7 @@ class ProviderContractModelTest {
 
     @Test
     void minimalResolvedProviderContractDefaultsCapabilityToProviderName() {
-        ResolvedProviderContract contract = new ResolvedProviderContract("adapter", "spring_boot_cli", "ru");
+        ResolvedProviderContract contract = new ResolvedProviderContract("provider", "spring_boot_cli", "ru");
 
         assertThat(contract.providerFamily()).isEmpty();
         assertThat(contract.providerType()).isEmpty();
@@ -41,8 +41,8 @@ class ProviderContractModelTest {
     @Test
     void providerContractGapConvenienceConstructorDefaultsToMissingAndBlocked() {
         ProviderContractGap gap = new ProviderContractGap(
-                "release_units[0].provider_contracts.adapters.spring_boot_cli",
-                "adapter",
+                "release_units[0].provider_contracts.providers.spring_boot_cli",
+                "provider",
                 "spring_boot_cli",
                 "Add provider contract before execution.");
 

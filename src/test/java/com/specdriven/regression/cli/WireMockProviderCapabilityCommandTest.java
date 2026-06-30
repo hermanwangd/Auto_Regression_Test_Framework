@@ -27,7 +27,7 @@ class WireMockProviderCapabilityCommandTest {
         List<String> requiredPaths = List.of(
                 "samples/provider_capability/wiremock/suite_manifest.yaml",
                 "samples/provider_capability/wiremock/test_case.yaml",
-                "samples/provider_capability/wiremock/provider_contracts/wiremock_http_mock.yaml",
+                "docs/02-architecture/contracts/provider-contracts/wiremock_http_mock.yaml",
                 "samples/provider_capability/wiremock/provider_instances/wiremock_payment_api.yaml",
                 "samples/provider_capability/wiremock/execution_profiles/local_wiremock.yaml",
                 "samples/provider_capability/wiremock/environment_bindings/local_wiremock.yaml",
@@ -94,6 +94,19 @@ class WireMockProviderCapabilityCommandTest {
                 .contains("run_id: RUN-WIREMOCK-")
                 .contains("test_case_id: WIREMOCK-CAPABILITY-TC-001")
                 .contains("status: passed");
+    }
+
+    @Test
+    void wireMockRunRejectsProfileNotSelectedBySuiteBeforeRuntimeExecution() {
+        CommandResult result = execute("run", "--suite", WIREMOCK_SUITE.toString(), "--profile", "wrong_profile");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("run_status: blocked")
+                .contains("reason: profile_mismatch")
+                .contains("profile: wrong_profile");
+        assertThat(result.stdout()).doesNotContain("provider_runtime_executed: true");
+        assertThat(result.stdout()).doesNotContain("result_json:");
     }
 
     @Test
@@ -166,18 +179,19 @@ class WireMockProviderCapabilityCommandTest {
     }
 
     @Test
-    void wireMockRunRejectsInvalidProviderContractBeforeExecution() throws Exception {
+    void wireMockRunRejectsUnknownProviderTypeBeforeExecution() throws Exception {
         Path suite = mutableWireMock();
-        Path contract = suite.getParent().resolve("provider_contracts/wiremock_http_mock.yaml");
-        Files.writeString(contract, read(contract).replace("provider_type: wiremock_http_mock", "provider_type: "));
+        Path instance = suite.getParent().resolve("provider_instances/wiremock_payment_api.yaml");
+        Files.writeString(instance, read(instance)
+                .replace("provider_type: wiremock_http_mock", "provider_type: unknown_wiremock"));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_wiremock");
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("run_status: blocked")
-                .contains("reason: missing_required_field")
-                .contains("field_path: provider_type");
+                .contains("reason: unknown_provider_type")
+                .contains("provider_type: unknown_wiremock");
         assertThat(result.stdout()).doesNotContain("provider_runtime_executed: true");
     }
 

@@ -5,7 +5,7 @@ import java.util.List;
 public record ExecutionContextReadiness(
         boolean ready,
         String ruId,
-        String adapter,
+        String provider,
         String executionMode,
         String environmentRef,
         List<String> capabilities,
@@ -13,14 +13,14 @@ public record ExecutionContextReadiness(
 
     public static ExecutionContextReadiness ready(
             String ruId,
-            String adapter,
+            String provider,
             String executionMode,
             String environmentRef,
             List<String> capabilities) {
         return new ExecutionContextReadiness(
                 true,
                 ruId,
-                adapter,
+                provider,
                 executionMode,
                 environmentRef,
                 List.copyOf(capabilities),

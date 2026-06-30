@@ -11,8 +11,8 @@ DSL target
   -> provider_id
   -> Provider Instance
   -> provider_type
-  -> Provider Contract
-  -> profile
+  -> Framework built-in Provider Contract catalog
+  -> selected profile
   -> Environment Binding
 ```
 
@@ -20,7 +20,7 @@ New v0.2 documentation and generated artifacts must use Provider Contract, Provi
 
 ## Controlled Interface Change Rules
 
-- Public commands, required options, exit-code meaning, stable stdout keys, DSL fields, generated artifact fields, provider contract fields, provider instance fields, environment binding fields, evidence paths, and input artifact locations are part of the v0.2 contract.
+- Public commands, required options, exit-code meaning, stable stdout keys, DSL fields, generated artifact fields, framework built-in provider contract fields, provider instance fields, environment binding fields, evidence paths, and input artifact locations are part of the v0.2 contract.
 - Interface changes require updates to this file, artifact contracts, AC, implementation plan, and test plan before code changes.
 - Additive optional fields are allowed when old callers still work.
 - Renaming commands, changing required options, changing exit-code meaning, renaming/removing DSL fields, renaming/removing provider contract or provider instance fields, or removing output keys requires a compatibility decision.
@@ -41,7 +41,7 @@ New v0.2 documentation and generated artifacts must use Provider Contract, Provi
 
 | Command | Required Options | Optional Options | Success | Blocking / Failure |
 |---|---|---|---|---|
-| `regress validate` | Product Repo mode: `--rp-id <rp-id>`, `--env <profile>`; framework sample mode: `--suite <suite_manifest_path>` | `--root <product-repo>` default `.`, `--test-case <test-case-id>`, `--tag <tag>`, `--format yaml|json` default `yaml`, `--strict` | Validates DSL, suite manifest, Execution Profile, Provider Instance, Provider Contract, Environment Binding, secret guardrails, and evidence/result contract readiness without provider execution. | Returns non-zero and prints deterministic owner-actionable validation errors. |
+| `regress validate` | Product Repo mode: `--rp-id <rp-id>`, `--env <profile>`; framework sample mode: `--suite <suite_manifest_path>` | `--root <product-repo>` default `.`, `--test-case <test-case-id>`, `--tag <tag>`, `--format yaml|json` default `yaml`, `--strict` | Validates DSL, suite manifest, Execution Profile, Provider Instance, framework Provider Contract catalog, Environment Binding, secret guardrails, and evidence/result contract readiness without provider execution. | Returns non-zero and prints deterministic owner-actionable validation errors. |
 | `regress run` | Product Repo mode: `--rp-id <rp-id>`, `--env <profile>`; framework sample mode: `--suite <suite_manifest_path>`, `--profile <profile>` | `--root <product-repo>` default `.`, `--dry-run`, `--test-case <test-case-id>`, `--tag <tag>` | Creates one batch ID, one run ID per selected approved test or parameter case, and writes run/batch evidence. | Blocks before unsafe provider dispatch when validation, binding, environment, provider contract, provider instance, expected-result, or secret checks fail. |
 | `regress report` | Product Repo mode: `--rp-id <rp-id>`, `--batch-id <batch-id>`; framework sample mode: `--result <generated_result_json>` | `--root <product-repo>` default `.`, `--format text|yaml|json` default `text` | Produces review-ready coverage/evidence summary from batch evidence or a framework verification result JSON. | Returns non-zero when evidence is incomplete, coverage is not review-ready, result JSON is missing, or result schema is invalid. |
 
@@ -82,7 +82,7 @@ regress run --root <product-repo> --rp-id <rp-id> --env <profile> --dry-run [--t
 regress run --suite samples/golden_e2e/suite_manifest.yaml --profile local_golden
 ```
 
-Dry-run performs all validation and planning through DSL target resolution, Provider Instance lookup, Provider Contract lookup, Environment Binding lookup, required binding key validation, `bind_as` validation, output-ref validation, and safety validation. It produces a resolved execution plan and must not execute provider operations, mutate fixtures, publish messages, run SQL, call external endpoints, or create provider execution evidence.
+Dry-run performs all validation and planning through DSL target resolution, Provider Instance lookup, framework Provider Contract catalog lookup, Environment Binding lookup, required binding key validation, `bind_as` validation, output-ref validation, and safety validation. It produces a resolved execution plan and must not execute provider operations, mutate fixtures, publish messages, run SQL, call external endpoints, or create provider execution evidence.
 
 Framework sample mode without `--dry-run` may execute only framework-owned fake providers that are deterministic, local, self-contained, and marked as framework verification evidence. It must not execute production provider types such as WireMock, JDBC, NATS, Kafka, REST/gRPC, K8s, VM, or external runner.
 
@@ -120,15 +120,15 @@ The stable DSL surface includes:
 - `dsl_version`, test identity, lifecycle `status`, revision, tags, labels, source refs, and compatible profiles.
 - operation-level `parameters.ref` / `parameters.bind_as` (`parameters[].ref` / `parameters[].bind_as` in array form) for reviewed parameter selection and provider binding.
 - `targets`, `setup`, `cleanup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime` sections.
-- `targets.<target>.provider_id` and `targets.<target>.profile`; DSL test cases must not contain endpoint, topic, database credential, namespace, or secret values.
+- `targets.<target>.provider_id`; DSL test cases must not contain endpoint, topic, database credential, namespace, or secret values. Active profile selection belongs to CLI or suite manifest, with `compatible_profiles` used only as a guardrail.
 - Execute operation names, verify type names, evidence requirement names, and parameter binding expression shape.
 - Approved-test eligibility from `tests/approved/`; draft/generated tests are not runtime eligible.
 
 DSL changes that rename fields, change required/conditional field rules, remove enum values, or change parameter binding semantics require a compatibility decision.
 
-## Run, Environment, Provider, and Adapter Configuration Interface
+## Run, Environment, and Provider Configuration Interface
 
-This heading is retained as a compatibility marker for older framework contract tests. The canonical user-facing model below is Execution Profile, Environment Binding, Provider Contract, and Provider Instance. Adapter wording is not a public v0.2 runtime interface.
+The canonical user-facing model below is Execution Profile, Environment Binding, Provider Contract, and Provider Instance.
 
 ## Execution Profile, Environment, Provider Contract, and Provider Instance Interface
 
@@ -146,11 +146,11 @@ The framework consumes generated runtime configuration as public inputs. v0.2 co
 The stable provider runtime configuration surface includes:
 
 - Execution Profile ID, execution mode, trigger, isolation scope, dependency model, dependency substitution policy, dependency provisioning policy, constraints, data policy, and max duration.
-- DSL target references `provider_id` and `profile`.
+- DSL target references `provider_id`; active profile comes from CLI or suite manifest.
 - Provider Instance declares one RP logical runtime target with `provider_id`, `provider_type`, allowed runtime modes, allowed operation selections, binding key names, defaults, evidence capture choices, and failure mapping using the same top-level shape as the Provider Contract.
-- Provider Contract declares the provider type, allowed runtime modes, allowed operations, allowed `bind_as` values, required fields, defaults, output refs, evidence outputs, failure codes, and valid Provider Instance shape.
+- Provider Contract declares the provider type, allowed runtime modes, allowed operations, allowed `bind_as` values, required fields, defaults, output refs, evidence outputs, failure codes, and valid Provider Instance shape. Built-in Provider Contracts are framework-owned and resolved by `provider_type`.
 - Environment Binding supplies profile-specific `runtime_mode` and actual values for the Provider Instance binding keys, such as URLs, topics, DB connection refs, namespaces, host refs, secret refs, mock service refs, stub server refs, fake topic refs, embedded broker refs, ephemeral DB refs, or disposable schema refs.
-- Local and CI profiles may use mock, stub, ephemeral, Testcontainers-backed, fake-topic, embedded-broker, disposable-schema, or generated-data replacements for external dependencies only when allowed by the Execution Profile, Provider Contract, and Provider Instance. The Execution Profile defines allowed provisioners, dependency types, startup/readiness policy, cleanup scope, and output binding keys. SIT and preprod default to native dependencies and must not produce release evidence from mock substitution.
+- Local and CI profiles may use mock, stub, ephemeral, Testcontainers-backed, fake-topic, embedded-broker, disposable-schema, or generated-data replacements for external dependencies only when allowed by the Execution Profile, framework built-in Provider Contract, and Provider Instance. The Execution Profile defines allowed provisioners, dependency types, startup/readiness policy, cleanup scope, and output binding keys. SIT and preprod default to native dependencies and must not produce release evidence from mock substitution.
 - Provider capability registry entries list supported `provider_type` values and blocked unsupported or ambiguous provider selections.
 - Product/RP/RU labels remain traceability metadata and must not select runtime behavior.
 
@@ -164,7 +164,6 @@ The framework runtime consumes these canonical generated locations under `docs/0
 - `generated-framework/run_plan.yaml`
 - `generated-framework/execution_profiles/`
 - `generated-framework/run_profiles/` as a compatibility alias for generated Execution Profiles
-- `generated-framework/provider_contracts/`
 - `generated-framework/provider_instances/`
 - `generated-framework/environment_bindings/`
 - `generated-framework/traceability_map.yaml`
@@ -172,7 +171,7 @@ The framework runtime consumes these canonical generated locations under `docs/0
 - `parameter-sets/`
 - `expected-results/approved/`
 
-RP-local authoring directories such as `provider-contracts/`, `provider-instances/`, `environment-bindings/`, and `execution-profiles/` may exist for owner or Agent Skill workflow. Runtime execution must consume the generated canonical paths above so validation, dry-run, and execution resolve the same artifacts.
+RP-local authoring directories such as `provider-instances/`, `environment-bindings/`, `execution-profiles/`, and optional `custom-provider-contracts/` may exist for owner or Agent Skill workflow. Runtime execution must consume the generated canonical paths above plus the framework built-in Provider Contract catalog so validation, dry-run, and execution resolve the same artifacts. Suite-local Provider Contracts are ignored unless `provider_contract_resolution` explicitly selects custom or snapshot mode.
 
 The framework must not infer Product/RP/RU topology from labels, folder names, repo names, or implementation language.
 

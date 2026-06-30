@@ -7,7 +7,7 @@ dependency_policy:
   require_readiness_evidence: true
   allow_framework_managed_dependencies: false
 dependency_substitution_policy:
-  allowed_runtime_modes: [native]
+  allowed_runtime_modes: [native, mock]
   mock_evidence_release_claim: prohibited
 dependency_provisioning_policy:
   allowed_provisioners: [none]

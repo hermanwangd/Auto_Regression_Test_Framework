@@ -44,11 +44,11 @@
     },
     {
       "provider_id": "nats-event-bus",
-      "provider_type": "nats_messaging",
+      "provider_type": "nats",
       "profile": "ci",
       "runtime_mode": "ephemeral",
       "resolved_operation_result": {
-        "operation": "publish_message",
+        "operation": "nats_publish",
         "status": "passed",
         "outputs": {
           "ack": true

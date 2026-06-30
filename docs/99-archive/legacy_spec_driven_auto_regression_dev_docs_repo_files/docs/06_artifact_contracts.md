@@ -47,7 +47,7 @@ fixture:
 
 steps:
   - name: create_object
-    adapter: api
+    provider: api
     action: POST
     target: /objects
     request_body: ${input.request_body}
@@ -55,7 +55,7 @@ steps:
       object_id: $.body.id
 
   - name: query_object
-    adapter: api
+    provider: api
     action: GET
     target: /objects/${context.object_id}
 
@@ -110,7 +110,7 @@ data_sensitivity: non_sensitive
 | `${context.xxx}` | Runtime captured value |
 | `${steps.xxx}` | Previous step result |
 
-## 6.7 Adapter Interface
+## 6.7 Provider Interface
 
 ```text
 execute(action, input, context) → actual_result

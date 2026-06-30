@@ -2,6 +2,7 @@ package com.specdriven.regression.contract;
 
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
+import com.specdriven.regression.evidence.EvidenceIndexFormatter;
 import com.specdriven.regression.provider.SampleFakeProvider;
 import com.specdriven.regression.provider.SampleFakeProvider.CleanupResult;
 import com.specdriven.regression.provider.SampleFakeProvider.ExecutionResult;
@@ -72,18 +73,16 @@ public class GoldenE2eService {
         Map<String, Object> suite = readMap(suiteManifest);
         Path testCasePath = suiteRoot.resolve(stringValue(listValue(suite.get("tests")).get(0))).normalize();
         Map<String, Object> testCase = readMap(testCasePath);
-        String targetName = mapValue(testCase.get("targets")).keySet().stream().findFirst().orElse("");
-        Map<String, Object> target = mapValue(mapValue(testCase.get("targets")).get(targetName));
-        if (!requestedProfile.equals(stringValue(target.get("profile")))) {
+        if (!profileAllowed(suite, testCase, requestedProfile)) {
             return GoldenRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, List.of(new ContractFinding(
                     testCasePath.toString(),
-                    "targets." + targetName + ".profile",
+                    "profile",
                     "profile_mismatch",
-                    stringValue(target.get("provider_id")),
+                    "",
                     "sample_fake_provider",
                     requestedProfile,
                     "",
-                    "Run with the profile declared by the DSL target or update the target profile.")));
+                    "Run with a profile selected by the suite manifest and allowed by compatible_profiles.")));
         }
 
         Path runDir = outputBase.resolve(safe(stringValue(suite.get("suite_id")))).resolve(BATCH_ID).resolve(RUN_ID);
@@ -284,22 +283,17 @@ public class GoldenE2eService {
     }
 
     private void writeEvidenceIndex(Path runDir, Map<String, Object> suite, Map<String, Object> testCase, String profile) {
-        StringBuilder index = new StringBuilder();
-        index.append("evidence_index_version: v0.2\n");
-        index.append("suite_id: ").append(suite.get("suite_id")).append('\n');
-        index.append("batch_id: ").append(BATCH_ID).append('\n');
-        index.append("run_id: ").append(RUN_ID).append('\n');
-        index.append("test_case_id: ").append(testCase.get("test_case_id")).append('\n');
-        index.append("profile: ").append(profile).append('\n');
-        index.append("evidence_classification: ").append(FRAMEWORK_EVIDENCE).append('\n');
-        index.append("downstream_release_evidence: false\n");
-        index.append("entries:\n");
-        for (String ref : EVIDENCE_REFS) {
-            index.append("  - ref: ").append(ref).append('\n');
-            index.append("    masked: true\n");
-        }
-        index.append("masking:\n  raw_secret_found: false\n");
-        write(runDir.resolve("evidence_index.yaml"), index.toString());
+        write(runDir.resolve("evidence_index.yaml"), EvidenceIndexFormatter.format(
+                new EvidenceIndexFormatter.Context(
+                        stringValue(suite.get("suite_id")),
+                        BATCH_ID,
+                        RUN_ID,
+                        stringValue(testCase.get("test_case_id")),
+                        profile,
+                        "sample_fake_provider",
+                        "sample-fake-provider"),
+                runDir,
+                EVIDENCE_REFS));
     }
 
     private Path writeResult(
@@ -416,6 +410,33 @@ public class GoldenE2eService {
             return (List<Object>) list;
         }
         return List.of();
+    }
+
+    private List<String> stringList(Object value) {
+        return listValue(value).stream().map(this::stringValue).filter(text -> !text.isBlank()).toList();
+    }
+
+    private boolean profileAllowed(Map<String, Object> suite, Map<String, Object> testCase, String requestedProfile) {
+        List<String> selectedProfiles = selectedProfiles(suite);
+        if (!selectedProfiles.isEmpty() && !selectedProfiles.contains(requestedProfile)) {
+            return false;
+        }
+        List<String> compatibleProfiles = stringList(testCase.get("compatible_profiles"));
+        return compatibleProfiles.isEmpty() || compatibleProfiles.contains(requestedProfile);
+    }
+
+    private List<String> selectedProfiles(Map<String, Object> suite) {
+        List<String> profiles = new ArrayList<>();
+        String profile = stringValue(suite.get("profile"));
+        if (!profile.isBlank()) {
+            profiles.add(profile);
+        }
+        profiles.addAll(stringList(suite.get("profiles")));
+        String selectionProfile = stringValue(mapValue(suite.get("selection")).get("profile"));
+        if (!selectionProfile.isBlank()) {
+            profiles.add(selectionProfile);
+        }
+        return profiles.stream().distinct().toList();
     }
 
     private String stringValue(Object value) {

@@ -8,7 +8,6 @@ selection:
 tests:
   - test_case.yaml
 artifact_roots:
-  provider_contracts: provider_contracts/
   provider_instances: provider_instances/
   execution_profiles: execution_profiles/
   environment_bindings: environment_bindings/

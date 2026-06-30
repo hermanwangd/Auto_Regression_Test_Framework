@@ -9,7 +9,7 @@ source_refs:
 source_fingerprint: sha256:framework-verification-fixture
 execution_target:
   ru_id: RU-framework-sample-adapter
-  adapter: spring_boot_cli
+  provider: spring_boot_cli
   execution_mode: ci_ephemeral
   environment_ref: ci://framework-verification/RP-FWK-SAMPLE
 scenario:

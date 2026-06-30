@@ -25,7 +25,7 @@ class JdbcProviderCapabilityCommandTest {
         List<String> requiredPaths = List.of(
                 "samples/provider_capability/jdbc/suite_manifest.yaml",
                 "samples/provider_capability/jdbc/test_case.yaml",
-                "samples/provider_capability/jdbc/provider_contracts/jdbc.yaml",
+                "docs/02-architecture/contracts/provider-contracts/jdbc.yaml",
                 "samples/provider_capability/jdbc/provider_instances/oracle_like.yaml",
                 "samples/provider_capability/jdbc/provider_instances/db2_like.yaml",
                 "samples/provider_capability/jdbc/execution_profiles/local_jdbc.yaml",
@@ -90,6 +90,12 @@ class JdbcProviderCapabilityCommandTest {
                 .contains("\"release_evidence_eligible\": false")
                 .doesNotContain("plain-text-secret")
                 .doesNotContain("jdbc:h2:");
+        assertThat(read(evidenceDir.resolve("logs/execution.log")))
+                .contains("profile: local_jdbc")
+                .contains("runtime_mode: ephemeral");
+        assertThat(read(evidenceDir.resolve("batch/batch.yaml")))
+                .contains("profile: local_jdbc")
+                .contains("runtime_mode: ephemeral");
 
         CommandResult report = execute("report", "--result", resultJson.toString());
         assertThat(report.exit()).as(report.stderr() + report.stdout()).isZero();
@@ -153,6 +159,21 @@ class JdbcProviderCapabilityCommandTest {
                 .contains("reason: unsupported_dialect")
                 .contains("provider_type: jdbc")
                 .contains("mariadb");
+    }
+
+    @Test
+    void jdbcValidateRejectsRuntimeModeOutsideExecutionProfileContractOrInstance() throws Exception {
+        Path suite = mutableJdbc();
+        Path binding = suite.getParent().resolve("environment_bindings/local_jdbc.yaml");
+        Files.writeString(binding, read(binding).replace("runtime_mode: ephemeral", "runtime_mode: local"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("reason: unsupported_runtime_mode")
+                .contains("runtime_mode")
+                .contains("local");
     }
 
     @Test
@@ -233,6 +254,23 @@ class JdbcProviderCapabilityCommandTest {
                 .contains("\"classification\": \"DB_QUERY_FAILED\"")
                 .contains("SQL_PARAM_MISSING")
                 .contains("order_id");
+    }
+
+    @Test
+    void jdbcRunClassifiesMissingSeedSqlRefAsExecutionFailure() throws Exception {
+        Path suite = mutableJdbc();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, read(testCase).replace("fixtures/db_seed.sql", "fixtures/missing_seed.sql"));
+
+        CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
+
+        assertThat(result.exit()).isEqualTo(1);
+        Path resultJson = extractPath(result.stdout(), "result_json");
+        assertThat(read(resultJson))
+                .contains("\"status\": \"failed\"")
+                .contains("\"classification\": \"DB_EXECUTION_FAILED\"")
+                .contains("SQL_REF_MISSING")
+                .contains("missing_seed.sql");
     }
 
     @Test

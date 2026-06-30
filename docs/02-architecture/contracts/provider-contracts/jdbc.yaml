@@ -30,7 +30,7 @@ defaults:
   strict_params: true
 valid_provider_instance_shape:
   required_fields: [provider_id, provider_type, runtime_modes, binding_keys, dialect, connection]
-  allowed_fields: [provider_instance_version, provider_id, provider_type, profile, runtime_mode, runtime_modes, dialect, connection, binding_keys, defaults, operations, evidence, failure_mapping, labels]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, dialect, connection, binding_keys, defaults, operations, evidence, failure_mapping, labels]
   binding_keys: [connection.secret_ref, dialect, schema, query_timeout, masking_policy, strict_params]
 supported_verifiers: [db_record_exists]
 operations:

@@ -3,15 +3,21 @@ provider_type: wiremock_http_mock
 runtime_modes: [mock]
 binding_keys:
   mappings_ref:
-    required: true
+    required: false
     source: environment_binding
+  port_strategy:
+    required: false
+    source: environment_binding
+  base_url_output_ref:
+    required: false
+    source: generated_binding_output
 defaults:
   timeout_seconds: 60
   retry: 0
 valid_provider_instance_shape:
   required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
-  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
-  binding_keys: [mappings_ref]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
+  binding_keys: [mappings_ref, port_strategy, base_url_output_ref]
 operations:
   start_mock:
     allowed_bind_as: [mock.port, mock.mappings_ref, mock.files_ref]
@@ -24,13 +30,21 @@ operations:
   load_stubs:
     allowed_bind_as: [mock.mappings_ref, mock.reset_before_load]
     required_parameters: [mock.mappings_ref]
-    output_refs: [loaded_stub_count, server_log]
+    output_refs: [base_url, loaded_stub_count, injected_stub, server_log]
+  send_http_request:
+    allowed_bind_as: [http.method, http.path, http.request_body, http.headers.*, mock.request_filter]
+    required_parameters: [http.request_body, mock.request_filter]
+    output_refs: [base_url, http_status, response_body, matched_count, request_journal, server_log]
   verify_requests:
     allowed_bind_as: [mock.request_filter, mock.expected_count, mock.body_pattern]
     required_parameters: [mock.request_filter]
     output_refs: [request_journal, matched_count]
+  reset_mock:
+    allowed_bind_as: []
+    required_parameters: []
+    output_refs: [cleanup_log, server_log]
 evidence:
-  outputs: [base_url, request_journal, server_log, timing, error]
+  outputs: [base_url, request_journal, server_log, injected_stub, assertion_result, timing, cleanup_log, failure_detail, error]
   redact: []
 failure_mapping:
-  allowed_codes: [PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, OPERATION_FAILED, ASSERTION_FAILED, EVIDENCE_INVALID]
+  allowed_codes: [PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, PROVIDER_STUB_MISSING, OPERATION_FAILED, ASSERTION_FAILED, EVIDENCE_INVALID, SECRET_RESOLUTION_ERROR]

@@ -1,0 +1,114 @@
+{
+  "framework_version": "v0.2",
+  "dsl_version": "v0.2",
+  "suite_id": "EVIDENCE-HARDENING-v0.2",
+  "batch_id": "BATCH-EVIDENCE-001",
+  "run_id": "RUN-EVIDENCE-001",
+  "test_case_id": "EVIDENCE-HARDENING-TC-001",
+  "status": "passed",
+  "profile": "local_evidence",
+  "environment": "local_evidence",
+  "start_time": "2026-06-30T00:00:00Z",
+  "end_time": "2026-06-30T00:00:01Z",
+  "duration_ms": 1000,
+  "timestamps": {
+    "started_at": "2026-06-30T00:00:00Z",
+    "finished_at": "2026-06-30T00:00:01Z"
+  },
+  "provider_results": [
+    {
+      "provider_id": "wiremock-payment-api",
+      "provider_type": "wiremock_http_mock",
+      "profile": "local_evidence",
+      "runtime_mode": "mock",
+      "resolved_operation_result": {
+        "operation": "verify_requests",
+        "status": "passed"
+      },
+      "cleanup_status": "passed",
+      "release_evidence_eligible": false
+    },
+    {
+      "provider_id": "oracle-like-db",
+      "provider_type": "jdbc",
+      "profile": "local_evidence",
+      "runtime_mode": "ephemeral",
+      "resolved_operation_result": {
+        "operation": "db_query",
+        "status": "passed"
+      },
+      "cleanup_status": "passed",
+      "release_evidence_eligible": false
+    },
+    {
+      "provider_id": "local-nats-event-bus",
+      "provider_type": "nats",
+      "profile": "local_evidence",
+      "runtime_mode": "local",
+      "resolved_operation_result": {
+        "operation": "event_payload_match",
+        "status": "passed"
+      },
+      "cleanup_status": "passed",
+      "release_evidence_eligible": false
+    }
+  ],
+  "steps": [
+    {
+      "id": "seed_order",
+      "status": "passed"
+    },
+    {
+      "id": "verify_payment_mock",
+      "status": "passed"
+    },
+    {
+      "id": "cleanup_order",
+      "status": "passed"
+    }
+  ],
+  "verify_results": [
+    {
+      "id": "payload_matches",
+      "type": "json_match",
+      "status": "passed",
+      "expected_ref": "expected_results/expected_payload.json",
+      "actual_ref": "actual_samples/actual_payload.json",
+      "assertion_evidence_ref": "assertion-diff-001"
+    },
+    {
+      "id": "event_observed",
+      "type": "event_published",
+      "status": "passed",
+      "polling": {
+        "last_observed_ref": "polling-observation-001",
+        "attempts": 2
+      }
+    }
+  ],
+  "evidence_index_ref": "evidence/evidence_index.yaml",
+  "evidence_refs": [
+    "execution-log-001",
+    "batch-summary-001",
+    "fixture-setup-001",
+    "fixture-cleanup-001",
+    "wiremock-request-journal-001",
+    "wiremock-server-log-001",
+    "jdbc-seed-001",
+    "jdbc-query-001",
+    "jdbc-cleanup-001",
+    "nats-event-001",
+    "assertion-diff-001",
+    "polling-observation-001"
+  ],
+  "failure": {
+    "code": null,
+    "classification": null,
+    "reason": null,
+    "owner_action": null
+  },
+  "masking": {
+    "status": "passed",
+    "secret_ref": "secret://evidence-hardening/sample"
+  }
+}

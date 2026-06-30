@@ -52,7 +52,7 @@ The platform should support multiple projects and domains.
 
 ### Decision
 
-Domain-specific logic shall not be placed in the framework core. It must be implemented through custom adapter, assertion, oracle, fixture, or data generator.
+Domain-specific logic shall not be placed in the framework core. It must be implemented through custom provider, assertion, oracle, fixture, or data generator.
 
 ### Consequences
 

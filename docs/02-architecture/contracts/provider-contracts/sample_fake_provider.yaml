@@ -14,7 +14,7 @@ defaults:
   retry: 0
 valid_provider_instance_shape:
   required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
-  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, labels]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, labels]
   binding_keys: [workspace_ref, clock_ref]
 operations:
   setup_fixture:

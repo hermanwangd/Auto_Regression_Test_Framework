@@ -17,8 +17,8 @@ MVP shall cover:
 - YAML test case validation
 - Data catalog validation
 - Data binding resolution
-- API adapter execution
-- DB adapter execution
+- API provider execution
+- DB provider execution
 - Basic assertions
 - Fixture setup
 - Cleanup
@@ -45,8 +45,8 @@ MVP shall cover:
 | REG-FW-001 | F001 | Framework executes valid YAML test | Core | P1 | Auto |
 | REG-DSL-001 | F002 | DSL schema validation passes | Core | P1 | Auto |
 | REG-DATA-001 | F003 | Dataset binding resolves input/expected | Core | P1 | Auto |
-| REG-ADAPTER-001 | F004 | API adapter executes request | Core | P1 | Auto |
-| REG-ADAPTER-002 | F004 | DB adapter verifies state | Core | P1 | Auto |
+| REG-PROVIDER-001 | F004 | API provider executes request | Core | P1 | Auto |
+| REG-PROVIDER-002 | F004 | DB provider verifies state | Core | P1 | Auto |
 | REG-ASSERT-001 | F005 | Assertion engine compares actual/expected | Core | P1 | Auto |
 | REG-AGENT-001 | F006 | Agent generates test artifacts from complete spec | SIT | P1 | Auto |
 | REG-AGENT-002 | F007 | Agent blocks generation for incomplete spec | SIT | P1 | Auto |

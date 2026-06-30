@@ -79,7 +79,7 @@ class EvidenceWriterTest {
                         assertionEvidence),
                 List.of(new ResolvedBinding("api_payload", "api_payload", "fixtures/request.json")),
                 List.of(new ResolvedProviderContract(
-                        "adapter",
+                        "provider",
                         "request_response",
                         "ru",
                         "request_response",
@@ -88,13 +88,13 @@ class EvidenceWriterTest {
                         "supported",
                         "RU-api",
                         "request_response",
-                        "release_units[0].provider_contracts.adapters.request_response")));
+                        "release_units[0].provider_contracts.providers.request_response")));
 
         assertThat(written).isEqualTo(runDir);
         assertThat(Files.readString(runDir.resolve("run.yaml")))
                 .contains("binding_name: api_payload")
                 .contains("provider_name: request_response")
-                .contains("provider_family: request_response")
+                .contains("provider_contract_kind: request_response")
                 .contains("provider_type: rest")
                 .contains("messaging: messaging.yaml")
                 .contains("assertion_status: passed")

@@ -1,0 +1,18 @@
+contract_version: v0.2
+suite_id: NATS-CAPABILITY-v0.2
+purpose: Framework-owned NATS provider capability verification sample for P0 event observation.
+profile: local_nats
+selection:
+  mode: suite
+  suite: provider-capability-nats
+tests:
+  - test_case.yaml
+artifact_roots:
+  provider_instances: provider_instances/
+  execution_profiles: execution_profiles/
+  environment_bindings: environment_bindings/
+  expected_results: expected_results/
+  fixtures: fixtures/
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

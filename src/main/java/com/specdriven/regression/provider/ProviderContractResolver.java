@@ -69,7 +69,7 @@ public class ProviderContractResolver {
         if (target == null) {
             gaps.add(new ProviderContractGap(
                     "generated-framework/environment_bindings.targets",
-                    "adapter",
+                    "provider",
                     adapter,
                     "",
                     "",
@@ -90,8 +90,8 @@ public class ProviderContractResolver {
                 gaps,
                 target,
                 fileRef,
-                "adapters",
-                "adapter",
+                "providers",
+                "provider",
                 adapterProviderName,
                 context.executionMode());
 
@@ -144,7 +144,7 @@ public class ProviderContractResolver {
         return generatedRuntimeArtifacts.providerContract(
                 packageRoot,
                 ref.fileRef(),
-                "adapters",
+                "providers",
                 firstNonBlank(ref.providerName(), adapter));
     }
 
@@ -175,16 +175,16 @@ public class ProviderContractResolver {
 
         List<ReleaseUnitContracts> adapterOwners = ownersForAdapter(releaseUnits, targetRuId, adapter);
         if (adapterOwners.size() > 1) {
-            gaps.add(ambiguousGap(adapterOwners, "adapters", "adapter", adapter));
+            gaps.add(ambiguousGap(adapterOwners, "providers", "provider", adapter));
             return new ProviderContractResolutionReport(false, List.of(), List.copyOf(gaps));
         }
         ReleaseUnitContracts adapterOwner = adapterOwners.get(0);
-        if (hasContract(adapterOwner.contracts(), "adapters", adapter)) {
-            resolveContract(resolved, gaps, adapterOwner, "adapters", "adapter", adapter);
+        if (hasContract(adapterOwner.contracts(), "providers", adapter)) {
+            resolveContract(resolved, gaps, adapterOwner, "providers", "provider", adapter);
         } else {
-            gaps.add(gap(adapterOwner, "adapters", "adapter", adapter, "",
+            gaps.add(gap(adapterOwner, "providers", "provider", adapter, "",
                     "Add provider contract `" + adapter + "` under "
-                            + path(adapterOwner, "adapters", adapter)
+                            + path(adapterOwner, "providers", adapter)
                             + " for `" + adapterOwner.ruId() + "` before execution."));
         }
 
@@ -312,15 +312,15 @@ public class ProviderContractResolver {
         Map<String, Object> contract = generatedRuntimeArtifacts.providerContract(
                 packageRoot,
                 ref.fileRef(),
-                "adapters",
+                "providers",
                 resolvedProviderName);
         return new ProviderContractGap(
                 generatedRuntimeArtifacts.contractPath(
-                        ref.fileRef() + "#adapters." + resolvedProviderName,
+                        ref.fileRef() + "#providers." + resolvedProviderName,
                         contract),
-                "adapter",
+                "provider",
                 resolvedProviderName,
-                stringValue(contract.get("provider_family")),
+                stringValue(contract.get("provider_contract_kind")),
                 stringValue(contract.get("provider_type")),
                 "ambiguous",
                 "blocked",
@@ -453,7 +453,7 @@ public class ProviderContractResolver {
         if (!adapterMatches.isEmpty()) {
             return List.copyOf(adapterMatches);
         }
-        return ownersFor(releaseUnits, "adapters", adapter, fallbackUnit(releaseUnits));
+        return ownersFor(releaseUnits, "providers", adapter, fallbackUnit(releaseUnits));
     }
 
     private ReleaseUnitContracts ownerByRuId(List<ReleaseUnitContracts> releaseUnits, String targetRuId) {
@@ -554,7 +554,7 @@ public class ProviderContractResolver {
             String section,
             String providerName,
             ReleaseUnitContracts owner) {
-        String declared = stringValue(contract.get("provider_family"));
+        String declared = stringValue(contract.get("provider_contract_kind"));
         if (!declared.isBlank()) {
             return declared;
         }
@@ -581,7 +581,7 @@ public class ProviderContractResolver {
         if (normalizedName.contains("runner") || providerType.contains("runner")) {
             return "external_runner";
         }
-        if (section.equals("adapters") || normalizedName.contains("file")
+        if (section.equals("providers") || normalizedName.contains("file")
                 || normalizedName.contains("batch") || normalizedName.contains("cli")
                 || providerType.contains("shell")) {
             return "file_batch";
@@ -613,7 +613,7 @@ public class ProviderContractResolver {
                 releaseUnitContracts.add(new ReleaseUnitContracts(
                         index,
                         stringValue(unit.get("ru_id")),
-                        stringValue(unit.get("adapter")),
+                        firstText(unit, "provider", "runner"),
                         stringValue(unit.get("validation_boundary")),
                         stringValue(unit.get("execution_mode")),
                         contractMap));
@@ -631,6 +631,16 @@ public class ProviderContractResolver {
     private String firstNonBlank(String... values) {
         for (String value : values) {
             if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private String firstText(Map<?, ?> map, String... fields) {
+        for (String field : fields) {
+            String value = stringValue(map.get(field));
+            if (!value.isBlank()) {
                 return value;
             }
         }

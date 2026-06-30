@@ -69,7 +69,7 @@ class DslTestCaseNormalizerTest {
         assertThat(normalized).containsEntry("artifact_status", "approved_for_regression");
         Map<?, ?> executionTarget = (Map<?, ?>) normalized.get("execution_target");
         assertThat(executionTarget.get("ru_id")).isEqualTo("RU-api");
-        assertThat(executionTarget.get("adapter")).isEqualTo("request_response");
+        assertThat(executionTarget.get("provider")).isEqualTo("request_response");
         assertThat(executionTarget.get("execution_mode")).isEqualTo("ci_ephemeral");
         assertThat(executionTarget.get("environment_ref")).isEqualTo("ci://api");
         Map<?, ?> inputs = (Map<?, ?>) ((Map<?, ?>) normalized.get("package_inputs")).get("inputs");

@@ -1,7 +1,6 @@
 provider_instance_version: v0.2
 provider_id: wiremock-payment-api
 provider_type: wiremock_http_mock
-profile: local_wiremock
 runtime_modes: [mock]
 binding_keys:
   port_strategy:

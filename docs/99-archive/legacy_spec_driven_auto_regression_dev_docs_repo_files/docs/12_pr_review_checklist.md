@@ -22,7 +22,7 @@
 
 ## 12.3 Framework Review
 
-- [ ] Adapter usage is correct.
+- [ ] Provider usage is correct.
 - [ ] Assertion type is appropriate.
 - [ ] Oracle source is valid.
 - [ ] Report contains evidence.

@@ -12,6 +12,12 @@ selection_modes:
   - suite
   - tag
   - profile
+optional_fields:
+  provider_contract_resolution:
+    default_mode: framework_builtin
+    allowed_modes: [framework_builtin, suite_override, snapshot]
+    custom_provider_contracts_default: custom-provider-contracts
+    allowed_provider_types_required_for_custom_types: true
 must_not_contain:
   - provider overrides
   - product topology inference

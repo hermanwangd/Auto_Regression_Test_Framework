@@ -2,6 +2,7 @@ package com.specdriven.regression.contract;
 
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
+import com.specdriven.regression.evidence.EvidenceIndexFormatter;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderFailure;
 import com.specdriven.regression.provider.runtime.ProviderOperationRequest;
@@ -30,6 +31,8 @@ import org.yaml.snakeyaml.Yaml;
 public class WireMockProviderCapabilityService {
 
     private static final String PROVIDER_TYPE = "wiremock_http_mock";
+    private static final Path FRAMEWORK_PROVIDER_CONTRACTS =
+            Path.of("docs/02-architecture/contracts/provider-contracts");
     private static final String EVIDENCE_CLASSIFICATION = "framework_provider_capability_only";
     private static final AtomicLong RUN_SEQUENCE = new AtomicLong();
     private static final DateTimeFormatter RUN_ID_TIME_FORMAT =
@@ -64,6 +67,10 @@ public class WireMockProviderCapabilityService {
                     "",
                     "",
                     "Provide --profile for WireMock provider capability run.")));
+        }
+        List<ContractFinding> profileFindings = requestedProfileFindings(suiteManifest, requestedProfile);
+        if (!profileFindings.isEmpty()) {
+            return WireMockRunResult.blocked(validation.suiteId(), requestedProfile, profileFindings);
         }
 
         RuntimeSelection selection = selectWireMockRuntime(suiteManifest, requestedProfile, outputBase);
@@ -220,15 +227,12 @@ public class WireMockProviderCapabilityService {
         Map<String, Map<String, Object>> instancesById =
                 readDirectoryByField(suiteRoot.resolve("provider_instances"), "provider_id");
         Map<String, Map<String, Object>> contractsByType =
-                readDirectoryByField(suiteRoot.resolve("provider_contracts"), "provider_type");
+                readDirectoryByField(frameworkProviderContractsDirectory(suiteRoot), "provider_type");
         Map<String, Object> environmentBinding = environmentBinding(suiteRoot, requestedProfile);
         for (Object testRef : listValue(suite.get("tests"))) {
             Map<String, Object> testCase = readMap(suiteRoot.resolve(stringValue(testRef)).normalize());
             for (Map.Entry<String, Object> targetEntry : mapValue(testCase.get("targets")).entrySet()) {
                 Map<String, Object> target = mapValue(targetEntry.getValue());
-                if (!requestedProfile.equals(stringValue(target.get("profile")))) {
-                    continue;
-                }
                 String providerId = stringValue(target.get("provider_id"));
                 Map<String, Object> providerInstance = instancesById.get(providerId);
                 if (providerInstance == null) {
@@ -266,6 +270,31 @@ public class WireMockProviderCapabilityService {
             }
         }
         return null;
+    }
+
+    private List<ContractFinding> requestedProfileFindings(Path suiteManifest, String requestedProfile) {
+        Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
+        Map<String, Object> suite = readMap(suiteManifest);
+        List<SuiteProfileGate.TestCaseDocument> testCases = new ArrayList<>();
+        for (Object testRef : listValue(suite.get("tests"))) {
+            Path testCasePath = suiteRoot.resolve(stringValue(testRef)).normalize();
+            testCases.add(new SuiteProfileGate.TestCaseDocument(testCasePath, readMap(testCasePath)));
+        }
+        return SuiteProfileGate.validate(suiteManifest, suite, testCases, requestedProfile, PROVIDER_TYPE);
+    }
+
+    private Path frameworkProviderContractsDirectory(Path suiteRoot) {
+        Path cwdCandidate = Path.of("").toAbsolutePath().normalize().resolve(FRAMEWORK_PROVIDER_CONTRACTS);
+        if (Files.isDirectory(cwdCandidate)) {
+            return cwdCandidate;
+        }
+        for (Path cursor = suiteRoot; cursor != null; cursor = cursor.getParent()) {
+            Path candidate = cursor.resolve(FRAMEWORK_PROVIDER_CONTRACTS).normalize();
+            if (Files.isDirectory(candidate)) {
+                return candidate;
+            }
+        }
+        return cwdCandidate;
     }
 
     private RunIds newRunIds() {
@@ -570,24 +599,17 @@ public class WireMockProviderCapabilityService {
     }
 
     private void writeEvidenceIndex(Path runDir, RuntimeSelection selection, List<String> evidenceRefs) {
-        StringBuilder index = new StringBuilder();
-        index.append("evidence_index_version: v0.2\n");
-        index.append("suite_id: ").append(selection.suite().get("suite_id")).append('\n');
-        index.append("batch_id: ").append(selection.batchId()).append('\n');
-        index.append("run_id: ").append(selection.runId()).append('\n');
-        index.append("test_case_id: ").append(selection.testCase().get("test_case_id")).append('\n');
-        index.append("profile: ").append(selection.profile()).append('\n');
-        index.append("provider_type: ").append(selection.providerType()).append('\n');
-        index.append("provider_id: ").append(selection.providerId()).append('\n');
-        index.append("evidence_classification: framework_provider_capability_only\n");
-        index.append("downstream_release_evidence: false\n");
-        index.append("entries:\n");
-        for (String ref : distinct(evidenceRefs)) {
-            index.append("  - ref: ").append(ref).append('\n');
-            index.append("    masked: true\n");
-        }
-        index.append("masking:\n  raw_secret_found: false\n");
-        write(runDir.resolve("evidence_index.yaml"), index.toString());
+        write(runDir.resolve("evidence_index.yaml"), EvidenceIndexFormatter.format(
+                new EvidenceIndexFormatter.Context(
+                        stringValue(selection.suite().get("suite_id")),
+                        selection.batchId(),
+                        selection.runId(),
+                        stringValue(selection.testCase().get("test_case_id")),
+                        selection.profile(),
+                        selection.providerType(),
+                        selection.providerId()),
+                runDir,
+                evidenceRefs));
     }
 
     private Path writeResult(

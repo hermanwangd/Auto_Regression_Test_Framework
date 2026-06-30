@@ -55,7 +55,7 @@ Track A documents contract placeholders for:
 
 - HTTP/Mock: `wiremock_http_mock`, `http_stub`, `http_mock_called`, `http_mock_request_body_match`.
 - DB: `jdbc_database`, `secret_ref` connection, SQL params binding, Oracle/DB2 dialect metadata, `db_record_exists`, query evidence.
-- NATS/Event: `nats_messaging`, `event_published`, `event_payload_match`, `consume_from: test_start_time`, subject handling, event evidence.
+- NATS/Event: `nats`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match`, `consume_from: test_start_time`, subject handling, event evidence.
 - Polling: timeout, `poll_interval`, last observed evidence.
 - JSON/Schema/File: `json_match`, `schema_match`, `ignore_paths`, `file_diff`, `normalize`, `ignore_order`.
 - Test Data Injection: `data_binding`, `db_seed`, `db_cleanup`, `http_stub`.

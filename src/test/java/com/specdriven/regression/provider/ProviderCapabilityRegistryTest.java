@@ -13,7 +13,7 @@ class ProviderCapabilityRegistryTest {
     @Test
     void rejectsMissingProviderMetadataBeforeFamilySpecificValidation() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "unknown_provider",
                 Map.of(),
                 "ci_ephemeral");
@@ -22,16 +22,16 @@ class ProviderCapabilityRegistryTest {
         assertThat(validation.registryStatus()).isEqualTo("missing_metadata");
         assertThat(validation.runtimeStatus()).isEqualTo("blocked");
         assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
-                .containsExactly(".provider_family", ".provider_type");
+                .containsExactly(".provider_type");
     }
 
     @Test
     void rejectsUnsupportedProviderFamilyAndTypeCombination() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "orbix_bridge",
                 Map.of(
-                        "provider_family", "orbix",
+                        "provider_contract_kind", "orbix",
                         "provider_type", "iiop"),
                 "ci_ephemeral");
 
@@ -45,10 +45,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void rejectsUnsupportedExecutionModeBeforeRuntimeSelection() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "request_response",
                 Map.of(
-                        "provider_family", "request_response",
+                        "provider_contract_kind", "request_response",
                         "provider_type", "rest",
                         "endpoint_ref", "http://127.0.0.1:8080",
                         "timeout_seconds", 5,
@@ -66,10 +66,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksExecutableShellAdapterWithoutCommandTimeoutOrOutput() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "batch_runner",
                 Map.of(
-                        "provider_family", "file_batch",
+                        "provider_contract_kind", "file_batch",
                         "provider_type", "shell",
                         "timeout_seconds", "soon"),
                 "ci_ephemeral");
@@ -85,20 +85,20 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsSupportedAlternativeEndpointAndOutputReferences() {
         ProviderCapabilityRegistry.ProviderContractValidation messaging = registry.validate(
-                "adapters",
+                "providers",
                 "message_bus",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "mock",
                         "stream_ref", "mock://payment.events",
                         "timeout_seconds", "10",
                         "outputs", Map.of("actual_output_ref", "actual/events.json")),
                 "ci_ephemeral");
         ProviderCapabilityRegistry.ProviderContractValidation deploymentReadiness = registry.validate(
-                "adapters",
+                "providers",
                 "deployment_readiness",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "local",
                         "readiness_probe", "http_get",
                         "target_selector", "app=payment-api",
@@ -114,10 +114,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsNativeKafkaAndNatsMessagingContracts() {
         ProviderCapabilityRegistry.ProviderContractValidation kafka = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "kafka",
                         "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
                         "topic_ref", "payment.events",
@@ -132,10 +132,10 @@ class ProviderCapabilityRegistryTest {
                                         "correlation_id", "PAY-001"))),
                 "ci_ephemeral");
         ProviderCapabilityRegistry.ProviderContractValidation nats = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "nats",
                         "server_ref", "nats://127.0.0.1:4222",
                         "subject_ref", "payment.events",
@@ -161,10 +161,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsNativeKafkaAndNatsConsumeObserveContractsWithoutPayloadBinding() {
         ProviderCapabilityRegistry.ProviderContractValidation kafka = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "kafka",
                         "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
                         "topic_ref", "payment.events",
@@ -179,10 +179,10 @@ class ProviderCapabilityRegistryTest {
                                         "correlation_id", "PAY-001"))),
                 "ci_ephemeral");
         ProviderCapabilityRegistry.ProviderContractValidation nats = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "nats",
                         "server_ref", "nats://127.0.0.1:4222",
                         "subject_ref", "payment.events",
@@ -206,10 +206,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsNativeNatsRequestReplyContractWithPayloadBinding() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_authorization",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "nats",
                         "server_ref", "nats://127.0.0.1:4222",
                         "subject_ref", "payment.authorization",
@@ -232,10 +232,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeNatsRequestReplyWithoutPayloadBinding() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_authorization",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "nats",
                         "server_ref", "nats://127.0.0.1:4222",
                         "subject_ref", "payment.authorization",
@@ -255,10 +255,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeKafkaRequestReplyUntilReusableRuntimeExists() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_authorization",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "kafka",
                         "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
                         "topic_ref", "payment.authorization",
@@ -279,10 +279,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsNativeKafkaAndNatsCleanupContractsWithoutPayloadBinding() {
         ProviderCapabilityRegistry.ProviderContractValidation kafka = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "kafka",
                         "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
                         "topic_ref", "payment.events",
@@ -296,10 +296,10 @@ class ProviderCapabilityRegistryTest {
                                         "serialization", "json"))),
                 "ci_ephemeral");
         ProviderCapabilityRegistry.ProviderContractValidation nats = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "nats",
                         "server_ref", "nats://127.0.0.1:4222",
                         "subject_ref", "payment.events",
@@ -324,10 +324,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeMessagingCleanupWithoutStrategyOrBound() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "kafka",
                         "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
                         "topic_ref", "payment.events",
@@ -349,10 +349,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeMessagingContractWithUnsupportedActionMode() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "kafka",
                         "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
                         "topic_ref", "payment.events",
@@ -372,10 +372,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsNativeGrpcRequestResponseContract() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "request_response",
                 Map.of(
-                        "provider_family", "request_response",
+                        "provider_contract_kind", "request_response",
                         "provider_type", "grpc",
                         "service_ref", "dns:///payment-api:9090",
                         "descriptor_ref", "descriptors/payment.desc",
@@ -396,10 +396,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeGrpcContractWithoutDescriptorActionOrOutput() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "request_response",
                 Map.of(
-                        "provider_family", "request_response",
+                        "provider_contract_kind", "request_response",
                         "provider_type", "grpc",
                         "actions", Map.of(
                                 "submit_payment", Map.of(
@@ -420,10 +420,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeGrpcContractWithUnsafeDescriptorAndMissingActionService() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "request_response",
                 Map.of(
-                        "provider_family", "request_response",
+                        "provider_contract_kind", "request_response",
                         "provider_type", "grpc",
                         "service_ref", "dns:///payment-api:9090",
                         "descriptor_ref", "../descriptors/payment.desc",
@@ -445,10 +445,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeGrpcContractWithEmptyActionMap() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "request_response",
                 Map.of(
-                        "provider_family", "request_response",
+                        "provider_contract_kind", "request_response",
                         "provider_type", "grpc",
                         "service_ref", "dns:///payment-api:9090",
                         "descriptor_ref", "descriptors/payment.desc",
@@ -465,10 +465,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsNativeK8sAndVmDeploymentReadinessContracts() {
         ProviderCapabilityRegistry.ProviderContractValidation k8s = registry.validate(
-                "adapters",
+                "providers",
                 "payment_k8s",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "k8s",
                         "readiness_probe", "rollout_status",
                         "kube_context_ref", "env://KUBE_CONTEXT",
@@ -479,10 +479,10 @@ class ProviderCapabilityRegistryTest {
                         "outputs", Map.of("actual_output_ref", "actual/readiness.txt")),
                 "sit_deployed");
         ProviderCapabilityRegistry.ProviderContractValidation vm = registry.validate(
-                "adapters",
+                "providers",
                 "payment_vm",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "vm",
                         "readiness_probe", "tcp_connect",
                         "host_ref", "10.0.0.15",
@@ -504,10 +504,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsNativeK8sPodLogReadinessContract() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_k8s",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "k8s",
                         "readiness_probe", "pod_logs",
                         "kube_context_ref", "env://KUBE_CONTEXT",
@@ -527,10 +527,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsNativeK8sDirectApiDeploymentAvailableContract() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_k8s",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "k8s",
                         "readiness_probe", "api_deployment_available",
                         "api_server_ref", "env://K8S_API_SERVER",
@@ -549,10 +549,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeK8sDirectApiReadinessWithoutApiServerOrDeployment() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_k8s",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "k8s",
                         "readiness_probe", "api_deployment_available",
                         "namespace_ref", "payment",
@@ -571,10 +571,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeK8sDirectApiReadinessWithoutNamespace() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_k8s",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "k8s",
                         "readiness_probe", "api_deployment_available",
                         "api_server_ref", "env://K8S_API_SERVER",
@@ -592,10 +592,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeK8sPodLogReadinessWithoutSelectorOrBoundedTail() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_k8s",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "k8s",
                         "readiness_probe", "pod_logs",
                         "kube_context_ref", "env://KUBE_CONTEXT",
@@ -615,10 +615,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsNativeVmSshAndWinrmCommandReadinessContracts() {
         ProviderCapabilityRegistry.ProviderContractValidation ssh = registry.validate(
-                "adapters",
+                "providers",
                 "payment_vm",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "vm",
                         "readiness_probe", "ssh_command",
                         "ssh_ref", "tools/ssh-readiness.sh",
@@ -630,10 +630,10 @@ class ProviderCapabilityRegistryTest {
                         "outputs", Map.of("actual_output_ref", "actual/vm-ssh.txt")),
                 "sit_deployed");
         ProviderCapabilityRegistry.ProviderContractValidation winrm = registry.validate(
-                "adapters",
+                "providers",
                 "payment_vm",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "vm",
                         "readiness_probe", "winrm_command",
                         "winrm_ref", "tools/winrm-readiness.sh",
@@ -655,10 +655,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeVmCommandReadinessWithoutHostOrCommand() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_vm",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "vm",
                         "readiness_probe", "ssh_command",
                         "deployed_version_ref", "build-43",
@@ -676,10 +676,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeDeploymentReadinessContractsWithoutRequiredTargetFields() {
         ProviderCapabilityRegistry.ProviderContractValidation k8s = registry.validate(
-                "adapters",
+                "providers",
                 "payment_k8s",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "k8s",
                         "readiness_probe", "rollout_status",
                         "deployed_version_ref", "build-42",
@@ -687,10 +687,10 @@ class ProviderCapabilityRegistryTest {
                         "outputs", Map.of("actual_output_ref", "actual/readiness.txt")),
                 "sit_deployed");
         ProviderCapabilityRegistry.ProviderContractValidation vm = registry.validate(
-                "adapters",
+                "providers",
                 "payment_vm",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "vm",
                         "readiness_probe", "tcp_connect",
                         "deployed_version_ref", "build-43",
@@ -714,10 +714,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksDeploymentReadinessContractWithoutCoreFields() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_ready",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "local"),
                 "sit_deployed");
 
@@ -734,10 +734,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeVmHttpAndCommandReadinessInvalidEndpointOrPort() {
         ProviderCapabilityRegistry.ProviderContractValidation http = registry.validate(
-                "adapters",
+                "providers",
                 "payment_vm_http",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "vm",
                         "readiness_probe", "http_get",
                         "deployed_version_ref", "build-43",
@@ -745,10 +745,10 @@ class ProviderCapabilityRegistryTest {
                         "outputs", Map.of("actual_output_ref", "actual/vm-http.txt")),
                 "sit_deployed");
         ProviderCapabilityRegistry.ProviderContractValidation ssh = registry.validate(
-                "adapters",
+                "providers",
                 "payment_vm_ssh",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "vm",
                         "readiness_probe", "ssh_command",
                         "host_ref", "10.0.0.15",
@@ -770,10 +770,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeVmTcpReadinessWithInvalidPort() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_vm_tcp",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "vm",
                         "readiness_probe", "tcp_connect",
                         "host_ref", "10.0.0.15",
@@ -791,10 +791,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksDeploymentReadinessContractWithInvalidTimeout() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_ready",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "local",
                         "readiness_probe", "http_get",
                         "deployment_ref", "payment-api",
@@ -811,10 +811,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNonNativeMessagingWithoutEndpointOrPositiveTimeout() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "message_bus",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "mock",
                         "timeout_seconds", "soon",
                         "outputs", Map.of("actual_output_ref", "actual/events.json")),
@@ -830,10 +830,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeMessagingContractsWithoutConnectionActionOrCorrelation() {
         ProviderCapabilityRegistry.ProviderContractValidation kafka = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "kafka",
                         "topic_ref", "payment.events",
                         "timeout_seconds", 10,
@@ -846,10 +846,10 @@ class ProviderCapabilityRegistryTest {
                                         "requires_correlation", true))),
                 "ci_ephemeral");
         ProviderCapabilityRegistry.ProviderContractValidation nats = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "nats",
                         "timeout_seconds", 10,
                         "outputs", Map.of("actual_output_ref", "actual/payment-events.json")),
@@ -872,10 +872,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksInvalidTimeoutAndMissingActionMapForRequestResponseProvider() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "request_response",
                 Map.of(
-                        "provider_family", "request_response",
+                        "provider_contract_kind", "request_response",
                         "provider_type", "rest",
                         "base_url_ref", "env://PAYMENT_API",
                         "timeout_seconds", "not-a-number",
@@ -895,7 +895,7 @@ class ProviderCapabilityRegistryTest {
                 "fixtures",
                 "relational_db",
                 Map.of(
-                        "provider_family", "db_fixture",
+                        "provider_contract_kind", "db_fixture",
                         "provider_type", "jdbc",
                         "connection_ref", "vault://ci/payment-db",
                         "cleanup_strategy", "by_test_run_id",
@@ -934,14 +934,14 @@ class ProviderCapabilityRegistryTest {
                 "bindings",
                 "payload",
                 Map.of(
-                        "provider_family", "file_batch",
+                        "provider_contract_kind", "file_batch",
                         "provider_type", "file_fixture"),
                 "ci_ephemeral");
         ProviderCapabilityRegistry.ProviderContractValidation fixture = registry.validate(
                 "fixtures",
                 "relational_db",
                 Map.of(
-                        "provider_family", "db_fixture",
+                        "provider_contract_kind", "db_fixture",
                         "provider_type", "jdbc"),
                 "ci_ephemeral");
 
@@ -959,10 +959,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsFullyApprovedExternalRunnerContract() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "external_runner",
                 Map.ofEntries(
-                        entry("provider_family", "external_runner"),
+                        entry("provider_contract_kind", "external_runner"),
                         entry("provider_type", "command_runner"),
                         entry("approval_ref", "ADR-012"),
                         entry("approved_by", "SA"),
@@ -982,10 +982,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksUnsafeExternalRunnerEvidenceAndBuiltInAlternative() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "external_runner",
                 Map.ofEntries(
-                        entry("provider_family", "external_runner"),
+                        entry("provider_contract_kind", "external_runner"),
                         entry("provider_type", "command_runner"),
                         entry("approval_ref", "ADR-012"),
                         entry("approved_by", "SA"),
@@ -1019,10 +1019,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksExternalRunnerWithoutCommandOrContainerRef() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "external_runner",
                 Map.ofEntries(
-                        entry("provider_family", "external_runner"),
+                        entry("provider_contract_kind", "external_runner"),
                         entry("provider_type", "command_runner"),
                         entry("approval_ref", "ADR-012"),
                         entry("approved_by", "SA"),
@@ -1041,31 +1041,31 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsBlankExecutionModeAndSupportedMetadataOnlyProviderTypes() {
         ProviderCapabilityRegistry.ProviderContractValidation fileFixture = registry.validate(
-                "adapters",
+                "providers",
                 "fixture_file",
                 Map.of(
-                        "provider_family", "file_batch",
+                        "provider_contract_kind", "file_batch",
                         "provider_type", "file_fixture"),
                 "");
         ProviderCapabilityRegistry.ProviderContractValidation requestBody = registry.validate(
-                "adapters",
+                "providers",
                 "request_body",
                 Map.of(
-                        "provider_family", "request_response",
+                        "provider_contract_kind", "request_response",
                         "provider_type", "request_body"),
                 "");
         ProviderCapabilityRegistry.ProviderContractValidation eventPayload = registry.validate(
-                "adapters",
+                "providers",
                 "event_payload",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "event_payload"),
                 "");
         ProviderCapabilityRegistry.ProviderContractValidation relationalDb = registry.validate(
                 "fixtures",
                 "relational_db",
                 Map.of(
-                        "provider_family", "db_fixture",
+                        "provider_contract_kind", "db_fixture",
                         "provider_type", "relational_db"),
                 "");
 
@@ -1081,7 +1081,7 @@ class ProviderCapabilityRegistryTest {
                 "fixtures",
                 "external_runner",
                 Map.of(
-                        "provider_family", "external_runner",
+                        "provider_contract_kind", "external_runner",
                         "provider_type", "command_runner"),
                 "ci_ephemeral");
 
@@ -1094,20 +1094,20 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsShellRestK8sAndVmAlternativeContractReferences() {
         ProviderCapabilityRegistry.ProviderContractValidation shell = registry.validate(
-                "adapters",
+                "providers",
                 "batch_runner",
                 Map.of(
-                        "provider_family", "file_batch",
+                        "provider_contract_kind", "file_batch",
                         "provider_type", "shell",
                         "command", "./run.sh",
                         "timeout_seconds", "5",
                         "outputs", Map.of("actual_output_ref", "actual/batch.json")),
                 "local_fixture");
         ProviderCapabilityRegistry.ProviderContractValidation rest = registry.validate(
-                "adapters",
+                "providers",
                 "payment_api",
                 Map.of(
-                        "provider_family", "request_response",
+                        "provider_contract_kind", "request_response",
                         "provider_type", "rest",
                         "service_ref", "payment-api",
                         "timeout_seconds", 5,
@@ -1115,10 +1115,10 @@ class ProviderCapabilityRegistryTest {
                         "actions", Map.of("submit", Map.of("method", "POST", "path", "/payments"))),
                 "ci_ephemeral");
         ProviderCapabilityRegistry.ProviderContractValidation k8s = registry.validate(
-                "adapters",
+                "providers",
                 "payment_k8s",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "k8s",
                         "readiness_probe", "rollout_status",
                         "connection_ref", "kube://sit",
@@ -1129,10 +1129,10 @@ class ProviderCapabilityRegistryTest {
                         "outputs", Map.of("actual_output_ref", "actual/readiness.txt")),
                 "sit_deployed");
         ProviderCapabilityRegistry.ProviderContractValidation vm = registry.validate(
-                "adapters",
+                "providers",
                 "payment_vm_http",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "vm",
                         "readiness_probe", "http_get",
                         "endpoint_ref", "https://payment.example.internal/health",
@@ -1150,10 +1150,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsGrpcServiceRefAndSkipsMalformedActionEntries() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "request_response",
                 Map.of(
-                        "provider_family", "request_response",
+                        "provider_contract_kind", "request_response",
                         "provider_type", "grpc",
                         "base_url_ref", "dns:///payment-api:9090",
                         "descriptor_ref", "descriptors/payment.desc",
@@ -1174,10 +1174,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsNativeMessagingDefaultModeHyphenatedModeAndBindingAliases() {
         ProviderCapabilityRegistry.ProviderContractValidation defaultPublish = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "kafka",
                         "connection_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
                         "subject_ref", "payment.events",
@@ -1191,10 +1191,10 @@ class ProviderCapabilityRegistryTest {
                                         "correlation_id_ref", "bindings/payment-id"))),
                 "ci_ephemeral");
         ProviderCapabilityRegistry.ProviderContractValidation requestReply = registry.validate(
-                "adapters",
+                "providers",
                 "payment_authorization",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "nats",
                         "connection_ref", "nats://127.0.0.1:4222",
                         "subject_ref", "payment.authorization",
@@ -1214,10 +1214,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeMessagingCleanupWithUnsupportedStrategy() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "nats",
                         "server_ref", "nats://127.0.0.1:4222",
                         "subject_ref", "payment.events",
@@ -1243,7 +1243,7 @@ class ProviderCapabilityRegistryTest {
                 "fixtures",
                 "relational_db",
                 Map.of(
-                        "provider_family", "db_fixture",
+                        "provider_contract_kind", "db_fixture",
                         "provider_type", "jdbc",
                         "connection_ref", "vault://ci/payment-db",
                         "cleanup_strategy", "by_test_run_id",
@@ -1271,10 +1271,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksUnsafeExternalRunnerBlankHomeParentAndTrailingParentOutputs() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "external_runner",
                 Map.ofEntries(
-                        entry("provider_family", "external_runner"),
+                        entry("provider_contract_kind", "external_runner"),
                         entry("provider_type", "command_runner"),
                         entry("approval_ref", "ADR-012"),
                         entry("approved_by", "SA"),
@@ -1303,34 +1303,34 @@ class ProviderCapabilityRegistryTest {
     @Test
     void rejectsUnsupportedTypesInsideSupportedProviderFamilies() {
         assertUnsupported(registry.validate(
-                "adapters",
+                "providers",
                 "file_batch",
-                Map.of("provider_family", "file_batch", "provider_type", "csv"),
+                Map.of("provider_contract_kind", "file_batch", "provider_type", "csv"),
                 "ci_ephemeral"));
         assertUnsupported(registry.validate(
-                "adapters",
+                "providers",
                 "request_response",
-                Map.of("provider_family", "request_response", "provider_type", "soap"),
+                Map.of("provider_contract_kind", "request_response", "provider_type", "soap"),
                 "ci_ephemeral"));
         assertUnsupported(registry.validate(
-                "adapters",
+                "providers",
                 "message_bus",
-                Map.of("provider_family", "messaging", "provider_type", "orbix"),
+                Map.of("provider_contract_kind", "messaging", "provider_type", "orbix"),
                 "ci_ephemeral"));
         assertUnsupported(registry.validate(
                 "fixtures",
                 "document_db",
-                Map.of("provider_family", "db_fixture", "provider_type", "mongo"),
+                Map.of("provider_contract_kind", "db_fixture", "provider_type", "mongo"),
                 "ci_ephemeral"));
         assertUnsupported(registry.validate(
-                "adapters",
+                "providers",
                 "deployment_readiness",
-                Map.of("provider_family", "deployment_readiness", "provider_type", "bare_metal"),
+                Map.of("provider_contract_kind", "deployment_readiness", "provider_type", "bare_metal"),
                 "ci_ephemeral"));
         assertUnsupported(registry.validate(
-                "adapters",
+                "providers",
                 "external_runner",
-                Map.of("provider_family", "external_runner", "provider_type", "shell"),
+                Map.of("provider_contract_kind", "external_runner", "provider_type", "shell"),
                 "ci_ephemeral"));
     }
 
@@ -1340,7 +1340,7 @@ class ProviderCapabilityRegistryTest {
                 "metadata",
                 "batch_runner",
                 Map.of(
-                        "provider_family", "file_batch",
+                        "provider_contract_kind", "file_batch",
                         "provider_type", "shell"),
                 "ci_ephemeral");
 
@@ -1350,10 +1350,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsMockDeploymentReadinessAndNonDbFixtureProviderMetadata() {
         ProviderCapabilityRegistry.ProviderContractValidation deployment = registry.validate(
-                "adapters",
+                "providers",
                 "payment_ready",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "mock",
                         "readiness_probe", "health_check",
                         "service_ref", "payment-api",
@@ -1365,7 +1365,7 @@ class ProviderCapabilityRegistryTest {
                 "fixtures",
                 "fixture_file",
                 Map.of(
-                        "provider_family", "file_batch",
+                        "provider_contract_kind", "file_batch",
                         "provider_type", "file_fixture"),
                 "local_fixture");
 
@@ -1376,10 +1376,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksGrpcWhenActionsNodeIsNotAMap() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "request_response",
                 Map.of(
-                        "provider_family", "request_response",
+                        "provider_contract_kind", "request_response",
                         "provider_type", "grpc",
                         "service_ref", "dns:///payment-api:9090",
                         "descriptor_ref", "descriptors/payment.desc",
@@ -1396,10 +1396,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void skipsMalformedNativeMessagingActionEntriesButBlocksNonMapActionSets() {
         ProviderCapabilityRegistry.ProviderContractValidation malformedEntry = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "kafka",
                         "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
                         "topic_ref", "payment.events",
@@ -1409,10 +1409,10 @@ class ProviderCapabilityRegistryTest {
                                 "metadata", "not-a-map")),
                 "ci_ephemeral");
         ProviderCapabilityRegistry.ProviderContractValidation nonMapActions = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "kafka",
                         "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
                         "topic_ref", "payment.events",
@@ -1430,10 +1430,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsNativeNatsRequestModeWithPayloadAlias() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_authorization",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "nats",
                         "server_ref", "nats://127.0.0.1:4222",
                         "subject_ref", "payment.authorization",
@@ -1452,10 +1452,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeMessagingWithEmptyActionMap() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "kafka",
                         "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
                         "topic_ref", "payment.events",
@@ -1472,10 +1472,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void blocksNativeNatsContractWithUnsupportedActionMode() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_events",
                 Map.of(
-                        "provider_family", "messaging",
+                        "provider_contract_kind", "messaging",
                         "provider_type", "nats",
                         "server_ref", "nats://127.0.0.1:4222",
                         "subject_ref", "payment.events",
@@ -1495,10 +1495,10 @@ class ProviderCapabilityRegistryTest {
     @Test
     void acceptsNativeVmCommandReadinessWithNumericPort() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
-                "adapters",
+                "providers",
                 "payment_vm_ssh",
                 Map.of(
-                        "provider_family", "deployment_readiness",
+                        "provider_contract_kind", "deployment_readiness",
                         "provider_type", "vm",
                         "readiness_probe", "ssh_command",
                         "host_ref", "10.0.0.15",

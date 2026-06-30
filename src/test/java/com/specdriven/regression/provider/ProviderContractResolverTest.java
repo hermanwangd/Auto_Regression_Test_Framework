@@ -20,9 +20,9 @@ class ProviderContractResolverTest {
         Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
         Files.writeString(mapping, mappingWithContracts("""
                 provider_contracts:
-                  adapters:
+                  providers:
                     spring_boot_cli:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: shell
                       command: java -jar ${repo}/target/release-unit.jar
                       timeout_seconds: 10
@@ -30,7 +30,7 @@ class ProviderContractResolverTest {
                         actual_output_ref: actual/output.txt
                   bindings:
                     db_seed:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: file_fixture
                       materialize_as: input_file
                   fixtures: {}
@@ -47,7 +47,7 @@ class ProviderContractResolverTest {
 
         assertThat(report.ready()).isTrue();
         assertThat(report.resolvedContracts()).extracting(ResolvedProviderContract::contractType)
-                .contains("adapter", "binding");
+                .contains("provider", "binding");
         assertThat(report.gaps()).isEmpty();
     }
 
@@ -56,9 +56,9 @@ class ProviderContractResolverTest {
         Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
         Files.writeString(mapping, mappingWithContracts("""
                 provider_contracts:
-                  adapters:
+                  providers:
                     spring_boot_cli:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: shell
                       command: java -jar ${repo}/target/release-unit.jar
                       timeout_seconds: 10
@@ -77,7 +77,7 @@ class ProviderContractResolverTest {
 
         assertThat(report.ready()).isTrue();
         assertThat(report.resolvedContracts()).singleElement().satisfies(contract -> {
-            assertThat(contract.contractType()).isEqualTo("adapter");
+            assertThat(contract.contractType()).isEqualTo("provider");
             assertThat(contract.providerName()).isEqualTo("spring_boot_cli");
         });
     }
@@ -95,7 +95,7 @@ class ProviderContractResolverTest {
 
         assertThat(report.ready()).isFalse();
         assertThat(report.gaps()).extracting(ProviderContractGap::fieldPath)
-                .contains("release_units[0].provider_contracts.adapters.spring_boot_cli",
+                .contains("release_units[0].provider_contracts.providers.spring_boot_cli",
                         "release_units[0].provider_contracts.bindings.db_seed");
         assertThat(report.gaps()).extracting(ProviderContractGap::ownerAction)
                 .allMatch(action -> action.contains("Add provider contract"));
@@ -106,16 +106,16 @@ class ProviderContractResolverTest {
         Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
         Files.writeString(mapping, mappingWithContracts("""
                 provider_contracts:
-                  adapters:
+                  providers:
                     spring_boot_cli:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: shell
                       timeout_seconds: 10
                       outputs:
                         actual_output_ref: actual/output.txt
                   bindings:
                     db_seed:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: file_fixture
                       materialize_as: input_file
                 """));
@@ -128,9 +128,9 @@ class ProviderContractResolverTest {
 
         assertThat(report.ready()).isFalse();
         assertThat(report.gaps()).extracting(ProviderContractGap::fieldPath)
-                .contains("release_units[0].provider_contracts.adapters.spring_boot_cli.command");
+                .contains("release_units[0].provider_contracts.providers.spring_boot_cli.command");
         assertThat(report.gaps()).extracting(ProviderContractGap::ownerAction)
-                .anyMatch(action -> action.contains("Declare executable adapter command"));
+                .anyMatch(action -> action.contains("Declare executable provider command"));
     }
 
     @Test
@@ -138,9 +138,9 @@ class ProviderContractResolverTest {
         Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
         Files.writeString(mapping, mappingWithContracts("""
                 provider_contracts:
-                  adapters:
+                  providers:
                     spring_boot_cli:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: shell
                       command: java -jar ${repo}/target/release-unit.jar
                       timeout_seconds: 10
@@ -148,7 +148,7 @@ class ProviderContractResolverTest {
                         actual_output_ref: actual/output.txt
                   bindings:
                     db_seed:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: file_fixture
                       materialize_as: input_file
                   fixtures: {}
@@ -178,11 +178,11 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/api
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: rest
                           endpoint_ref: env://PAYMENT_API
                           timeout_seconds: 10
@@ -194,7 +194,7 @@ class ProviderContractResolverTest {
                             actual_output_ref: actual/response.json
                       bindings:
                         api_payload:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: request_body
                           bind_as: request_body
                       fixtures: {}
@@ -209,21 +209,21 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/events
-                    adapter: message_bus
+                    provider: message_bus
                     provider_contracts:
-                      adapters:
+                      providers:
                         message_bus:
-                          provider_family: messaging
+                          provider_contract_kind: messaging
                           provider_type: kafka
                           topic_ref: kafka://payment.events
                       bindings:
                         message_event:
-                          provider_family: messaging
+                          provider_contract_kind: messaging
                           provider_type: event_payload
                           bind_as: event_payload
                       fixtures:
                         relational_db:
-                          provider_family: db_fixture
+                          provider_contract_kind: db_fixture
                           provider_type: jdbc
                           connection_ref: secret://ci/payment-db
                           isolation_key: test_run_id
@@ -246,7 +246,7 @@ class ProviderContractResolverTest {
                     assertThat(contract.affectedRu()).isEqualTo("RU-payment-api");
                     assertThat(contract.capability()).isEqualTo("request_response");
                     assertThat(contract.contractPath())
-                            .isEqualTo("release_units[0].provider_contracts.adapters.request_response");
+                            .isEqualTo("release_units[0].provider_contracts.providers.request_response");
                 })
                 .anySatisfy(contract -> {
                     assertThat(contract.providerName()).isEqualTo("message_event");
@@ -279,7 +279,7 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/events
-                    adapter: message_bus
+                    provider: message_bus
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []
@@ -294,13 +294,13 @@ class ProviderContractResolverTest {
         assertThat(report.ready()).isFalse();
         assertThat(report.gaps())
                 .anySatisfy(gap -> {
-                    assertThat(gap.contractType()).isEqualTo("adapter");
+                    assertThat(gap.contractType()).isEqualTo("provider");
                     assertThat(gap.providerName()).isEqualTo("message_bus");
                     assertThat(gap.providerFamily()).isEqualTo("messaging");
                     assertThat(gap.affectedRu()).isEqualTo("RU-payment-events");
                     assertThat(gap.capability()).isEqualTo("message_bus");
                     assertThat(gap.fieldPath())
-                            .isEqualTo("release_units[0].provider_contracts.adapters.message_bus");
+                            .isEqualTo("release_units[0].provider_contracts.providers.message_bus");
                     assertThat(gap.ownerAction()).contains("RU-payment-events");
                 })
                 .anySatisfy(gap -> {
@@ -328,11 +328,11 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/api-blue
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: rest
                           endpoint_ref: env://PAYMENT_API_BLUE
                           timeout_seconds: 10
@@ -353,11 +353,11 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/api-green
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: rest
                           endpoint_ref: env://PAYMENT_API_GREEN
                           timeout_seconds: 10
@@ -381,14 +381,14 @@ class ProviderContractResolverTest {
         assertThat(report.resolvedContracts()).isEmpty();
         assertThat(report.gaps())
                 .anySatisfy(gap -> {
-                    assertThat(gap.contractType()).isEqualTo("adapter");
+                    assertThat(gap.contractType()).isEqualTo("provider");
                     assertThat(gap.providerName()).isEqualTo("request_response");
                     assertThat(gap.providerFamily()).isEqualTo("request_response");
                     assertThat(gap.registryStatus()).isEqualTo("ambiguous");
                     assertThat(gap.runtimeStatus()).isEqualTo("blocked");
                     assertThat(gap.affectedRu()).isEqualTo("RU-payment-api-blue,RU-payment-api-green");
                     assertThat(gap.fieldPath())
-                            .isEqualTo("release_units[0].provider_contracts.adapters.request_response");
+                            .isEqualTo("release_units[0].provider_contracts.providers.request_response");
                     assertThat(gap.ownerAction())
                             .contains("Select target RU")
                             .contains("RU-payment-api-blue")
@@ -409,11 +409,11 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://runner
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         spring_boot_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: java -jar app.jar
                           timeout_seconds: 10
@@ -430,16 +430,16 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://source-a
-                    adapter: source_a
+                    provider: source_a
                     provider_contracts:
                       bindings:
                         db_seed:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: file_fixture
                           materialize_as: input_file
                       fixtures:
                         relational_db:
-                          provider_family: db_fixture
+                          provider_contract_kind: db_fixture
                           provider_type: jdbc
                           connection_ref: secret://db-a
                           cleanup_strategy: by_test_run_id
@@ -455,16 +455,16 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://source-b
-                    adapter: source_b
+                    provider: source_b
                     provider_contracts:
                       bindings:
                         db_seed:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: file_fixture
                           materialize_as: input_file
                       fixtures:
                         relational_db:
-                          provider_family: db_fixture
+                          provider_contract_kind: db_fixture
                           provider_type: jdbc
                           connection_ref: secret://db-b
                           cleanup_strategy: by_test_run_id
@@ -508,11 +508,11 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/api
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: rest
                           actions:
                             submit_payment:
@@ -520,7 +520,7 @@ class ProviderContractResolverTest {
                               path: /payments
                       bindings:
                         api_payload:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: request_body
                           bind_as: request_body
                     evidence_responsibility: [execution_log]
@@ -540,7 +540,7 @@ class ProviderContractResolverTest {
                     assertThat(gap.affectedRu()).isEqualTo("RU-payment-api");
                     assertThat(gap.capability()).isEqualTo("request_response");
                     assertThat(gap.fieldPath())
-                            .isEqualTo("release_units[0].provider_contracts.adapters.request_response.endpoint_ref");
+                            .isEqualTo("release_units[0].provider_contracts.providers.request_response.endpoint_ref");
                     assertThat(gap.ownerAction()).contains("endpoint", "RU-payment-api");
                     assertThat(gap.ownerAction()).doesNotContain("command");
                 });
@@ -551,7 +551,7 @@ class ProviderContractResolverTest {
         Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
         Files.writeString(mapping, mappingWithContracts("""
                 provider_contracts:
-                  adapters:
+                  providers:
                     spring_boot_cli:
                       command: java -jar ${repo}/target/release-unit.jar
                   bindings:
@@ -570,12 +570,9 @@ class ProviderContractResolverTest {
         assertThat(report.ready()).isFalse();
         assertThat(report.gaps()).extracting(ProviderContractGap::fieldPath)
                 .contains(
-                        "release_units[0].provider_contracts.adapters.spring_boot_cli.provider_family",
-                        "release_units[0].provider_contracts.adapters.spring_boot_cli.provider_type",
-                        "release_units[0].provider_contracts.bindings.db_seed.provider_family",
+                        "release_units[0].provider_contracts.providers.spring_boot_cli.provider_type",
                         "release_units[0].provider_contracts.bindings.db_seed.provider_type");
         assertThat(report.gaps()).extracting(ProviderContractGap::ownerAction)
-                .anyMatch(action -> action.contains("provider_family"))
                 .anyMatch(action -> action.contains("provider_type"));
     }
 
@@ -592,11 +589,11 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/events
-                    adapter: message_bus
+                    provider: message_bus
                     provider_contracts:
-                      adapters:
+                      providers:
                         message_bus:
-                          provider_family: messaging
+                          provider_contract_kind: messaging
                           provider_type: kafka
                           topic_ref: kafka://payment.events
                     evidence_responsibility: [execution_log]
@@ -613,7 +610,7 @@ class ProviderContractResolverTest {
         assertThat(report.gaps())
                 .anySatisfy(gap -> {
                     assertThat(gap.fieldPath())
-                            .isEqualTo("release_units[0].provider_contracts.adapters.message_bus.bootstrap_servers_ref");
+                            .isEqualTo("release_units[0].provider_contracts.providers.message_bus.bootstrap_servers_ref");
                     assertThat(gap.providerFamily()).isEqualTo("messaging");
                     assertThat(gap.providerType()).isEqualTo("kafka");
                     assertThat(gap.registryStatus()).isEqualTo("incomplete");
@@ -634,11 +631,11 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://runner
-                    adapter: external_runner
+                    provider: external_runner
                     provider_contracts:
-                      adapters:
+                      providers:
                         external_runner:
-                          provider_family: external_runner
+                          provider_contract_kind: external_runner
                           provider_type: command_runner
                           command: ./run-legacy-check.sh
                     evidence_responsibility: [runner_result]
@@ -655,7 +652,7 @@ class ProviderContractResolverTest {
         assertThat(report.gaps())
                 .anySatisfy(gap -> {
                     assertThat(gap.fieldPath())
-                            .isEqualTo("release_units[0].provider_contracts.adapters.external_runner.approval_ref");
+                            .isEqualTo("release_units[0].provider_contracts.providers.external_runner.approval_ref");
                     assertThat(gap.providerFamily()).isEqualTo("external_runner");
                     assertThat(gap.providerType()).isEqualTo("command_runner");
                     assertThat(gap.registryStatus()).isEqualTo("unapproved_escape_hatch");
@@ -673,12 +670,12 @@ class ProviderContractResolverTest {
                       runner: spring_boot_cli
                       execution_mode: ci_ephemeral
                       environment_ref: ci://generated/RU-generated-job
-                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#adapters.spring_boot_cli
+                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#providers.spring_boot_cli
                     """,
                 generatedProviderContracts("""
-                  adapters:
+                  providers:
                     spring_boot_cli:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: shell
                       command: java -jar app.jar
                       timeout_seconds: 10
@@ -686,12 +683,12 @@ class ProviderContractResolverTest {
                         actual_output_ref: actual/output.txt
                   bindings:
                     db_seed:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: file_fixture
                       materialize_as: input_file
                   fixtures:
                     relational_db:
-                      provider_family: db_fixture
+                      provider_contract_kind: db_fixture
                       provider_type: jdbc
                       connection_ref: secret://ci/payment-db
                       cleanup_strategy: by_test_run_id
@@ -711,12 +708,12 @@ class ProviderContractResolverTest {
         assertThat(report.gaps()).isEmpty();
         assertThat(report.resolvedContracts())
                 .anySatisfy(contract -> {
-                    assertThat(contract.contractType()).isEqualTo("adapter");
+                    assertThat(contract.contractType()).isEqualTo("provider");
                     assertThat(contract.providerName()).isEqualTo("spring_boot_cli");
                     assertThat(contract.sourceLevel()).isEqualTo("generated");
                     assertThat(contract.affectedRu()).isEqualTo("RU-generated-job");
                     assertThat(contract.contractPath())
-                            .isEqualTo("generated-framework/provider_contracts/RU-generated-job.yaml#adapters.spring_boot_cli");
+                            .isEqualTo("generated-framework/provider_contracts/RU-generated-job.yaml#providers.spring_boot_cli");
                 })
                 .anySatisfy(contract -> {
                     assertThat(contract.contractType()).isEqualTo("binding");
@@ -752,17 +749,17 @@ class ProviderContractResolverTest {
                       target_id: RU-generated-blue
                       runner: spring_boot_cli
                       environment_ref: ci://generated/blue
-                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#adapters.spring_boot_cli
+                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#providers.spring_boot_cli
                     RU-generated-green:
                       target_id: RU-generated-green
                       runner: spring_boot_cli
                       environment_ref: ci://generated/green
-                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#adapters.spring_boot_cli
+                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#providers.spring_boot_cli
                     """,
                 generatedProviderContracts("""
-                  adapters:
+                  providers:
                     spring_boot_cli:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: shell
                       command: java -jar app.jar
                       timeout_seconds: 10
@@ -783,7 +780,7 @@ class ProviderContractResolverTest {
         assertThat(report.ready()).isFalse();
         assertThat(report.resolvedContracts()).isEmpty();
         assertThat(report.gaps()).singleElement().satisfies(gap -> {
-            assertThat(gap.contractType()).isEqualTo("adapter");
+            assertThat(gap.contractType()).isEqualTo("provider");
             assertThat(gap.providerName()).isEqualTo("spring_boot_cli");
             assertThat(gap.registryStatus()).isEqualTo("ambiguous");
             assertThat(gap.runtimeStatus()).isEqualTo("blocked");
@@ -801,12 +798,12 @@ class ProviderContractResolverTest {
                       target_id: RU-generated-job
                       runner: spring_boot_cli
                       environment_ref: ci://generated/job
-                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#adapters.spring_boot_cli
+                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#providers.spring_boot_cli
                     """,
                 generatedProviderContracts("""
-                  adapters:
+                  providers:
                     spring_boot_cli:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: shell
                       command: java -jar app.jar
                       timeout_seconds: 10
@@ -841,12 +838,12 @@ class ProviderContractResolverTest {
                       target_id: RU-generated-job
                       runner: spring_boot_cli
                       environment_ref: ci://generated/job
-                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#adapters.spring_boot_cli
+                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#providers.spring_boot_cli
                     """,
                 generatedProviderContracts("""
-                  adapters:
+                  providers:
                     spring_boot_cli:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: shell
                       command: java -jar app.jar
                       timeout_seconds: 10
@@ -881,12 +878,12 @@ class ProviderContractResolverTest {
                       target_id: RU-generated-job
                       runner: spring_boot_cli
                       environment_ref: ci://generated/job
-                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#adapters.spring_boot_cli
+                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#providers.spring_boot_cli
                     """,
                 generatedProviderContracts("""
-                  adapters:
+                  providers:
                     spring_boot_cli:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: shell
                       command: java -jar app.jar
                       timeout_seconds: 10
@@ -908,7 +905,7 @@ class ProviderContractResolverTest {
         assertThat(report.resolvedContracts()).isEmpty();
         assertThat(report.gaps()).singleElement().satisfies(gap -> {
             assertThat(gap.fieldPath()).isEqualTo("generated-framework/environment_bindings.targets");
-            assertThat(gap.contractType()).isEqualTo("adapter");
+            assertThat(gap.contractType()).isEqualTo("provider");
             assertThat(gap.registryStatus()).isEqualTo("missing");
             assertThat(gap.runtimeStatus()).isEqualTo("blocked");
             assertThat(gap.affectedRu()).isEqualTo("RU-missing");
@@ -924,10 +921,10 @@ class ProviderContractResolverTest {
                       target_id: RU-generated-job
                       runner: ""
                       environment_ref: ci://generated/job
-                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#adapters.
+                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#providers.
                     """,
                 generatedProviderContracts("""
-                  adapters: {}
+                  providers: {}
                   bindings: {}
                   fixtures: {}
                 """));
@@ -944,7 +941,7 @@ class ProviderContractResolverTest {
         assertThat(report.gaps())
                 .anySatisfy(gap -> {
                     assertThat(gap.fieldPath()).isEqualTo("generated-framework/provider_contracts");
-                    assertThat(gap.contractType()).isEqualTo("adapter");
+                    assertThat(gap.contractType()).isEqualTo("provider");
                     assertThat(gap.registryStatus()).isEqualTo("missing");
                 })
                 .anySatisfy(gap -> {
@@ -970,12 +967,12 @@ class ProviderContractResolverTest {
                       target_id: RU-generated-job
                       runner: spring_boot_cli
                       environment_ref: ci://generated/job
-                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#adapters.spring_boot_cli
+                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#providers.spring_boot_cli
                     """,
                 generatedProviderContracts("""
-                  adapters:
+                  providers:
                     spring_boot_cli:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: shell
                       timeout_seconds: 10
                       outputs:
@@ -996,8 +993,8 @@ class ProviderContractResolverTest {
         assertThat(report.resolvedContracts()).isEmpty();
         assertThat(report.gaps()).anySatisfy(gap -> {
             assertThat(gap.fieldPath())
-                    .isEqualTo("generated-framework/provider_contracts/RU-generated-job.yaml#adapters.spring_boot_cli.command");
-            assertThat(gap.contractType()).isEqualTo("adapter");
+                    .isEqualTo("generated-framework/provider_contracts/RU-generated-job.yaml#providers.spring_boot_cli.command");
+            assertThat(gap.contractType()).isEqualTo("provider");
             assertThat(gap.providerFamily()).isEqualTo("file_batch");
             assertThat(gap.providerType()).isEqualTo("shell");
             assertThat(gap.ownerAction()).contains("Affected target: `RU-generated-job`");
@@ -1017,11 +1014,11 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://runner
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         spring_boot_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           timeout_seconds: 10
                           outputs:
@@ -1048,12 +1045,12 @@ class ProviderContractResolverTest {
                       target_id: spring_boot_cli
                       runner: spring_boot_cli
                       environment_ref: ci://generated/job
-                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#adapters.spring_boot_cli
+                      provider_contract_ref: provider_contracts/RU-generated-job.yaml#providers.spring_boot_cli
                     """,
                 generatedProviderContracts("""
-                  adapters:
+                  providers:
                     spring_boot_cli:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: shell
                       timeout_seconds: 10
                       outputs:
@@ -1089,11 +1086,11 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/api-blue
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: rest
                           endpoint_ref: env://PAYMENT_API_BLUE
                           timeout_seconds: 10
@@ -1114,11 +1111,11 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://payment/api-green
-                    adapter: request_response
+                    provider: request_response
                     provider_contracts:
-                      adapters:
+                      providers:
                         request_response:
-                          provider_family: request_response
+                          provider_contract_kind: request_response
                           provider_type: rest
                           endpoint_ref: env://PAYMENT_API_GREEN
                           timeout_seconds: 10
@@ -1144,7 +1141,7 @@ class ProviderContractResolverTest {
         assertThat(report.resolvedContracts()).singleElement().satisfies(contract -> {
             assertThat(contract.affectedRu()).isEqualTo("RU-payment-api-green");
             assertThat(contract.contractPath())
-                    .isEqualTo("release_units[1].provider_contracts.adapters.request_response");
+                    .isEqualTo("release_units[1].provider_contracts.providers.request_response");
         });
     }
 
@@ -1153,9 +1150,9 @@ class ProviderContractResolverTest {
         Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
         Files.writeString(mapping, mappingWithContracts("""
                 provider_contracts:
-                  adapters:
+                  providers:
                     spring_boot_cli:
-                      provider_family: file_batch
+                      provider_contract_kind: file_batch
                       provider_type: shell
                       command: java -jar ${repo}/target/release-unit.jar
                       timeout_seconds: 10
@@ -1190,11 +1187,11 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://custom
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                     provider_contracts:
-                      adapters:
+                      providers:
                         spring_boot_cli:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: java -jar app.jar
                           timeout_seconds: 10
@@ -1243,7 +1240,7 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://first
-                    adapter: actual_adapter
+                    provider: actual_adapter
                     provider_contracts: {}
                     evidence_responsibility: [execution_log]
                     dependencies: []
@@ -1258,11 +1255,11 @@ class ProviderContractResolverTest {
         assertThat(report.ready()).isFalse();
         assertThat(report.gaps())
                 .anySatisfy(gap -> {
-                    assertThat(gap.contractType()).isEqualTo("adapter");
+                    assertThat(gap.contractType()).isEqualTo("provider");
                     assertThat(gap.providerName()).isEqualTo("missing_adapter");
                     assertThat(gap.affectedRu()).isEqualTo("RU-first");
                     assertThat(gap.fieldPath())
-                            .isEqualTo("release_units[0].provider_contracts.adapters.missing_adapter");
+                            .isEqualTo("release_units[0].provider_contracts.providers.missing_adapter");
                     assertThat(gap.ownerAction()).contains("RU-first");
                 })
                 .anySatisfy(gap -> {
@@ -1290,9 +1287,9 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://rest-blue
-                    adapter: rest_adapter
+                    provider: rest_adapter
                     provider_contracts:
-                      adapters:
+                      providers:
                         rest_adapter:
                           provider_type: rest
                     evidence_responsibility: [execution_log]
@@ -1306,9 +1303,9 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://rest-green
-                    adapter: rest_adapter
+                    provider: rest_adapter
                     provider_contracts:
-                      adapters:
+                      providers:
                         rest_adapter:
                           provider_type: rest
                     evidence_responsibility: [execution_log]
@@ -1342,11 +1339,11 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://blank
-                    adapter: shared_adapter
+                    provider: shared_adapter
                     provider_contracts:
-                      adapters:
+                      providers:
                         shared_adapter:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: java -jar blank.jar
                           timeout_seconds: 10
@@ -1363,11 +1360,11 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://named
-                    adapter: shared_adapter
+                    provider: shared_adapter
                     provider_contracts:
-                      adapters:
+                      providers:
                         shared_adapter:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: java -jar named.jar
                           timeout_seconds: 10
@@ -1432,13 +1429,13 @@ class ProviderContractResolverTest {
                 release_units:
                   - not-a-map
                   - ru_id: RU-valid
-                    adapter: valid_adapter
+                    provider: valid_adapter
                     validation_boundary: custom
                     execution_mode: ci_ephemeral
                     provider_contracts:
-                      adapters:
+                      providers:
                         valid_adapter:
-                          provider_family: file_batch
+                          provider_contract_kind: file_batch
                           provider_type: shell
                           command: java -jar app.jar
                           timeout_seconds: 10
@@ -1456,7 +1453,7 @@ class ProviderContractResolverTest {
         assertThat(report.resolvedContracts()).singleElement().satisfies(contract -> {
             assertThat(contract.affectedRu()).isEqualTo("RU-valid");
             assertThat(contract.contractPath())
-                    .isEqualTo("release_units[1].provider_contracts.adapters.valid_adapter");
+                    .isEqualTo("release_units[1].provider_contracts.providers.valid_adapter");
         });
     }
 
@@ -1478,7 +1475,7 @@ class ProviderContractResolverTest {
         assertThat(report.resolvedContracts()).isEmpty();
         assertThat(report.gaps()).extracting(ProviderContractGap::fieldPath)
                 .containsExactly(
-                        "release_units[0].provider_contracts.adapters.spring_boot_cli",
+                        "release_units[0].provider_contracts.providers.spring_boot_cli",
                         "release_units[0].provider_contracts.bindings.db_seed",
                         "release_units[0].provider_contracts.fixtures.relational_db");
         assertThat(report.gaps()).extracting(ProviderContractGap::registryStatus)
@@ -1509,10 +1506,10 @@ class ProviderContractResolverTest {
         assertThat(missingUnitsReport.ready()).isFalse();
         assertThat(listRootReport.gaps()).singleElement()
                 .extracting(ProviderContractGap::fieldPath)
-                .isEqualTo("release_units[0].provider_contracts.adapters.spring_boot_cli");
+                .isEqualTo("release_units[0].provider_contracts.providers.spring_boot_cli");
         assertThat(missingUnitsReport.gaps()).singleElement()
                 .extracting(ProviderContractGap::fieldPath)
-                .isEqualTo("release_units[0].provider_contracts.adapters.spring_boot_cli");
+                .isEqualTo("release_units[0].provider_contracts.providers.spring_boot_cli");
     }
 
     @Test
@@ -1522,7 +1519,7 @@ class ProviderContractResolverTest {
                 rp_id: RP-SCALAR-CONTRACTS
                 release_units:
                   - ru_id: RU-scalar
-                    adapter: scalar_adapter
+                    provider: scalar_adapter
                     validation_boundary: custom
                     execution_mode: ci_ephemeral
                     provider_contracts: not-a-map
@@ -1568,7 +1565,7 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://pipeline/RP-001
-                    adapter: spring_boot_cli
+                    provider: spring_boot_cli
                 %s\
                     evidence_responsibility: [execution_log]
                     dependencies: []
@@ -1594,9 +1591,9 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://%s/blue
-                    adapter: %s
+                    provider: %s
                     provider_contracts:
-                      adapters:
+                      providers:
                         %s:
                           provider_type: %s
                     evidence_responsibility: [execution_log]
@@ -1610,9 +1607,9 @@ class ProviderContractResolverTest {
                     execution_mode: ci_ephemeral
                     deployment_required: false
                     environment_ref: ci://%s/green
-                    adapter: %s
+                    provider: %s
                     provider_contracts:
-                      adapters:
+                      providers:
                         %s:
                           provider_type: %s
                     evidence_responsibility: [execution_log]

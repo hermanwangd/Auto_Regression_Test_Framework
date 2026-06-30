@@ -10,6 +10,7 @@ provider_bindings:
     binding_values:
       jdbc_url: generated://oracle-ephemeral.jdbc_url
       username: generated://oracle-ephemeral.username
+      dialect: oracle
       password:
         secret_ref: generated://oracle-ephemeral.password
   - provider_id: nats-event-bus

@@ -12,12 +12,6 @@ compatible_profiles: [local_polling]
 targets:
   verifier:
     provider_id: local-common-polling
-    profile: local_polling
-scenario:
-  type: framework_capability
-  scope: verifier
-  description: Validate shared polling evidence for observation-style checks.
-  capabilities: [event_published]
 execute: []
 expected_results:
   event:

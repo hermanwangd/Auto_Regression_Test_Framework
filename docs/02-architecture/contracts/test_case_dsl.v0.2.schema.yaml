@@ -14,7 +14,6 @@ required_sections:
   - source_refs.acceptance_criteria
   - targets.<target>.provider_id
   - targets.<target>.profile
-  - scenario
   - execute
   - verify
   - evidence.required
@@ -100,6 +99,7 @@ prohibited_sections:
   - evidence_required
   - policy
   - approval_status
+  - scenario
   - waiver
   - release_gate
   - risk_approval

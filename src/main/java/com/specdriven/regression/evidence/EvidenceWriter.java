@@ -90,7 +90,7 @@ public class EvidenceWriter {
                     parameter_values:
                     %s
                     status: %s
-                    adapter_execution_started: true
+                    provider_runtime_started: true
                     execution_mode: %s
                     environment_ref: %s
                     ru_refs:
@@ -170,7 +170,7 @@ public class EvidenceWriter {
             Map<?, ?> target = map(entry.getValue());
             builder.append("    - target_id: ").append(stringValue(entry.getKey())).append("\n");
             appendField(builder, "      ", "type", target.get("type"));
-            appendField(builder, "      ", "runner", target.get("runner"));
+            appendField(builder, "      ", "provider", firstText(target, "provider", "runner"));
             appendField(builder, "      ", "environment", target.get("environment"));
         }
         return builder.toString().stripTrailing();
@@ -328,7 +328,7 @@ public class EvidenceWriter {
         for (ResolvedProviderContract contract : providerContracts) {
             builder.append("  - contract_type: ").append(contract.contractType()).append("\n");
             builder.append("    provider_name: ").append(contract.providerName()).append("\n");
-            builder.append("    provider_family: ").append(contract.providerFamily()).append("\n");
+            builder.append("    provider_contract_kind: ").append(contract.providerFamily()).append("\n");
             builder.append("    provider_type: ").append(contract.providerType()).append("\n");
             builder.append("    registry_status: ").append(contract.registryStatus()).append("\n");
             builder.append("    runtime_status: ").append(contract.runtimeStatus()).append("\n");
@@ -503,7 +503,7 @@ public class EvidenceWriter {
                     parameter_values:
                     %s
                     status: blocked
-                    adapter_execution_started: false
+                    provider_runtime_started: false
                     execution_mode: %s
                     environment_ref: %s
                     ru_refs:
@@ -587,6 +587,16 @@ public class EvidenceWriter {
 
     private String stringValue(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private String firstText(Map<?, ?> map, String... fields) {
+        for (String field : fields) {
+            String value = stringValue(map.get(field));
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private record ProviderEvidenceRef(String name, String path) {

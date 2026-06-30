@@ -1,7 +1,6 @@
 provider_instance_version: v0.2
 provider_id: db2-like-db
 provider_type: jdbc
-profile: local_jdbc
 runtime_modes: [native, ephemeral]
 dialect: db2
 connection:

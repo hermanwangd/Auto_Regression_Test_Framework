@@ -253,7 +253,7 @@ public class RequestResponseProvider {
         try {
             Files.createDirectories(runDir);
             StringBuilder builder = new StringBuilder();
-            builder.append("provider_family: request_response\n");
+            builder.append("provider_contract_kind: request_response\n");
             builder.append("provider_type: ").append(stringValue(contract.get("provider_type"))).append("\n");
             builder.append("status: ").append(status).append("\n");
             builder.append("timeout: ").append(timeout).append("\n");

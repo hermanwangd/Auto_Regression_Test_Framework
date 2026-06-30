@@ -33,9 +33,9 @@ class ContractBaselineCommandTest {
                 "schemas/result.v0.2.schema.yaml",
                 "samples/contract_baseline/suite_manifest.yaml",
                 "samples/contract_baseline/test_case.yaml",
-                "samples/contract_baseline/provider_contracts/wiremock_http_mock.yaml",
-                "samples/contract_baseline/provider_contracts/jdbc.yaml",
-                "samples/contract_baseline/provider_contracts/nats.yaml",
+                "docs/02-architecture/contracts/provider-contracts/wiremock_http_mock.yaml",
+                "docs/02-architecture/contracts/provider-contracts/jdbc_database.yaml",
+                "docs/02-architecture/contracts/provider-contracts/nats.yaml",
                 "samples/contract_baseline/provider_instances/wiremock_payment_api.yaml",
                 "samples/contract_baseline/provider_instances/oracle_database.yaml",
                 "samples/contract_baseline/provider_instances/nats_event_bus.yaml",
@@ -128,6 +128,42 @@ class ContractBaselineCommandTest {
     }
 
     @Test
+    void validateSuitePassesWithoutScenarioSection() throws Exception {
+        Path suite = mutableBaseline();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, withoutScenarioBlock(Files.readString(testCase)));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).as(result.stdout()).isZero();
+        assertThat(result.stdout()).contains("validation_status: passed");
+    }
+
+    @Test
+    void validateSuiteRejectsDeprecatedScenarioSection() throws Exception {
+        Path suite = mutableBaseline();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, withoutScenarioBlock(Files.readString(testCase))
+                .replace("""
+                        targets:
+                        """, """
+                        scenario:
+                          type: integration
+                          scope: release_package
+                          capabilities: [db_seed, http_request, json_assertion]
+                        targets:
+                        """));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("field_path: scenario")
+                .contains("reason: prohibited_deprecated_field")
+                .contains("owner_action: Remove `scenario`; declare behavior through setup/execute/verify and provider capability through Provider Contract.");
+    }
+
+    @Test
     void validateSuiteRejectsRawSecret() throws Exception {
         Path suite = mutableBaseline();
         Path binding = suite.getParent().resolve("environment_bindings/ci.yaml");
@@ -141,6 +177,34 @@ class ContractBaselineCommandTest {
                 .contains("reason: raw_secret")
                 .contains("field_path:")
                 .contains("owner_action:");
+    }
+
+    @Test
+    void validateSuiteRejectsRawConnectionStringsAndSensitiveUsernames() throws Exception {
+        Path rawConnectionSuite = mutableBaseline("raw_connection_string");
+        Path rawConnectionBinding = rawConnectionSuite.getParent().resolve("environment_bindings/ci.yaml");
+        Files.writeString(rawConnectionBinding, Files.readString(rawConnectionBinding)
+                .replace("jdbc_url: generated://oracle-ephemeral.jdbc_url",
+                        "jdbc_url: jdbc:h2:mem:leaked_db;DB_CLOSE_DELAY=-1"));
+
+        Path sensitiveUsernameSuite = mutableBaseline("sensitive_username");
+        Path sensitiveUsernameBinding = sensitiveUsernameSuite.getParent().resolve("environment_bindings/ci.yaml");
+        Files.writeString(sensitiveUsernameBinding, Files.readString(sensitiveUsernameBinding)
+                .replace("username: generated://oracle-ephemeral.username",
+                        "username: {sensitive: true, value: dbadmin}"));
+
+        CommandResult rawConnection = execute("validate", "--suite", rawConnectionSuite.toString());
+        CommandResult sensitiveUsername = execute("validate", "--suite", sensitiveUsernameSuite.toString());
+
+        assertThat(rawConnection.exit()).isEqualTo(1);
+        assertThat(rawConnection.stdout())
+                .contains("reason: raw_secret")
+                .contains("category: SECRET_GUARDRAIL_ERROR");
+        assertThat(sensitiveUsername.exit()).isEqualTo(1);
+        assertThat(sensitiveUsername.stdout())
+                .contains("field_path: provider_bindings[1].binding_values.username.value")
+                .contains("reason: raw_secret")
+                .contains("category: SECRET_GUARDRAIL_ERROR");
     }
 
     @Test
@@ -172,6 +236,54 @@ class ContractBaselineCommandTest {
     }
 
     @Test
+    void validateSuiteRejectsMissingEnvironmentBindingForEverySelectedProfile() throws Exception {
+        Path suite = mutableBaseline();
+        Files.delete(suite.getParent().resolve("environment_bindings/sit.yaml"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("reason: missing_environment_binding")
+                .contains("profile: sit")
+                .contains("provider_id: wiremock-payment-api")
+                .contains("owner_action:");
+    }
+
+    @Test
+    void validateSuiteRejectsInvalidTargetRefBeforeRuntimeExecution() throws Exception {
+        Path suite = mutableBaseline();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("target: payment_api_mock", "target: missing_payment_api"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("reason: invalid_target_ref")
+                .contains("field_path: setup.fixtures.load_payment_stub.target")
+                .contains("category: CONFIGURATION_ERROR");
+    }
+
+    @Test
+    void validateSuiteRejectsUnresolvedRuntimeCriticalArtifactRefs() throws Exception {
+        Path suite = mutableBaseline();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("expected_results/sample_expected.json#/event/payload",
+                        "expected_results/missing_expected.json#/event/payload"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("reason: unresolved_artifact_ref")
+                .contains("expected_results/missing_expected.json")
+                .contains("category: CONFIGURATION_ERROR");
+    }
+
+    @Test
     void validateSuiteRejectsUnknownProviderType() throws Exception {
         Path suite = mutableBaseline();
         Path providerInstance = suite.getParent().resolve("provider_instances/oracle_database.yaml");
@@ -190,10 +302,7 @@ class ContractBaselineCommandTest {
     @Test
     void validateSuiteRejectsLegacyNatsMessagingProviderType() throws Exception {
         Path suite = mutableBaseline();
-        Path providerContract = suite.getParent().resolve("provider_contracts/nats.yaml");
         Path providerInstance = suite.getParent().resolve("provider_instances/nats_event_bus.yaml");
-        Files.writeString(providerContract, Files.readString(providerContract)
-                .replace("provider_type: nats", "provider_type: nats_messaging"));
         Files.writeString(providerInstance, Files.readString(providerInstance)
                 .replace("provider_type: nats", "provider_type: nats_messaging"));
 
@@ -207,6 +316,51 @@ class ContractBaselineCommandTest {
     }
 
     @Test
+    void validateSuiteRejectsProviderInstanceFieldsNotAllowedByProviderContract() throws Exception {
+        Path suite = mutableBaseline();
+        Path instance = suite.getParent().resolve("provider_instances/wiremock_payment_api.yaml");
+        Files.writeString(instance, Files.readString(instance)
+                .replace("provider_type: wiremock_http_mock\n", "provider_type: wiremock_http_mock\nprofile: ci\n"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("reason: unsupported_provider_instance_field")
+                .contains("field_path: profile")
+                .contains("provider_id: wiremock-payment-api")
+                .contains("provider_type: wiremock_http_mock");
+    }
+
+    @Test
+    void validateSuiteAllowsExplicitCustomProviderContractsWhenAllowlisted() throws Exception {
+        Path suite = mutableBaseline("custom_provider_contract");
+        Path root = suite.getParent();
+        Files.writeString(suite, Files.readString(suite) + """
+
+                provider_contract_resolution:
+                  mode: suite_override
+                  custom_provider_contracts: custom-provider-contracts
+                  allowed_provider_types:
+                    - custom_http_mock
+                """);
+        Files.createDirectories(root.resolve("custom-provider-contracts"));
+        Files.writeString(root.resolve("custom-provider-contracts/custom_http_mock.yaml"),
+                Files.readString(Path.of("docs/02-architecture/contracts/provider-contracts/wiremock_http_mock.yaml"))
+                        .replace("provider_type: wiremock_http_mock", "provider_type: custom_http_mock"));
+        Path instance = root.resolve("provider_instances/wiremock_payment_api.yaml");
+        Files.writeString(instance, Files.readString(instance)
+                .replace("provider_type: wiremock_http_mock", "provider_type: custom_http_mock"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).as(result.stdout()).isZero();
+        assertThat(result.stdout())
+                .contains("validation_status: passed")
+                .contains("custom_http_mock");
+    }
+
+    @Test
     void validateSuiteRejectsUnsupportedOperation() throws Exception {
         Path suite = mutableBaseline();
         Path testCase = suite.getParent().resolve("test_case.yaml");
@@ -217,6 +371,8 @@ class ContractBaselineCommandTest {
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("reason: unsupported_operation")
+                .contains("failure_code: CONTRACT_UNSUPPORTED_OPERATION")
+                .contains("category: CONTRACT_ERROR")
                 .contains("operation: call_api")
                 .contains("owner_action:");
     }
@@ -254,7 +410,11 @@ class ContractBaselineCommandTest {
     }
 
     private Path mutableBaseline() throws IOException {
-        Path target = tempDir.resolve("contract_baseline");
+        return mutableBaseline("contract_baseline");
+    }
+
+    private Path mutableBaseline(String name) throws IOException {
+        Path target = tempDir.resolve(name);
         copyDirectory(Path.of("samples/contract_baseline"), target);
         return target.resolve("suite_manifest.yaml");
     }
@@ -272,6 +432,10 @@ class ContractBaselineCommandTest {
                 }
             }
         }
+    }
+
+    private String withoutScenarioBlock(String yaml) {
+        return yaml.replaceFirst("(?m)^scenario:\\n(?:  [^\\n]*\\n)+", "");
     }
 
     private CommandResult execute(String... args) {

@@ -3,7 +3,7 @@ environment_type: isolated
 targets:
   RU-framework-sample-adapter:
     target_id: RU-framework-sample-adapter
-    runner: spring_boot_cli
+    provider: spring_boot_cli
     execution_mode: ci_ephemeral
     environment_ref: ci://framework-verification/RP-FWK-SAMPLE
-    provider_contract_ref: provider_contracts/RU-framework-sample-adapter.yaml#adapters.spring_boot_cli
+    provider_contract_ref: provider_contracts/RU-framework-sample-adapter.yaml#providers.spring_boot_cli

@@ -14,7 +14,7 @@ The framework core includes:
 - Test Data Catalog
 - Data Binding Resolver
 - Fixture Manager
-- Adapter-based Executor
+- Provider-based Executor
 - Result Collector
 - Assertion Engine
 - Oracle Engine
@@ -25,7 +25,7 @@ The framework core includes:
 
 ### Expected Behavior
 
-The framework shall validate test artifact syntax, resolve test data, set up fixtures, execute steps through adapters, collect actual results, run assertions/oracles, perform cleanup, generate evidence, and apply release gate rules.
+The framework shall validate test artifact syntax, resolve test data, set up fixtures, execute steps through providers, collect actual results, run assertions/oracles, perform cleanup, generate evidence, and apply release gate rules.
 
 ---
 
@@ -77,25 +77,25 @@ The framework shall resolve `${input.xxx}`, `${expected.xxx}`, `${context.xxx}`,
 
 ---
 
-## F004 — Adapter Layer
+## F004 — Provider Layer
 
 ### Purpose
 
 Allow the framework to execute actions against different target systems through plugins.
 
-### MVP Adapters
+### MVP Providers
 
-- API Adapter
-- DB Adapter
+- API Provider
+- DB Provider
 
-### Future Adapters
+### Future Providers
 
-- UI Adapter
-- Message Adapter
-- File Adapter
-- Batch Adapter
-- CLI Adapter
-- Custom Adapter
+- UI Provider
+- Message Provider
+- File Provider
+- Batch Provider
+- CLI Provider
+- Custom Provider
 
 ---
 

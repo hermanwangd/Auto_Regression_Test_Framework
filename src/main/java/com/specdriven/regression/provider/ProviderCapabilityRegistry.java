@@ -16,17 +16,10 @@ class ProviderCapabilityRegistry {
             String providerName,
             Map<String, Object> contract,
             String executionMode) {
-        String providerFamily = stringValue(contract.get("provider_family"));
         String providerType = stringValue(contract.get("provider_type"));
+        String providerFamily = providerContractKind(section, providerName, contract, providerType);
         List<ProviderContractViolation> violations = new ArrayList<>();
 
-        if (providerFamily.isBlank()) {
-            violations.add(new ProviderContractViolation(
-                    ".provider_family",
-                    "missing_metadata",
-                    "blocked",
-                    "Declare provider_family for `" + providerName + "` before execution."));
-        }
         if (providerType.isBlank()) {
             violations.add(new ProviderContractViolation(
                     ".provider_type",
@@ -52,7 +45,7 @@ class ProviderCapabilityRegistry {
                     ".provider_type",
                     "unsupported",
                     "unsupported",
-                    "Unsupported provider_type `" + providerType + "` for provider_family `"
+                    "Unsupported provider_type `" + providerType + "` for provider_contract_kind `"
                             + providerFamily + "` in `" + section + "`. Configure a supported provider type."));
             return new ProviderContractValidation(providerFamily, providerType, violations);
         }
@@ -75,9 +68,43 @@ class ProviderCapabilityRegistry {
                     || type.equals("mock")
                     || type.equals("k8s")
                     || type.equals("vm");
-            case "external_runner" -> section.equals("adapters") && type.equals("command_runner");
+            case "external_runner" -> section.equals("providers") && type.equals("command_runner");
             default -> false;
         };
+    }
+
+    private String providerContractKind(
+            String section,
+            String providerName,
+            Map<String, Object> contract,
+            String providerType) {
+        String declared = stringValue(contract.get("provider_contract_kind"));
+        if (!declared.isBlank()) {
+            return declared;
+        }
+        String type = providerType.toLowerCase(Locale.ROOT);
+        String normalizedName = providerName.toLowerCase(Locale.ROOT);
+        if (type.equals("rest") || type.equals("grpc") || type.equals("request_body")
+                || normalizedName.contains("request")) {
+            return "request_response";
+        }
+        if (type.equals("kafka") || type.equals("nats") || type.equals("event_payload")
+                || normalizedName.contains("message") || normalizedName.contains("event")) {
+            return "messaging";
+        }
+        if (type.equals("jdbc") || type.equals("relational_db") || normalizedName.contains("db")) {
+            return "db_fixture";
+        }
+        if (type.equals("k8s") || type.equals("vm") || normalizedName.contains("readiness")) {
+            return "deployment_readiness";
+        }
+        if (type.equals("command_runner") || normalizedName.contains("runner")) {
+            return "external_runner";
+        }
+        if (type.equals("shell") || type.equals("file_fixture") || section.equals("providers")) {
+            return "file_batch";
+        }
+        return section.endsWith("s") ? section.substring(0, section.length() - 1) : section;
     }
 
     private void validateRequiredFields(
@@ -87,7 +114,7 @@ class ProviderCapabilityRegistry {
             String providerName,
             Map<String, Object> contract,
             List<ProviderContractViolation> violations) {
-        if (section.equals("adapters")) {
+        if (section.equals("providers")) {
             validateAdapter(family, type, providerName, contract, violations);
         } else if (section.equals("bindings")) {
             validateBinding(providerName, contract, violations);
@@ -104,20 +131,20 @@ class ProviderCapabilityRegistry {
             List<ProviderContractViolation> violations) {
         if (family.equals("file_batch") && type.equals("shell")) {
             if (!hasAnyText(contract, "command")) {
-                violations.add(required(".command", "Declare executable adapter command for `" + providerName + "`."));
+                violations.add(required(".command", "Declare executable provider command for `" + providerName + "`."));
             }
             if (!hasAnyText(contract, "timeout_seconds")) {
                 violations.add(required(".timeout_seconds",
-                        "Declare timeout_seconds as a positive bounded integer for executable adapter `"
+                        "Declare timeout_seconds as a positive bounded integer for executable provider `"
                                 + providerName + "`."));
             } else if (!isPositiveInteger(contract.get("timeout_seconds"))) {
                 violations.add(required(".timeout_seconds",
-                        "Declare timeout_seconds as a positive bounded integer for executable adapter `"
+                        "Declare timeout_seconds as a positive bounded integer for executable provider `"
                                 + providerName + "`."));
             }
             if (!hasNestedAnyText(contract, "outputs", "actual_output_ref")) {
                 violations.add(required(".outputs.actual_output_ref",
-                        "Declare actual_output_ref for executable adapter `" + providerName + "`."));
+                        "Declare actual_output_ref for executable provider `" + providerName + "`."));
             }
         }
         if (family.equals("request_response") && List.of("rest", "grpc").contains(type)) {
