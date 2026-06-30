@@ -1,0 +1,19 @@
+profile_id: local_verify
+execution_mode: local
+trigger: local_cli
+environment_binding_ref: environment_bindings/local_verify.yaml
+isolation_scope: per_run
+dependency_policy:
+  require_readiness_evidence: false
+  allow_framework_managed_dependencies: false
+dependency_substitution_policy:
+  allowed_runtime_modes: [local]
+dependency_provisioning_policy:
+  allowed_provisioners: []
+  dependencies: []
+max_duration: PT5M
+data_policy:
+  approved_expected_results_required: true
+  production_data_allowed: false
+  generated_data_allowed: true
+  secrets_must_use_refs: true

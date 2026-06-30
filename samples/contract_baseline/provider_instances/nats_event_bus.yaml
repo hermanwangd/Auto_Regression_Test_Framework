@@ -1,20 +1,35 @@
 provider_instance_version: v0.2
 provider_id: nats-event-bus
-provider_type: nats_messaging
+provider_type: nats
 runtime_modes: [native, ephemeral]
+connection:
+  secret_ref: ${environment.connection.secret_ref}
+subject: ${environment.subject}
 binding_keys:
-  servers:
+  connection:
     required: true
+  subject:
+    required: true
+  timeout:
+    required: false
+  poll_interval:
+    required: false
 defaults:
-  timeout_seconds: 30
+  timeout: PT30S
+  poll_interval: PT0.5S
+  consume_from: test_start_time
 operations:
-  publish_message:
-    outputs: [published_message, ack, timestamp]
-  consume_message:
-    outputs: [consumed_message, ack, timestamp]
+  nats_publish:
+    outputs: [subject, published, published_at, event_evidence_ref]
+  nats_observe:
+    outputs: [subject, observed_count, matched, duration_ms, event_evidence_ref]
+  event_published:
+    outputs: [subject, observed_count, matched, duration_ms, event_evidence_ref]
+  event_payload_match:
+    outputs: [subject, observed_count, matched, matched_fields, duration_ms, event_evidence_ref]
 evidence:
-  capture: [published_message, consumed_message, ack, timing]
+  capture: [subject, consume_from, observation_window, attempts, observed_count, matched, matched_fields, masked_observed_payload, duration_ms, status, failure_code]
 failure_mapping:
-  provider_unavailable: PROVIDER_UNAVAILABLE
-  timeout: PROVIDER_TIMEOUT
-  assertion_failed: ASSERTION_FAILED
+  event_not_found: ASSERTION_FAILED
+  payload_mismatch: ASSERTION_FAILED
+  timeout: NATS_TIMEOUT

@@ -22,7 +22,7 @@ entries:
     masked: true
   - evidence_type: event_result
     provider_id: nats-event-bus
-    provider_type: nats_messaging
+    provider_type: nats
     runtime_mode: ephemeral
     ref: evidence/runs/RUN-CONTRACT-001/event-evidence/nats_event_bus/published_message.yaml
     masked: true

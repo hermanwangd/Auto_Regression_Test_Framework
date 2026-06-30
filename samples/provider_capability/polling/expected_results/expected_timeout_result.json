@@ -1,8 +1,4 @@
 {
-  "expected_state": "READY",
-  "timeout_status": "timed_out",
-  "last_observed": {
-    "state": "PENDING",
-    "attempt": 3
-  }
+  "published": true,
+  "subject": "orders.ready"
 }

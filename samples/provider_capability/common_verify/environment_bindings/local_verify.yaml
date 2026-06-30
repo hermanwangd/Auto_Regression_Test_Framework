@@ -1,0 +1,7 @@
+environment_id: local-common-verify
+profile: local_verify
+provider_bindings:
+  - provider_id: local-common-verifier
+    runtime_mode: local
+    binding_values:
+      workspace_ref: samples/provider_capability/common_verify

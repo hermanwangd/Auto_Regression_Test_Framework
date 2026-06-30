@@ -10,6 +10,8 @@ import com.specdriven.regression.contract.ContractBaselineService.DryRunResult;
 import com.specdriven.regression.contract.ContractBaselineService.ReportResult;
 import com.specdriven.regression.contract.ContractBaselineService.ResolvedTarget;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
+import com.specdriven.regression.contract.CommonVerifyService;
+import com.specdriven.regression.contract.CommonVerifyService.CommonVerifyRunResult;
 import com.specdriven.regression.contract.GoldenE2eService;
 import com.specdriven.regression.contract.GoldenE2eService.GoldenRunResult;
 import com.specdriven.regression.contract.JdbcProviderCapabilityService;
@@ -124,6 +126,7 @@ public class RegressionCommand {
     private final GeneratedRuntimeArtifacts generatedRuntimeArtifacts = new GeneratedRuntimeArtifacts();
     private final ParameterSetResolver parameterSetResolver = new ParameterSetResolver();
     private final ContractBaselineService contractBaselineService = new ContractBaselineService();
+    private final CommonVerifyService commonVerifyService = new CommonVerifyService();
     private final GoldenE2eService goldenE2eService = new GoldenE2eService();
     private final WireMockProviderCapabilityService wireMockProviderCapabilityService =
             new WireMockProviderCapabilityService();
@@ -670,6 +673,30 @@ public class RegressionCommand {
                     out.println("provider_id: " + result.providerId());
                     out.println("runtime_mode: " + result.runtimeMode());
                     out.println("dialect: " + result.dialect());
+                    out.println("evidence_classification: framework_provider_capability_only");
+                    out.println("result_json: " + result.resultJson());
+                    out.println("evidence_dir: " + result.evidenceDir());
+                }
+                printContractFindings(out, result.findings());
+                return result.passed() ? 0 : 1;
+            }
+            if (validation.providerTypesUsed().equals(List.of("common_verify"))
+                    || suite.contains("provider_capability/common_verify")
+                    || suite.contains("provider_capability/polling")) {
+                CommonVerifyRunResult result = commonVerifyService.run(
+                        root.resolve(suite).normalize(),
+                        profile,
+                        root.resolve("target/provider-capability/common_verify").normalize());
+                out.println("run_status: " + result.status());
+                out.println("suite_id: " + result.suiteId());
+                if (result.resultJson() != null) {
+                    out.println("batch_id: " + result.batchId());
+                    out.println("run_id: " + result.runId());
+                    out.println("test_case_id: " + result.testCaseId());
+                    out.println("profile: " + result.profile());
+                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
+                    out.println("provider_type: " + result.providerType());
+                    out.println("provider_id: " + result.providerId());
                     out.println("evidence_classification: framework_provider_capability_only");
                     out.println("result_json: " + result.resultJson());
                     out.println("evidence_dir: " + result.evidenceDir());

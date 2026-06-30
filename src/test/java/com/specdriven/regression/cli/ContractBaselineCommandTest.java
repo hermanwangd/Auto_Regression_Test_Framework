@@ -79,7 +79,7 @@ class ContractBaselineCommandTest {
                 .contains("provider_id: oracle-database")
                 .contains("provider_type: jdbc_database")
                 .contains("provider_id: nats-event-bus")
-                .contains("provider_type: nats_messaging");
+                .contains("provider_type: nats");
     }
 
     @Test
@@ -184,6 +184,25 @@ class ContractBaselineCommandTest {
         assertThat(result.stdout())
                 .contains("reason: unknown_provider_type")
                 .contains("provider_type: unknown_database")
+                .contains("owner_action:");
+    }
+
+    @Test
+    void validateSuiteRejectsLegacyNatsMessagingProviderType() throws Exception {
+        Path suite = mutableBaseline();
+        Path providerContract = suite.getParent().resolve("provider_contracts/nats.yaml");
+        Path providerInstance = suite.getParent().resolve("provider_instances/nats_event_bus.yaml");
+        Files.writeString(providerContract, Files.readString(providerContract)
+                .replace("provider_type: nats", "provider_type: nats_messaging"));
+        Files.writeString(providerInstance, Files.readString(providerInstance)
+                .replace("provider_type: nats", "provider_type: nats_messaging"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("reason: unknown_provider_type")
+                .contains("provider_type: nats_messaging")
                 .contains("owner_action:");
     }
 

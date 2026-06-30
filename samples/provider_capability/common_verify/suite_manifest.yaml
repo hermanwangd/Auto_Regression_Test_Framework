@@ -1,0 +1,11 @@
+contract_version: v0.2
+suite_id: COMMON-VERIFY-CAPABILITY-v0.2
+selection:
+  mode: suite
+  suite: common-verifier-p0
+tests:
+  - test_case.yaml
+profiles:
+  - local_verify
+coverage_source_ref: docs/03-acceptance/common_verify.md
+traceability_map_ref: generated-framework/traceability_map.yaml

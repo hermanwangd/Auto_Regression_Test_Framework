@@ -1,0 +1,7 @@
+environment_id: local-polling
+profile: local_polling
+provider_bindings:
+  - provider_id: local-common-polling
+    runtime_mode: local
+    binding_values:
+      workspace_ref: samples/provider_capability/polling

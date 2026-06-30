@@ -31,7 +31,8 @@ dependency_provisioning_policy:
       readiness_check: broker_connect
       cleanup_scope: per_run
       output_binding_keys:
-        servers: nats-ephemeral.servers
+        connection.secret_ref: nats-ephemeral.connection
+        subject: nats-ephemeral.subject
 max_duration: PT15M
 data_policy:
   approved_expected_results_required: true

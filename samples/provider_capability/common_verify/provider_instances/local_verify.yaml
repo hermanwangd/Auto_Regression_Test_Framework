@@ -1,0 +1,24 @@
+provider_instance_version: v0.2
+provider_id: local-common-verifier
+provider_type: common_verify
+runtime_modes: [local]
+binding_keys:
+  workspace_ref:
+    required: true
+defaults:
+  timeout: PT5S
+  poll_interval: PT0S
+operations:
+  json_match:
+    outputs: [assertion_evidence_ref, diff_ref]
+  schema_match:
+    outputs: [assertion_evidence_ref, diff_ref]
+  file_diff:
+    outputs: [assertion_evidence_ref, diff_ref]
+  event_published:
+    outputs: [polling_evidence_ref, last_observed_ref]
+evidence:
+  capture: [assertion_result, assertion_diff, polling_result]
+failure_mapping:
+  assertion_failed: ASSERTION_MISMATCH
+  polling_timeout: POLLING_TIMEOUT

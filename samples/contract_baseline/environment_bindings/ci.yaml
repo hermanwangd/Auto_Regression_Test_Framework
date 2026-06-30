@@ -15,4 +15,8 @@ provider_bindings:
   - provider_id: nats-event-bus
     runtime_mode: ephemeral
     binding_values:
-      servers: generated://nats-ephemeral.servers
+      connection:
+        secret_ref: generated://nats-ephemeral.connection
+      subject: payments.accepted
+      timeout: PT30S
+      poll_interval: PT0.5S

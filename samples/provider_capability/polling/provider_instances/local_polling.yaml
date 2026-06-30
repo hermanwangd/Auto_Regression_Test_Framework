@@ -1,0 +1,14 @@
+provider_instance_version: v0.2
+provider_id: local-common-polling
+provider_type: common_verify
+runtime_modes: [local]
+binding_keys:
+  workspace_ref:
+    required: true
+operations:
+  event_published:
+    outputs: [polling_evidence_ref, last_observed_ref]
+evidence:
+  capture: [polling_result]
+failure_mapping:
+  polling_timeout: POLLING_TIMEOUT

@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -33,9 +35,10 @@ public class ContractBaselineService {
     private static final Set<String> ALLOWED_PROVIDER_TYPES = Set.of(
             "wiremock_http_mock",
             "jdbc",
+            "nats",
             "jdbc_database",
-            "nats_messaging",
-            "sample_fake_provider");
+            "sample_fake_provider",
+            "common_verify");
     private static final List<String> RESULT_REQUIRED_FIELDS = List.of(
             "framework_version",
             "dsl_version",
@@ -64,6 +67,7 @@ public class ContractBaselineService {
         validateTargets(graph, findings);
         validateExecutionProfiles(graph, findings);
         validateJdbcContractsAndInstances(graph, findings);
+        validateNatsContractsAndInstances(graph, findings);
         validateOperations(graph, findings);
         validateOutputRefs(graph, findings);
         validateEnvironmentBindings(graph, findings);
@@ -118,7 +122,7 @@ public class ContractBaselineService {
         }
         List<ContractFinding> findings = new ArrayList<>();
         for (String field : RESULT_REQUIRED_FIELDS) {
-            if (isMissing(result.get(field))) {
+            if (isMissingResultField(result.get(field))) {
                 findings.add(new ContractFinding(
                         resultJson.toString(),
                         field,
@@ -135,7 +139,7 @@ public class ContractBaselineService {
         String runId = stringValue(result.get("run_id"));
         if (!suiteId.isBlank()) {
             for (String field : List.of("suite_id", "batch_id", "run_id", "start_time", "end_time", "duration_ms")) {
-                if (isMissing(result.get(field))) {
+                if (isMissingResultField(result.get(field))) {
                     findings.add(new ContractFinding(
                             resultJson.toString(),
                             field,
@@ -365,6 +369,9 @@ public class ContractBaselineService {
                 }
                 Map<String, Object> operation = targetResolution.operation(operationRef.operation());
                 if (operation.isEmpty()) {
+                    if (operationRef.parameters().isEmpty() && !"common_verify".equals(targetResolution.providerType())) {
+                        continue;
+                    }
                     findings.add(new ContractFinding(
                             entry.getKey().toString(),
                             operationRef.fieldPath() + ".operation",
@@ -378,7 +385,8 @@ public class ContractBaselineService {
                 }
                 List<String> allowedBindAs = stringList(operation.get("allowed_bind_as"));
                 List<String> providedBindAs = new ArrayList<>();
-                for (Map<String, Object> parameter : operationRef.parameters()) {
+                for (int parameterIndex = 0; parameterIndex < operationRef.parameters().size(); parameterIndex++) {
+                    Map<String, Object> parameter = operationRef.parameters().get(parameterIndex);
                     String bindAs = stringValue(parameter.get("bind_as"));
                     providedBindAs.add(bindAs);
                     if (bindAs.isBlank()) {
@@ -399,20 +407,28 @@ public class ContractBaselineService {
                     if (isMissing(parameter.get("ref"))) {
                         findings.add(finding(entry.getKey(), operationRef.fieldPath() + ".parameters.ref",
                                 "missing_required_field", "Add ref for operation parameter."));
+                    } else {
+                        String ref = stringValue(parameter.get("ref"));
+                        validateParameterRefWithinSuite(graph, entry.getKey(), operationRef,
+                                parameterIndex, bindAs, ref, targetResolution, findings);
+                        validateParameterValueSyntax(entry.getKey(), operationRef, parameterIndex,
+                                bindAs, ref, targetResolution, findings);
                     }
                 }
-                for (String requiredParameter : stringList(operation.get("required_parameters"))) {
-                    if (!providedBindAs.contains(requiredParameter)) {
-                        findings.add(new ContractFinding(
-                                entry.getKey().toString(),
-                                operationRef.fieldPath() + ".parameters",
-                                "missing_required_parameter",
-                                targetResolution.providerId(),
-                                targetResolution.providerType(),
-                                targetResolution.profile(),
-                                operationRef.operation(),
-                                "Add required parameter bind_as `" + requiredParameter + "` for operation `"
-                                        + operationRef.operation() + "`."));
+                if (!operationRef.parameters().isEmpty() || "common_verify".equals(targetResolution.providerType())) {
+                    for (String requiredParameter : stringList(operation.get("required_parameters"))) {
+                        if (!providedBindAs.contains(requiredParameter)) {
+                            findings.add(new ContractFinding(
+                                    entry.getKey().toString(),
+                                    operationRef.fieldPath() + ".parameters",
+                                    "missing_required_parameter",
+                                    targetResolution.providerId(),
+                                    targetResolution.providerType(),
+                                    targetResolution.profile(),
+                                    operationRef.operation(),
+                                    "Add required parameter bind_as `" + requiredParameter + "` for operation `"
+                                            + operationRef.operation() + "`."));
+                        }
                     }
                 }
             }
@@ -450,10 +466,119 @@ public class ContractBaselineService {
         }
     }
 
+    private void validateParameterRefWithinSuite(
+            ContractGraph graph,
+            Path testCasePath,
+            OperationRef operationRef,
+            int parameterIndex,
+            String bindAs,
+            String ref,
+            TargetResolution targetResolution,
+            List<ContractFinding> findings) {
+        String filePart = refFilePart(ref);
+        if (!looksLikeLocalFileRef(bindAs, ref, filePart)) {
+            return;
+        }
+        Path suiteRoot = graph.suitePath().toAbsolutePath().normalize().getParent();
+        Path resolved = suiteRoot.resolve(filePart).normalize();
+        if (!resolved.startsWith(suiteRoot)) {
+            findings.add(new ContractFinding(
+                    testCasePath.toString(),
+                    operationRef.fieldPath() + ".parameters[" + parameterIndex + "].ref",
+                    "ref_outside_suite_root",
+                    targetResolution.providerId(),
+                    targetResolution.providerType(),
+                    targetResolution.profile(),
+                    operationRef.operation(),
+                    "Keep parameter refs under the suite directory; use checked-in fixtures or expected_results."));
+        }
+    }
+
+    private void validateParameterValueSyntax(
+            Path testCasePath,
+            OperationRef operationRef,
+            int parameterIndex,
+            String bindAs,
+            String ref,
+            TargetResolution targetResolution,
+            List<ContractFinding> findings) {
+        if (!literalParameterValue(ref)) {
+            return;
+        }
+        if (List.of("timeout", "poll_interval").contains(bindAs)) {
+            try {
+                Duration.parse(ref);
+            } catch (RuntimeException e) {
+                findings.add(new ContractFinding(
+                        testCasePath.toString(),
+                        operationRef.fieldPath() + ".parameters[" + parameterIndex + "].ref",
+                        "invalid_duration",
+                        targetResolution.providerId(),
+                        targetResolution.providerType(),
+                        targetResolution.profile(),
+                        operationRef.operation(),
+                        "Use an ISO-8601 duration for bind_as `" + bindAs + "`, for example `PT5S`."));
+            }
+        }
+        if ("consume_from".equals(bindAs)
+                && !List.of("test_start_time", "earliest").contains(ref)) {
+            try {
+                Instant.parse(ref);
+            } catch (RuntimeException e) {
+                findings.add(new ContractFinding(
+                        testCasePath.toString(),
+                        operationRef.fieldPath() + ".parameters[" + parameterIndex + "].ref",
+                        "invalid_instant",
+                        targetResolution.providerId(),
+                        targetResolution.providerType(),
+                        targetResolution.profile(),
+                        operationRef.operation(),
+                        "Use `test_start_time`, `earliest`, or an ISO-8601 instant for bind_as `consume_from`."));
+            }
+        }
+    }
+
+    private String refFilePart(String ref) {
+        return ref.split("#", 2)[0];
+    }
+
+    private boolean looksLikeLocalFileRef(String bindAs, String ref, String filePart) {
+        if (filePart.isBlank() || ref.startsWith("${") || ref.contains("://")) {
+            return false;
+        }
+        if (ref.contains("#") || fileReferenceBindAs(bindAs)) {
+            return true;
+        }
+        return filePart.startsWith(".")
+                || !filePart.startsWith("/") && (filePart.contains("/") || filePart.contains("\\"));
+    }
+
+    private boolean fileReferenceBindAs(String bindAs) {
+        String normalized = bindAs.toLowerCase();
+        return normalized.endsWith("_ref")
+                || normalized.endsWith(".ref")
+                || normalized.contains("file")
+                || normalized.contains("fixture")
+                || normalized.contains("mapping")
+                || normalized.contains("sql")
+                || normalized.contains("query");
+    }
+
+    private boolean literalParameterValue(String ref) {
+        return !ref.isBlank()
+                && !ref.startsWith("${")
+                && !ref.contains("://")
+                && !ref.contains("#")
+                && !ref.startsWith(".")
+                && !ref.contains("/")
+                && !ref.contains("\\");
+    }
+
     private void validateEnvironmentBindings(ContractGraph graph, List<ContractFinding> findings) {
         for (Map.Entry<String, Map<String, Object>> entry : graph.providerInstances().entrySet()) {
             String providerId = entry.getKey();
-            String providerType = stringValue(entry.getValue().get("provider_type"));
+            Map<String, Object> providerInstance = entry.getValue();
+            String providerType = stringValue(providerInstance.get("provider_type"));
             Map<String, Object> contract = graph.providerContracts().get(providerType);
             if (contract == null) {
                 continue;
@@ -467,11 +592,14 @@ public class ContractBaselineService {
                 if (providerBinding.isEmpty()) {
                     continue;
                 }
+                Path bindingPath = graph.environmentBindingsByProfile().get(profile).path();
+                validateRuntimeMode(bindingPath, providerId, providerType, profile, providerBinding,
+                        providerInstance, contract, graph, findings);
                 Map<String, Object> bindingValues = mapValue(providerBinding.get("binding_values"));
                 for (String requiredKey : requiredBindingKeys) {
                     if (isMissing(valueAtPath(bindingValues, requiredKey))) {
                         findings.add(new ContractFinding(
-                                graph.environmentBindingsByProfile().get(profile).path().toString(),
+                                bindingPath.toString(),
                                 "provider_bindings." + providerId + ".binding_values." + requiredKey,
                                 "missing_required_binding_key",
                                 providerId,
@@ -483,16 +611,101 @@ public class ContractBaselineService {
                 }
                 if ("jdbc".equals(providerType)) {
                     validateJdbcEnvironmentBinding(
-                            graph.environmentBindingsByProfile().get(profile).path(),
+                            bindingPath,
                             providerId,
                             providerType,
                             profile,
                             contract,
                             bindingValues,
                             findings);
+                } else if ("nats".equals(providerType)) {
+                    validateNatsEnvironmentBinding(
+                            bindingPath,
+                            providerId,
+                            providerType,
+                            profile,
+                            bindingValues,
+                            findings);
                 }
             }
         }
+    }
+
+    private void validateRuntimeMode(
+            Path bindingPath,
+            String providerId,
+            String providerType,
+            String profile,
+            Map<String, Object> providerBinding,
+            Map<String, Object> providerInstance,
+            Map<String, Object> contract,
+            ContractGraph graph,
+            List<ContractFinding> findings) {
+        String runtimeMode = stringValue(providerBinding.get("runtime_mode"));
+        String fieldPath = "provider_bindings." + providerId + ".runtime_mode";
+        if (runtimeMode.isBlank()) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    fieldPath,
+                    "missing_required_field",
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Set runtime_mode for provider `" + providerId + "`."));
+            return;
+        }
+        validateRuntimeModeAllowed(bindingPath, fieldPath, providerId, providerType, profile, runtimeMode,
+                stringList(contract.get("runtime_modes")), "Provider Contract", findings);
+        validateRuntimeModeAllowed(bindingPath, fieldPath, providerId, providerType, profile, runtimeMode,
+                stringList(providerInstance.get("runtime_modes")), "Provider Instance", findings);
+        validateRuntimeModeAllowed(bindingPath, fieldPath, providerId, providerType, profile, runtimeMode,
+                allowedRuntimeModes(graph, profile), "Execution Profile", findings);
+    }
+
+    private void validateRuntimeModeAllowed(
+            Path bindingPath,
+            String fieldPath,
+            String providerId,
+            String providerType,
+            String profile,
+            String runtimeMode,
+            List<String> allowedModes,
+            String owner,
+            List<ContractFinding> findings) {
+        if (allowedModes.isEmpty() || allowedModes.contains(runtimeMode)) {
+            return;
+        }
+        findings.add(new ContractFinding(
+                bindingPath.toString(),
+                fieldPath,
+                "unsupported_runtime_mode",
+                providerId,
+                providerType,
+                profile,
+                "",
+                "Use runtime_mode allowed by " + owner + " for provider `" + providerId
+                        + "`: " + allowedModes + ". Unsupported runtime_mode: " + runtimeMode));
+    }
+
+    private List<String> allowedRuntimeModes(ContractGraph graph, String profile) {
+        Map<String, Object> executionProfile = executionProfile(graph, profile);
+        Map<String, Object> policy = mapValue(executionProfile.get("dependency_substitution_policy"));
+        List<String> allowed = stringList(policy.get("allowed_runtime_modes"));
+        if (!allowed.isEmpty()) {
+            return allowed;
+        }
+        String executionMode = stringValue(executionProfile.get("execution_mode"));
+        return executionMode.isBlank() ? List.of() : stringList(policy.get(executionMode + "_allowed_runtime_modes"));
+    }
+
+    private Map<String, Object> executionProfile(ContractGraph graph, String profile) {
+        for (Map<String, Object> document : graph.executionProfiles().values()) {
+            if (profile.equals(stringValue(document.get("profile_id")))) {
+                return document;
+            }
+        }
+        return Map.of();
     }
 
     private void validateJdbcContractsAndInstances(ContractGraph graph, List<ContractFinding> findings) {
@@ -580,6 +793,92 @@ public class ContractBaselineService {
         }
     }
 
+    private void validateNatsContractsAndInstances(ContractGraph graph, List<ContractFinding> findings) {
+        Map<String, Object> contract = graph.providerContracts().get("nats");
+        if (contract != null) {
+            for (String requiredOperation : List.of("nats_publish", "nats_observe", "event_published", "event_payload_match")) {
+                if (mapValue(contract.get("operations")).get(requiredOperation) == null) {
+                    findings.add(new ContractFinding(
+                            graph.suitePath().toString(),
+                            "provider_contracts.nats.operations." + requiredOperation,
+                            "unsupported_operation",
+                            "",
+                            "nats",
+                            "",
+                            requiredOperation,
+                            "Declare NATS operation `" + requiredOperation + "` in Provider Contract."));
+                }
+            }
+            List<String> failureCodes = stringList(mapValue(contract.get("failure_mapping")).get("allowed_codes"));
+            for (String requiredCode : List.of(
+                    "SUBJECT_MISSING",
+                    "PAYLOAD_REF_MISSING",
+                    "PAYLOAD_PARAM_MISSING",
+                    "NATS_CONNECTION_FAILED",
+                    "NATS_PUBLISH_FAILED",
+                    "NATS_OBSERVE_FAILED",
+                    "EVENT_NOT_FOUND",
+                    "PAYLOAD_MISMATCH",
+                    "NATS_TIMEOUT",
+                    "INVALID_DURATION",
+                    "INVALID_INSTANT",
+                    "REF_OUTSIDE_SUITE_ROOT")) {
+                if (!failureCodes.contains(requiredCode)) {
+                    findings.add(new ContractFinding(
+                            graph.suitePath().toString(),
+                            "provider_contracts.nats.failure_mapping.allowed_codes",
+                            "missing_failure_code",
+                            "",
+                            "nats",
+                            "",
+                            "",
+                            "Declare NATS failure code `" + requiredCode + "` in Provider Contract."));
+                }
+            }
+            if (listValue(mapValue(contract.get("evidence")).get("outputs")).isEmpty()) {
+                findings.add(new ContractFinding(
+                        graph.suitePath().toString(),
+                        "provider_contracts.nats.evidence.outputs",
+                        "missing_evidence_output_definition",
+                        "",
+                        "nats",
+                        "",
+                        "",
+                        "Define NATS indexed event evidence outputs."));
+            }
+        }
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.providerInstancesByPath().entrySet()) {
+            Map<String, Object> instance = entry.getValue();
+            if (!"nats".equals(stringValue(instance.get("provider_type")))) {
+                continue;
+            }
+            String providerId = stringValue(instance.get("provider_id"));
+            Map<String, Object> connection = mapValue(instance.get("connection"));
+            if (connection.isEmpty()) {
+                findings.add(new ContractFinding(
+                        entry.getKey().toString(),
+                        "connection",
+                        "missing_required_binding_key",
+                        providerId,
+                        "nats",
+                        stringValue(instance.get("profile")),
+                        "",
+                        "Declare connection.secret_ref or connection.local_ref on the NATS Provider Instance shape."));
+            }
+            if (stringValue(instance.get("subject")).isBlank()) {
+                findings.add(new ContractFinding(
+                        entry.getKey().toString(),
+                        "subject",
+                        "missing_required_field",
+                        providerId,
+                        "nats",
+                        stringValue(instance.get("profile")),
+                        "",
+                        "Declare the NATS subject on the Provider Instance shape; subjects are never inferred."));
+            }
+        }
+    }
+
     private void validateJdbcEnvironmentBinding(
             Path bindingPath,
             String providerId,
@@ -623,6 +922,57 @@ public class ContractBaselineService {
                     "",
                     "Supply JDBC connection.secret_ref; raw DB URLs, usernames, and passwords are prohibited."));
         }
+    }
+
+    private void validateNatsEnvironmentBinding(
+            Path bindingPath,
+            String providerId,
+            String providerType,
+            String profile,
+            Map<String, Object> bindingValues,
+            List<ContractFinding> findings) {
+        Map<String, Object> connection = mapValue(bindingValues.get("connection"));
+        String secretRef = stringValue(connection.get("secret_ref"));
+        String localRef = stringValue(connection.get("local_ref"));
+        if (secretRef.isBlank() && localRef.isBlank()) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    "provider_bindings." + providerId + ".binding_values.connection",
+                    "missing_required_binding_key",
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Supply NATS connection.secret_ref or approved connection.local_ref."));
+        }
+        if (!localRef.isBlank() && !approvedLocalNatsRef(localRef)) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    "provider_bindings." + providerId + ".binding_values.connection.local_ref",
+                    "unsupported_local_ref",
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Use an approved local_ref for local or CI NATS capability verification."));
+        }
+        String subject = stringValue(bindingValues.get("subject"));
+        if (subject.isBlank()) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    "provider_bindings." + providerId + ".binding_values.subject",
+                    "missing_required_binding_key",
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Supply explicit NATS subject in Environment Binding; subjects are never inferred."));
+        }
+    }
+
+    private boolean approvedLocalNatsRef(String localRef) {
+        return localRef.startsWith("approved_local_nats")
+                || localRef.startsWith("generated://provider-capability/nats/");
     }
 
     private ContractGraph loadGraph(Path suiteManifest) {
@@ -738,6 +1088,9 @@ public class ContractBaselineService {
     }
 
     private void require(Path path, Map<String, Object> document, String field, List<ContractFinding> findings) {
+        if ("execute".equals(field) && document.containsKey(field)) {
+            return;
+        }
         if (isMissing(document.get(field))) {
             findings.add(finding(path, field, "missing_required_field", "Add required field `" + field + "`."));
         }
@@ -823,6 +1176,19 @@ public class ContractBaselineService {
                     stringValue(fixture.get("operation")),
                     mapList(fixture.get("parameters")),
                     Map.of()));
+        }
+        for (Object value : listValue(testCase.get("verify"))) {
+            Map<String, Object> verify = mapValue(value);
+            List<Map<String, Object>> parameters = mapList(verify.get("parameters"));
+            if (!parameters.isEmpty() || !stringValue(verify.get("target")).isBlank()) {
+                String id = stringValue(verify.get("id"));
+                operations.add(new OperationRef(
+                        id.isBlank() ? "verify[]" : "verify." + id,
+                        stringValue(verify.get("target")),
+                        stringValue(verify.get("type")),
+                        parameters,
+                        Map.of()));
+            }
         }
         return operations;
     }
@@ -1035,6 +1401,10 @@ public class ContractBaselineService {
                 || value instanceof String text && text.isBlank()
                 || value instanceof Collection<?> collection && collection.isEmpty()
                 || value instanceof Map<?, ?> map && map.isEmpty();
+    }
+
+    private boolean isMissingResultField(Object value) {
+        return value == null || value instanceof String text && text.isBlank();
     }
 
     private Object valueAtPath(Map<String, Object> map, String path) {
