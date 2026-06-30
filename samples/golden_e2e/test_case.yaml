@@ -15,15 +15,16 @@ targets:
   sample_runtime:
     provider_id: sample-fake-runtime
 data_binding:
-  datasets:
+  input_data:
     input:
       ref: fixtures/input.json
-  fixtures:
+  setup_data:
     setup:
       ref: fixtures/setup_fixture.yaml
+  cleanup_data:
     cleanup:
       ref: fixtures/cleanup_fixture.yaml
-  expected_results:
+  expect_data:
     expected_output:
       ref: expected_results/expected_output.json
 setup:
@@ -34,22 +35,22 @@ setup:
       operation: setup_fixture
       parameters:
         - name: setup_ref
-          ref: ${data.fixtures.setup}
+          ref: ${data.setup_data.setup}
           bind_as: fixture.setup_ref
         - name: input_ref
-          ref: ${data.datasets.input}
+          ref: ${data.input_data.input}
           bind_as: fixture.input_ref
-      cleanup_ref: ${data.fixtures.cleanup}
+      cleanup_ref: ${data.cleanup_data.cleanup}
 execute:
   - id: produce_sample_output
     target: sample_runtime
     operation: execute_sample
     parameters:
       - name: input
-        ref: ${data.datasets.input}
+        ref: ${data.input_data.input}
         bind_as: sample.input_ref
       - name: expected_shape
-        ref: ${data.expected_results.expected_output}
+        ref: ${data.expect_data.expected_output}
         bind_as: sample.expected_ref
     outputs:
       actual_json: actual_json
@@ -82,7 +83,7 @@ cleanup:
       operation: cleanup_fixture
       parameters:
         - name: cleanup_ref
-          ref: ${data.fixtures.cleanup}
+          ref: ${data.cleanup_data.cleanup}
           bind_as: fixture.cleanup_ref
 evidence:
   required:

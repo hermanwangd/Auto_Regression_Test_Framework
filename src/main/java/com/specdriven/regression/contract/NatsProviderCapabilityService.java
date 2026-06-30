@@ -319,7 +319,7 @@ public class NatsProviderCapabilityService {
                         id.isBlank() ? "execute" : id,
                         new ProviderOperationRequest(
                                 stringValue(step.get("operation")),
-                                resolvedParameters(suiteRoot, listValue(step.get("parameters"))),
+                                resolvedParameters(testCase, suiteRoot, listValue(step.get("parameters"))),
                                 runtimeOutputs(id, mapValue(step.get("outputs")), testStartTime))));
             }
         }
@@ -344,7 +344,7 @@ public class NatsProviderCapabilityService {
                     id.isBlank() ? type : id,
                     new ProviderOperationRequest(
                             type,
-                            resolvedParameters(suiteRoot, listValue(verify.get("parameters"))),
+                            resolvedParameters(testCase, suiteRoot, listValue(verify.get("parameters"))),
                             runtimeOutputs(id, Map.of(), testStartTime))));
         }
         return List.copyOf(operations);
@@ -357,18 +357,37 @@ public class NatsProviderCapabilityService {
         return resolved;
     }
 
-    private List<Map<String, Object>> resolvedParameters(Path suiteRoot, List<Object> parameters) {
+    private List<Map<String, Object>> resolvedParameters(
+            Map<String, Object> testCase,
+            Path suiteRoot,
+            List<Object> parameters) {
         List<Map<String, Object>> resolved = new ArrayList<>();
         for (Object value : parameters) {
             Map<String, Object> parameter = new LinkedHashMap<>(mapValue(value));
             String bindAs = stringValue(parameter.get("bind_as"));
-            String ref = stringValue(parameter.get("ref"));
+            String ref = resolveDataRef(testCase, stringValue(parameter.get("ref")));
             if ("subject".equals(bindAs)) {
                 parameter.put("ref", resolveValue(suiteRoot, ref));
+            } else {
+                parameter.put("ref", ref);
             }
             resolved.add(parameter);
         }
         return List.copyOf(resolved);
+    }
+
+    private String resolveDataRef(Map<String, Object> testCase, String ref) {
+        if (!ref.startsWith("${data.") || !ref.endsWith("}")) {
+            return ref;
+        }
+        String path = ref.substring("${data.".length(), ref.length() - 1);
+        String[] parts = path.split("\\.");
+        if (parts.length != 2) {
+            return ref;
+        }
+        String resolved = stringValue(mapValue(mapValue(mapValue(testCase.get("data_binding")).get(parts[0]))
+                .get(parts[1])).get("ref"));
+        return resolved.isBlank() ? ref : resolved;
     }
 
     private Object resolveValue(Path suiteRoot, String ref) {

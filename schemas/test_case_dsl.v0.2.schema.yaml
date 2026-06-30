@@ -19,7 +19,7 @@ required_sections:
   - runtime.timeout
   - runtime.retry
 conditional_sections:
-  data_binding: allowed as an optional reviewed dataset or fixture source index when setup, execute, cleanup, or verify refs use shared data artifacts
+  data_binding: allowed as an optional reviewed data source index when setup, execute, cleanup, or verify refs use shared data artifacts
   parameters: allowed as an optional reviewed data source index when one test has multiple parameter cases
   setup: required when precondition data or mutated state is needed
   cleanup: required when setup mutates state
@@ -28,27 +28,27 @@ data_binding_rules:
   allowed: true
   required_when_data_namespace_refs_are_used: true
   allowed_top_level_fields:
+    - input_data
+    - setup_data
+    - cleanup_data
+    - expect_data
+  prohibited_top_level_fields:
     - datasets
+    - fixtures
+    - expected_results
     - db_seed
     - db_cleanup
     - mock_stubs
-    - event_expectations
-    - file_seed
-    - config
-    - env
+  prohibition_scope: data_binding category keys only; lifecycle sections such as setup.fixtures and provider operations such as db_seed or db_cleanup remain valid when defined by the Provider Contract
   ref_namespace_prefix: data
   reference_format: ${data.<category>.<name>}
   required_source_fields:
     - ref
   category_target_rules:
-    datasets: may be read by parameters, setup, execute, verify, or expected_results
-    db_seed: setup fixtures with type db_seed
-    db_cleanup: cleanup refs or setup cleanup_ref
-    mock_stubs: setup fixtures with type http_stub
-    event_expectations: verify rules or event expectation fixtures
-    file_seed: setup fixtures with type file_seed
-    config: Environment Binding output injection refs
-    env: Environment Binding output injection refs
+    input_data: execute operation input artifacts
+    setup_data: setup operation data artifacts
+    cleanup_data: cleanup operation data artifacts
+    expect_data: verify operation expected result or oracle artifacts
   prohibited_values:
     - raw_secret
     - endpoint_url

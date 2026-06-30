@@ -13,9 +13,12 @@ targets:
   event_bus:
     provider_id: local-nats-event-bus
 data_binding:
-  datasets:
+  input_data:
     event_input:
       ref: fixtures/event_input.json
+  expect_data:
+    event_expected:
+      ref: expected_results/event_expected.json
 expected_results:
   event_expected:
     ref: expected_results/event_expected.json
@@ -28,7 +31,7 @@ execute:
         ref: expected_results/event_expected.json#/subject
         bind_as: subject
       - name: payload
-        ref: fixtures/event_input.json
+        ref: ${data.input_data.event_input}
         bind_as: payload_ref
     outputs:
       subject: subject

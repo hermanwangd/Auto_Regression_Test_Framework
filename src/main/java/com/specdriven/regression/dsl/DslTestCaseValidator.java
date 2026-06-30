@@ -131,6 +131,7 @@ public class DslTestCaseValidator {
         List<DslValidationGap> gaps = new ArrayList<>();
         validateIdentity(document, testCaseId, acId, gaps);
         validateLegacyAndGovernanceFields(document, testCaseId, acId, gaps);
+        validateDataBinding(document, testCaseId, acId, gaps);
         validateTargets(document, testCaseId, acId, gaps);
         validateSetup(document, testCaseId, acId, gaps);
         validateExecute(document, testCaseId, acId, gaps);
@@ -238,6 +239,20 @@ public class DslTestCaseValidator {
             }
         }
         collectGovernanceFields(document, "", testCaseId, acId, gaps);
+    }
+
+    private void validateDataBinding(Map<?, ?> document, String testCaseId, String acId, List<DslValidationGap> gaps) {
+        if (!document.containsKey("data_binding")) {
+            return;
+        }
+        Map<?, ?> dataBinding = map(document.get("data_binding"));
+        for (Map.Entry<?, ?> entry : dataBinding.entrySet()) {
+            String category = stringValue(entry.getKey());
+            if (!DataBindingCategories.allowed(category)) {
+                gaps.add(gap(testCaseId, acId, "data_binding", "data_binding." + category, "",
+                        DataBindingCategories.OWNER_ACTION));
+            }
+        }
     }
 
     private void collectGovernanceFields(

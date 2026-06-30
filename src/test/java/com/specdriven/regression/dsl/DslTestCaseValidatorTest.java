@@ -120,6 +120,49 @@ class DslTestCaseValidatorTest {
     }
 
     @Test
+    void blocksLegacyDataBindingCategoriesInV02Dsl() {
+        String yaml = validExecutionFocusedDsl()
+                .replace("""
+                setup:
+                """, """
+                data_binding:
+                  datasets:
+                    payment_request:
+                      ref: fixtures/payment_request.json
+                  fixtures:
+                    setup:
+                      ref: fixtures/setup_fixture.yaml
+                  expected_results:
+                    expected_output:
+                      ref: expected_results/expected_output.json
+                  db_seed:
+                    order:
+                      ref: fixtures/db/seed_order.sql
+                  db_cleanup:
+                    order:
+                      ref: fixtures/db/cleanup_order.sql
+                  mock_stubs:
+                    payment_api:
+                      ref: fixtures/wiremock/payment_api/
+                setup:
+                """);
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains(
+                        "data_binding.datasets",
+                        "data_binding.fixtures",
+                        "data_binding.expected_results",
+                        "data_binding.db_seed",
+                        "data_binding.db_cleanup",
+                        "data_binding.mock_stubs");
+        assertThat(report.gaps()).extracting(DslValidationGap::ownerAction)
+                .contains("Use data_binding.input_data, setup_data, cleanup_data, or expect_data only.");
+    }
+
+    @Test
     void blocksLegacyOperationUnknownTargetAndMissingOutputs() {
         String yaml = validExecutionFocusedDsl()
                 .replace("target: RU-transform-job", "target: RU-missing")

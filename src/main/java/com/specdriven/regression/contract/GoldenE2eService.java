@@ -89,9 +89,9 @@ public class GoldenE2eService {
         recreateDirectory(runDir);
 
         String generatedAt = resolveGeneratedAt(suiteRoot, requestedProfile);
-        Path inputFile = suiteRoot.resolve(resolveDataRef(testCase, "${data.datasets.input}")).normalize();
-        Path setupFixture = suiteRoot.resolve(resolveDataRef(testCase, "${data.fixtures.setup}")).normalize();
-        Path cleanupFixture = suiteRoot.resolve(resolveDataRef(testCase, "${data.fixtures.cleanup}")).normalize();
+        Path inputFile = suiteRoot.resolve(resolveDataRef(testCase, "${data.input_data.input}")).normalize();
+        Path setupFixture = suiteRoot.resolve(resolveDataRef(testCase, "${data.setup_data.setup}")).normalize();
+        Path cleanupFixture = suiteRoot.resolve(resolveDataRef(testCase, "${data.cleanup_data.cleanup}")).normalize();
         Path expectedResult = suiteRoot.resolve(resolveExpectedRef(testCase)).normalize();
 
         String status = "passed";

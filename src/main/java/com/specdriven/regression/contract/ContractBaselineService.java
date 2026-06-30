@@ -1,5 +1,6 @@
 package com.specdriven.regression.contract;
 
+import com.specdriven.regression.dsl.DataBindingCategories;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -66,6 +67,7 @@ public class ContractBaselineService {
         }
         validateRequiredFields(graph, findings);
         validateProhibitedFields(graph, findings);
+        validateDataBindingCategories(graph, findings);
         validateRawSecrets(graph, findings);
         validateTargets(graph, findings);
         validateOperationTargets(graph, findings);
@@ -282,6 +284,18 @@ public class ContractBaselineService {
                 if (entry.getValue().containsKey(field)) {
                     findings.add(finding(entry.getKey(), field, "prohibited_deprecated_field",
                             "Remove `scenario`; declare behavior through setup/execute/verify and provider capability through Provider Contract."));
+                }
+            }
+        }
+    }
+
+    private void validateDataBindingCategories(ContractGraph graph, List<ContractFinding> findings) {
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.testCases().entrySet()) {
+            for (String category : mapValue(entry.getValue().get("data_binding")).keySet()) {
+                if (!DataBindingCategories.allowed(category)) {
+                    findings.add(finding(entry.getKey(), "data_binding." + category,
+                            "prohibited_data_binding_category",
+                            DataBindingCategories.OWNER_ACTION));
                 }
             }
         }
@@ -525,7 +539,7 @@ public class ContractBaselineService {
                                 "missing_required_field", "Add ref for operation parameter."));
                     } else {
                         String ref = stringValue(parameter.get("ref"));
-                        validateParameterRefWithinSuite(graph, entry.getKey(), operationRef,
+                        validateParameterRefWithinSuite(graph, entry.getKey(), testCase, operationRef,
                                 parameterIndex, bindAs, ref, targetResolution, findings);
                         validateParameterValueSyntax(entry.getKey(), operationRef, parameterIndex,
                                 bindAs, ref, targetResolution, findings);
@@ -647,12 +661,14 @@ public class ContractBaselineService {
     private void validateParameterRefWithinSuite(
             ContractGraph graph,
             Path testCasePath,
+            Map<String, Object> testCase,
             OperationRef operationRef,
             int parameterIndex,
             String bindAs,
             String ref,
             TargetResolution targetResolution,
             List<ContractFinding> findings) {
+        ref = resolveDataRef(testCase, ref);
         String filePart = refFilePart(ref);
         if (!looksLikeLocalFileRef(bindAs, ref, filePart)) {
             return;
@@ -670,6 +686,20 @@ public class ContractBaselineService {
                     operationRef.operation(),
                     "Keep parameter refs under the suite directory; use checked-in fixtures or expected_results."));
         }
+    }
+
+    private String resolveDataRef(Map<String, Object> testCase, String ref) {
+        if (!ref.startsWith("${data.") || !ref.endsWith("}")) {
+            return ref;
+        }
+        String path = ref.substring("${data.".length(), ref.length() - 1);
+        String[] parts = path.split("\\.");
+        if (parts.length != 2) {
+            return ref;
+        }
+        String resolved = stringValue(mapValue(mapValue(mapValue(testCase.get("data_binding")).get(parts[0]))
+                .get(parts[1])).get("ref"));
+        return resolved.isBlank() ? ref : resolved;
     }
 
     private void validateParameterValueSyntax(
@@ -1847,7 +1877,8 @@ public class ContractBaselineService {
                 case "invalid_result_json", "missing_result_json", "invalid_yaml",
                         "missing_required_file", "missing_required_directory",
                         "missing_required_field", "prohibited_legacy_field",
-                        "prohibited_governance_field", "prohibited_deprecated_field", "invalid_duration",
+                        "prohibited_governance_field", "prohibited_deprecated_field",
+                        "prohibited_data_binding_category", "invalid_duration",
                         "invalid_instant", "invalid_polling_config" -> "VALIDATION_ERROR";
                 default -> "VALIDATION_ERROR";
             };

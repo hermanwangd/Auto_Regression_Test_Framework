@@ -14,15 +14,15 @@ targets:
   payment_mock:
     provider_id: wiremock-payment-api
 data_binding:
-  mock_stubs:
+  setup_data:
     payment_success:
       ref: fixtures/payment_success_stub.json
     payment_failure:
       ref: fixtures/payment_failure_stub.json
-  datasets:
+  input_data:
     request_input:
       ref: fixtures/request_input.json
-  expected_results:
+  expect_data:
     expected_request:
       ref: expected_results/expected_request.json
 setup:
@@ -33,7 +33,7 @@ setup:
       operation: load_stubs
       parameters:
         - name: mappings
-          ref: ${data.mock_stubs.payment_success}
+          ref: ${data.setup_data.payment_success}
           bind_as: mock.mappings_ref
         - name: reset_before_load
           ref: true
@@ -44,10 +44,10 @@ execute:
     operation: send_http_request
     parameters:
       - name: request
-        ref: ${data.datasets.request_input}
+        ref: ${data.input_data.request_input}
         bind_as: http.request_body
       - name: expected_request
-        ref: ${data.expected_results.expected_request}
+        ref: ${data.expect_data.expected_request}
         bind_as: mock.request_filter
       - name: method
         ref: POST

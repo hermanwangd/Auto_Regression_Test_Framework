@@ -79,9 +79,9 @@ Boundary path: Multiple parameter cases for one test count the traced AC once in
 
 ## AC-004 Set Up and Clean Up Fixtures
 
-Happy path: Given fixtures with scope and cleanup policy, the framework sets up required state, records fixture evidence, executes the test, and runs cleanup according to policy. Supported v0.2 injection includes reviewed `data_binding`, `db_seed`, `db_cleanup`, and `http_stub` artifacts.
+Happy path: Given fixtures with scope and cleanup policy, the framework sets up required state, records fixture evidence, executes the test, and runs cleanup according to policy. Supported v0.2 injection includes reviewed `data_binding` artifacts under `input_data`, `setup_data`, `cleanup_data`, and `expect_data`, plus Provider Contract operations such as `db_seed`, `db_cleanup`, and `http_stub`.
 
-Failure path: Given mutating fixtures without cleanup where cleanup is required, unsafe cleanup scope, missing fixture ref, missing reviewed data artifact, unknown `data_binding` category, `data_binding` entry without `ref`, unresolved `${data.<category>.<name>}` reference, raw endpoint/JDBC/broker/secret value in `data_binding`, invalid provider target, or failed setup, execution blocks or fails with `schema_error`, `fixture_setup_error`, or `cleanup_error`.
+Failure path: Given mutating fixtures without cleanup where cleanup is required, unsafe cleanup scope, missing fixture ref, missing reviewed data artifact, unknown `data_binding` category, prohibited legacy `data_binding` category such as `datasets`, `fixtures`, `expected_results`, `db_seed`, `db_cleanup`, or `mock_stubs`, `data_binding` entry without `ref`, unresolved `${data.<category>.<name>}` reference, raw endpoint/JDBC/broker/secret value in `data_binding`, invalid provider target, or failed setup, execution blocks or fails with `schema_error`, `fixture_setup_error`, or `cleanup_error`.
 
 Boundary path: Default fixture behavior is `scope: test_case` and `cleanup_policy: always` unless the DSL explicitly declares another supported policy. Fixture injection uses Provider Contracts, Provider Instances, and Environment Bindings; the DSL does not contain raw endpoint, topic, DB credential, or provider implementation values.
 

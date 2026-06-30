@@ -164,6 +164,21 @@ class ContractBaselineCommandTest {
     }
 
     @Test
+    void validateSuiteRejectsLegacyDataBindingCategory() throws Exception {
+        Path suite = mutableBaseline();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase).replace("input_data:", "datasets:"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("field_path: data_binding.datasets")
+                .contains("reason: prohibited_data_binding_category")
+                .contains("owner_action: Use data_binding.input_data, setup_data, cleanup_data, or expect_data only.");
+    }
+
+    @Test
     void validateSuiteRejectsRawSecret() throws Exception {
         Path suite = mutableBaseline();
         Path binding = suite.getParent().resolve("environment_bindings/ci.yaml");

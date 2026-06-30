@@ -19,24 +19,23 @@ targets:
   event_bus:
     provider_id: nats-event-bus
 data_binding:
-  datasets:
+  input_data:
     payment_request:
       ref: fixtures/payment_request.json
-  db_seed:
+  setup_data:
     order:
       ref: fixtures/sample_db_seed.yaml
-  db_cleanup:
-    order:
-      ref: fixtures/sample_db_cleanup.yaml
-  mock_stubs:
     payment_api:
       ref: fixtures/wiremock/payment-api/
-  event_expectations:
+  cleanup_data:
+    order:
+      ref: fixtures/sample_db_cleanup.yaml
+  expect_data:
     payment_event:
       ref: expected_results/sample_expected.json
 parameters:
   - name: payment_request
-    ref: ${data.datasets.payment_request}
+    ref: ${data.input_data.payment_request}
     bind_as: request.body
 setup:
   fixtures:
@@ -46,16 +45,16 @@ setup:
       operation: execute_script
       parameters:
         - name: seed_script
-          ref: ${data.db_seed.order}
+          ref: ${data.setup_data.order}
           bind_as: db.script_ref
-      cleanup_ref: ${data.db_cleanup.order}
+      cleanup_ref: ${data.cleanup_data.order}
     load_payment_stub:
       type: http_stub
       target: payment_api_mock
       operation: load_stubs
       parameters:
         - name: mappings
-          ref: ${data.mock_stubs.payment_api}
+          ref: ${data.setup_data.payment_api}
           bind_as: mock.mappings_ref
 cleanup:
   fixtures:
@@ -65,7 +64,7 @@ cleanup:
       operation: execute_script
       parameters:
         - name: cleanup_script
-          ref: ${data.db_cleanup.order}
+          ref: ${data.cleanup_data.order}
           bind_as: db.script_ref
 execute:
   - id: verify_payment_mock_request

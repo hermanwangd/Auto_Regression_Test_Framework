@@ -158,24 +158,23 @@ targets:
     provider_id: payment-db
 
 data_binding:
-  datasets:
+  input_data:
     request_payload:
       ref: fixtures/payment/valid_request.json
-  config:
     submit_payment_method:
       ref: config/http/post.yaml
     submit_payment_path:
       ref: config/http/payments_path.yaml
-  db_seed:
+  setup_data:
     customer:
       ref: fixtures/payment/seed_customer.sql
-  db_cleanup:
+  cleanup_data:
     customer:
       ref: fixtures/payment/cleanup_customer.sql
 
 parameters:
   - name: request_payload
-    ref: ${data.datasets.request_payload}
+    ref: ${data.input_data.request_payload}
     bind_as: request.body
 
 setup:
@@ -186,9 +185,9 @@ setup:
       operation: db_seed
       parameters:
         - name: script
-          ref: ${data.db_seed.customer}
+          ref: ${data.setup_data.customer}
           bind_as: sql_ref
-      cleanup_ref: ${data.db_cleanup.customer}
+      cleanup_ref: ${data.cleanup_data.customer}
 
 execute:
   - id: submit_payment
@@ -196,10 +195,10 @@ execute:
     operation: http_request
     parameters:
       - name: method
-        ref: ${data.config.submit_payment_method}
+        ref: ${data.input_data.submit_payment_method}
         bind_as: request.method
       - name: path
-        ref: ${data.config.submit_payment_path}
+        ref: ${data.input_data.submit_payment_path}
         bind_as: request.path
       - name: body
         ref: parameters.request_payload
@@ -225,7 +224,7 @@ cleanup:
       operation: db_cleanup
       parameters:
         - name: script
-          ref: ${data.db_cleanup.customer}
+          ref: ${data.cleanup_data.customer}
           bind_as: sql_ref
 
 evidence:
@@ -242,24 +241,26 @@ runtime:
 
 ## 7. Data Binding
 
-Use `data_binding` when a test needs reviewed datasets, fixture files, mock stubs, expected observation config, or small non-secret config refs that are reused by setup, execute, cleanup, or verify.
+Use `data_binding` when a test needs reviewed input, setup, cleanup, or expected-result artifacts that are reused by setup, execute, cleanup, or verify.
 
-The framework resolves `${data.<category>.<name>}` to the matching entry's `ref`. Allowed v0.2 categories are `datasets`, `db_seed`, `db_cleanup`, `mock_stubs`, `event_expectations`, `file_seed`, `config`, and `env`.
+The framework resolves `${data.<category>.<name>}` to the matching entry's `ref`. Allowed v0.2 categories are `input_data`, `setup_data`, `cleanup_data`, and `expect_data`. Legacy categories such as `datasets`, `fixtures`, `expected_results`, `db_seed`, `db_cleanup`, and `mock_stubs` are prohibited as `data_binding` category keys. This prohibition does not remove lifecycle sections such as `setup.fixtures` or Provider Contract operations such as `db_seed` and `db_cleanup`.
 
 ```yaml
 data_binding:
-  datasets:
+  input_data:
     request_payload:
       ref: fixtures/payment/valid_request.json
-  db_seed:
+  setup_data:
     customer:
       ref: fixtures/payment/seed_customer.sql
-  db_cleanup:
-    customer:
-      ref: fixtures/payment/cleanup_customer.sql
-  mock_stubs:
     payment_gateway:
       ref: stubs/payment-gateway/mappings/
+  cleanup_data:
+    customer:
+      ref: fixtures/payment/cleanup_customer.sql
+  expect_data:
+    payment_response:
+      ref: expected-results/approved/ER001.yaml
 ```
 
 `data_binding` is not an Environment Binding substitute. It must not contain endpoint URLs, JDBC URLs, broker URLs, namespaces, credentials, or raw secrets.
@@ -271,8 +272,8 @@ Common `ref` values:
 ```yaml
 ref: fixtures/payment/valid_request.json
 ref: expected-results/approved/ER001.yaml
-ref: ${data.datasets.request_payload}
-ref: ${data.db_seed.customer}
+ref: ${data.input_data.request_payload}
+ref: ${data.setup_data.customer}
 ref: parameters.customer_id
 ref: ${execute.submit_payment.outputs.body}
 ```

@@ -452,37 +452,36 @@ The framework does not invent business data. The framework reads reviewed datase
 
 P0 injection types are `data_binding`, `db_seed`, `db_cleanup`, and `http_stub`. P1 injection types are `event_seed`, `event_expectation`, `file_seed`, `config_injection`, and `env_injection`.
 
-`data_binding` links a test case to reviewed artifact references. It is an optional top-level DSL section with named categories such as `datasets`, `db_seed`, `db_cleanup`, `mock_stubs`, `event_expectations`, `file_seed`, `config`, and `env`. DSL references use `${data.<category>.<name>}` and resolve to that entry's `ref`. `data_binding` must not contain raw endpoint URLs, JDBC strings, broker URLs, credentials, or secret values; profile-specific runtime values remain in Environment Binding.
+`data_binding` links a test case to reviewed artifact references. It is an optional top-level DSL section with exactly four allowed categories: `input_data`, `setup_data`, `cleanup_data`, and `expect_data`. DSL references use `${data.<category>.<name>}` and resolve to that entry's `ref`. Legacy categories such as `datasets`, `fixtures`, `expected_results`, `db_seed`, `db_cleanup`, and `mock_stubs` are prohibited as `data_binding` category keys. This prohibition does not remove lifecycle sections such as `setup.fixtures` or Provider Contract operations such as `db_seed` and `db_cleanup`. `data_binding` must not contain raw endpoint URLs, JDBC strings, broker URLs, credentials, or secret values; profile-specific runtime values remain in Environment Binding.
 
 `db_seed` injects Oracle / DB2 or relational DB test data through the selected JDBC provider. `db_cleanup` cleans injected DB data and records cleanup evidence. `http_stub` injects WireMock stub mappings. `event_expectation` may prepare event filters or expected observation configuration. `config_injection` and `env_injection` may inject runtime endpoint references, mock `base_url`, DB connection refs, or broker refs into the subject target through Environment Binding outputs. Injection evidence shall include source artifact ref, target provider, execution result, cleanup result, and masked runtime values.
 
 ```yaml
 data_binding:
-  datasets:
+  input_data:
     order:
       ref: datasets/order_normalize_valid.yaml
-  db_seed:
+  setup_data:
     orders:
       ref: fixtures/db/seed_orders.sql
-  db_cleanup:
-    orders:
-      ref: fixtures/db/cleanup_orders.sql
-  mock_stubs:
     payment_api:
       ref: stubs/payment_api/mappings/
+  cleanup_data:
+    orders:
+      ref: fixtures/db/cleanup_orders.sql
 
 setup:
   fixtures:
     orders_seed:
       type: db_seed
       target: database
-      ref: ${data.db_seed.orders}
-      cleanup_ref: ${data.db_cleanup.orders}
+      ref: ${data.setup_data.orders}
+      cleanup_ref: ${data.cleanup_data.orders}
 
     payment_stub:
       type: http_stub
       target: payment_api_mock
-      ref: ${data.mock_stubs.payment_api}
+      ref: ${data.setup_data.payment_api}
 ```
 
 ## 3.17 Reporting / Evidence Integration

@@ -15,10 +15,10 @@ targets:
   db2_like_db:
     provider_id: db2-like-db
 data_binding:
-  db_seed:
+  setup_data:
     order:
       ref: fixtures/db_seed.sql
-  db_cleanup:
+  cleanup_data:
     order:
       ref: fixtures/db_cleanup.sql
 expected_results:
@@ -32,12 +32,12 @@ setup:
       operation: db_seed
       parameters:
         - name: seed_sql
-          ref: ${data.db_seed.order}
+          ref: ${data.setup_data.order}
           bind_as: sql_ref
         - name: seed_order_id
           ref: expected_results/db_expected.json#/order_id
           bind_as: params.order_id
-      cleanup_ref: ${data.db_cleanup.order}
+      cleanup_ref: ${data.cleanup_data.order}
 execute:
   - id: query_order_oracle
     target: oracle_like_db
@@ -72,7 +72,7 @@ cleanup:
       operation: db_cleanup
       parameters:
         - name: cleanup_sql
-          ref: ${data.db_cleanup.order}
+          ref: ${data.cleanup_data.order}
           bind_as: sql_ref
         - name: cleanup_order_id
           ref: expected_results/db_expected.json#/order_id
