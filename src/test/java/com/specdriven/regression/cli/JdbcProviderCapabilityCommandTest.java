@@ -238,11 +238,8 @@ class JdbcProviderCapabilityCommandTest {
     @Test
     void jdbcRunFailsOwnerActionablyWhenSqlParamIsMissing() throws Exception {
         Path suite = mutableJdbc();
-        Path testCase = suite.getParent().resolve("test_case.yaml");
-        Files.writeString(testCase, read(testCase)
-                .replace("      - name: query_order_id\n"
-                        + "        ref: expected_results/db_expected.json#/order_id\n"
-                        + "        bind_as: params.order_id\n", ""));
+        Path query = suite.getParent().resolve("queries/order_exists_oracle.sql");
+        Files.writeString(query, read(query).replace(":order_id", ":missing_order_id"));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
 
@@ -265,12 +262,12 @@ class JdbcProviderCapabilityCommandTest {
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
 
         assertThat(result.exit()).isEqualTo(1);
-        Path resultJson = extractPath(result.stdout(), "result_json");
-        assertThat(read(resultJson))
-                .contains("\"status\": \"failed\"")
-                .contains("\"classification\": \"DB_EXECUTION_FAILED\"")
-                .contains("SQL_REF_MISSING")
+        assertThat(result.stdout())
+                .contains("run_status: blocked")
+                .contains("reason: unresolved_artifact_ref")
+                .contains("data.order_seed.ref")
                 .contains("missing_seed.sql");
+        assertThat(result.stdout()).doesNotContain("result_json:");
     }
 
     @Test

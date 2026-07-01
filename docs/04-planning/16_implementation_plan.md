@@ -51,7 +51,7 @@ These slices supersede the earlier minimum M1/v1 execution-slice framing.
 |---|---|---|
 | S01 DSL and Validation Core | `test_case_dsl.v0.2.schema.yaml`, required/conditional/prohibited fields, compatibility path, secret guardrail | AC-001, AC-014, AC-017 |
 | S02 Profile, Provider Resolution, Binding, and Suite Selection | Execution Profile schema, Provider Instance schema, Provider Contract schema, Environment Binding schema, runtime mode validation, local/CI dependency substitution policy, selected profile compatibility, test/suite/tag/profile CLI selection | AC-002, AC-015, AC-018 |
-| S03 Parameter and Variable Resolution | operation-level `parameters[].ref`, `parameters[].bind_as`, per-parameter result/evidence, source-ref coverage de-duplication | AC-003 |
+| S03 Data and Input Resolution | optional `data` catalog, operation-level `inputs`, per-parameter result/evidence, source-ref coverage de-duplication | AC-003 |
 | S04 Fixture Lifecycle | Fixture catalog, scope, cleanup policy, setup/cleanup evidence, unsafe fixture blocking | AC-004 |
 | S05 Provider Public Interface and Runtime Catalog | `shell_command`, `rest_client`, `grpc_client`, `jdbc_database`, `nats`, `kafka_messaging`, `kubernetes_runtime`, `vm_runtime`, and `external_runner` Provider Contracts, Provider Instances, Environment Bindings, runtime modes, and provider_type registry metadata | AC-005, AC-006, AC-007, AC-008, AC-016 |
 | S06 Verify and Polling Engine | Basic, structure, collection, numeric/time, file, state, event, custom verify types; DB/event polling | AC-009, AC-010, AC-011, AC-016 |
@@ -239,7 +239,7 @@ Related features: F007, F008, F011
 Acceptance: AC-001, AC-002, AC-013, AC-016
 Modules: `schema`, `artifact`, `validation`
 
-Implement typed parsers for framework-runtime artifacts: DSL test cases, `suite_manifest.yaml`, `run_plan.yaml`, Execution Profiles, Provider Instances, Provider Contracts, Environment Bindings, expected results, traceability maps, result JSON, and evidence records. Start with YAML/Markdown front matter or embedded YAML blocks supported by the artifact contracts. DSL parsing must validate `dsl_version`, required fields, conditionally required fields, allowed enum values, `targets.<target>.provider_id`, `targets.<target>.profile`, operation `parameters[].ref`, operation `parameters[].bind_as`, and output refs. Provider Contract parsing must require explicit `provider_type` and validate allowed runtime modes, allowed operations, allowed `bind_as` values, required binding keys, output refs, evidence outputs, failure codes, cleanup strategy, escape-hatch approval metadata when applicable, and unsupported configuration. Provider Instance parsing must validate that the instance conforms to the referenced Provider Contract shape. Execution Profile parsing must validate local/CI dependency provisioning policy, including Testcontainers or equivalent provisioner, dependency type, image/catalog ref, startup timeout, readiness check, cleanup scope, and output binding keys. Environment Binding parsing must validate selected `runtime_mode`, local/CI mock-stub-ephemeral replacement refs, generated binding outputs, and SIT/preprod native-dependency restrictions.
+Implement typed parsers for framework-runtime artifacts: DSL test cases, `suite_manifest.yaml`, `run_plan.yaml`, Execution Profiles, Provider Instances, Provider Contracts, Environment Bindings, expected results, traceability maps, result JSON, and evidence records. Start with YAML/Markdown front matter or embedded YAML blocks supported by the artifact contracts. DSL parsing must validate `dsl_version`, required fields, conditionally required fields, allowed enum values, `targets.<target>.provider_id`, selected profile, optional `data`, operation `inputs`, and output refs. Provider Contract parsing must require explicit `provider_type` and validate allowed runtime modes, allowed operations, allowed input keys, required inputs, required binding keys, output refs, evidence outputs, failure codes, cleanup strategy, escape-hatch approval metadata when applicable, and unsupported configuration. Provider Instance parsing must validate that the instance conforms to the referenced Provider Contract shape. Execution Profile parsing must validate local/CI dependency provisioning policy, including Testcontainers or equivalent provisioner, dependency type, image/catalog ref, startup timeout, readiness check, cleanup scope, and output binding keys. Environment Binding parsing must validate selected `runtime_mode`, local/CI mock-stub-ephemeral replacement refs, generated binding outputs, and SIT/preprod native-dependency restrictions.
 
 Product-side readiness artifacts such as `package.yaml`, `rp_feature_spec.md`, and `rp_ru_mapping.yaml` are parsed by the next-stage Phase 2 support path unless they are used only as sample fixture inputs for framework verification.
 
@@ -262,8 +262,8 @@ Implement the execution-focused DSL v0.2 validation gate before provider runtime
 The gate validates:
 
 - Always-required fields: `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs.acceptance_criteria`, `targets`, `execute`, `verify`, `evidence`, and `runtime`; `labels` and `compatible_profiles` are optional unless the selected report or profile needs them.
-- Conditional fields: `setup.fixtures` when precondition data or mutated state is needed, `expected_results` when verify rules use approved artifacts or reusable truth sources, `setup.fixtures.<name>.cleanup_ref` for state mutation, explicit and uniquely named `execute[]` items, `execute[].with`, `execute[].outputs`, `verify[].actual` when a verify rule reads captured output, `verify[].selector` for structured checks, provider metadata for metadata-backed rules such as `response_status_equals`, `verify[].target/query/event`, `verify[].options`, selected profile, environment binding, and result/evidence refs.
-- Parameterization fields when used: `parameters.ref`, `parameters.bind_as`, a readable reviewed parameter set, unique case IDs in the referenced set, non-empty case values, and resolvable `${param.<bind_as>.<field>}` references.
+- Conditional fields: `setup.operations` when precondition data or mutated state is needed, check-level `expected_ref` or `data` refs when verify rules use approved artifacts or reusable truth sources, cleanup operations for state mutation, explicit and uniquely named `execute.operations[]` items, operation `inputs`, operation `outputs`, `verify.checks[].actual` when a verify rule reads captured output, `verify.checks[].selector` for structured checks, provider metadata for metadata-backed rules such as `response_status_equals`, `verify.checks[].target/query/event`, `verify.checks[].options`, selected profile, environment binding, and result/evidence refs.
+- Parameterization fields when used: operation `inputs` that reference readable reviewed parameter sets, unique case IDs in the referenced set, non-empty case values, and resolvable `${data.<name>}` references.
 - Supported operations must come from the referenced Provider Contract, such as `run_batch`, `execute_command`, `http_request`, `unary_call`, `publish_message`, `consume_message`, `nats_publish`, `nats_observe`, `execute_script`, `query`, `check_deployment_ready`, `run_command`, `run_and_collect`, `load_stubs`, and `verify_requests`.
 - Supported verify rules: basic, structure, collection, numeric, file, state, and event checks defined in the artifact contract.
 - Prohibited fields: legacy-only fields such as `call_ru`, `target_ru_id`, `package_inputs`, and `oracles`, plus approval, waiver, release gate, and risk approval fields.
@@ -290,7 +290,7 @@ Prove that the same execution-focused DSL v0.2 artifact can be consumed by execu
 Required behavior:
 
 - `run` derives the reviewed AC source from `source_refs.acceptance_criteria` and copies optional report labels from `labels` or generated `traceability_map.yaml`.
-- `run` resolves v0.2 targets, setup fixtures, execute outputs, expected-result refs, verify rules, evidence refs, selected profile, environment binding, timeout, retry, plugin contracts, and secret policy into durable result, run, and batch evidence.
+- `run` resolves v0.2 targets, setup operations, execute outputs, expected-result refs, verify rules, evidence refs, selected profile, environment binding, timeout, retry, plugin contracts, and secret policy into durable result, run, and batch evidence.
 - `report --batch-id` calculates coverage from the selected batch using v0.2 source refs, optional labels, generated `traceability_map.yaml`, standard result JSON, and normalized run evidence.
 - The selected batch becomes review-ready when the v0.2 test passes and covers the automatable RP AC through a resolvable source ref.
 - A passing run that cannot be reported as review-ready is treated as an incomplete F007/F008 implementation.
@@ -398,7 +398,7 @@ Related feature: F007
 Acceptance: AC-002, AC-003, AC-015, AC-018
 Modules: `binding`
 
-Resolve execution-focused DSL v0.2 `targets.<target>.provider_id`, `targets.<target>.profile`, `setup.fixtures`, `execute[].parameters`, `execute[].outputs`, `expected_results`, `verify`, `evidence.required`, selected Execution Profile, Provider Instances, Provider Contracts, Environment Binding, and `runtime` into an execution plan. The initial compatibility path may still read legacy `package_inputs`, `steps`, `oracles`, `assertions`, `evidence_required`, and `policy`, but new generation and new framework tests must target the execution-focused fields. Binding types or operations outside the selected or implemented provider types must fail as unsupported before execution.
+Resolve execution-focused DSL v0.2 `targets.<target>.provider_id`, optional `data`, `setup.operations`, `execute.operations[].inputs`, `execute.operations[].outputs`, expected refs, `verify.checks`, `evidence.required`, selected Execution Profile, Provider Instances, Provider Contracts, Environment Binding, and `runtime` into an execution plan. The initial compatibility path may still read legacy `package_inputs`, `steps`, `oracles`, `assertions`, `evidence_required`, and `policy`, but new generation and new framework tests must target the execution-focused fields. Binding types or operations outside the selected or implemented provider types must fail as unsupported before execution.
 
 Verification:
 
@@ -406,7 +406,7 @@ Verification:
 regress run --root <product-repo> --rp-id <rp-id> --env ci --dry-run
 ```
 
-Done when supported pilot targets, setup fixtures, execute inputs/outputs, expected results, verify rules, evidence refs, and runtime policy resolve into the execution plan, and unresolved fields fail fast with file path, test case ID, acceptance-criteria source ref when available, section name, field path, provider_id, provider_type, profile when applicable, and owner action.
+Done when supported pilot targets, setup operations, execute inputs/outputs, expected refs, verify rules, evidence refs, and runtime policy resolve into the execution plan, and unresolved fields fail fast with file path, test case ID, acceptance-criteria source ref when available, section name, field path, provider_id, provider_type, profile when applicable, and owner action.
 
 ### T009A - Parameter Set Reference Binding
 
@@ -414,7 +414,7 @@ Related feature: F007
 Acceptance: AC-003, AC-012, AC-013
 Modules: `binding`, `execution`, `evidence`, `report`
 
-Implement v0.2 parameterization using operation-level `parameters[].ref` and `parameters[].bind_as`. `ref` must point to a reviewed parameter set value, fixture, execute output, expected-result artifact, or environment-safe reference. `bind_as` declares the provider input location and must be allowed by the Provider Contract selected through the target Provider Instance. Each referenced parameter-set case must have a unique case ID and non-empty values. Runtime may resolve parameter refs from setup, execute, cleanup, expected results, verify rules, and evidence refs. Each case produces a separate run ID, standard result JSON, and run evidence with `parameter_case_id`; coverage counts the traced AC once per batch.
+Implement v0.2 parameterization using optional `data` refs and operation-level `inputs`. Each input ref must point to a reviewed parameter set value, setup output, execute output, expected-result artifact, or environment-safe reference. The input key declares the provider input location and must be allowed by the Provider Contract selected through the target Provider Instance. Each referenced parameter-set case must have a unique case ID and non-empty values. Runtime may resolve input refs from setup, execute, cleanup, expected refs, verify rules, and evidence refs. Each case produces a separate run ID, standard result JSON, and run evidence with `parameter_case_id`; coverage counts the traced AC once per batch.
 
 Verification:
 
@@ -423,7 +423,7 @@ Verification:
 ./mvnw -q -Dtest='RegressionCommandTest,BindingResolverTest,DslTestCaseValidatorTest,CoverageReportServiceTest' test
 ```
 
-Done when one DSL test with operation-level `parameters[].ref` and `parameters[].bind_as` resolves a reviewed two-case parameter set, validates `bind_as` against the Provider Contract, produces two run evidence directories with the same test case ID and acceptance-criteria source ref, distinct run IDs, recorded `parameter_case_id`, resolved safe parameter refs, and batch/report coverage that counts the AC once. Inline `parameters.strategy`, inline `parameters.cases`, and `${parameters.<name>}` references are accepted only through an explicit legacy compatibility path until migrated.
+Done when one DSL test with operation-level `inputs` resolves a reviewed two-case parameter set, validates input keys against the Provider Contract, produces two run evidence directories with the same test case ID and acceptance-criteria source ref, distinct run IDs, recorded `parameter_case_id`, resolved safe input refs, and batch/report coverage that counts the AC once. Inline `parameters.strategy`, inline `parameters.cases`, and `${parameters.<name>}` references are accepted only through an explicit legacy compatibility path until migrated.
 
 ### T010 - Provider Contract Registry and Dispatch
 
@@ -431,7 +431,7 @@ Related feature: F007
 Acceptance: AC-005, AC-006, AC-007, AC-008, AC-016
 Modules: `provider`, `schema`
 
-Introduce the provider capability registry, Provider Contract validator, Provider Instance validator, Environment Binding validator, and DSL target resolver before adding more provider runtimes. The registry must define supported `provider_type` values, supported runtime modes, required binding keys, supported operations, allowed execution modes, runtime support status, evidence outputs, and safety policy. Resolve the public runtime chain explicitly: DSL target `provider_id + profile` -> Provider Instance -> `provider_type` -> Provider Contract -> Environment Binding `runtime_mode` and values for the selected profile. Suite manifests select tests only and must not override provider fields. Dispatch `execute[].operation`, `setup[].operation`, `cleanup[].operation`, `parameters[].ref`, `parameters[].bind_as`, output refs, `verify[].type`, and `evidence.required[]` through the resolved provider runtime. Fail before execution when a Provider Contract, Provider Instance, Environment Binding, runtime mode, required binding key, operation, `bind_as`, or output ref is missing, ambiguous, unsupported, unsafe, prohibited for the selected profile, or only available through an unapproved escape hatch.
+Introduce the provider capability registry, Provider Contract validator, Provider Instance validator, Environment Binding validator, and DSL target resolver before adding more provider runtimes. The registry must define supported `provider_type` values, supported runtime modes, required binding keys, supported operations, allowed input keys, required inputs, allowed execution modes, runtime support status, evidence outputs, and safety policy. Resolve the public runtime chain explicitly: DSL target `provider_id + selected profile` -> Provider Instance -> `provider_type` -> Provider Contract -> Environment Binding `runtime_mode` and values for the selected profile. Suite manifests select tests only and must not override provider fields. Dispatch `execute.operations[].operation`, `setup.operations[].operation`, `cleanup.operations[].operation`, operation `inputs`, output refs, `verify.checks[].type`, and `evidence.required[]` through the resolved provider runtime. Fail before execution when a Provider Contract, Provider Instance, Environment Binding, runtime mode, required binding key, operation, input key, required input, or output ref is missing, ambiguous, unsupported, unsafe, prohibited for the selected profile, or only available through an unapproved escape hatch.
 
 Verification:
 
@@ -439,7 +439,7 @@ Verification:
 regress run --root <product-repo> --rp-id <rp-id> --env ci --dry-run
 ```
 
-Done when provider resolution reports provider_id, provider_type, profile, runtime_mode, runtime support status, source level, action/type, affected logical target, test case ID, acceptance-criteria source ref when available, Provider Contract path, Provider Instance path, Environment Binding path, and owner action for unsupported, missing, ambiguous, invalid `bind_as`, missing output ref, missing binding key, unsupported runtime mode, prohibited mock substitution, unsafe, or unapproved escape-hatch capabilities. Execution dispatch must no longer require adding a new product-specific conditional to `ExecutionEngine`.
+Done when provider resolution reports provider_id, provider_type, profile, runtime_mode, runtime support status, source level, action/type, affected logical target, test case ID, acceptance-criteria source ref when available, Provider Contract path, Provider Instance path, Environment Binding path, and owner action for unsupported, missing, ambiguous, invalid input key, missing required input, missing output ref, missing binding key, unsupported runtime mode, prohibited mock substitution, unsafe, or unapproved escape-hatch capabilities. Execution dispatch must no longer require adding a new product-specific conditional to `ExecutionEngine`.
 
 ### T011 - Fixture Lifecycle Manager
 

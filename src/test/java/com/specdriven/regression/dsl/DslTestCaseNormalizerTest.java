@@ -91,6 +91,105 @@ class DslTestCaseNormalizerTest {
     }
 
     @Test
+    void normalizesProviderInputsDslIntoRuntimeBridgeShape() {
+        Map<String, Object> testCase = new LinkedHashMap<>();
+        testCase.put("dsl_version", "v0.2");
+        testCase.put("test_case_id", "GOLDEN-E2E-TC-001");
+        testCase.put("status", "active");
+        testCase.put("revision", 1);
+        testCase.put("source_refs", Map.of(
+                "acceptance_criteria", "docs/03-acceptance/04_acceptance_criteria.md#track-b-golden-e2e"));
+        testCase.put("targets", Map.of(
+                "sample_runtime", Map.of("provider_id", "sample-fake-runtime")));
+        testCase.put("data", Map.of(
+                "input", Map.of("ref", "fixtures/input.json"),
+                "setup_fixture", Map.of("ref", "fixtures/setup_fixture.yaml"),
+                "expected_output", Map.of("ref", "expected_results/expected_output.json")));
+        Map<String, Object> setupInputs = new LinkedHashMap<>();
+        setupInputs.put("fixture.setup_ref", Map.of("ref", "${data.setup_fixture}"));
+        setupInputs.put("fixture.input_ref", Map.of("ref", "${data.input}"));
+        testCase.put("setup", Map.of("operations", List.of(Map.of(
+                "id", "prepare_sample_workspace",
+                "target", "sample_runtime",
+                "operation", "setup_fixture",
+                "inputs", setupInputs))));
+        Map<String, Object> executeInputs = new LinkedHashMap<>();
+        executeInputs.put("sample.input_ref", Map.of("ref", "${data.input}"));
+        executeInputs.put("sample.expected_ref", Map.of("ref", "${data.expected_output}"));
+        testCase.put("execute", Map.of("operations", List.of(Map.of(
+                "id", "produce_sample_output",
+                "target", "sample_runtime",
+                "operation", "execute_sample",
+                "inputs", executeInputs,
+                "outputs", Map.of("actual_json", "actual_json")))));
+        testCase.put("verify", Map.of("checks", List.of(Map.of(
+                "id", "output_matches_expected_json",
+                "type", "json_match",
+                "actual", Map.of("ref", "${execute.produce_sample_output.outputs.actual_json}"),
+                "expected_ref", "expected_results/expected_output.json"))));
+
+        Map<String, Object> normalized = new DslTestCaseNormalizer().normalize(testCase);
+
+        Map<?, ?> inputs = (Map<?, ?>) ((Map<?, ?>) normalized.get("package_inputs")).get("inputs");
+        assertThat(inputs.keySet().stream().map(Object::toString).toList())
+                .contains(
+                        "prepare_sample_workspace_fixture_setup_ref",
+                        "prepare_sample_workspace_fixture_input_ref",
+                        "produce_sample_output_sample_input_ref",
+                        "produce_sample_output_sample_expected_ref");
+        Map<?, ?> sampleInput = (Map<?, ?>) inputs.get("produce_sample_output_sample_input_ref");
+        assertThat(sampleInput.get("ref")).isEqualTo("${data.input}");
+        assertThat(sampleInput.get("bind_as")).isEqualTo("sample.input_ref");
+        assertThat((List<?>) normalized.get("steps"))
+                .singleElement()
+                .satisfies(step -> {
+                    Map<?, ?> stepMap = (Map<?, ?>) step;
+                    assertThat(stepMap.get("action")).isEqualTo("execute_sample");
+                    assertThat(stepMap.get("input"))
+                            .isEqualTo("${package_inputs.inputs.produce_sample_output_sample_input_ref}");
+                });
+        assertThat(((Map<?, ?>) normalized.get("expected")).get("ref"))
+                .isEqualTo("expected_results/expected_output.json");
+        assertThat((List<?>) normalized.get("assertions"))
+                .singleElement()
+                .satisfies(assertion -> {
+                    Map<?, ?> assertionMap = (Map<?, ?>) assertion;
+                    assertThat(assertionMap.get("type")).isEqualTo("json_match");
+                    assertThat(assertionMap.get("actual"))
+                            .isEqualTo("${execute.produce_sample_output.outputs.actual_json}");
+                    assertThat(assertionMap.get("oracle"))
+                            .isEqualTo("${oracles.output_matches_expected_json_expected}");
+                });
+        Map<?, ?> oracles = (Map<?, ?>) normalized.get("oracles");
+        Map<?, ?> expectedOracle = (Map<?, ?>) oracles.get("output_matches_expected_json_expected");
+        assertThat(expectedOracle.get("type")).isEqualTo("expected_result_artifact");
+        assertThat(expectedOracle.get("ref")).isEqualTo("expected_results/expected_output.json");
+    }
+
+    @Test
+    void normalizesDirectVerifyExpectedRefIntoPrivateOracle() {
+        Map<String, Object> normalized = new DslTestCaseNormalizer().normalize(Map.of(
+                "dsl_version", "v0.2",
+                "test_case_id", "TC-DIRECT-EXPECTED-001",
+                "verify", Map.of("checks", List.of(Map.of(
+                        "id", "payload_matches",
+                        "type", "file_diff",
+                        "actual", Map.of("ref", "${execute.run.outputs.actual}"),
+                        "expected", "expected-results/approved/ER-001.yaml")))));
+
+        Map<?, ?> oracles = (Map<?, ?>) normalized.get("oracles");
+        Map<?, ?> expectedOracle = (Map<?, ?>) oracles.get("payload_matches_expected");
+        assertThat(expectedOracle.get("type")).isEqualTo("expected_result_artifact");
+        assertThat(expectedOracle.get("ref")).isEqualTo("expected-results/approved/ER-001.yaml");
+        assertThat(((Map<?, ?>) normalized.get("expected")).get("ref"))
+                .isEqualTo("expected-results/approved/ER-001.yaml");
+        assertThat((List<?>) normalized.get("assertions"))
+                .singleElement()
+                .satisfies(assertion -> assertThat(((Map<?, ?>) assertion).get("oracle"))
+                        .isEqualTo("${oracles.payload_matches_expected}"));
+    }
+
+    @Test
     void mapsVerifyExpectedDirectNameToMatchingExpectedResult() {
         Map<String, Object> normalized = new DslTestCaseNormalizer().normalize(Map.of(
                 "test_case_id", "TC-001",

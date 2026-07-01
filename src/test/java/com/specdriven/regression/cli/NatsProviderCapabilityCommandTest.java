@@ -168,13 +168,13 @@ class NatsProviderCapabilityCommandTest {
     void natsValidateRejectsUnsupportedVerifierBindAsBeforeExecution() throws Exception {
         Path suite = mutableNats();
         Path testCase = suite.getParent().resolve("test_case.yaml");
-        Files.writeString(testCase, read(testCase).replace("bind_as: expected_ref", "bind_as: unsupported.topic"));
+        Files.writeString(testCase, read(testCase).replace("expected_ref:", "unsupported.topic:"));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
-                .contains("reason: unsupported_bind_as")
+                .contains("reason: unsupported_input")
                 .contains("operation: event_payload_match")
                 .contains("provider_type: nats");
     }
@@ -205,7 +205,7 @@ class NatsProviderCapabilityCommandTest {
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("reason: ref_outside_suite_root")
-                .contains("field_path: execute.publish_event.parameters[1].ref")
+                .contains("field_path: execute.publish_event.inputs.payload_ref")
                 .contains("owner_action:");
     }
 
@@ -213,14 +213,14 @@ class NatsProviderCapabilityCommandTest {
     void natsValidateRejectsInvalidDurationBeforeExecution() throws Exception {
         Path suite = mutableNats();
         Path testCase = suite.getParent().resolve("test_case.yaml");
-        Files.writeString(testCase, read(testCase).replace("ref: PT5S", "ref: not-a-duration"));
+        Files.writeString(testCase, read(testCase).replace("value: PT5S", "value: not-a-duration"));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("reason: invalid_duration")
-                .contains("bind_as `timeout`")
+                .contains("input `timeout`")
                 .contains("owner_action:");
     }
 

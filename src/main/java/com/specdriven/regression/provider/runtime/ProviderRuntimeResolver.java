@@ -25,26 +25,26 @@ public class ProviderRuntimeResolver {
                     "Provider operation `" + request.operation() + "` is not declared by Provider Contract.",
                     "Use an operation declared by the selected Provider Contract."));
         }
-        List<String> allowedBindAs = stringList(operation.get("allowed_bind_as"));
+        List<String> allowedInputs = operationInputs(operation, "allowed_inputs", "allowed_bind_as");
         for (Map<String, Object> parameter : request.parameters()) {
-            String bindAs = stringValue(parameter.get("bind_as"));
-            if (!allowedBindAs(allowedBindAs, bindAs)) {
+            String inputName = stringValue(parameter.get("bind_as"));
+            if (!allowedBindAs(allowedInputs, inputName)) {
                 return ProviderRuntimeResolution.failed(ProviderFailure.of(
-                        "UNSUPPORTED_BIND_AS",
+                        "UNSUPPORTED_INPUT",
                         "TARGET_RESOLUTION_FAILED",
-                        "bind_as `" + bindAs + "` is not allowed for operation `" + request.operation() + "`.",
-                        "Use a bind_as value declared by the Provider Contract operation."));
+                        "input `" + inputName + "` is not allowed for operation `" + request.operation() + "`.",
+                        "Use an input declared by the Provider Contract operation."));
             }
         }
-        for (String requiredParameter : stringList(operation.get("required_parameters"))) {
+        for (String requiredInput : operationInputs(operation, "required_inputs", "required_parameters")) {
             if (request.parameters().stream()
-                    .noneMatch(parameter -> requiredParameter.equals(stringValue(parameter.get("bind_as"))))) {
+                    .noneMatch(parameter -> requiredInput.equals(stringValue(parameter.get("bind_as"))))) {
                 return ProviderRuntimeResolution.failed(ProviderFailure.of(
-                        "MISSING_REQUIRED_PARAMETER",
+                        "MISSING_REQUIRED_INPUT",
                         "TARGET_RESOLUTION_FAILED",
-                        "Required parameter `" + requiredParameter + "` is missing for operation `"
+                        "Required input `" + requiredInput + "` is missing for operation `"
                                 + request.operation() + "`.",
-                        "Add a parameter with bind_as `" + requiredParameter + "` to the DSL operation."));
+                        "Add input `" + requiredInput + "` to the DSL operation."));
             }
         }
         for (String bindingKey : requiredBindingKeys(context.providerContract())) {
@@ -80,6 +80,11 @@ public class ProviderRuntimeResolver {
             }
         }
         return false;
+    }
+
+    private List<String> operationInputs(Map<String, Object> operation, String preferredField, String legacyField) {
+        List<String> inputs = stringList(operation.get(preferredField));
+        return inputs.isEmpty() ? stringList(operation.get(legacyField)) : inputs;
     }
 
     @SuppressWarnings("unchecked")

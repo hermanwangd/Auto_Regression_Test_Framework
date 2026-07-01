@@ -18,10 +18,11 @@ public class DslTestCaseValidator {
     private static final Set<String> EXECUTION_FOCUSED_SECTIONS = Set.of(
             "traceability",
             "targets",
+            "data",
             "setup",
             "execute",
-            "expected_results",
             "verify",
+            "cleanup",
             "evidence",
             "runtime");
     private static final Set<String> ALLOWED_STATUSES = Set.of(
@@ -43,6 +44,14 @@ public class DslTestCaseValidator {
             "assertions",
             "evidence_required",
             "policy");
+    private static final Set<String> PROHIBITED_V02_DATA_FIELDS = Set.of(
+            "data_binding",
+            "datasets",
+            "fixtures",
+            "expected_results",
+            "db_seed",
+            "db_cleanup",
+            "mock_stubs");
     private static final Set<String> GOVERNANCE_FIELDS = Set.of(
             "approval_status",
             "approved_by",
@@ -60,7 +69,24 @@ public class DslTestCaseValidator {
             "publish_message",
             "consume_message",
             "request_reply_message",
-            "run_application");
+            "run_application",
+            "setup_fixture",
+            "execute_sample",
+            "cleanup_fixture",
+            "load_stubs",
+            "reset_stubs",
+            "http_request",
+            "db_seed",
+            "db_execute",
+            "db_query",
+            "db_cleanup",
+            "nats_publish",
+            "nats_observe",
+            "event_published",
+            "event_payload_match",
+            "json_match",
+            "schema_match",
+            "file_diff");
     private static final Set<String> VERIFY_TYPES_REQUIRING_ACTUAL_AND_EXPECTED = Set.of(
             "equals",
             "not_equals",
@@ -74,7 +100,9 @@ public class DslTestCaseValidator {
             "schema_matches",
             "contract_match",
             "contract_matches",
-            "json_path_equals");
+            "json_path_equals",
+            "json_match",
+            "value_equals");
     private static final Set<String> VERIFY_TYPES_REQUIRING_ACTUAL_ONLY = Set.of(
             "exists",
             "not_exists",
@@ -132,6 +160,7 @@ public class DslTestCaseValidator {
         validateIdentity(document, testCaseId, acId, gaps);
         validateLegacyAndGovernanceFields(document, testCaseId, acId, gaps);
         validateDataBinding(document, testCaseId, acId, gaps);
+        validateData(document, testCaseId, acId, gaps);
         validateTargets(document, testCaseId, acId, gaps);
         validateSetup(document, testCaseId, acId, gaps);
         validateExecute(document, testCaseId, acId, gaps);
@@ -232,6 +261,15 @@ public class DslTestCaseValidator {
             gaps.add(gap(testCaseId, acId, "compatibility", "traceability", "",
                     "Use source_refs and labels instead of old traceability fields in DSL v0.2."));
         }
+        if ("v0.2".equals(stringValue(document.get("dsl_version")))) {
+            for (String field : PROHIBITED_V02_DATA_FIELDS) {
+                if (document.containsKey(field)) {
+                    gaps.add(gap(testCaseId, acId, "compatibility", field, "",
+                            "Use lifecycle-neutral `data` entries and bind them through operation `inputs`; `"
+                                    + field + "` is not part of DSL v0.2."));
+                }
+            }
+        }
         for (String field : DEPRECATED_DSL_FIELDS) {
             if (document.containsKey(field)) {
                 gaps.add(gap(testCaseId, acId, "compatibility", field, "",
@@ -245,13 +283,33 @@ public class DslTestCaseValidator {
         if (!document.containsKey("data_binding")) {
             return;
         }
+        if ("v0.2".equals(stringValue(document.get("dsl_version")))) {
+            gaps.add(gap(testCaseId, acId, "data_binding", "data_binding", "",
+                    "Use lifecycle-neutral `data` entries and bind them through operation `inputs`; `data_binding` is not part of DSL v0.2."));
+        }
         Map<?, ?> dataBinding = map(document.get("data_binding"));
         for (Map.Entry<?, ?> entry : dataBinding.entrySet()) {
             String category = stringValue(entry.getKey());
             if (!DataBindingCategories.allowed(category)) {
                 gaps.add(gap(testCaseId, acId, "data_binding", "data_binding." + category, "",
-                        DataBindingCategories.OWNER_ACTION));
+                        "Move checked-in artifacts to `data.<name>.ref` and reference them from operation `inputs`."));
             }
+        }
+    }
+
+    private void validateData(Map<?, ?> document, String testCaseId, String acId, List<DslValidationGap> gaps) {
+        if (!document.containsKey("data")) {
+            return;
+        }
+        Map<?, ?> data = map(document.get("data"));
+        if (data.isEmpty() && !(document.get("data") instanceof Map<?, ?>)) {
+            gaps.add(gap(testCaseId, acId, "data", "data", "",
+                    "Declare data as a map of reusable data names to ref or value sources."));
+            return;
+        }
+        for (Map.Entry<?, ?> entry : data.entrySet()) {
+            String dataName = stringValue(entry.getKey());
+            validateInputSource(entry.getValue(), "data." + dataName, "data", testCaseId, acId, gaps);
         }
     }
 
@@ -286,15 +344,24 @@ public class DslTestCaseValidator {
                     "Declare at least one named target with type, provider, and environment."));
             return;
         }
+        boolean v02 = "v0.2".equals(stringValue(document.get("dsl_version")));
         for (Map.Entry<?, ?> entry : targets.entrySet()) {
             String targetName = stringValue(entry.getKey());
             Map<?, ?> target = map(entry.getValue());
-            requireText(target, "type", "targets", testCaseId, acId, gaps,
-                    "Declare targets." + targetName + ".type.", "targets." + targetName + ".type");
-            requireAnyText(target, List.of("provider", "runner"), "targets", testCaseId, acId, gaps,
-                    "Declare targets." + targetName + ".provider.", "targets." + targetName + ".provider");
-            requireText(target, "environment", "targets", testCaseId, acId, gaps,
-                    "Declare targets." + targetName + ".environment.", "targets." + targetName + ".environment");
+            if (v02) {
+                requireText(target, "provider_id", "targets", testCaseId, acId, gaps,
+                        "Declare targets." + targetName + ".provider_id.", "targets." + targetName + ".provider_id");
+            } else if (!isMissing(target.get("provider_id"))) {
+                requireText(target, "provider_id", "targets", testCaseId, acId, gaps,
+                        "Declare targets." + targetName + ".provider_id.", "targets." + targetName + ".provider_id");
+            } else {
+                requireText(target, "type", "targets", testCaseId, acId, gaps,
+                        "Declare targets." + targetName + ".type.", "targets." + targetName + ".type");
+                requireAnyText(target, List.of("provider", "runner"), "targets", testCaseId, acId, gaps,
+                        "Declare targets." + targetName + ".provider.", "targets." + targetName + ".provider");
+                requireText(target, "environment", "targets", testCaseId, acId, gaps,
+                        "Declare targets." + targetName + ".environment.", "targets." + targetName + ".environment");
+            }
         }
     }
 
@@ -302,7 +369,14 @@ public class DslTestCaseValidator {
         Map<?, ?> setup = map(document.get("setup"));
         if (setup.isEmpty() && !document.containsKey("setup")) {
             gaps.add(gap(testCaseId, acId, "setup", "setup", "",
-                    "Declare setup.fixtures, even when no fixtures are required."));
+                    "Declare setup.operations, even when no setup is required."));
+            return;
+        }
+        if (setup.containsKey("operations")) {
+            List<OperationSection> operations = operationSections(document, "setup");
+            for (OperationSection operation : operations) {
+                validateOperationShape(operation, map(document.get("targets")), "setup", testCaseId, acId, gaps, false);
+            }
             return;
         }
         if (!(setup.get("fixtures") instanceof Map<?, ?>)) {
@@ -334,50 +408,160 @@ public class DslTestCaseValidator {
     }
 
     private void validateExecute(Map<?, ?> document, String testCaseId, String acId, List<DslValidationGap> gaps) {
-        List<Map<?, ?>> execute = mapList(document.get("execute"));
+        List<OperationSection> execute = operationSections(document, "execute");
         if (execute.isEmpty()) {
             gaps.add(gap(testCaseId, acId, "execute", "execute", "",
                     "Declare at least one execute operation before execution."));
             return;
         }
-        if (execute.size() > 1) {
+        if (document.get("execute") instanceof List<?> && execute.size() > 1) {
             gaps.add(gap(testCaseId, acId, "execute", "execute", "",
                     "Use exactly one execute step per M1 test case; split additional operations into separate approved tests in the same batch."));
         }
         Map<?, ?> targets = map(document.get("targets"));
         for (int index = 0; index < execute.size(); index++) {
-            Map<?, ?> step = execute.get(index);
-            String prefix = "execute[" + index + "]";
-            requireText(step, "id", "execute", testCaseId, acId, gaps,
-                    "Declare execute step id.", prefix + ".id");
-            String target = stringValue(step.get("target"));
-            if (target.isBlank()) {
-                gaps.add(gap(testCaseId, acId, "execute", prefix + ".target", "",
-                        "Declare execute target that matches a named target."));
-            } else if (!targets.containsKey(target)) {
-                gaps.add(gap(testCaseId, acId, "execute", prefix + ".target", "",
-                        "Reference an existing target in execute[" + index + "].target."));
-            }
-            if (step.containsKey("target_ru_id")) {
-                gaps.add(gap(testCaseId, acId, "execute", prefix + ".target_ru_id", "",
-                        "Use execute[].target instead of legacy target_ru_id."));
-            }
-            String operation = stringValue(step.get("operation"));
-            if (operation.isBlank()) {
-                gaps.add(gap(testCaseId, acId, "execute", prefix + ".operation", "",
-                        "Declare execute operation before provider dispatch."));
-            } else if ("call_ru".equals(operation)) {
-                gaps.add(gap(testCaseId, acId, "execute", prefix + ".operation", "",
-                        "Use operation `run_batch`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `request_reply_message`, `run_application`, or `execute_command` instead of legacy `call_ru`."));
-            } else if (!SUPPORTED_OPERATIONS.contains(operation)) {
-                gaps.add(gap(testCaseId, acId, "execute", prefix + ".operation", "",
-                        "Use supported v0.2 operation run_batch, call_api, execute_sql, publish_message, consume_message, request_reply_message, run_application, or execute_command."));
-            }
-            if (!(step.get("outputs") instanceof Map<?, ?> outputs) || outputs.isEmpty()) {
-                gaps.add(gap(testCaseId, acId, "execute", prefix + ".outputs", "",
+            OperationSection step = execute.get(index);
+            validateOperationShape(step, targets, "execute", testCaseId, acId, gaps, true);
+            if (!(step.value().get("outputs") instanceof Map<?, ?> outputs) || outputs.isEmpty()) {
+                gaps.add(gap(testCaseId, acId, "execute", step.path() + ".outputs", "",
                         "Declare execute outputs used by verify or evidence."));
             }
         }
+    }
+
+    private void validateOperationShape(
+            OperationSection operationSection,
+            Map<?, ?> targets,
+            String section,
+            String testCaseId,
+            String acId,
+            List<DslValidationGap> gaps,
+            boolean outputsRequired) {
+        Map<?, ?> operationMap = operationSection.value();
+        String prefix = operationSection.path();
+        requireText(operationMap, "id", section, testCaseId, acId, gaps,
+                "Declare " + section + " operation id.", prefix + ".id");
+        String target = stringValue(operationMap.get("target"));
+        if (target.isBlank()) {
+            gaps.add(gap(testCaseId, acId, section, prefix + ".target", "",
+                    "Declare " + section + " target that matches a named target."));
+        } else if (!targets.containsKey(target)) {
+            gaps.add(gap(testCaseId, acId, section, prefix + ".target", "",
+                    "Reference an existing target in " + prefix + ".target."));
+        }
+        if (operationMap.containsKey("target_ru_id")) {
+            gaps.add(gap(testCaseId, acId, section, prefix + ".target_ru_id", "",
+                    "Use " + section + ".operations[].target instead of legacy target_ru_id."));
+        }
+        String operation = stringValue(operationMap.get("operation"));
+        if (operation.isBlank()) {
+            gaps.add(gap(testCaseId, acId, section, prefix + ".operation", "",
+                    "Declare " + section + " operation before provider dispatch."));
+        } else if ("call_ru".equals(operation)) {
+            gaps.add(gap(testCaseId, acId, section, prefix + ".operation", "",
+                    "Use a provider contract operation instead of legacy `call_ru`."));
+        } else if (!SUPPORTED_OPERATIONS.contains(operation)) {
+            gaps.add(gap(testCaseId, acId, section, prefix + ".operation", "",
+                    "Use an operation declared by the selected Provider Contract."));
+        }
+        if (operationMap.containsKey("parameters")) {
+            gaps.add(gap(testCaseId, acId, section, prefix + ".parameters", "",
+                    "Use " + section + ".operations[].inputs instead of legacy parameters/bind_as."));
+        }
+        validateOperationInputs(operationMap.get("inputs"), prefix + ".inputs", section, testCaseId, acId, gaps);
+        if (outputsRequired && !(operationMap.get("outputs") instanceof Map<?, ?>)) {
+            gaps.add(gap(testCaseId, acId, section, prefix + ".outputs", "",
+                    "Declare execute outputs used by verify or evidence."));
+        }
+    }
+
+    private void validateOperationInputs(
+            Object inputsValue,
+            String fieldPath,
+            String section,
+            String testCaseId,
+            String acId,
+            List<DslValidationGap> gaps) {
+        if (inputsValue == null) {
+            return;
+        }
+        if (!(inputsValue instanceof Map<?, ?> inputs)) {
+            gaps.add(gap(testCaseId, acId, section, fieldPath, "",
+                    "Declare operation inputs as a map keyed by Provider Contract input name."));
+            return;
+        }
+        for (Map.Entry<?, ?> entry : inputs.entrySet()) {
+            String inputName = stringValue(entry.getKey());
+            validateInputSource(entry.getValue(), fieldPath + "." + inputName, section, testCaseId, acId, gaps);
+        }
+    }
+
+    private void validateInputSource(
+            Object sourceValue,
+            String fieldPath,
+            String section,
+            String testCaseId,
+            String acId,
+            List<DslValidationGap> gaps) {
+        if (!(sourceValue instanceof Map<?, ?> source)) {
+            gaps.add(gap(testCaseId, acId, section, fieldPath, "",
+                    "Declare a data/input source as a map with exactly one of `ref` or `value`."));
+            return;
+        }
+        boolean hasRef = !isMissing(source.get("ref"));
+        boolean hasValue = source.containsKey("value") && !isMissing(source.get("value"));
+        if (hasRef == hasValue) {
+            gaps.add(gap(testCaseId, acId, section, fieldPath, "",
+                    "Declare exactly one source: `ref` for checked-in artifact references or `value` for safe literals."));
+        }
+    }
+
+    private boolean usesModernDataOrOperationShape(Map<?, ?> document) {
+        return document.containsKey("data")
+                || hasOperationsMap(document, "setup")
+                || hasOperationsMap(document, "execute")
+                || hasOperationsMap(document, "cleanup")
+                || map(document.get("verify")).containsKey("checks");
+    }
+
+    private boolean hasOperationsMap(Map<?, ?> document, String section) {
+        return map(document.get(section)).containsKey("operations");
+    }
+
+    private List<OperationSection> operationSections(Map<?, ?> document, String section) {
+        Object value = document.get(section);
+        if (value instanceof Map<?, ?> sectionMap && sectionMap.get("operations") instanceof List<?> operations) {
+            List<Map<?, ?>> maps = mapList(operations);
+            List<OperationSection> sections = new ArrayList<>();
+            for (int index = 0; index < maps.size(); index++) {
+                sections.add(new OperationSection(maps.get(index), section + ".operations[" + index + "]"));
+            }
+            return List.copyOf(sections);
+        }
+        List<Map<?, ?>> legacy = mapList(value);
+        List<OperationSection> sections = new ArrayList<>();
+        for (int index = 0; index < legacy.size(); index++) {
+            sections.add(new OperationSection(legacy.get(index), section + "[" + index + "]"));
+        }
+        return List.copyOf(sections);
+    }
+
+    private List<OperationSection> verifySections(Map<?, ?> document) {
+        Object value = document.get("verify");
+        if (value instanceof Map<?, ?> verifyMap && verifyMap.get("checks") instanceof List<?> checks) {
+            List<Map<?, ?>> maps = mapList(checks);
+            List<OperationSection> sections = new ArrayList<>();
+            for (int index = 0; index < maps.size(); index++) {
+                sections.add(new OperationSection(maps.get(index), "verify.checks[" + index + "]"));
+            }
+            return List.copyOf(sections);
+        }
+        List<Map<?, ?>> legacy = mapList(value);
+        List<OperationSection> sections = new ArrayList<>();
+        for (int index = 0; index < legacy.size(); index++) {
+            sections.add(new OperationSection(legacy.get(index), "verify[" + index + "]"));
+        }
+        return List.copyOf(sections);
     }
 
     private void validateExpectedResults(
@@ -385,9 +569,14 @@ public class DslTestCaseValidator {
             String testCaseId,
             String acId,
             List<DslValidationGap> gaps) {
+        if ("v0.2".equals(stringValue(document.get("dsl_version")))) {
+            return;
+        }
         if (!document.containsKey("expected_results")) {
-            gaps.add(gap(testCaseId, acId, "expected_results", "expected_results", "",
-                    "Declare expected_results as a map, even when deterministic verify rules do not use artifacts."));
+            if (!usesModernDataOrOperationShape(document)) {
+                gaps.add(gap(testCaseId, acId, "expected_results", "expected_results", "",
+                        "Declare expected_results as a map, even when deterministic verify rules do not use artifacts."));
+            }
             return;
         }
         Map<?, ?> expectedResults = map(document.get("expected_results"));
@@ -410,7 +599,7 @@ public class DslTestCaseValidator {
     }
 
     private void validateVerify(Map<?, ?> document, String testCaseId, String acId, List<DslValidationGap> gaps) {
-        List<Map<?, ?>> verify = mapList(document.get("verify"));
+        List<OperationSection> verify = verifySections(document);
         if (verify.isEmpty()) {
             gaps.add(gap(testCaseId, acId, "verify", "verify", "",
                     "Declare at least one verify rule before execution."));
@@ -423,8 +612,8 @@ public class DslTestCaseValidator {
         Map<String, Set<String>> executeOutputs = executeOutputs(document);
         boolean requestResponseMetadataAvailable = hasRequestResponseExecuteTarget(document);
         for (int index = 0; index < verify.size(); index++) {
-            Map<?, ?> rule = verify.get(index);
-            String prefix = "verify[" + index + "]";
+            Map<?, ?> rule = verify.get(index).value();
+            String prefix = verify.get(index).path();
             String verifyId = stringValue(rule.get("id"));
             requireText(rule, "id", "verify", testCaseId, acId, gaps,
                     "Declare verify rule id.", prefix + ".id");
@@ -439,11 +628,14 @@ public class DslTestCaseValidator {
             if (VERIFY_TYPES_REQUIRING_ACTUAL_AND_EXPECTED.contains(type)) {
                 requireText(rule, "actual", "verify", testCaseId, acId, gaps,
                         "Declare actual source for verify rule `" + verifyId + "`.", prefix + ".actual", verifyId);
-                requirePresent(rule, "expected", "verify", testCaseId, acId, gaps,
-                        "Declare expected source or value for verify rule `" + verifyId + "`.", prefix + ".expected", verifyId);
+                if (!hasExpected(rule)) {
+                    gaps.add(gap(testCaseId, acId, "verify", prefix + ".expected", verifyId,
+                            "Declare expected source or value for verify rule `" + verifyId + "`."));
+                }
                 validateReference(rule.get("actual"), prefix + ".actual", "verify", verifyId, expectedNames,
                         executeOutputs, Set.of(), testCaseId, acId, gaps);
-                validateExpectedReference(rule.get("expected"), prefix + ".expected", verifyId, expectedNames,
+                validateExpectedReference(firstNonMissing(rule.get("expected"), rule.get("expected_ref")),
+                        prefix + ".expected", verifyId, expectedNames,
                         testCaseId, acId, gaps);
             } else if ("response_status_equals".equals(type)) {
                 requirePresent(rule, "expected", "verify", testCaseId, acId, gaps,
@@ -493,7 +685,8 @@ public class DslTestCaseValidator {
 
     private boolean hasRequestResponseExecuteTarget(Map<?, ?> document) {
         Map<?, ?> targets = map(document.get("targets"));
-        for (Map<?, ?> step : mapList(document.get("execute"))) {
+        for (OperationSection stepSection : operationSections(document, "execute")) {
+            Map<?, ?> step = stepSection.value();
             Map<?, ?> target = map(targets.get(stringValue(step.get("target"))));
             if ("request_response".equals(firstText(target, "provider", "runner"))) {
                 return true;
@@ -590,7 +783,7 @@ public class DslTestCaseValidator {
             String testCaseId,
             String acId,
             List<DslValidationGap> gaps) {
-        String reference = stringValue(value);
+        String reference = referenceText(value);
         if (reference.startsWith("${execute.")) {
             String[] parts = expressionParts(reference);
             if (parts.length < 4 || !"outputs".equals(parts[2])
@@ -621,7 +814,7 @@ public class DslTestCaseValidator {
             String testCaseId,
             String acId,
             List<DslValidationGap> gaps) {
-        String reference = stringValue(value);
+        String reference = referenceText(value);
         if (reference.startsWith("${expected_results.")) {
             String expectedName = expectedResultName(reference);
             if (!expectedNames.contains(expectedName)) {
@@ -648,7 +841,8 @@ public class DslTestCaseValidator {
 
     private Map<String, Set<String>> executeOutputs(Map<?, ?> document) {
         Map<String, Set<String>> outputsByStep = new java.util.LinkedHashMap<>();
-        for (Map<?, ?> step : mapList(document.get("execute"))) {
+        for (OperationSection stepSection : operationSections(document, "execute")) {
+            Map<?, ?> step = stepSection.value();
             String stepId = stringValue(step.get("id"));
             if (!stepId.isBlank()) {
                 outputsByStep.put(stepId, map(step.get("outputs")).keySet().stream()
@@ -660,8 +854,8 @@ public class DslTestCaseValidator {
     }
 
     private Set<String> verifyIds(Map<?, ?> document) {
-        return mapList(document.get("verify")).stream()
-                .map(rule -> stringValue(rule.get("id")))
+        return verifySections(document).stream()
+                .map(rule -> stringValue(rule.value().get("id")))
                 .filter(id -> !id.isBlank())
                 .collect(java.util.stream.Collectors.toSet());
     }
@@ -806,6 +1000,26 @@ public class DslTestCaseValidator {
         return value == null || value instanceof String text && text.isBlank();
     }
 
+    private boolean hasExpected(Map<?, ?> rule) {
+        return !isMissing(rule.get("expected")) || !isMissing(rule.get("expected_ref"));
+    }
+
+    private Object firstNonMissing(Object... values) {
+        for (Object value : values) {
+            if (!isMissing(value)) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private String referenceText(Object value) {
+        if (value instanceof Map<?, ?> map && map.containsKey("ref")) {
+            return stringValue(map.get("ref"));
+        }
+        return stringValue(value);
+    }
+
     private String stringValue(Object value) {
         return value == null ? "" : value.toString();
     }
@@ -818,5 +1032,8 @@ public class DslTestCaseValidator {
             }
         }
         return "";
+    }
+
+    private record OperationSection(Map<?, ?> value, String path) {
     }
 }

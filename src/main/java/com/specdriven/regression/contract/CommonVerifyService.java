@@ -111,7 +111,7 @@ public class CommonVerifyService {
         String status = "passed";
         Failure failure = null;
 
-        for (Object value : listValue(testCase.get("verify"))) {
+        for (Object value : verifyValues(testCase)) {
             Map<String, Object> verify = mapValue(value);
             VerifyOutcome outcome = evaluateVerifier(suiteRoot, runDir, verify);
             verifyResults.add(outcome.result());
@@ -435,7 +435,7 @@ public class CommonVerifyService {
 
     private List<ContractFinding> pollingConfigFindings(Path testCasePath, Map<String, Object> testCase, String profile) {
         List<ContractFinding> findings = new ArrayList<>();
-        for (Object value : listValue(testCase.get("verify"))) {
+        for (Object value : verifyValues(testCase)) {
             Map<String, Object> verify = mapValue(value);
             if (!List.of("event_published", "db_record_exists").contains(stringValue(verify.get("type")))) {
                 continue;
@@ -481,6 +481,14 @@ public class CommonVerifyService {
             }
         }
         return List.copyOf(findings);
+    }
+
+    private List<Object> verifyValues(Map<String, Object> testCase) {
+        Object verify = testCase.get("verify");
+        if (verify instanceof Map<?, ?> verifyMap) {
+            return listValue(verifyMap.get("checks"));
+        }
+        return listValue(verify);
     }
 
     private VerifyOutcome missingArtifact(

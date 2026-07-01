@@ -23,20 +23,20 @@ valid_provider_instance_shape:
   binding_keys: [jdbc_url, username, password, dialect]
 operations:
   execute_script:
-    allowed_bind_as: [db.script_ref, db.parameters.*, db.transaction, db.timeout]
-    required_parameters: [db.script_ref]
+    allowed_inputs: [db.script_ref, db.parameters.*, db.transaction, db.timeout]
+    required_inputs: [db.script_ref]
     output_refs: [script_result, affected_rows, duration_ms]
   execute_update:
-    allowed_bind_as: [db.sql_ref, db.parameters.*, db.transaction, db.timeout]
-    required_parameters: [db.sql_ref]
+    allowed_inputs: [db.sql_ref, db.parameters.*, db.transaction, db.timeout]
+    required_inputs: [db.sql_ref]
     output_refs: [affected_rows, duration_ms]
   query:
-    allowed_bind_as: [db.sql_ref, db.parameters.*, db.max_rows, db.timeout]
-    required_parameters: [db.sql_ref]
+    allowed_inputs: [db.sql_ref, db.parameters.*, db.max_rows, db.timeout]
+    required_inputs: [db.sql_ref]
     output_refs: [query_result, row_count, duration_ms]
   transaction:
-    allowed_bind_as: [db.steps_ref, db.rollback_on_error, db.timeout]
-    required_parameters: [db.steps_ref]
+    allowed_inputs: [db.steps_ref, db.rollback_on_error, db.timeout]
+    required_inputs: [db.steps_ref]
     output_refs: [transaction_status, affected_rows, duration_ms]
 evidence:
   outputs: [script_result, query_result, affected_rows, transaction_status, error]

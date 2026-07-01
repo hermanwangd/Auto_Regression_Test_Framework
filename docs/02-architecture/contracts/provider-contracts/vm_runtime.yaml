@@ -25,24 +25,24 @@ valid_provider_instance_shape:
   binding_keys: [host, user]
 operations:
   check_host_ready:
-    allowed_bind_as: [vm.port, vm.timeout, vm.command]
-    required_parameters: []
+    allowed_inputs: [vm.port, vm.timeout, vm.command]
+    required_inputs: []
     output_refs: [process_status, command_output, duration_ms]
   run_command:
-    allowed_bind_as: [vm.command, vm.args.*, vm.env.*, vm.timeout]
-    required_parameters: [vm.command]
+    allowed_inputs: [vm.command, vm.args.*, vm.env.*, vm.timeout]
+    required_inputs: [vm.command]
     output_refs: [command_output, exit_code, stdout, stderr, duration_ms]
   collect_file:
-    allowed_bind_as: [vm.path, vm.destination_ref]
-    required_parameters: [vm.path]
+    allowed_inputs: [vm.path, vm.destination_ref]
+    required_inputs: [vm.path]
     output_refs: [collected_file]
   collect_logs:
-    allowed_bind_as: [vm.path, vm.since, vm.tail]
-    required_parameters: [vm.path]
+    allowed_inputs: [vm.path, vm.since, vm.tail]
+    required_inputs: [vm.path]
     output_refs: [logs]
   check_process:
-    allowed_bind_as: [vm.process_name, vm.pid, vm.expected_state]
-    required_parameters: []
+    allowed_inputs: [vm.process_name, vm.pid, vm.expected_state]
+    required_inputs: []
     output_refs: [process_status]
 evidence:
   outputs: [command_output, collected_file, process_status, logs, error]

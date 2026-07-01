@@ -21,7 +21,7 @@ shape_rules:
   unknown_top_level_field: block_before_provider_dispatch
   unknown_nested_field: block_before_provider_dispatch
   operation_not_in_contract: block_before_provider_dispatch
-  bind_as_not_in_contract: block_before_provider_dispatch
+  input_key_not_in_contract: block_before_provider_dispatch
   runtime_modes_not_subset_of_contract: block_before_provider_dispatch
   output_ref_not_in_contract: block_before_provider_dispatch
   evidence_output_not_in_contract: block_before_provider_dispatch

@@ -13,35 +13,31 @@ targets:
   verifier:
     provider_id: local-common-polling
 execute: []
-expected_results:
+data:
   event:
     ref: expected_results/expected_timeout_result.json
 verify:
-  - id: event_is_published
-    type: event_published
-    target: verifier
-    expected_ref: expected_results/expected_timeout_result.json
-    actual_ref: actual_samples/observed_event.json
-    options:
-      timeout: PT1S
-      poll_interval: PT0S
-      consume_from: test_start_time
-    parameters:
-      - name: expected
-        ref: expected_results/expected_timeout_result.json
-        bind_as: expected_ref
-      - name: actual
-        ref: actual_samples/observed_event.json
-        bind_as: actual_ref
-      - name: timeout
-        ref: PT1S
-        bind_as: timeout
-      - name: poll_interval
-        ref: PT0S
-        bind_as: poll_interval
-      - name: consume_from
-        ref: test_start_time
-        bind_as: consume_from
+  checks:
+    - id: event_is_published
+      type: event_published
+      target: verifier
+      expected_ref: expected_results/expected_timeout_result.json
+      actual_ref: actual_samples/observed_event.json
+      options:
+        timeout: PT1S
+        poll_interval: PT0S
+        consume_from: test_start_time
+      inputs:
+        expected_ref:
+          ref: expected_results/expected_timeout_result.json
+        actual_ref:
+          ref: actual_samples/observed_event.json
+        timeout:
+          value: PT1S
+        poll_interval:
+          value: PT0S
+        consume_from:
+          value: test_start_time
 evidence:
   required:
     - polling/event_is_published.yaml

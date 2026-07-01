@@ -1,0 +1,5 @@
+operation: cleanup_order
+records:
+  - table: orders
+    where:
+      order_id: ORD-001

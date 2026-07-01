@@ -35,20 +35,20 @@ valid_provider_instance_shape:
 supported_verifiers: [db_record_exists]
 operations:
   db_seed:
-    allowed_bind_as: [sql_ref, params.*]
-    required_parameters: [sql_ref]
+    allowed_inputs: [sql_ref, params.*]
+    required_inputs: [sql_ref]
     output_refs: [affected_rows, duration_ms, seed_evidence_ref]
   db_cleanup:
-    allowed_bind_as: [sql_ref, params.*]
-    required_parameters: [sql_ref]
+    allowed_inputs: [sql_ref, params.*]
+    required_inputs: [sql_ref]
     output_refs: [affected_rows, duration_ms, cleanup_evidence_ref]
   db_query:
-    allowed_bind_as: [query_ref, params.*]
-    required_parameters: [query_ref]
+    allowed_inputs: [query_ref, params.*]
+    required_inputs: [query_ref]
     output_refs: [row_count, sample_rows, duration_ms, query_evidence_ref]
   db_record_exists:
-    allowed_bind_as: [query_ref, params.*, expected.min_rows, expected.row_count]
-    required_parameters: [query_ref]
+    allowed_inputs: [query_ref, params.*, expected.min_rows, expected.row_count]
+    required_inputs: [query_ref]
     output_refs: [matched, row_count, duration_ms, query_evidence_ref]
 evidence:
   outputs: [seed_evidence, cleanup_evidence, query_evidence]

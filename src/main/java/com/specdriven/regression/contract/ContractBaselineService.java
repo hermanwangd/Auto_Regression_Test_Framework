@@ -1,6 +1,5 @@
 package com.specdriven.regression.contract;
 
-import com.specdriven.regression.dsl.DataBindingCategories;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -13,6 +12,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -31,6 +31,14 @@ public class ContractBaselineService {
             "steps",
             "assertions",
             "evidence_required");
+    private static final Set<String> PROHIBITED_V02_DATA_FIELDS = Set.of(
+            "data_binding",
+            "datasets",
+            "fixtures",
+            "expected_results",
+            "db_seed",
+            "db_cleanup",
+            "mock_stubs");
     private static final Set<String> GOVERNANCE_FIELDS = Set.of(
             "approval_status",
             "waiver",
@@ -286,17 +294,22 @@ public class ContractBaselineService {
                             "Remove `scenario`; declare behavior through setup/execute/verify and provider capability through Provider Contract."));
                 }
             }
+            for (String field : PROHIBITED_V02_DATA_FIELDS) {
+                if (entry.getValue().containsKey(field)) {
+                    findings.add(finding(entry.getKey(), field, "prohibited_data_catalog_field",
+                            "Use lifecycle-neutral `data` entries and bind them through operation `inputs`; `"
+                                    + field + "` is not part of DSL v0.2."));
+                }
+            }
         }
     }
 
     private void validateDataBindingCategories(ContractGraph graph, List<ContractFinding> findings) {
         for (Map.Entry<Path, Map<String, Object>> entry : graph.testCases().entrySet()) {
             for (String category : mapValue(entry.getValue().get("data_binding")).keySet()) {
-                if (!DataBindingCategories.allowed(category)) {
-                    findings.add(finding(entry.getKey(), "data_binding." + category,
-                            "prohibited_data_binding_category",
-                            DataBindingCategories.OWNER_ACTION));
-                }
+                findings.add(finding(entry.getKey(), "data_binding." + category,
+                        "prohibited_data_binding_category",
+                        "Move checked-in artifacts to `data.<name>.ref` and reference them from operation `inputs`."));
             }
         }
     }
@@ -513,50 +526,51 @@ public class ContractBaselineService {
                             "Use an operation declared by Provider Contract `" + targetResolution.providerType() + "`."));
                     continue;
                 }
-                List<String> allowedBindAs = stringList(operation.get("allowed_bind_as"));
-                List<String> providedBindAs = new ArrayList<>();
+                List<String> allowedInputs = operationInputs(operation, "allowed_inputs", "allowed_bind_as");
+                List<String> providedInputs = new ArrayList<>();
                 for (int parameterIndex = 0; parameterIndex < operationRef.parameters().size(); parameterIndex++) {
                     Map<String, Object> parameter = operationRef.parameters().get(parameterIndex);
-                    String bindAs = stringValue(parameter.get("bind_as"));
-                    providedBindAs.add(bindAs);
-                    if (bindAs.isBlank()) {
-                        findings.add(finding(entry.getKey(), operationRef.fieldPath() + ".parameters.bind_as",
-                                "missing_required_field", "Add bind_as for operation parameter."));
-                    } else if (!allowedBindAs(allowedBindAs, bindAs)) {
+                    String inputName = parameterInputName(parameter);
+                    providedInputs.add(inputName);
+                    if (inputName.isBlank()) {
+                        findings.add(finding(entry.getKey(), parameterFieldPath(operationRef, parameterIndex, parameter),
+                                "missing_required_field", "Add an input name declared by the Provider Contract operation."));
+                    } else if (!allowedBindAs(allowedInputs, inputName)) {
                         findings.add(new ContractFinding(
                                 entry.getKey().toString(),
-                                operationRef.fieldPath() + ".parameters.bind_as",
-                                "unsupported_bind_as",
+                                parameterFieldPath(operationRef, parameterIndex, parameter),
+                                operationRef.modernInputs() ? "unsupported_input" : "unsupported_bind_as",
                                 targetResolution.providerId(),
                                 targetResolution.providerType(),
                                 targetResolution.profile(),
                                 operationRef.operation(),
-                                "Use a bind_as value allowed by Provider Contract `" + targetResolution.providerType()
-                                        + "` for operation `" + operationRef.operation() + "`. bind_as: " + bindAs));
+                                "Use an input name allowed by Provider Contract `" + targetResolution.providerType()
+                                        + "` for operation `" + operationRef.operation() + "`. input: " + inputName));
                     }
-                    if (isMissing(parameter.get("ref"))) {
-                        findings.add(finding(entry.getKey(), operationRef.fieldPath() + ".parameters.ref",
-                                "missing_required_field", "Add ref for operation parameter."));
+                    String source = parameterSource(parameter);
+                    if (source.isBlank()) {
+                        findings.add(finding(entry.getKey(), parameterFieldPath(operationRef, parameterIndex, parameter),
+                                "missing_required_field", "Add ref or value for operation input."));
                     } else {
-                        String ref = stringValue(parameter.get("ref"));
+                        String ref = source;
                         validateParameterRefWithinSuite(graph, entry.getKey(), testCase, operationRef,
-                                parameterIndex, bindAs, ref, targetResolution, findings);
+                                parameterIndex, inputName, ref, targetResolution, findings);
                         validateParameterValueSyntax(entry.getKey(), operationRef, parameterIndex,
-                                bindAs, ref, targetResolution, findings);
+                                inputName, ref, targetResolution, findings);
                     }
                 }
                 if (!operationRef.parameters().isEmpty() || "common_verify".equals(targetResolution.providerType())) {
-                    for (String requiredParameter : stringList(operation.get("required_parameters"))) {
-                        if (!providedBindAs.contains(requiredParameter)) {
+                    for (String requiredInput : operationInputs(operation, "required_inputs", "required_parameters")) {
+                        if (!providedInput(providedInputs, requiredInput)) {
                             findings.add(new ContractFinding(
                                     entry.getKey().toString(),
-                                    operationRef.fieldPath() + ".parameters",
-                                    "missing_required_parameter",
+                                    operationRef.fieldPath() + (operationRef.modernInputs() ? ".inputs" : ".parameters"),
+                                    operationRef.modernInputs() ? "missing_required_input" : "missing_required_parameter",
                                     targetResolution.providerId(),
                                     targetResolution.providerType(),
                                     targetResolution.profile(),
                                     operationRef.operation(),
-                                    "Add required parameter bind_as `" + requiredParameter + "` for operation `"
+                                    "Add required input `" + requiredInput + "` for operation `"
                                             + operationRef.operation() + "`."));
                         }
                     }
@@ -609,14 +623,29 @@ public class ContractBaselineService {
                         stringValue(mapValue(expected.getValue()).get("ref")),
                         findings);
             }
+            for (Map.Entry<String, Object> dataEntry : mapValue(testCase.get("data")).entrySet()) {
+                validateRuntimeCriticalRef(
+                        suiteRoot,
+                        testCasePath,
+                        "data." + dataEntry.getKey() + ".ref",
+                        stringValue(mapValue(dataEntry.getValue()).get("ref")),
+                        findings);
+            }
             int verifyIndex = 0;
-            for (Object verifyValue : listValue(testCase.get("verify"))) {
+            for (Object verifyValue : verifyChecks(testCase)) {
                 Map<String, Object> verify = mapValue(verifyValue);
                 String verifyPath = verify.get("id") == null
                         ? "verify[" + verifyIndex + "]"
                         : "verify." + stringValue(verify.get("id"));
                 validateRuntimeCriticalRef(suiteRoot, testCasePath, verifyPath + ".expected_ref",
                         stringValue(verify.get("expected_ref")), findings);
+                validateRuntimeCriticalExpectedRef(
+                        suiteRoot,
+                        testCasePath,
+                        testCase,
+                        verifyPath + ".expected",
+                        verify.get("expected"),
+                        findings);
                 validateRuntimeCriticalRef(suiteRoot, testCasePath, verifyPath + ".actual_ref",
                         stringValue(verify.get("actual_ref")), findings);
                 validateRuntimeCriticalRef(suiteRoot, testCasePath, verifyPath + ".query.ref",
@@ -628,6 +657,20 @@ public class ContractBaselineService {
                 verifyIndex++;
             }
         }
+    }
+
+    private void validateRuntimeCriticalExpectedRef(
+            Path suiteRoot,
+            Path testCasePath,
+            Map<String, Object> testCase,
+            String fieldPath,
+            Object expectedValue,
+            List<ContractFinding> findings) {
+        String ref = resolveDataRef(testCase, referenceText(expectedValue));
+        if (!looksLikeExpectedArtifactRef(ref)) {
+            return;
+        }
+        validateRuntimeCriticalRef(suiteRoot, testCasePath, fieldPath, ref, findings);
     }
 
     private void validateRuntimeCriticalRef(
@@ -678,7 +721,7 @@ public class ContractBaselineService {
         if (!resolved.startsWith(suiteRoot)) {
             findings.add(new ContractFinding(
                     testCasePath.toString(),
-                    operationRef.fieldPath() + ".parameters[" + parameterIndex + "].ref",
+                    parameterFieldPath(operationRef, parameterIndex, operationRef.parameters().get(parameterIndex)),
                     "ref_outside_suite_root",
                     targetResolution.providerId(),
                     targetResolution.providerType(),
@@ -694,6 +737,10 @@ public class ContractBaselineService {
         }
         String path = ref.substring("${data.".length(), ref.length() - 1);
         String[] parts = path.split("\\.");
+        if (parts.length == 1) {
+            String resolved = stringValue(mapValue(mapValue(testCase.get("data")).get(parts[0])).get("ref"));
+            return resolved.isBlank() ? ref : resolved;
+        }
         if (parts.length != 2) {
             return ref;
         }
@@ -719,13 +766,13 @@ public class ContractBaselineService {
             } catch (RuntimeException e) {
                 findings.add(new ContractFinding(
                         testCasePath.toString(),
-                        operationRef.fieldPath() + ".parameters[" + parameterIndex + "].ref",
+                        parameterFieldPath(operationRef, parameterIndex, operationRef.parameters().get(parameterIndex)),
                         "invalid_duration",
                         targetResolution.providerId(),
                         targetResolution.providerType(),
                         targetResolution.profile(),
                         operationRef.operation(),
-                        "Use an ISO-8601 duration for bind_as `" + bindAs + "`, for example `PT5S`."));
+                        "Use an ISO-8601 duration for input `" + bindAs + "`, for example `PT5S`."));
             }
         }
         if ("consume_from".equals(bindAs)
@@ -735,13 +782,13 @@ public class ContractBaselineService {
             } catch (RuntimeException e) {
                 findings.add(new ContractFinding(
                         testCasePath.toString(),
-                        operationRef.fieldPath() + ".parameters[" + parameterIndex + "].ref",
+                        parameterFieldPath(operationRef, parameterIndex, operationRef.parameters().get(parameterIndex)),
                         "invalid_instant",
                         targetResolution.providerId(),
                         targetResolution.providerType(),
                         targetResolution.profile(),
                         operationRef.operation(),
-                        "Use `test_start_time`, `earliest`, or an ISO-8601 instant for bind_as `consume_from`."));
+                        "Use `test_start_time`, `earliest`, or an ISO-8601 instant for input `consume_from`."));
             }
         }
     }
@@ -759,6 +806,32 @@ public class ContractBaselineService {
         }
         return filePart.startsWith(".")
                 || !filePart.startsWith("/") && (filePart.contains("/") || filePart.contains("\\"));
+    }
+
+    private boolean looksLikeExpectedArtifactRef(String ref) {
+        String filePart = refFilePart(ref);
+        if (filePart.isBlank() || ref.startsWith("${") || ref.contains("://")) {
+            return false;
+        }
+        String lower = filePart.toLowerCase(Locale.ROOT);
+        return ref.contains("#")
+                || filePart.startsWith(".")
+                || filePart.contains("/")
+                || filePart.contains("\\")
+                || lower.endsWith(".json")
+                || lower.endsWith(".yaml")
+                || lower.endsWith(".yml")
+                || lower.endsWith(".txt")
+                || lower.endsWith(".csv")
+                || lower.endsWith(".sql")
+                || lower.endsWith(".xml");
+    }
+
+    private String referenceText(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return stringValue(map.get("ref"));
+        }
+        return stringValue(value);
     }
 
     private boolean fileReferenceBindAs(String bindAs) {
@@ -1448,18 +1521,33 @@ public class ContractBaselineService {
                     "setup.fixtures." + entry.getKey(),
                     stringValue(fixture.get("target")),
                     stringValue(fixture.get("operation")),
-                    mapList(fixture.get("parameters")),
-                    Map.of()));
+                    operationInputs(fixture, "setup.fixtures." + entry.getKey()),
+                    Map.of(),
+                    fixture.containsKey("inputs")));
         }
-        for (Object value : listValue(testCase.get("execute"))) {
+        for (Object value : listValue(mapValue(testCase.get("setup")).get("operations"))) {
+            Map<String, Object> operation = mapValue(value);
+            String id = stringValue(operation.get("id"));
+            String path = id.isBlank() ? "setup.operations[]" : "setup." + id;
+            operations.add(new OperationRef(
+                    path,
+                    stringValue(operation.get("target")),
+                    stringValue(operation.get("operation")),
+                    operationInputs(operation, path),
+                    Map.of(),
+                    operation.containsKey("inputs")));
+        }
+        for (Object value : executeOperations(testCase)) {
             Map<String, Object> step = mapValue(value);
             String id = stringValue(step.get("id"));
+            String path = id.isBlank() ? "execute[]" : "execute." + id;
             operations.add(new OperationRef(
-                    id.isBlank() ? "execute[]" : "execute." + id,
+                    path,
                     stringValue(step.get("target")),
                     stringValue(step.get("operation")),
-                    mapList(step.get("parameters")),
-                    mapValue(step.get("outputs"))));
+                    operationInputs(step, path),
+                    mapValue(step.get("outputs")),
+                    step.containsKey("inputs")));
         }
         for (Map.Entry<String, Object> entry : mapValue(mapValue(testCase.get("cleanup")).get("fixtures")).entrySet()) {
             Map<String, Object> fixture = mapValue(entry.getValue());
@@ -1467,23 +1555,70 @@ public class ContractBaselineService {
                     "cleanup.fixtures." + entry.getKey(),
                     stringValue(fixture.get("target")),
                     stringValue(fixture.get("operation")),
-                    mapList(fixture.get("parameters")),
-                    Map.of()));
+                    operationInputs(fixture, "cleanup.fixtures." + entry.getKey()),
+                    Map.of(),
+                    fixture.containsKey("inputs")));
         }
-        for (Object value : listValue(testCase.get("verify"))) {
+        for (Object value : listValue(mapValue(testCase.get("cleanup")).get("operations"))) {
+            Map<String, Object> operation = mapValue(value);
+            String id = stringValue(operation.get("id"));
+            String path = id.isBlank() ? "cleanup.operations[]" : "cleanup." + id;
+            operations.add(new OperationRef(
+                    path,
+                    stringValue(operation.get("target")),
+                    stringValue(operation.get("operation")),
+                    operationInputs(operation, path),
+                    Map.of(),
+                    operation.containsKey("inputs")));
+        }
+        for (Object value : verifyChecks(testCase)) {
             Map<String, Object> verify = mapValue(value);
-            List<Map<String, Object>> parameters = mapList(verify.get("parameters"));
+            String id = stringValue(verify.get("id"));
+            String path = id.isBlank() ? "verify[]" : "verify." + id;
+            List<Map<String, Object>> parameters = operationInputs(verify, path);
             if (!parameters.isEmpty() || !stringValue(verify.get("target")).isBlank()) {
-                String id = stringValue(verify.get("id"));
                 operations.add(new OperationRef(
-                        id.isBlank() ? "verify[]" : "verify." + id,
+                        path,
                         stringValue(verify.get("target")),
                         stringValue(verify.get("type")),
                         parameters,
-                        Map.of()));
+                        Map.of(),
+                        verify.containsKey("inputs")));
             }
         }
         return operations;
+    }
+
+    private List<Object> executeOperations(Map<String, Object> testCase) {
+        Object execute = testCase.get("execute");
+        if (execute instanceof Map<?, ?> executeMap) {
+            return listValue(executeMap.get("operations"));
+        }
+        return listValue(execute);
+    }
+
+    private List<Object> verifyChecks(Map<String, Object> testCase) {
+        Object verify = testCase.get("verify");
+        if (verify instanceof Map<?, ?> verifyMap) {
+            return listValue(verifyMap.get("checks"));
+        }
+        return listValue(verify);
+    }
+
+    private List<Map<String, Object>> operationInputs(Map<String, Object> operation, String fieldPath) {
+        if (operation.get("inputs") instanceof Map<?, ?> inputs) {
+            List<Map<String, Object>> normalized = new ArrayList<>();
+            for (Map.Entry<?, ?> entry : inputs.entrySet()) {
+                String inputName = stringValue(entry.getKey());
+                Map<String, Object> source = new LinkedHashMap<>(mapValue(entry.getValue()));
+                source.put("__input_name", inputName);
+                source.put("__field_path", fieldPath + ".inputs." + inputName);
+                source.putIfAbsent("bind_as", inputName);
+                normalized.add(source);
+            }
+            return List.copyOf(normalized);
+        }
+        return mapList(operation.get("parameters"));
     }
 
     private TargetResolution resolveTarget(ContractGraph graph, Map<String, Object> testCase, String targetName) {
@@ -1575,6 +1710,40 @@ public class ContractBaselineService {
             }
         }
         return false;
+    }
+
+    private List<String> operationInputs(Map<String, Object> operation, String preferredField, String legacyField) {
+        List<String> inputs = stringList(operation.get(preferredField));
+        return inputs.isEmpty() ? stringList(operation.get(legacyField)) : inputs;
+    }
+
+    private boolean providedInput(List<String> providedInputs, String requiredInput) {
+        for (String provided : providedInputs) {
+            if (allowedBindAs(List.of(requiredInput), provided)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String parameterInputName(Map<String, Object> parameter) {
+        return firstNonBlank(
+                stringValue(parameter.get("__input_name")),
+                stringValue(parameter.get("input")),
+                stringValue(parameter.get("name")),
+                stringValue(parameter.get("bind_as")));
+    }
+
+    private String parameterSource(Map<String, Object> parameter) {
+        return firstNonBlank(stringValue(parameter.get("ref")), stringValue(parameter.get("value")));
+    }
+
+    private String parameterFieldPath(OperationRef operationRef, int parameterIndex, Map<String, Object> parameter) {
+        String fieldPath = stringValue(parameter.get("__field_path"));
+        if (!fieldPath.isBlank()) {
+            return fieldPath;
+        }
+        return operationRef.fieldPath() + ".parameters[" + parameterIndex + "]";
     }
 
     private void detectRawSecrets(String filePath, Object value, List<ContractFinding> findings) {
@@ -1769,6 +1938,15 @@ public class ContractBaselineService {
         return value == null ? "" : String.valueOf(value);
     }
 
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
     public record ValidationResult(
             boolean valid,
             String suiteId,
@@ -1869,14 +2047,17 @@ public class ContractBaselineService {
                         "unsupported_local_ref", "missing_jdbc_target", "missing_nats_target",
                         "profile_mismatch" -> "CONFIGURATION_ERROR";
                 case "unknown_provider_type", "unsupported_operation", "unsupported_bind_as",
+                        "unsupported_input",
                         "unsupported_dialect", "missing_output_ref", "missing_supported_dialect",
                         "missing_evidence_output_definition", "missing_required_parameter",
+                        "missing_required_input",
                         "unsupported_suite_runtime", "unsupported_suite_shape",
                         "unsupported_provider_instance_field",
                         "unsupported_provider_instance_binding_key" -> "CONTRACT_ERROR";
                 case "invalid_result_json", "missing_result_json", "invalid_yaml",
                         "missing_required_file", "missing_required_directory",
                         "missing_required_field", "prohibited_legacy_field",
+                        "prohibited_data_catalog_field",
                         "prohibited_governance_field", "prohibited_deprecated_field",
                         "prohibited_data_binding_category", "invalid_duration",
                         "invalid_instant", "invalid_polling_config" -> "VALIDATION_ERROR";
@@ -1932,7 +2113,8 @@ public class ContractBaselineService {
             String target,
             String operation,
             List<Map<String, Object>> parameters,
-            Map<String, Object> outputs) {
+            Map<String, Object> outputs,
+            boolean modernInputs) {
     }
 
     private record TargetResolution(

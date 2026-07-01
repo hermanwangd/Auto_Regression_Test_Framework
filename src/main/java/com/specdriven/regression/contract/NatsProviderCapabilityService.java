@@ -287,12 +287,12 @@ public class NatsProviderCapabilityService {
     }
 
     private boolean targetReferencedByLifecycle(Map<String, Object> testCase, String targetName) {
-        for (Object stepValue : listValue(testCase.get("execute"))) {
+        for (Object stepValue : executeOperationValues(testCase)) {
             if (targetName.equals(stringValue(mapValue(stepValue).get("target")))) {
                 return true;
             }
         }
-        for (Object verifyValue : listValue(testCase.get("verify"))) {
+        for (Object verifyValue : verifyValues(testCase)) {
             if (targetName.equals(stringValue(mapValue(verifyValue).get("target")))) {
                 return true;
             }
@@ -311,7 +311,7 @@ public class NatsProviderCapabilityService {
             Path suiteRoot,
             Instant testStartTime) {
         List<SelectedOperation> operations = new ArrayList<>();
-        for (Object value : listValue(testCase.get("execute"))) {
+        for (Object value : executeOperationValues(testCase)) {
             Map<String, Object> step = mapValue(value);
             if (targetName.equals(stringValue(step.get("target")))) {
                 String id = stringValue(step.get("id"));
@@ -319,7 +319,7 @@ public class NatsProviderCapabilityService {
                         id.isBlank() ? "execute" : id,
                         new ProviderOperationRequest(
                                 stringValue(step.get("operation")),
-                                resolvedParameters(testCase, suiteRoot, listValue(step.get("parameters"))),
+                                resolvedOperationInputs(testCase, suiteRoot, step),
                                 runtimeOutputs(id, mapValue(step.get("outputs")), testStartTime))));
             }
         }
@@ -332,7 +332,7 @@ public class NatsProviderCapabilityService {
             Path suiteRoot,
             Instant testStartTime) {
         List<SelectedOperation> operations = new ArrayList<>();
-        for (Object value : listValue(testCase.get("verify"))) {
+        for (Object value : verifyValues(testCase)) {
             Map<String, Object> verify = mapValue(value);
             String type = stringValue(verify.get("type"));
             if (!targetName.equals(stringValue(verify.get("target")))
@@ -344,7 +344,7 @@ public class NatsProviderCapabilityService {
                     id.isBlank() ? type : id,
                     new ProviderOperationRequest(
                             type,
-                            resolvedParameters(testCase, suiteRoot, listValue(verify.get("parameters"))),
+                            resolvedOperationInputs(testCase, suiteRoot, verify),
                             runtimeOutputs(id, Map.of(), testStartTime))));
         }
         return List.copyOf(operations);
@@ -365,7 +365,8 @@ public class NatsProviderCapabilityService {
         for (Object value : parameters) {
             Map<String, Object> parameter = new LinkedHashMap<>(mapValue(value));
             String bindAs = stringValue(parameter.get("bind_as"));
-            String ref = resolveDataRef(testCase, stringValue(parameter.get("ref")));
+            String ref = resolveDataRef(testCase,
+                    firstNonBlank(stringValue(parameter.get("ref")), stringValue(parameter.get("value"))));
             if ("subject".equals(bindAs)) {
                 parameter.put("ref", resolveValue(suiteRoot, ref));
             } else {
@@ -376,12 +377,49 @@ public class NatsProviderCapabilityService {
         return List.copyOf(resolved);
     }
 
+    private List<Map<String, Object>> resolvedOperationInputs(
+            Map<String, Object> testCase,
+            Path suiteRoot,
+            Map<String, Object> operation) {
+        if (!(operation.get("inputs") instanceof Map<?, ?> inputs)) {
+            return resolvedParameters(testCase, suiteRoot, listValue(operation.get("parameters")));
+        }
+        List<Object> parameters = new ArrayList<>();
+        for (Map.Entry<?, ?> entry : inputs.entrySet()) {
+            Map<String, Object> parameter = new LinkedHashMap<>(mapValue(entry.getValue()));
+            parameter.putIfAbsent("name", stringValue(entry.getKey()));
+            parameter.put("bind_as", stringValue(entry.getKey()));
+            parameters.add(parameter);
+        }
+        return resolvedParameters(testCase, suiteRoot, parameters);
+    }
+
+    private List<Object> executeOperationValues(Map<String, Object> testCase) {
+        Object execute = testCase.get("execute");
+        if (execute instanceof Map<?, ?> executeMap) {
+            return listValue(executeMap.get("operations"));
+        }
+        return listValue(execute);
+    }
+
+    private List<Object> verifyValues(Map<String, Object> testCase) {
+        Object verify = testCase.get("verify");
+        if (verify instanceof Map<?, ?> verifyMap) {
+            return listValue(verifyMap.get("checks"));
+        }
+        return listValue(verify);
+    }
+
     private String resolveDataRef(Map<String, Object> testCase, String ref) {
         if (!ref.startsWith("${data.") || !ref.endsWith("}")) {
             return ref;
         }
         String path = ref.substring("${data.".length(), ref.length() - 1);
         String[] parts = path.split("\\.");
+        if (parts.length == 1) {
+            String resolved = stringValue(mapValue(mapValue(testCase.get("data")).get(parts[0])).get("ref"));
+            return resolved.isBlank() ? ref : resolved;
+        }
         if (parts.length != 2) {
             return ref;
         }
@@ -726,6 +764,15 @@ public class NatsProviderCapabilityService {
 
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private String safe(String value) {

@@ -14,69 +14,59 @@ targets:
     provider_id: oracle-like-db
   db2_like_db:
     provider_id: db2-like-db
-data_binding:
-  setup_data:
-    order:
-      ref: fixtures/db_seed.sql
-  cleanup_data:
-    order:
-      ref: fixtures/db_cleanup.sql
-expected_results:
+data:
+  order_seed:
+    ref: fixtures/db_seed.sql
+  order_cleanup:
+    ref: fixtures/db_cleanup.sql
   db_expected:
     ref: expected_results/db_expected.json
 setup:
-  fixtures:
-    seed_order:
-      type: db_seed
+  operations:
+    - id: seed_order
       target: oracle_like_db
       operation: db_seed
-      parameters:
-        - name: seed_sql
-          ref: ${data.setup_data.order}
-          bind_as: sql_ref
-        - name: seed_order_id
+      inputs:
+        sql_ref:
+          ref: ${data.order_seed}
+        params.order_id:
           ref: expected_results/db_expected.json#/order_id
-          bind_as: params.order_id
-      cleanup_ref: ${data.cleanup_data.order}
 execute:
-  - id: query_order_oracle
-    target: oracle_like_db
-    operation: db_query
-    parameters:
-      - name: query
-        ref: queries/order_exists_oracle.sql
-        bind_as: query_ref
-      - name: query_order_id
-        ref: expected_results/db_expected.json#/order_id
-        bind_as: params.order_id
-    outputs:
-      row_count: row_count
-      sample_rows: sample_rows
-      duration_ms: duration_ms
-      query_evidence_ref: query_evidence_ref
+  operations:
+    - id: query_order_oracle
+      target: oracle_like_db
+      operation: db_query
+      inputs:
+        query_ref:
+          ref: queries/order_exists_oracle.sql
+        params.order_id:
+          ref: expected_results/db_expected.json#/order_id
+      outputs:
+        row_count: row_count
+        sample_rows: sample_rows
+        duration_ms: duration_ms
+        query_evidence_ref: query_evidence_ref
 verify:
-  - id: order_record_exists
-    type: db_record_exists
-    target: oracle_like_db
-    query:
-      ref: queries/order_exists_oracle.sql
-    expected_ref: expected_results/db_expected.json
-    options:
-      timeout: PT20S
-      poll_interval: PT2S
+  checks:
+    - id: order_record_exists
+      type: db_record_exists
+      target: oracle_like_db
+      query:
+        ref: queries/order_exists_oracle.sql
+      expected_ref: expected_results/db_expected.json
+      options:
+        timeout: PT20S
+        poll_interval: PT2S
 cleanup:
-  fixtures:
-    cleanup_order:
-      type: db_cleanup
+  operations:
+    - id: cleanup_order
       target: oracle_like_db
       operation: db_cleanup
-      parameters:
-        - name: cleanup_sql
-          ref: ${data.cleanup_data.order}
-          bind_as: sql_ref
-        - name: cleanup_order_id
+      inputs:
+        sql_ref:
+          ref: ${data.order_cleanup}
+        params.order_id:
           ref: expected_results/db_expected.json#/order_id
-          bind_as: params.order_id
 evidence:
   required:
     - provider-evidence/jdbc/query_query_order_oracle.yaml

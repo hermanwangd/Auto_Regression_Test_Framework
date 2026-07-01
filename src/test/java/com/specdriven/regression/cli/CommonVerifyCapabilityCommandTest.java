@@ -227,8 +227,8 @@ class CommonVerifyCapabilityCommandTest {
         Path suite = mutableCommonVerify("unsupported_verify_without_parameters");
         Path testCase = suite.getParent().resolve("test_case.yaml");
         String text = read(testCase).replace("type: json_match", "type: not_a_verifier");
-        int start = text.indexOf("    parameters:\n");
-        int end = text.indexOf("  - id: payload_schema_matches", start);
+        int start = text.indexOf("      inputs:\n");
+        int end = text.indexOf("    - id: payload_schema_matches", start);
         Files.writeString(testCase, text.substring(0, start) + text.substring(end));
 
         CommandResult validate = execute("validate", "--suite", suite.toString());
@@ -246,13 +246,14 @@ class CommonVerifyCapabilityCommandTest {
         Path normalizeSuite = mutableCommonVerify("normalize_missing");
         Files.writeString(ignorePathsSuite.getParent().resolve("test_case.yaml"),
                 read(ignorePathsSuite.getParent().resolve("test_case.yaml"))
-                        .replace("      ignore_paths: [metadata.generated_at]\n", ""));
+                        .replace("        ignore_paths: [metadata.generated_at]\n", ""));
         Files.writeString(ignoreOrderSuite.getParent().resolve("test_case.yaml"),
                 read(ignoreOrderSuite.getParent().resolve("test_case.yaml"))
-                        .replace("    ignore_order: true", "    ignore_order: false"));
+                        .replace("        ignore_order: true", "        ignore_order: false")
+                        .replace("          value: \"true\"", "          value: \"false\""));
         Files.writeString(normalizeSuite.getParent().resolve("test_case.yaml"),
                 read(normalizeSuite.getParent().resolve("test_case.yaml"))
-                        .replace("    normalize: trim_lines", "    normalize: none"));
+                        .replace("        normalize: trim_lines", "        normalize: none"));
 
         assertThat(read(extractPath(execute("run", "--suite", ignorePathsSuite.toString(), "--profile", "local_verify")
                         .stdout(), "result_json")))

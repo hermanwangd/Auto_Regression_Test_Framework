@@ -11,7 +11,7 @@ This catalog defines the Track A contract baseline. It is not a runtime-complete
 | NATS / Event | `nats`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match`, `consume_from: test_start_time`, subject handling, event evidence | PR-005 runtime capability for local/CI framework evidence; no Kafka, JetStream, durable consumer, or request/reply scope. |
 | Polling | `polling_observer`, timeout, `poll_interval`, last observed evidence, poll-until-condition semantics | Provider target for observation plus verify contract and evidence shape. |
 | JSON / Schema / File | `artifact_compare`, `json_match`, `schema_match`, `ignore_paths`, `file_diff`, `normalize`, `ignore_order` | Provider target for artifact loading plus verify contract and result/evidence shape. |
-| Test Data Injection | `data_binding`, `db_seed`, `db_cleanup`, `http_stub` | Fixture contract and dry-run validation only. |
+| Test Data Injection | DSL `data` catalog, operation `inputs`, `db_seed`, `db_cleanup`, `http_stub` | Fixture contract and dry-run validation only. |
 | Reporting | standard result JSON, evidence folder structure, deterministic report output | Contract-complete report shape only. |
 
 Provider naming is mandatory in v0.2 public contracts. Public docs must describe `jdbc`, `nats`, and other runtime targets as Provider Contracts and Provider Instances.

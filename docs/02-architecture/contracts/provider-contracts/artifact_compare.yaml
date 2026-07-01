@@ -11,8 +11,8 @@ valid_provider_instance_shape:
   binding_keys: []
 operations:
   read_artifact:
-    allowed_bind_as: [file.path]
-    required_parameters: [file.path]
+    allowed_inputs: [file.path]
+    required_inputs: [file.path]
     output_refs: [actual_payload, actual_file]
 evidence:
   outputs: [actual_payload, actual_file, diff, error]

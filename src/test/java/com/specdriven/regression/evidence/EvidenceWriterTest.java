@@ -119,7 +119,7 @@ class EvidenceWriterTest {
                 .contains("dsl_version: v0.2")
                 .contains("execute_steps:")
                 .contains("outputs:\n        []")
-                .contains("expected_results:\n    []")
+                .contains("data:\n    []")
                 .contains("evidence_required:\n    []")
                 .contains("runtime:\n    []");
     }

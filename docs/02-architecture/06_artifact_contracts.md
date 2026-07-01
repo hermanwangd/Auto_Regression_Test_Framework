@@ -204,9 +204,10 @@ provider_instances:
           - reboot
     operations:
       run_batch:
-        parameters:
-          orders_seed:
-            bind_as: runner.args.ordersSeed
+        allowed_inputs:
+          - runner.args.ordersSeed
+        required_inputs:
+          - runner.args.ordersSeed
         outputs:
           exit_code: exit_code
           actual_output: output_files
@@ -250,7 +251,7 @@ DSL target
   -> Environment Binding
 ```
 
-Executable Provider Contracts must declare `provider_type`, allowed runtime modes, allowed operations, allowed `bind_as` values, binding keys, output refs, evidence outputs, failure codes, and the valid Provider Instance shape. Provider Instances fill RP-level logical selections using the same top-level shape as the Provider Contract and cannot introduce unknown fields. Environment Bindings supply actual profile-specific values for required binding keys and select `runtime_mode` for each `provider_id`. Unsupported, missing, prohibited, or ambiguous resolution fails before execution and before non-dry-run provider dispatch.
+Executable Provider Contracts must declare `provider_type`, allowed runtime modes, allowed operations, allowed input names, binding keys, output refs, evidence outputs, failure codes, and the valid Provider Instance shape. Provider Instances fill RP-level logical selections using the same top-level shape as the Provider Contract and cannot introduce unknown fields. Environment Bindings supply actual profile-specific values for required binding keys and select `runtime_mode` for each `provider_id`. Unsupported, missing, prohibited, or ambiguous resolution fails before execution and before non-dry-run provider dispatch.
 
 Local and CI profiles are expected to replace most external service, database, messaging, K8s, and VM dependencies with explicit mock, stub, ephemeral, fake-topic, embedded-broker, disposable-schema, generated-data, or Testcontainers-backed dependency bindings. Those replacements are still Provider Instances, Environment Bindings, and Execution Profile dependency-provisioning policy; they are not a separate DSL feature and must not be inferred as a fallback. SIT and preprod default to `runtime_mode: native` and cannot use mock substitution for release evidence unless the run is explicitly classified as framework verification evidence.
 
@@ -346,7 +347,7 @@ Framework-owned catalogs:
 - Provider capability registry: supported `provider_type` values, required binding keys, supported operations, runtime support status, evidence outputs, and safety constraints.
 - Operation catalog: Provider Contract-backed operations, including `run_batch`, `execute_command`, `http_request`, `unary_call`, `server_stream_call`, `execute_script`, `execute_update`, `query`, `transaction`, `publish_message`, `consume_message`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match`, `check_deployment_ready`, `check_pod_ready`, `get_logs`, `wait_rollout`, `exec_command`, `check_host_ready`, `run_command`, `collect_file`, `collect_logs`, `check_process`, `run`, `run_and_collect`, `check_status`, `start_mock`, `connect_mock`, `load_stubs`, `verify_requests`, `read_artifact`, and `observe_condition`.
 - Verify catalog: `equals`, `not_equals`, `exists`, `not_exists`, `contains`, `regex_match`, `json_match`, `schema_match`, `list_size_equals`, `unordered_list_equals`, `subset_match`, `partial_match`, `numeric_tolerance`, `greater_than`, `less_than`, `between`, `timestamp_tolerance`, `file_exists`, `file_not_empty`, `file_diff`, `json_diff`, `yaml_diff`, `csv_row_count_equals`, `csv_diff`, `db_record_exists`, `db_field_equals`, `db_row_count_equals`, `event_published`, `event_payload_match`, `event_not_published`, `http_mock_called`, `http_mock_request_body_match`, `http_mock_request_count`, `http_mock_not_called`, and `custom_verify`.
-- Fixture catalog: `data_binding`, `database_seed`, `database_cleanup`, `db_seed`, `db_cleanup`, `http_stub`, `event_seed`, `event_expectation`, `file_seed`, `file_cleanup`, `config_injection`, `env_injection`, `mock_config`, `message_seed`, `container_dependency`, `environment_variable`, and `test_data_namespace`.
+- Fixture and setup catalog: DSL `data` catalog, operation `inputs`, `database_seed`, `database_cleanup`, `db_seed`, `db_cleanup`, `http_stub`, `event_seed`, `event_expectation`, `file_seed`, `file_cleanup`, `config_injection`, `env_injection`, `mock_config`, `message_seed`, `container_dependency`, `environment_variable`, and `test_data_namespace`.
 
 The framework validates that a Provider Instance, Provider Contract, selected runtime mode, operation, fixture type, verify type, evidence ref, and required Environment Binding keys are declared and supported. The Agent Skill decides whether a product/RU should use a catalog entry. For example, the framework may support an external runner provider type, but the Agent Skill decides whether a release unit has an approved need for that escape hatch.
 
@@ -371,7 +372,7 @@ Required framework-owned artifact families:
 | Provider Instance | Define one RP logical runtime target using a Provider Contract shape | Endpoint/topic/DB credential values, unsupported fields, product topology decisions |
 | Environment Binding | Resolve Provider Instance binding keys and `runtime_mode` for `local`, `ci`, `sit`, or `preprod`; supply mock/stub/ephemeral replacement refs when selected | Product topology decisions, unreferenced secrets, or silent fallback rules |
 | Suite manifest | Select tests by suite, tag, profile, or test ID | Hidden product/RU inference |
-| Provider Contract | Define provider type, allowed runtime modes, allowed operations, allowed `bind_as` values, binding keys, output refs, evidence outputs, failure codes, and valid Provider Instance shape | Product-specific strategy selection, raw secrets, or inline unsafe commands |
+| Provider Contract | Define provider type, allowed runtime modes, allowed operations, allowed input names, binding keys, output refs, evidence outputs, failure codes, and valid Provider Instance shape | Product-specific strategy selection, raw secrets, or inline unsafe commands |
 | Provider plugin metadata | Declare provider type, operations, required binding keys, evidence outputs, and safety constraints | Product topology decisions or RP-specific scripts |
 | Verify plugin metadata | Declare verify type, target types, and required fields | Business truth approval |
 | Result schema | Normalize step results, verify results, evidence refs, labels, timing, and failure classification | Raw secrets |
@@ -419,7 +420,7 @@ v0.2 validation must block before execution when:
 - Test case ID, source refs, selected profile, targets, execute step IDs, verify IDs, fixture refs, expected-result refs, cleanup refs, parameter refs, evidence refs, or runtime policy are missing or invalid.
 - A selected profile is incompatible with the test case.
 - A target, Provider Instance, Provider Contract, operation, verify type, Environment Binding, required binding key, or plugin contract cannot be resolved.
-- A DSL `parameters.bind_as` value is not allowed by the referenced Provider Contract.
+- A DSL operation input key is not allowed by the referenced Provider Contract.
 - A DSL or provider instance output ref is not declared by the referenced Provider Contract.
 - `file_diff`, DB, event, or normal comparison verify rules are missing required actual, expected, target, query, event, topic/filter, or selector fields.
 - Polling timeout or poll interval is not an ISO-8601 duration.
@@ -430,10 +431,10 @@ Current provider contract minimums enforced by the framework verification build:
 | Provider Type | Enforced Minimum Fields |
 |---|---|
 | `shell_command` | `command` binding key, positive timeout, declared output refs |
-| `rest_client` | `base_url` binding key, allowed `http_request` operation, allowed request `bind_as` values, positive timeout, declared output refs |
-| `grpc_client` | service/descriptor refs, allowed request `bind_as` values, positive timeout, declared output refs |
-| `kafka_messaging` | broker/topic binding keys, allowed publish/consume/observe/cleanup operations, payload `bind_as`, bounded cleanup, declared output refs |
-| `nats` | connection/subject binding keys, allowed publish/observe/event verification operations, payload `bind_as`, bounded observation, declared output refs |
+| `rest_client` | `base_url` binding key, allowed `http_request` operation, allowed request input names, positive timeout, declared output refs |
+| `grpc_client` | service/descriptor refs, allowed request input names, positive timeout, declared output refs |
+| `kafka_messaging` | broker/topic binding keys, allowed publish/consume/observe/cleanup operations, payload input names, bounded cleanup, declared output refs |
+| `nats` | connection/subject binding keys, allowed publish/observe/event verification operations, payload input names, bounded observation, declared output refs |
 | `jdbc_database` | connection binding key, isolation key, cleanup strategy, setup/cleanup SQL refs, verification SQL refs, declared output refs |
 | `kubernetes_runtime` | namespace/context/API binding keys, readiness operation, deployed version ref, bounded log tail, declared output refs |
 | `vm_runtime` | host/health binding keys, command refs for SSH/WinRM when selected, deployed version ref, declared output refs |
@@ -572,11 +573,10 @@ Use clear test-case language in new DSL artifacts:
 | `labels` | Optional opaque metadata for reporting, such as product, package, runtime unit, team, or domain. |
 | `source_refs` | Link the test to reviewed source artifacts such as acceptance criteria and feature specs. |
 | `targets` | Name each application, database, event bus, file store, batch runner, or external boundary used by the test. |
-| `parameters` | Optionally reference a reviewed parameter set for repeated execution of the same logical test. |
-| `setup` | Declare fixtures, seed data, mock setup, or initial state needed before execution. |
-| `execute` | Declare readable operations, target, runtime inputs, and output capture. |
-| `expected_results` | Reference expected files, JSON/YAML payloads, DB state snapshots, response payloads, schemas, or contracts. |
-| `verify` | Declare assertions over captured outputs, state, events, or files. |
+| `data` | Optionally declare reusable reviewed data refs or safe literals. |
+| `setup` | Declare provider-backed setup operations for seed data, mock setup, or initial state needed before execution. |
+| `execute` | Declare provider-backed operations, target, inputs, and output capture. |
+| `verify` | Declare provider-backed checks or framework assertions over captured outputs, state, events, or files. |
 | `evidence` | Declare evidence refs that must be retained from execution or verification. |
 | `runtime` | Declare bounded timeout and retry policy. |
 
@@ -586,10 +586,10 @@ The v0.2 contract separates stable top-level structure from execution-required c
 
 - Always required: `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs.acceptance_criteria`, `targets`, `execute`, `verify`, `evidence`, and `runtime`.
 - Optional: `labels` and `compatible_profiles`. `labels` are report metadata only; `compatible_profiles` restricts the test to named Execution Profiles.
-- Conditionally required: `setup.fixtures` when the test needs precondition data, state mutation, mock setup, seed data, or cleanup.
-- Conditionally required: `expected_results` when a verify item references an approved artifact, schema, contract, payload, file, DB state snapshot, or other reusable truth source. Simple deterministic expected values may be declared directly in `verify[].expected`.
-- Conditionally required: operation-level `parameters[].ref` and `parameters[].bind_as` when setup, execute, or cleanup passes data to a provider. `ref` identifies the source value or artifact; `bind_as` identifies the provider input location and must be allowed by the referenced Provider Contract.
-- Required when referenced: `execute[].outputs`, `verify[].selector` for structured output checks, `verify[].target/query/event` for state or event checks, `verify[].options` for polling/tolerance/normalization, and fixture `cleanup_ref`.
+- Optional: `data`. Use it only when reusable reviewed data refs or safe literals make operation inputs clearer.
+- Conditionally required: `setup.operations` when the test needs precondition data, state mutation, mock setup, seed data, or cleanup.
+- Conditionally required: operation-level `inputs` when setup, execute, verify, or cleanup passes data to a provider. Input map keys identify Provider Contract input names and must be allowed by the referenced Provider Contract. Input values provide either `ref` or safe literal `value`.
+- Required when referenced: `execute.operations[].outputs`, `verify.checks[].selector` for structured output checks, `verify.checks[].target` plus `operation` for provider-backed state or event checks, `verify.checks[].options` for polling/tolerance/normalization, and cleanup operations for mutating setup.
 - Prohibited in DSL: `scenario`, provider implementation settings, secrets, endpoint URLs, topics, namespaces, connection strings, SQL bodies, shell scripts, release gates, waivers, risk approvals, and approval workflow state.
 
 The v0.2 semantic model is:
@@ -620,49 +620,59 @@ targets:
     provider_id: order-db
     profile: ci
 
-setup:
-  fixtures:
-    orders_seed:
-      type: database_seed
-      target: order_database
-      operation: execute_script
-      parameters:
-        - name: seed_script
-          ref: parameter-sets/orders_regression_cases.yaml#orders_case.orders_seed_ref
-          bind_as: db.script_ref
-      cleanup_ref: fixtures/db/orders_cleanup.yaml
-
-execute:
-  - id: run_pipeline
-    operation: run_batch
-    target: framework_sample_pipeline
-    parameters:
-      - name: orders_seed
-        ref: setup.orders_seed.outputs.affected_rows
-        bind_as: runner.args.ordersSeed
-    outputs:
-      exit_code: exit_code
-      normalized_orders_file: output_files
-      execution_log: stdout
-
-expected_results:
+data:
+  orders_seed_ref:
+    ref: parameter-sets/orders_regression_cases.yaml#orders_case.orders_seed_ref
+  orders_cleanup_ref:
+    ref: fixtures/db/orders_cleanup.yaml
   normalized_orders:
-    type: file
     ref: expected-results/RP-FWK-SAMPLE-ER-001.yaml
 
+setup:
+  operations:
+    - id: orders_seed
+      target: order_database
+      operation: execute_script
+      inputs:
+        db.script_ref:
+          ref: ${data.orders_seed_ref}
+      cleanup:
+        operation: execute_script
+        inputs:
+          db.script_ref:
+            ref: ${data.orders_cleanup_ref}
+
+execute:
+  operations:
+    - id: run_pipeline
+      operation: run_batch
+      target: framework_sample_pipeline
+      inputs:
+        runner.args.ordersSeed:
+          ref: ${setup.orders_seed.outputs.affected_rows}
+      outputs:
+        exit_code: exit_code
+        normalized_orders_file: output_files
+        execution_log: stdout
+
 verify:
-  - id: verify_exit_code
-    type: equals
-    actual: ${execute.run_pipeline.outputs.exit_code}
-    expected: 0
-  - id: verify_normalized_orders_file
-    type: file_diff
-    actual: ${execute.run_pipeline.outputs.normalized_orders_file}
-    expected: ${expected_results.normalized_orders.ref}
-    options:
-      format: yaml
-      normalize: true
-      ignore_order: true
+  checks:
+    - id: verify_exit_code
+      type: equals
+      actual:
+        ref: ${execute.run_pipeline.outputs.exit_code}
+      expected:
+        value: 0
+    - id: verify_normalized_orders_file
+      type: file_diff
+      actual:
+        ref: ${execute.run_pipeline.outputs.normalized_orders_file}
+      expected:
+        ref: ${data.normalized_orders}
+      options:
+        format: yaml
+        normalize: true
+        ignore_order: true
 
 evidence:
   required:
@@ -683,13 +693,13 @@ New DSL artifacts must use readable execution terms:
 
 | Replace Old Term | Use v0.2 Term | Reason |
 |---|---|---|
-| `execution_target` | `targets` plus `execute[].target` | One test may involve multiple targets. |
+| `execution_target` | `targets` plus `execute.operations[].target` | One test may involve multiple targets. |
 | `target_ru_id` | `target` | Tests should refer to logical target IDs, not framework-internal RU fields. |
 | `action: call_ru` | `operation: run_batch`, `execute_command`, `http_request`, `unary_call`, `execute_script`, `query`, `publish_message`, `consume_message`, `nats_publish`, `nats_observe`, or another operation declared by the referenced Provider Contract | Operation names should explain what the test does and must be contract-backed. |
-| `package_inputs` | `setup.fixtures` or `execute[].parameters` | Setup owns preconditions; execute owns runtime inputs. |
-| `oracles` | `expected_results` | v0.2 uses expected result references and explicit `verify` rules instead of a heavy oracle framework. |
-| `steps` | `execute` | The section is executable behavior, not an abstract workflow step. |
-| `assertions` | `verify` | The section defines pass/fail checks. |
+| `package_inputs` | `data` plus operation `inputs` | Data sources and binding points are separated. |
+| `oracles` | `data` plus `verify.checks` expected refs | v0.2 uses expected data refs and explicit checks instead of a heavy oracle framework. |
+| `steps` | `execute.operations` | The section is executable behavior, not an abstract workflow step. |
+| `assertions` | `verify.checks` | The section defines pass/fail checks. |
 | `evidence_required` | `evidence.required` | Evidence should reference real execution or verification outputs. |
 | `policy` | `runtime` | Runtime policy is timeout, retry, and bounded execution behavior in v0.2. |
 
@@ -699,7 +709,7 @@ Legacy v1 artifacts may still be read through an explicit compatibility path dur
 
 `targets` is a name-keyed map. Each target must declare `provider_id` and `profile`. `provider_id` resolves to a Provider Instance. The Provider Instance declares `provider_type`, which selects a Provider Contract. `profile` selects the Environment Binding values used at runtime. A DSL target must not contain URLs, topics, namespaces, DB connection strings, or credentials.
 
-`setup`, `execute`, and `cleanup` operations must be allowed by the referenced Provider Contract. Core v0.2 operations include:
+`setup.operations`, `execute.operations`, provider-backed `verify.checks`, and `cleanup.operations` must be allowed by the referenced Provider Contract. Core v0.2 operations include:
 
 - `run_batch`
 - `execute_command`
@@ -732,48 +742,48 @@ Legacy v1 artifacts may still be read through an explicit compatibility path dur
 - `load_stubs`
 - `verify_requests`
 
-Every execute step must declare an `outputs` map when later verification or evidence depends on the result. Normal actions such as API calls, SQL queries, batch runs, or command execution belong in `execute`, not `verify`.
+Every execute operation must declare an `outputs` map when later verification or evidence depends on the result. Normal actions such as API calls, SQL queries, batch runs, or command execution belong in `execute`, not framework assertion checks.
 
-Every output ref in DSL must be declared by the referenced Provider Contract. Every `parameters[].bind_as` value must be allowed by the referenced Provider Contract. v0.2 supports one or more executable `execute[]` items when each step has a unique ID, declared operation, target, inputs, outputs, ordering semantics, and evidence refs. Ambiguous multi-step execution must block before provider dispatch.
+Every output ref in DSL must be declared by the referenced Provider Contract. Every operation `inputs` key must be allowed by the referenced Provider Contract. v0.2 supports one or more executable `execute.operations[]` items when each operation has a unique ID, declared operation, target, inputs, outputs, ordering semantics, and evidence refs. Ambiguous multi-step execution must block before provider dispatch.
 
 ### 6.7.3 Setup, Inputs, and Cleanup
 
-Use `setup.fixtures` for precondition data or state that must exist before the operation runs, such as database seeds, file seeds, mock setup, queue seed messages, or initial state. A fixture that changes system state must declare `scope`, `cleanup_policy`, and either a `cleanup_ref` or a provider contract that supplies a safe cleanup action.
+Use `setup.operations` for precondition data or state that must exist before the main execution runs, such as database seeds, file seeds, mock setup, queue seed messages, or initial state. A setup operation that changes system state must declare bounded cleanup through an inline `cleanup` operation or a matching `cleanup.operations[]` item.
 
 Cleanup authority and precedence:
 
-- DSL `setup.fixtures.<name>.scope` owns lifecycle scope. Supported v0.2 values are `test_case`, `parameter_case`, and `batch`.
-- DSL `setup.fixtures.<name>.cleanup_policy` owns when cleanup is required. Supported v0.2 values are `always`, `on_success`, `on_failure`, and `manual_blocked`.
+- DSL `setup.operations[].scope` owns lifecycle scope. Supported v0.2 values are `test_case`, `parameter_case`, and `batch`.
+- DSL `setup.operations[].cleanup_policy` owns when cleanup is required. Supported v0.2 values are `always`, `on_success`, `on_failure`, and `manual_blocked`.
 - Provider Contract `cleanup_strategy` owns how cleanup is performed for the selected technology, such as `by_test_run_id`, `by_parameter_case_id`, `drain`, or `delete_files_under_workspace`.
 - The framework resolves cleanup by first reading DSL scope/policy, then validating that the selected Provider Contract has a compatible cleanup strategy and bounded evidence output.
 - If a mutating fixture omits required cleanup, declares an unsafe scope, or selects an incompatible provider cleanup strategy, execution blocks before dispatch with `fixture_setup_error` or `cleanup_error`.
 
-Use `parameters[].ref` and `parameters[].bind_as` for runtime inputs passed to setup, execute, or cleanup operations, such as request payloads, file refs, fixture refs, event payloads, query params, or command args. Provider-specific connection strings, credentials, endpoints, SQL bodies, queue client settings, and shell scripts do not belong in the DSL body; they belong in validated Provider Contracts, Provider Instances, Environment Bindings, or referenced files.
+Use operation `inputs` for runtime inputs passed to setup, execute, provider-backed verify, or cleanup operations, such as request payloads, file refs, fixture refs, event payloads, SQL bind variables, or command args. Provider-specific connection strings, credentials, endpoints, SQL bodies, queue client settings, and shell scripts do not belong in the DSL body; they belong in validated Provider Contracts, Provider Instances, Environment Bindings, or referenced files.
 
 ### 6.7.3A Parameterization
 
-v0.2 parameterization and operation binding use reviewed source references plus provider binding names:
+v0.2 parameterization and operation binding use reviewed source references plus provider input names:
 
 ```yaml
 execute:
-  - id: submit_order
-    target: order_api
-    operation: http_request
-    parameters:
-      - name: order_payload
-        ref: parameter-sets/orders_regression_cases.yaml#happy_path.request
-        bind_as: request.body
+  operations:
+    - id: submit_order
+      target: order_api
+      operation: http_request
+      inputs:
+        request.body:
+          ref: parameter-sets/orders_regression_cases.yaml#happy_path.request
 ```
 
-The referenced parameter set is a checked-in, reviewed RP-local artifact under `parameter-sets/` or a generated artifact that resolves to that folder before execution. It may contain one or more named cases, but the cases are not embedded in the DSL body. `bind_as` must match the allowed values from the Provider Contract selected by the target Provider Instance. Each resolved parameter case produces a separate run ID and run evidence record with `parameter_case_id`. Coverage still counts the traced AC once per selected batch even when multiple parameter cases pass.
+The referenced parameter set is a checked-in, reviewed RP-local artifact under `parameter-sets/` or a generated artifact that resolves to that folder before execution. It may contain one or more named cases, but the cases are not embedded in the DSL body. Each input key must match `allowed_inputs` from the Provider Contract selected by the target Provider Instance. Each resolved parameter case produces a separate run ID and run evidence record with `parameter_case_id`. Coverage still counts the traced AC once per selected batch even when multiple parameter cases pass.
 
-`parameters.strategy`, inline `parameters.cases`, `${parameters.<name>}` references, dynamic data selection, combinatorial case generation, runtime-created cases, secrets, and provider connection details do not belong in new v0.2 DSL artifacts. Existing `strategy: explicit_cases` artifacts may be read only through a legacy compatibility path until migrated to operation-level `ref` / `bind_as`.
+Legacy parameter strategy fields, inline case lists, parameter expressions, old parameter binding arrays, dynamic data selection, combinatorial case generation, runtime-created cases, secrets, and provider connection details do not belong in the next v0.2 DSL shape. Existing `strategy: explicit_cases` artifacts may be read only through a legacy compatibility path until migrated to operation-level `inputs`.
 
 ### 6.7.4 Expected Results and Verification
 
-`expected_results` contains simple truth references: expected files, expected JSON/YAML, expected DB state snapshots, expected response payloads, schemas, or contracts. Do not duplicate the same expected artifact under both `expected_results` and legacy `oracles`.
+Expected refs point to simple truth artifacts: expected files, expected JSON/YAML, expected DB state snapshots, expected response payloads, schemas, or contracts. Do not duplicate the same expected artifact under both new refs and legacy `oracles`.
 
-Core `verify[].type` values for v0.2 are:
+Core `verify.checks[].type` values for v0.2 are:
 
 | Group | Verify Types |
 |---|---|
@@ -805,60 +815,65 @@ Required verify source rules:
 
 ```yaml
 verify:
-  - id: verify_http_status
-    type: response_status_equals
-    expected: 202
-  - id: verify_response_status
-    type: equals
-    actual: ${execute.create_order.outputs.response_body}
-    selector: $.status
-    expected: CREATED
-  - id: verify_response_body_status
-    type: json_path_equals
-    actual: ${execute.create_order.outputs.response_body}
-    selector: $.status
-    expected: CREATED
+  checks:
+    - id: verify_http_status
+      type: response_status_equals
+      expected: 202
+    - id: verify_response_status
+      type: equals
+      actual:
+        ref: ${execute.create_order.outputs.response_body}
+      selector: $.status
+      expected: CREATED
+    - id: verify_response_body_status
+      type: json_path_equals
+      actual:
+        ref: ${execute.create_order.outputs.response_body}
+      selector: $.status
+      expected: CREATED
 ```
 
 Use `db_record_exists` when verifying persisted database state:
 
 ```yaml
 verify:
-  - id: verify_order_record_created
-    type: db_record_exists
-    target: order_database
-    query:
-      ref: queries/order_exists.sql
-      params:
-        order_id: ${setup.fixtures.orders_seed.order_id}
-    expected:
-      min_rows: 1
-      fields:
-        status: NORMALIZED
-    options:
-      timeout: PT30S
-      poll_interval: PT5S
+  checks:
+    - id: verify_order_record_created
+      type: db_record_exists
+      target: order_database
+      query:
+        ref: queries/order_exists.sql
+        params:
+          order_id: ${setup.orders_seed.outputs.order_id}
+      expected:
+        min_rows: 1
+        fields:
+          status: NORMALIZED
+      options:
+        timeout: PT30S
+        poll_interval: PT5S
 ```
 
 Use `event_published` when verifying a produced event:
 
 ```yaml
 verify:
-  - id: verify_order_normalized_event_published
-    type: event_published
-    target: order_event_bus
-    event:
-      topic: order.normalized
-      key: ${setup.fixtures.orders_seed.order_id}
-    expected:
-      match:
-        $.order_id: ${setup.fixtures.orders_seed.order_id}
-        $.event_type: ORDER_NORMALIZED
-        $.status: NORMALIZED
-    options:
-      timeout: PT30S
-      poll_interval: PT5S
-      consume_from: test_start_time
+  checks:
+    - id: verify_order_normalized_event_published
+      type: event_published
+      target: order_event_bus
+      event:
+        topic: order.normalized
+        key: ${setup.orders_seed.outputs.order_id}
+      expected:
+        match:
+          $.order_id: ${setup.orders_seed.outputs.order_id}
+          $.event_type: ORDER_NORMALIZED
+          $.status: NORMALIZED
+      options:
+        timeout: PT30S
+        poll_interval: PT5S
+        consume_from: test_start_time
 ```
 
 ### 6.7.5 Runtime, Evidence, and Status
@@ -903,11 +918,11 @@ The current implementation still contains legacy field readers in some framework
 | `traceability.source` | `source_refs.acceptance_criteria` or a specific source ref |
 | `execution_target.runner` | `targets.<target_id>.provider_id` plus generated Provider Instance |
 | `execution_target.environment_ref` | `targets.<target_id>.profile` plus Environment Binding |
-| `fixture.setup` / `fixture.cleanup` | `setup.fixtures.<name>` with `cleanup_ref` |
-| `package_inputs.inputs.<name>` | `setup.fixtures.<name>.parameters[].ref` or `execute[].parameters[].ref` |
-| `steps[]` | `execute[]` |
-| `oracles` / `expected.ref` | `expected_results` |
-| `assertions[]` | `verify[]` |
+| `fixture.setup` / `fixture.cleanup` | `setup.operations[]` and `cleanup.operations[]`, with inline cleanup allowed on mutating setup operations |
+| `package_inputs.inputs.<name>` | `data.<name>` plus operation `inputs.<input_key>.ref` |
+| `steps[]` | `execute.operations[]` |
+| `oracles` / `expected.ref` | `data.<name>` or check-level `expected_ref` |
+| `assertions[]` | `verify.checks[]` |
 | `evidence_required` | `evidence.required` |
 | `policy.timeout_seconds` / `policy.retry` | `runtime.timeout` / `runtime.retry.max_attempts` |
 
@@ -966,7 +981,7 @@ Rules:
 
 ## 6.9 Provider Contract, Provider Instance, and Environment Binding
 
-Each executable provider must resolve through a validated Provider Contract, Provider Instance, Execution Profile, and Environment Binding. The Provider Contract defines reusable rules. The Provider Instance fills RP-level logical selections. The Environment Binding supplies profile-specific actual values. The DSL only references `provider_id`, `profile`, operations, `parameters.ref`, `parameters.bind_as`, output refs, verify refs, and evidence refs.
+Each executable provider must resolve through a validated Provider Contract, Provider Instance, Execution Profile, and Environment Binding. The Provider Contract defines reusable rules. The Provider Instance fills RP-level logical selections. The Environment Binding supplies profile-specific actual values. The DSL only references `provider_id`, operations, `inputs`, output refs, verify refs, and evidence refs; active profile selection comes from CLI or suite manifest.
 
 ```yaml
 provider_contract_version: v0.2
@@ -987,11 +1002,12 @@ valid_provider_instance_shape:
   allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
 operations:
   run_batch:
-    allowed_bind_as:
+    allowed_inputs:
       - runner.args.*
       - runner.env.*
       - runner.timeout
       - runner.input_file
+    required_inputs: []
     output_refs:
       - exit_code
       - stdout
@@ -1021,9 +1037,9 @@ safety:
       - reboot
 operations:
   run_batch:
-    parameters:
+    inputs:
       business_date:
-        bind_as: runner.args.businessDate
+        input: runner.args.businessDate
     outputs:
       exit_code: exit_code
       actual_output: output_files
@@ -1043,10 +1059,10 @@ Provider runtime rules:
 - Resolution order is DSL target `provider_id` + `profile`, Provider Instance, Provider Contract by `provider_type`, then Environment Binding values for the selected profile. Suite manifests select tests only and must not override provider fields.
 - Executable Provider Contracts must declare `provider_type`; heuristic inference is diagnostic only and must not silently choose a runtime.
 - Provider capability registry status must be checked before dispatch. Unsupported, ambiguous, unsafe, or unapproved escape-hatch providers fail before execution.
-- Dispatch uses v0.2 DSL fields and generated artifact fields: `targets.<target_id>.provider_id`, `targets.<target_id>.profile`, `execute[].operation`, `setup.fixtures.<name>.operation`, `cleanup.fixtures.<name>.operation`, `parameters[].ref`, `parameters[].bind_as`, `expected_results`, `verify[].type`, and `evidence.required[]`.
+- Dispatch uses the next v0.2 DSL fields and generated artifact fields: `targets.<target_id>.provider_id`, selected profile, `setup.operations[].operation`, `execute.operations[].operation`, `verify.checks[].operation` when provider-backed, `cleanup.operations[].operation`, operation `inputs`, `data`, `verify.checks`, and `evidence.required[]`.
 - The framework supplies resolved input paths and run workspace paths.
 - Providers write actual outputs, observation results, and cleanup results under the run evidence directory.
-- Provider Instances cannot introduce fields, operations, `bind_as` values, output refs, evidence outputs, or failure codes that are not allowed by the Provider Contract.
+- Provider Instances cannot introduce fields, operations, input names, output refs, evidence outputs, or failure codes that are not allowed by the Provider Contract.
 - Environment Bindings must supply all required binding keys for the selected profile.
 - Messaging actions that declare `requires_correlation: true` must also declare `correlation_id`, `correlation_id_ref`, or `correlation_key` before publish, request/reply, consume, observe, or cleanup dispatch.
 - Messaging request/reply actions are not part of the P0 NATS runtime; they remain future reusable Provider Contract scope.

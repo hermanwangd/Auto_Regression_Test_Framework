@@ -326,13 +326,23 @@ public class JdbcProviderCapabilityService {
                 return true;
             }
         }
-        for (Object stepValue : listValue(testCase.get("execute"))) {
+        for (Object stepValue : executeOperationValues(testCase)) {
             if (targetName.equals(stringValue(mapValue(stepValue).get("target")))) {
                 return true;
             }
         }
-        for (Object verifyValue : listValue(testCase.get("verify"))) {
+        for (Object verifyValue : verifyValues(testCase)) {
             if (targetName.equals(stringValue(mapValue(verifyValue).get("target")))) {
+                return true;
+            }
+        }
+        for (Object operationValue : listValue(mapValue(testCase.get("setup")).get("operations"))) {
+            if (targetName.equals(stringValue(mapValue(operationValue).get("target")))) {
+                return true;
+            }
+        }
+        for (Object operationValue : listValue(mapValue(testCase.get("cleanup")).get("operations"))) {
+            if (targetName.equals(stringValue(mapValue(operationValue).get("target")))) {
                 return true;
             }
         }
@@ -351,6 +361,19 @@ public class JdbcProviderCapabilityService {
 
     private List<SelectedOperation> setupOperations(Map<String, Object> testCase, String targetName) {
         List<SelectedOperation> operations = new ArrayList<>();
+        for (Object value : listValue(mapValue(testCase.get("setup")).get("operations"))) {
+            Map<String, Object> operation = mapValue(value);
+            if (targetName.equals(stringValue(operation.get("target")))
+                    && "db_seed".equals(stringValue(operation.get("operation")))) {
+                String id = stringValue(operation.get("id"));
+                operations.add(new SelectedOperation(
+                        id.isBlank() ? "db_seed" : id,
+                        new ProviderOperationRequest(
+                                stringValue(operation.get("operation")),
+                                resolvedOperationInputs(testCase, operation),
+                                runtimeOutputs(id, Map.of()))));
+            }
+        }
         for (Map.Entry<String, Object> entry : mapValue(mapValue(testCase.get("setup")).get("fixtures")).entrySet()) {
             Map<String, Object> fixture = mapValue(entry.getValue());
             if (targetName.equals(stringValue(fixture.get("target")))
@@ -368,7 +391,7 @@ public class JdbcProviderCapabilityService {
 
     private List<SelectedOperation> executeOperations(Map<String, Object> testCase, String targetName) {
         List<SelectedOperation> operations = new ArrayList<>();
-        for (Object value : listValue(testCase.get("execute"))) {
+        for (Object value : executeOperationValues(testCase)) {
             Map<String, Object> step = mapValue(value);
             if (targetName.equals(stringValue(step.get("target")))) {
                 String id = stringValue(step.get("id"));
@@ -376,7 +399,7 @@ public class JdbcProviderCapabilityService {
                         id.isBlank() ? "execute" : id,
                         new ProviderOperationRequest(
                                 stringValue(step.get("operation")),
-                                resolvedParameters(testCase, listValue(step.get("parameters"))),
+                                resolvedOperationInputs(testCase, step),
                                 runtimeOutputs(id, mapValue(step.get("outputs"))))));
             }
         }
@@ -385,7 +408,7 @@ public class JdbcProviderCapabilityService {
 
     private List<SelectedOperation> verifyOperations(Path suiteRoot, Map<String, Object> testCase, String targetName) {
         List<SelectedOperation> operations = new ArrayList<>();
-        for (Object value : listValue(testCase.get("verify"))) {
+        for (Object value : verifyValues(testCase)) {
             Map<String, Object> verify = mapValue(value);
             if (!targetName.equals(stringValue(verify.get("target")))
                     || !"db_record_exists".equals(stringValue(verify.get("type")))) {
@@ -417,6 +440,19 @@ public class JdbcProviderCapabilityService {
 
     private List<SelectedOperation> cleanupOperations(Map<String, Object> testCase, String targetName) {
         List<SelectedOperation> operations = new ArrayList<>();
+        for (Object value : listValue(mapValue(testCase.get("cleanup")).get("operations"))) {
+            Map<String, Object> operation = mapValue(value);
+            if (targetName.equals(stringValue(operation.get("target")))
+                    && "db_cleanup".equals(stringValue(operation.get("operation")))) {
+                String id = stringValue(operation.get("id"));
+                operations.add(new SelectedOperation(
+                        id.isBlank() ? "db_cleanup" : id,
+                        new ProviderOperationRequest(
+                                stringValue(operation.get("operation")),
+                                resolvedOperationInputs(testCase, operation),
+                                runtimeOutputs(id, Map.of()))));
+            }
+        }
         for (Map.Entry<String, Object> entry : mapValue(mapValue(testCase.get("cleanup")).get("fixtures")).entrySet()) {
             Map<String, Object> fixture = mapValue(entry.getValue());
             if (targetName.equals(stringValue(fixture.get("target")))
@@ -443,10 +479,41 @@ public class JdbcProviderCapabilityService {
         List<Map<String, Object>> resolved = new ArrayList<>();
         for (Object value : parameters) {
             Map<String, Object> parameter = new LinkedHashMap<>(mapValue(value));
-            parameter.put("ref", resolveRef(testCase, stringValue(parameter.get("ref"))));
+            parameter.put("ref", resolveRef(testCase,
+                    firstNonBlank(stringValue(parameter.get("ref")), stringValue(parameter.get("value")))));
             resolved.add(parameter);
         }
         return List.copyOf(resolved);
+    }
+
+    private List<Map<String, Object>> resolvedOperationInputs(Map<String, Object> testCase, Map<String, Object> operation) {
+        if (!(operation.get("inputs") instanceof Map<?, ?> inputs)) {
+            return resolvedParameters(testCase, listValue(operation.get("parameters")));
+        }
+        List<Object> parameters = new ArrayList<>();
+        for (Map.Entry<?, ?> entry : inputs.entrySet()) {
+            Map<String, Object> parameter = new LinkedHashMap<>(mapValue(entry.getValue()));
+            parameter.putIfAbsent("name", stringValue(entry.getKey()));
+            parameter.put("bind_as", stringValue(entry.getKey()));
+            parameters.add(parameter);
+        }
+        return resolvedParameters(testCase, parameters);
+    }
+
+    private List<Object> executeOperationValues(Map<String, Object> testCase) {
+        Object execute = testCase.get("execute");
+        if (execute instanceof Map<?, ?> executeMap) {
+            return listValue(executeMap.get("operations"));
+        }
+        return listValue(execute);
+    }
+
+    private List<Object> verifyValues(Map<String, Object> testCase) {
+        Object verify = testCase.get("verify");
+        if (verify instanceof Map<?, ?> verifyMap) {
+            return listValue(verifyMap.get("checks"));
+        }
+        return listValue(verify);
     }
 
     private String resolveRef(Map<String, Object> testCase, String ref) {
@@ -455,6 +522,10 @@ public class JdbcProviderCapabilityService {
         }
         String path = ref.substring("${data.".length(), ref.length() - 1);
         String[] parts = path.split("\\.");
+        if (parts.length == 1) {
+            String resolved = stringValue(mapValue(mapValue(testCase.get("data")).get(parts[0])).get("ref"));
+            return resolved.isBlank() ? ref : resolved;
+        }
         if (parts.length != 2) {
             return ref;
         }
@@ -807,6 +878,15 @@ public class JdbcProviderCapabilityService {
 
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private String safe(String value) {

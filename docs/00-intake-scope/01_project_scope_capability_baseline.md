@@ -189,7 +189,7 @@ The Agent Skill translates product mapping into:
 - `run_plan.yaml`: logical target dependency graph, Execution Profile, and selected execution mode.
 - `provider-instances/*.yaml`: RP logical runtime targets with provider_id and provider_type.
 - `environment-bindings/*.yaml`: profile-specific values for Provider Instance binding keys.
-- `provider-contracts/*.yaml`: reusable Provider Contracts that define provider_type, operations, allowed `bind_as` values, output refs, evidence outputs, and failure codes.
+- `provider-contracts/*.yaml`: reusable Provider Contracts that define provider_type, operations, allowed input keys, required inputs, output refs, evidence outputs, and failure codes.
 - `traceability_map.yaml`: opaque product/RP/RU/source labels used for reporting, not runtime branching.
 - `mapping_explanation.md` or `.yaml`: strategy selection reason, selected provider_id/profile, source facts, unresolved assumptions, and validation warnings for human review.
 
@@ -331,11 +331,11 @@ Current framework verification can be accepted only for the framework capabiliti
 
 | Capability ID | Capability | v0.2 Scope | Owner | Acceptance Evidence |
 |---|---|---|---|---|
-| CAP-001 | Test Case DSL v0.2 | Metadata, tags, labels, source refs, compatible profiles, parameters, targets, setup, execute, expected results, verify, evidence, runtime | Platform | Schema validation and DSL contract tests |
+| CAP-001 | Test Case DSL v0.2 | Metadata, tags, labels, source refs, compatible profiles, optional data catalog, operation inputs, targets, setup, execute, expected refs, verify, evidence, runtime | Platform | Schema validation and DSL contract tests |
 | CAP-002 | Execution Profile | `local`, `ci`, `sit`, and `preprod` profiles with isolation, dependency, duration, data, mock, readiness, and destructive-operation constraints | Platform | Execution Profile validation and selected-profile blocking tests |
 | CAP-003 | Environment Binding | Logical targets resolved to local process, testcontainer, deployed runtime, shared infrastructure, file store, or secret/runtime-generated references | Platform | Environment binding validation and resolution evidence |
 | CAP-004 | Suite Selection | Execute by test ID, suite, tag, and profile | Platform | CLI selection tests and suite manifest validation |
-| CAP-005 | Parameter Expansion | Operation-level `parameters[].ref` and `parameters[].bind_as` with per-parameter result and evidence folders | Platform | Parameterized run evidence and coverage de-duplication |
+| CAP-005 | Input Expansion | Operation-level `inputs` with reviewed refs and per-parameter result/evidence folders | Platform | Parameterized run evidence and coverage de-duplication |
 | CAP-006 | Fixture Manager | Database, file, mock, message, container dependency, environment variable, and test-data namespace fixtures with scope and cleanup policy | Platform | Setup/cleanup evidence and unsafe cleanup blocking |
 | CAP-007 | Provider Interface and Catalog | Provider types such as `shell_command`, `rest_client`, `grpc_client`, `jdbc_database`, `nats`, `kafka_messaging`, `kubernetes_runtime`, `vm_runtime`, and approved `external_runner` Provider Contracts | Platform | Provider catalog and plugin metadata validation |
 | CAP-008 | Execute Operation Catalog | `run_batch`, `execute_command`, `call_api`, `execute_sql`, `publish_message`, `consume_message`, `run_application`, `run_container`, `run_k8s_job`, `run_maven_failsafe`, `read_file`, `write_file` | Platform | Operation dispatch and unsupported-operation blocking |

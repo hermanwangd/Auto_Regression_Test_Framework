@@ -33,7 +33,7 @@ classifications:
   target_resolution_error:
     owner: framework_contract
     blocks: [dry_run, execution]
-    examples: [missing_provider_instance, missing_provider_contract, invalid_bind_as, missing_output_ref]
+    examples: [missing_provider_instance, missing_provider_contract, invalid_input_key, missing_output_ref]
   environment_error:
     owner: environment_owner
     blocks: [dry_run, execution]

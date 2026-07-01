@@ -37,6 +37,22 @@ class OracleResolverTest {
     }
 
     @Test
+    void resolvesDirectExpectedPayloadWhenWrapperOutputIsAbsent() throws Exception {
+        Files.writeString(tempDir.resolve("expected.json"), """
+                {"status":"OK"}
+                """);
+
+        ResolvedOracle oracle = resolver.resolveExpectedResultArtifact(
+                tempDir,
+                "primary",
+                "${oracles.primary}",
+                Map.of("ref", "expected.json"));
+
+        assertThat(oracle.expectedRef()).isEqualTo("expected.json");
+        assertThat(oracle.expectedPath()).isEqualTo(tempDir.resolve("expected.json"));
+    }
+
+    @Test
     void throwsUncheckedIoWhenExpectedResultArtifactCannotBeRead() throws Exception {
         Files.createDirectories(tempDir.resolve("expected.yaml"));
 

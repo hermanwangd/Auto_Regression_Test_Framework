@@ -606,7 +606,7 @@ class RegressionCommandTest {
         assertThat(output.toString()).contains("ap: Definition and Validation");
         assertThat(output.toString()).contains("field_path: execute[0].operation");
         assertThat(output.toString()).contains("field_path: execute[0].outputs");
-        assertThat(output.toString()).contains("Use operation `run_batch`");
+        assertThat(output.toString()).contains("Use a provider contract operation instead of legacy `call_ru`");
         assertThat(output.toString()).contains("run_status: blocked");
     }
 
@@ -1017,8 +1017,9 @@ class RegressionCommandTest {
                 .contains("fixture_name: orders_seed")
                 .contains("type: existing_state")
                 .contains("operation: run_batch")
-                .contains("expected_results:")
+                .contains("data:")
                 .contains("verify_rules:")
+                .contains("expected: expected-results/approved/RP-001-ER-001.yaml")
                 .contains("runtime:");
         assertThat(failureDetails)
                 .contains("reason: binding_resolution_failed")
@@ -3681,10 +3682,10 @@ class RegressionCommandTest {
                 .contains("execute_steps:")
                 .contains("operation: run_batch")
                 .contains("actual_output: actual/output.txt")
-                .contains("expected_results:")
-                .contains("ref: expected-results/approved/RP-001-ER-001.yaml")
+                .contains("data:")
                 .contains("verify_rules:")
                 .contains("type: file_diff")
+                .contains("expected: expected-results/approved/RP-001-ER-001.yaml")
                 .contains("evidence_required:")
                 .contains("runtime:")
                 .contains("timeout: PT10M")
@@ -5898,6 +5899,7 @@ class RegressionCommandTest {
                   acceptance_criteria: acceptance_criteria.md#%s
                 targets:
                   RU-transform-job:
+                    provider_id: spring_boot_cli
                     type: batch_runner
                     provider: spring_boot_cli
                     environment: ci://pipeline/%s
@@ -5912,15 +5914,11 @@ class RegressionCommandTest {
                     operation: call_ru
                     with:
                       orders_seed: ${setup.fixtures.orders_seed}
-                expected_results:
-                  normalized_orders:
-                    type: expected_result_artifact
-                    ref: expected-results/approved/%s.yaml
                 verify:
                   - id: verify_output
                     type: file_diff
                     actual: ${execute.run_pipeline.outputs.actual_output}
-                    expected: ${expected_results.normalized_orders.ref}
+                    expected: expected-results/approved/%s.yaml
                 evidence:
                   required:
                     - ${verify.verify_output.result}
@@ -5952,6 +5950,7 @@ class RegressionCommandTest {
                   acceptance_criteria: acceptance_criteria.md#%s
                 targets:
                   RU-transform-job:
+                    provider_id: spring_boot_cli
                     type: batch_runner
                     provider: spring_boot_cli
                     environment: ci://pipeline/%s
@@ -5972,15 +5971,11 @@ class RegressionCommandTest {
                         ref: actual/output.txt
                       execution_log:
                         ref: logs/stdout.log
-                expected_results:
-                  normalized_orders:
-                    type: expected_result_artifact
-                    ref: expected-results/approved/%s.yaml
                 verify:
                   - id: verify_output
                     type: file_diff
                     actual: ${execute.run_pipeline.outputs.actual_output}
-                    expected: ${expected_results.normalized_orders.ref}
+                    expected: expected-results/approved/%s.yaml
                 evidence:
                   required:
                     - ${execute.run_pipeline.outputs.execution_log}
@@ -6009,6 +6004,7 @@ class RegressionCommandTest {
                   acceptance_criteria: acceptance_criteria.md#%s
                 targets:
                   RU-transform-job:
+                    provider_id: spring_boot_cli
                     type: batch_runner
                     provider: spring_boot_cli
                     environment: ci://pipeline/%s
@@ -6024,7 +6020,6 @@ class RegressionCommandTest {
                         ref: actual/output.txt
                       execution_log:
                         ref: logs/stdout.log
-                expected_results: {}
                 verify:
                   - id: verify_status
                     type: json_path_equals
@@ -6059,6 +6054,7 @@ class RegressionCommandTest {
                   acceptance_criteria: acceptance_criteria.md#%s
                 targets:
                   RU-transform-job:
+                    provider_id: spring_boot_cli
                     type: batch_runner
                     provider: spring_boot_cli
                     environment: ci://pipeline/%s
@@ -6074,7 +6070,6 @@ class RegressionCommandTest {
                         ref: actual/output.txt
                       execution_log:
                         ref: logs/stdout.log
-                expected_results: {}
                 verify:
                   - id: verify_risk_score
                     type: numeric_tolerance
@@ -6110,6 +6105,7 @@ class RegressionCommandTest {
                   acceptance_criteria: acceptance_criteria.md#%s
                 targets:
                   RU-payment-api:
+                    provider_id: request_response
                     type: application
                     runner: request_response
                     environment: ci://payment/api
@@ -6128,7 +6124,6 @@ class RegressionCommandTest {
                         ref: actual/response.json
                       execution_log:
                         ref: logs/response.log
-                expected_results: {}
                 verify:
                   - id: verify_http_status
                     type: response_status_equals
@@ -6207,9 +6202,14 @@ class RegressionCommandTest {
                   source: acceptance_criteria.md#%s
                 targets:
                   RU-transform-job:
+                    provider_id: spring_boot_cli
                     type: spring_boot_application
                     provider: spring_boot_cli
                     environment: ci://pipeline/%s
+                expected_results:
+                  primary:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/%s.yaml
                 parameters:
                   strategy: explicit_cases
                   cases:
@@ -6235,15 +6235,11 @@ class RegressionCommandTest {
                       exit_code: ${result.exit_code}
                       normalized_orders_file: ${result.files.normalized_orders}
                       execution_log: ${result.logs.execution_log}
-                expected_results:
-                  normalized_orders:
-                    type: expected_result_artifact
-                    ref: expected-results/approved/%s.yaml
                 verify:
                   - id: verify_output
                     type: file_diff
                     actual: ${execute.run_pipeline.outputs.normalized_orders_file}
-                    expected: ${expected_results.normalized_orders.ref}
+                    expected: expected-results/approved/%s.yaml
                 evidence:
                   required:
                     - ${execute.run_pipeline.outputs.execution_log}
@@ -6252,7 +6248,7 @@ class RegressionCommandTest {
                   timeout: PT10M
                   retry:
                     max_attempts: 0
-                """.formatted(testCaseId, rpId, acId, acId, rpId, expectedResultId));
+                """.formatted(testCaseId, rpId, acId, acId, rpId, expectedResultId, expectedResultId));
     }
 
     private void writeApprovedV02ParameterizedTestCase(String rpId) throws Exception {
@@ -6271,6 +6267,7 @@ class RegressionCommandTest {
                   acceptance_criteria: acceptance_criteria.md#%s
                 targets:
                   RU-transform-job:
+                    provider_id: spring_boot_cli
                     type: spring_boot_application
                     provider: spring_boot_cli
                     environment: ci://pipeline/%s
@@ -6293,15 +6290,11 @@ class RegressionCommandTest {
                       exit_code: ${result.exit_code}
                       normalized_orders_file: ${result.files.normalized_orders}
                       execution_log: ${result.logs.execution_log}
-                expected_results:
-                  normalized_orders:
-                    type: expected_result_artifact
-                    ref: expected-results/approved/%s.yaml
                 verify:
                   - id: verify_output
                     type: file_diff
                     actual: ${execute.run_pipeline.outputs.normalized_orders_file}
-                    expected: ${expected_results.normalized_orders.ref}
+                    expected: expected-results/approved/%s.yaml
                 evidence:
                   required:
                     - ${execute.run_pipeline.outputs.execution_log}
@@ -6965,15 +6958,11 @@ class RegressionCommandTest {
                     outputs:
                       actual_output:
                         ref: actual/output.txt
-                expected_results:
-                  primary:
-                    type: expected_result_artifact
-                    ref: expected-results/approved/%s-ER-001.yaml
                 verify:
                   - id: verify_output
                     type: file_diff
                     actual: ${execute.run_pipeline.outputs.actual_output}
-                    expected: ${expected_results.primary.ref}
+                    expected: expected-results/approved/%s-ER-001.yaml
                 evidence:
                   collect:
                     - execution_log

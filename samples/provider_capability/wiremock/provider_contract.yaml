@@ -17,16 +17,16 @@ valid_provider_instance_shape:
   binding_keys: [mappings_ref, base_url_output_ref]
 operations:
   start_mock:
-    allowed_bind_as: [mock.port, mock.mappings_ref, mock.files_ref]
-    required_parameters: []
+    allowed_inputs: [mock.port, mock.mappings_ref, mock.files_ref]
+    required_inputs: []
     output_refs: [base_url, server_log]
   load_stubs:
-    allowed_bind_as: [mock.mappings_ref, mock.reset_before_load]
-    required_parameters: [mock.mappings_ref]
+    allowed_inputs: [mock.mappings_ref, mock.reset_before_load]
+    required_inputs: [mock.mappings_ref]
     output_refs: [loaded_stub_count, server_log, base_url]
   verify_requests:
-    allowed_bind_as: [mock.request_filter, mock.expected_count, mock.body_pattern]
-    required_parameters: [mock.request_filter]
+    allowed_inputs: [mock.request_filter, mock.expected_count, mock.body_pattern]
+    required_inputs: [mock.request_filter]
     output_refs: [request_journal, matched_count, server_log]
 evidence:
   outputs: [base_url, request_journal, server_log, timing, error]

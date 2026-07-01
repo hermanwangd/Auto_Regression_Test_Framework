@@ -14,12 +14,12 @@ valid_provider_instance_shape:
   binding_keys: [mappings_ref]
 operations:
   load_stubs:
-    allowed_bind_as: [mock.mappings_ref, mock.reset_before_load]
-    required_parameters: [mock.mappings_ref]
+    allowed_inputs: [mock.mappings_ref, mock.reset_before_load]
+    required_inputs: [mock.mappings_ref]
     output_refs: [loaded_stub_count, server_log]
   verify_requests:
-    allowed_bind_as: [mock.request_filter, mock.expected_count, mock.body_pattern]
-    required_parameters: [mock.request_filter]
+    allowed_inputs: [mock.request_filter, mock.expected_count, mock.body_pattern]
+    required_inputs: [mock.request_filter]
     output_refs: [request_journal, matched_count]
 evidence:
   outputs: [request_journal, server_log, timing, error]

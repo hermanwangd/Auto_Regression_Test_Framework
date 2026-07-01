@@ -89,9 +89,9 @@ public class GoldenE2eService {
         recreateDirectory(runDir);
 
         String generatedAt = resolveGeneratedAt(suiteRoot, requestedProfile);
-        Path inputFile = suiteRoot.resolve(resolveDataRef(testCase, "${data.input_data.input}")).normalize();
-        Path setupFixture = suiteRoot.resolve(resolveDataRef(testCase, "${data.setup_data.setup}")).normalize();
-        Path cleanupFixture = suiteRoot.resolve(resolveDataRef(testCase, "${data.cleanup_data.cleanup}")).normalize();
+        Path inputFile = suiteRoot.resolve(resolveDataRef(testCase, "${data.input}")).normalize();
+        Path setupFixture = suiteRoot.resolve(resolveDataRef(testCase, "${data.setup_fixture}")).normalize();
+        Path cleanupFixture = suiteRoot.resolve(resolveDataRef(testCase, "${data.cleanup_fixture}")).normalize();
         Path expectedResult = suiteRoot.resolve(resolveExpectedRef(testCase)).normalize();
 
         String status = "passed";
@@ -184,7 +184,7 @@ public class GoldenE2eService {
         Map<String, Object> expected = readMap(expectedResult);
         List<Map<String, Object>> results = new ArrayList<>();
         boolean passed = true;
-        for (Object verifyValue : listValue(testCase.get("verify"))) {
+        for (Object verifyValue : verifyChecks(testCase)) {
             Map<String, Object> verify = mapValue(verifyValue);
             String id = stringValue(verify.get("id"));
             String type = stringValue(verify.get("type"));
@@ -372,6 +372,10 @@ public class GoldenE2eService {
     private String resolveDataRef(Map<String, Object> testCase, String expression) {
         String path = expression.substring("${data.".length(), expression.length() - 1);
         String[] parts = path.split("\\.");
+        if (parts.length == 1) {
+            String resolved = stringValue(mapValue(mapValue(testCase.get("data")).get(parts[0])).get("ref"));
+            return resolved.isBlank() ? "" : resolved;
+        }
         if (parts.length != 2) {
             return "";
         }
@@ -379,8 +383,20 @@ public class GoldenE2eService {
     }
 
     private String resolveExpectedRef(Map<String, Object> testCase) {
+        String dataExpected = stringValue(mapValue(mapValue(testCase.get("data")).get("expected_output")).get("ref"));
+        if (!dataExpected.isBlank()) {
+            return dataExpected;
+        }
         Map<String, Object> expectedResults = mapValue(testCase.get("expected_results"));
         return stringValue(mapValue(expectedResults.get("expected_output")).get("ref"));
+    }
+
+    private List<Object> verifyChecks(Map<String, Object> testCase) {
+        Object verify = testCase.get("verify");
+        if (verify instanceof Map<?, ?> verifyMap) {
+            return listValue(verifyMap.get("checks"));
+        }
+        return listValue(verify);
     }
 
     @SuppressWarnings("unchecked")

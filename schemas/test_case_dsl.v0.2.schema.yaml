@@ -19,36 +19,27 @@ required_sections:
   - runtime.timeout
   - runtime.retry
 conditional_sections:
-  data_binding: allowed as an optional reviewed data source index when setup, execute, cleanup, or verify refs use shared data artifacts
-  parameters: allowed as an optional reviewed data source index when one test has multiple parameter cases
-  setup: required when precondition data or mutated state is needed
-  cleanup: required when setup mutates state
-  expected_results: required when verify uses reusable truth artifacts
-data_binding_rules:
+  data: allowed as an optional lifecycle-neutral reviewed data source catalog
+  setup.operations: required when precondition data or mutated state is needed
+  cleanup.operations: required when setup mutates state and cleanup is not declared inline
+data_rules:
   allowed: true
   required_when_data_namespace_refs_are_used: true
-  allowed_top_level_fields:
-    - input_data
-    - setup_data
-    - cleanup_data
-    - expect_data
-  prohibited_top_level_fields:
+  lifecycle_categories: prohibited
+  ref_namespace_prefix: data
+  reference_format: ${data.<name>}
+  source_fields:
+    - ref
+    - value
+  exactly_one_source_field_required: true
+  prohibited_legacy_sections:
+    - data_binding
     - datasets
     - fixtures
     - expected_results
     - db_seed
     - db_cleanup
     - mock_stubs
-  prohibition_scope: data_binding category keys only; lifecycle sections such as setup.fixtures and provider operations such as db_seed or db_cleanup remain valid when defined by the Provider Contract
-  ref_namespace_prefix: data
-  reference_format: ${data.<category>.<name>}
-  required_source_fields:
-    - ref
-  category_target_rules:
-    input_data: execute operation input artifacts
-    setup_data: setup operation data artifacts
-    cleanup_data: cleanup operation data artifacts
-    expect_data: verify operation expected result or oracle artifacts
   prohibited_values:
     - raw_secret
     - endpoint_url
@@ -62,15 +53,15 @@ target_rules:
 operation_rules:
   setup_execute_cleanup_operations_must_exist_in_provider_contract: true
   output_refs_must_exist_in_provider_contract: true
-parameter_rules:
-  operation_parameters_use_ref_and_bind_as: true
-  ref_required: true
-  bind_as_required: true
-  bind_as_must_be_allowed_by_referenced_provider_contract: true
+input_rules:
+  operation_inputs_use_map_shape: true
+  input_values_use_ref_or_value: true
+  input_key_must_be_allowed_by_referenced_provider_contract: true
   applies_to:
-    - setup.fixtures.<fixture>.parameters[]
-    - execute[].parameters[]
-    - cleanup.fixtures.<fixture>.parameters[]
+    - setup.operations[].inputs
+    - execute.operations[].inputs
+    - verify.checks[].inputs
+    - cleanup.operations[].inputs
   reviewed_parameter_sets_are_referenced_by_ref: true
 validation_output_fields:
   - ap
@@ -89,6 +80,13 @@ evidence_outputs:
   - validation_report
   - dry_run_report
 prohibited_sections:
+  - data_binding
+  - datasets
+  - fixtures
+  - expected_results
+  - db_seed
+  - db_cleanup
+  - mock_stubs
   - rp_id
   - ac_id
   - execution_target
@@ -110,7 +108,7 @@ unsupported_behavior:
   unresolved_reference: block_before_provider_dispatch
   missing_provider_instance: block_before_provider_dispatch
   missing_provider_contract: block_before_provider_dispatch
-  invalid_bind_as: block_before_provider_dispatch
+  invalid_input_key: block_before_provider_dispatch
   missing_output_ref: block_before_provider_dispatch
   raw_secret: block_before_execution
 failure_classification: schema_error

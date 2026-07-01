@@ -48,8 +48,9 @@ class TestCaseLifecycleServiceTest {
         assertThat(yaml).contains("acceptance_criteria: acceptance_criteria.md#RP-AR-M1-data-pipeline-AC-001");
         assertThat(yaml).contains("source_fingerprint:");
         assertThat(yaml).contains("targets:");
-        assertThat(yaml).contains("provider: spring_boot_cli");
-        assertThat(yaml).contains("environment: ci://pipeline/rp-ar-m1-data-pipeline");
+        assertThat(yaml).contains("provider_id: RU-transform-job");
+        assertThat(yaml).doesNotContain("provider: spring_boot_cli");
+        assertThat(yaml).doesNotContain("environment: ci://pipeline/rp-ar-m1-data-pipeline");
         assertThat(yaml).contains("setup:");
         assertThat(yaml).contains("execute:");
         assertThat(yaml).contains("primary_input:");
@@ -57,7 +58,9 @@ class TestCaseLifecycleServiceTest {
         assertThat(yaml).contains("lifecycle: read_only");
         assertThat(yaml).contains("operation: run_batch");
         assertThat(yaml).doesNotContain("operation: call_ru");
-        assertThat(yaml).contains("expected_results:");
+        assertThat(yaml).contains("data:");
+        assertThat(yaml).contains("owner_approved_expected:");
+        assertThat(yaml).doesNotContain("expected_results:");
         assertThat(yaml).contains("verify:");
         assertThat(yaml).contains("evidence:");
         assertThat(yaml).contains("runtime:");
@@ -103,8 +106,9 @@ class TestCaseLifecycleServiceTest {
         assertThat(yaml).contains("cleanup_required: true");
         assertThat(yaml).contains("cleanup:");
         assertThat(yaml).contains("- id: cleanup_primary_input");
-        assertThat(yaml).contains("action: cleanup_bound_input");
-        assertThat(yaml).contains("input: ${setup.fixtures.primary_input}");
+        assertThat(yaml).contains("operation: cleanup_fixture");
+        assertThat(yaml).contains("ref: ${data.primary_cleanup}");
+        assertThat(yaml).doesNotContain("setup.fixtures");
         DslValidationReport validation = new DslTestCaseValidator().validate(yaml);
         assertThat(validation.gaps()).isEmpty();
         assertThat(validation.ready()).isTrue();
@@ -121,7 +125,6 @@ class TestCaseLifecycleServiceTest {
         assertThat(yaml).doesNotContain("capabilities:");
         assertThat(yaml).contains("type: dataset");
         assertThat(yaml).contains("lifecycle: read_only");
-        assertThat(yaml).contains("type: application");
         assertThat(yaml).contains("operation: run_application");
         assertThat(yaml).contains("cleanup_required: false");
     }
@@ -134,7 +137,6 @@ class TestCaseLifecycleServiceTest {
 
         String yaml = Files.readString(result.writtenPath());
         assertThat(yaml).contains("type: api_payload");
-        assertThat(yaml).contains("type: application");
         assertThat(yaml).contains("operation: call_api");
         assertThat(yaml).contains("cleanup_required: false");
     }
@@ -147,7 +149,6 @@ class TestCaseLifecycleServiceTest {
 
         String yaml = Files.readString(result.writtenPath());
         assertThat(yaml).contains("type: message_event");
-        assertThat(yaml).contains("type: event_bus");
         assertThat(yaml).contains("operation: publish_message");
         assertThat(yaml).contains("lifecycle: state_mutating");
         assertThat(yaml).contains("cleanup_required: true");
@@ -183,9 +184,8 @@ class TestCaseLifecycleServiceTest {
         assertThat(yaml).doesNotContain("scenario:");
         assertThat(yaml).doesNotContain("capabilities:");
         assertThat(yaml).contains("type: existing_state");
-        assertThat(yaml).contains("type: application");
         assertThat(yaml).contains("operation: run_application");
-        assertThat(yaml).contains("cleanup: []");
+        assertThat(yaml).contains("cleanup:\n  operations: []");
     }
 
     @Test

@@ -31,9 +31,9 @@ New v0.2 documentation and generated artifacts must use Provider Contract, Provi
 | Interface Family | Stable Contract Files | Stable Surface |
 |---|---|---|
 | Invocation | This file | Runtime commands, required/optional options, exit codes, stable stdout keys, and support-command boundary. |
-| Test Definition | `test_case_dsl.v0.2.schema.yaml`, `suite_manifest.v0.2.schema.yaml` | DSL identity/status/source refs, labels, compatible profiles, parameters, targets, setup, execute, expected results, verify, evidence, runtime policy, suite/test/tag selection. |
+| Test Definition | `test_case_dsl.v0.2.schema.yaml`, `suite_manifest.v0.2.schema.yaml` | DSL identity/status/source refs, labels, compatible profiles, optional data catalog, operation inputs, targets, setup, execute, expected refs, verify, evidence, runtime policy, suite/test/tag selection. |
 | Execution Profile and Environment Binding | `execution_profile.v0.2.schema.yaml`, `environment_binding.v0.2.schema.yaml` | Profile selection, execution mode, target environment values, secret refs, readiness refs, dependency model, constraints, and binding keys. |
-| Provider Runtime Configuration | `provider_contract.v0.2.schema.yaml`, `provider_instance.v0.2.schema.yaml`, `provider_capability_registry.v0.2.yaml`, `provider_plugin_contract.md`, `verify_plugin_contract.md` | Provider type, provider ID, valid instance shape, allowed operations, allowed `bind_as` values, required binding keys, defaults, output refs, evidence outputs, failure codes, and runtime status. |
+| Provider Runtime Configuration | `provider_contract.v0.2.schema.yaml`, `provider_instance.v0.2.schema.yaml`, `provider_capability_registry.v0.2.yaml`, `provider_plugin_contract.md`, `verify_plugin_contract.md` | Provider type, provider ID, valid instance shape, allowed operations, allowed input keys, required inputs, required binding keys, defaults, output refs, evidence outputs, failure codes, and runtime status. |
 | Result and Evidence Output | `result.v0.2.schema.yaml`, `evidence.v0.2.schema.yaml`, `evidence_folder_structure.v0.2.md`, `validation_error_taxonomy.v0.2.yaml`, `secret_guardrails.v0.2.yaml` | Standard result shape, deterministic validation errors, failure classification, batch/run evidence locations, assertion evidence, cleanup evidence, report evidence, and masking rules. |
 | P0 Contract Catalog | `p0_provider_verify_catalog.v0.2.md` | Contract baseline for HTTP mock, JDBC, NATS/event, polling, JSON/schema/file, fixture injection, reporting, and dry-run readiness. |
 
@@ -82,7 +82,7 @@ regress run --root <product-repo> --rp-id <rp-id> --env <profile> --dry-run [--t
 regress run --suite samples/golden_e2e/suite_manifest.yaml --profile local_golden
 ```
 
-Dry-run performs all validation and planning through DSL target resolution, Provider Instance lookup, framework Provider Contract catalog lookup, Environment Binding lookup, required binding key validation, `bind_as` validation, output-ref validation, and safety validation. It produces a resolved execution plan and must not execute provider operations, mutate fixtures, publish messages, run SQL, call external endpoints, or create provider execution evidence.
+Dry-run performs all validation and planning through DSL target resolution, Provider Instance lookup, framework Provider Contract catalog lookup, Environment Binding lookup, required binding key validation, operation input-key validation, output-ref validation, and safety validation. It produces a resolved execution plan and must not execute provider operations, mutate fixtures, publish messages, run SQL, call external endpoints, or create provider execution evidence.
 
 Framework sample mode without `--dry-run` may execute only framework-owned fake providers that are deterministic, local, self-contained, and marked as framework verification evidence. It must not execute production provider types such as WireMock, JDBC, NATS, Kafka, REST/gRPC, K8s, VM, or external runner.
 
@@ -118,13 +118,14 @@ The framework consumes approved test definitions as public inputs. v0.2 test def
 The stable DSL surface includes:
 
 - `dsl_version`, test identity, lifecycle `status`, revision, tags, labels, source refs, and compatible profiles.
-- operation-level `parameters.ref` / `parameters.bind_as` (`parameters[].ref` / `parameters[].bind_as` in array form) for reviewed parameter selection and provider binding.
-- `targets`, `setup`, `cleanup`, `execute`, `expected_results`, `verify`, `evidence`, and `runtime` sections.
+- optional `data.<name>.ref` or `data.<name>.value` for reusable reviewed data sources.
+- operation-level `inputs` maps for provider binding; each key must be allowed by the resolved Provider Contract operation.
+- `targets`, `setup.operations`, `cleanup.operations`, `execute.operations`, expected refs, `verify.checks`, `evidence`, and `runtime` sections.
 - `targets.<target>.provider_id`; DSL test cases must not contain endpoint, topic, database credential, namespace, or secret values. Active profile selection belongs to CLI or suite manifest, with `compatible_profiles` used only as a guardrail.
-- Execute operation names, verify type names, evidence requirement names, and parameter binding expression shape.
+- Execute operation names, verify type names, evidence requirement names, and input binding expression shape.
 - Approved-test eligibility from `tests/approved/`; draft/generated tests are not runtime eligible.
 
-DSL changes that rename fields, change required/conditional field rules, remove enum values, or change parameter binding semantics require a compatibility decision.
+DSL changes that rename fields, change required/conditional field rules, remove enum values, or change input binding semantics require a compatibility decision.
 
 ## Run, Environment, and Provider Configuration Interface
 
@@ -148,13 +149,13 @@ The stable provider runtime configuration surface includes:
 - Execution Profile ID, execution mode, trigger, isolation scope, dependency model, dependency substitution policy, dependency provisioning policy, constraints, data policy, and max duration.
 - DSL target references `provider_id`; active profile comes from CLI or suite manifest.
 - Provider Instance declares one RP logical runtime target with `provider_id`, `provider_type`, allowed runtime modes, allowed operation selections, binding key names, defaults, evidence capture choices, and failure mapping using the same top-level shape as the Provider Contract.
-- Provider Contract declares the provider type, allowed runtime modes, allowed operations, allowed `bind_as` values, required fields, defaults, output refs, evidence outputs, failure codes, and valid Provider Instance shape. Built-in Provider Contracts are framework-owned and resolved by `provider_type`.
+- Provider Contract declares the provider type, allowed runtime modes, allowed operations, allowed input keys, required inputs, required fields, defaults, output refs, evidence outputs, failure codes, and valid Provider Instance shape. Built-in Provider Contracts are framework-owned and resolved by `provider_type`.
 - Environment Binding supplies profile-specific `runtime_mode` and actual values for the Provider Instance binding keys, such as URLs, topics, DB connection refs, namespaces, host refs, secret refs, mock service refs, stub server refs, fake topic refs, embedded broker refs, ephemeral DB refs, or disposable schema refs.
 - Local and CI profiles may use mock, stub, ephemeral, Testcontainers-backed, fake-topic, embedded-broker, disposable-schema, or generated-data replacements for external dependencies only when allowed by the Execution Profile, framework built-in Provider Contract, and Provider Instance. The Execution Profile defines allowed provisioners, dependency types, startup/readiness policy, cleanup scope, and output binding keys. SIT and preprod default to native dependencies and must not produce release evidence from mock substitution.
 - Provider capability registry entries list supported `provider_type` values and blocked unsupported or ambiguous provider selections.
 - Product/RP/RU labels remain traceability metadata and must not select runtime behavior.
 
-Provider interface changes that rename provider types, change required binding keys, change runtime mode semantics, remove supported operations, remove allowed `bind_as` values, alter cleanup compatibility, alter output refs, or alter evidence outputs require a compatibility decision.
+Provider interface changes that rename provider types, change required binding keys, change runtime mode semantics, remove supported operations, remove allowed input keys, alter cleanup compatibility, alter output refs, or alter evidence outputs require a compatibility decision.
 
 ## Stable Input Artifact Locations
 

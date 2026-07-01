@@ -24,7 +24,7 @@ class ProviderRuntimeFoundationTest {
     }
 
     @Test
-    void resolverRejectsUnsupportedOperationUnsupportedBindAsAndMissingBindingKeys() {
+    void resolverRejectsUnsupportedOperationUnsupportedInputAndMissingBindingKeys() {
         ProviderRuntimeRegistry registry = new ProviderRuntimeRegistry(Map.of(
                 "wiremock_http_mock",
                 (context, request) -> ProviderOperationResult.passed(Map.of(), List.of())));
@@ -41,8 +41,8 @@ class ProviderRuntimeFoundationTest {
                         "binding_keys", Map.of("mappings_ref", Map.of("required", true)),
                         "operations", Map.of(
                                 "load_stubs", Map.of(
-                                        "allowed_bind_as", List.of("mock.mappings_ref"),
-                                        "required_parameters", List.of("mock.mappings_ref")))),
+                                        "allowed_inputs", List.of("mock.mappings_ref"),
+                                        "required_inputs", List.of("mock.mappings_ref")))),
                 Map.of("provider_id", "wiremock-payment-api", "provider_type", "wiremock_http_mock"),
                 Map.of("mappings_ref", "fixtures/payment_success_stub.json"));
 
@@ -51,11 +51,17 @@ class ProviderRuntimeFoundationTest {
                 .valid()).isTrue();
         assertThat(resolver.resolve(context, new ProviderOperationRequest("query_database", List.of(), Map.of()))
                 .failure().code()).isEqualTo("UNSUPPORTED_OPERATION");
-        assertThat(resolver.resolve(context, new ProviderOperationRequest("load_stubs", List.of(
+        ProviderFailure unsupportedInput = resolver.resolve(context, new ProviderOperationRequest("load_stubs", List.of(
                         Map.of("bind_as", "db.sql_ref", "ref", "queries/order.sql")), Map.of()))
-                .failure().code()).isEqualTo("UNSUPPORTED_BIND_AS");
-        assertThat(resolver.resolve(context, new ProviderOperationRequest("load_stubs", List.of(), Map.of()))
-                .failure().code()).isEqualTo("MISSING_REQUIRED_PARAMETER");
+                .failure();
+        assertThat(unsupportedInput.code()).isEqualTo("UNSUPPORTED_INPUT");
+        assertThat(unsupportedInput.reason()).contains("input `db.sql_ref`").doesNotContain("bind_as");
+        assertThat(unsupportedInput.ownerAction()).contains("input declared by the Provider Contract operation")
+                .doesNotContain("bind_as");
+        ProviderFailure missingInput = resolver.resolve(context, new ProviderOperationRequest("load_stubs", List.of(), Map.of()))
+                .failure();
+        assertThat(missingInput.code()).isEqualTo("MISSING_REQUIRED_INPUT");
+        assertThat(missingInput.ownerAction()).contains("Add input `mock.mappings_ref`").doesNotContain("bind_as");
 
         ProviderExecutionContext missingBinding = new ProviderExecutionContext(
                 context.providerId(),

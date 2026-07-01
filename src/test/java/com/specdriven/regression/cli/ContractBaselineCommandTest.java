@@ -167,7 +167,13 @@ class ContractBaselineCommandTest {
     void validateSuiteRejectsLegacyDataBindingCategory() throws Exception {
         Path suite = mutableBaseline();
         Path testCase = suite.getParent().resolve("test_case.yaml");
-        Files.writeString(testCase, Files.readString(testCase).replace("input_data:", "datasets:"));
+        Files.writeString(testCase, Files.readString(testCase) + """
+
+                data_binding:
+                  datasets:
+                    legacy:
+                      ref: fixtures/payment_request.json
+                """);
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
@@ -175,7 +181,7 @@ class ContractBaselineCommandTest {
         assertThat(result.stdout())
                 .contains("field_path: data_binding.datasets")
                 .contains("reason: prohibited_data_binding_category")
-                .contains("owner_action: Use data_binding.input_data, setup_data, cleanup_data, or expect_data only.");
+                .contains("owner_action: Move checked-in artifacts to `data.<name>.ref` and reference them from operation `inputs`.");
     }
 
     @Test
@@ -237,6 +243,23 @@ class ContractBaselineCommandTest {
     }
 
     @Test
+    void validateSuiteRejectsMissingDirectExpectedArtifact() throws Exception {
+        Path suite = mutableBaseline();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("expected_ref: expected_results/sample_expected.json#/db",
+                        "expected: expected_results/missing_expected.json"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("field_path: verify.order_exists.expected")
+                .contains("reason: unresolved_artifact_ref")
+                .contains("Restore runtime-critical artifact ref `expected_results/missing_expected.json` under the suite directory before execution.");
+    }
+
+    @Test
     void validateSuiteRejectsMissingEnvironmentBinding() throws Exception {
         Path suite = mutableBaseline();
         Files.delete(suite.getParent().resolve("environment_bindings/ci.yaml"));
@@ -277,7 +300,7 @@ class ContractBaselineCommandTest {
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("reason: invalid_target_ref")
-                .contains("field_path: setup.fixtures.load_payment_stub.target")
+                .contains("field_path: setup.load_payment_stub.target")
                 .contains("category: CONFIGURATION_ERROR");
     }
 
@@ -396,14 +419,14 @@ class ContractBaselineCommandTest {
     void validateSuiteRejectsUnsupportedBindAs() throws Exception {
         Path suite = mutableBaseline();
         Path testCase = suite.getParent().resolve("test_case.yaml");
-        Files.writeString(testCase, Files.readString(testCase).replace("bind_as: mock.request_filter", "bind_as: request.body"));
+        Files.writeString(testCase, Files.readString(testCase).replace("mock.request_filter:", "request.body:"));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
-                .contains("reason: unsupported_bind_as")
-                .contains("bind_as: request.body")
+                .contains("reason: unsupported_input")
+                .contains("input: request.body")
                 .contains("owner_action:");
     }
 

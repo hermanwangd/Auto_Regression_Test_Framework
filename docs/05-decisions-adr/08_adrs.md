@@ -119,7 +119,7 @@ Different Products, Release Packages, and Release Units may use different implem
 
 ### Decision
 
-Use framework-owned Provider Contracts, Provider Instances, and Environment Bindings as the heterogeneous execution boundary. The DSL remains package-neutral and references logical capabilities such as inputs, actions, fixtures, expected results, verify rules, observations, and evidence through `provider_id`, operation, `parameters.ref`, `parameters.bind_as`, and output refs. The selected profile is supplied by CLI or suite manifest, not by each DSL target. Product-owned `rp_ru_mapping.yaml` declares RU membership, execution mode, deployment requirement, dependencies, and provider intent for Agent Skill translation. The framework runtime consumes generated `suite_manifest.yaml`, `run_plan.yaml`, Execution Profiles, Provider Instances, Environment Bindings, and `traceability_map.yaml`, then resolves Provider Contracts from the framework catalog by `provider_type` unless an explicit custom or snapshot contract mode is declared. A provider capability registry validates `provider_type`, required binding keys, supported runtime status, execution modes, safety policy, and evidence outputs before execution. Reusable built-in provider types implement concrete behavior for request/response APIs, messaging, DB fixtures, deployment readiness, and file/batch execution.
+Use framework-owned Provider Contracts, Provider Instances, and Environment Bindings as the heterogeneous execution boundary. The DSL remains package-neutral and references logical capabilities such as inputs, actions, fixtures, expected results, verify rules, observations, and evidence through `provider_id`, operation, operation `inputs`, and output refs. The selected profile is supplied by CLI or suite manifest, not by each DSL target. Product-owned `rp_ru_mapping.yaml` declares RU membership, execution mode, deployment requirement, dependencies, and provider intent for Agent Skill translation. The framework runtime consumes generated `suite_manifest.yaml`, `run_plan.yaml`, Execution Profiles, Provider Instances, Environment Bindings, and `traceability_map.yaml`, then resolves Provider Contracts from the framework catalog by `provider_type` unless an explicit custom or snapshot contract mode is declared. A provider capability registry validates `provider_type`, required binding keys, supported runtime status, execution modes, safety policy, and evidence outputs before execution. Reusable built-in provider types implement concrete behavior for request/response APIs, messaging, DB fixtures, deployment readiness, and file/batch execution.
 
 The selected M1 pilot shall exercise one heterogeneous RP that includes REST and/or gRPC, Kafka and/or NATS, DB fixture setup/cleanup, and K8s/VM readiness as needed by the RP boundary. External runner is not a required pilot capability. It is an approved escape hatch only when a legacy or specialized boundary cannot yet be represented by a reusable built-in provider contract.
 
@@ -143,15 +143,23 @@ The DSL needs a stable parameter contract that remains easy for agents to genera
 
 ### Decision
 
-Replace the inline parameter-case syntax in new execution-focused DSL v1 artifacts with:
+Replace the inline parameter-case syntax in new execution-focused DSL artifacts with operation `inputs` that point to reviewed data refs:
 
 ```yaml
-parameters:
-  ref: parameter-sets/orders_regression_cases.yaml
-  bind_as: orders_case
+data:
+  orders_case:
+    ref: parameter-sets/orders_regression_cases.yaml#happy_path
+execute:
+  operations:
+    - id: submit_order
+      target: order_api
+      operation: http_request
+      inputs:
+        request.body:
+          ref: ${data.orders_case}
 ```
 
-DSL fields reference values through `${param.<bind_as>.<field>}`. The referenced parameter set artifact owns one or more reviewed named cases. The runtime expands those cases into separate runs, records `parameter_case_id`, and keeps coverage counted once for the traced AC per selected batch.
+The referenced parameter set artifact owns one or more reviewed named cases. The runtime expands those cases into separate runs, records `parameter_case_id`, and keeps coverage counted once for the traced AC per selected batch.
 
 Inline `parameters.strategy`, inline `parameters.cases`, and `${parameters.<name>}` references are legacy-only compatibility inputs until migrated. They are not the new v1 core syntax.
 
@@ -334,7 +342,7 @@ DSL target
   -> Environment Binding
 ```
 
-Provider Contract defines provider_type, allowed operations, allowed `bind_as` values, binding keys, output refs, evidence outputs, failure codes, defaults, and valid Provider Instance shape. Built-in Provider Contracts are owned by the framework and resolved by `provider_type`; suite-local contracts are allowed only for explicit custom provider or snapshot pinning mode.
+Provider Contract defines provider_type, allowed operations, allowed input keys, required inputs, binding keys, output refs, evidence outputs, failure codes, defaults, and valid Provider Instance shape. Built-in Provider Contracts are owned by the framework and resolved by `provider_type`; suite-local contracts are allowed only for explicit custom provider or snapshot pinning mode.
 
 Provider Instance defines one RP logical runtime target with provider_id and provider_type using the same top-level shape as the Provider Contract.
 
@@ -348,6 +356,53 @@ Remove implementation-hook terminology from user-facing docs. Any legacy interna
 
 Feature/spec, architecture, AC, test plan, user guide, and contract artifacts must use Provider Contract, Provider Instance, Environment Binding, Execution Profile, DSL Test Case, CLI, and Evidence Contract consistently.
 
-Provider validation must fail before execution when Provider Instance, framework Provider Contract catalog entry, explicit custom Provider Contract, Environment Binding, required binding key, allowed operation, allowed `bind_as`, or output ref is missing or invalid.
+Provider validation must fail before execution when Provider Instance, framework Provider Contract catalog entry, explicit custom Provider Contract, Environment Binding, required binding key, allowed operation, required input, allowed input key, or output ref is missing or invalid.
+
+## ADR-014 Use Data Catalog and Operation Inputs for DSL Provider Binding
+
+### Status
+
+Accepted for next v0.2 interface migration; runtime implementation pending.
+
+### Context
+
+The current DSL exposes provider binding through `data_binding`, lifecycle-specific data categories, inconsistent lifecycle operation shapes, and old parameter binding arrays. This works mechanically but creates inconsistent user-facing semantics:
+
+- `data_binding` is named like a binding point, but it is only a reviewed data reference catalog.
+- `input_data`, `setup_data`, `cleanup_data`, and `expect_data` force data to be categorized by lifecycle even when the same data is reused across setup, execute, verify, and cleanup.
+- Provider-backed setup, execute, verify, and cleanup use different shapes even though all dispatch through Provider Contract operations.
+- Old parameter name and binding fields duplicate naming; the real public contract is the provider input name.
+- Old Provider Contract binding field names describe input names, not general parameters.
+
+### Decision
+
+Adopt a cleaner DSL model for the next v0.2 implementation slice:
+
+```text
+data     = optional reusable data source catalog
+inputs   = operation input bindings
+operation = Provider Contract action
+```
+
+The DSL shall use:
+
+- `data.<data_id>.ref` or `data.<data_id>.value` for optional reusable data sources.
+- `setup.operations[]`, `execute.operations[]`, and `cleanup.operations[]` for provider-backed lifecycle actions.
+- `verify.checks[]` for verification. Provider-backed checks use `target`, `operation`, and `inputs`; framework assertions may use `type`.
+- `inputs` maps where the key is the provider input name and the value supplies `ref` or safe literal `value`.
+- Structured input maps for domain concepts such as JDBC `bind_variables`.
+
+Provider Contracts shall migrate to:
+
+```yaml
+allowed_inputs: [...]
+required_inputs: [...]
+```
+
+The legacy parameter binding array shape remains compatibility-only until the implementation migration is complete.
+
+### Consequences
+
+This reduces DSL authoring complexity and makes provider use consistent across setup, execute, verify, and cleanup. The implementation must add compatibility validation, sample migration, provider input resolution, and contract tests before the new shape can replace the current runtime syntax. Existing checked-in executable samples may remain in the old shape until the migration slice updates runtime code and samples together.
 
 Dry-run must produce a resolved execution plan without executing real operations. Evidence must include provider_id, provider_type, profile, and resolved operation result.

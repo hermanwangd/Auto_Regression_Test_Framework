@@ -19,6 +19,9 @@ public class OracleResolver {
         String expectedResultRef = stringValue(oracleDefinition.get("ref"));
         Map<String, Object> expectedResult = readYamlMap(packageRoot.resolve(expectedResultRef));
         String expectedOutputRef = expectedOutputRef(expectedResult);
+        if (expectedOutputRef.isBlank() && !expectedResult.containsKey("expected_outputs")) {
+            expectedOutputRef = expectedResultRef;
+        }
         return new ResolvedOracle(
                 oracleName,
                 stringValue(oracleDefinition.get("type")),

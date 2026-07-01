@@ -1,0 +1,6 @@
+operation: seed_order
+records:
+  - table: orders
+    values:
+      order_id: ORD-001
+      status: PENDING

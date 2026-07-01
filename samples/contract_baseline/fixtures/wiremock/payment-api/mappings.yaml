@@ -1,0 +1,7 @@
+stubs:
+  - id: payment-success
+    request:
+      method: POST
+      path: /payments
+    response:
+      status: 202

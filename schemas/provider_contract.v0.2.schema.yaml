@@ -3,7 +3,7 @@ artifact: provider_contract
 status: framework_owned_current_stage
 purpose: >
   Defines one reusable provider type, the valid Provider Instance shape for
-  that provider type, allowed operations, allowed bind_as values, output refs,
+  that provider type, allowed operations, allowed input names, output refs,
   evidence outputs, runtime modes, defaults, required fields, and failure codes.
 version_compatibility:
   supported_versions: [v0.2]
@@ -28,7 +28,7 @@ provider_contract_required_sections:
   safety:
     purpose: Defines contract-owned safety rules for command-capable provider operations under safety.rules. Provider Instances select safety.access_policy and safety.approval values when required.
   operations:
-    purpose: Defines allowed operations, allowed parameter bind_as values, and output refs.
+    purpose: Defines allowed operations, allowed input names, required input names, and output refs.
   evidence:
     purpose: Defines allowed evidence capture and redaction behavior.
   failure_mapping:
@@ -37,7 +37,7 @@ validation_rules:
   provider_instance_same_shape: provider_instance_must_use_contract_top_level_shape
   unknown_instance_field: block_before_provider_dispatch
   unknown_operation: block_before_provider_dispatch
-  unsupported_bind_as: block_before_provider_dispatch
+  unsupported_input: block_before_provider_dispatch
   unsupported_runtime_mode: block_before_provider_dispatch
   missing_output_ref: block_before_provider_dispatch
   missing_required_binding_key: block_before_provider_dispatch

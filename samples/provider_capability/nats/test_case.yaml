@@ -12,74 +12,60 @@ compatible_profiles: [local_nats]
 targets:
   event_bus:
     provider_id: local-nats-event-bus
-data_binding:
-  input_data:
-    event_input:
-      ref: fixtures/event_input.json
-  expect_data:
-    event_expected:
-      ref: expected_results/event_expected.json
-expected_results:
+data:
+  event_input:
+    ref: fixtures/event_input.json
   event_expected:
     ref: expected_results/event_expected.json
 execute:
-  - id: publish_event
-    target: event_bus
-    operation: nats_publish
-    parameters:
-      - name: subject
-        ref: expected_results/event_expected.json#/subject
-        bind_as: subject
-      - name: payload
-        ref: ${data.input_data.event_input}
-        bind_as: payload_ref
-    outputs:
-      subject: subject
-      published: published
-      published_at: published_at
-      event_evidence_ref: event_evidence_ref
+  operations:
+    - id: publish_event
+      target: event_bus
+      operation: nats_publish
+      inputs:
+        subject:
+          ref: expected_results/event_expected.json#/subject
+        payload_ref:
+          ref: ${data.event_input}
+      outputs:
+        subject: subject
+        published: published
+        published_at: published_at
+        event_evidence_ref: event_evidence_ref
 verify:
-  - id: event_published
-    type: event_published
-    target: event_bus
-    parameters:
-      - name: subject
-        ref: expected_results/event_expected.json#/subject
-        bind_as: subject
-      - name: consume_from
-        ref: test_start_time
-        bind_as: consume_from
-      - name: timeout
-        ref: PT5S
-        bind_as: timeout
-      - name: poll_interval
-        ref: PT0.05S
-        bind_as: poll_interval
-    options:
-      timeout: PT5S
-      poll_interval: PT0.05S
-  - id: event_payload_match
-    type: event_payload_match
-    target: event_bus
-    parameters:
-      - name: subject
-        ref: expected_results/event_expected.json#/subject
-        bind_as: subject
-      - name: expected
-        ref: expected_results/event_expected.json#/payload
-        bind_as: expected_ref
-      - name: consume_from
-        ref: test_start_time
-        bind_as: consume_from
-      - name: timeout
-        ref: PT5S
-        bind_as: timeout
-      - name: poll_interval
-        ref: PT0.05S
-        bind_as: poll_interval
-    options:
-      timeout: PT5S
-      poll_interval: PT0.05S
+  checks:
+    - id: event_published
+      type: event_published
+      target: event_bus
+      inputs:
+        subject:
+          ref: expected_results/event_expected.json#/subject
+        consume_from:
+          value: test_start_time
+        timeout:
+          value: PT5S
+        poll_interval:
+          value: PT0.05S
+      options:
+        timeout: PT5S
+        poll_interval: PT0.05S
+    - id: event_payload_match
+      type: event_payload_match
+      target: event_bus
+      inputs:
+        subject:
+          ref: expected_results/event_expected.json#/subject
+        expected_ref:
+          ref: expected_results/event_expected.json#/payload
+        consume_from:
+          value: test_start_time
+        timeout:
+          value: PT5S
+        poll_interval:
+          value: PT0.05S
+      options:
+        timeout: PT5S
+        poll_interval: PT0.05S
 evidence:
   required:
     - event-evidence/nats/observed_event.yaml

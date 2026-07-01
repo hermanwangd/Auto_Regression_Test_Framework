@@ -149,11 +149,16 @@ public class EvidenceWriter {
             return "  []";
         }
         StringBuilder builder = new StringBuilder();
+        boolean v02 = "v0.2".equals(stringValue(testCase.get("dsl_version")));
         builder.append("  dsl_version: ").append(stringValue(testCase.get("dsl_version"))).append("\n");
         builder.append("  targets:\n").append(targetsYaml(testCase.get("targets"))).append("\n");
         builder.append("  setup_fixtures:\n").append(setupFixturesYaml(testCase.get("setup"))).append("\n");
         builder.append("  execute_steps:\n").append(executeStepsYaml(testCase.get("execute"))).append("\n");
-        builder.append("  expected_results:\n").append(expectedResultsYaml(testCase.get("expected_results"))).append("\n");
+        if (v02) {
+            builder.append("  data:\n").append(dataYaml(testCase.get("data"))).append("\n");
+        } else {
+            builder.append("  expected_results:\n").append(expectedResultsYaml(testCase.get("expected_results"))).append("\n");
+        }
         builder.append("  verify_rules:\n").append(verifyRulesYaml(testCase.get("verify"))).append("\n");
         builder.append("  evidence_required:\n").append(evidenceRequiredYaml(testCase.get("evidence"))).append("\n");
         builder.append("  runtime:\n").append(runtimeYaml(testCase.get("runtime")));
@@ -170,7 +175,9 @@ public class EvidenceWriter {
             Map<?, ?> target = map(entry.getValue());
             builder.append("    - target_id: ").append(stringValue(entry.getKey())).append("\n");
             appendField(builder, "      ", "type", target.get("type"));
+            appendField(builder, "      ", "provider_id", target.get("provider_id"));
             appendField(builder, "      ", "provider", firstText(target, "provider", "runner"));
+            appendField(builder, "      ", "profile", target.get("profile"));
             appendField(builder, "      ", "environment", target.get("environment"));
         }
         return builder.toString().stripTrailing();
@@ -193,7 +200,7 @@ public class EvidenceWriter {
     }
 
     private String executeStepsYaml(Object executeValue) {
-        List<?> execute = list(executeValue);
+        List<?> execute = operationList(executeValue, "operations");
         if (execute.isEmpty()) {
             return "    []";
         }
@@ -236,8 +243,23 @@ public class EvidenceWriter {
         return builder.toString().stripTrailing();
     }
 
+    private String dataYaml(Object dataValue) {
+        Map<?, ?> data = map(dataValue);
+        if (data.isEmpty()) {
+            return "    []";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (Map.Entry<?, ?> entry : data.entrySet()) {
+            Map<?, ?> source = map(entry.getValue());
+            builder.append("    - data_id: ").append(stringValue(entry.getKey())).append("\n");
+            appendField(builder, "      ", "ref", source.get("ref"));
+            appendField(builder, "      ", "value", source.get("value"));
+        }
+        return builder.toString().stripTrailing();
+    }
+
     private String verifyRulesYaml(Object verifyValue) {
-        List<?> verifyRules = list(verifyValue);
+        List<?> verifyRules = operationList(verifyValue, "checks");
         if (verifyRules.isEmpty()) {
             return "    []";
         }
@@ -249,6 +271,7 @@ public class EvidenceWriter {
             appendField(builder, "      ", "actual", rule.get("actual"));
             appendField(builder, "      ", "selector", rule.get("selector"));
             appendField(builder, "      ", "expected", rule.get("expected"));
+            appendField(builder, "      ", "expected_ref", rule.get("expected_ref"));
             appendField(builder, "      ", "target", rule.get("target"));
         }
         return builder.toString().stripTrailing();
@@ -583,6 +606,14 @@ public class EvidenceWriter {
 
     private List<?> list(Object value) {
         return value instanceof List<?> list ? list : List.of();
+    }
+
+    private List<?> operationList(Object value, String key) {
+        List<?> direct = list(value);
+        if (!direct.isEmpty()) {
+            return direct;
+        }
+        return list(map(value).get(key));
     }
 
     private String stringValue(Object value) {

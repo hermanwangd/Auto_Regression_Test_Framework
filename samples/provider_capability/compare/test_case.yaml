@@ -12,7 +12,7 @@ compatible_profiles: [local_provider]
 targets:
   compare_engine:
     provider_id: compare-engine
-expected_results:
+data:
   expected_payload:
     ref: expected_results/expected_payload.json
   expected_schema:
@@ -20,42 +20,40 @@ expected_results:
   expected_file:
     ref: expected_results/expected_file.json
 execute:
-  - id: load_actual_samples
-    target: compare_engine
-    operation: read_artifact
-    parameters:
-      - name: actual_payload
-        ref: actual_samples/actual_payload.json
-        bind_as: file.path
-      - name: actual_file
-        ref: actual_samples/actual_file.json
-        bind_as: file.path
-    outputs:
-      actual_payload: actual_payload
-      actual_file: actual_file
+  operations:
+    - id: load_actual_samples
+      target: compare_engine
+      operation: read_artifact
+      inputs:
+        file.path:
+          ref: actual_samples/actual_payload.json
+      outputs:
+        actual_payload: actual_payload
+        actual_file: actual_file
 verify:
-  - id: payload_json_matches
-    type: json_match
-    actual:
-      ref: actual_samples/actual_payload.json
-    expected_ref: expected_results/expected_payload.json
-    options:
-      ignore_paths: [$.generatedAt]
-      ignore_order: true
-      normalize: true
-  - id: payload_schema_matches
-    type: schema_match
-    actual:
-      ref: actual_samples/actual_payload.json
-    schema_ref: expected_results/expected_schema.json
-  - id: file_diff_matches
-    type: file_diff
-    actual:
-      ref: actual_samples/actual_file.json
-    expected_ref: expected_results/expected_file.json
-    options:
-      normalize: true
-      ignore_order: true
+  checks:
+    - id: payload_json_matches
+      type: json_match
+      actual:
+        ref: actual_samples/actual_payload.json
+      expected_ref: expected_results/expected_payload.json
+      options:
+        ignore_paths: [$.generatedAt]
+        ignore_order: true
+        normalize: true
+    - id: payload_schema_matches
+      type: schema_match
+      actual:
+        ref: actual_samples/actual_payload.json
+      schema_ref: expected_results/expected_schema.json
+    - id: file_diff_matches
+      type: file_diff
+      actual:
+        ref: actual_samples/actual_file.json
+      expected_ref: expected_results/expected_file.json
+      options:
+        normalize: true
+        ignore_order: true
 evidence:
   required:
     - assertion-results/payload_json_matches.yaml

@@ -58,7 +58,7 @@ Track A documents contract placeholders for:
 - NATS/Event: `nats`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match`, `consume_from: test_start_time`, subject handling, event evidence.
 - Polling: timeout, `poll_interval`, last observed evidence.
 - JSON/Schema/File: `json_match`, `schema_match`, `ignore_paths`, `file_diff`, `normalize`, `ignore_order`.
-- Test Data Injection: `data_binding`, `db_seed`, `db_cleanup`, `http_stub`.
+- Test Data Injection: DSL `data` catalog, operation `inputs`, `db_seed`, `db_cleanup`, `http_stub`.
 - Reporting: standard result JSON and evidence folder structure.
 
 ## 7 Validation Error Taxonomy
@@ -131,7 +131,7 @@ First PR is documentation/spec alignment only:
 
 Risk: Track A may be mistaken for runtime completion. Mitigation: every Track A doc states runtime is deferred.
 
-Risk: Provider Instance shape drifts from Provider Contract. Mitigation: AC and test plan require unknown-field, invalid `bind_as`, and missing output-ref validation.
+Risk: Provider Instance shape drifts from Provider Contract. Mitigation: AC and test plan require unknown-field, invalid input-key, required-input, and missing output-ref validation.
 
 Risk: local/CI mock substitution leaks into release evidence. Mitigation: Execution Profile and Environment Binding contracts require release-evidence eligibility markers.
 
@@ -152,7 +152,7 @@ Use docs as the contract source of truth and `samples/` as the executable-shape 
 - Provider Contract exists for `provider_type`.
 - Environment Binding exists for the selected profile.
 - Required binding keys are supplied.
-- Invalid `bind_as`, missing output ref, missing Provider Contract, missing Provider Instance, missing Environment Binding, and missing binding key are specified as blocking failures.
+- Invalid input key, missing required input, missing output ref, missing Provider Contract, missing Provider Instance, missing Environment Binding, and missing binding key are specified as blocking failures.
 - Dry-run produces a resolved execution plan without execution.
 - Evidence includes provider_id, provider_type, profile, runtime_mode, and resolved operation result.
 

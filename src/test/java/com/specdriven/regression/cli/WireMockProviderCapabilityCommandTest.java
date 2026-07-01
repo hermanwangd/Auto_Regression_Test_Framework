@@ -114,14 +114,15 @@ class WireMockProviderCapabilityCommandTest {
         Path suite = mutableWireMock();
         Path testCase = suite.getParent().resolve("test_case.yaml");
         Files.writeString(testCase, read(testCase)
-                .replace("bind_as: mock.mappings_ref", "bind_as: mock.reset_before_load"));
+                .replace("        mock.mappings_ref:\n"
+                        + "          ref: ${data.payment_success_stub}\n", ""));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_wiremock");
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("run_status: blocked")
-                .contains("reason: missing_required_parameter")
+                .contains("reason: missing_required_input")
                 .contains("operation: load_stubs");
         assertThat(result.stdout()).doesNotContain("provider_runtime_executed: true");
         assertThat(result.stdout()).doesNotContain("result_json:");
@@ -245,14 +246,14 @@ class WireMockProviderCapabilityCommandTest {
     void wireMockRunRejectsUnsupportedBindAsBeforeExecution() throws Exception {
         Path suite = mutableWireMock();
         Path testCase = suite.getParent().resolve("test_case.yaml");
-        Files.writeString(testCase, read(testCase).replace("bind_as: http.request_body", "bind_as: db.sql_ref"));
+        Files.writeString(testCase, read(testCase).replace("http.request_body:", "db.sql_ref:"));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_wiremock");
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("run_status: blocked")
-                .contains("reason: unsupported_bind_as")
+                .contains("reason: unsupported_input")
                 .contains("db.sql_ref");
     }
 
@@ -264,18 +265,19 @@ class WireMockProviderCapabilityCommandTest {
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_wiremock");
 
         assertThat(result.exit()).isEqualTo(1);
-        assertThat(result.stdout()).contains("run_status: failed");
-        Path resultJson = extractPath(result.stdout(), "result_json");
-        assertThat(read(resultJson))
-                .contains("\"classification\": \"PROVIDER_STUB_MISSING\"")
-                .contains("Restore checked-in WireMock stub mapping");
+        assertThat(result.stdout())
+                .contains("run_status: blocked")
+                .contains("reason: unresolved_artifact_ref")
+                .contains("data.payment_success_stub.ref");
+        assertThat(result.stdout()).doesNotContain("provider_runtime_executed: true");
+        assertThat(result.stdout()).doesNotContain("result_json:");
     }
 
     @Test
     void wireMockRunWritesFailedResultWhenExpectedMockCallIsMissing() throws Exception {
         Path suite = mutableWireMock();
         Path testCase = suite.getParent().resolve("test_case.yaml");
-        Files.writeString(testCase, read(testCase).replace("ref: /payments", "ref: /not-found"));
+        Files.writeString(testCase, read(testCase).replace("value: /payments", "value: /not-found"));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_wiremock");
 

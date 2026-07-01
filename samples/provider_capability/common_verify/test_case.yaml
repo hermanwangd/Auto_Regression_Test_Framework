@@ -13,7 +13,7 @@ targets:
   verifier:
     provider_id: local-common-verifier
 execute: []
-expected_results:
+data:
   payload:
     ref: expected_results/expected_payload.json
   schema:
@@ -21,57 +21,50 @@ expected_results:
   file:
     ref: expected_results/expected_file.txt
 verify:
-  - id: payload_matches
-    type: json_match
-    target: verifier
-    expected_ref: expected_results/expected_payload.json
-    actual_ref: actual_samples/actual_payload.json
-    options:
-      ignore_paths: [metadata.generated_at]
-      normalize: canonical_json
-      ignore_order: true
-    parameters:
-      - name: expected
-        ref: expected_results/expected_payload.json
-        bind_as: expected_ref
-      - name: actual
-        ref: actual_samples/actual_payload.json
-        bind_as: actual_ref
-      - name: normalize
-        ref: canonical_json
-        bind_as: normalize
-      - name: ignore_order
-        ref: "true"
-        bind_as: ignore_order
-  - id: payload_schema_matches
-    type: schema_match
-    target: verifier
-    schema_ref: expected_results/expected_schema.json
-    actual_ref: actual_samples/actual_payload.json
-    options:
-      normalize: canonical_json
-    parameters:
-      - name: schema
-        ref: expected_results/expected_schema.json
-        bind_as: schema_ref
-      - name: actual
-        ref: actual_samples/actual_payload.json
-        bind_as: actual_ref
-  - id: file_matches
-    type: file_diff
-    target: verifier
-    expected_ref: expected_results/expected_file.txt
-    actual_ref: actual_samples/actual_file.txt
-    options:
-      normalize: trim_lines
-      ignore_order: false
-    parameters:
-      - name: expected
-        ref: expected_results/expected_file.txt
-        bind_as: expected_ref
-      - name: actual
-        ref: actual_samples/actual_file.txt
-        bind_as: actual_ref
+  checks:
+    - id: payload_matches
+      type: json_match
+      target: verifier
+      expected_ref: expected_results/expected_payload.json
+      actual_ref: actual_samples/actual_payload.json
+      options:
+        ignore_paths: [metadata.generated_at]
+        normalize: canonical_json
+        ignore_order: true
+      inputs:
+        expected_ref:
+          ref: expected_results/expected_payload.json
+        actual_ref:
+          ref: actual_samples/actual_payload.json
+        normalize:
+          value: canonical_json
+        ignore_order:
+          value: "true"
+    - id: payload_schema_matches
+      type: schema_match
+      target: verifier
+      schema_ref: expected_results/expected_schema.json
+      actual_ref: actual_samples/actual_payload.json
+      options:
+        normalize: canonical_json
+      inputs:
+        schema_ref:
+          ref: expected_results/expected_schema.json
+        actual_ref:
+          ref: actual_samples/actual_payload.json
+    - id: file_matches
+      type: file_diff
+      target: verifier
+      expected_ref: expected_results/expected_file.txt
+      actual_ref: actual_samples/actual_file.txt
+      options:
+        normalize: trim_lines
+        ignore_order: false
+      inputs:
+        expected_ref:
+          ref: expected_results/expected_file.txt
+        actual_ref:
+          ref: actual_samples/actual_file.txt
 evidence:
   required:
     - assertions/payload_matches.yaml

@@ -24,20 +24,20 @@ valid_provider_instance_shape:
   binding_keys: [connection, subject, timeout, poll_interval]
 operations:
   nats_publish:
-    allowed_bind_as: [subject, payload_ref, payload, correlation_key]
-    required_parameters: [subject, payload]
+    allowed_inputs: [subject, payload_ref, payload, correlation_key]
+    required_inputs: [subject, payload_ref]
     output_refs: [subject, published, published_at, event_evidence_ref]
   nats_observe:
-    allowed_bind_as: [subject, consume_from, timeout, poll_interval, expected_ref, correlation_key]
-    required_parameters: [subject]
+    allowed_inputs: [subject, consume_from, timeout, poll_interval, expected_ref, correlation_key]
+    required_inputs: [subject]
     output_refs: [subject, observed_count, matched, duration_ms, event_evidence_ref]
   event_published:
-    allowed_bind_as: [subject, consume_from, timeout, poll_interval, correlation_key]
-    required_parameters: [subject]
+    allowed_inputs: [subject, consume_from, timeout, poll_interval, correlation_key]
+    required_inputs: [subject]
     output_refs: [subject, observed_count, matched, duration_ms, event_evidence_ref]
   event_payload_match:
-    allowed_bind_as: [subject, expected_ref, consume_from, timeout, poll_interval, correlation_key]
-    required_parameters: [subject, expected_ref]
+    allowed_inputs: [subject, expected_ref, consume_from, timeout, poll_interval, correlation_key]
+    required_inputs: [subject, expected_ref]
     output_refs: [subject, observed_count, matched, matched_fields, duration_ms, event_evidence_ref]
 evidence:
   outputs: [event_evidence, assertion_evidence]

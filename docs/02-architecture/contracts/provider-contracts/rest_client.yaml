@@ -14,8 +14,8 @@ valid_provider_instance_shape:
   binding_keys: [base_url]
 operations:
   http_request:
-    allowed_bind_as: [request.method, request.path, request.query.*, request.headers.*, request.body, request.timeout]
-    required_parameters: [request.method, request.path]
+    allowed_inputs: [request.method, request.path, request.query.*, request.headers.*, request.body, request.timeout]
+    required_inputs: [request.method, request.path]
     output_refs: [response.status, response.headers, response.body, response.duration_ms]
 evidence:
   outputs: [request, response, timing, error]

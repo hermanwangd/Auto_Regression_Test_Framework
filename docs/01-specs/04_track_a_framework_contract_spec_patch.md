@@ -45,7 +45,7 @@ Track A delivers:
 
 ## Contract Rules
 
-- Provider Contract defines `provider_type`, allowed operations, allowed `bind_as`, output refs, evidence outputs, failure codes, required binding keys, defaults, safety rules, and valid Provider Instance shape.
+- Provider Contract defines `provider_type`, allowed operations, allowed input keys, required inputs, output refs, evidence outputs, failure codes, required binding keys, defaults, safety rules, and valid Provider Instance shape.
 - Provider Instance defines one RP logical runtime target and may use only fields, operations, output refs, evidence outputs, and failure codes allowed by its Provider Contract.
 - Environment Binding supplies profile-specific actual values and selected `runtime_mode`.
 - Execution Profile defines what may run in `local`, `ci`, `sit`, or `preprod`, including dependency substitution and provisioning rules.
@@ -63,7 +63,7 @@ Track A delivers:
 - Environment Binding for the selected profile and provider.
 - Required binding keys.
 - Operation allowed by Provider Contract.
-- `parameters[].bind_as` allowed by Provider Contract.
+- Operation `inputs` keys allowed by Provider Contract.
 - Output refs declared by Provider Contract.
 - Secret guardrail and masking rules.
 

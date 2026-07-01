@@ -277,7 +277,7 @@ Required failure tests:
 - Invalid Provider Instance.
 - Missing Environment Binding.
 - Unsupported operation.
-- Unsupported `bind_as`.
+- Unsupported input key.
 - Missing output ref.
 - Missing expected artifact.
 - Raw secret in config.
@@ -338,7 +338,7 @@ WireMock, JDBC, and NATS should follow only after the compare/evidence foundatio
 | Task | Files | Acceptance |
 |---|---|---|
 | C1 Provider capability suite loader | `runtime/ProviderCapabilitySuiteLoader.java`, tests | Loads `samples/provider_capability/suite_manifest.yaml` and resolves P0 artifacts. |
-| C2 Contract validation hardening | `provider/ProviderContractResolver.java`, tests | Invalid contract, instance, binding, operation, `bind_as`, and output refs block before runtime. |
+| C2 Contract validation hardening | `provider/ProviderContractResolver.java`, tests | Invalid contract, instance, binding, operation, input key, required input, and output refs block before runtime. |
 | C3 Compare engine | `assertion/CompareEngine.java`, `AssertionEngine.java`, tests | `json_match`, `schema_match`, `file_diff`, `ignore_paths`, `normalize`, `ignore_order`, and diff evidence work. |
 | C4 Evidence foundation | `evidence/EvidenceWriter.java`, result/report tests | Provider evidence refs are indexed and report-consumable. |
 | C5 WireMock provider | `provider/WireMockProvider.java`, tests | Stub injection, base URL output, request journal, server log, and mock assertions work. |

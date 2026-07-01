@@ -13,73 +13,64 @@ compatible_profiles: [local_wiremock]
 targets:
   payment_mock:
     provider_id: wiremock-payment-api
-data_binding:
-  setup_data:
-    payment_success:
-      ref: fixtures/payment_success_stub.json
-    payment_failure:
-      ref: fixtures/payment_failure_stub.json
-  input_data:
-    request_input:
-      ref: fixtures/request_input.json
-  expect_data:
-    expected_request:
-      ref: expected_results/expected_request.json
+data:
+  payment_success_stub:
+    ref: fixtures/payment_success_stub.json
+  payment_failure_stub:
+    ref: fixtures/payment_failure_stub.json
+  request_input:
+    ref: fixtures/request_input.json
+  expected_request:
+    ref: expected_results/expected_request.json
 setup:
-  fixtures:
-    load_payment_stub:
-      type: http_stub
+  operations:
+    - id: load_payment_stub
       target: payment_mock
       operation: load_stubs
-      parameters:
-        - name: mappings
-          ref: ${data.setup_data.payment_success}
-          bind_as: mock.mappings_ref
-        - name: reset_before_load
-          ref: true
-          bind_as: mock.reset_before_load
+      inputs:
+        mock.mappings_ref:
+          ref: ${data.payment_success_stub}
+        mock.reset_before_load:
+          value: true
 execute:
-  - id: submit_payment_to_mock
-    target: payment_mock
-    operation: send_http_request
-    parameters:
-      - name: request
-        ref: ${data.input_data.request_input}
-        bind_as: http.request_body
-      - name: expected_request
-        ref: ${data.expect_data.expected_request}
-        bind_as: mock.request_filter
-      - name: method
-        ref: POST
-        bind_as: http.method
-      - name: path
-        ref: /payments
-        bind_as: http.path
-    outputs:
-      base_url: base_url
-      http_status: http_status
-      response_body: response_body
-      matched_count: matched_count
-      request_journal: request_journal
-      server_log: server_log
+  operations:
+    - id: submit_payment_to_mock
+      target: payment_mock
+      operation: send_http_request
+      inputs:
+        http.request_body:
+          ref: ${data.request_input}
+        mock.request_filter:
+          ref: ${data.expected_request}
+        http.method:
+          value: POST
+        http.path:
+          value: /payments
+      outputs:
+        base_url: base_url
+        http_status: http_status
+        response_body: response_body
+        matched_count: matched_count
+        request_journal: request_journal
+        server_log: server_log
 verify:
-  - id: http_mock_called
-    type: http_mock_called
-    actual:
-      ref: ${execute.submit_payment_to_mock.outputs.matched_count}
-    expected: 1
-  - id: http_mock_request_body_match
-    type: http_mock_request_body_match
-    actual:
-      ref: ${execute.submit_payment_to_mock.outputs.request_journal}
-    expected_ref: expected_results/expected_request.json
+  checks:
+    - id: http_mock_called
+      type: http_mock_called
+      actual:
+        ref: ${execute.submit_payment_to_mock.outputs.matched_count}
+      expected: 1
+    - id: http_mock_request_body_match
+      type: http_mock_request_body_match
+      actual:
+        ref: ${execute.submit_payment_to_mock.outputs.request_journal}
+      expected_ref: expected_results/expected_request.json
 cleanup:
-  fixtures:
-    reset_payment_mock:
-      type: http_mock_reset
+  operations:
+    - id: reset_payment_mock
       target: payment_mock
       operation: reset_mock
-      parameters: []
+      inputs: {}
 evidence:
   required:
     - evidence_index.yaml

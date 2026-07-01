@@ -125,9 +125,9 @@ The DSL defines:
 
 - Source truth: feature spec, AC, expected result.
 - Runtime target: provider instance. The active profile is selected by CLI or suite manifest.
-- Test data: `ref` and `bind_as`.
-- Setup and cleanup.
-- Execution action.
+- Test data: optional `data` catalog plus operation `inputs`.
+- Setup and cleanup operations.
+- Execution operations.
 - Verification/oracle.
 - Required evidence.
 
@@ -157,75 +157,68 @@ targets:
   payment_db:
     provider_id: payment-db
 
-data_binding:
-  input_data:
-    request_payload:
-      ref: fixtures/payment/valid_request.json
-    submit_payment_method:
-      ref: config/http/post.yaml
-    submit_payment_path:
-      ref: config/http/payments_path.yaml
-  setup_data:
-    customer:
-      ref: fixtures/payment/seed_customer.sql
-  cleanup_data:
-    customer:
-      ref: fixtures/payment/cleanup_customer.sql
-
-parameters:
-  - name: request_payload
-    ref: ${data.input_data.request_payload}
-    bind_as: request.body
+data:
+  request_payload:
+    ref: fixtures/payment/valid_request.json
+  submit_payment_method:
+    value: POST
+  submit_payment_path:
+    value: /payments
+  seed_customer_sql:
+    ref: fixtures/payment/seed_customer.sql
+  cleanup_customer_sql:
+    ref: fixtures/payment/cleanup_customer.sql
 
 setup:
-  fixtures:
-    seed_customer:
-      type: db_seed
+  operations:
+    - id: seed_customer
       target: payment_db
       operation: db_seed
-      parameters:
-        - name: script
-          ref: ${data.setup_data.customer}
-          bind_as: sql_ref
-      cleanup_ref: ${data.cleanup_data.customer}
+      inputs:
+        sql_ref:
+          ref: ${data.seed_customer_sql}
+      cleanup:
+        target: payment_db
+        operation: db_cleanup
+        inputs:
+          sql_ref:
+            ref: ${data.cleanup_customer_sql}
 
 execute:
-  - id: submit_payment
-    target: payment_api
-    operation: http_request
-    parameters:
-      - name: method
-        ref: ${data.input_data.submit_payment_method}
-        bind_as: request.method
-      - name: path
-        ref: ${data.input_data.submit_payment_path}
-        bind_as: request.path
-      - name: body
-        ref: parameters.request_payload
-        bind_as: request.body
-    outputs:
-      status: response.status
-      headers: response.headers
-      body: response.body
-      duration_ms: response.duration_ms
+  operations:
+    - id: submit_payment
+      target: payment_api
+      operation: http_request
+      inputs:
+        request.method:
+          ref: ${data.submit_payment_method}
+        request.path:
+          ref: ${data.submit_payment_path}
+        request.body:
+          ref: ${data.request_payload}
+      outputs:
+        status: response.status
+        headers: response.headers
+        body: response.body
+        duration_ms: response.duration_ms
 
 verify:
-  - id: payment_status_is_accepted
-    type: json_path_equals
-    actual:
-      ref: ${execute.submit_payment.outputs.body}
-    selector: $.status
-    expected: ACCEPTED
+  checks:
+    - id: payment_status_is_accepted
+      type: json_path_equals
+      actual:
+        ref: ${execute.submit_payment.outputs.body}
+      selector: $.status
+      expected: ACCEPTED
 
 cleanup:
-  fixtures:
-    cleanup_customer:
+  operations:
+    - id: cleanup_customer
       target: payment_db
       operation: db_cleanup
-      parameters:
-        - name: script
-          ref: ${data.cleanup_data.customer}
-          bind_as: sql_ref
+      inputs:
+        sql_ref:
+          ref: ${data.cleanup_customer_sql}
 
 evidence:
   required:
@@ -239,66 +232,58 @@ runtime:
     max_attempts: 0
 ```
 
-## 7. Data Binding
+## 7. Data Catalog and Inputs
 
-Use `data_binding` when a test needs reviewed input, setup, cleanup, or expected-result artifacts that are reused by setup, execute, cleanup, or verify.
+Use `data` only when a test needs reusable reviewed artifacts or small safe literals. `data` is lifecycle-neutral; it does not split values into setup, execute, cleanup, or expected-result categories.
 
-The framework resolves `${data.<category>.<name>}` to the matching entry's `ref`. Allowed v0.2 categories are `input_data`, `setup_data`, `cleanup_data`, and `expect_data`. Legacy categories such as `datasets`, `fixtures`, `expected_results`, `db_seed`, `db_cleanup`, and `mock_stubs` are prohibited as `data_binding` category keys. This prohibition does not remove lifecycle sections such as `setup.fixtures` or Provider Contract operations such as `db_seed` and `db_cleanup`.
+The framework resolves `${data.<name>}` to the matching entry's `ref` or `value`. Legacy `data_binding` and lifecycle category keys such as `input_data`, `setup_data`, `cleanup_data`, `expect_data`, `datasets`, `fixtures`, `expected_results`, `db_seed`, `db_cleanup`, and `mock_stubs` are prohibited in new v0.2 DSL artifacts.
 
 ```yaml
-data_binding:
-  input_data:
-    request_payload:
-      ref: fixtures/payment/valid_request.json
-  setup_data:
-    customer:
-      ref: fixtures/payment/seed_customer.sql
-    payment_gateway:
-      ref: stubs/payment-gateway/mappings/
-  cleanup_data:
-    customer:
-      ref: fixtures/payment/cleanup_customer.sql
-  expect_data:
-    payment_response:
-      ref: expected-results/approved/ER001.yaml
+data:
+  request_payload:
+    ref: fixtures/payment/valid_request.json
+  seed_customer_sql:
+    ref: fixtures/payment/seed_customer.sql
+  cleanup_customer_sql:
+    ref: fixtures/payment/cleanup_customer.sql
+  expected_payment_response:
+    ref: expected-results/approved/ER001.yaml
+  customer_id:
+    value: CUST-001
 ```
 
-`data_binding` is not an Environment Binding substitute. It must not contain endpoint URLs, JDBC URLs, broker URLs, namespaces, credentials, or raw secrets.
+`data` is not an Environment Binding substitute. It must not contain endpoint URLs, JDBC URLs, broker URLs, namespaces, credentials, or raw secrets.
 
-Use `ref` for where operation data comes from and `bind_as` for where the provider receives it.
+Use operation `inputs` for where the provider receives data. Each input key must be allowed by the resolved Provider Contract operation.
 
 Common `ref` values:
 
 ```yaml
 ref: fixtures/payment/valid_request.json
 ref: expected-results/approved/ER001.yaml
-ref: ${data.input_data.request_payload}
-ref: ${data.setup_data.customer}
-ref: parameters.customer_id
+ref: ${data.request_payload}
+ref: ${data.seed_customer_sql}
 ref: ${execute.submit_payment.outputs.body}
 ```
 
-Common `bind_as` values:
+Common `inputs` values:
 
 ```yaml
-bind_as: request.body
-bind_as: request.headers.X-Correlation-ID
-bind_as: request.path
-bind_as: request.query.customerId
-bind_as: grpc.message
-bind_as: message.topic
-bind_as: message.subject
-bind_as: message.payload
-bind_as: sql_ref
-bind_as: query_ref
-bind_as: k8s.deployment
-bind_as: vm.command
-bind_as: runner.args.businessDate
+inputs:
+  request.body:
+    ref: ${data.request_payload}
+  request.headers.X-Correlation-ID:
+    value: RP-PAYMENT-001-TC-001
+  query_ref:
+    ref: queries/payment/find_by_id.sql
+  bind_variables:
+    payment_id:
+      ref: ${execute.submit_payment.outputs.body}
 ```
 
-A DSL test case is invalid if it uses a `bind_as` that is not allowed by the Provider Contract resolved from the target Provider Instance `provider_type`.
+A DSL test case is invalid if it uses an `inputs` key that is not allowed by the Provider Contract resolved from the target Provider Instance `provider_type`.
 
-Runtime connection and authentication values belong to provider instances and environment bindings, not test-case data binding. DSL test cases must not bind `secret.*` directly. Runtime endpoints, tokens, DB credentials, broker credentials, kubeconfig, SSH keys, and runner credentials must be supplied through `provider-instances/` and `environment-bindings/`.
+Runtime connection and authentication values belong to provider instances and environment bindings, not test-case data. DSL test cases must not bind `secret.*` directly. Runtime endpoints, tokens, DB credentials, broker credentials, kubeconfig, SSH keys, and runner credentials must be supplied through `provider-instances/` and `environment-bindings/`.
 
 Authentication headers such as `Authorization` should be injected by provider configuration. Test cases may bind ordinary request headers, such as correlation IDs, only when the resolved Provider Contract allows `request.headers.*`.
 
@@ -321,18 +306,19 @@ Each verify item should use a stable `id`, an assertion `type`, an `actual` sour
 
 ```yaml
 verify:
-  - id: payment_status_is_accepted
-    type: json_path_equals
-    actual:
-      ref: ${execute.submit_payment.outputs.body}
-    selector: $.status
-    expected: ACCEPTED
-    severity: blocking
-    evidence:
-      capture:
-        - actual
-        - expected
-        - assertion_result
+  checks:
+    - id: payment_status_is_accepted
+      type: json_path_equals
+      actual:
+        ref: ${execute.submit_payment.outputs.body}
+      selector: $.status
+      expected: ACCEPTED
+      severity: blocking
+      evidence:
+        capture:
+          - actual
+          - expected
+          - assertion_result
 ```
 
 Common fields:
@@ -368,7 +354,7 @@ actual:
   ref: ${execute.publish_event.outputs.offset}
 
 actual:
-  ref: ${setup.fixtures.seed_customer.outputs.affected_rows}
+  ref: ${setup.seed_customer.outputs.affected_rows}
 ```
 
 Expected values may be inline for simple technical checks:
@@ -419,127 +405,137 @@ Each verify implementation must produce the verify result contract described bel
 
 ```yaml
 verify:
-  - id: http_status_is_200
-    type: response_status_equals
-    expected: 200
+  checks:
+    - id: http_status_is_200
+      type: response_status_equals
+      expected: 200
 ```
 
 #### JSON Path Equals
 
 ```yaml
 verify:
-  - id: payment_status_is_accepted
-    type: json_path_equals
-    actual:
-      ref: ${execute.submit_payment.outputs.body}
-    selector: $.paymentStatus
-    expected: ACCEPTED
+  checks:
+    - id: payment_status_is_accepted
+      type: json_path_equals
+      actual:
+        ref: ${execute.submit_payment.outputs.body}
+      selector: $.paymentStatus
+      expected: ACCEPTED
 ```
 
 #### JSON Schema Matches
 
 ```yaml
 verify:
-  - id: response_matches_schema
-    type: schema_match
-    actual:
-      ref: ${execute.submit_payment.outputs.body}
-    schema_ref: schemas/payment_response.schema.json
+  checks:
+    - id: response_matches_schema
+      type: schema_match
+      actual:
+        ref: ${execute.submit_payment.outputs.body}
+      schema_ref: schemas/payment_response.schema.json
 ```
 
 #### Event Payload Match
 
 ```yaml
 verify:
-  - id: payment_event_received
-    type: event_payload_match
-    actual:
-      ref: ${execute.consume_payment_event.outputs.consumed_message}
-    expected_ref: expected-results/approved/payment_accepted_event.yaml
-    expected:
-      match:
-        correlation_id:
-          ref: ${execute.submit_payment.outputs.body}
+  checks:
+    - id: payment_event_received
+      type: event_payload_match
+      actual:
+        ref: ${execute.consume_payment_event.outputs.consumed_message}
+      expected_ref: expected-results/approved/payment_accepted_event.yaml
+      expected:
+        match:
+          correlation_id:
+            ref: ${execute.submit_payment.outputs.body}
 ```
 
 #### Event Not Published
 
 ```yaml
 verify:
-  - id: no_rejection_event
-    type: event_not_published
-    target: payment_events
-    event:
-      topic: payment.events
-    expected:
-      match:
-        eventType: PAYMENT_REJECTED
-    options:
-      timeout: PT10S
+  checks:
+    - id: no_rejection_event
+      type: event_not_published
+      target: payment_events
+      event:
+        topic: payment.events
+      expected:
+        match:
+          eventType: PAYMENT_REJECTED
+      options:
+        timeout: PT10S
 ```
 
 #### DB Record Exists
 
 ```yaml
 verify:
-  - id: payment_db_state_is_accepted
-    type: db_record_exists
-    target: payment_db
-    query:
-      ref: queries/payment/find_by_id.sql
-      params:
-        payment_id: ${execute.submit_payment.outputs.body}
-    expected:
-      min_rows: 1
+  checks:
+    - id: payment_db_state_is_accepted
+      type: db_record_exists
+      target: payment_db
+      query:
+        ref: queries/payment/find_by_id.sql
+        params:
+          payment_id: ${execute.submit_payment.outputs.body}
+      expected:
+        min_rows: 1
 ```
 
 #### List Size Equals
 
 ```yaml
 verify:
-  - id: exactly_one_payment_record
-    type: list_size_equals
-    actual:
-      ref: ${execute.query_payment.outputs.query_result}
-    expected: 1
+  checks:
+    - id: exactly_one_payment_record
+      type: list_size_equals
+      actual:
+        ref: ${execute.query_payment.outputs.query_result}
+      expected: 1
 ```
 
 #### Numeric Tolerance
 
 ```yaml
 verify:
-  - id: amount_matches
-    type: numeric_tolerance
-    actual:
-      ref: ${execute.query_payment.outputs.query_result}
-    selector: $[0].amount
-    expected: 100.00
-    tolerance:
-      absolute: 0.01
+  checks:
+    - id: amount_matches
+      type: numeric_tolerance
+      actual:
+        ref: ${execute.query_payment.outputs.query_result}
+      selector: $[0].amount
+      expected: 100.00
+      tolerance:
+        absolute: 0.01
 ```
 
 #### Runtime Ready Output
 
 ```yaml
 verify:
-  - id: payment_deployment_ready
-    type: equals
-    actual:
-      ref: ${execute.check_payment_deployment.outputs.deployment_status}
-    selector: $.ready
-    expected: true
+  checks:
+    - id: payment_deployment_ready
+      type: equals
+      actual:
+        ref: ${execute.check_payment_deployment.outputs.deployment_status}
+      selector: $.ready
+      expected: true
 ```
 
 #### External Runner Result
 
 ```yaml
 verify:
-  - id: legacy_runner_passed
-    type: equals
-    actual:
-      ref: ${execute.run_legacy_regression.outputs.result_json}
-    selector: $.status
-    expected: PASSED
+  checks:
+    - id: legacy_runner_passed
+      type: equals
+      actual:
+        ref: ${execute.run_legacy_regression.outputs.result_json}
+      selector: $.status
+      expected: PASSED
 ```
 
 ### 8.4 Eventual Verification
@@ -548,14 +544,15 @@ Use explicit `options.timeout` and `options.poll_interval` when behavior is asyn
 
 ```yaml
 verify:
-  - id: settlement_event_eventually_received
-    type: event_payload_match
-    actual:
-      ref: ${execute.consume_settlement_event.outputs.consumed_message}
-    expected_ref: expected-results/approved/settlement_event.yaml
-    options:
-      timeout: PT60S
-      poll_interval: PT5S
+  checks:
+    - id: settlement_event_eventually_received
+      type: event_payload_match
+      actual:
+        ref: ${execute.consume_settlement_event.outputs.consumed_message}
+      expected_ref: expected-results/approved/settlement_event.yaml
+      options:
+        timeout: PT60S
+        poll_interval: PT5S
 ```
 
 Rules:
@@ -646,7 +643,7 @@ A provider contract and provider instance should use the same top-level domains.
 
 The contract defines allowed fields, allowed operations, allowed values, required fields, defaults, output refs, evidence outputs, access policy shape, and failure codes. The instance fills concrete RP-level selections using those contract-defined domains.
 
-A provider instance is invalid if it contains a field, operation, `bind_as`, output ref, evidence output, or failure code not allowed by its provider contract.
+A provider instance is invalid if it contains a field, operation input key, output ref, evidence output, or failure code not allowed by its provider contract.
 
 Contract and instance shapes are aligned by domain, not byte-for-byte identical. For example, a contract declares allowed readiness operations under `readiness.operations`; an instance selects one operation under `readiness.operation`.
 
@@ -654,8 +651,8 @@ Contract and instance shapes are aligned by domain, not byte-for-byte identical.
 | --- | --- | --- |
 | `binding_keys` | Required and optional binding keys, types, and value source. | Binding key names supplied by environment binding. |
 | `defaults` | Allowed default fields and default values. | RP-level timeout, retry, or provider defaults. |
-| `readiness` | Allowed readiness operations and fields. | Selected readiness operation and concrete parameters. |
-| `operations` | Allowed executable operations, `bind_as`, and output refs. | Operations are referenced by DSL `setup`, `execute`, or `cleanup`. |
+| `readiness` | Allowed readiness operations and fields. | Selected readiness operation and concrete inputs. |
+| `operations` | Allowed executable operations, input keys, and output refs. | Operations are referenced by DSL `setup`, `execute`, or `cleanup`. |
 | `evidence` | Allowed evidence capture and redaction options. | RP-level evidence capture and redaction selections. |
 | `safety` | Required safety rules and approval shape for command-capable providers, such as `safety.rules.required_fields`. | Explicit RP-level `safety.access_policy` and `safety.approval` selections. |
 | `failure_mapping` | Allowed failure codes. | Mapping from provider-specific failure cases to allowed failure codes. |
@@ -767,13 +764,11 @@ binding_keys:
     required: true
 readiness:
   operation: http_request
-  parameters:
-    - name: method
-      ref: config/http/get.yaml
-      bind_as: request.method
-    - name: path
-      ref: config/http/health_path.yaml
-      bind_as: request.path
+  inputs:
+    request.method:
+      value: GET
+    request.path:
+      value: /health
   expected_status: 200
 defaults:
   timeout_seconds: 30
@@ -796,10 +791,9 @@ binding_keys:
     required: true
 readiness:
   operation: db_query
-  parameters:
-    - name: readiness_query
+  inputs:
+    query_ref:
       ref: fixtures/payment/db/readiness.sql
-      bind_as: query_ref
 defaults:
   query_timeout: PT10S
 ```
@@ -843,7 +837,7 @@ Before dispatch, the framework validates:
 - Environment Binding supplies all required Provider Contract binding keys.
 - Selected `runtime_mode` is allowed by Execution Profile, Provider Contract, and Provider Instance.
 - Operation exists in the Provider Contract.
-- Every `parameters[].bind_as` value is allowed by the Provider Contract operation.
+- Every operation `inputs` key is allowed by the Provider Contract operation.
 - Every output ref used by DSL, evidence, or verify exists in the Provider Contract operation.
 - Command-capable providers that execute shell, VM, K8s, or external commands include `safety.access_policy` when required by their Provider Contract or execution profile.
 
@@ -1145,7 +1139,7 @@ Additive changes:
 - Add optional DSL field.
 - Add provider contract optional field.
 - Add provider operation.
-- Add supported `bind_as`.
+- Add supported input key.
 - Add output ref.
 - Add evidence output.
 - Add optional `safety.access_policy` field.
@@ -1156,7 +1150,7 @@ Breaking changes:
 - Rename or remove DSL fields.
 - Rename `provider_id` or `provider_type`.
 - Change provider operation semantics.
-- Change existing `bind_as` meaning.
+- Change existing input key meaning.
 - Change output ref names.
 - Change pass/fail semantics.
 - Change evidence output shape.

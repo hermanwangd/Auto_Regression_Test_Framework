@@ -92,7 +92,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         if (sqlRef.isBlank()) {
             return failed(context, request, Map.of(), "SQL_REF_MISSING", classificationFor(request.operation()),
                     "JDBC operation `" + request.operation() + "` requires sql_ref.",
-                    "Add a checked-in SQL ref parameter with bind_as `sql_ref`.");
+                    "Add checked-in SQL ref input `sql_ref`.");
         }
         Instant startedAt = Instant.now();
         Map<String, Object> params = parameterValues(context, request);
@@ -168,7 +168,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         if (queryRef.isBlank()) {
             return failed(context, request, Map.of(), "QUERY_REF_MISSING", "DB_QUERY_FAILED",
                     "JDBC query operation requires query_ref.",
-                    "Add a checked-in SQL query ref parameter with bind_as `query_ref`.");
+                    "Add checked-in SQL query ref input `query_ref`.");
         }
         Instant startedAt = Instant.now();
         Map<String, Object> params = parameterValues(context, request);
@@ -358,7 +358,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
                         "SQL_PARAM_MISSING",
                         classificationFor(request.operation()),
                         "SQL parameter `" + requiredParam + "` is required by referenced SQL.",
-                        "Add operation parameter bind_as `params." + requiredParam + "`."));
+                        "Add operation input `params." + requiredParam + "`."));
             }
         }
         if (strictParams(request)) {

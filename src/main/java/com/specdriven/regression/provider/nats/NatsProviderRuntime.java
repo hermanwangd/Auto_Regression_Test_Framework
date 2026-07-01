@@ -286,7 +286,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
                     "PAYLOAD_REF_MISSING",
                     "TARGET_RESOLUTION_FAILED",
                     "NATS publish requires payload_ref or payload.",
-                    "Add a checked-in payload ref parameter with bind_as `payload_ref`."));
+                    "Add checked-in payload ref input `payload_ref` or inline input `payload`."));
         }
         try {
             String text = payloadRef.isBlank() ? payloadText : Files.readString(suiteFile(context.suiteRoot(), payloadRef));
@@ -327,7 +327,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
                     "PAYLOAD_REF_MISSING",
                     "TARGET_RESOLUTION_FAILED",
                     "NATS payload match requires expected_ref.",
-                    "Add an expected result ref parameter with bind_as `expected_ref`."));
+                    "Add expected result ref input `expected_ref`."));
         }
         Object value;
         try {
@@ -407,7 +407,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
                     "INVALID_INSTANT",
                     "TARGET_RESOLUTION_FAILED",
                     "NATS consume_from must be `test_start_time`, `earliest`, or an ISO-8601 instant.",
-                    "Fix the DSL parameter with bind_as `consume_from`."));
+                    "Fix DSL input `consume_from`."));
         }
     }
 
@@ -423,7 +423,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
                     "INVALID_DURATION",
                     "TARGET_RESOLUTION_FAILED",
                     "NATS " + bindAs + " must be an ISO-8601 duration.",
-                    "Fix the DSL parameter or Environment Binding value for bind_as `" + bindAs + "`."));
+                    "Fix DSL input or Environment Binding value `" + bindAs + "`."));
         }
     }
 

@@ -71,33 +71,38 @@ public class TestCaseLifecycleService {
                 source_fingerprint: %s
                 targets:
                   %s:
+                    provider_id: %s
+                data:
+                  primary_input:
                     type: %s
-                    provider: %s
-                    execution_mode: %s
-                    environment: %s
-                %s
-                execute:
-                  - id: execute_rp_behavior
-                    target: %s
-                    operation: %s
-                    with:
-                      primary_input: ${setup.fixtures.primary_input}
-                    outputs:
-                      actual_output:
-                        ref: actual/output.txt
-                      execution_log:
-                        ref: logs/execution.log
-                expected_results:
+                    lifecycle: %s
+                    ref: pending_owner_selected_input
+                    owner_action: Select checked-in or cataloged logical input data for this AC.
                   owner_approved_expected:
-                    type: expected_result_artifact
-                    status: pending_owner_review
                     ref: pending_owner_approved_expected_result
                     owner_action: Approve expected result before regression execution.
+                %s
+                %s
+                execute:
+                  operations:
+                    - id: execute_rp_behavior
+                      target: %s
+                      operation: %s
+                      inputs:
+                        primary_input:
+                          ref: ${data.primary_input}
+                      outputs:
+                        actual_output:
+                          ref: actual/output.txt
+                        execution_log:
+                          ref: logs/execution.log
                 verify:
-                  - id: verify_expected_output
-                    type: file_diff
-                    actual: ${execute.execute_rp_behavior.outputs.actual_output}
-                    expected: ${expected_results.owner_approved_expected.ref}
+                  checks:
+                    - id: verify_expected_output
+                      type: file_diff
+                      actual:
+                        ref: ${execute.execute_rp_behavior.outputs.actual_output}
+                      expected_ref: ${data.owner_approved_expected}
                 evidence:
                   required:
                     - ${execute.execute_rp_behavior.outputs.execution_log}
@@ -116,11 +121,11 @@ public class TestCaseLifecycleService {
                 ac.acId(),
                 fingerprint(ac),
                 executionContext.ruId(),
-                targetType(executionContext.capabilities()),
-                executionContext.provider(),
-                executionContext.executionMode(),
-                executionContext.environmentRef(),
-                fixtureYaml(executionContext.capabilities()),
+                executionContext.ruId(),
+                inputBindAs(executionContext.capabilities()),
+                inputLifecycle(executionContext.capabilities()),
+                cleanupDataYaml(executionContext.capabilities()),
+                fixtureYaml(executionContext.capabilities(), executionContext.ruId()),
                 executionContext.ruId(),
                 operation(executionContext.capabilities()),
                 requiresCleanup(executionContext.capabilities()));
@@ -188,33 +193,45 @@ public class TestCaseLifecycleService {
                 || capabilities.contains("env_var");
     }
 
-    private String fixtureYaml(List<String> capabilities) {
+    private String cleanupDataYaml(List<String> capabilities) {
+        if (!requiresCleanup(capabilities)) {
+            return "";
+        }
+        return """
+                  primary_cleanup:
+                    ref: pending_owner_cleanup_ref
+                """;
+    }
+
+    private String fixtureYaml(List<String> capabilities, String targetId) {
         if (!requiresCleanup(capabilities)) {
             return """
                     setup:
-                      fixtures:
-                        primary_input:
-                          type: %s
-                          lifecycle: %s
-                          ref: pending_owner_selected_input
-                          owner_action: Select checked-in or cataloged logical input data for this AC.
-                      cleanup: []
-                    """.formatted(inputBindAs(capabilities), inputLifecycle(capabilities));
+                      operations: []
+                    cleanup:
+                      operations: []
+                    """;
         }
         return """
                 setup:
-                  fixtures:
-                    primary_input:
-                      type: %s
-                      lifecycle: %s
-                      ref: pending_owner_selected_input
-                      owner_action: Select checked-in or cataloged logical input data for this AC.
-                      cleanup_ref: pending_owner_cleanup_ref
-                  cleanup:
+                  operations:
+                    - id: prepare_primary_input
+                      target: %s
+                      operation: setup_fixture
+                      inputs:
+                        fixture.input_ref:
+                          ref: ${data.primary_input}
+                        fixture.cleanup_ref:
+                          ref: ${data.primary_cleanup}
+                cleanup:
+                  operations:
                     - id: cleanup_primary_input
-                      action: cleanup_bound_input
-                      input: ${setup.fixtures.primary_input}
-                """.formatted(inputBindAs(capabilities), inputLifecycle(capabilities));
+                      target: %s
+                      operation: cleanup_fixture
+                      inputs:
+                        fixture.cleanup_ref:
+                          ref: ${data.primary_cleanup}
+                """.formatted(targetId, targetId);
     }
 
     private String skeletonDraftContent(

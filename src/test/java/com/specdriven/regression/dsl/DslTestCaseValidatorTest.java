@@ -15,11 +15,19 @@ class DslTestCaseValidatorTest {
 
     @Test
     void acceptsValidExecutionFocusedDsl() {
-        DslValidationReport report = new DslTestCaseValidator().validate(validExecutionFocusedDsl());
+        DslValidationReport report = new DslTestCaseValidator().validate(validProviderInputsDsl());
 
         assertThat(report.ready()).isTrue();
-        assertThat(report.testCaseId()).isEqualTo("RP-001-TC-001");
-        assertThat(report.acId()).isEqualTo("RP-001-AC-001");
+        assertThat(report.testCaseId()).isEqualTo("GOLDEN-E2E-TC-001");
+        assertThat(report.gaps()).isEmpty();
+    }
+
+    @Test
+    void acceptsLifecycleNeutralDataAndProviderInputsDsl() {
+        DslValidationReport report = new DslTestCaseValidator().validate(validProviderInputsDsl());
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.testCaseId()).isEqualTo("GOLDEN-E2E-TC-001");
         assertThat(report.gaps()).isEmpty();
     }
 
@@ -120,7 +128,7 @@ class DslTestCaseValidatorTest {
     }
 
     @Test
-    void blocksLegacyDataBindingCategoriesInV02Dsl() {
+    void blocksLegacyDataBindingInV02Dsl() {
         String yaml = validExecutionFocusedDsl()
                 .replace("""
                 setup:
@@ -152,6 +160,7 @@ class DslTestCaseValidatorTest {
         assertThat(report.ready()).isFalse();
         assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
                 .contains(
+                        "data_binding",
                         "data_binding.datasets",
                         "data_binding.fixtures",
                         "data_binding.expected_results",
@@ -159,7 +168,26 @@ class DslTestCaseValidatorTest {
                         "data_binding.db_cleanup",
                         "data_binding.mock_stubs");
         assertThat(report.gaps()).extracting(DslValidationGap::ownerAction)
-                .contains("Use data_binding.input_data, setup_data, cleanup_data, or expect_data only.");
+                .contains("Use lifecycle-neutral `data` entries and bind them through operation `inputs`; `data_binding` is not part of DSL v0.2.");
+    }
+
+    @Test
+    void blocksProviderInputWithoutRefOrValue() {
+        String yaml = validProviderInputsDsl()
+                .replace("""
+                        sample.input_ref:
+                          ref: ${data.input}
+                """, """
+                        sample.input_ref: {}
+                """);
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains("execute.operations[0].inputs.sample.input_ref");
+        assertThat(report.gaps()).extracting(DslValidationGap::ownerAction)
+                .contains("Declare exactly one source: `ref` for checked-in artifact references or `value` for safe literals.");
     }
 
     @Test
@@ -324,25 +352,128 @@ class DslTestCaseValidatorTest {
 
     @Test
     void acceptsResponseStatusVerifyWithoutActualWhenProviderMetadataIsUsed() {
-        String yaml = validExecutionFocusedDsl()
-                .replace("runner: spring_boot_cli", "runner: request_response")
-                .replace("operation: run_batch", "operation: call_api")
-                .replace("""
-                  - id: verify_output
-                    type: file_diff
-                    actual: ${execute.run_pipeline.outputs.actual_output}
-                    expected: ${expected_results.primary.ref}
-                """, """
-                  - id: verify_http_status
-                    type: response_status_equals
-                    expected: 202
-                """)
-                .replace("${verify.verify_output.result}", "${verify.verify_http_status.result}");
+        String yaml = """
+                dsl_version: v0.2
+                test_case_id: GOLDEN-E2E-TC-001
+                status: active
+                revision: 1
+                source_refs:
+                  acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#track-b-golden-e2e
+                targets:
+                  sample_runtime:
+                    provider_id: sample-fake-runtime
+                    runner: request_response
+                data:
+                  input:
+                    ref: fixtures/input.json
+                  setup_fixture:
+                    ref: fixtures/setup_fixture.yaml
+                  cleanup_fixture:
+                    ref: fixtures/cleanup_fixture.yaml
+                  expected_output:
+                    ref: expected_results/expected_output.json
+                setup:
+                  operations:
+                    - id: prepare_sample_workspace
+                      target: sample_runtime
+                      operation: setup_fixture
+                      inputs:
+                        fixture.setup_ref:
+                          ref: ${data.setup_fixture}
+                        fixture.input_ref:
+                          ref: ${data.input}
+                execute:
+                  operations:
+                    - id: produce_sample_output
+                      target: sample_runtime
+                      operation: call_api
+                      inputs:
+                        sample.input_ref:
+                          ref: ${data.input}
+                        sample.expected_ref:
+                          ref: ${data.expected_output}
+                      outputs:
+                        actual_json: actual_json
+                        actual_text: actual_text
+                        execution_log: execution_log
+                verify:
+                  checks:
+                    - id: verify_http_status
+                      type: response_status_equals
+                      expected: 202
+                cleanup:
+                  operations:
+                    - id: cleanup_sample_workspace
+                      target: sample_runtime
+                      operation: cleanup_fixture
+                      inputs:
+                        fixture.cleanup_ref:
+                          ref: ${data.cleanup_fixture}
+                evidence:
+                  required:
+                    - ${execute.produce_sample_output.outputs.actual_json}
+                    - ${verify.verify_http_status.result}
+                runtime:
+                  timeout: PT30S
+                  retry:
+                    max_attempts: 1
+                """;
 
         DslValidationReport report = new DslTestCaseValidator().validate(yaml);
 
         assertThat(report.ready()).isTrue();
         assertThat(report.gaps()).isEmpty();
+    }
+
+    @Test
+    void blocksV02TargetWithoutProviderIdEvenWhenLegacyTargetFieldsArePresent() {
+        String yaml = """
+                dsl_version: v0.2
+                test_case_id: GOLDEN-E2E-TC-001
+                status: active
+                revision: 1
+                source_refs:
+                  acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#track-b-golden-e2e
+                targets:
+                  sample_runtime:
+                    type: application
+                    provider: request_response
+                    environment: local://sample
+                data:
+                  input:
+                    ref: fixtures/input.json
+                setup:
+                  operations: []
+                execute:
+                  operations:
+                    - id: produce_sample_output
+                      target: sample_runtime
+                      operation: call_api
+                      outputs:
+                        actual_json: actual_json
+                verify:
+                  checks:
+                    - id: output_matches_expected_json
+                      type: json_match
+                      actual:
+                        ref: ${execute.produce_sample_output.outputs.actual_json}
+                      expected_ref: expected_results/expected_output.json
+                evidence:
+                  required:
+                    - ${verify.output_matches_expected_json.result}
+                runtime:
+                  timeout: PT30S
+                  retry:
+                    max_attempts: 1
+                """;
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains("targets.sample_runtime.provider_id");
+        assertThat(report.gaps()).extracting(DslValidationGap::ownerAction)
+                .contains("Declare targets.sample_runtime.provider_id.");
     }
 
     @Test
@@ -476,24 +607,8 @@ class DslTestCaseValidatorTest {
 
     @Test
     void acceptsStateMutatingFixtureWithCleanupActionAndInlineExpectedResult() {
-        String yaml = validExecutionFocusedDsl()
-                .replace("  fixtures: {}", """
-                  fixtures:
-                    orders_seed:
-                      type: db_seed
-                      lifecycle: state_mutating
-                      cleanup_action: cleanup_orders
-                """)
-                .replace("""
-                  primary:
-                    type: expected_result_artifact
-                    ref: expected-results/approved/RP-001-ER-001.yaml
-                """, """
-                  primary:
-                    type: inline_value
-                    value: NORMALIZED
-                """)
-                .replace("expected: ${expected_results.primary.ref}", "expected: NORMALIZED");
+        String yaml = validProviderInputsDsl()
+                .replace("expected_ref: expected_results/expected_output.json", "expected: OK");
 
         DslValidationReport report = new DslTestCaseValidator().validate(yaml);
 
@@ -798,25 +913,26 @@ class DslTestCaseValidatorTest {
 
     @Test
     void acceptsEventVerificationAndStringRetryPolicy() {
-        String yaml = validExecutionFocusedDsl()
+        String yaml = validProviderInputsDsl()
                 .replace("""
-                  - id: verify_output
-                    type: file_diff
-                    actual: ${execute.run_pipeline.outputs.actual_output}
-                    expected: ${expected_results.primary.ref}
+                    - id: output_matches_expected_json
+                      type: json_match
+                      actual:
+                        ref: ${execute.produce_sample_output.outputs.actual_json}
+                      expected_ref: expected_results/expected_output.json
                 """, """
-                  - id: verify_event
-                    type: event_published
-                    target: RU-transform-job
-                    event:
-                      topic: order.normalized
-                      key: ORD-001
-                    expected:
-                      match:
-                        $.status: NORMALIZED
+                    - id: verify_event
+                      type: event_published
+                      target: sample_runtime
+                      event:
+                        topic: order.normalized
+                        key: ORD-001
+                      expected:
+                        match:
+                          $.status: NORMALIZED
                 """)
                 .replace("max_attempts: 0", "max_attempts: \"1\"");
-        yaml = yaml.replace("${verify.verify_output.result}", "${verify.verify_event.result}");
+        yaml = yaml.replace("${verify.output_matches_expected_json.result}", "${verify.verify_event.result}");
 
         DslValidationReport report = new DslTestCaseValidator().validate(yaml);
 
@@ -877,6 +993,76 @@ class DslTestCaseValidatorTest {
                   timeout: PT10M
                   retry:
                     max_attempts: 0
+                """;
+    }
+
+    private String validProviderInputsDsl() {
+        return """
+                dsl_version: v0.2
+                test_case_id: GOLDEN-E2E-TC-001
+                status: active
+                revision: 1
+                source_refs:
+                  acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#track-b-golden-e2e
+                targets:
+                  sample_runtime:
+                    provider_id: sample-fake-runtime
+                data:
+                  input:
+                    ref: fixtures/input.json
+                  setup_fixture:
+                    ref: fixtures/setup_fixture.yaml
+                  cleanup_fixture:
+                    ref: fixtures/cleanup_fixture.yaml
+                  expected_output:
+                    ref: expected_results/expected_output.json
+                setup:
+                  operations:
+                    - id: prepare_sample_workspace
+                      target: sample_runtime
+                      operation: setup_fixture
+                      inputs:
+                        fixture.setup_ref:
+                          ref: ${data.setup_fixture}
+                        fixture.input_ref:
+                          ref: ${data.input}
+                execute:
+                  operations:
+                    - id: produce_sample_output
+                      target: sample_runtime
+                      operation: execute_sample
+                      inputs:
+                        sample.input_ref:
+                          ref: ${data.input}
+                        sample.expected_ref:
+                          ref: ${data.expected_output}
+                      outputs:
+                        actual_json: actual_json
+                        actual_text: actual_text
+                        execution_log: execution_log
+                verify:
+                  checks:
+                    - id: output_matches_expected_json
+                      type: json_match
+                      actual:
+                        ref: ${execute.produce_sample_output.outputs.actual_json}
+                      expected_ref: expected_results/expected_output.json
+                cleanup:
+                  operations:
+                    - id: cleanup_sample_workspace
+                      target: sample_runtime
+                      operation: cleanup_fixture
+                      inputs:
+                        fixture.cleanup_ref:
+                          ref: ${data.cleanup_fixture}
+                evidence:
+                  required:
+                    - ${execute.produce_sample_output.outputs.actual_json}
+                    - ${verify.output_matches_expected_json.result}
+                runtime:
+                  timeout: PT30S
+                  retry:
+                    max_attempts: 1
                 """;
     }
 }

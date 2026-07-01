@@ -11,8 +11,8 @@ valid_provider_instance_shape:
   binding_keys: []
 operations:
   observe_condition:
-    allowed_bind_as: [poll.expected_state, poll.timeout, poll.interval]
-    required_parameters: [poll.expected_state]
+    allowed_inputs: [poll.expected_state, poll.timeout, poll.interval]
+    required_inputs: [poll.expected_state]
     output_refs: [last_observed, attempts]
 evidence:
   outputs: [last_observed, attempts, timeout_status, error]

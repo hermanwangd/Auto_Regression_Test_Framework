@@ -7,12 +7,12 @@ binding_keys:
     source: environment_binding
 operations:
   event_published:
-    allowed_bind_as: [expected_ref, actual_ref, timeout, poll_interval, consume_from]
-    required_parameters: [expected_ref, actual_ref]
+    allowed_inputs: [expected_ref, actual_ref, timeout, poll_interval, consume_from]
+    required_inputs: [expected_ref, actual_ref]
     output_refs: [polling_evidence_ref, last_observed_ref]
   db_record_exists:
-    allowed_bind_as: [expected_ref, actual_ref, timeout, poll_interval]
-    required_parameters: [expected_ref, actual_ref]
+    allowed_inputs: [expected_ref, actual_ref, timeout, poll_interval]
+    required_inputs: [expected_ref, actual_ref]
     output_refs: [polling_evidence_ref, last_observed_ref]
 evidence:
   outputs: [polling_result, evidence_index, result_json]

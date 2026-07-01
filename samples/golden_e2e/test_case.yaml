@@ -14,77 +14,64 @@ compatible_profiles: [local_golden]
 targets:
   sample_runtime:
     provider_id: sample-fake-runtime
-data_binding:
-  input_data:
-    input:
-      ref: fixtures/input.json
-  setup_data:
-    setup:
-      ref: fixtures/setup_fixture.yaml
-  cleanup_data:
-    cleanup:
-      ref: fixtures/cleanup_fixture.yaml
-  expect_data:
-    expected_output:
-      ref: expected_results/expected_output.json
-setup:
-  fixtures:
-    prepare_sample_workspace:
-      type: sample_setup
-      target: sample_runtime
-      operation: setup_fixture
-      parameters:
-        - name: setup_ref
-          ref: ${data.setup_data.setup}
-          bind_as: fixture.setup_ref
-        - name: input_ref
-          ref: ${data.input_data.input}
-          bind_as: fixture.input_ref
-      cleanup_ref: ${data.cleanup_data.cleanup}
-execute:
-  - id: produce_sample_output
-    target: sample_runtime
-    operation: execute_sample
-    parameters:
-      - name: input
-        ref: ${data.input_data.input}
-        bind_as: sample.input_ref
-      - name: expected_shape
-        ref: ${data.expect_data.expected_output}
-        bind_as: sample.expected_ref
-    outputs:
-      actual_json: actual_json
-      actual_text: actual_text
-      execution_log: execution_log
-expected_results:
+data:
+  input:
+    ref: fixtures/input.json
+  setup_fixture:
+    ref: fixtures/setup_fixture.yaml
+  cleanup_fixture:
+    ref: fixtures/cleanup_fixture.yaml
   expected_output:
     ref: expected_results/expected_output.json
+setup:
+  operations:
+    - id: prepare_sample_workspace
+      target: sample_runtime
+      operation: setup_fixture
+      inputs:
+        fixture.setup_ref:
+          ref: ${data.setup_fixture}
+        fixture.input_ref:
+          ref: ${data.input}
+execute:
+  operations:
+    - id: produce_sample_output
+      target: sample_runtime
+      operation: execute_sample
+      inputs:
+        sample.input_ref:
+          ref: ${data.input}
+        sample.expected_ref:
+          ref: ${data.expected_output}
+      outputs:
+        actual_json: actual_json
+        actual_text: actual_text
+        execution_log: execution_log
 verify:
-  - id: status_is_ok
-    type: value_equals
-    actual:
-      ref: ${execute.produce_sample_output.outputs.actual_json}
-    selector: $.status
-    expected: OK
-  - id: output_matches_expected_json
-    type: json_match
-    actual:
-      ref: ${execute.produce_sample_output.outputs.actual_json}
-    expected_ref: expected_results/expected_output.json
-    options:
-      ignore_order: true
-      ignore_paths:
-        - $.generatedAt
+  checks:
+    - id: status_is_ok
+      type: value_equals
+      actual:
+        ref: ${execute.produce_sample_output.outputs.actual_json}
+      selector: $.status
+      expected: OK
+    - id: output_matches_expected_json
+      type: json_match
+      actual:
+        ref: ${execute.produce_sample_output.outputs.actual_json}
+      expected_ref: expected_results/expected_output.json
+      options:
+        ignore_order: true
+        ignore_paths:
+          - $.generatedAt
 cleanup:
-  fixtures:
-    cleanup_sample_workspace:
-      type: sample_cleanup
+  operations:
+    - id: cleanup_sample_workspace
       target: sample_runtime
       operation: cleanup_fixture
-      parameters:
-        - name: cleanup_ref
-          ref: ${data.cleanup_data.cleanup}
-          bind_as: fixture.cleanup_ref
+      inputs:
+        fixture.cleanup_ref:
+          ref: ${data.cleanup_fixture}
 evidence:
   required:
     - evidence_index.yaml

@@ -22,12 +22,12 @@ valid_provider_instance_shape:
   binding_keys: [command]
 operations:
   run_batch:
-    allowed_bind_as: [runner.args.*, runner.env.*, runner.timeout, runner.input_file]
-    required_parameters: []
+    allowed_inputs: [runner.args.*, runner.env.*, runner.timeout, runner.input_file]
+    required_inputs: []
     output_refs: [exit_code, stdout, stderr, output_files, duration_ms]
   execute_command:
-    allowed_bind_as: [runner.args.*, runner.env.*, runner.timeout, runner.input_file]
-    required_parameters: []
+    allowed_inputs: [runner.args.*, runner.env.*, runner.timeout, runner.input_file]
+    required_inputs: []
     output_refs: [exit_code, stdout, stderr, output_files, duration_ms]
 evidence:
   outputs: [command, stdout, stderr, output_files, exit_code, timing, error]

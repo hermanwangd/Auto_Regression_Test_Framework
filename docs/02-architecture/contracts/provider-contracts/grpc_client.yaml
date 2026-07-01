@@ -14,12 +14,12 @@ valid_provider_instance_shape:
   binding_keys: [target]
 operations:
   unary_call:
-    allowed_bind_as: [grpc.service, grpc.method, grpc.metadata.*, grpc.message, grpc.timeout]
-    required_parameters: [grpc.service, grpc.method, grpc.message]
+    allowed_inputs: [grpc.service, grpc.method, grpc.metadata.*, grpc.message, grpc.timeout]
+    required_inputs: [grpc.service, grpc.method, grpc.message]
     output_refs: [response.message, response.status, response.metadata, response.duration_ms]
   server_stream_call:
-    allowed_bind_as: [grpc.service, grpc.method, grpc.metadata.*, grpc.message, grpc.timeout, grpc.max_messages]
-    required_parameters: [grpc.service, grpc.method, grpc.message]
+    allowed_inputs: [grpc.service, grpc.method, grpc.metadata.*, grpc.message, grpc.timeout, grpc.max_messages]
+    required_inputs: [grpc.service, grpc.method, grpc.message]
     output_refs: [response.messages, response.status, response.metadata, response.duration_ms]
 evidence:
   outputs: [request, response, status, metadata, timing, error]

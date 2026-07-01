@@ -26,24 +26,24 @@ valid_provider_instance_shape:
   binding_keys: [context, namespace]
 operations:
   check_deployment_ready:
-    allowed_bind_as: [k8s.deployment, k8s.timeout, k8s.selector]
-    required_parameters: [k8s.deployment]
+    allowed_inputs: [k8s.deployment, k8s.timeout, k8s.selector]
+    required_inputs: [k8s.deployment]
     output_refs: [deployment_status, events, duration_ms]
   check_pod_ready:
-    allowed_bind_as: [k8s.pod, k8s.selector, k8s.timeout]
-    required_parameters: []
+    allowed_inputs: [k8s.pod, k8s.selector, k8s.timeout]
+    required_inputs: []
     output_refs: [pod_status, events, duration_ms]
   get_logs:
-    allowed_bind_as: [k8s.pod, k8s.deployment, k8s.container, k8s.since, k8s.tail]
-    required_parameters: []
+    allowed_inputs: [k8s.pod, k8s.deployment, k8s.container, k8s.since, k8s.tail]
+    required_inputs: []
     output_refs: [logs]
   wait_rollout:
-    allowed_bind_as: [k8s.deployment, k8s.timeout]
-    required_parameters: [k8s.deployment]
+    allowed_inputs: [k8s.deployment, k8s.timeout]
+    required_inputs: [k8s.deployment]
     output_refs: [deployment_status, events, duration_ms]
   exec_command:
-    allowed_bind_as: [k8s.pod, k8s.container, k8s.command, k8s.timeout]
-    required_parameters: [k8s.command]
+    allowed_inputs: [k8s.pod, k8s.container, k8s.command, k8s.timeout]
+    required_inputs: [k8s.command]
     output_refs: [command_output, exit_code, stderr, stdout]
 evidence:
   outputs: [deployment_status, pod_status, logs, events, command_output, error]

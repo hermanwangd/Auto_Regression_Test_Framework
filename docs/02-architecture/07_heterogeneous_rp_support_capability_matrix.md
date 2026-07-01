@@ -10,9 +10,9 @@ This document defines how the Release Package Regression Framework supports hete
 
 The framework supports logical targets, Provider Contracts, Provider Instances, Environment Bindings, Execution Profiles, fixtures, verify rules, and evidence. It does not understand Product/RP/RU topology or implementation languages directly.
 
-- DSL test cases describe logical validation intent: targets, setup fixtures, execute operations, expected results, verify rules, cleanup needs, runtime policy, and evidence.
+- DSL test cases describe logical validation intent: targets, optional data, setup operations, execute operations, expected refs, verify rules, cleanup needs, runtime policy, and evidence.
 - Product-owned `rp_ru_mapping.yaml` declares which RUs are in the RP. The Agent Skill translates that topology into `suite_manifest.yaml`, `run_plan.yaml`, Execution Profiles, Provider Instances, Environment Bindings, Provider Contracts, and `traceability_map.yaml`.
-- Provider Contracts define allowed operations, allowed `bind_as` values, binding keys, output refs, evidence outputs, and failure codes for reusable concrete technology behavior such as REST, gRPC, Kafka, NATS, DB, K8s, VM, or a governed external runner escape hatch.
+- Provider Contracts define allowed operations, allowed input keys, required inputs, binding keys, output refs, evidence outputs, and failure codes for reusable concrete technology behavior such as REST, gRPC, Kafka, NATS, DB, K8s, VM, or a governed external runner escape hatch.
 - Providers normalize execution, verify, cleanup, and evidence results back into the common suite/run evidence model with optional RP/RU trace labels.
 
 Java, Go, C++, VB.NET, and other languages should normally be invisible to the DSL. Language matters only when a reusable provider cannot express a legacy or specialized boundary and an approved escape-hatch contract is used.
@@ -68,8 +68,8 @@ Status meanings:
 
 | Provider Type | Purpose | Example Technologies | Minimum Contract |
 |---|---|---|---|
-| `rest_client` / `grpc_client` | Invoke synchronous APIs and capture response evidence | REST, gRPC, Orbix bridge through external runner if needed | Service binding key, operation, allowed request `bind_as`, auth secret ref, timeout, output refs |
-| `kafka_messaging` / `nats` | Publish, consume, observe, cleanup, and correlate events | Kafka, NATS | Topic/subject or connection/subject binding key, payload `bind_as`, key/correlation id where supported, serialization, timeout, output refs, observation rule, cleanup strategy, max cleanup count |
+| `rest_client` / `grpc_client` | Invoke synchronous APIs and capture response evidence | REST, gRPC, Orbix bridge through external runner if needed | Service binding key, operation, allowed request input keys, auth secret ref, timeout, output refs |
+| `kafka_messaging` / `nats` | Publish, consume, observe, cleanup, and correlate events | Kafka, NATS | Topic/subject or connection/subject binding key, payload input keys, key/correlation id where supported, serialization, timeout, output refs, observation rule, cleanup strategy, max cleanup count |
 | `jdbc_database` | Prepare and validate state | SQL/NoSQL DBs through JDBC where supported | Connection binding key, query refs, setup/cleanup SQL refs, isolation key, cleanup strategy |
 | `kubernetes_runtime` / `vm_runtime` | Block execution until deployed targets are ready | K8s, VM | Namespace/host binding key, target selector, readiness probe, version/deployment ref, timeout, output refs, log/evidence refs |
 | `external_runner` | Governed escape hatch for existing tools or legacy runtimes that cannot yet use built-in providers | JUnit, Newman, Robot, C++ or VB.NET harness | Approval ref, command or container ref, inputs, outputs, success codes, timeout, evidence artifact map |

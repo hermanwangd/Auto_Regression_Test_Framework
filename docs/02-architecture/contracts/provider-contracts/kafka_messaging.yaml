@@ -14,12 +14,12 @@ valid_provider_instance_shape:
   binding_keys: [bootstrap_servers]
 operations:
   publish_message:
-    allowed_bind_as: [message.topic, message.key, message.headers.*, message.payload, message.partition, message.timeout]
-    required_parameters: [message.topic, message.payload]
+    allowed_inputs: [message.topic, message.key, message.headers.*, message.payload, message.partition, message.timeout]
+    required_inputs: [message.topic, message.payload]
     output_refs: [produced_message, offset, partition, timestamp]
   consume_message:
-    allowed_bind_as: [message.topic, message.consumer_group, message.filter, message.timeout, message.max_records]
-    required_parameters: [message.topic]
+    allowed_inputs: [message.topic, message.consumer_group, message.filter, message.timeout, message.max_records]
+    required_inputs: [message.topic]
     output_refs: [consumed_message, offset, partition, timestamp]
 evidence:
   outputs: [produced_message, consumed_message, offset, timing, error]

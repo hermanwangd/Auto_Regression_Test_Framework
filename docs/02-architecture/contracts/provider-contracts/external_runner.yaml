@@ -24,16 +24,16 @@ valid_provider_instance_shape:
   binding_keys: [command]
 operations:
   run:
-    allowed_bind_as: [runner.args.*, runner.env.*, runner.timeout, runner.input_ref]
-    required_parameters: []
+    allowed_inputs: [runner.args.*, runner.env.*, runner.timeout, runner.input_ref]
+    required_inputs: []
     output_refs: [exit_code, stdout, stderr, result_json, output_files, duration_ms]
   run_and_collect:
-    allowed_bind_as: [runner.args.*, runner.env.*, runner.timeout, runner.input_ref, runner.output_glob]
-    required_parameters: [runner.output_glob]
+    allowed_inputs: [runner.args.*, runner.env.*, runner.timeout, runner.input_ref, runner.output_glob]
+    required_inputs: [runner.output_glob]
     output_refs: [exit_code, stdout, stderr, result_json, output_files, duration_ms]
   check_status:
-    allowed_bind_as: [runner.status_ref, runner.timeout]
-    required_parameters: [runner.status_ref]
+    allowed_inputs: [runner.status_ref, runner.timeout]
+    required_inputs: [runner.status_ref]
     output_refs: [result_json, stdout, stderr]
 evidence:
   outputs: [command, stdout, stderr, output_files, result_json, error]
