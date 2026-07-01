@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -27,6 +28,7 @@ class ContractBaselineCommandTest {
                 "schemas/test_case_dsl.v0.2.schema.yaml",
                 "schemas/provider_contract.v0.2.schema.yaml",
                 "schemas/provider_instance.v0.2.schema.yaml",
+                "schemas/env_profile.v0.2.schema.yaml",
                 "schemas/execution_profile.v0.2.schema.yaml",
                 "schemas/environment_binding.v0.2.schema.yaml",
                 "schemas/suite_manifest.v0.2.schema.yaml",
@@ -39,6 +41,8 @@ class ContractBaselineCommandTest {
                 "samples/contract_baseline/provider_instances/wiremock_payment_api.yaml",
                 "samples/contract_baseline/provider_instances/oracle_database.yaml",
                 "samples/contract_baseline/provider_instances/nats_event_bus.yaml",
+                "samples/contract_baseline/env_profiles/ci.yaml",
+                "samples/contract_baseline/env_profiles/sit.yaml",
                 "samples/contract_baseline/execution_profiles/ci_pr.yaml",
                 "samples/contract_baseline/execution_profiles/sit_regression.yaml",
                 "samples/contract_baseline/environment_bindings/ci.yaml",
@@ -63,6 +67,137 @@ class ContractBaselineCommandTest {
                 .contains("wiremock-payment-api")
                 .contains("oracle-database")
                 .contains("nats-event-bus");
+    }
+
+    @Test
+    void validateSuitePassesWithoutSourceRefsBecauseTraceabilityIsNotRuntimeContract() throws Exception {
+        Path suite = mutableBaseline();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase).replace("""
+                source_refs:
+                  acceptance_criteria: docs/08-release/release-packages/RP-FWK-CONTRACT-SAMPLE/acceptance_criteria.md#AC-001
+                """, ""));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).as(result.stdout()).isZero();
+        assertThat(result.stdout()).contains("validation_status: passed");
+    }
+
+    @Test
+    void validateSuiteAcceptsEnvProfileWithoutLegacyProfileAndBindingArtifacts() throws Exception {
+        Path suite = mutableBaseline("env_profile_contract_baseline");
+        Path root = suite.getParent();
+        writeEnvProfiles(root);
+        deleteDirectory(root.resolve("execution_profiles"));
+        deleteDirectory(root.resolve("environment_bindings"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).as(result.stdout()).isZero();
+        assertThat(result.stdout())
+                .contains("validation_status: passed")
+                .contains("provider_instances_used:")
+                .contains("wiremock-payment-api")
+                .contains("oracle-database")
+                .contains("nats-event-bus");
+    }
+
+    @Test
+    void validateSuiteReportsMalformedEnvProfileYaml() throws Exception {
+        Path suite = mutableBaseline();
+        Files.writeString(suite.getParent().resolve("env_profiles/ci.yaml"), "env_profile_id: ci\nproviders:\n  wiremock-payment-api: [\n");
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("reason: invalid_yaml")
+                .contains("owner_action: Fix malformed YAML before validation.");
+    }
+
+    @Test
+    void validateSuiteRejectsEnvProfileBindingKeyNotDeclaredByProviderContract() throws Exception {
+        Path suite = mutableBaseline();
+        Path envProfile = suite.getParent().resolve("env_profiles/ci.yaml");
+        Files.writeString(envProfile, Files.readString(envProfile)
+                .replace("mappings_ref:", "unexpected_mappings_ref:"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("field_path: providers.wiremock-payment-api.binding_keys.unexpected_mappings_ref")
+                .contains("reason: unknown_binding_key")
+                .contains("category: CONTRACT_ERROR");
+    }
+
+    @Test
+    void validateSuiteRejectsEnvProfileBindingValueKindNotAllowedByProviderContract() throws Exception {
+        Path suite = mutableBaseline();
+        Path envProfile = suite.getParent().resolve("env_profiles/ci.yaml");
+        Files.writeString(envProfile, Files.readString(envProfile)
+                .replace("""
+                              mappings_ref:
+                                ref: fixtures/wiremock/payment-api/
+                        """, """
+                              port_strategy:
+                                ref: fixtures/wiremock/payment-api/
+                        """));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("field_path: providers.wiremock-payment-api.binding_keys.port_strategy.ref")
+                .contains("reason: invalid_binding_key_value_kind")
+                .contains("category: CONTRACT_ERROR");
+    }
+
+    @Test
+    void validateSuiteRejectsExecutionArtifactKeysInSourceRefs() throws Exception {
+        Path suite = mutableBaseline();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase).replace("""
+                  acceptance_criteria: docs/08-release/release-packages/RP-FWK-CONTRACT-SAMPLE/acceptance_criteria.md#AC-001
+                """, """
+                  acceptance_criteria: docs/08-release/release-packages/RP-FWK-CONTRACT-SAMPLE/acceptance_criteria.md#AC-001
+                  expected_result: expected_results/sample_expected.json
+                  fixture: fixtures/payment_request.json
+                  sql: fixtures/sql/find_order.sql
+                """));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("field_path: source_refs.expected_result")
+                .contains("field_path: source_refs.fixture")
+                .contains("field_path: source_refs.sql")
+                .contains("reason: prohibited_source_ref")
+                .contains("category: VALIDATION_ERROR");
+    }
+
+    @Test
+    void validateSuiteRejectsNonMapSourceRefs() throws Exception {
+        Path suite = mutableBaseline();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase).replace("""
+                source_refs:
+                  acceptance_criteria: docs/08-release/release-packages/RP-FWK-CONTRACT-SAMPLE/acceptance_criteria.md#AC-001
+                """, """
+                source_refs:
+                  - acceptance_criteria.md#AC-001
+                """));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("field_path: source_refs")
+                .contains("reason: invalid_source_refs")
+                .contains("category: VALIDATION_ERROR")
+                .contains("Declare `source_refs` as a map of traceability keys to source references.");
     }
 
     @Test
@@ -187,7 +322,7 @@ class ContractBaselineCommandTest {
     @Test
     void validateSuiteRejectsRawSecret() throws Exception {
         Path suite = mutableBaseline();
-        Path binding = suite.getParent().resolve("environment_bindings/ci.yaml");
+        Path binding = suite.getParent().resolve("env_profiles/ci.yaml");
         Files.writeString(binding, Files.readString(binding)
                 .replace("secret_ref: generated://oracle-ephemeral.password", "value: raw-password"));
 
@@ -203,16 +338,27 @@ class ContractBaselineCommandTest {
     @Test
     void validateSuiteRejectsRawConnectionStringsAndSensitiveUsernames() throws Exception {
         Path rawConnectionSuite = mutableBaseline("raw_connection_string");
-        Path rawConnectionBinding = rawConnectionSuite.getParent().resolve("environment_bindings/ci.yaml");
+        Path rawConnectionBinding = rawConnectionSuite.getParent().resolve("env_profiles/ci.yaml");
         Files.writeString(rawConnectionBinding, Files.readString(rawConnectionBinding)
-                .replace("jdbc_url: generated://oracle-ephemeral.jdbc_url",
-                        "jdbc_url: jdbc:h2:mem:leaked_db;DB_CLOSE_DELAY=-1"));
+                .replace("""
+                              jdbc_url:
+                                generated_ref: generated://oracle-ephemeral.jdbc_url
+                        """, """
+                              jdbc_url:
+                                value: jdbc:h2:mem:leaked_db;DB_CLOSE_DELAY=-1
+                        """));
 
         Path sensitiveUsernameSuite = mutableBaseline("sensitive_username");
-        Path sensitiveUsernameBinding = sensitiveUsernameSuite.getParent().resolve("environment_bindings/ci.yaml");
+        Path sensitiveUsernameBinding = sensitiveUsernameSuite.getParent().resolve("env_profiles/ci.yaml");
         Files.writeString(sensitiveUsernameBinding, Files.readString(sensitiveUsernameBinding)
-                .replace("username: generated://oracle-ephemeral.username",
-                        "username: {sensitive: true, value: dbadmin}"));
+                .replace("""
+                              username:
+                                generated_ref: generated://oracle-ephemeral.username
+                        """, """
+                              username:
+                                sensitive: true
+                                value: dbadmin
+                        """));
 
         CommandResult rawConnection = execute("validate", "--suite", rawConnectionSuite.toString());
         CommandResult sensitiveUsername = execute("validate", "--suite", sensitiveUsernameSuite.toString());
@@ -223,7 +369,7 @@ class ContractBaselineCommandTest {
                 .contains("category: SECRET_GUARDRAIL_ERROR");
         assertThat(sensitiveUsername.exit()).isEqualTo(1);
         assertThat(sensitiveUsername.stdout())
-                .contains("field_path: provider_bindings[1].binding_values.username.value")
+                .contains("field_path: providers.oracle-database.binding_keys.username.value")
                 .contains("reason: raw_secret")
                 .contains("category: SECRET_GUARDRAIL_ERROR");
     }
@@ -262,13 +408,13 @@ class ContractBaselineCommandTest {
     @Test
     void validateSuiteRejectsMissingEnvironmentBinding() throws Exception {
         Path suite = mutableBaseline();
-        Files.delete(suite.getParent().resolve("environment_bindings/ci.yaml"));
+        Files.delete(suite.getParent().resolve("env_profiles/ci.yaml"));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
-                .contains("reason: missing_environment_binding")
+                .contains("reason: missing_env_profile")
                 .contains("profile: ci")
                 .contains("owner_action:");
     }
@@ -276,15 +422,14 @@ class ContractBaselineCommandTest {
     @Test
     void validateSuiteRejectsMissingEnvironmentBindingForEverySelectedProfile() throws Exception {
         Path suite = mutableBaseline();
-        Files.delete(suite.getParent().resolve("environment_bindings/sit.yaml"));
+        Files.delete(suite.getParent().resolve("env_profiles/sit.yaml"));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
-                .contains("reason: missing_environment_binding")
+                .contains("reason: missing_env_profile")
                 .contains("profile: sit")
-                .contains("provider_id: wiremock-payment-api")
                 .contains("owner_action:");
     }
 
@@ -457,6 +602,98 @@ class ContractBaselineCommandTest {
         return target.resolve("suite_manifest.yaml");
     }
 
+    private void writeEnvProfiles(Path root) throws IOException {
+        Files.createDirectories(root.resolve("env_profiles"));
+        Files.writeString(root.resolve("env_profiles/ci.yaml"), """
+                env_profile_id: ci
+                execution_mode: ci
+                isolation_scope: per_run
+                dependency_policy:
+                  require_readiness_evidence: false
+                  allow_framework_managed_dependencies: true
+                dependency_substitution_policy:
+                  allowed_runtime_modes: [mock, stub, ephemeral]
+                  mock_evidence_release_claim: prohibited
+                dependency_provisioning_policy:
+                  allowed_provisioners: [testcontainers]
+                data_policy:
+                  approved_expected_results_required: true
+                  production_data_allowed: false
+                  generated_data_allowed: true
+                  secrets_must_use_refs: true
+                providers:
+                  wiremock-payment-api:
+                    runtime_mode: mock
+                    binding_keys:
+                      mappings_ref:
+                        ref: fixtures/wiremock/payment-api/
+                  oracle-database:
+                    runtime_mode: ephemeral
+                    binding_keys:
+                      jdbc_url:
+                        generated_ref: generated://oracle-ephemeral.jdbc_url
+                      username:
+                        generated_ref: generated://oracle-ephemeral.username
+                      dialect:
+                        value: oracle
+                      password:
+                        secret_ref: generated://oracle-ephemeral.password
+                  nats-event-bus:
+                    runtime_mode: ephemeral
+                    binding_keys:
+                      connection:
+                        secret_ref: generated://nats-ephemeral.connection
+                      subject:
+                        value: payments.accepted
+                      timeout:
+                        value: PT30S
+                      poll_interval:
+                        value: PT0.5S
+                """);
+        Files.writeString(root.resolve("env_profiles/sit.yaml"), """
+                env_profile_id: sit
+                execution_mode: sit
+                isolation_scope: shared_sit_environment
+                dependency_policy:
+                  require_readiness_evidence: true
+                  allow_framework_managed_dependencies: false
+                dependency_substitution_policy:
+                  allowed_runtime_modes: [native]
+                  mock_evidence_release_claim: prohibited
+                dependency_provisioning_policy:
+                  allowed_provisioners: [none]
+                data_policy:
+                  approved_expected_results_required: true
+                  production_data_allowed: false
+                  generated_data_allowed: false
+                  secrets_must_use_refs: true
+                providers:
+                  wiremock-payment-api:
+                    runtime_mode: mock
+                    binding_keys:
+                      mappings_ref:
+                        ref: fixtures/wiremock/payment-api/
+                  oracle-database:
+                    runtime_mode: native
+                    binding_keys:
+                      jdbc_url:
+                        secret_ref: vault://sit/oracle/jdbc-url
+                      username:
+                        secret_ref: vault://sit/oracle/username
+                      dialect:
+                        value: oracle
+                      password:
+                        secret_ref: vault://sit/oracle/password
+                  nats-event-bus:
+                    runtime_mode: native
+                    binding_keys:
+                      connection:
+                        secret_ref: vault://sit/nats/connection
+                      subject:
+                        value: payments.accepted
+                """);
+    }
+
     private void copyDirectory(Path source, Path target) throws IOException {
         try (var paths = Files.walk(source)) {
             for (Path path : paths.toList()) {
@@ -468,6 +705,17 @@ class ContractBaselineCommandTest {
                     Files.createDirectories(destination.getParent());
                     Files.copy(path, destination);
                 }
+            }
+        }
+    }
+
+    private void deleteDirectory(Path directory) throws IOException {
+        if (!Files.exists(directory)) {
+            return;
+        }
+        try (var paths = Files.walk(directory)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
+                Files.delete(path);
             }
         }
     }

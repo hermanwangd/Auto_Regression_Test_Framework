@@ -8,10 +8,10 @@ This document defines how the Release Package Regression Framework supports hete
 
 ## 7.2 Support Principle
 
-The framework supports logical targets, Provider Contracts, Provider Instances, Environment Bindings, Execution Profiles, fixtures, verify rules, and evidence. It does not understand Product/RP/RU topology or implementation languages directly.
+The framework supports logical targets, Provider Contracts, Provider Instances, Env_Profiles, fixtures, verify rules, and evidence. It does not understand Product/RP/RU topology or implementation languages directly.
 
 - DSL test cases describe logical validation intent: targets, optional data, setup operations, execute operations, expected refs, verify rules, cleanup needs, runtime policy, and evidence.
-- Product-owned `rp_ru_mapping.yaml` declares which RUs are in the RP. The Agent Skill translates that topology into `suite_manifest.yaml`, `run_plan.yaml`, Execution Profiles, Provider Instances, Environment Bindings, Provider Contracts, and `traceability_map.yaml`.
+- Product-owned `rp_ru_mapping.yaml` declares which RUs are in the RP. The Agent Skill translates that topology into `suite_manifest.yaml`, `run_plan.yaml`, Env_Profiles, Provider Instances, Provider Contracts, and `traceability_map.yaml`.
 - Provider Contracts define allowed operations, allowed input keys, required inputs, binding keys, output refs, evidence outputs, and failure codes for reusable concrete technology behavior such as REST, gRPC, Kafka, NATS, DB, K8s, VM, or a governed external runner escape hatch.
 - Providers normalize execution, verify, cleanup, and evidence results back into the common suite/run evidence model with optional RP/RU trace labels.
 
@@ -39,12 +39,12 @@ This matrix records target contract coverage and partial repository evidence. It
 |---|---|---|---|
 | Product Repo readiness | Support-command contract exists for folder/readiness checks | Keep | Harden reports and owner actions in Phase 2 |
 | RP artifact completeness | Structural support-command contract exists | Keep | Add richer cross-artifact readiness in Phase 2 |
-| Generated execution artifacts | Contract exists for suite/run/Provider Instance/Environment Binding/Execution Profile/Provider Contract inputs; product mapping is product-side input | Logical target dependency-aware execution from generated run plans | Add richer Agent Skill translation checks and generated artifact readiness reporting |
+| Generated execution artifacts | Contract exists for suite/run/Provider Instance/Env_Profile/Provider Contract inputs; product mapping is product-side input | Logical target dependency-aware execution from generated run plans | Add richer Agent Skill translation checks and generated artifact readiness reporting |
 | DSL lifecycle | Draft and approved test lifecycle exists; execution-focused DSL validation, CLI run/report consumption, and `dsl_runtime` run evidence cover identity, source refs, optional labels, targets, setup, execute, expected results, verify, evidence, and runtime | Package-neutral DSL v0.2 consumed by validation, run, result, evidence, and report | Complete v0.2 parameter, suite/profile, result schema, and secret guardrail verification |
 | Binding types | Supports `input_file`, `dataset`, `db_seed`, `api_payload`, and `message_event` readiness/resolution | Add `config_file`, `env_var`, and `existing_state` as providers mature | Unsupported bindings fail before execution |
 | Fixture lifecycle | Validates cleanup policy and executes JDBC DB fixture setup, verification query counts, cleanup, and bounded messaging cleanup drain where configured | Execute DB seed/query/cleanup and test-owned message drain cleanup where needed | Add stronger fixture safety policy and persistent broker purge only if a pilot RP requires it |
 | Provider runtime | Provider runtime registry dispatches file/batch shell, REST, native descriptor-driven gRPC unary request/response, local/mock messaging, native Kafka/NATS publish, NATS request/reply, consume/observe, and cleanup messaging, JDBC DB fixture, local/mock plus native K8s/VM deployment readiness, bounded K8s direct API readiness, bounded K8s pod log capture, bounded VM SSH/WinRM command probes, and approved external runner escape-hatch paths | Provider-registry-dispatched REST/gRPC, Kafka/NATS, DB, deployment readiness, and shell/file providers | Add real pilot environment validation |
-| REST | Contract target plus partial framework evidence for configurable HTTP request/response behavior | Native request/response provider | Add pilot endpoint evidence when owner environment exists |
+| REST | Contract target plus executable framework-owned WireMock + `rest_client` local/CI sample evidence for configurable HTTP request/response behavior | Native request/response provider for framework samples; downstream pilot endpoint validation still requires owner artifacts | Add pilot endpoint evidence when owner environment exists |
 | gRPC | Native descriptor-driven unary runtime is supported through `request_response/grpc` with `service_ref`, `descriptor_ref`, action `service`/`method`, payload binding, timeout, output ref, CLI preflight blocking, request-response evidence, and reusable response assertion helpers over captured output. | Native request/response provider | Add reflection support, streaming modes, metadata/auth handling, and pilot endpoint evidence if selected RP requires them. |
 | Kafka | Native `messaging/kafka` publish, consume/observe, and cleanup runtime is supported through Kafka client dispatch with `bootstrap_servers_ref`, `topic_ref`, mode, payload binding for publish, optional min/expected count for observe, `cleanup_strategy: drain`, positive `max_count`, JSON serialization gate, timeout, correlation, output ref, and evidence. | Publish, consume, observe, correlate, bounded drain cleanup | Add pilot evidence against owner-provided Kafka environment and persistent purge only if required. |
 | NATS | Native `messaging/nats` publish, request/reply, consume/observe, and cleanup runtime is supported through NATS core protocol dispatch with `server_ref`, `subject_ref`, mode, payload binding for publish/request, optional min/expected count for observe, `cleanup_strategy: drain`, positive `max_count`, JSON serialization gate, timeout, correlation, output ref, and evidence. | Publish/request/reply/subscribe where pilot needs it plus bounded drain cleanup | Add pilot evidence against owner-provided NATS environment. |
@@ -55,7 +55,7 @@ This matrix records target contract coverage and partial repository evidence. It
 | Expected-result / verify | File diff, expected-result artifact path, HTTP/status field checks, JSON path equality and absence checks, numeric tolerance checks, schema/contract checks, multi-check aggregation, and DB row count checks | JSON path, schema, contract, DB row, absence, tolerance | Add invariant or custom comparator providers only when a selected pilot requires them |
 | Evidence | Batch/run evidence includes bindings, dependencies, provider contracts, verify status, cleanup, failed/blocked runs, and selected provider-specific evidence | Include resolved bindings, provider contracts used, cleanup, observations, verify details | Add richer observation and postcondition evidence for native messaging and deployment providers |
 | External runner bridge | Contract validation, approved `command_runner` dispatch, approval metadata checks, positive bounded timeout checks, unsafe output and evidence-map path blocking, built-in provider alternative blocking, evidence-map recording, and mapped-artifact existence checks exist as an escape hatch | Governed escape hatch for JUnit, Newman, Robot, legacy binaries, or custom harnesses only when built-in providers cannot cover the boundary | Add mapped-artifact content/schema checks before broad use |
-| Provider registry | Supported structural capability registry validates explicit provider_type, Provider Instance shape, logical target binding, runtime status, and dispatch for selected providers | Config-driven provider registry with framework defaults, generated Provider Contracts, Provider Instances, Environment Binding target values, selected Execution Profile constraints, explicit provider_type validation, and runtime dispatch | Externalize or govern registry configuration as provider set grows |
+| Provider registry | Supported structural capability registry validates explicit provider_type, Provider Instance shape, logical target binding, runtime status, and dispatch for selected providers | Config-driven provider registry with framework defaults, generated Provider Contracts, Provider Instances, Env_Profile provider binding values, selected execution-mode constraints, explicit provider_type validation, and runtime dispatch | Externalize or govern registry configuration as provider set grows |
 
 Status meanings:
 
@@ -123,24 +123,26 @@ provider_instances:
       bootstrap_servers:
         required: true
 ---
-environment_id: sit_payment
-profile: sit
-provider_bindings:
-  - provider_id: payment-api
+env_profile_id: sit_payment
+execution_mode: sit
+providers:
+  payment-api:
     runtime_mode: native
-    binding_values:
-      base_url: env.PAYMENT_API_BASE_URL
-  - provider_id: payment-db
+    binding_keys:
+      base_url:
+        secret_ref: vault://sit/payment/api-base-url
+  payment-db:
     runtime_mode: native
-    binding_values:
-      jdbc_url: env.PAYMENT_DB_JDBC_URL
-      username: env.PAYMENT_DB_USER
-      password:
-        secret_ref: vault://sit/payment/db-password
-  - provider_id: payment-events
+    binding_keys:
+      connection.secret_ref:
+        secret_ref: vault://sit/payment/db-connection
+      dialect:
+        value: oracle
+  payment-events:
     runtime_mode: native
-    binding_values:
-      bootstrap_servers: env.PAYMENT_KAFKA_BOOTSTRAP_SERVERS
+    binding_keys:
+      bootstrap_servers:
+        secret_ref: vault://sit/payment/kafka-bootstrap
 ```
 
 The DSL would reference logical names such as `submit_payment`, `payment_payload`, and `payment_events`. It would not contain URLs, credentials, SQL bodies, topic client settings, or K8s commands.
@@ -152,11 +154,11 @@ The DSL would reference logical names such as `submit_payment`, `payment_payload
 - Add DSL enum values only for recurring cross-RP concepts, not for product-specific details.
 - Add or change required DSL fields only through a `dsl_version` compatibility decision.
 - External runner bridge is acceptable only for approved legacy or specialized systems when standard evidence can still be produced and no reusable built-in provider can safely represent the boundary.
-- Every new provider type must include contract validation, Provider Instance validation, Environment Binding validation, failure semantics, evidence mapping, sample fixture coverage, and AC traceability.
+- Every new provider type must include contract validation, Provider Instance validation, Env_Profile validation, failure semantics, evidence mapping, sample fixture coverage, and AC traceability.
 
 ## 7.8 Implementation Implications
 
-The next implementation slice should not start by coding REST, Kafka, K8s, and VM providers all at once. It should first introduce or harden the provider capability registry, generated artifact validator, Provider Contract validator, Provider Instance validator, Environment Binding validator, and DSL target resolver that support multiple logical targets, explicit provider_type metadata, capability readiness, unsupported-capability blocking, and standardized evidence output. After that, add provider types in pilot order:
+The next implementation slice should not start by coding REST, Kafka, K8s, and VM providers all at once. It should first introduce or harden the provider capability registry, generated artifact validator, Provider Contract validator, Provider Instance validator, Env_Profile validator, and DSL target resolver that support multiple logical targets, explicit provider_type metadata, capability readiness, unsupported-capability blocking, and standardized evidence output. After that, add provider types in pilot order:
 
 1. Request/response provider for REST or gRPC.
 2. DB fixture provider for seed/query/cleanup.

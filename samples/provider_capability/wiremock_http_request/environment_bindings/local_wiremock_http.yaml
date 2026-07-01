@@ -1,0 +1,17 @@
+environment_id: local-wiremock-http
+profile: local_wiremock_http
+provider_bindings:
+  - provider_id: wiremock-payment-api
+    provider_instance_ref: provider_instances/wiremock_payment_api.yaml
+    runtime_mode: mock
+    binding_values:
+      port_strategy: dynamic
+      base_url_output_ref: generated://wiremock-payment-api.base_url
+  - provider_id: payment-api-client
+    provider_instance_ref: provider_instances/payment_api_client.yaml
+    runtime_mode: native
+    binding_values:
+      base_url: generated://wiremock-payment-api.base_url
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

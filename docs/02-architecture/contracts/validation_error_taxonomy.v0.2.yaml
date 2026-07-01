@@ -37,7 +37,7 @@ classifications:
   environment_error:
     owner: environment_owner
     blocks: [dry_run, execution]
-    examples: [missing_environment_binding, unsupported_runtime_mode, prohibited_mock_substitution]
+    examples: [missing_env_profile, missing_env_profile_provider_binding, unsupported_runtime_mode, prohibited_mock_substitution]
   secret_resolution_error:
     owner: environment_owner
     blocks: [validate, dry_run, execution, evidence_publication, report_readiness]

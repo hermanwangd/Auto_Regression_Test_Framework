@@ -52,6 +52,17 @@ public class DslTestCaseValidator {
             "db_seed",
             "db_cleanup",
             "mock_stubs");
+    private static final Set<String> PROHIBITED_SOURCE_REF_KEYS = Set.of(
+            "expected_result",
+            "expected_results",
+            "fixture",
+            "fixtures",
+            "payload",
+            "sql",
+            "query",
+            "mock_mapping",
+            "mock_mappings",
+            "data");
     private static final Set<String> GOVERNANCE_FIELDS = Set.of(
             "approval_status",
             "approved_by",
@@ -235,15 +246,23 @@ public class DslTestCaseValidator {
             String testCaseId,
             String acId,
             List<DslValidationGap> gaps) {
-        Map<?, ?> sourceRefs = map(document.get("source_refs"));
-        if (sourceRefs.isEmpty()) {
+        Object sourceRefsValue = document.get("source_refs");
+        if (sourceRefsValue != null && !(sourceRefsValue instanceof Map<?, ?>)) {
             gaps.add(gap(testCaseId, acId, "source_refs", "source_refs", "",
-                    "Declare source_refs.acceptance_criteria for AC/source linkage."));
+                    "Declare `source_refs` as a map of traceability keys to source references."));
             return;
         }
-        requireText(sourceRefs, "acceptance_criteria", "source_refs", testCaseId, acId, gaps,
-                "Declare source_refs.acceptance_criteria for AC/source linkage.",
-                "source_refs.acceptance_criteria");
+        Map<?, ?> sourceRefs = map(document.get("source_refs"));
+        if (sourceRefs.isEmpty()) {
+            return;
+        }
+        for (Object key : sourceRefs.keySet()) {
+            String sourceKey = stringValue(key);
+            if (PROHIBITED_SOURCE_REF_KEYS.contains(sourceKey)) {
+                gaps.add(gap(testCaseId, acId, "source_refs", "source_refs." + sourceKey, "",
+                        "Keep execution artifacts in `data`, operation `inputs`, or verify expected refs; `source_refs` is traceability metadata only."));
+            }
+        }
     }
 
     private void validateLegacyAndGovernanceFields(

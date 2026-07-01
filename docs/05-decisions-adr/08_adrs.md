@@ -97,7 +97,7 @@ Use two explicit execution lines:
 - Framework Verification validates this framework product. `./mvnw test` runs unit and component tests through Maven Surefire. `./mvnw verify` runs framework integration tests through Maven Failsafe against sample generated artifacts and local/mock providers.
 - RP Regression Execution validates a downstream Product Release Package. Product-aware tooling first generates framework-readable artifacts under the RP folder, then invokes the generic runner, for example `regress run --root <product-repo> --rp-id <rp-id> --env <mode>`.
 
-Framework Verification must not depend on SIT/UAT deployment and must not claim downstream RP release evidence. RP Regression Execution may run in `local`, `ci`, `sit`, or `preprod` mode depending on the selected Execution Profile. SIT/preprod regression is triggered by a release package pipeline after required product targets are deployed; it is not part of Maven unit/component testing for this framework.
+Framework Verification must not depend on SIT/UAT deployment and must not claim downstream RP release evidence. RP Regression Execution may run in `local`, `ci`, `sit`, or `preprod` mode depending on the selected Env_Profile execution mode. SIT/preprod regression is triggered by a release package pipeline after required product targets are deployed; it is not part of Maven unit/component testing for this framework.
 
 The Test Plan belongs under validation evidence and defines verification strategy. The Implementation Plan remains under planning and defines the work required to implement or extend that strategy.
 
@@ -119,7 +119,7 @@ Different Products, Release Packages, and Release Units may use different implem
 
 ### Decision
 
-Use framework-owned Provider Contracts, Provider Instances, and Environment Bindings as the heterogeneous execution boundary. The DSL remains package-neutral and references logical capabilities such as inputs, actions, fixtures, expected results, verify rules, observations, and evidence through `provider_id`, operation, operation `inputs`, and output refs. The selected profile is supplied by CLI or suite manifest, not by each DSL target. Product-owned `rp_ru_mapping.yaml` declares RU membership, execution mode, deployment requirement, dependencies, and provider intent for Agent Skill translation. The framework runtime consumes generated `suite_manifest.yaml`, `run_plan.yaml`, Execution Profiles, Provider Instances, Environment Bindings, and `traceability_map.yaml`, then resolves Provider Contracts from the framework catalog by `provider_type` unless an explicit custom or snapshot contract mode is declared. A provider capability registry validates `provider_type`, required binding keys, supported runtime status, execution modes, safety policy, and evidence outputs before execution. Reusable built-in provider types implement concrete behavior for request/response APIs, messaging, DB fixtures, deployment readiness, and file/batch execution.
+Use framework-owned Provider Contracts, Provider Instances, and Env_Profiles as the heterogeneous execution boundary. The DSL remains package-neutral and references logical capabilities such as inputs, actions, fixtures, expected results, verify rules, observations, and evidence through `provider_id`, operation, operation `inputs`, and output refs. The selected Env_Profile is supplied by CLI or suite manifest, not by each DSL target. Product-owned `rp_ru_mapping.yaml` declares RU membership, execution mode, deployment requirement, dependencies, and provider intent for Agent Skill translation. The framework runtime consumes generated `suite_manifest.yaml`, `run_plan.yaml`, Env_Profiles, Provider Instances, and `traceability_map.yaml`, then resolves Provider Contracts from the framework catalog by `provider_type` unless an explicit custom or snapshot contract mode is declared. A provider capability registry validates `provider_type`, required binding keys, supported runtime status, execution modes, safety policy, and evidence outputs before execution. Reusable built-in provider types implement concrete behavior for request/response APIs, messaging, DB fixtures, deployment readiness, and file/batch execution.
 
 The selected M1 pilot shall exercise one heterogeneous RP that includes REST and/or gRPC, Kafka and/or NATS, DB fixture setup/cleanup, and K8s/VM readiness as needed by the RP boundary. External runner is not a required pilot capability. It is an approved escape hatch only when a legacy or specialized boundary cannot yet be represented by a reusable built-in provider contract.
 
@@ -184,7 +184,7 @@ Earlier design drafts allowed the framework to consume `rp_ru_mapping.yaml` dire
 Separate responsibilities into three layers:
 
 - Product/RP/RU docs own product knowledge: product specs, RP feature specs, RP AC, RP/RU mapping, release manifest, deployment manifest, and SIT topology.
-- Phase 2 Agent Skills interpret product knowledge and generate framework-readable artifacts: `suite_manifest.yaml`, `run_plan.yaml`, `environment_binding.yaml`, provider contracts, DSL tests, expected results, and `traceability_map.yaml`.
+- Phase 2 Agent Skills interpret product knowledge and generate framework-readable artifacts: `suite_manifest.yaml`, `run_plan.yaml`, Env_Profiles, Provider Instances, provider contracts when explicitly needed, DSL tests, expected results, and `traceability_map.yaml`.
 - Generic Test Framework core validates and executes only framework-readable artifacts. It may preserve RP/RU labels as opaque traceability metadata, but it must not decide RP membership, RU technology, runner eligibility, release manifest semantics, or SIT topology.
 
 Framework validation covers generic contracts: DSL syntax, target IDs, runner/provider existence, fixture refs, expected-result refs, verify rules, evidence refs, timeout/retry, secret-safety rules, and generated artifact consistency. Agent Skill validation covers product mapping: which RUs are in an RP, whether a RU can use Maven Failsafe or another runner, which topology targets exist in SIT, and whether generated targets match release context.
@@ -220,13 +220,15 @@ source_refs:
   feature_spec: docs/feature_spec.md#F001
 ```
 
-`source_refs.acceptance_criteria` is required for reviewed-source traceability. `labels` are optional opaque report metadata. The framework may copy labels into evidence and reports, but it must not branch on labels to select runners, providers, topology, or execution strategy.
+`source_refs` is optional traceability metadata. It may point to AC, feature specs, defects, ADRs, or other reviewed source links, but it is not part of the runtime execution contract. Runtime execution must not resolve source refs or fail because a source ref is missing. Execution artifacts such as expected results, fixtures, SQL, payloads, mock mappings, and test data belong in `data`, operation `inputs`, or verify expected refs instead of `source_refs`.
+
+`labels` are optional opaque report metadata. The framework may copy labels and source refs into evidence and reports, but it must not branch on labels or source refs to select runners, providers, topology, or execution strategy.
 
 `traceability.package_id`, `traceability.acceptance_criteria_id`, and `traceability.source` are compatibility inputs until migrated. They map to `labels.package`, `source_refs.acceptance_criteria`, and source refs respectively.
 
 ### Consequences
 
-DSL test cases become more product-agnostic. Coverage and release evidence packaging must resolve product-specific reporting through `source_refs`, `labels`, and generated `traceability_map.yaml`. Generator, validator, run evidence, report, and compatibility tests must migrate away from required `traceability.*` fields for new artifacts.
+DSL test cases become more product-agnostic. Coverage and release evidence packaging may use `source_refs`, `labels`, and generated `traceability_map.yaml` for reporting, but runtime execution remains independent from these fields. Generator, validator, run evidence, report, and compatibility tests must migrate away from required `traceability.*` and required `source_refs.acceptance_criteria` fields for new artifacts.
 
 ## ADR-010 Define v0.2 as Full Pre-release Execution Framework
 
@@ -308,11 +310,11 @@ Runtime implementation and test planning were previously driven by a mix of CLI 
 
 ### Decision
 
-Define `docs/02-architecture/contracts/framework_usage_interface.v0.2.md` as the current-stage public interface contract before expanding runtime/provider implementation or test plans. The documented v0.2 public interface has controlled breaking changes allowed before v1.0 and includes invocation commands, required options, optional options, exit-code semantics, stable stdout keys, DSL/test definition fields, Execution Profile fields, Provider Contract fields, Provider Instance fields, Environment Binding fields, result/evidence schemas, input artifact locations, output evidence paths, and the boundary between framework runtime commands and next-stage Phase 2 support commands.
+Define `docs/02-architecture/contracts/framework_usage_interface.v0.2.md` as the current-stage public interface contract before expanding runtime/provider implementation or test plans. The documented v0.2 public interface has controlled breaking changes allowed before v1.0 and includes invocation commands, required options, optional options, exit-code semantics, stable stdout keys, DSL/test definition fields, Env_Profile fields, Provider Contract fields, Provider Instance fields, result/evidence schemas, input artifact locations, output evidence paths, and the boundary between framework runtime commands and next-stage Phase 2 support commands.
 
 ### Consequences
 
-Framework verification must add interface contract tests before provider/runtime tests can claim maturity. Future command, option, DSL field, Provider Contract field, Provider Instance field, Environment Binding field, output-key, or evidence-path changes must update the interface contract and test plan first. Phase 2 Agent Skills may wrap framework commands and generate framework-readable artifacts, but they must not redefine the framework interface.
+Framework verification must add interface contract tests before provider/runtime tests can claim maturity. Future command, option, DSL field, Provider Contract field, Provider Instance field, Env_Profile field, output-key, or evidence-path changes must update the interface contract and test plan first. Phase 2 Agent Skills may wrap framework commands and generate framework-readable artifacts, but they must not redefine the framework interface.
 
 ---
 
@@ -338,25 +340,25 @@ DSL target
   -> Provider Instance
   -> provider_type
   -> Framework built-in Provider Contract catalog
-  -> selected profile
-  -> Environment Binding
+  -> selected Env_Profile
+  -> Env_Profile.providers.<provider_id>.binding_keys
 ```
 
-Provider Contract defines provider_type, allowed operations, allowed input keys, required inputs, binding keys, output refs, evidence outputs, failure codes, defaults, and valid Provider Instance shape. Built-in Provider Contracts are owned by the framework and resolved by `provider_type`; suite-local contracts are allowed only for explicit custom provider or snapshot pinning mode.
+Provider Contract defines provider_type, allowed operations, allowed input keys, required inputs, binding key schema, allowed value kinds, bindable outputs, output refs, evidence outputs, failure codes, defaults, and valid Provider Instance shape. Built-in Provider Contracts are owned by the framework and resolved by `provider_type`; suite-local contracts are allowed only for explicit custom provider or snapshot pinning mode.
 
 Provider Instance defines one RP logical runtime target with provider_id and provider_type using the same top-level shape as the Provider Contract.
 
-Environment Binding supplies profile-specific actual values such as URLs, topics, DB strings, namespaces, host refs, and secret refs.
+Env_Profile supplies environment-specific actual values such as URLs, topics, DB strings, namespaces, host refs, generated refs, and secret refs. Env_Profile `providers` map keys are Provider Instance `provider_id` values.
 
-DSL Test Cases reference only `provider_id` for runtime targets. The active profile is selected by CLI or suite manifest. Test cases must not contain endpoint, topic, DB credential, namespace, or secret values.
+DSL Test Cases reference only `provider_id` for runtime targets. The active Env_Profile is selected by CLI or suite manifest. Test cases must not contain endpoint, topic, DB credential, namespace, or secret values.
 
 Remove implementation-hook terminology from user-facing docs. Any legacy internal package names are implementation details only and are not public runtime contracts.
 
 ### Consequences
 
-Feature/spec, architecture, AC, test plan, user guide, and contract artifacts must use Provider Contract, Provider Instance, Environment Binding, Execution Profile, DSL Test Case, CLI, and Evidence Contract consistently.
+Feature/spec, architecture, AC, test plan, user guide, and contract artifacts must use Provider Contract, Provider Instance, Env_Profile, DSL Test Case, CLI, and Evidence Contract consistently.
 
-Provider validation must fail before execution when Provider Instance, framework Provider Contract catalog entry, explicit custom Provider Contract, Environment Binding, required binding key, allowed operation, required input, allowed input key, or output ref is missing or invalid.
+Provider validation must fail before execution when Provider Instance, framework Provider Contract catalog entry, explicit custom Provider Contract, Env_Profile, required binding key, allowed value kind, generated ref, allowed operation, required input, allowed input key, or output ref is missing or invalid.
 
 ## ADR-014 Use Data Catalog and Operation Inputs for DSL Provider Binding
 
@@ -406,3 +408,63 @@ The legacy parameter binding array shape remains compatibility-only until the im
 This reduces DSL authoring complexity and makes provider use consistent across setup, execute, verify, and cleanup. The implementation must add compatibility validation, sample migration, provider input resolution, and contract tests before the new shape can replace the current runtime syntax. Existing checked-in executable samples may remain in the old shape until the migration slice updates runtime code and samples together.
 
 Dry-run must produce a resolved execution plan without executing real operations. Evidence must include provider_id, provider_type, profile, and resolved operation result.
+
+## ADR-015 Use WireMock Plus REST Client as the P0 HTTP Runtime Capability Proof
+
+### Status
+
+Accepted for the v0.2 provider capability slice.
+
+### Date
+
+2026-07-01
+
+### Context
+
+The framework needs an executable HTTP proof that is stronger than dry-run validation but still product-agnostic. A provider-only fake sample proves lifecycle mechanics, but it does not prove that the HTTP provider can issue a request, consume generated mock endpoint bindings, capture response outputs, write provider evidence, and feed assertions/reporting.
+
+At the same time, the framework must not claim downstream SIT/preprod endpoint release evidence without owner-provided RP artifacts and real Env_Profiles.
+
+### Decision
+
+Use `wiremock_http_mock` plus `rest_client` as the P0 HTTP runtime capability proof. The checked-in sample under `samples/provider_capability/wiremock_http_request/` starts WireMock, loads checked-in stubs, exposes generated `base_url`, executes `rest_client` `http_request`, captures response outputs, writes `http_request_response` plus WireMock evidence, and covers happy, failure, and boundary paths.
+
+### Consequences
+
+Documentation, AC, test plan, and traceability must describe this as framework provider capability evidence only. It may validate local/CI HTTP runtime behavior, assertion failures, and empty/no-content boundary behavior, but it must not be reported as downstream Product/RP release evidence or broad external HTTP endpoint certification.
+
+---
+
+## ADR-016 Use Env_Profile for Environment-Specific Provider Bindings
+
+### Status
+
+Accepted for the v0.2 public interface; runtime migration may be staged.
+
+### Date
+
+2026-07-01
+
+### Context
+
+The previous public model split runtime environment configuration across Execution Profile and Environment Binding. That forced users to maintain two artifacts that had to point at each other, and it made provider binding ownership unclear. It also encouraged Provider Instance files to redeclare binding keys even though the Provider Contract is the correct source of binding schema.
+
+The framework needs a simpler public interface that still supports local/CI mock substitution, Testcontainers-style generated resources, SIT/preprod native execution, and cross-provider generated outputs such as WireMock `base_url`.
+
+### Decision
+
+Use Env_Profile as the public environment runtime artifact. Env_Profile contains `env_profile_id`, `execution_mode`, policy sections, and a `providers` map keyed by Provider Instance `provider_id`.
+
+Each `providers.<provider_id>.binding_keys` entry must align with the referenced Provider Contract `binding_keys`. Provider Contract defines required keys, value types, allowed value kinds, defaults, failure codes, and `bindable_outputs`. Provider Instance defines only the RP logical target and must not redefine binding key schema.
+
+Env_Profile binding values may use `value`, `ref`, `secret_ref`, or `generated_ref` only when allowed by the Provider Contract. `generated_ref` must resolve to a Provider Contract `bindable_outputs` entry, for example `generated://wiremock-payment-api.base_url`.
+
+Compatibility readers may continue to accept legacy `execution_profile.v0.2` and `environment_binding.v0.2` artifacts until runtime migration completes, but new user-facing docs, specs, AC, and tests must use Env_Profile.
+
+### Consequences
+
+DSL Test Cases stay small: targets reference `provider_id`, and operation `inputs` reference test data or execute outputs. They do not contain endpoint, topic, DB credential, namespace, or secret values.
+
+Validation must fail before dispatch when Env_Profile is missing, provider binding is missing, binding key is unknown or missing, value kind is unsupported, `generated_ref` is invalid, or required Provider Contract `bindable_outputs` are absent.
+
+Test plans must add public interface coverage for Env_Profile schema validation, Provider Contract binding key validation, generated-ref validation, secret guardrails, dry-run resolution, and evidence/report output that includes `provider_id`, `provider_type`, and `env_profile_id`.

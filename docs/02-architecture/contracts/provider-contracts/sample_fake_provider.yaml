@@ -5,17 +5,16 @@ runtime_modes: [stub]
 binding_keys:
   workspace_ref:
     required: true
-    source: environment_binding
+    source: env_profile
   clock_ref:
     required: true
-    source: environment_binding
+    source: env_profile
 defaults:
   timeout_seconds: 30
   retry: 0
 valid_provider_instance_shape:
-  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
-  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, labels]
-  binding_keys: [workspace_ref, clock_ref]
+  required_fields: [provider_id, provider_type, runtime_modes]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, defaults, readiness, operations, evidence, failure_mapping, labels]
 operations:
   setup_fixture:
     allowed_inputs: [fixture.setup_ref, fixture.input_ref, fixture.workspace_ref]

@@ -38,6 +38,7 @@ public class NatsProviderCapabilityService {
             DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS").withZone(ZoneOffset.UTC);
 
     private final ContractBaselineService contractBaselineService = new ContractBaselineService();
+    private final RuntimeBindingResolver runtimeBindingResolver = new RuntimeBindingResolver();
     private final Yaml yaml = new Yaml();
 
     public NatsRunResult run(Path suiteManifest, String requestedProfile, Path outputBase) {
@@ -212,7 +213,6 @@ public class NatsProviderCapabilityService {
                 readDirectoryByField(suiteRoot.resolve("provider_instances"), "provider_id");
         Map<String, Map<String, Object>> contractsByType =
                 readDirectoryByField(frameworkProviderContractsDirectory(suiteRoot), "provider_type");
-        Map<String, Object> environmentBinding = environmentBinding(suiteRoot, requestedProfile);
         for (Object testRef : listValue(suite.get("tests"))) {
             Map<String, Object> testCase = readMap(suiteRoot.resolve(stringValue(testRef)).normalize());
             for (Map.Entry<String, Object> targetEntry : mapValue(testCase.get("targets")).entrySet()) {
@@ -233,7 +233,8 @@ public class NatsProviderCapabilityService {
                 if (providerContract == null) {
                     continue;
                 }
-                Map<String, Object> providerBinding = providerBinding(environmentBinding, providerId);
+                Map<String, Object> providerBinding =
+                        runtimeBindingResolver.providerBinding(suiteRoot, requestedProfile, providerId);
                 Map<String, Object> bindingValues = mapValue(providerBinding.get("binding_values"));
                 RunIds runIds = newRunIds();
                 Path runDir = outputBase
@@ -688,34 +689,6 @@ public class NatsProviderCapabilityService {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read directory: " + directory, e);
         }
-    }
-
-    private Map<String, Object> environmentBinding(Path suiteRoot, String profile) {
-        try (var paths = Files.list(suiteRoot.resolve("environment_bindings"))) {
-            for (Path path : paths
-                    .filter(Files::isRegularFile)
-                    .filter(candidate -> candidate.getFileName().toString().endsWith(".yaml"))
-                    .sorted(Comparator.comparing(Path::toString))
-                    .toList()) {
-                Map<String, Object> binding = readMap(path);
-                if (profile.equals(stringValue(binding.get("profile")))) {
-                    return binding;
-                }
-            }
-            return Map.of();
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read environment bindings", e);
-        }
-    }
-
-    private Map<String, Object> providerBinding(Map<String, Object> environmentBinding, String providerId) {
-        for (Object value : listValue(environmentBinding.get("provider_bindings"))) {
-            Map<String, Object> providerBinding = mapValue(value);
-            if (providerId.equals(providerBinding.get("provider_id"))) {
-                return providerBinding;
-            }
-        }
-        return Map.of();
     }
 
     @SuppressWarnings("unchecked")

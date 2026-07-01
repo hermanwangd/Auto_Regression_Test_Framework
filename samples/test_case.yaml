@@ -5,7 +5,6 @@ status: active
 revision: 1
 source_refs:
   acceptance_criteria: docs/08-release/release-packages/RP-FWK-CONTRACT-SAMPLE/acceptance_criteria.md#AC-001
-  expected_result: expected_results/sample_expected.json
 labels:
   rp_id: RP-FWK-CONTRACT-SAMPLE
   feature_id: F007

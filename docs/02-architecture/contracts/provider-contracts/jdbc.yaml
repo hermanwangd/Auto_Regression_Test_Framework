@@ -8,30 +8,29 @@ dialects:
 binding_keys:
   connection.secret_ref:
     required: true
-    source: environment_binding_secret_ref
+    source: env_profile_secret_ref
   dialect:
     required: true
-    source: environment_binding
+    source: env_profile
   schema:
     required: false
-    source: environment_binding
+    source: env_profile
   query_timeout:
     required: false
-    source: environment_binding
+    source: env_profile
   masking_policy:
     required: false
-    source: environment_binding
+    source: env_profile
   strict_params:
     required: false
-    source: environment_binding
+    source: env_profile
 defaults:
   default_timeout: PT30S
   query_timeout: PT10S
   strict_params: true
 valid_provider_instance_shape:
-  required_fields: [provider_id, provider_type, runtime_modes, binding_keys, dialect, connection]
-  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, dialect, connection, binding_keys, defaults, operations, evidence, failure_mapping, labels]
-  binding_keys: [connection.secret_ref, dialect, schema, query_timeout, masking_policy, strict_params]
+  required_fields: [provider_id, provider_type, runtime_modes]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, defaults, operations, evidence, failure_mapping, labels]
 supported_verifiers: [db_record_exists]
 operations:
   db_seed:

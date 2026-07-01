@@ -2,11 +2,6 @@ provider_instance_version: v0.2
 provider_id: wiremock-payment-mock
 provider_type: wiremock_http_mock
 runtime_modes: [mock]
-binding_keys:
-  mappings_ref:
-    required: true
-  base_url_output_ref:
-    required: false
 defaults:
   timeout_seconds: 60
 operations:

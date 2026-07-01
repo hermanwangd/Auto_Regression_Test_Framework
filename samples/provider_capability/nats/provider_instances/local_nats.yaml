@@ -2,24 +2,6 @@ provider_instance_version: v0.2
 provider_id: local-nats-event-bus
 provider_type: nats
 runtime_modes: [local]
-connection:
-  local_ref: ${environment.connection.local_ref}
-subject: ${environment.subject}
-timeout: ${environment.timeout}
-poll_interval: ${environment.poll_interval}
-binding_keys:
-  connection:
-    required: true
-  subject:
-    required: true
-  timeout:
-    required: false
-  poll_interval:
-    required: false
-  masking_policy:
-    required: false
-  correlation_key:
-    required: false
 defaults:
   timeout: PT5S
   poll_interval: PT0.05S

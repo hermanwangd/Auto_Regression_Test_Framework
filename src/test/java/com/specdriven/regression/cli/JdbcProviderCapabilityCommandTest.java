@@ -28,6 +28,7 @@ class JdbcProviderCapabilityCommandTest {
                 "docs/02-architecture/contracts/provider-contracts/jdbc.yaml",
                 "samples/provider_capability/jdbc/provider_instances/oracle_like.yaml",
                 "samples/provider_capability/jdbc/provider_instances/db2_like.yaml",
+                "samples/provider_capability/jdbc/env_profiles/local_jdbc.yaml",
                 "samples/provider_capability/jdbc/execution_profiles/local_jdbc.yaml",
                 "samples/provider_capability/jdbc/environment_bindings/local_jdbc.yaml",
                 "samples/provider_capability/jdbc/fixtures/db_seed.sql",
@@ -111,8 +112,8 @@ class JdbcProviderCapabilityCommandTest {
     @Test
     void jdbcRunRejectsUnsupportedDialectBeforeExecution() throws Exception {
         Path suite = mutableJdbc();
-        Path binding = suite.getParent().resolve("environment_bindings/local_jdbc.yaml");
-        Files.writeString(binding, read(binding).replace("dialect: oracle", "dialect: mariadb"));
+        Path envProfile = suite.getParent().resolve("env_profiles/local_jdbc.yaml");
+        Files.writeString(envProfile, read(envProfile).replace("value: oracle", "value: mariadb"));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
 
@@ -147,10 +148,10 @@ class JdbcProviderCapabilityCommandTest {
     }
 
     @Test
-    void jdbcValidateRejectsUnsupportedProviderInstanceDialect() throws Exception {
+    void jdbcValidateRejectsUnsupportedEnvProfileDialect() throws Exception {
         Path suite = mutableJdbc();
-        Path instance = suite.getParent().resolve("provider_instances/oracle_like.yaml");
-        Files.writeString(instance, read(instance).replace("dialect: oracle", "dialect: mariadb"));
+        Path envProfile = suite.getParent().resolve("env_profiles/local_jdbc.yaml");
+        Files.writeString(envProfile, read(envProfile).replace("value: oracle", "value: mariadb"));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
@@ -164,8 +165,8 @@ class JdbcProviderCapabilityCommandTest {
     @Test
     void jdbcValidateRejectsRuntimeModeOutsideExecutionProfileContractOrInstance() throws Exception {
         Path suite = mutableJdbc();
-        Path binding = suite.getParent().resolve("environment_bindings/local_jdbc.yaml");
-        Files.writeString(binding, read(binding).replace("runtime_mode: ephemeral", "runtime_mode: local"));
+        Path envProfile = suite.getParent().resolve("env_profiles/local_jdbc.yaml");
+        Files.writeString(envProfile, read(envProfile).replace("runtime_mode: ephemeral", "runtime_mode: local"));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
@@ -177,17 +178,20 @@ class JdbcProviderCapabilityCommandTest {
     }
 
     @Test
-    void jdbcValidateRejectsMissingProviderInstanceDialect() throws Exception {
+    void jdbcValidateRejectsMissingEnvProfileDialect() throws Exception {
         Path suite = mutableJdbc();
-        Path instance = suite.getParent().resolve("provider_instances/oracle_like.yaml");
-        Files.writeString(instance, read(instance).replace("dialect: oracle\n", ""));
+        Path envProfile = suite.getParent().resolve("env_profiles/local_jdbc.yaml");
+        Files.writeString(envProfile, read(envProfile).replace("""
+              dialect:
+                value: oracle
+        """, ""));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
-                .contains("reason: missing_required_field")
-                .contains("field_path: dialect")
+                .contains("reason: missing_required_binding_key")
+                .contains("field_path: provider_bindings.oracle-like-db.binding_values.dialect")
                 .contains("provider_type: jdbc");
     }
 
@@ -223,7 +227,7 @@ class JdbcProviderCapabilityCommandTest {
     @Test
     void jdbcRunRejectsMissingSecretRefBeforeExecution() throws Exception {
         Path suite = mutableJdbc();
-        Path binding = suite.getParent().resolve("environment_bindings/local_jdbc.yaml");
+        Path binding = suite.getParent().resolve("env_profiles/local_jdbc.yaml");
         Files.writeString(binding, read(binding)
                 .replace("secret_ref: generated://provider-capability/oracle-like/connection", "value: raw-connection"));
 

@@ -4,8 +4,7 @@ title: Framework Golden E2E sample
 status: active
 revision: 1
 source_refs:
-  acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#track-b-golden-e2e
-  expected_result: expected_results/expected_output.json
+  framework_requirement: docs/03-acceptance/04_acceptance_criteria.md#track-b-golden-e2e
 labels:
   evidence_classification: framework_verification_only
   sample_id: GOLDEN-E2E

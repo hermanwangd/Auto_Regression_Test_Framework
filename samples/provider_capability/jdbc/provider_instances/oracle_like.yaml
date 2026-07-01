@@ -2,22 +2,6 @@ provider_instance_version: v0.2
 provider_id: oracle-like-db
 provider_type: jdbc
 runtime_modes: [native, ephemeral]
-dialect: oracle
-connection:
-  secret_ref: ${environment.connection.secret_ref}
-binding_keys:
-  connection.secret_ref:
-    required: true
-  dialect:
-    required: true
-  schema:
-    required: false
-  query_timeout:
-    required: false
-  masking_policy:
-    required: false
-  strict_params:
-    required: false
 defaults:
   query_timeout: PT10S
   strict_params: true

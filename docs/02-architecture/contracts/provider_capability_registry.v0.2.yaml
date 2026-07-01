@@ -31,7 +31,7 @@ provider_types:
     supported_runtime_modes: [native, mock, stub]
     required_binding_keys: [base_url]
     supported_operations: [http_request]
-    evidence_outputs: [request, response, timing, error]
+    evidence_outputs: [http_request_response, request, response, timing, error]
   grpc_client:
     contract_ref: provider-contracts/grpc_client.yaml
     runtime_status: supported

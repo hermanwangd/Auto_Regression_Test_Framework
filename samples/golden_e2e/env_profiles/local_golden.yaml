@@ -1,0 +1,24 @@
+env_profile_id: local_golden
+execution_mode: local
+isolation_scope: per_run
+dependency_policy:
+  require_readiness_evidence: false
+  allow_framework_managed_dependencies: true
+dependency_substitution_policy:
+  allowed_runtime_modes: [stub]
+  mock_evidence_release_claim: prohibited
+dependency_provisioning_policy:
+  allowed_provisioners: [none]
+data_policy:
+  approved_expected_results_required: true
+  production_data_allowed: false
+  generated_data_allowed: true
+  secrets_must_use_refs: true
+providers:
+  sample-fake-runtime:
+    runtime_mode: stub
+    binding_keys:
+      workspace_ref:
+        generated_ref: generated://golden-e2e/workspace
+      clock_ref:
+        value: fixed://2026-06-29T00:00:00Z

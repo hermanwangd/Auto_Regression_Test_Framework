@@ -4,24 +4,26 @@ runtime_modes: [local, native, mock, ephemeral]
 binding_keys:
   connection:
     required: true
-    source: environment_binding_secret_ref_or_approved_local_ref
+    source: env_profile_secret_ref_or_approved_local_ref
   subject:
     required: true
-    source: environment_binding
+    source: env_profile
   timeout:
     required: false
-    source: environment_binding
+    source: env_profile
   poll_interval:
     required: false
-    source: environment_binding
+    source: env_profile
+  masking_policy:
+    required: false
+    source: env_profile
 defaults:
   timeout: PT5S
   poll_interval: PT0.05S
   consume_from: test_start_time
 valid_provider_instance_shape:
-  required_fields: [provider_id, provider_type, runtime_modes, connection, subject, binding_keys]
-  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, connection, subject, timeout, poll_interval, masking_policy, correlation_key, binding_keys, defaults, operations, evidence, failure_mapping, labels]
-  binding_keys: [connection, subject, timeout, poll_interval, masking_policy, correlation_key]
+  required_fields: [provider_id, provider_type, runtime_modes]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, defaults, operations, evidence, failure_mapping, labels]
 operations:
   nats_publish:
     allowed_inputs: [subject, payload_ref, payload, correlation_key]

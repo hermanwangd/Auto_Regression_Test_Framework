@@ -12,9 +12,8 @@ defaults:
   timeout_seconds: 60
   retry: 0
 valid_provider_instance_shape:
-  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
-  allowed_fields: [provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, labels]
-  binding_keys: [mappings_ref, base_url_output_ref]
+  required_fields: [provider_id, provider_type, runtime_modes]
+  allowed_fields: [provider_id, provider_type, runtime_modes, defaults, readiness, operations, evidence, failure_mapping, labels]
 operations:
   start_mock:
     allowed_inputs: [mock.port, mock.mappings_ref, mock.files_ref]

@@ -4,14 +4,13 @@ runtime_modes: [native, mock, ephemeral]
 binding_keys:
   bootstrap_servers:
     required: true
-    source: environment_binding
+    source: env_profile
 defaults:
   timeout_seconds: 30
   retry: 0
 valid_provider_instance_shape:
-  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
-  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
-  binding_keys: [bootstrap_servers]
+  required_fields: [provider_id, provider_type, runtime_modes]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
 operations:
   publish_message:
     allowed_inputs: [message.topic, message.key, message.headers.*, message.payload, message.partition, message.timeout]

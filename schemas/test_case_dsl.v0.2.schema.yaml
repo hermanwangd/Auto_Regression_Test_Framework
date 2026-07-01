@@ -11,7 +11,6 @@ required_sections:
   - test_case_id
   - status
   - revision
-  - source_refs.acceptance_criteria
   - targets.<target>.provider_id
   - execute
   - verify
@@ -19,9 +18,25 @@ required_sections:
   - runtime.timeout
   - runtime.retry
 conditional_sections:
+  source_refs: optional traceability metadata; runtime must not depend on or resolve source refs
   data: allowed as an optional lifecycle-neutral reviewed data source catalog
   setup.operations: required when precondition data or mutated state is needed
   cleanup.operations: required when setup mutates state and cleanup is not declared inline
+source_ref_rules:
+  required: false
+  runtime_resolution: prohibited
+  missing_source_ref_blocks_runtime: false
+  prohibited_execution_artifact_keys:
+    - expected_result
+    - expected_results
+    - fixture
+    - fixtures
+    - payload
+    - sql
+    - query
+    - mock_mapping
+    - mock_mappings
+    - data
 data_rules:
   allowed: true
   required_when_data_namespace_refs_are_used: true
@@ -71,7 +86,7 @@ validation_output_fields:
   - provider_id
   - provider_type
   - selected_profile
-  - source_refs.acceptance_criteria
+  - source_refs
   - severity
   - blocking_scope
   - reason

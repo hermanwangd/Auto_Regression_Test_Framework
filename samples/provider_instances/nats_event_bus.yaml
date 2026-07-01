@@ -2,18 +2,6 @@ provider_instance_version: v0.2
 provider_id: nats-event-bus
 provider_type: nats
 runtime_modes: [native, ephemeral]
-connection:
-  secret_ref: ${environment.connection.secret_ref}
-subject: ${environment.subject}
-binding_keys:
-  connection:
-    required: true
-  subject:
-    required: true
-  timeout:
-    required: false
-  poll_interval:
-    required: false
 defaults:
   timeout: PT30S
   poll_interval: PT0.5S

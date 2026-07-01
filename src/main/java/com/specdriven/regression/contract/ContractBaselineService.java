@@ -39,6 +39,17 @@ public class ContractBaselineService {
             "db_seed",
             "db_cleanup",
             "mock_stubs");
+    private static final Set<String> PROHIBITED_SOURCE_REF_KEYS = Set.of(
+            "expected_result",
+            "expected_results",
+            "fixture",
+            "fixtures",
+            "payload",
+            "sql",
+            "query",
+            "mock_mapping",
+            "mock_mappings",
+            "data");
     private static final Set<String> GOVERNANCE_FIELDS = Set.of(
             "approval_status",
             "waiver",
@@ -46,6 +57,12 @@ public class ContractBaselineService {
             "risk_approval");
     private static final Set<String> DEPRECATED_DSL_FIELDS = Set.of(
             "scenario");
+    private static final Set<String> BINDING_VALUE_KIND_FIELDS = Set.of(
+            "value",
+            "ref",
+            "secret_ref",
+            "generated_ref",
+            "local_ref");
     private static final List<String> RESULT_REQUIRED_FIELDS = List.of(
             "framework_version",
             "dsl_version",
@@ -238,7 +255,7 @@ public class ContractBaselineService {
         for (Map.Entry<Path, Map<String, Object>> entry : graph.testCases().entrySet()) {
             Map<String, Object> testCase = entry.getValue();
             for (String field : List.of(
-                    "dsl_version", "test_case_id", "status", "revision", "source_refs", "targets",
+                    "dsl_version", "test_case_id", "status", "revision", "targets",
                     "execute", "verify", "evidence", "runtime")) {
                 require(entry.getKey(), testCase, field, findings);
             }
@@ -253,7 +270,7 @@ public class ContractBaselineService {
         }
         for (Map.Entry<Path, Map<String, Object>> entry : graph.providerInstancesByPath().entrySet()) {
             Map<String, Object> instance = entry.getValue();
-            for (String field : List.of("provider_instance_version", "provider_id", "provider_type", "runtime_modes", "binding_keys")) {
+            for (String field : List.of("provider_instance_version", "provider_id", "provider_type", "runtime_modes")) {
                 require(entry.getKey(), instance, field, findings);
             }
         }
@@ -263,6 +280,15 @@ public class ContractBaselineService {
                     "profile_id", "execution_mode", "environment_binding_ref", "isolation_scope",
                     "dependency_policy", "dependency_substitution_policy", "dependency_provisioning_policy",
                     "max_duration", "data_policy")) {
+                require(entry.getKey(), profile, field, findings);
+            }
+        }
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.envProfiles().entrySet()) {
+            Map<String, Object> profile = entry.getValue();
+            for (String field : List.of(
+                    "env_profile_id", "execution_mode", "providers",
+                    "dependency_policy", "dependency_substitution_policy",
+                    "dependency_provisioning_policy", "data_policy")) {
                 require(entry.getKey(), profile, field, findings);
             }
         }
@@ -301,6 +327,18 @@ public class ContractBaselineService {
                                     + field + "` is not part of DSL v0.2."));
                 }
             }
+            Object sourceRefs = entry.getValue().get("source_refs");
+            if (sourceRefs != null && !(sourceRefs instanceof Map<?, ?>)) {
+                findings.add(finding(entry.getKey(), "source_refs", "invalid_source_refs",
+                        "Declare `source_refs` as a map of traceability keys to source references."));
+            } else {
+                for (String field : mapValue(sourceRefs).keySet()) {
+                    if (PROHIBITED_SOURCE_REF_KEYS.contains(field)) {
+                        findings.add(finding(entry.getKey(), "source_refs." + field, "prohibited_source_ref",
+                                "Keep execution artifacts in `data`, operation `inputs`, or verify expected refs; `source_refs` is traceability metadata only."));
+                    }
+                }
+            }
         }
     }
 
@@ -320,6 +358,7 @@ public class ContractBaselineService {
         graph.providerContractsByPath().forEach((path, document) -> scanAll(path, document, findings));
         graph.providerInstancesByPath().forEach((path, document) -> scanAll(path, document, findings));
         graph.executionProfiles().forEach((path, document) -> scanAll(path, document, findings));
+        graph.envProfiles().forEach((path, document) -> scanAll(path, document, findings));
         graph.environmentBindings().forEach((path, document) -> scanAll(path, document, findings));
     }
 
@@ -485,6 +524,24 @@ public class ContractBaselineService {
     }
 
     private void validateExecutionProfiles(ContractGraph graph, List<ContractFinding> findings) {
+        if (graph.envProfileMode()) {
+            for (String profile : graph.usedProfiles()) {
+                boolean profileExists = graph.envProfiles().values().stream()
+                        .anyMatch(document -> profile.equals(stringValue(document.get("env_profile_id"))));
+                if (!profileExists) {
+                    findings.add(new ContractFinding(
+                            graph.suitePath().toString(),
+                            "profiles." + profile,
+                            "missing_env_profile",
+                            "",
+                            "",
+                            profile,
+                            "",
+                            "Add Env_Profile for env_profile_id `" + profile + "`."));
+                }
+            }
+            return;
+        }
         for (String profile : graph.usedProfiles()) {
             boolean profileExists = graph.executionProfiles().values().stream()
                     .anyMatch(document -> profile.equals(stringValue(document.get("profile_id"))));
@@ -873,7 +930,19 @@ public class ContractBaselineService {
                 if (providerBinding.isEmpty()) {
                     continue;
                 }
-                Path bindingPath = graph.environmentBindingsByProfile().get(profile).path();
+                EnvironmentBindingDoc bindingDoc = graph.environmentBindingsByProfile().get(profile);
+                Path bindingPath = bindingDoc.path();
+                if (bindingDoc.envProfile()) {
+                    validateEnvProfileProviderBinding(
+                            graph,
+                            bindingPath,
+                            providerId,
+                            providerType,
+                            profile,
+                            mapValue(mapValue(bindingDoc.document().get("providers")).get(providerId)),
+                            contract,
+                            findings);
+                }
                 validateRuntimeMode(bindingPath, providerId, providerType, profile, providerBinding,
                         providerInstance, contract, graph, findings);
                 Map<String, Object> bindingValues = mapValue(providerBinding.get("binding_values"));
@@ -909,6 +978,66 @@ public class ContractBaselineService {
                             findings);
                 }
             }
+        }
+    }
+
+    private void validateEnvProfileProviderBinding(
+            ContractGraph graph,
+            Path bindingPath,
+            String providerId,
+            String providerType,
+            String profile,
+            Map<String, Object> provider,
+            Map<String, Object> contract,
+            List<ContractFinding> findings) {
+        Map<String, Object> bindingKeys = mapValue(provider.get("binding_keys"));
+        Map<String, Object> contractBindingKeys = mapValue(contract.get("binding_keys"));
+        Set<String> allowedKeys = contractBindingKeys.keySet();
+        for (Map.Entry<String, Object> entry : bindingKeys.entrySet()) {
+            String rawKey = entry.getKey();
+            List<String> valueKinds = bindingValueKinds(entry.getValue());
+            if (valueKinds.size() > 1) {
+                findings.add(new ContractFinding(
+                        bindingPath.toString(),
+                        "providers." + providerId + ".binding_keys." + rawKey,
+                        "invalid_binding_key_value_kind",
+                        providerId,
+                        providerType,
+                        profile,
+                        "",
+                        "Use exactly one binding value kind for Env_Profile binding key `" + rawKey + "`."));
+                continue;
+            }
+            String kind = valueKinds.isEmpty() ? "value" : valueKinds.get(0);
+            String effectiveKey = effectiveContractBindingKey(rawKey, kind, allowedKeys);
+            Map<String, Object> keySpec = mapValue(contractBindingKeys.get(effectiveKey));
+            if (keySpec.isEmpty() && !contractBindingKeys.containsKey(effectiveKey)) {
+                findings.add(new ContractFinding(
+                        bindingPath.toString(),
+                        "providers." + providerId + ".binding_keys." + rawKey,
+                        "unknown_binding_key",
+                        providerId,
+                        providerType,
+                        profile,
+                        "",
+                        "Use a binding key declared by Provider Contract `" + providerType + "`. Unknown key `" + rawKey + "`."));
+                continue;
+            }
+            Set<String> allowedKinds = allowedValueKinds(keySpec);
+            if (!allowedKinds.isEmpty() && !allowedKinds.contains(kind)) {
+                findings.add(new ContractFinding(
+                        bindingPath.toString(),
+                        "providers." + providerId + ".binding_keys." + rawKey + "." + kind,
+                        "invalid_binding_key_value_kind",
+                        providerId,
+                        providerType,
+                        profile,
+                        "",
+                        "Use one of " + allowedKinds + " for Provider Contract `" + providerType
+                                + "` binding key `" + effectiveKey + "`."));
+            }
+            validateGeneratedRef(graph, bindingPath, providerId, providerType, profile, rawKey, kind,
+                    bindingValue(entry.getValue(), kind), findings);
         }
     }
 
@@ -1031,47 +1160,6 @@ public class ContractBaselineService {
                         "Define JDBC seed, query, and cleanup evidence outputs."));
             }
         }
-        for (Map.Entry<Path, Map<String, Object>> entry : graph.providerInstancesByPath().entrySet()) {
-            Map<String, Object> instance = entry.getValue();
-            if (!"jdbc".equals(stringValue(instance.get("provider_type")))) {
-                continue;
-            }
-            String providerId = stringValue(instance.get("provider_id"));
-            String dialect = stringValue(instance.get("dialect"));
-            if (dialect.isBlank()) {
-                findings.add(new ContractFinding(
-                        entry.getKey().toString(),
-                        "dialect",
-                        "missing_required_field",
-                        providerId,
-                        "jdbc",
-                        stringValue(instance.get("profile")),
-                        "",
-                        "Set JDBC Provider Instance dialect to `oracle` or `db2`."));
-            } else if (contract != null && !jdbcSupportedDialects(contract).contains(dialect)) {
-                findings.add(new ContractFinding(
-                        entry.getKey().toString(),
-                        "dialect",
-                        "unsupported_dialect",
-                        providerId,
-                        "jdbc",
-                        stringValue(instance.get("profile")),
-                        "",
-                        "Use supported JDBC dialect `oracle` or `db2`; unsupported dialect `" + dialect
-                                + "` is outside PR-004."));
-            }
-            if (isMissing(valueAtPath(instance, "connection.secret_ref"))) {
-                findings.add(new ContractFinding(
-                        entry.getKey().toString(),
-                        "connection.secret_ref",
-                        "missing_required_binding_key",
-                        providerId,
-                        "jdbc",
-                        stringValue(instance.get("profile")),
-                        "",
-                        "Declare connection.secret_ref on the JDBC Provider Instance shape."));
-            }
-        }
     }
 
     private void validateNatsContractsAndInstances(ContractGraph graph, List<ContractFinding> findings) {
@@ -1126,36 +1214,6 @@ public class ContractBaselineService {
                         "",
                         "",
                         "Define NATS indexed event evidence outputs."));
-            }
-        }
-        for (Map.Entry<Path, Map<String, Object>> entry : graph.providerInstancesByPath().entrySet()) {
-            Map<String, Object> instance = entry.getValue();
-            if (!"nats".equals(stringValue(instance.get("provider_type")))) {
-                continue;
-            }
-            String providerId = stringValue(instance.get("provider_id"));
-            Map<String, Object> connection = mapValue(instance.get("connection"));
-            if (connection.isEmpty()) {
-                findings.add(new ContractFinding(
-                        entry.getKey().toString(),
-                        "connection",
-                        "missing_required_binding_key",
-                        providerId,
-                        "nats",
-                        stringValue(instance.get("profile")),
-                        "",
-                        "Declare connection.secret_ref or connection.local_ref on the NATS Provider Instance shape."));
-            }
-            if (stringValue(instance.get("subject")).isBlank()) {
-                findings.add(new ContractFinding(
-                        entry.getKey().toString(),
-                        "subject",
-                        "missing_required_field",
-                        providerId,
-                        "nats",
-                        stringValue(instance.get("profile")),
-                        "",
-                        "Declare the NATS subject on the Provider Instance shape; subjects are never inferred."));
             }
         }
     }
@@ -1275,8 +1333,15 @@ public class ContractBaselineService {
         contractsByPath.putAll(frameworkContractsByPath);
         contractsByPath.putAll(suiteLocalContractsByPath);
         Map<Path, Map<String, Object>> instancesByPath = readDirectory(root.resolve("provider_instances"), findings);
-        Map<Path, Map<String, Object>> profiles = readDirectory(root.resolve("execution_profiles"), findings);
-        Map<Path, Map<String, Object>> environmentBindings = readDirectory(root.resolve("environment_bindings"), findings);
+        Path envProfilesRoot = root.resolve("env_profiles");
+        Map<Path, Map<String, Object>> envProfiles = readOptionalDirectory(envProfilesRoot, findings);
+        boolean envProfileMode = Files.isDirectory(envProfilesRoot);
+        Map<Path, Map<String, Object>> profiles = envProfileMode
+                ? Map.of()
+                : readDirectory(root.resolve("execution_profiles"), findings);
+        Map<Path, Map<String, Object>> environmentBindings = envProfileMode
+                ? Map.of()
+                : readDirectory(root.resolve("environment_bindings"), findings);
 
         Map<String, Map<String, Object>> contracts = new LinkedHashMap<>();
         for (Map<String, Object> contract : contractsByPath.values()) {
@@ -1293,10 +1358,19 @@ public class ContractBaselineService {
             }
         }
         Map<String, EnvironmentBindingDoc> bindingsByProfile = new LinkedHashMap<>();
-        for (Map.Entry<Path, Map<String, Object>> entry : environmentBindings.entrySet()) {
-            String profile = stringValue(entry.getValue().get("profile"));
-            if (!profile.isBlank()) {
-                bindingsByProfile.put(profile, new EnvironmentBindingDoc(entry.getKey(), entry.getValue()));
+        if (envProfileMode) {
+            for (Map.Entry<Path, Map<String, Object>> entry : envProfiles.entrySet()) {
+                String profile = stringValue(entry.getValue().get("env_profile_id"));
+                if (!profile.isBlank()) {
+                    bindingsByProfile.put(profile, new EnvironmentBindingDoc(entry.getKey(), entry.getValue(), true));
+                }
+            }
+        } else {
+            for (Map.Entry<Path, Map<String, Object>> entry : environmentBindings.entrySet()) {
+                String profile = stringValue(entry.getValue().get("profile"));
+                if (!profile.isBlank()) {
+                    bindingsByProfile.put(profile, new EnvironmentBindingDoc(entry.getKey(), entry.getValue(), false));
+                }
             }
         }
         Set<String> usedProfiles = usedProfiles(suite, testCases);
@@ -1310,6 +1384,8 @@ public class ContractBaselineService {
                 instancesByPath,
                 instances,
                 profiles,
+                envProfiles,
+                envProfileMode,
                 environmentBindings,
                 bindingsByProfile,
                 new LinkedHashSet<>(usedProfiles),
@@ -1422,6 +1498,13 @@ public class ContractBaselineService {
         }
     }
 
+    private Map<Path, Map<String, Object>> readOptionalDirectory(Path directory, List<ContractFinding> findings) {
+        if (!Files.isDirectory(directory)) {
+            return Map.of();
+        }
+        return readDirectory(directory, findings);
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> readYamlMap(Path path, List<ContractFinding> findings) {
         if (!Files.isRegularFile(path)) {
@@ -1466,10 +1549,126 @@ public class ContractBaselineService {
         return !providerBinding(graph, profile, providerId).isEmpty();
     }
 
+    private List<String> bindingValueKinds(Object value) {
+        Map<String, Object> map = mapValue(value);
+        if (map.isEmpty()) {
+            return List.of();
+        }
+        List<String> kinds = new ArrayList<>();
+        for (String kind : BINDING_VALUE_KIND_FIELDS) {
+            if (map.containsKey(kind)) {
+                kinds.add(kind);
+            }
+        }
+        return List.copyOf(kinds);
+    }
+
+    private Object bindingValue(Object value, String kind) {
+        Map<String, Object> map = mapValue(value);
+        return map.isEmpty() ? value : map.get(kind);
+    }
+
+    private String effectiveContractBindingKey(String rawKey, String valueKind, Set<String> contractKeys) {
+        if (contractKeys.contains(rawKey)) {
+            return rawKey;
+        }
+        String nestedKey = rawKey + "." + valueKind;
+        if (contractKeys.contains(nestedKey)) {
+            return nestedKey;
+        }
+        return rawKey;
+    }
+
+    private Set<String> allowedValueKinds(Map<String, Object> keySpec) {
+        Set<String> explicit = new LinkedHashSet<>(stringList(keySpec.get("allowed_value_kinds")));
+        if (!explicit.isEmpty()) {
+            return explicit;
+        }
+        String source = stringValue(keySpec.get("source")).toLowerCase(Locale.ROOT);
+        if (source.contains("secret_ref_or_approved_local_ref")) {
+            return Set.of("secret_ref", "local_ref");
+        }
+        if (source.contains("secret_ref")) {
+            return Set.of("secret_ref", "generated_ref");
+        }
+        if (source.contains("env_profile") || source.contains("environment_binding")) {
+            return Set.of("value", "ref", "generated_ref", "secret_ref", "local_ref");
+        }
+        return Set.of();
+    }
+
+    private void validateGeneratedRef(
+            ContractGraph graph,
+            Path bindingPath,
+            String providerId,
+            String providerType,
+            String profile,
+            String rawKey,
+            String kind,
+            Object value,
+            List<ContractFinding> findings) {
+        if (!"generated_ref".equals(kind)) {
+            return;
+        }
+        String generatedRef = stringValue(value);
+        String prefix = "generated://";
+        if (!generatedRef.startsWith(prefix)) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    "providers." + providerId + ".binding_keys." + rawKey + ".generated_ref",
+                    "invalid_generated_ref",
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Use generated_ref format `generated://<provider_id>.<bindable_output>` or an approved provisioner-generated ref."));
+            return;
+        }
+        String target = generatedRef.substring(prefix.length());
+        int separator = target.indexOf('.');
+        if (separator < 1 || separator == target.length() - 1) {
+            return;
+        }
+        String generatedProviderId = target.substring(0, separator);
+        String output = target.substring(separator + 1);
+        Map<String, Object> generatedProvider = graph.providerInstances().get(generatedProviderId);
+        if (generatedProvider == null) {
+            return;
+        }
+        String generatedProviderType = stringValue(generatedProvider.get("provider_type"));
+        Map<String, Object> generatedContract = graph.providerContracts().get(generatedProviderType);
+        if (generatedContract == null) {
+            return;
+        }
+        if (!mapValue(generatedContract.get("bindable_outputs")).containsKey(output)) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    "providers." + providerId + ".binding_keys." + rawKey + ".generated_ref",
+                    "unknown_bindable_output",
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Reference a bindable output declared by Provider Contract `" + generatedProviderType
+                            + "`. Unknown output `" + output + "`."));
+        }
+    }
+
     private Map<String, Object> providerBinding(ContractGraph graph, String profile, String providerId) {
         EnvironmentBindingDoc bindingDoc = graph.environmentBindingsByProfile().get(profile);
         if (bindingDoc == null) {
             return Map.of();
+        }
+        if (bindingDoc.envProfile()) {
+            Map<String, Object> provider = mapValue(mapValue(bindingDoc.document().get("providers")).get(providerId));
+            if (provider.isEmpty()) {
+                return Map.of();
+            }
+            Map<String, Object> normalized = new LinkedHashMap<>();
+            normalized.put("provider_id", providerId);
+            normalized.put("runtime_mode", provider.get("runtime_mode"));
+            normalized.put("binding_values", normalizeEnvProfileBindingKeys(mapValue(provider.get("binding_keys"))));
+            return normalized;
         }
         for (Object value : listValue(bindingDoc.document().get("provider_bindings"))) {
             Map<String, Object> providerBinding = mapValue(value);
@@ -1478,6 +1677,55 @@ public class ContractBaselineService {
             }
         }
         return Map.of();
+    }
+
+    private Map<String, Object> normalizeEnvProfileBindingKeys(Map<String, Object> bindingKeys) {
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : bindingKeys.entrySet()) {
+            putPath(normalized, entry.getKey(), normalizeEnvProfileBindingValue(entry.getValue()));
+        }
+        return normalized;
+    }
+
+    private Object normalizeEnvProfileBindingValue(Object value) {
+        Map<String, Object> map = mapValue(value);
+        if (map.isEmpty()) {
+            return value;
+        }
+        if (map.containsKey("value")) {
+            return map.get("value");
+        }
+        if (map.containsKey("ref")) {
+            return map.get("ref");
+        }
+        if (map.containsKey("generated_ref")) {
+            return map.get("generated_ref");
+        }
+        if (map.containsKey("secret_ref") && map.size() == 1) {
+            return map;
+        }
+        return map;
+    }
+
+    private void putPath(Map<String, Object> target, String path, Object value) {
+        String[] parts = path.split("\\.");
+        Map<String, Object> cursor = target;
+        for (int i = 0; i < parts.length - 1; i++) {
+            Object existing = cursor.get(parts[i]);
+            if (existing instanceof Map<?, ?>) {
+                cursor = writableMap(existing);
+            } else {
+                Map<String, Object> nested = new LinkedHashMap<>();
+                cursor.put(parts[i], nested);
+                cursor = nested;
+            }
+        }
+        cursor.put(parts[parts.length - 1], value);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> writableMap(Object value) {
+        return (Map<String, Object>) value;
     }
 
     private boolean providerUsedInProfile(ContractGraph graph, String providerId, String profile) {
@@ -2042,10 +2290,11 @@ public class ContractBaselineService {
                         "unreadable_evidence_file", "invalid_evidence_index" -> "EVIDENCE_ERROR";
                 case "cleanup_failure_not_indexed", "cleanup_failure_hides_original_failure" -> "CLEANUP_ERROR";
                 case "missing_provider_instance", "missing_environment_binding", "missing_execution_profile",
+                        "missing_env_profile", "missing_env_profile_provider_binding",
                         "missing_required_binding_key", "unsupported_runtime_mode",
                         "invalid_target_ref", "unresolved_artifact_ref",
                         "unsupported_local_ref", "missing_jdbc_target", "missing_nats_target",
-                        "profile_mismatch" -> "CONFIGURATION_ERROR";
+                        "profile_mismatch", "invalid_generated_ref" -> "CONFIGURATION_ERROR";
                 case "unknown_provider_type", "unsupported_operation", "unsupported_bind_as",
                         "unsupported_input",
                         "unsupported_dialect", "missing_output_ref", "missing_supported_dialect",
@@ -2053,13 +2302,15 @@ public class ContractBaselineService {
                         "missing_required_input",
                         "unsupported_suite_runtime", "unsupported_suite_shape",
                         "unsupported_provider_instance_field",
-                        "unsupported_provider_instance_binding_key" -> "CONTRACT_ERROR";
+                        "unsupported_provider_instance_binding_key", "unknown_binding_key",
+                        "invalid_binding_key_value_kind", "unknown_bindable_output" -> "CONTRACT_ERROR";
                 case "invalid_result_json", "missing_result_json", "invalid_yaml",
                         "missing_required_file", "missing_required_directory",
                         "missing_required_field", "prohibited_legacy_field",
                         "prohibited_data_catalog_field",
                         "prohibited_governance_field", "prohibited_deprecated_field",
-                        "prohibited_data_binding_category", "invalid_duration",
+                        "prohibited_data_binding_category", "prohibited_source_ref", "invalid_source_refs",
+                        "invalid_duration",
                         "invalid_instant", "invalid_polling_config" -> "VALIDATION_ERROR";
                 default -> "VALIDATION_ERROR";
             };
@@ -2076,6 +2327,8 @@ public class ContractBaselineService {
             Map<Path, Map<String, Object>> providerInstancesByPath,
             Map<String, Map<String, Object>> providerInstances,
             Map<Path, Map<String, Object>> executionProfiles,
+            Map<Path, Map<String, Object>> envProfiles,
+            boolean envProfileMode,
             Map<Path, Map<String, Object>> environmentBindings,
             Map<String, EnvironmentBindingDoc> environmentBindingsByProfile,
             Set<String> usedProfiles,
@@ -2094,6 +2347,8 @@ public class ContractBaselineService {
                     Map.of(),
                     Map.of(),
                     Map.of(),
+                    false,
+                    Map.of(),
                     Map.of(),
                     Set.of(),
                     Set.of(),
@@ -2105,7 +2360,7 @@ public class ContractBaselineService {
         }
     }
 
-    private record EnvironmentBindingDoc(Path path, Map<String, Object> document) {
+    private record EnvironmentBindingDoc(Path path, Map<String, Object> document, boolean envProfile) {
     }
 
     private record OperationRef(

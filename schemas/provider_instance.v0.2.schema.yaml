@@ -3,10 +3,8 @@ artifact: provider_instance
 status: framework_owned_current_stage
 purpose: >
   Defines one RP logical runtime target using a Provider Contract. The Provider
-  Instance uses the same top-level shape as its Provider Contract and fills
-  RP-level logical selections only; actual profile-specific URLs, topics,
-  credentials, namespaces, mock/stub/ephemeral endpoints, and secret refs are
-  supplied by Environment Binding.
+  Instance fills logical selections only; binding key schema belongs to the
+  Provider Contract and actual environment-specific values belong to Env_Profile.
 version_compatibility:
   supported_versions: [v0.2]
   unsupported_version_behavior: block_before_provider_dispatch
@@ -15,9 +13,8 @@ required_fields:
   - provider_id
   - provider_type
   - runtime_modes
-  - binding_keys
 shape_rules:
-  provider_contract_shape: top_level_sections_must_match_referenced_provider_contract
+  provider_contract_shape: top_level_sections_must_be_allowed_by_referenced_provider_contract
   unknown_top_level_field: block_before_provider_dispatch
   unknown_nested_field: block_before_provider_dispatch
   operation_not_in_contract: block_before_provider_dispatch
@@ -35,7 +32,6 @@ allowed_sections:
   - runtime_modes
   - dialect
   - connection
-  - binding_keys
   - defaults
   - readiness
   - operations
@@ -44,8 +40,8 @@ allowed_sections:
   - safety
   - labels
 binding_key_rules:
-  keys_must_match_provider_contract_binding_keys: true
-  actual_values_must_be_supplied_by_environment_binding: true
+  provider_instance_must_not_define_binding_key_schema: true
+  actual_values_must_be_supplied_by_env_profile: true
   raw_urls_topics_db_strings_namespaces_credentials: prohibited
 runtime_mode_rules:
   provider_instance_runtime_modes_must_be_subset_of_contract: true
@@ -69,7 +65,7 @@ evidence_outputs:
 unsupported_behavior:
   missing_provider_instance: block_before_provider_dispatch
   missing_provider_contract: block_before_provider_dispatch
-  missing_environment_binding: block_before_provider_dispatch
+  missing_env_profile: block_before_provider_dispatch
   missing_required_binding_key: block_before_provider_dispatch
   unsupported_runtime_mode: block_before_provider_dispatch
 failure_classification: target_resolution_error

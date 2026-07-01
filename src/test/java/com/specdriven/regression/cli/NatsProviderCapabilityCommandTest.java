@@ -27,6 +27,7 @@ class NatsProviderCapabilityCommandTest {
                 "samples/provider_capability/nats/test_case.yaml",
                 "docs/02-architecture/contracts/provider-contracts/nats.yaml",
                 "samples/provider_capability/nats/provider_instances/local_nats.yaml",
+                "samples/provider_capability/nats/env_profiles/local_nats.yaml",
                 "samples/provider_capability/nats/execution_profiles/local_nats.yaml",
                 "samples/provider_capability/nats/environment_bindings/local_nats.yaml",
                 "samples/provider_capability/nats/fixtures/event_input.json",
@@ -107,8 +108,11 @@ class NatsProviderCapabilityCommandTest {
     @Test
     void natsValidateRejectsMissingSubjectBeforeExecution() throws Exception {
         Path suite = mutableNats();
-        Path binding = suite.getParent().resolve("environment_bindings/local_nats.yaml");
-        Files.writeString(binding, read(binding).replace("      subject: orders.ready\n", ""));
+        Path binding = suite.getParent().resolve("env_profiles/local_nats.yaml");
+        Files.writeString(binding, read(binding).replace("""
+              subject:
+                value: orders.ready
+        """, ""));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
@@ -122,7 +126,7 @@ class NatsProviderCapabilityCommandTest {
     @Test
     void natsValidateRejectsRawConnectionValue() throws Exception {
         Path suite = mutableNats();
-        Path binding = suite.getParent().resolve("environment_bindings/local_nats.yaml");
+        Path binding = suite.getParent().resolve("env_profiles/local_nats.yaml");
         Files.writeString(binding, read(binding)
                 .replace("local_ref: approved_local_nats_ref", "value: nats://plain-text-secret:4222"));
 
@@ -135,11 +139,9 @@ class NatsProviderCapabilityCommandTest {
     @Test
     void natsValidateRejectsMissingConnectionBeforeExecution() throws Exception {
         Path suite = mutableNats();
-        Path binding = suite.getParent().resolve("environment_bindings/local_nats.yaml");
-        Files.writeString(binding, read(binding).replace("""
-              connection:
-                local_ref: approved_local_nats_ref
-        """, ""));
+        Path binding = suite.getParent().resolve("env_profiles/local_nats.yaml");
+        Files.writeString(binding, read(binding)
+                .replace("      connection:\n        local_ref: approved_local_nats_ref\n", ""));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
@@ -243,7 +245,7 @@ class NatsProviderCapabilityCommandTest {
     @Test
     void natsRunFailsOwnerActionablyOnSecretRefConnectionError() throws Exception {
         Path suite = mutableNats();
-        Path binding = suite.getParent().resolve("environment_bindings/local_nats.yaml");
+        Path binding = suite.getParent().resolve("env_profiles/local_nats.yaml");
         Files.writeString(binding, read(binding)
                 .replace("local_ref: approved_local_nats_ref", "secret_ref: generated://provider-capability/nats/connection"));
 

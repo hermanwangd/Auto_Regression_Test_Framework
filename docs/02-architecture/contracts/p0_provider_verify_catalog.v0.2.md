@@ -2,11 +2,11 @@
 
 Status: framework-owned current-stage contract.
 
-This catalog defines the Track A contract baseline. It is not a runtime-complete statement. Track B proves the framework lifecycle with a fake provider; real P0 provider behavior remains placeholder-only until Track C provider scenarios.
+This catalog defines the v0.2 P0 contract and provider capability baseline. Track B proves the framework lifecycle with a fake provider. Track C rows identify framework-owned executable provider scenarios only inside the stated local/CI verification boundary.
 
 | Area | P0 Contract Surface | Runtime Boundary |
 |---|---|---|
-| HTTP / Mock | `wiremock_http_mock`, `http_stub`, `http_mock_called`, `http_mock_request_body_match` | Contract placeholder and dry-run validation; full WireMock behavior is not Track A. |
+| HTTP / Mock | `wiremock_http_mock`, `rest_client`, `http_request`, `http_stub`, `http_mock_called`, `http_mock_request_body_match`, `http_request_response` evidence | Track C executable framework evidence through `samples/provider_capability/wiremock_http_request/` for local/CI happy, failure, and boundary paths. This is not downstream SIT/preprod endpoint release evidence. |
 | DB | `jdbc`, `connection.secret_ref`, SQL params binding, Oracle / DB2 dialect metadata, `db_seed`, `db_query`, `db_record_exists`, `db_cleanup`, query evidence | PR-004 runtime capability for local/CI framework evidence; no MariaDB, MongoDB, Testcontainers, or full polling engine. |
 | NATS / Event | `nats`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match`, `consume_from: test_start_time`, subject handling, event evidence | PR-005 runtime capability for local/CI framework evidence; no Kafka, JetStream, durable consumer, or request/reply scope. |
 | Polling | `polling_observer`, timeout, `poll_interval`, last observed evidence, poll-until-condition semantics | Provider target for observation plus verify contract and evidence shape. |

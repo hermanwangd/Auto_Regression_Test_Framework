@@ -28,6 +28,7 @@ public class EvidenceHardeningService {
             "jdbc_query",
             "jdbc_cleanup",
             "nats_event",
+            "http_request_response",
             "assertion_diff",
             "polling_observation");
     private static final Set<String> PROVIDER_EVIDENCE_TYPES = Set.of(
@@ -38,7 +39,8 @@ public class EvidenceHardeningService {
             "jdbc_seed",
             "jdbc_query",
             "jdbc_cleanup",
-            "nats_event");
+            "nats_event",
+            "http_request_response");
     private static final List<String> ENTRY_REQUIRED_FIELDS = List.of(
             "evidence_id",
             "evidence_type",
@@ -261,6 +263,7 @@ public class EvidenceHardeningService {
                     requiredTypes.add("jdbc_cleanup");
                 }
                 case "nats" -> requiredTypes.add("nats_event");
+                case "rest_client" -> requiredTypes.add("http_request_response");
                 default -> {
                 }
             }

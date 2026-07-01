@@ -321,7 +321,7 @@ Current framework verification can be accepted only for the framework capabiliti
 | Area | Current Framework Status | Pilot Acceptance Requirement |
 |---|---|---|
 | File/batch execution | Supported through bounded shell/file provider contracts. | Use when selected RP has file, CLI, batch, or pipeline-style validation. |
-| REST/gRPC request/response | Supported through configurable REST contracts and native descriptor-driven gRPC unary contracts. | Pilot must prove selected endpoint behavior against owner-provided RP artifacts and environment refs. |
+| REST/gRPC request/response | Supported through configurable REST contracts, executable WireMock + `rest_client` local/CI sample evidence, and native descriptor-driven gRPC unary contracts. | Pilot must prove selected endpoint behavior against owner-provided RP artifacts and environment refs. |
 | Messaging | Supported through local/mock messaging plus native Kafka/NATS publish, consume/observe, and bounded cleanup drain contracts. | Pilot must prove selected broker behavior against owner-provided Kafka/NATS environment refs. |
 | DB fixture | Supported through JDBC setup, verification query, cleanup SQL refs, cleanup strategy, isolation key evidence, and DB row count assertions. | Pilot must prove state isolation and cleanup on real selected DB fixture boundary. |
 | Deployment readiness | Supported through local/mock readiness plus native K8s and VM bounded readiness probes, K8s direct API availability, pod log capture, and VM SSH/WinRM command probes. | Pilot must prove selected K8s/VM readiness against owner-provided environments. |
@@ -377,7 +377,7 @@ Rules:
 - Draft test cases may be stored under `tests/draft/` until reviewed.
 - Approved executable test cases should be stored under `tests/approved/` and reused across repeated runs.
 - Superseded test cases should move to `tests/retired/` or be marked `retired` with replacement links.
-- Each checked-in test case must reference `source_refs.acceptance_criteria`, test case ID, source artifact version, expected-result reference when needed, optional report labels, and artifact status.
+- Each checked-in test case must include test case ID, source artifact version when available, expected-result reference when needed, optional `source_refs`, optional report labels, and artifact status. `source_refs` is traceability metadata and is not required by runtime execution.
 - Regeneration must preserve history by creating a new revision or replacement test case instead of silently overwriting approved tests.
 - If an RP has a dedicated RP repository, the same `tests/` lifecycle applies there. In the current Product Repo model, the RP folder under `docs/08-release/release-packages/<rp_id>/` is the RP artifact location.
 

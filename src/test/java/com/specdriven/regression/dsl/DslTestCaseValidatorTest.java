@@ -32,6 +32,60 @@ class DslTestCaseValidatorTest {
     }
 
     @Test
+    void acceptsV02DslWithoutSourceRefsBecauseTraceabilityIsNotRuntimeContract() {
+        String yaml = validProviderInputsDsl().replace("""
+                source_refs:
+                  acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#track-b-golden-e2e
+                """, "");
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isTrue();
+        assertThat(report.gaps()).isEmpty();
+    }
+
+    @Test
+    void blocksExecutionArtifactKeysInSourceRefs() {
+        String yaml = validProviderInputsDsl().replace("""
+                source_refs:
+                  acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#track-b-golden-e2e
+                """, """
+                source_refs:
+                  framework_requirement: docs/03-acceptance/04_acceptance_criteria.md#track-b-golden-e2e
+                  expected_result: expected_results/expected_output.json
+                  fixture: fixtures/input.json
+                  sql: fixtures/sql/find_order.sql
+                """);
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains("source_refs.expected_result", "source_refs.fixture", "source_refs.sql");
+        assertThat(report.gaps()).extracting(DslValidationGap::ownerAction)
+                .contains("Keep execution artifacts in `data`, operation `inputs`, or verify expected refs; `source_refs` is traceability metadata only.");
+    }
+
+    @Test
+    void blocksNonMapSourceRefsWhenPresent() {
+        String yaml = validProviderInputsDsl().replace("""
+                source_refs:
+                  acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#track-b-golden-e2e
+                """, """
+                source_refs:
+                  - acceptance_criteria.md#AC-001
+                """);
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains("source_refs");
+        assertThat(report.gaps()).extracting(DslValidationGap::ownerAction)
+                .contains("Declare `source_refs` as a map of traceability keys to source references.");
+    }
+
+    @Test
     void blocksMissingCoreIdentityAndUnsupportedStatus() {
         String yaml = validExecutionFocusedDsl()
                 .replace("status: active\n", "status: approved\n")
@@ -41,7 +95,9 @@ class DslTestCaseValidatorTest {
 
         assertThat(report.ready()).isFalse();
         assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
-                .contains("status", "source_refs");
+                .contains("status");
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .doesNotContain("source_refs", "source_refs.acceptance_criteria");
         assertThat(report.gaps()).extracting(DslValidationGap::ownerAction)
                 .contains("Use allowed DSL execution status draft_skeleton, draft_executable, active, needs_update, or retired.");
     }
@@ -58,7 +114,6 @@ class DslTestCaseValidatorTest {
                         "dsl_version",
                         "test_case_id",
                         "revision",
-                        "source_refs",
                         "targets",
                         "setup",
                         "execute",
@@ -847,7 +902,6 @@ class DslTestCaseValidatorTest {
                         "test_case_id",
                         "status",
                         "revision",
-                        "source_refs",
                         "targets",
                         "setup",
                         "execute",

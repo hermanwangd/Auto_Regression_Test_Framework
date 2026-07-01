@@ -2,7 +2,6 @@ provider_instance_version: v0.2
 provider_id: polling-observer
 provider_type: polling_observer
 runtime_modes: [stub]
-binding_keys: {}
 defaults:
   timeout_seconds: 30
 operations:

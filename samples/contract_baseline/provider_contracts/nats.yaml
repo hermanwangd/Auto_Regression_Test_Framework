@@ -14,14 +14,17 @@ binding_keys:
   poll_interval:
     required: false
     source: environment_binding
+  masking_policy:
+    required: false
+    source: environment_binding
 defaults:
   timeout: PT30S
   poll_interval: PT0.5S
   consume_from: test_start_time
 valid_provider_instance_shape:
   required_fields: [provider_id, provider_type, runtime_modes, connection, subject, binding_keys]
-  allowed_fields: [provider_id, provider_type, runtime_mode, runtime_modes, connection, subject, timeout, poll_interval, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
-  binding_keys: [connection, subject, timeout, poll_interval]
+  allowed_fields: [provider_id, provider_type, runtime_mode, runtime_modes, connection, subject, timeout, poll_interval, masking_policy, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
+  binding_keys: [connection, subject, timeout, poll_interval, masking_policy]
 operations:
   nats_publish:
     allowed_inputs: [subject, payload_ref, payload, correlation_key]

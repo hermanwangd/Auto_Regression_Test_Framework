@@ -27,6 +27,7 @@ class GoldenE2eCommandTest {
                 "samples/golden_e2e/test_case.yaml",
                 "docs/02-architecture/contracts/provider-contracts/sample_fake_provider.yaml",
                 "samples/golden_e2e/provider_instances/sample_fake_instance.yaml",
+                "samples/golden_e2e/env_profiles/local_golden.yaml",
                 "samples/golden_e2e/execution_profiles/local_golden.yaml",
                 "samples/golden_e2e/environment_bindings/local_golden.yaml",
                 "samples/golden_e2e/fixtures/input.json",
@@ -111,6 +112,26 @@ class GoldenE2eCommandTest {
     }
 
     @Test
+    void goldenRunResolvesRuntimeBindingFromEnvProfileBeforeLegacyEnvironmentBinding() throws Exception {
+        Path suite = mutableGolden();
+        Path suiteRoot = suite.getParent();
+        Files.writeString(suiteRoot.resolve("env_profiles/local_golden.yaml"),
+                Files.readString(suiteRoot.resolve("env_profiles/local_golden.yaml"))
+                        .replace("fixed://2026-06-29T00:00:00Z", "fixed://2030-01-02T03:04:05Z"));
+        Files.writeString(suiteRoot.resolve("environment_bindings/local_golden.yaml"),
+                Files.readString(suiteRoot.resolve("environment_bindings/local_golden.yaml"))
+                        .replace("fixed://2026-06-29T00:00:00Z", "fixed://1999-01-01T00:00:00Z"));
+
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_golden");
+
+        assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+        Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
+        assertThat(Files.readString(evidenceDir.resolve("actual/actual_output.json")))
+                .contains("\"generatedAt\": \"2030-01-02T03:04:05Z\"")
+                .doesNotContain("1999-01-01T00:00:00Z");
+    }
+
+    @Test
     void goldenRunRejectsInvalidDslBeforeExecution() throws Exception {
         Path suite = mutableGolden();
         Path testCase = suite.getParent().resolve("test_case.yaml");
@@ -161,6 +182,7 @@ class GoldenE2eCommandTest {
     @Test
     void goldenRunRejectsMissingExecutionProfileBeforeExecution() throws Exception {
         Path suite = mutableGolden();
+        deleteDirectory(suite.getParent().resolve("env_profiles"));
         Files.delete(suite.getParent().resolve("execution_profiles/local_golden.yaml"));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_golden");
@@ -176,6 +198,7 @@ class GoldenE2eCommandTest {
     @Test
     void goldenRunRejectsMissingEnvironmentBindingBeforeExecution() throws Exception {
         Path suite = mutableGolden();
+        deleteDirectory(suite.getParent().resolve("env_profiles"));
         Files.delete(suite.getParent().resolve("environment_bindings/local_golden.yaml"));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_golden");
@@ -269,7 +292,7 @@ class GoldenE2eCommandTest {
     @Test
     void goldenRunBlocksRawSecretInDslOrBinding() throws Exception {
         Path suite = mutableGolden();
-        Path binding = suite.getParent().resolve("environment_bindings/local_golden.yaml");
+        Path binding = suite.getParent().resolve("env_profiles/local_golden.yaml");
         Files.writeString(binding, Files.readString(binding) + "\npassword: plain-text-secret\n");
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_golden");

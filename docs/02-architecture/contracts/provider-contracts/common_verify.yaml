@@ -4,14 +4,13 @@ runtime_modes: [local]
 binding_keys:
   workspace_ref:
     required: true
-    source: environment_binding
+    source: env_profile
 defaults:
   timeout: PT5S
   poll_interval: PT0S
 valid_provider_instance_shape:
-  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
-  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, binding_keys, defaults, operations, evidence, failure_mapping, labels]
-  binding_keys: [workspace_ref]
+  required_fields: [provider_id, provider_type, runtime_modes]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, defaults, operations, evidence, failure_mapping, labels]
 operations:
   json_match:
     allowed_inputs: [expected_ref, actual_ref, ignore_paths, normalize, ignore_order]

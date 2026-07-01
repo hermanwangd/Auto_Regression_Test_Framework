@@ -29,6 +29,7 @@ class WireMockProviderCapabilityCommandTest {
                 "samples/provider_capability/wiremock/test_case.yaml",
                 "docs/02-architecture/contracts/provider-contracts/wiremock_http_mock.yaml",
                 "samples/provider_capability/wiremock/provider_instances/wiremock_payment_api.yaml",
+                "samples/provider_capability/wiremock/env_profiles/local_wiremock.yaml",
                 "samples/provider_capability/wiremock/execution_profiles/local_wiremock.yaml",
                 "samples/provider_capability/wiremock/environment_bindings/local_wiremock.yaml",
                 "samples/provider_capability/wiremock/fixtures/payment_success_stub.json",
@@ -213,16 +214,16 @@ class WireMockProviderCapabilityCommandTest {
     }
 
     @Test
-    void wireMockRunRejectsMissingEnvironmentBindingBeforeExecution() throws Exception {
+    void wireMockRunRejectsMissingEnvProfileBeforeExecution() throws Exception {
         Path suite = mutableWireMock();
-        Files.delete(suite.getParent().resolve("environment_bindings/local_wiremock.yaml"));
+        Files.delete(suite.getParent().resolve("env_profiles/local_wiremock.yaml"));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_wiremock");
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("run_status: blocked")
-                .contains("reason: missing_environment_binding")
+                .contains("reason: missing_env_profile")
                 .contains("profile: local_wiremock");
         assertThat(result.stdout()).doesNotContain("provider_runtime_executed: true");
     }
@@ -315,9 +316,17 @@ class WireMockProviderCapabilityCommandTest {
     void wireMockUnavailableMapsToTechnicalFailureClassification() throws Exception {
         Path suite = mutableWireMock();
         try (ServerSocket occupied = new ServerSocket(0)) {
-            Path binding = suite.getParent().resolve("environment_bindings/local_wiremock.yaml");
+            Path binding = suite.getParent().resolve("env_profiles/local_wiremock.yaml");
             Files.writeString(binding, read(binding)
-                    .replace("port_strategy: dynamic", "port_strategy: fixed\n      port: " + occupied.getLocalPort()));
+                    .replace("""
+                              port_strategy:
+                                value: dynamic
+                        """, """
+                              port_strategy:
+                                value: fixed
+                              fixed_port:
+                                value: %d
+                        """.formatted(occupied.getLocalPort())));
 
             CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_wiremock");
 
@@ -332,7 +341,7 @@ class WireMockProviderCapabilityCommandTest {
     @Test
     void wireMockRunBlocksRawSecretInConfig() throws Exception {
         Path suite = mutableWireMock();
-        Path binding = suite.getParent().resolve("environment_bindings/local_wiremock.yaml");
+        Path binding = suite.getParent().resolve("env_profiles/local_wiremock.yaml");
         Files.writeString(binding, read(binding) + "\npassword: plain-text-secret\n");
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_wiremock");

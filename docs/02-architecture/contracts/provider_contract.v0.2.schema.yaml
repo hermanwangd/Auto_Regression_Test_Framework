@@ -3,8 +3,9 @@ artifact: provider_contract
 status: framework_owned_current_stage
 purpose: >
   Defines one reusable provider type, the valid Provider Instance shape for
-  that provider type, allowed operations, allowed input names, output refs,
-  evidence outputs, runtime modes, defaults, required fields, and failure codes.
+  that provider type, environment binding key schema, bindable runtime outputs,
+  allowed operations, allowed input names, output refs, evidence outputs,
+  runtime modes, defaults, required fields, and failure codes.
 version_compatibility:
   supported_versions: [v0.2]
   unsupported_version_behavior: block_before_provider_dispatch
@@ -20,7 +21,20 @@ provider_contract_required_sections:
   runtime_modes:
     purpose: Defines whether this provider type supports native, mock, stub, or ephemeral dependency execution for selected profiles.
   binding_keys:
-    purpose: Names values that must be supplied by Environment Binding for a selected profile.
+    purpose: >
+      Defines binding keys that must be supplied by Env_Profile.providers.<provider_id>.binding_keys.
+      Each binding key schema must declare required, value_type, and allowed_value_kinds.
+    required_key_fields: [required, value_type, allowed_value_kinds]
+    allowed_value_kinds: [value, ref, secret_ref, generated_ref]
+    value_types: [string, uri, integer, boolean, enum, duration, secret_ref, generated_ref]
+    enum_keys_must_declare_allowed_values: true
+    generated_refs_must_target_bindable_outputs: true
+  bindable_outputs:
+    purpose: >
+      Defines provider runtime outputs that may be referenced by another provider binding
+      through generated_ref, such as generated://wiremock-payment-api.base_url.
+    required_output_fields: [value_type]
+    optional_output_fields: [produced_by_operations, ref_format]
   defaults:
     purpose: Defines provider-level default timeout, retry, and safety values.
   readiness:
@@ -41,7 +55,11 @@ validation_rules:
   unsupported_runtime_mode: block_before_provider_dispatch
   missing_output_ref: block_before_provider_dispatch
   missing_required_binding_key: block_before_provider_dispatch
-  missing_environment_binding_value: block_before_provider_dispatch
+  missing_env_profile_binding_value: block_before_provider_dispatch
+  invalid_binding_key_value_kind: block_before_provider_dispatch
+  invalid_binding_key_value_type: block_before_provider_dispatch
+  invalid_generated_ref: block_before_provider_dispatch
+  unknown_bindable_output: block_before_provider_dispatch
   missing_required_safety_policy: block_before_provider_dispatch
 validation_output_fields:
   - ap

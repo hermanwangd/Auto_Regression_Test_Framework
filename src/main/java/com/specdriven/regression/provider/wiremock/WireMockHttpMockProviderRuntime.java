@@ -202,7 +202,7 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
         }
         String portStrategy = stringValue(context.bindingValues().get("port_strategy"));
         if ("fixed".equals(portStrategy)) {
-            int port = intValue(context.bindingValues().get("port"), 0);
+            int port = intValue(firstNonNull(context.bindingValues().get("fixed_port"), context.bindingValues().get("port")), 0);
             server = new WireMockServer(options().port(port));
         } else {
             server = new WireMockServer(options().dynamicPort());
@@ -341,6 +341,10 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
             return Integer.parseInt(text);
         }
         return fallback;
+    }
+
+    private Object firstNonNull(Object first, Object second) {
+        return first != null ? first : second;
     }
 
     private String stringValue(Object value) {

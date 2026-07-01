@@ -4,7 +4,7 @@
 
 ## 1. Summary
 
-Track C implements the selected v0.2 P0 provider and verification capabilities needed for practical framework execution: WireMock HTTP mock, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and provider evidence integration.
+Track C implements the selected v0.2 P0 provider and verification capabilities needed for practical framework execution: WireMock HTTP mock plus `rest_client` HTTP request samples, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and provider evidence integration.
 
 Track C is not all providers. It must not add product topology interpretation, Phase 2 Agent Skill behavior, release governance, or non-P0 providers.
 
@@ -36,7 +36,7 @@ Track C may start only when `samples/provider_capability/` exists and parses.
 
 | Capability | Provider / Verify Surface | Track C Runtime Target |
 |---|---|---|
-| WireMock | `wiremock_http_mock`, `http_stub`, `http_mock_called`, `http_mock_request_body_match` | Framework starts/uses local WireMock, injects checked-in stubs, records request journal and server log. |
+| WireMock + HTTP request | `wiremock_http_mock`, `rest_client`, `http_request`, `http_stub`, `http_mock_called`, `http_mock_request_body_match` | Framework starts local WireMock, injects checked-in stubs, passes generated `base_url` to `rest_client`, executes HTTP requests, and records request journal, server log, and `http_request_response` evidence. |
 | JDBC Oracle/DB2 | `jdbc_database`, `db_seed`, `db_cleanup`, `db_record_exists`, SQL params, dialect | Executes against configured JDBC binding or controlled fixture; validates Oracle/DB2 dialect contracts. |
 | NATS | `nats`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match` | Uses framework local capability binding or controlled CI binding without SIT release evidence claims. |
 | JSON/Schema/File Diff | `artifact_compare`, `json_match`, `schema_match`, `file_diff` | Framework-owned compare target with ignore paths, normalization, ignore order, and diff evidence. |
@@ -52,21 +52,32 @@ Required runtime:
 - Validate `wiremock_http_mock` Provider Contract and Provider Instance.
 - Resolve Environment Binding and generated `base_url` output.
 - Inject stubs from checked-in mapping artifacts.
+- Execute checked-in `rest_client` `http_request` operations against the generated WireMock `base_url`.
+- Capture HTTP status, headers, body, duration, and `http_request_response` evidence.
 - Record request journal evidence and server log evidence.
 - Verify `http_mock_called` and `http_mock_request_body_match`.
 
 Failure tests:
 
 - Missing stub mapping.
+- Missing HTTP request body ref.
 - Expected mock call missing.
 - Request body mismatch.
+- HTTP response assertion mismatch.
 - WireMock unavailable.
 - Raw secret in mock config is blocked.
+
+Boundary tests:
+
+- Empty request body represented by a checked-in ref.
+- HTTP 204 no-content response with an explicitly expected empty body.
+- Repeated sample runs isolate output/evidence directories.
 
 Non-goals:
 
 - Do not use WireMock to claim SIT release readiness.
 - Do not replace internal RP/RU with WireMock in SIT evidence.
+- Do not treat the sample `rest_client` runtime as broad downstream endpoint certification.
 
 ## 6. JDBC / Oracle / DB2 Capability
 

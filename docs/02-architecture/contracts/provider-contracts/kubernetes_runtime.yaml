@@ -4,10 +4,10 @@ runtime_modes: [native, mock]
 binding_keys:
   context:
     required: true
-    source: environment_binding
+    source: env_profile
   namespace:
     required: true
-    source: environment_binding
+    source: env_profile
 defaults:
   timeout_seconds: 300
   retry: 0
@@ -21,9 +21,8 @@ safety:
     prohibited_defaults:
       - safety.access_policy.allow_unbounded_exec
 valid_provider_instance_shape:
-  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
-  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
-  binding_keys: [context, namespace]
+  required_fields: [provider_id, provider_type, runtime_modes]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
 operations:
   check_deployment_ready:
     allowed_inputs: [k8s.deployment, k8s.timeout, k8s.selector]

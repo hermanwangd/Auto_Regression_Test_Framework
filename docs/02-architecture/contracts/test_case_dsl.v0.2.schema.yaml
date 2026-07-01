@@ -11,18 +11,32 @@ required_sections:
   - test_case_id
   - status
   - revision
-  - source_refs.acceptance_criteria
   - targets.<target>.provider_id
-  - targets.<target>.profile
   - execute
   - verify
   - evidence.required
   - runtime.timeout
   - runtime.retry
 conditional_sections:
+  source_refs: optional traceability metadata; runtime must not depend on or resolve source refs
   data: allowed as an optional lifecycle-neutral reviewed data source catalog
   setup.operations: required when precondition data or mutated state is needed
   cleanup.operations: required when setup mutates state and cleanup is not declared inline
+source_ref_rules:
+  required: false
+  runtime_resolution: prohibited
+  missing_source_ref_blocks_runtime: false
+  prohibited_execution_artifact_keys:
+    - expected_result
+    - expected_results
+    - fixture
+    - fixtures
+    - payload
+    - sql
+    - query
+    - mock_mapping
+    - mock_mappings
+    - data
 data_rules:
   allowed: true
   required_when_data_namespace_refs_are_used: true
@@ -48,7 +62,8 @@ data_rules:
     - broker_url
 target_rules:
   provider_id_required: true
-  profile_required: true
+  profile_required: false
+  selected_profile_source: cli_or_suite_manifest
   endpoint_topic_db_credential_values: prohibited
 operation_rules:
   setup_execute_cleanup_operations_must_exist_in_provider_contract: true
@@ -71,7 +86,7 @@ validation_output_fields:
   - provider_id
   - provider_type
   - profile
-  - source_refs.acceptance_criteria
+  - source_refs
   - severity
   - blocking_scope
   - reason

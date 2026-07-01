@@ -15,8 +15,7 @@ The user-facing public interfaces are:
 | DSL Test Case | Defines executable regression behavior. |
 | Provider Contract | Framework-owned contract for a provider type, allowed operations, bindings, outputs, evidence, failure codes, and valid provider instance shape. |
 | Provider Instance | Defines an RP logical runtime target using a built-in or explicitly declared custom provider contract. |
-| Environment Binding | Supplies profile-specific values such as URLs, topics, DB strings, namespaces, and secret refs. |
-| Execution Profile | Defines what may run in `local`, `ci`, `sit`, or `preprod`. |
+| Env_Profile | Supplies environment-specific provider binding values and defines what may run in `local`, `ci`, `sit`, or `preprod`. |
 | CLI | Initializes, validates, executes, and reports. |
 | Evidence Contract | Defines reviewable outputs for release readiness. |
 
@@ -28,18 +27,18 @@ DSL target
   -> Provider Instance
   -> provider_type
   -> Framework built-in Provider Contract catalog
-  -> selected profile
-  -> Environment Binding
+  -> selected Env_Profile
+  -> Env_Profile.providers.<provider_id>.binding_keys
 ```
 
-There is no additional user-facing runtime interface beyond provider instances, environment bindings, execution profiles, DSL, CLI, evidence, and framework-owned provider contracts. RP/suite repositories do not copy built-in Provider Contracts by default.
+There is no additional user-facing runtime interface beyond Provider Instances, Env_Profiles, DSL, CLI, evidence, and framework-owned Provider Contracts. RP/suite repositories do not copy built-in Provider Contracts by default.
 
 ## 3. Role Responsibilities
 
 | Role | Responsibility |
 | --- | --- |
 | Product Owner / Product Developer | Defines product release scope, product-level E2E AC, and product-to-RP mapping. |
-| RP Owner / RP Developer | Defines RP feature spec, RP AC, RP/RU mapping, approved tests, expected results, provider instances, and environment bindings. |
+| RP Owner / RP Developer | Defines RP feature spec, RP AC, RP/RU mapping, approved tests, expected results, Provider Instances, and Env_Profiles. |
 | RU Developer | Provides APIs, events, jobs, readiness signals, fixtures, cleanup support, and implementation fixes. |
 | Agent | Initializes structure, drafts tests, validates readiness, runs tests, and reports gaps/evidence. |
 
@@ -61,8 +60,7 @@ docs/08-release/release-packages/<RP-ID>/
     draft/
     approved/
   provider-instances/
-  environment-bindings/
-  execution-profiles/
+  env-profiles/
   custom-provider-contracts/   # optional, only for approved custom providers or pinned contract snapshots
   traceability.md
   evidence_index.md
@@ -70,7 +68,7 @@ docs/08-release/release-packages/<RP-ID>/
 
 Approved tests and expected results are versioned assets. Do not regenerate or overwrite them on every run.
 
-Provider instance and environment authoring folders are owner/Agent Skill working areas. Runtime execution consumes canonical generated artifacts under `generated-framework/provider_instances/`, `generated-framework/environment_bindings/`, and `generated-framework/execution_profiles/`. Built-in Provider Contracts are resolved from the framework catalog by `provider_type`. Suite-local Provider Contracts are optional and only valid for approved custom providers or explicit contract snapshot pinning.
+Provider instance and Env_Profile authoring folders are owner/Agent Skill working areas. Runtime execution consumes canonical generated artifacts under `generated-framework/provider_instances/` and `generated-framework/env_profiles/`. Built-in Provider Contracts are resolved from the framework catalog by `provider_type`. Suite-local Provider Contracts are optional and only valid for approved custom providers or explicit contract snapshot pinning.
 
 ## 5. End-to-End Workflow
 
@@ -123,13 +121,15 @@ MAVEN_OPTS='-Xmx1024m' ./mvnw verify
 
 The DSL defines:
 
-- Source truth: feature spec, AC, expected result.
+- Optional traceability metadata: feature spec, AC, defect, ADR, or other source links.
 - Runtime target: provider instance. The active profile is selected by CLI or suite manifest.
 - Test data: optional `data` catalog plus operation `inputs`.
 - Setup and cleanup operations.
 - Execution operations.
 - Verification/oracle.
 - Required evidence.
+
+`source_refs` is metadata only. Runtime execution must not resolve it, and execution artifacts such as expected results, fixtures, SQL, payloads, mock mappings, and test data belong in `data`, operation `inputs`, or verify expected refs.
 
 Example:
 
@@ -142,7 +142,6 @@ revision: 1
 
 source_refs:
   acceptance_criteria: acceptance_criteria.md#AC001
-  expected_result: expected-results/approved/ER001.yaml
 
 labels:
   rp_id: RP-PAYMENT-001
@@ -252,7 +251,7 @@ data:
     value: CUST-001
 ```
 
-`data` is not an Environment Binding substitute. It must not contain endpoint URLs, JDBC URLs, broker URLs, namespaces, credentials, or raw secrets.
+`data` is not an Env_Profile substitute. It must not contain endpoint URLs, JDBC URLs, broker URLs, namespaces, credentials, or raw secrets.
 
 Use operation `inputs` for where the provider receives data. Each input key must be allowed by the resolved Provider Contract operation.
 
@@ -283,7 +282,7 @@ inputs:
 
 A DSL test case is invalid if it uses an `inputs` key that is not allowed by the Provider Contract resolved from the target Provider Instance `provider_type`.
 
-Runtime connection and authentication values belong to provider instances and environment bindings, not test-case data. DSL test cases must not bind `secret.*` directly. Runtime endpoints, tokens, DB credentials, broker credentials, kubeconfig, SSH keys, and runner credentials must be supplied through `provider-instances/` and `environment-bindings/`.
+Runtime connection and authentication values belong to Env_Profile provider bindings, not test-case data. DSL test cases must not bind `secret.*` directly. Runtime endpoints, tokens, DB credentials, broker credentials, kubeconfig, SSH keys, and runner credentials must be supplied through `env-profiles/` or generated `generated-framework/env_profiles/`.
 
 Authentication headers such as `Authorization` should be injected by provider configuration. Test cases may bind ordinary request headers, such as correlation IDs, only when the resolved Provider Contract allows `request.headers.*`.
 
@@ -649,7 +648,8 @@ Contract and instance shapes are aligned by domain, not byte-for-byte identical.
 
 | Domain | Contract Defines | Instance Selects |
 | --- | --- | --- |
-| `binding_keys` | Required and optional binding keys, types, and value source. | Binding key names supplied by environment binding. |
+| `binding_keys` | Required and optional binding keys, value types, allowed value kinds, defaults, and generated-ref rules. | Not selected by Provider Instance. Env_Profile supplies values for these keys. |
+| `bindable_outputs` | Runtime outputs that may be referenced by Env_Profile `generated_ref`, such as `generated://wiremock-payment-api.base_url`. | Not selected by Provider Instance. Provider runtime produces the output at execution time. |
 | `defaults` | Allowed default fields and default values. | RP-level timeout, retry, or provider defaults. |
 | `readiness` | Allowed readiness operations and fields. | Selected readiness operation and concrete inputs. |
 | `operations` | Allowed executable operations, input keys, and output refs. | Operations are referenced by DSL `setup`, `execute`, or `cleanup`. |
@@ -659,7 +659,7 @@ Contract and instance shapes are aligned by domain, not byte-for-byte identical.
 
 ### 9.1 Command-Capable Provider Access Policy
 
-Providers that can execute commands or collect host/runtime data must define contract-owned safety requirements under `safety.rules` when required by the Provider Contract or Execution Profile. Provider instances must explicitly select the matching `safety.access_policy` and, where required, `safety.approval`.
+Providers that can execute commands or collect host/runtime data must define contract-owned safety requirements under `safety.rules` when required by the Provider Contract or Env_Profile execution mode. Provider instances must explicitly select the matching `safety.access_policy` and, where required, `safety.approval`.
 
 External runner approval is provider safety approval, not release approval.
 
@@ -706,7 +706,7 @@ If a command-capable provider instance does not define required `safety.access_p
 
 The canonical built-in Provider Contracts are materialized under `docs/02-architecture/contracts/provider-contracts/` and indexed by `docs/02-architecture/contracts/provider_capability_registry.v0.2.yaml`. The user guide must not redefine a second provider contract catalog. Runtime suite manifests use this built-in catalog by default.
 
-RP/suite repositories do not need a `provider_contracts/` folder for built-in provider types such as `wiremock_http_mock`, `jdbc`, `nats`, `artifact_compare`, or `polling_observer`. Suite-local contracts are an explicit opt-in for custom provider plugins or contract snapshot pinning:
+RP/suite repositories do not need a `provider_contracts/` folder for built-in provider types such as `wiremock_http_mock`, `rest_client`, `jdbc`, `nats`, `artifact_compare`, or `polling_observer`. Suite-local contracts are an explicit opt-in for custom provider plugins or contract snapshot pinning:
 
 ```yaml
 provider_contract_resolution:
@@ -724,6 +724,7 @@ A Provider Contract defines reusable rules for one `provider_type`:
 - `provider_type`
 - `runtime_modes`
 - `binding_keys`
+- `bindable_outputs`
 - `defaults`
 - `valid_provider_instance_shape`
 - `safety`
@@ -731,7 +732,7 @@ A Provider Contract defines reusable rules for one `provider_type`:
 - `evidence`
 - `failure_mapping`
 
-A Provider Instance defines one logical runtime target for an RP. It must use the top-level shape allowed by its Provider Contract and must not contain physical endpoint, topic, DB credential, namespace, host, or secret values. It declares `runtime_modes` as the subset it may use; the selected `runtime_mode` is supplied by Environment Binding for the active profile.
+A Provider Instance defines one logical runtime target for an RP. It must use the top-level shape allowed by its Provider Contract and must not contain physical endpoint, topic, DB credential, namespace, host, or secret values. It declares `runtime_modes` as the subset it may use; the selected `runtime_mode` and all Provider Contract `binding_keys` are supplied by Env_Profile for the active environment.
 
 ### 10.1 Built-In Provider Contract Catalog
 
@@ -750,6 +751,8 @@ A Provider Instance defines one logical runtime target for an RP. It must use th
 | `artifact_compare` | `provider-contracts/artifact_compare.yaml` | none | `read_artifact` |
 | `polling_observer` | `provider-contracts/polling_observer.yaml` | none | `observe_condition` |
 
+In v0.2 provider capability mode, `rest_client` is executable for checked-in WireMock + HTTP request samples. It resolves `base_url` from Env_Profile, including generated WireMock outputs such as `generated://wiremock-payment-api.base_url`, executes `http_request`, exposes `response.status`, `response.headers`, `response.body`, and `response.duration_ms`, and writes `http_request_response` evidence. Downstream SIT/preprod endpoint validation still requires owner-provided RP artifacts and real Env_Profiles.
+
 ### 10.2 Provider Instance Examples
 
 REST Provider Instance:
@@ -759,9 +762,6 @@ provider_instance_version: v0.2
 provider_id: payment-api
 provider_type: rest_client
 runtime_modes: [native, stub]
-binding_keys:
-  base_url:
-    required: true
 readiness:
   operation: http_request
   inputs:
@@ -779,16 +779,8 @@ JDBC Provider Instance:
 ```yaml
 provider_instance_version: v0.2
 provider_id: payment-db
-dialect: oracle
 provider_type: jdbc
 runtime_modes: [native, ephemeral]
-connection:
-  secret_ref: ${environment.connection.secret_ref}
-binding_keys:
-  connection.secret_ref:
-    required: true
-  dialect:
-    required: true
 readiness:
   operation: db_query
   inputs:
@@ -805,9 +797,6 @@ provider_instance_version: v0.2
 provider_id: settlement-runner
 provider_type: external_runner
 runtime_modes: [native]
-binding_keys:
-  command:
-    required: true
 safety:
   access_policy:
     allow_shell: false
@@ -833,84 +822,100 @@ Before dispatch, the framework validates:
 - Provider Contract exists in the framework built-in catalog for the Provider Instance `provider_type`, unless an explicit custom/snapshot resolution mode is declared.
 - Provider Instance fields are allowed by `valid_provider_instance_shape`.
 - Provider Instance `runtime_modes` are a subset of Provider Contract `runtime_modes`.
-- Environment Binding exists for the selected profile and provider_id.
-- Environment Binding supplies all required Provider Contract binding keys.
-- Selected `runtime_mode` is allowed by Execution Profile, Provider Contract, and Provider Instance.
+- Env_Profile exists for the selected `env_profile_id`.
+- Env_Profile has `providers.<provider_id>` for every DSL target.
+- Env_Profile `providers.<provider_id>.binding_keys` supplies all required Provider Contract binding keys.
+- Env_Profile binding value kinds are allowed by the Provider Contract `binding_keys`.
+- Env_Profile `generated_ref` values resolve to Provider Contract `bindable_outputs`.
+- Selected `runtime_mode` is allowed by Env_Profile, Provider Contract, and Provider Instance.
 - Operation exists in the Provider Contract.
 - Every operation `inputs` key is allowed by the Provider Contract operation.
 - Every output ref used by DSL, evidence, or verify exists in the Provider Contract operation.
-- Command-capable providers that execute shell, VM, K8s, or external commands include `safety.access_policy` when required by their Provider Contract or execution profile.
+- Command-capable providers that execute shell, VM, K8s, or external commands include `safety.access_policy` when required by their Provider Contract or Env_Profile execution mode.
 
 
-## 11. Environment Binding
+## 11. Env_Profile
 
-Environment Binding supplies actual values for a profile. Provider Instances declare required binding keys; Environment Bindings provide values for those keys by `provider_id`.
+Env_Profile supplies actual environment values for Provider Contract `binding_keys` and defines the execution mode. The `providers` map is keyed by Provider Instance `provider_id`. Provider Instance files do not define binding key schema or physical endpoints.
 
 Secrets must be referenced, not committed.
 
 ```yaml
-environment_id: sit-payment
-profile: sit
-provider_bindings:
-  - provider_id: payment-api
+env_profile_id: sit_payment
+execution_mode: sit
+providers:
+  payment-api:
     runtime_mode: native
     readiness_ref: evidence/readiness/payment-api-sit.yaml
-    binding_values:
-      base_url: https://payment-api.sit.example.com
+    binding_keys:
+      base_url:
+        value: https://payment-api.sit.example.com
 
-  - provider_id: payment-db
+  payment-db:
     runtime_mode: native
     readiness_ref: evidence/readiness/payment-db-sit.yaml
-    binding_values:
-      jdbc_url: jdbc:postgresql://payment-db.sit:5432/payment
-      username:
-        secret_ref: vault://sit/payment/db-username
-      password:
-        secret_ref: vault://sit/payment/db-password
+    binding_keys:
+      connection.secret_ref:
+        secret_ref: vault://sit/payment/db-connection
+      dialect:
+        value: oracle
 
-  - provider_id: payment-events
+  payment-events:
     runtime_mode: native
     readiness_ref: evidence/readiness/payment-events-sit.yaml
-    binding_values:
-      bootstrap_servers: kafka-sit-01:9092,kafka-sit-02:9092
+    binding_keys:
+      bootstrap_servers:
+        secret_ref: vault://sit/payment/kafka-bootstrap
 ```
 
-Each provider binding must declare the selected runtime mode. Local and CI bindings usually replace external services, databases, and messaging with mocks, stubs, fake topics, embedded brokers, ephemeral DBs, disposable schemas, or generated data.
+Each provider binding must declare the selected runtime mode. Local and CI Env_Profiles usually replace external services, databases, and messaging with mocks, stubs, fake topics, embedded brokers, ephemeral DBs, disposable schemas, or generated data.
+
+The `binding_keys` under each provider must match the keys defined by that provider's Provider Contract. Allowed value kinds are `value`, `ref`, `secret_ref`, and `generated_ref`, but the Provider Contract decides which kinds are valid for each binding key.
 
 ```yaml
-environment_id: ci-payment
-profile: ci
-
-provider_bindings:
-  - provider_id: payment-api
-    runtime_mode: stub
-    binding_values:
-      base_url: stub://payment-api-ci
-
-  - provider_id: payment-db
-    runtime_mode: ephemeral
-    binding_values:
-      jdbc_url: generated://payment-postgres.jdbc_url
-      username: generated://payment-postgres.username
-      password:
-        secret_ref: generated://payment-postgres.password
-
-  - provider_id: payment-events
+env_profile_id: local_wiremock_http
+execution_mode: local
+providers:
+  wiremock-payment-api:
     runtime_mode: mock
-    binding_values:
-      bootstrap_servers: embedded-broker://payment-kafka.bootstrap_servers
+    binding_keys:
+      mappings_ref:
+        ref: fixtures/wiremock/payment_mappings
+      port_strategy:
+        value: dynamic
+
+  payment-api-client:
+    runtime_mode: native
+    binding_keys:
+      base_url:
+        generated_ref: generated://wiremock-payment-api.base_url
+
+  payment-db:
+    runtime_mode: ephemeral
+    binding_keys:
+      connection.secret_ref:
+        secret_ref: generated://payment-postgres.connection
+      dialect:
+        value: oracle
+
+  payment-events:
+    runtime_mode: mock
+    binding_keys:
+      bootstrap_servers:
+        generated_ref: generated://payment-kafka.bootstrap_servers
 ```
 
-`sit` and `preprod` bindings default to `runtime_mode: native`. Mock substitution in those profiles must not be used as downstream RP release evidence.
+`generated_ref` can reference only outputs declared in the producing Provider Contract `bindable_outputs`, such as `generated://wiremock-payment-api.base_url`.
 
-## 12. Execution Profile
+`sit` and `preprod` Env_Profiles default to `runtime_mode: native`. Mock substitution in those execution modes must not be used as downstream RP release evidence.
 
-Execution profiles define what is allowed to run in a profile.
+## 12. Execution Mode and Dependency Policy
+
+Env_Profile defines what is allowed to run in an environment.
 
 ```yaml
-profile_id: sit
+env_profile_id: sit
 execution_mode: sit
-environment_binding_ref: generated-framework/environment_bindings/sit-payment.yaml
 isolation_scope: shared_sit_environment
 
 dependency_policy:
@@ -932,12 +937,11 @@ data_policy:
   secrets_must_use_refs: true
 ```
 
-Local and CI profiles may provision ephemeral dependencies before execution. The profile defines the allowed provisioner and lifecycle policy; generated connection values are written into Environment Binding output keys.
+Local and CI Env_Profiles may provision ephemeral dependencies before execution. The Env_Profile defines the allowed provisioner and lifecycle policy; generated connection values must be exposed through Provider Contract `bindable_outputs` and referenced by Env_Profile `generated_ref`.
 
 ```yaml
-profile_id: ci
+env_profile_id: ci
 execution_mode: ci
-environment_binding_ref: generated-framework/environment_bindings/ci-payment.yaml
 isolation_scope: per_run
 
 dependency_policy:
@@ -958,10 +962,6 @@ dependency_provisioning_policy:
       startup_timeout: PT60S
       readiness_check: jdbc_connect
       cleanup_scope: per_run
-      output_binding_keys:
-        jdbc_url: payment-postgres.jdbc_url
-        username: payment-postgres.username
-        password: payment-postgres.password
 
     - dependency_id: payment-kafka
       provider_id: payment-events
@@ -970,8 +970,21 @@ dependency_provisioning_policy:
       startup_timeout: PT90S
       readiness_check: broker_connect
       cleanup_scope: per_run
-      output_binding_keys:
-        bootstrap_servers: payment-kafka.bootstrap_servers
+
+providers:
+  payment-db:
+    runtime_mode: ephemeral
+    binding_keys:
+      connection.secret_ref:
+        secret_ref: generated://payment-postgres.connection
+      dialect:
+        value: oracle
+
+  payment-events:
+    runtime_mode: mock
+    binding_keys:
+      bootstrap_servers:
+        generated_ref: generated://payment-kafka.bootstrap_servers
 
 max_duration: PT15M
 
@@ -982,9 +995,9 @@ data_policy:
   secrets_must_use_refs: true
 ```
 
-Typical profiles:
+Typical execution modes:
 
-| Profile | Purpose |
+| Mode | Purpose |
 | --- | --- |
 | `local` | Developer debugging with mocks, stubs, files, generated data, ephemeral DBs, fake topics, or embedded brokers. |
 | `ci` | Fast validation with mock/stub/ephemeral replacements for most external dependencies. |
@@ -993,7 +1006,7 @@ Typical profiles:
 
 ## 13. Running Tests
 
-Validate checks the DSL, suite manifest, Execution Profile, Provider Instance, Environment Binding, framework built-in Provider Contract catalog, secret guardrails, result schema, and evidence contract without provider execution.
+Validate checks the DSL, suite manifest, Env_Profile, Provider Instance, framework built-in Provider Contract catalog, secret guardrails, result schema, and evidence contract without provider execution.
 
 ```bash
 regress validate \
@@ -1023,6 +1036,14 @@ Golden E2E suite-path mode may execute only deterministic framework-owned fake p
 Provider Capability suite-path mode proves selected v0.2 P0 provider capabilities as framework evidence:
 
 ```bash
+regress validate --suite samples/provider_capability/wiremock_http_request/suite_manifest.yaml
+
+regress run \
+  --suite samples/provider_capability/wiremock_http_request/suite_manifest.yaml \
+  --profile local_wiremock_http
+
+regress report --result <generated_result_json>
+
 regress validate --suite samples/provider_capability/jdbc/suite_manifest.yaml
 
 regress run \
@@ -1032,7 +1053,9 @@ regress run \
 regress report --result <generated_result_json>
 ```
 
-Provider Capability suite-path mode may execute only checked-in framework provider capability samples for WireMock HTTP mock, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and evidence/report behavior. It must not execute non-P0 providers, Product/RP/RU topology interpretation, release governance, SIT/preprod release evidence, or downstream product deployment.
+The WireMock + HTTP request sample also includes `suite_manifest_failure.yaml` for deterministic assertion-failure evidence and `suite_manifest_boundary.yaml` for empty request plus HTTP 204 no-content behavior.
+
+Provider Capability suite-path mode may execute only checked-in framework provider capability samples for WireMock HTTP mock, `rest_client` HTTP request, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and evidence/report behavior. It must not execute non-P0 providers, Product/RP/RU topology interpretation, release governance, SIT/preprod release evidence, or downstream product deployment.
 
 Dry run validates the same contract graph and produces a resolved execution plan. It should not perform real test execution.
 
@@ -1126,7 +1149,7 @@ Agents must:
 3. Never overwrite approved tests or expected results without explicit instruction.
 4. Run `check-rp` before generation work.
 5. Run `validate` and `run --dry-run` before real execution.
-6. Report missing AC, expected result, unknown provider type or custom provider contract, provider instance, environment binding, fixture, or evidence as gaps.
+6. Report missing AC, expected result, unknown provider type or custom provider contract, Provider Instance, Env_Profile, fixture, or evidence as gaps.
 7. Preserve owner-authored truth.
 8. Produce evidence and report paths after execution.
 9. Never place runtime secrets or credentials in DSL test cases.

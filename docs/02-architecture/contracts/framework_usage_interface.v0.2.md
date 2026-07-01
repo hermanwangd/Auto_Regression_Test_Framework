@@ -12,11 +12,11 @@ DSL target
   -> Provider Instance
   -> provider_type
   -> Framework built-in Provider Contract catalog
-  -> selected profile
-  -> Environment Binding
+  -> selected Env_Profile
+  -> Env_Profile.providers.<provider_id>.binding_keys
 ```
 
-New v0.2 documentation and generated artifacts must use Provider Contract, Provider Instance, Environment Binding, Execution Profile, DSL Test Case, CLI, and Evidence Contract terminology. Internal implementation packages may keep legacy names temporarily, but those names are not public runtime interfaces.
+New v0.2 documentation and generated artifacts must use Provider Contract, Provider Instance, Env_Profile, DSL Test Case, CLI, and Evidence Contract terminology. Existing `execution_profile` and `environment_binding` artifacts remain compatibility inputs until the runtime migration is complete, but they are no longer the preferred public authoring model. Internal implementation packages may keep legacy names temporarily, but those names are not public runtime interfaces.
 
 ## Controlled Interface Change Rules
 
@@ -32,17 +32,17 @@ New v0.2 documentation and generated artifacts must use Provider Contract, Provi
 |---|---|---|
 | Invocation | This file | Runtime commands, required/optional options, exit codes, stable stdout keys, and support-command boundary. |
 | Test Definition | `test_case_dsl.v0.2.schema.yaml`, `suite_manifest.v0.2.schema.yaml` | DSL identity/status/source refs, labels, compatible profiles, optional data catalog, operation inputs, targets, setup, execute, expected refs, verify, evidence, runtime policy, suite/test/tag selection. |
-| Execution Profile and Environment Binding | `execution_profile.v0.2.schema.yaml`, `environment_binding.v0.2.schema.yaml` | Profile selection, execution mode, target environment values, secret refs, readiness refs, dependency model, constraints, and binding keys. |
+| Env_Profile | `env_profile.v0.2.schema.yaml`; compatibility inputs: `execution_profile.v0.2.schema.yaml`, `environment_binding.v0.2.schema.yaml` | Environment selection, execution mode, provider runtime modes, target environment values, secret refs, readiness refs, dependency model, constraints, and provider binding keys. |
 | Provider Runtime Configuration | `provider_contract.v0.2.schema.yaml`, `provider_instance.v0.2.schema.yaml`, `provider_capability_registry.v0.2.yaml`, `provider_plugin_contract.md`, `verify_plugin_contract.md` | Provider type, provider ID, valid instance shape, allowed operations, allowed input keys, required inputs, required binding keys, defaults, output refs, evidence outputs, failure codes, and runtime status. |
 | Result and Evidence Output | `result.v0.2.schema.yaml`, `evidence.v0.2.schema.yaml`, `evidence_folder_structure.v0.2.md`, `validation_error_taxonomy.v0.2.yaml`, `secret_guardrails.v0.2.yaml` | Standard result shape, deterministic validation errors, failure classification, batch/run evidence locations, assertion evidence, cleanup evidence, report evidence, and masking rules. |
-| P0 Contract Catalog | `p0_provider_verify_catalog.v0.2.md` | Contract baseline for HTTP mock, JDBC, NATS/event, polling, JSON/schema/file, fixture injection, reporting, and dry-run readiness. |
+| P0 Contract Catalog | `p0_provider_verify_catalog.v0.2.md` | Contract and provider capability baseline for WireMock HTTP mock, `rest_client` HTTP request samples, JDBC, NATS/event, polling, JSON/schema/file, fixture injection, reporting, and dry-run readiness. |
 
 ## Invocation Interface: Runtime Commands
 
 | Command | Required Options | Optional Options | Success | Blocking / Failure |
 |---|---|---|---|---|
-| `regress validate` | Product Repo mode: `--rp-id <rp-id>`, `--env <profile>`; framework sample mode: `--suite <suite_manifest_path>` | `--root <product-repo>` default `.`, `--test-case <test-case-id>`, `--tag <tag>`, `--format yaml|json` default `yaml`, `--strict` | Validates DSL, suite manifest, Execution Profile, Provider Instance, framework Provider Contract catalog, Environment Binding, secret guardrails, and evidence/result contract readiness without provider execution. | Returns non-zero and prints deterministic owner-actionable validation errors. |
-| `regress run` | Product Repo mode: `--rp-id <rp-id>`, `--env <profile>`; framework sample mode: `--suite <suite_manifest_path>`, `--profile <profile>` | `--root <product-repo>` default `.`, `--dry-run`, `--test-case <test-case-id>`, `--tag <tag>` | Creates one batch ID, one run ID per selected approved test or parameter case, and writes run/batch evidence. | Blocks before unsafe provider dispatch when validation, binding, environment, provider contract, provider instance, expected-result, or secret checks fail. |
+| `regress validate` | Product Repo mode: `--rp-id <rp-id>`, `--env <profile>`; framework sample mode: `--suite <suite_manifest_path>` | `--root <product-repo>` default `.`, `--test-case <test-case-id>`, `--tag <tag>`, `--format yaml|json` default `yaml`, `--strict` | Validates DSL, suite manifest, Env_Profile or compatibility profile/binding artifacts, Provider Instance, framework Provider Contract catalog, secret guardrails, and evidence/result contract readiness without provider execution. | Returns non-zero and prints deterministic owner-actionable validation errors. |
+| `regress run` | Product Repo mode: `--rp-id <rp-id>`, `--env <profile>`; framework sample mode: `--suite <suite_manifest_path>`, `--profile <env_profile_id>` | `--root <product-repo>` default `.`, `--dry-run`, `--test-case <test-case-id>`, `--tag <tag>` | Creates one batch ID, one run ID per selected approved test or parameter case, and writes run/batch evidence. | Blocks before unsafe provider dispatch when validation, binding, environment, provider contract, provider instance, expected-result, or secret checks fail. |
 | `regress report` | Product Repo mode: `--rp-id <rp-id>`, `--batch-id <batch-id>`; framework sample mode: `--result <generated_result_json>` | `--root <product-repo>` default `.`, `--format text|yaml|json` default `text` | Produces review-ready coverage/evidence summary from batch evidence or a framework verification result JSON. | Returns non-zero when evidence is incomplete, coverage is not review-ready, result JSON is missing, or result schema is invalid. |
 
 Debug-only compatibility:
@@ -71,7 +71,7 @@ regress validate --suite samples/golden_e2e/suite_manifest.yaml [--format yaml|j
 
 Product Repo mode requires `--rp-id` and `--env`; `--root` defaults to `.`. Framework sample mode requires `--suite <suite_manifest_path>` and resolves artifacts relative to the suite manifest. The command validates selected checked-in approved DSL tests and generated framework artifacts only. It must not start providers, provision dependencies, mutate fixtures, write run evidence, or infer Product/RP/RU topology.
 
-Machine-readable output must include `status`, `valid`, `errors`, `warnings`, `selected_tests`, `provider_instances_used`, `provider_contracts_used`, `environment_bindings_used`, and `owner_action`. Errors follow `validation_error_taxonomy.v0.2.yaml`.
+Machine-readable output must include `status`, `valid`, `errors`, `warnings`, `selected_tests`, `provider_instances_used`, `provider_contracts_used`, `env_profiles_used`, and `owner_action`. Compatibility output may also include `environment_bindings_used` until migration completes. Errors follow `validation_error_taxonomy.v0.2.yaml`.
 
 ### `regress run --dry-run`
 
@@ -82,7 +82,7 @@ regress run --root <product-repo> --rp-id <rp-id> --env <profile> --dry-run [--t
 regress run --suite samples/golden_e2e/suite_manifest.yaml --profile local_golden
 ```
 
-Dry-run performs all validation and planning through DSL target resolution, Provider Instance lookup, framework Provider Contract catalog lookup, Environment Binding lookup, required binding key validation, operation input-key validation, output-ref validation, and safety validation. It produces a resolved execution plan and must not execute provider operations, mutate fixtures, publish messages, run SQL, call external endpoints, or create provider execution evidence.
+Dry-run performs all validation and planning through DSL target resolution, Provider Instance lookup, framework Provider Contract catalog lookup, Env_Profile lookup, required binding key validation, operation input-key validation, output-ref validation, and safety validation. It produces a resolved execution plan and must not execute provider operations, mutate fixtures, publish messages, run SQL, call external endpoints, or create provider execution evidence.
 
 Framework sample mode without `--dry-run` may execute only framework-owned fake providers that are deterministic, local, self-contained, and marked as framework verification evidence. It must not execute production provider types such as WireMock, JDBC, NATS, Kafka, REST/gRPC, K8s, VM, or external runner.
 
@@ -103,7 +103,7 @@ Commands may print additional diagnostic lines, but these keys are stable for au
 
 | Command | Stable Keys |
 |---|---|
-| `validate` | `status`, `valid`, `errors`, `warnings`, `selected_tests`, `provider_instances_used`, `provider_contracts_used`, `environment_bindings_used`, `owner_action` |
+| `validate` | `status`, `valid`, `errors`, `warnings`, `selected_tests`, `provider_instances_used`, `provider_contracts_used`, `env_profiles_used`, `owner_action` |
 | `run --dry-run` | `execution_started`, `environment_gaps`, `dsl_gaps`, `binding_gaps`, `provider_instances_used`, `provider_contracts_used`, `provider_contract_gaps`, `ap_gate_status`, `resolved_execution_plan`, `run_status` |
 | `run` | `batch_id`, `run_status`, `test_case_id`, `run_id`, `run_dir`, `status`, `exit_code`, `timeout`, `stdout`, `stderr` |
 | `report` | `report_status`, `coverage_percent`, `covered`, `total_automatable`, `review_dir`, `gaps` |
@@ -129,14 +129,15 @@ DSL changes that rename fields, change required/conditional field rules, remove 
 
 ## Run, Environment, and Provider Configuration Interface
 
-The canonical user-facing model below is Execution Profile, Environment Binding, Provider Contract, and Provider Instance.
+The canonical user-facing model below is Env_Profile, Provider Contract, and Provider Instance.
 
-## Execution Profile, Environment, Provider Contract, and Provider Instance Interface
+## Env_Profile, Provider Contract, and Provider Instance Interface
 
 The framework consumes generated runtime configuration as public inputs. v0.2 configuration compatibility is governed by:
 
-- `docs/02-architecture/contracts/execution_profile.v0.2.schema.yaml`
-- `docs/02-architecture/contracts/environment_binding.v0.2.schema.yaml`
+- `docs/02-architecture/contracts/env_profile.v0.2.schema.yaml`
+- `docs/02-architecture/contracts/execution_profile.v0.2.schema.yaml` as a compatibility input until migration
+- `docs/02-architecture/contracts/environment_binding.v0.2.schema.yaml` as a compatibility input until migration
 - `docs/02-architecture/contracts/run_profile.v0.2.schema.yaml` as a compatibility alias for `execution_profile.v0.2.schema.yaml`
 - `docs/02-architecture/contracts/provider_contract.v0.2.schema.yaml`
 - `docs/02-architecture/contracts/provider_instance.v0.2.schema.yaml`
@@ -146,16 +147,17 @@ The framework consumes generated runtime configuration as public inputs. v0.2 co
 
 The stable provider runtime configuration surface includes:
 
-- Execution Profile ID, execution mode, trigger, isolation scope, dependency model, dependency substitution policy, dependency provisioning policy, constraints, data policy, and max duration.
+- Env_Profile ID, execution mode, isolation scope, provider runtime modes, dependency model, dependency substitution policy, dependency provisioning policy, constraints, data policy, max duration, and evidence policy.
 - DSL target references `provider_id`; active profile comes from CLI or suite manifest.
-- Provider Instance declares one RP logical runtime target with `provider_id`, `provider_type`, allowed runtime modes, allowed operation selections, binding key names, defaults, evidence capture choices, and failure mapping using the same top-level shape as the Provider Contract.
-- Provider Contract declares the provider type, allowed runtime modes, allowed operations, allowed input keys, required inputs, required fields, defaults, output refs, evidence outputs, failure codes, and valid Provider Instance shape. Built-in Provider Contracts are framework-owned and resolved by `provider_type`.
-- Environment Binding supplies profile-specific `runtime_mode` and actual values for the Provider Instance binding keys, such as URLs, topics, DB connection refs, namespaces, host refs, secret refs, mock service refs, stub server refs, fake topic refs, embedded broker refs, ephemeral DB refs, or disposable schema refs.
-- Local and CI profiles may use mock, stub, ephemeral, Testcontainers-backed, fake-topic, embedded-broker, disposable-schema, or generated-data replacements for external dependencies only when allowed by the Execution Profile, framework built-in Provider Contract, and Provider Instance. The Execution Profile defines allowed provisioners, dependency types, startup/readiness policy, cleanup scope, and output binding keys. SIT and preprod default to native dependencies and must not produce release evidence from mock substitution.
+- Provider Instance declares one logical runtime target with `provider_id`, `provider_type`, allowed runtime modes, defaults, evidence capture choices, and failure mapping. It must not redefine Provider Contract binding key schema.
+- Provider Contract declares the provider type, allowed runtime modes, allowed operations, allowed input keys, required inputs, binding key schema, bindable outputs, required fields, defaults, output refs, evidence outputs, failure codes, and valid Provider Instance shape. Built-in Provider Contracts are framework-owned and resolved by `provider_type`.
+- Env_Profile supplies environment-specific `runtime_mode` and actual values under `providers.<provider_id>.binding_keys`. The `providers` map keys are Provider Instance `provider_id` values. Each binding key must match the resolved Provider Contract `binding_keys`.
+- Env_Profile binding key values may use `value`, `ref`, `secret_ref`, or `generated_ref` only when allowed by the Provider Contract binding key schema. `generated_ref` values must target a producing Provider Contract `bindable_outputs` entry, such as `generated://wiremock-payment-api.base_url`.
+- Local and CI Env_Profiles may use mock, stub, ephemeral, Testcontainers-backed, fake-topic, embedded-broker, disposable-schema, or generated-data replacements for external dependencies only when allowed by Env_Profile policy, the framework built-in Provider Contract, and Provider Instance runtime modes. SIT and preprod default to native dependencies and must not produce release evidence from mock substitution.
 - Provider capability registry entries list supported `provider_type` values and blocked unsupported or ambiguous provider selections.
 - Product/RP/RU labels remain traceability metadata and must not select runtime behavior.
 
-Provider interface changes that rename provider types, change required binding keys, change runtime mode semantics, remove supported operations, remove allowed input keys, alter cleanup compatibility, alter output refs, or alter evidence outputs require a compatibility decision.
+Provider interface changes that rename provider types, change required binding keys, change binding key value kinds, change runtime mode semantics, remove supported operations, remove allowed input keys, alter cleanup compatibility, alter bindable outputs, alter output refs, or alter evidence outputs require a compatibility decision.
 
 ## Stable Input Artifact Locations
 
@@ -163,16 +165,20 @@ The framework runtime consumes these canonical generated locations under `docs/0
 
 - `generated-framework/suite_manifest.yaml`
 - `generated-framework/run_plan.yaml`
-- `generated-framework/execution_profiles/`
-- `generated-framework/run_profiles/` as a compatibility alias for generated Execution Profiles
+- `generated-framework/env_profiles/`
 - `generated-framework/provider_instances/`
-- `generated-framework/environment_bindings/`
 - `generated-framework/traceability_map.yaml`
 - `tests/approved/`
 - `parameter-sets/`
 - `expected-results/approved/`
 
-RP-local authoring directories such as `provider-instances/`, `environment-bindings/`, `execution-profiles/`, and optional `custom-provider-contracts/` may exist for owner or Agent Skill workflow. Runtime execution must consume the generated canonical paths above plus the framework built-in Provider Contract catalog so validation, dry-run, and execution resolve the same artifacts. Suite-local Provider Contracts are ignored unless `provider_contract_resolution` explicitly selects custom or snapshot mode.
+Compatibility readers may also accept these legacy locations until Env_Profile runtime migration completes:
+
+- `generated-framework/execution_profiles/`
+- `generated-framework/run_profiles/`
+- `generated-framework/environment_bindings/`
+
+RP-local authoring directories such as `provider-instances/`, `env-profiles/`, `environment-bindings/`, `execution-profiles/`, and optional `custom-provider-contracts/` may exist for owner or Agent Skill workflow. Runtime execution must consume the generated canonical paths above plus the framework built-in Provider Contract catalog so validation, dry-run, and execution resolve the same artifacts. Suite-local Provider Contracts are ignored unless `provider_contract_resolution` explicitly selects custom or snapshot mode.
 
 The framework must not infer Product/RP/RU topology from labels, folder names, repo names, or implementation language.
 

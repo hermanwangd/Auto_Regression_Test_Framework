@@ -1,0 +1,81 @@
+dsl_version: v0.2
+test_case_id: WIREMOCK-HTTP-REQUEST-TC-BOUNDARY-001
+title: Handle empty request and no-content response through HTTP request provider
+status: active
+revision: 1
+source_refs:
+  framework_requirement: docs/03-acceptance/04_acceptance_criteria.md#wiremock-http-request-sample
+labels:
+  capability: wiremock_http_request
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false
+compatible_profiles: [local_wiremock_http]
+targets:
+  payment_mock:
+    provider_id: wiremock-payment-api
+  payment_api:
+    provider_id: payment-api-client
+data:
+  payment_empty_response_stub:
+    ref: fixtures/wiremock/payment_empty_response_stub.json
+  payment_empty_request:
+    ref: fixtures/payment_empty_request.json
+setup:
+  operations:
+    - id: load_empty_response_stub
+      target: payment_mock
+      operation: load_stubs
+      inputs:
+        mock.mappings_ref:
+          ref: ${data.payment_empty_response_stub}
+        mock.reset_before_load:
+          value: true
+execute:
+  operations:
+    - id: submit_empty_payment
+      target: payment_api
+      operation: http_request
+      inputs:
+        request.method:
+          value: POST
+        request.path:
+          value: /empty-payments
+        request.headers.content-type:
+          value: application/json
+        request.body:
+          ref: ${data.payment_empty_request}
+      outputs:
+        response.status: response.status
+        response.headers: response.headers
+        response.body: response.body
+        response.duration_ms: response.duration_ms
+verify:
+  checks:
+    - id: empty_response_status
+      type: value_equals
+      actual:
+        ref: ${execute.submit_empty_payment.outputs.response.status}
+      expected: 204
+    - id: empty_response_body
+      type: value_equals
+      actual:
+        ref: ${execute.submit_empty_payment.outputs.response.body}
+      expected: ""
+cleanup:
+  operations:
+    - id: reset_payment_mock
+      target: payment_mock
+      operation: reset_mock
+      inputs: {}
+evidence:
+  required:
+    - evidence_index.yaml
+    - provider-evidence/wiremock/request_journal.json
+    - provider-evidence/http/response.json
+    - assertions/empty_response_status.yaml
+    - assertions/empty_response_body.yaml
+    - batch/batch.yaml
+runtime:
+  timeout: PT30S
+  retry:
+    max_attempts: 1

@@ -1,0 +1,12 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "/empty-payments"
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

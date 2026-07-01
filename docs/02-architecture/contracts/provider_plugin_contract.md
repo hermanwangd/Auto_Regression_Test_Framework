@@ -30,8 +30,8 @@ Validation rules:
 - `provider_type` is explicit and resolves to exactly one Provider Contract; heuristic inference is diagnostic only.
 - Unsupported, ambiguous, unsafe, or disabled providers block before execution.
 - Provider Contracts define allowed runtime modes, allowed operations, allowed input keys, required inputs, output refs, evidence outputs, failure codes, and the valid Provider Instance shape.
-- Provider Instances reference secrets, endpoints, SQL, payloads, commands, and environment resources by binding key only; Environment Bindings supply profile-specific runtime modes and values.
+- Provider Instances reference secrets, endpoints, SQL, payloads, commands, and environment resources by binding key only; Env_Profiles supply environment-specific runtime modes and values through `providers.<provider_id>.binding_keys`.
 - Local and CI mock/stub/ephemeral runtime modes must be declared capability, not implicit fallback behavior.
 - Fixture providers that mutate state declare compatible cleanup capabilities.
-- Dry-run evidence names provider ID, provider type, profile, runtime mode, registry status, contract path, AP gate, affected target, resolved binding keys, and owner action.
+- Dry-run evidence names provider ID, provider type, env_profile_id, runtime mode, registry status, contract path, AP gate, affected target, resolved binding keys, and owner action.
 - Standard failure classifications are `target_resolution_error`, `environment_error`, `secret_resolution_error`, `fixture_setup_error`, `cleanup_error`, and `execution_error`.

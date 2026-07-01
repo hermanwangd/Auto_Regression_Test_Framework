@@ -1,0 +1,39 @@
+env_profile_id: sit
+execution_mode: sit
+isolation_scope: shared_sit_environment
+dependency_policy:
+  require_readiness_evidence: true
+  allow_framework_managed_dependencies: false
+dependency_substitution_policy:
+  allowed_runtime_modes: [native]
+  mock_evidence_release_claim: prohibited
+dependency_provisioning_policy:
+  allowed_provisioners: [none]
+data_policy:
+  approved_expected_results_required: true
+  production_data_allowed: false
+  generated_data_allowed: false
+  secrets_must_use_refs: true
+providers:
+  oracle-database:
+    runtime_mode: native
+    binding_keys:
+      jdbc_url:
+        secret_ref: vault://sit/payment/db-jdbc-url
+      username:
+        secret_ref: vault://sit/payment/db-username
+      dialect:
+        value: oracle
+      password:
+        secret_ref: vault://sit/payment/db-password
+  nats-event-bus:
+    runtime_mode: native
+    binding_keys:
+      connection:
+        secret_ref: vault://sit/payment/nats-connection
+      subject:
+        value: payments.accepted
+      timeout:
+        value: PT30S
+      poll_interval:
+        value: PT0.5S

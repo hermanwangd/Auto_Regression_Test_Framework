@@ -2,9 +2,6 @@ provider_instance_version: v0.2
 provider_id: local-common-verifier
 provider_type: common_verify
 runtime_modes: [local]
-binding_keys:
-  workspace_ref:
-    required: true
 defaults:
   timeout: PT5S
   poll_interval: PT0S

@@ -20,6 +20,8 @@ import com.specdriven.regression.contract.NatsProviderCapabilityService;
 import com.specdriven.regression.contract.NatsProviderCapabilityService.NatsRunResult;
 import com.specdriven.regression.contract.WireMockProviderCapabilityService;
 import com.specdriven.regression.contract.WireMockProviderCapabilityService.WireMockRunResult;
+import com.specdriven.regression.contract.WireMockHttpRequestCapabilityService;
+import com.specdriven.regression.contract.WireMockHttpRequestCapabilityService.MixedRunResult;
 import com.specdriven.regression.discovery.ReleasePackageCompletenessReport;
 import com.specdriven.regression.discovery.ReleasePackageGap;
 import com.specdriven.regression.discovery.ReleasePackageResult;
@@ -136,6 +138,8 @@ public class RegressionCommand {
     private final GoldenE2eService goldenE2eService = new GoldenE2eService();
     private final WireMockProviderCapabilityService wireMockProviderCapabilityService =
             new WireMockProviderCapabilityService();
+    private final WireMockHttpRequestCapabilityService wireMockHttpRequestCapabilityService =
+            new WireMockHttpRequestCapabilityService();
     private final JdbcProviderCapabilityService jdbcProviderCapabilityService =
             new JdbcProviderCapabilityService();
     private final NatsProviderCapabilityService natsProviderCapabilityService =
@@ -716,6 +720,35 @@ public class RegressionCommand {
                 return 2;
             }
             ValidationResult validation = contractBaselineService.validateSuite(root.resolve(suite).normalize());
+            if (!validation.valid()) {
+                out.println("run_status: blocked");
+                out.println("suite_id: " + validation.suiteId());
+                out.println("provider_runtime_invoked: false");
+                printContractFindings(out, validation.findings());
+                return 1;
+            }
+            if (validation.valid() && supportsWireMockHttpRequestSample(validation.providerTypesUsed())) {
+                MixedRunResult result = wireMockHttpRequestCapabilityService.run(
+                        root.resolve(suite).normalize(),
+                        profile,
+                        root.resolve("target/provider-capability/wiremock_http_request").normalize());
+                out.println("run_status: " + result.status());
+                out.println("suite_id: " + result.suiteId());
+                if (result.resultJson() != null) {
+                    out.println("batch_id: " + result.batchId());
+                    out.println("run_id: " + result.runId());
+                    out.println("test_case_id: " + result.testCaseId());
+                    out.println("profile: " + result.profile());
+                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
+                    out.println("provider_types: " + String.join(",", result.providerTypes()));
+                    out.println("provider_ids: " + String.join(",", result.providerIds()));
+                    out.println("evidence_classification: framework_provider_capability_only");
+                    out.println("result_json: " + result.resultJson());
+                    out.println("evidence_dir: " + result.evidenceDir());
+                }
+                printContractFindings(out, result.findings());
+                return result.passed() ? 0 : 1;
+            }
             if (validation.valid() && validation.providerTypesUsed().equals(List.of("wiremock_http_mock"))) {
                 WireMockRunResult result = wireMockProviderCapabilityService.run(
                         root.resolve(suite).normalize(),
@@ -845,6 +878,12 @@ public class RegressionCommand {
         }
         printContractFindings(out, result.validation().findings());
         return result.ready() ? 0 : 1;
+    }
+
+    private boolean supportsWireMockHttpRequestSample(List<String> providerTypes) {
+        return providerTypes.size() == 2
+                && providerTypes.contains("wiremock_http_mock")
+                && providerTypes.contains("rest_client");
     }
 
     private void printContractFindings(PrintStream out, List<ContractFinding> findings) {

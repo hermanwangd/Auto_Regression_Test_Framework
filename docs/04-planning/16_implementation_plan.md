@@ -261,7 +261,7 @@ Implement the execution-focused DSL v0.2 validation gate before provider runtime
 
 The gate validates:
 
-- Always-required fields: `dsl_version`, `test_case_id`, `status`, `revision`, `source_refs.acceptance_criteria`, `targets`, `execute`, `verify`, `evidence`, and `runtime`; `labels` and `compatible_profiles` are optional unless the selected report or profile needs them.
+- Always-required fields: `dsl_version`, `test_case_id`, `status`, `revision`, `targets`, `execute`, `verify`, `evidence`, and `runtime`; `source_refs`, `labels`, and `compatible_profiles` are optional metadata unless the selected report or profile needs them.
 - Conditional fields: `setup.operations` when precondition data or mutated state is needed, check-level `expected_ref` or `data` refs when verify rules use approved artifacts or reusable truth sources, cleanup operations for state mutation, explicit and uniquely named `execute.operations[]` items, operation `inputs`, operation `outputs`, `verify.checks[].actual` when a verify rule reads captured output, `verify.checks[].selector` for structured checks, provider metadata for metadata-backed rules such as `response_status_equals`, `verify.checks[].target/query/event`, `verify.checks[].options`, selected profile, environment binding, and result/evidence refs.
 - Parameterization fields when used: operation `inputs` that reference readable reviewed parameter sets, unique case IDs in the referenced set, non-empty case values, and resolvable `${data.<name>}` references.
 - Supported operations must come from the referenced Provider Contract, such as `run_batch`, `execute_command`, `http_request`, `unary_call`, `publish_message`, `consume_message`, `nats_publish`, `nats_observe`, `execute_script`, `query`, `check_deployment_ready`, `run_command`, `run_and_collect`, `load_stubs`, and `verify_requests`.
@@ -289,7 +289,7 @@ Prove that the same execution-focused DSL v0.2 artifact can be consumed by execu
 
 Required behavior:
 
-- `run` derives the reviewed AC source from `source_refs.acceptance_criteria` and copies optional report labels from `labels` or generated `traceability_map.yaml`.
+- `run` may copy optional reviewed source refs and report labels from `source_refs`, `labels`, or generated `traceability_map.yaml`, but runtime execution must not depend on those metadata fields.
 - `run` resolves v0.2 targets, setup operations, execute outputs, expected-result refs, verify rules, evidence refs, selected profile, environment binding, timeout, retry, plugin contracts, and secret policy into durable result, run, and batch evidence.
 - `report --batch-id` calculates coverage from the selected batch using v0.2 source refs, optional labels, generated `traceability_map.yaml`, standard result JSON, and normalized run evidence.
 - The selected batch becomes review-ready when the v0.2 test passes and covers the automatable RP AC through a resolvable source ref.

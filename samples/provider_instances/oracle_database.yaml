@@ -2,13 +2,6 @@ provider_instance_version: v0.2
 provider_id: oracle-database
 provider_type: jdbc_database
 runtime_modes: [native, ephemeral]
-binding_keys:
-  jdbc_url:
-    required: true
-  username:
-    required: true
-  password:
-    required: true
 defaults:
   timeout_seconds: 60
   dialect: oracle

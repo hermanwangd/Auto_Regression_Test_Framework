@@ -15,8 +15,7 @@
     "sample_id": "GOLDEN-E2E"
   },
   "source_refs": {
-    "acceptance_criteria": "docs/03-acceptance/04_acceptance_criteria.md#track-b-golden-e2e",
-    "expected_result": "expected_results/expected_output.json"
+    "framework_requirement": "docs/03-acceptance/04_acceptance_criteria.md#track-b-golden-e2e"
   },
   "step_results": [
     {

@@ -1,0 +1,49 @@
+env_profile_id: local_jdbc
+execution_mode: local
+isolation_scope: per_run
+dependency_policy:
+  require_readiness_evidence: false
+  allow_framework_managed_dependencies: true
+dependency_substitution_policy:
+  allowed_runtime_modes: [ephemeral]
+  mock_evidence_release_claim: prohibited
+dependency_provisioning_policy:
+  allowed_provisioners: [embedded_h2]
+data_policy:
+  approved_expected_results_required: true
+  production_data_allowed: false
+  generated_data_allowed: true
+  secrets_must_use_refs: true
+providers:
+  oracle-like-db:
+    runtime_mode: ephemeral
+    binding_keys:
+      connection:
+        secret_ref: generated://provider-capability/oracle-like/connection
+      dialect:
+        value: oracle
+      schema:
+        value: PUBLIC
+      strict_params:
+        value: true
+      query_timeout:
+        value: PT10S
+      masking_policy:
+        value:
+          redact: [connection, password, secret, token]
+  db2-like-db:
+    runtime_mode: ephemeral
+    binding_keys:
+      connection:
+        secret_ref: generated://provider-capability/db2-like/connection
+      dialect:
+        value: db2
+      schema:
+        value: PUBLIC
+      strict_params:
+        value: true
+      query_timeout:
+        value: PT10S
+      masking_policy:
+        value:
+          redact: [connection, password, secret, token]

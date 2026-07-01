@@ -4,20 +4,28 @@ runtime_modes: [mock]
 binding_keys:
   mappings_ref:
     required: false
-    source: environment_binding
+    value_type: string
+    allowed_value_kinds: [value, ref]
   port_strategy:
     required: false
-    source: environment_binding
-  base_url_output_ref:
+    value_type: enum
+    allowed_values: [dynamic, fixed]
+    allowed_value_kinds: [value]
+  fixed_port:
     required: false
-    source: generated_binding_output
+    value_type: integer
+    allowed_value_kinds: [value]
+bindable_outputs:
+  base_url:
+    value_type: uri
+    produced_by_operations: [start_mock, connect_mock, load_stubs]
+    ref_format: generated://{provider_id}.base_url
 defaults:
   timeout_seconds: 60
   retry: 0
 valid_provider_instance_shape:
-  required_fields: [provider_id, provider_type, runtime_modes, binding_keys]
-  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, binding_keys, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
-  binding_keys: [mappings_ref, port_strategy, base_url_output_ref]
+  required_fields: [provider_id, provider_type, runtime_modes]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
 operations:
   start_mock:
     allowed_inputs: [mock.port, mock.mappings_ref, mock.files_ref]

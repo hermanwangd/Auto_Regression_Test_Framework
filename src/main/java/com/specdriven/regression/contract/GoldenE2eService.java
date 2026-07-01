@@ -38,6 +38,7 @@ public class GoldenE2eService {
             "batch/batch.yaml");
 
     private final ContractBaselineService contractBaselineService = new ContractBaselineService();
+    private final RuntimeBindingResolver runtimeBindingResolver = new RuntimeBindingResolver();
     private final SampleFakeProvider fakeProvider = new SampleFakeProvider();
     private final Yaml yaml = new Yaml();
 
@@ -358,13 +359,11 @@ public class GoldenE2eService {
     }
 
     private String resolveGeneratedAt(Path suiteRoot, String profile) {
-        Map<String, Object> binding = readMap(suiteRoot.resolve("environment_bindings/" + profile + ".yaml"));
-        for (Object value : listValue(binding.get("provider_bindings"))) {
-            Map<String, Object> providerBinding = mapValue(value);
-            if ("sample-fake-runtime".equals(providerBinding.get("provider_id"))) {
-                String clockRef = stringValue(mapValue(providerBinding.get("binding_values")).get("clock_ref"));
-                return clockRef.startsWith("fixed://") ? clockRef.substring("fixed://".length()) : clockRef;
-            }
+        Map<String, Object> providerBinding =
+                runtimeBindingResolver.providerBinding(suiteRoot, profile, "sample-fake-runtime");
+        String clockRef = stringValue(mapValue(providerBinding.get("binding_values")).get("clock_ref"));
+        if (!clockRef.isBlank()) {
+            return clockRef.startsWith("fixed://") ? clockRef.substring("fixed://".length()) : clockRef;
         }
         return "2026-06-29T00:00:00Z";
     }

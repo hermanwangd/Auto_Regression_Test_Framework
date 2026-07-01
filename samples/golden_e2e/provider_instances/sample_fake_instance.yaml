@@ -2,11 +2,6 @@ provider_instance_version: v0.2
 provider_id: sample-fake-runtime
 provider_type: sample_fake_provider
 runtime_modes: [stub]
-binding_keys:
-  workspace_ref:
-    required: true
-  clock_ref:
-    required: true
 defaults:
   timeout_seconds: 30
 operations:
