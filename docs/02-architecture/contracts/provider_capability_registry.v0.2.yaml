@@ -37,8 +37,8 @@ provider_types:
     runtime_status: supported
     supported_runtime_modes: [native, mock, stub]
     required_binding_keys: [target]
-    supported_operations: [unary_call, server_stream_call]
-    evidence_outputs: [request, response, status, metadata, timing, error]
+    supported_operations: [unary_call]
+    evidence_outputs: [grpc_request_response, request, response, status, metadata, timing, error]
   wiremock_http_mock:
     contract_ref: provider-contracts/wiremock_http_mock.yaml
     runtime_status: supported
@@ -46,6 +46,20 @@ provider_types:
     required_binding_keys: [mappings_ref]
     supported_operations: [start_mock, connect_mock, load_stubs, verify_requests]
     evidence_outputs: [base_url, request_journal, server_log, timing, error]
+  soap_mock:
+    contract_ref: provider-contracts/soap_mock.yaml
+    runtime_status: partial
+    supported_runtime_modes: [mock]
+    required_binding_keys: [endpoint_url]
+    supported_operations: [start_soap_mock, connect_soap_mock, load_soap_stub, soap_request_received, reset_mock]
+    evidence_outputs: [endpoint_url, request_journal, server_log, xml_diff, timing, error]
+  grpc_mock:
+    contract_ref: provider-contracts/grpc_mock.yaml
+    runtime_status: partial
+    supported_runtime_modes: [mock]
+    required_binding_keys: [descriptor_ref, service_name]
+    supported_operations: [start_grpc_mock, connect_grpc_mock, load_grpc_stub, grpc_request_received, reset_mock]
+    evidence_outputs: [target_uri, request_journal, server_log, protobuf_json_diff, timing, error]
   kafka_messaging:
     contract_ref: provider-contracts/kafka_messaging.yaml
     runtime_status: supported

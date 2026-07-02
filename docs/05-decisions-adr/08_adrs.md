@@ -468,3 +468,36 @@ DSL Test Cases stay small: targets reference `provider_id`, and operation `input
 Validation must fail before dispatch when Env_Profile is missing, provider binding is missing, binding key is unknown or missing, value kind is unsupported, `generated_ref` is invalid, or required Provider Contract `bindable_outputs` are absent.
 
 Test plans must add public interface coverage for Env_Profile schema validation, Provider Contract binding key validation, generated-ref validation, secret guardrails, dry-run resolution, and evidence/report output that includes `provider_id`, `provider_type`, and `env_profile_id`.
+
+---
+
+## ADR-017 Use WireMock-backed SOAP and gRPC Mock Providers
+
+### Status
+
+Accepted for PR-008 specification; runtime implementation pending.
+
+### Date
+
+2026-07-02
+
+### Context
+
+SOAP and gRPC dependencies are common release package boundaries. The framework needs local/CI mock capability for these protocols without making every RP build its own mock server or script. At the same time, the framework must not expand into a deployment platform or custom protocol server platform when an established mock backend can provide the behavior.
+
+WireMock already supports HTTP/XML SOAP-style stubbing and has a gRPC extension for descriptor-backed unary request/response mocking. Reusing WireMock keeps the provider model consistent with the existing `wiremock_http_mock` capability and avoids adding multiple mock-server lifecycles.
+
+### Decision
+
+Add two public provider types:
+
+- `soap_mock`: WireMock-backed SOAP mock over HTTP/XML, supporting SOAPAction/header matching, XPath/XML request matching, checked-in XML response refs, request journal evidence, server log evidence, HTTP response evidence, and assertion evidence.
+- `grpc_mock`: WireMock gRPC-extension-backed unary mock, supporting proto/descriptor refs, service/method selection, request JSON matching, checked-in response refs, gRPC status, request journal evidence, server log evidence, and protobuf JSON diff evidence.
+
+Both providers are suite/batch lifecycle dependencies. Framework-owned mock servers may start before RU readiness and be reused across multiple test cases with reset operations. DSL `setup` may load stubs, but it must not start or restart RU, start mock-server processes directly, or embed generated endpoints. Env_Profile provider bindings supply generated endpoint refs such as `generated://payment-soap-mock.endpoint_url` and `generated://customer-grpc-mock.target_uri`.
+
+The v0.2 `grpc_mock` scope is unary only. Streaming is a future additive provider contract change.
+
+### Consequences
+
+Feature specs, architecture, AC, test plan, user guide, provider capability registry, and Provider Contract catalog must include `soap_mock` and `grpc_mock`. Runtime implementation must keep executable SOAP mock samples for PR-008A acceptance and executable gRPC unary mock samples for PR-008B acceptance. This evidence remains framework local/CI provider capability evidence only and must not be represented as downstream SIT/preprod release evidence.

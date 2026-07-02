@@ -1,0 +1,5 @@
+<Envelope>
+  <Body>
+    <PingResponse>OK</PingResponse>
+  </Body>
+</Envelope>

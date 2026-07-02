@@ -14,10 +14,14 @@ import com.specdriven.regression.contract.CommonVerifyService;
 import com.specdriven.regression.contract.CommonVerifyService.CommonVerifyRunResult;
 import com.specdriven.regression.contract.GoldenE2eService;
 import com.specdriven.regression.contract.GoldenE2eService.GoldenRunResult;
+import com.specdriven.regression.contract.GrpcMockCapabilityService;
+import com.specdriven.regression.contract.GrpcMockCapabilityService.GrpcRunResult;
 import com.specdriven.regression.contract.JdbcProviderCapabilityService;
 import com.specdriven.regression.contract.JdbcProviderCapabilityService.JdbcRunResult;
 import com.specdriven.regression.contract.NatsProviderCapabilityService;
 import com.specdriven.regression.contract.NatsProviderCapabilityService.NatsRunResult;
+import com.specdriven.regression.contract.SoapMockCapabilityService;
+import com.specdriven.regression.contract.SoapMockCapabilityService.SoapRunResult;
 import com.specdriven.regression.contract.WireMockProviderCapabilityService;
 import com.specdriven.regression.contract.WireMockProviderCapabilityService.WireMockRunResult;
 import com.specdriven.regression.contract.WireMockHttpRequestCapabilityService;
@@ -79,12 +83,15 @@ import com.specdriven.regression.testcase.TestCaseLifecycleService;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.Yaml;
 
@@ -144,6 +151,10 @@ public class RegressionCommand {
             new JdbcProviderCapabilityService();
     private final NatsProviderCapabilityService natsProviderCapabilityService =
             new NatsProviderCapabilityService();
+    private final SoapMockCapabilityService soapMockCapabilityService =
+            new SoapMockCapabilityService();
+    private final GrpcMockCapabilityService grpcMockCapabilityService =
+            new GrpcMockCapabilityService();
 
     public RegressionCommand(ProductRepoService productRepoService, ReleasePackageService releasePackageService) {
         this(
@@ -226,7 +237,11 @@ public class RegressionCommand {
         if (suite == null) {
             return 2;
         }
-        ValidationResult result = contractBaselineService.validateSuite(root.resolve(suite).normalize());
+        Path suiteManifest = root.resolve(suite).normalize();
+        if (isSuiteGroupManifest(suiteManifest)) {
+            return validateSuiteGroup(suiteManifest, out);
+        }
+        ValidationResult result = contractBaselineService.validateSuite(suiteManifest);
         out.println("validation_status: " + (result.valid() ? "passed" : "failed"));
         out.println("suite_id: " + result.suiteId());
         out.println("provider_instances_used:");
@@ -714,12 +729,20 @@ public class RegressionCommand {
         if (suite == null) {
             return 2;
         }
+        Path suiteManifest = root.resolve(suite).normalize();
         if (!options.containsKey("--dry-run")) {
             String profile = requiredOption(options, "--profile", err);
             if (profile == null) {
                 return 2;
             }
-            ValidationResult validation = contractBaselineService.validateSuite(root.resolve(suite).normalize());
+            if (isSuiteGroupManifest(suiteManifest)) {
+                return runSuiteGroup(
+                        suiteManifest,
+                        profile,
+                        root.resolve("target/suite-groups").normalize(),
+                        out);
+            }
+            ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
             if (!validation.valid()) {
                 out.println("run_status: blocked");
                 out.println("suite_id: " + validation.suiteId());
@@ -732,6 +755,50 @@ public class RegressionCommand {
                         root.resolve(suite).normalize(),
                         profile,
                         root.resolve("target/provider-capability/wiremock_http_request").normalize());
+                out.println("run_status: " + result.status());
+                out.println("suite_id: " + result.suiteId());
+                if (result.resultJson() != null) {
+                    out.println("batch_id: " + result.batchId());
+                    out.println("run_id: " + result.runId());
+                    out.println("test_case_id: " + result.testCaseId());
+                    out.println("profile: " + result.profile());
+                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
+                    out.println("provider_types: " + String.join(",", result.providerTypes()));
+                    out.println("provider_ids: " + String.join(",", result.providerIds()));
+                    out.println("evidence_classification: framework_provider_capability_only");
+                    out.println("result_json: " + result.resultJson());
+                    out.println("evidence_dir: " + result.evidenceDir());
+                }
+                printContractFindings(out, result.findings());
+                return result.passed() ? 0 : 1;
+            }
+            if (validation.valid() && supportsSoapMockSample(validation.providerTypesUsed())) {
+                SoapRunResult result = soapMockCapabilityService.run(
+                        root.resolve(suite).normalize(),
+                        profile,
+                        root.resolve("target/provider-capability/soap_mock").normalize());
+                out.println("run_status: " + result.status());
+                out.println("suite_id: " + result.suiteId());
+                if (result.resultJson() != null) {
+                    out.println("batch_id: " + result.batchId());
+                    out.println("run_id: " + result.runId());
+                    out.println("test_case_id: " + result.testCaseId());
+                    out.println("profile: " + result.profile());
+                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
+                    out.println("provider_types: " + String.join(",", result.providerTypes()));
+                    out.println("provider_ids: " + String.join(",", result.providerIds()));
+                    out.println("evidence_classification: framework_provider_capability_only");
+                    out.println("result_json: " + result.resultJson());
+                    out.println("evidence_dir: " + result.evidenceDir());
+                }
+                printContractFindings(out, result.findings());
+                return result.passed() ? 0 : 1;
+            }
+            if (validation.valid() && supportsGrpcMockSample(validation.providerTypesUsed())) {
+                GrpcRunResult result = grpcMockCapabilityService.run(
+                        root.resolve(suite).normalize(),
+                        profile,
+                        root.resolve("target/provider-capability/grpc_mock").normalize());
                 out.println("run_status: " + result.status());
                 out.println("suite_id: " + result.suiteId());
                 if (result.resultJson() != null) {
@@ -863,7 +930,10 @@ public class RegressionCommand {
             printContractFindings(out, result.findings());
             return result.passed() ? 0 : 1;
         }
-        DryRunResult result = contractBaselineService.dryRun(root.resolve(suite).normalize());
+        if (isSuiteGroupManifest(suiteManifest)) {
+            return dryRunSuiteGroup(suiteManifest, out);
+        }
+        DryRunResult result = contractBaselineService.dryRun(suiteManifest);
         out.println("provider_runtime_invoked: false");
         out.println("run_status: " + (result.ready() ? "dry_run_ready" : "blocked"));
         out.println("suite_id: " + result.validation().suiteId());
@@ -880,10 +950,433 @@ public class RegressionCommand {
         return result.ready() ? 0 : 1;
     }
 
+    private int validateSuiteGroup(Path suiteManifest, PrintStream out) {
+        SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest);
+        SuiteGroupDefinition definition = validation.definition();
+        out.println("validation_status: " + (validation.valid() ? "passed" : "failed"));
+        out.println("suite_id: " + definition.suiteId());
+        out.println("test_count: " + definition.children().size());
+        out.println("provider_instances_used:");
+        for (String providerId : validation.providerInstances()) {
+            out.println("  - " + providerId);
+        }
+        out.println("provider_types_used:");
+        for (String providerType : validation.providerTypes()) {
+            out.println("  - " + providerType);
+        }
+        out.println("child_suites:");
+        for (SuiteGroupChild child : definition.children()) {
+            out.println("  - id: " + child.id());
+            out.println("    ref: " + child.ref());
+            out.println("    expected_status: " + child.expectedStatus());
+        }
+        printContractFindings(out, validation.findings());
+        return validation.valid() ? 0 : 1;
+    }
+
+    private int dryRunSuiteGroup(Path suiteManifest, PrintStream out) {
+        SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest);
+        SuiteGroupDefinition definition = validation.definition();
+        out.println("provider_runtime_invoked: false");
+        out.println("run_status: " + (validation.valid() ? "dry_run_ready" : "blocked"));
+        out.println("suite_id: " + definition.suiteId());
+        out.println("test_count: " + definition.children().size());
+        out.println("provider_instances_used:");
+        for (String providerId : validation.providerInstances()) {
+            out.println("  - " + providerId);
+        }
+        out.println("provider_types_used:");
+        for (String providerType : validation.providerTypes()) {
+            out.println("  - " + providerType);
+        }
+        out.println("child_suites:");
+        for (SuiteGroupChild child : definition.children()) {
+            out.println("  - id: " + child.id());
+            out.println("    ref: " + child.ref());
+            out.println("    profile: " + child.profile());
+            out.println("    expected_status: " + child.expectedStatus());
+        }
+        printContractFindings(out, validation.findings());
+        return validation.valid() ? 0 : 1;
+    }
+
+    private SuiteGroupValidation validateSuiteGroupArtifacts(Path suiteManifest) {
+        Map<String, Object> manifest = readYamlMap(suiteManifest);
+        List<ContractFinding> findings = new ArrayList<>();
+        SuiteGroupDefinition definition = suiteGroupDefinition(suiteManifest, manifest, findings);
+        List<String> providerInstances = new ArrayList<>();
+        List<String> providerTypes = new ArrayList<>();
+        for (SuiteGroupChild child : definition.children()) {
+            if (!Files.isRegularFile(child.suiteManifest())) {
+                findings.add(finding(
+                        child.suiteManifest(),
+                        "test_cases." + child.id() + ".ref",
+                        "missing_required_file",
+                        "Create or correct the child suite manifest referenced by the suite group."));
+                continue;
+            }
+            ValidationResult childValidation = contractBaselineService.validateSuite(child.suiteManifest());
+            addUnique(providerInstances, childValidation.providerInstancesUsed());
+            addUnique(providerTypes, childValidation.providerTypesUsed());
+            if (!childValidation.valid()) {
+                findings.addAll(childValidation.findings());
+            }
+        }
+        return new SuiteGroupValidation(definition, providerInstances, providerTypes, findings);
+    }
+
+    private int runSuiteGroup(
+            Path suiteManifest,
+            String requestedProfile,
+            Path outputRoot,
+            PrintStream out) {
+        SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest);
+        SuiteGroupDefinition definition = validation.definition();
+        List<ContractFinding> findings = new ArrayList<>(validation.findings());
+        if (!definition.profile().isBlank() && !definition.profile().equals(requestedProfile)) {
+            findings.add(finding(
+                    suiteManifest,
+                    "profile",
+                    "profile_mismatch",
+                    "Run the suite group with --profile " + definition.profile() + " or update the suite group profile."));
+        }
+        if (!findings.isEmpty()) {
+            out.println("run_status: blocked");
+            out.println("suite_id: " + definition.suiteId());
+            out.println("test_count: " + definition.children().size());
+            printContractFindings(out, findings);
+            return 1;
+        }
+
+        long startedAt = System.currentTimeMillis();
+        String batchId = "BATCH-" + Long.toString(startedAt, 36).toUpperCase();
+        String runId = "RUN-" + UUID.randomUUID();
+        Path runDir = outputRoot
+                .resolve(safeFileName(definition.suiteId()))
+                .resolve(batchId)
+                .resolve(runId)
+                .normalize();
+        Path childOutputRoot = runDir.resolve("children");
+        List<SuiteGroupChildResult> childResults = new ArrayList<>();
+        for (SuiteGroupChild child : definition.children()) {
+            childResults.add(runSuiteGroupChild(child, childOutputRoot));
+        }
+        for (SuiteGroupChildResult childResult : childResults) {
+            findings.addAll(childResult.findings());
+        }
+
+        int passedCount = (int) childResults.stream().filter(SuiteGroupChildResult::passed).count();
+        int failedCount = childResults.size() - passedCount;
+        int expectedFailureCount = (int) childResults.stream()
+                .filter(result -> "failed".equals(result.expectedStatus()))
+                .count();
+        String status = failedCount == 0 ? "passed" : "failed";
+        SuiteGroupOutput output = writeSuiteGroupOutput(
+                definition,
+                requestedProfile,
+                batchId,
+                runId,
+                status,
+                startedAt,
+                System.currentTimeMillis(),
+                runDir,
+                childResults,
+                expectedFailureCount);
+
+        out.println("run_status: " + status);
+        out.println("suite_id: " + definition.suiteId());
+        out.println("batch_id: " + batchId);
+        out.println("run_id: " + runId);
+        out.println("profile: " + requestedProfile);
+        out.println("test_count: " + childResults.size());
+        out.println("passed_count: " + passedCount);
+        out.println("failed_count: " + failedCount);
+        out.println("expected_failure_count: " + expectedFailureCount);
+        out.println("suite_summary_json: " + output.summaryJson());
+        out.println("suite_summary_yaml: " + output.summaryYaml());
+        out.println("allure_results_dir: " + output.allureResultsDir());
+        printContractFindings(out, findings);
+        return failedCount == 0 ? 0 : 1;
+    }
+
+    private SuiteGroupChildResult runSuiteGroupChild(SuiteGroupChild child, Path childOutputRoot) {
+        ValidationResult validation = contractBaselineService.validateSuite(child.suiteManifest());
+        if (!validation.valid()) {
+            return SuiteGroupChildResult.fromBlocked(child, validation.suiteId(), validation.findings());
+        }
+        if (supportsWireMockHttpRequestSample(validation.providerTypesUsed())) {
+            MixedRunResult result = wireMockHttpRequestCapabilityService.run(
+                    child.suiteManifest(),
+                    child.profile(),
+                    childOutputRoot.resolve("wiremock_http_request").normalize());
+            return SuiteGroupChildResult.fromMixed(child, result);
+        }
+        if (supportsSoapMockSample(validation.providerTypesUsed())) {
+            SoapRunResult result = soapMockCapabilityService.run(
+                    child.suiteManifest(),
+                    child.profile(),
+                    childOutputRoot.resolve("soap_mock").normalize());
+            return SuiteGroupChildResult.fromSoap(child, result);
+        }
+        if (supportsGrpcMockSample(validation.providerTypesUsed())) {
+            GrpcRunResult result = grpcMockCapabilityService.run(
+                    child.suiteManifest(),
+                    child.profile(),
+                    childOutputRoot.resolve("grpc_mock").normalize());
+            return SuiteGroupChildResult.fromGrpc(child, result);
+        }
+        return SuiteGroupChildResult.fromBlocked(
+                child,
+                validation.suiteId(),
+                List.of(finding(
+                        child.suiteManifest(),
+                        "provider_types_used",
+                        "unsupported_provider_type",
+                        "Use a suite group child suite supported by the current CLI provider runtime dispatch.")));
+    }
+
+    private SuiteGroupOutput writeSuiteGroupOutput(
+            SuiteGroupDefinition definition,
+            String profile,
+            String batchId,
+            String runId,
+            String status,
+            long startedAt,
+            long stoppedAt,
+            Path runDir,
+            List<SuiteGroupChildResult> childResults,
+            int expectedFailureCount) {
+        try {
+            Files.createDirectories(runDir);
+            Path allureResultsDir = runDir.resolve("allure-results");
+            Files.createDirectories(allureResultsDir);
+            List<String> allureChildren = new ArrayList<>();
+            for (SuiteGroupChildResult child : childResults) {
+                allureChildren.add(writeAllureResult(definition, profile, runId, startedAt, stoppedAt, allureResultsDir, child));
+            }
+            writeAllureContainer(definition, startedAt, stoppedAt, allureResultsDir, allureChildren);
+
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("suite_id", definition.suiteId());
+            summary.put("profile", profile);
+            summary.put("batch_id", batchId);
+            summary.put("run_id", runId);
+            summary.put("status", status);
+            summary.put("test_count", childResults.size());
+            summary.put("passed_count", childResults.stream().filter(SuiteGroupChildResult::passed).count());
+            summary.put("failed_count", childResults.stream().filter(result -> !result.passed()).count());
+            summary.put("expected_failure_count", expectedFailureCount);
+            summary.put("allure_results_dir", allureResultsDir.toString());
+            summary.put("children", childResults.stream().map(SuiteGroupChildResult::toSummary).toList());
+
+            Path summaryJson = runDir.resolve("suite_summary.json");
+            Path summaryYaml = runDir.resolve("suite_summary.yaml");
+            Files.writeString(summaryJson, toJson(summary));
+            Files.writeString(summaryYaml, new Yaml().dump(summary));
+            return new SuiteGroupOutput(summaryJson, summaryYaml, allureResultsDir);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write suite group output: " + runDir, e);
+        }
+    }
+
+    private String writeAllureResult(
+            SuiteGroupDefinition definition,
+            String profile,
+            String runId,
+            long startedAt,
+            long stoppedAt,
+            Path allureResultsDir,
+            SuiteGroupChildResult child) throws IOException {
+        String uuid = UUID.nameUUIDFromBytes(
+                (runId + ":" + child.id()).getBytes(StandardCharsets.UTF_8)).toString();
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("uuid", uuid);
+        result.put("historyId", UUID.nameUUIDFromBytes(child.id().getBytes(StandardCharsets.UTF_8)).toString());
+        result.put("testCaseId", child.id());
+        result.put("fullName", definition.suiteId() + "." + child.id());
+        result.put("name", child.id());
+        result.put("status", child.passed() ? "passed" : "failed");
+        result.put("start", startedAt);
+        result.put("stop", stoppedAt);
+        result.put("labels", List.of(
+                allureLabel("suite", definition.suiteId()),
+                allureLabel("framework", "spec-driven-auto-regression"),
+                allureLabel("profile", profile),
+                allureLabel("child_suite_id", child.childSuiteId()),
+                allureLabel("expected_status", child.expectedStatus()),
+                allureLabel("observed_status", child.observedStatus()),
+                allureLabel("provider_types", String.join(",", child.providerTypes()))));
+        result.put("steps", List.of(allureStep("execute child suite", child.passed() ? "passed" : "failed", startedAt, stoppedAt)));
+        Files.writeString(allureResultsDir.resolve(uuid + "-result.json"), toJson(result));
+        return uuid;
+    }
+
+    private void writeAllureContainer(
+            SuiteGroupDefinition definition,
+            long startedAt,
+            long stoppedAt,
+            Path allureResultsDir,
+            List<String> children) throws IOException {
+        String uuid = UUID.nameUUIDFromBytes(
+                (definition.suiteId() + ":container:" + startedAt).getBytes(StandardCharsets.UTF_8)).toString();
+        Map<String, Object> container = new LinkedHashMap<>();
+        container.put("uuid", uuid);
+        container.put("name", definition.suiteId());
+        container.put("children", children);
+        container.put("start", startedAt);
+        container.put("stop", stoppedAt);
+        container.put("befores", List.of());
+        container.put("afters", List.of());
+        Files.writeString(allureResultsDir.resolve(uuid + "-container.json"), toJson(container));
+    }
+
+    private Map<String, Object> allureLabel(String name, String value) {
+        Map<String, Object> label = new LinkedHashMap<>();
+        label.put("name", name);
+        label.put("value", value);
+        return label;
+    }
+
+    private Map<String, Object> allureStep(String name, String status, long start, long stop) {
+        Map<String, Object> step = new LinkedHashMap<>();
+        step.put("name", name);
+        step.put("status", status);
+        step.put("start", start);
+        step.put("stop", stop);
+        return step;
+    }
+
+    private boolean isSuiteGroupManifest(Path suiteManifest) {
+        if (!Files.isRegularFile(suiteManifest)) {
+            return false;
+        }
+        try {
+            Object loaded = new Yaml().load(Files.readString(suiteManifest));
+            return loaded instanceof Map<?, ?> map
+                    && "suite_group".equals(stringValue(map.get("suite_type")));
+        } catch (IOException | RuntimeException e) {
+            return false;
+        }
+    }
+
+    private SuiteGroupDefinition suiteGroupDefinition(
+            Path suiteManifest,
+            Map<String, Object> manifest,
+            List<ContractFinding> findings) {
+        String suiteId = stringValue(manifest.get("suite_id"));
+        if (suiteId.isBlank()) {
+            findings.add(finding(suiteManifest, "suite_id", "missing_required_field", "Set suite_id on the suite group manifest."));
+        }
+        String profile = stringValue(manifest.get("profile"));
+        if (profile.isBlank()) {
+            findings.add(finding(suiteManifest, "profile", "missing_required_field", "Set the default suite group profile."));
+        }
+        Object testCasesValue = manifest.get("test_cases");
+        if (!(testCasesValue instanceof List<?> entries) || entries.isEmpty()) {
+            findings.add(finding(suiteManifest, "test_cases", "missing_required_field", "List at least one child test case suite."));
+            return new SuiteGroupDefinition(suiteId, profile, List.of());
+        }
+        Path suiteRoot = suiteDirectory(suiteManifest);
+        List<SuiteGroupChild> children = new ArrayList<>();
+        List<String> seenChildIds = new ArrayList<>();
+        int index = 0;
+        for (Object entry : entries) {
+            String fieldPath = "test_cases[" + index + "]";
+            if (!(entry instanceof Map<?, ?> map)) {
+                findings.add(finding(suiteManifest, fieldPath, "invalid_field_type", "Use a map for each suite group test case entry."));
+                index++;
+                continue;
+            }
+            String id = stringValue(map.get("id"));
+            String ref = stringValue(map.get("ref"));
+            String childProfile = stringValue(map.get("profile"));
+            String expectedStatus = stringValue(map.get("expected_status"));
+            if (expectedStatus.isBlank()) {
+                expectedStatus = "passed";
+            }
+            if (id.isBlank()) {
+                findings.add(finding(suiteManifest, fieldPath + ".id", "missing_required_field", "Set a stable child test id."));
+            } else if (seenChildIds.contains(id)) {
+                findings.add(finding(
+                        suiteManifest,
+                        fieldPath + ".id",
+                        "duplicate_child_id",
+                        "Use a unique child test id so suite summaries and Allure results cannot overwrite each other."));
+            } else {
+                seenChildIds.add(id);
+            }
+            if (ref.isBlank()) {
+                findings.add(finding(suiteManifest, fieldPath + ".ref", "missing_required_field", "Set child suite manifest ref."));
+            }
+            if (childProfile.isBlank()) {
+                findings.add(finding(suiteManifest, fieldPath + ".profile", "missing_required_field", "Set child execution profile."));
+            }
+            if (!List.of("passed", "failed").contains(expectedStatus)) {
+                findings.add(finding(
+                        suiteManifest,
+                        fieldPath + ".expected_status",
+                        "unsupported_expected_status",
+                        "Use expected_status passed or failed."));
+            }
+            if (ref.isBlank()) {
+                index++;
+                continue;
+            }
+            Path childSuite = suiteRoot.resolve(ref).normalize();
+            if (!childSuite.startsWith(suiteRoot)) {
+                findings.add(finding(
+                        suiteManifest,
+                        fieldPath + ".ref",
+                        "invalid_child_suite_ref",
+                        "Keep child suite refs under the suite group directory."));
+                index++;
+                continue;
+            }
+            children.add(new SuiteGroupChild(id, ref, childSuite, childProfile, expectedStatus));
+            index++;
+        }
+        return new SuiteGroupDefinition(suiteId, profile, List.copyOf(children));
+    }
+
+    private void addUnique(List<String> target, List<String> values) {
+        for (String value : values) {
+            if (!target.contains(value)) {
+                target.add(value);
+            }
+        }
+    }
+
+    private Path suiteDirectory(Path suiteManifest) {
+        Path normalized = suiteManifest.toAbsolutePath().normalize();
+        Path parent = normalized.getParent();
+        return parent == null ? Path.of(".").toAbsolutePath().normalize() : parent;
+    }
+
+    private ContractFinding finding(Path file, String fieldPath, String reason, String ownerAction) {
+        return new ContractFinding(file.toString(), fieldPath, reason, "", "", "", "", ownerAction);
+    }
+
+    private String safeFileName(String value) {
+        String safe = value.replaceAll("[^A-Za-z0-9._-]+", "_");
+        return safe.isBlank() ? "suite_group" : safe;
+    }
+
     private boolean supportsWireMockHttpRequestSample(List<String> providerTypes) {
         return providerTypes.size() == 2
                 && providerTypes.contains("wiremock_http_mock")
                 && providerTypes.contains("rest_client");
+    }
+
+    private boolean supportsSoapMockSample(List<String> providerTypes) {
+        return providerTypes.size() == 2
+                && providerTypes.contains("soap_mock")
+                && providerTypes.contains("rest_client");
+    }
+
+    private boolean supportsGrpcMockSample(List<String> providerTypes) {
+        return providerTypes.size() == 2
+                && providerTypes.contains("grpc_mock")
+                && providerTypes.contains("grpc_client");
     }
 
     private void printContractFindings(PrintStream out, List<ContractFinding> findings) {
@@ -2049,6 +2542,174 @@ public class RegressionCommand {
 
     private String stringValue(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private String toJson(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof String text) {
+            return "\"" + escapeJson(text) + "\"";
+        }
+        if (value instanceof Number || value instanceof Boolean) {
+            return String.valueOf(value);
+        }
+        if (value instanceof Map<?, ?> map) {
+            StringBuilder json = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (!first) {
+                    json.append(", ");
+                }
+                first = false;
+                json.append(toJson(entry.getKey())).append(": ").append(toJson(entry.getValue()));
+            }
+            return json.append("}").toString();
+        }
+        if (value instanceof Iterable<?> iterable) {
+            StringBuilder json = new StringBuilder("[");
+            boolean first = true;
+            for (Object item : iterable) {
+                if (!first) {
+                    json.append(", ");
+                }
+                first = false;
+                json.append(toJson(item));
+            }
+            return json.append("]").toString();
+        }
+        return toJson(String.valueOf(value));
+    }
+
+    private String escapeJson(String value) {
+        return value.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r");
+    }
+
+    private record SuiteGroupDefinition(String suiteId, String profile, List<SuiteGroupChild> children) {
+    }
+
+    private record SuiteGroupValidation(
+            SuiteGroupDefinition definition,
+            List<String> providerInstances,
+            List<String> providerTypes,
+            List<ContractFinding> findings) {
+
+        boolean valid() {
+            return findings.isEmpty();
+        }
+    }
+
+    private record SuiteGroupChild(
+            String id,
+            String ref,
+            Path suiteManifest,
+            String profile,
+            String expectedStatus) {
+    }
+
+    private record SuiteGroupOutput(Path summaryJson, Path summaryYaml, Path allureResultsDir) {
+    }
+
+    private record SuiteGroupChildResult(
+            String id,
+            String ref,
+            String childSuiteId,
+            String profile,
+            String expectedStatus,
+            String observedStatus,
+            boolean passed,
+            List<String> providerIds,
+            List<String> providerTypes,
+            Path resultJson,
+            Path evidenceDir,
+            List<ContractFinding> findings) {
+
+        static SuiteGroupChildResult fromMixed(SuiteGroupChild child, MixedRunResult result) {
+            return new SuiteGroupChildResult(
+                    child.id(),
+                    child.ref(),
+                    result.suiteId(),
+                    result.profile(),
+                    child.expectedStatus(),
+                    result.status(),
+                    child.expectedStatus().equals(result.status()),
+                    result.providerIds(),
+                    result.providerTypes(),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    result.findings());
+        }
+
+        static SuiteGroupChildResult fromSoap(SuiteGroupChild child, SoapRunResult result) {
+            return new SuiteGroupChildResult(
+                    child.id(),
+                    child.ref(),
+                    result.suiteId(),
+                    result.profile(),
+                    child.expectedStatus(),
+                    result.status(),
+                    child.expectedStatus().equals(result.status()),
+                    result.providerIds(),
+                    result.providerTypes(),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    result.findings());
+        }
+
+        static SuiteGroupChildResult fromGrpc(SuiteGroupChild child, GrpcRunResult result) {
+            return new SuiteGroupChildResult(
+                    child.id(),
+                    child.ref(),
+                    result.suiteId(),
+                    result.profile(),
+                    child.expectedStatus(),
+                    result.status(),
+                    child.expectedStatus().equals(result.status()),
+                    result.providerIds(),
+                    result.providerTypes(),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    result.findings());
+        }
+
+        static SuiteGroupChildResult fromBlocked(
+                SuiteGroupChild child,
+                String childSuiteId,
+                List<ContractFinding> findings) {
+            return new SuiteGroupChildResult(
+                    child.id(),
+                    child.ref(),
+                    childSuiteId,
+                    child.profile(),
+                    child.expectedStatus(),
+                    "blocked",
+                    false,
+                    List.of(),
+                    List.of(),
+                    null,
+                    null,
+                    List.copyOf(findings));
+        }
+
+        Map<String, Object> toSummary() {
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("id", id);
+            summary.put("ref", ref);
+            summary.put("child_suite_id", childSuiteId);
+            summary.put("profile", profile);
+            summary.put("expected_status", expectedStatus);
+            summary.put("observed_status", observedStatus);
+            summary.put("status", passed ? "passed" : "failed");
+            summary.put("provider_ids", providerIds);
+            summary.put("provider_types", providerTypes);
+            summary.put("result_json", resultJson == null ? "" : resultJson.toString());
+            summary.put("evidence_dir", evidenceDir == null ? "" : evidenceDir.toString());
+            summary.put("finding_count", findings.size());
+            return summary;
+        }
     }
 
     private record PreflightResult(

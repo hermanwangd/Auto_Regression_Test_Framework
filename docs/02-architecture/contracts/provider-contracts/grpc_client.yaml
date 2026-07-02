@@ -5,6 +5,10 @@ binding_keys:
   target:
     required: true
     source: env_profile
+  descriptor_ref:
+    required: false
+    value_type: string
+    allowed_value_kinds: [ref]
 defaults:
   timeout_seconds: 30
   retry: 0
@@ -13,15 +17,11 @@ valid_provider_instance_shape:
   allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
 operations:
   unary_call:
-    allowed_inputs: [grpc.service, grpc.method, grpc.metadata.*, grpc.message, grpc.timeout]
+    allowed_inputs: [grpc.service, grpc.method, grpc.metadata.*, grpc.message, grpc.descriptor_ref, grpc.timeout]
     required_inputs: [grpc.service, grpc.method, grpc.message]
     output_refs: [response.message, response.status, response.metadata, response.duration_ms]
-  server_stream_call:
-    allowed_inputs: [grpc.service, grpc.method, grpc.metadata.*, grpc.message, grpc.timeout, grpc.max_messages]
-    required_inputs: [grpc.service, grpc.method, grpc.message]
-    output_refs: [response.messages, response.status, response.metadata, response.duration_ms]
 evidence:
-  outputs: [request, response, status, metadata, timing, error]
+  outputs: [grpc_request_response, request, response, status, metadata, timing, error]
   redact: [grpc.metadata.authorization]
 failure_mapping:
   allowed_codes: [PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, OPERATION_FAILED, ASSERTION_FAILED, EVIDENCE_INVALID]

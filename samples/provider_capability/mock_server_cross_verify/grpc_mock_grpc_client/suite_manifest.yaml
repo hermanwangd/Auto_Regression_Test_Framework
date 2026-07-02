@@ -1,0 +1,19 @@
+contract_version: v0.2
+suite_id: MOCK-SERVER-CROSS-VERIFY-GRPC-v0.2
+purpose: Cross-provider sample proving grpc_mock setup is verified through grpc_client execution and gRPC request evidence.
+profile: local_grpc_mock
+selection:
+  mode: suite
+  suite: mock-server-cross-verify-grpc-client
+tests:
+  - test_case.yaml
+artifact_roots:
+  provider_instances: provider_instances/
+  env_profiles: env_profiles/
+  execution_profiles: execution_profiles/
+  environment_bindings: environment_bindings/
+  fixtures: fixtures/
+  proto: proto/
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

@@ -1,0 +1,19 @@
+contract_version: v0.2
+suite_id: GRPC-MOCK-SAMPLE-BOUNDARY-v0.2
+purpose: Boundary-path unary gRPC mock sample proving a minimal unary request can be matched.
+profile: local_grpc_mock
+selection:
+  mode: suite
+  suite: provider-capability-grpc-mock-boundary
+tests:
+  - test_case_boundary.yaml
+artifact_roots:
+  provider_instances: provider_instances/
+  env_profiles: env_profiles/
+  execution_profiles: execution_profiles/
+  environment_bindings: environment_bindings/
+  fixtures: fixtures/
+  proto: proto/
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

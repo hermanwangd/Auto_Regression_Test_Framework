@@ -1,0 +1,106 @@
+dsl_version: v0.2
+test_case_id: SOAP-MOCK-TC-FAILURE-001
+title: Fail SOAP request-count assertion against SOAP mock
+status: active
+revision: 1
+source_refs:
+  framework_requirement: docs/03-acceptance/04_acceptance_criteria.md#soap-mock-sample
+labels:
+  capability: soap_mock
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false
+compatible_profiles: [local_soap_mock]
+targets:
+  payment_soap_mock:
+    provider_id: payment-soap-mock
+  payment_soap_client:
+    provider_id: payment-soap-client
+data:
+  payment_response:
+    ref: fixtures/payment_submit_response.xml
+  payment_request:
+    ref: fixtures/payment_submit_request.xml
+setup:
+  operations:
+    - id: load_submit_payment_stub
+      target: payment_soap_mock
+      operation: load_soap_stub
+      inputs:
+        soap.path:
+          value: /PaymentService
+        soap.operation:
+          value: SubmitPayment
+        soap.action:
+          value: SubmitPayment
+        soap.request_xpath:
+          value: "//*[local-name()='PaymentId' and text()='P-1001']"
+        soap.response_ref:
+          ref: ${data.payment_response}
+        soap.status:
+          value: 200
+        mock.reset_before_load:
+          value: true
+execute:
+  operations:
+    - id: submit_payment
+      target: payment_soap_client
+      operation: http_request
+      inputs:
+        request.method:
+          value: POST
+        request.path:
+          value: /PaymentService
+        request.headers.content-type:
+          value: text/xml; charset=utf-8
+        request.headers.SOAPAction:
+          value: SubmitPayment
+        request.body:
+          ref: ${data.payment_request}
+      outputs:
+        response.status: response.status
+        response.body: response.body
+    - id: observe_submit_payment_request
+      target: payment_soap_mock
+      operation: soap_request_received
+      inputs:
+        soap.path:
+          value: /PaymentService
+        soap.operation:
+          value: SubmitPayment
+        soap.action:
+          value: SubmitPayment
+        soap.expected_count:
+          value: 2
+      outputs:
+        request_journal: request_journal
+        matched_count: matched_count
+verify:
+  checks:
+    - id: payment_soap_status
+      type: value_equals
+      actual:
+        ref: ${execute.submit_payment.outputs.response.status}
+      expected: 200
+    - id: payment_soap_request_count
+      type: value_equals
+      actual:
+        ref: ${execute.observe_submit_payment_request.outputs.matched_count}
+      expected: 2
+cleanup:
+  operations:
+    - id: reset_payment_soap_mock
+      target: payment_soap_mock
+      operation: reset_mock
+      inputs: {}
+evidence:
+  required:
+    - evidence_index.yaml
+    - provider-evidence/soap/request_journal.json
+    - provider-evidence/soap/server_log.txt
+    - provider-evidence/http/response.json
+    - assertions/payment_soap_request_count.yaml
+    - batch/batch.yaml
+runtime:
+  timeout: PT30S
+  retry:
+    max_attempts: 1

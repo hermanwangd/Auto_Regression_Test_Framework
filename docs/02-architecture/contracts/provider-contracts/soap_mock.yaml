@@ -1,0 +1,58 @@
+provider_contract_version: v0.2
+provider_type: soap_mock
+runtime_modes: [mock]
+binding_keys:
+  endpoint_url:
+    required: false
+    value_type: uri
+    allowed_value_kinds: [generated_ref, value]
+  wsdl_ref:
+    required: false
+    value_type: string
+    allowed_value_kinds: [ref]
+  port_strategy:
+    required: false
+    value_type: enum
+    allowed_values: [dynamic, fixed]
+    allowed_value_kinds: [value]
+  fixed_port:
+    required: false
+    value_type: integer
+    allowed_value_kinds: [value]
+bindable_outputs:
+  endpoint_url:
+    value_type: uri
+    produced_by_operations: [start_soap_mock, connect_soap_mock, load_soap_stub]
+    ref_format: generated://{provider_id}.endpoint_url
+defaults:
+  timeout_seconds: 60
+  retry: 0
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
+operations:
+  start_soap_mock:
+    allowed_inputs: [mock.port, soap.wsdl_ref]
+    required_inputs: []
+    output_refs: [endpoint_url, server_log]
+  connect_soap_mock:
+    allowed_inputs: [soap.endpoint_url]
+    required_inputs: []
+    output_refs: [endpoint_url]
+  load_soap_stub:
+    allowed_inputs: [soap.path, soap.operation, soap.action, soap.request_xpath, soap.request_xml_ref, soap.response_ref, soap.status, soap.headers.*, mock.reset_before_load]
+    required_inputs: [soap.operation, soap.response_ref]
+    output_refs: [endpoint_url, loaded_stub_count, injected_stub, server_log]
+  soap_request_received:
+    allowed_inputs: [soap.path, soap.operation, soap.action, soap.request_xpath, soap.expected_count]
+    required_inputs: [soap.operation]
+    output_refs: [request_journal, matched_count, server_log]
+  reset_mock:
+    allowed_inputs: []
+    required_inputs: []
+    output_refs: [cleanup_log, server_log]
+evidence:
+  outputs: [endpoint_url, request_journal, server_log, injected_stub, assertion_result, xml_diff, timing, cleanup_log, failure_detail, error]
+  redact: [soap.headers.authorization]
+failure_mapping:
+  allowed_codes: [PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, PROVIDER_STUB_MISSING, OPERATION_FAILED, ASSERTION_FAILED, XML_MISMATCH, EVIDENCE_INVALID, SECRET_RESOLUTION_ERROR]

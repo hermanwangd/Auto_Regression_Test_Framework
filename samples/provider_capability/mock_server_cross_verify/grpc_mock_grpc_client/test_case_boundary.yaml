@@ -1,0 +1,103 @@
+dsl_version: v0.2
+test_case_id: MOCK-SERVER-CROSS-VERIFY-GRPC-TC-BOUNDARY-001
+title: Cross-verify gRPC mock boundary request
+status: active
+revision: 1
+source_refs:
+  framework_requirement: docs/03-acceptance/04_acceptance_criteria.md#mock-server-cross-provider-verification
+labels:
+  capability: mock_server_cross_verify
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false
+compatible_profiles: [local_grpc_mock]
+targets:
+  customer_grpc_mock:
+    provider_id: customer-grpc-mock
+  customer_grpc_client:
+    provider_id: customer-grpc-client
+data:
+  descriptor:
+    ref: proto/customer.desc.b64
+  ping_request:
+    ref: fixtures/ping_request.json
+  ping_response:
+    ref: fixtures/ping_response.json
+setup:
+  operations:
+    - id: load_ping_stub
+      target: customer_grpc_mock
+      operation: load_grpc_stub
+      inputs:
+        grpc.service:
+          value: com.example.customer.CustomerService
+        grpc.method:
+          value: Ping
+        grpc.request_json:
+          ref: ${data.ping_request}
+        grpc.response_ref:
+          ref: ${data.ping_response}
+        mock.reset_before_load:
+          value: true
+execute:
+  operations:
+    - id: ping_customer_service
+      target: customer_grpc_client
+      operation: unary_call
+      inputs:
+        grpc.service:
+          value: com.example.customer.CustomerService
+        grpc.method:
+          value: Ping
+        grpc.message:
+          ref: ${data.ping_request}
+        grpc.descriptor_ref:
+          ref: ${data.descriptor}
+        grpc.timeout:
+          value: PT10S
+      outputs:
+        response.message: response.message
+        response.status: response.status
+    - id: observe_ping_request
+      target: customer_grpc_mock
+      operation: grpc_request_received
+      inputs:
+        grpc.service:
+          value: com.example.customer.CustomerService
+        grpc.method:
+          value: Ping
+        grpc.expected_count:
+          value: 1
+      outputs:
+        request_journal: request_journal
+        matched_count: matched_count
+verify:
+  checks:
+    - id: ping_grpc_status
+      type: value_equals
+      actual:
+        ref: ${execute.ping_customer_service.outputs.response.status}
+      expected: OK
+    - id: ping_grpc_request_count
+      type: value_equals
+      actual:
+        ref: ${execute.observe_ping_request.outputs.matched_count}
+      expected: 1
+cleanup:
+  operations:
+    - id: reset_customer_grpc_mock
+      target: customer_grpc_mock
+      operation: reset_mock
+      inputs: {}
+evidence:
+  required:
+    - evidence_index.yaml
+    - provider-evidence/grpc/request_journal.json
+    - provider-evidence/grpc/server_log.txt
+    - provider-evidence/grpc-client/response.json
+    - assertions/ping_grpc_status.yaml
+    - assertions/ping_grpc_request_count.yaml
+    - batch/batch.yaml
+runtime:
+  timeout: PT30S
+  retry:
+    max_attempts: 1

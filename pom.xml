@@ -23,9 +23,23 @@
         <grpc.version>1.65.1</grpc.version>
         <protobuf.version>3.25.3</protobuf.version>
         <wiremock.version>3.13.2</wiremock.version>
+        <wiremock.grpc.version>0.11.0</wiremock.grpc.version>
+        <wiremock.jetty.version>11.0.26</wiremock.jetty.version>
         <httpclient5.version>5.5.1</httpclient5.version>
         <httpcore5.version>5.3.6</httpcore5.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-bom</artifactId>
+                <version>${wiremock.jetty.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -62,8 +76,17 @@
         </dependency>
         <dependency>
             <groupId>org.wiremock</groupId>
-            <artifactId>wiremock-jetty12</artifactId>
+            <artifactId>wiremock</artifactId>
             <version>${wiremock.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-grpc-extension</artifactId>
+            <version>${wiremock.grpc.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>

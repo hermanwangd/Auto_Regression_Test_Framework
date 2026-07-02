@@ -117,6 +117,20 @@ class ContractBaselineCommandTest {
     }
 
     @Test
+    void validateSuiteReportsMalformedSuiteYamlWithoutThrowing() throws Exception {
+        Path suite = mutableBaseline();
+        Files.writeString(suite, "contract_version: v0.2\nsuite_id: [\n");
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("reason: invalid_yaml")
+                .contains("owner_action: Fix malformed YAML before validation.");
+    }
+
+    @Test
     void validateSuiteRejectsEnvProfileBindingKeyNotDeclaredByProviderContract() throws Exception {
         Path suite = mutableBaseline();
         Path envProfile = suite.getParent().resolve("env_profiles/ci.yaml");

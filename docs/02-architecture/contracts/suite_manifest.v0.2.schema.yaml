@@ -4,9 +4,50 @@ status: framework_owned_current_stage
 version_compatibility:
   supported_versions: [v0.2]
   unsupported_version_behavior: block_before_execution
-required_fields:
-  - suite_id
-  - selection
+required_field_rules:
+  single_suite:
+    - suite_id
+    - selection
+  suite_group:
+    - contract_version
+    - suite_type
+    - suite_id
+    - profile
+    - test_cases
+suite_types:
+  single_suite:
+    default_when_omitted: true
+    required_fields:
+      - suite_id
+      - selection
+  suite_group:
+    purpose: Aggregate checked-in child suite manifests so provider capability samples can run multiple test cases and summarize results.
+    required_fields:
+      - contract_version
+      - suite_type
+      - suite_id
+      - profile
+      - test_cases
+    test_case_required_fields:
+      - id
+      - ref
+      - profile
+    test_case_optional_fields:
+      expected_status:
+        default: passed
+        allowed_values: [passed, failed]
+    ref_rules:
+      - Child suite refs are relative to the suite group manifest directory.
+      - Child suite refs must remain under the suite group directory after path normalization.
+      - Child test ids must be unique within one suite group.
+    dry_run_behavior:
+      - Validate all child suites and print provider_instances_used, provider_types_used, and child_suites.
+      - Do not invoke provider runtime or create provider execution evidence.
+    run_outputs:
+      - suite_summary_json
+      - suite_summary_yaml
+      - allure_results_dir
+      - expected_failure_count
 selection_modes:
   - test_id
   - suite

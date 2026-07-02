@@ -35,7 +35,7 @@ New v0.2 documentation and generated artifacts must use Provider Contract, Provi
 | Env_Profile | `env_profile.v0.2.schema.yaml`; compatibility inputs: `execution_profile.v0.2.schema.yaml`, `environment_binding.v0.2.schema.yaml` | Environment selection, execution mode, provider runtime modes, target environment values, secret refs, readiness refs, dependency model, constraints, and provider binding keys. |
 | Provider Runtime Configuration | `provider_contract.v0.2.schema.yaml`, `provider_instance.v0.2.schema.yaml`, `provider_capability_registry.v0.2.yaml`, `provider_plugin_contract.md`, `verify_plugin_contract.md` | Provider type, provider ID, valid instance shape, allowed operations, allowed input keys, required inputs, required binding keys, defaults, output refs, evidence outputs, failure codes, and runtime status. |
 | Result and Evidence Output | `result.v0.2.schema.yaml`, `evidence.v0.2.schema.yaml`, `evidence_folder_structure.v0.2.md`, `validation_error_taxonomy.v0.2.yaml`, `secret_guardrails.v0.2.yaml` | Standard result shape, deterministic validation errors, failure classification, batch/run evidence locations, assertion evidence, cleanup evidence, report evidence, and masking rules. |
-| P0 Contract Catalog | `p0_provider_verify_catalog.v0.2.md` | Contract and provider capability baseline for WireMock HTTP mock, `rest_client` HTTP request samples, JDBC, NATS/event, polling, JSON/schema/file, fixture injection, reporting, and dry-run readiness. |
+| P0 Contract Catalog | `p0_provider_verify_catalog.v0.2.md` | Contract and provider capability baseline for WireMock HTTP mock, `rest_client` HTTP request samples, PR-008 WireMock-backed SOAP/gRPC mock contracts, JDBC, NATS/event, polling, JSON/schema/file, fixture injection, reporting, and dry-run readiness. |
 
 ## Invocation Interface: Runtime Commands
 
@@ -67,9 +67,10 @@ Syntax:
 ```bash
 regress validate --root <product-repo> --rp-id <rp-id> --env <profile> [--test-case <id> | --suite <id> | --tag <tag>] [--format yaml|json] [--strict]
 regress validate --suite samples/golden_e2e/suite_manifest.yaml [--format yaml|json] [--strict]
+regress validate --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml [--format yaml|json] [--strict]
 ```
 
-Product Repo mode requires `--rp-id` and `--env`; `--root` defaults to `.`. Framework sample mode requires `--suite <suite_manifest_path>` and resolves artifacts relative to the suite manifest. The command validates selected checked-in approved DSL tests and generated framework artifacts only. It must not start providers, provision dependencies, mutate fixtures, write run evidence, or infer Product/RP/RU topology.
+Product Repo mode requires `--rp-id` and `--env`; `--root` defaults to `.`. Framework sample mode requires `--suite <suite_manifest_path>` and resolves artifacts relative to the suite manifest. A suite manifest may be a single suite or `suite_type: suite_group` that aggregates checked-in child suite manifests. The command validates selected checked-in approved DSL tests and generated framework artifacts only. It must not start providers, provision dependencies, mutate fixtures, write run evidence, or infer Product/RP/RU topology.
 
 Machine-readable output must include `status`, `valid`, `errors`, `warnings`, `selected_tests`, `provider_instances_used`, `provider_contracts_used`, `env_profiles_used`, and `owner_action`. Compatibility output may also include `environment_bindings_used` until migration completes. Errors follow `validation_error_taxonomy.v0.2.yaml`.
 
@@ -79,12 +80,13 @@ Syntax:
 
 ```bash
 regress run --root <product-repo> --rp-id <rp-id> --env <profile> --dry-run [--test-case <id> | --suite <id> | --tag <tag>]
-regress run --suite samples/golden_e2e/suite_manifest.yaml --profile local_golden
+regress run --suite samples/golden_e2e/suite_manifest.yaml --dry-run
+regress run --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml --dry-run
 ```
 
-Dry-run performs all validation and planning through DSL target resolution, Provider Instance lookup, framework Provider Contract catalog lookup, Env_Profile lookup, required binding key validation, operation input-key validation, output-ref validation, and safety validation. It produces a resolved execution plan and must not execute provider operations, mutate fixtures, publish messages, run SQL, call external endpoints, or create provider execution evidence.
+Dry-run performs all validation and planning through DSL target resolution, Provider Instance lookup, framework Provider Contract catalog lookup, Env_Profile lookup, required binding key validation, operation input-key validation, output-ref validation, and safety validation. For `suite_type: suite_group`, dry-run validates every child suite, prints child suite status metadata, and keeps `provider_runtime_invoked: false`. It produces a resolved execution plan or suite group child plan and must not execute provider operations, mutate fixtures, publish messages, run SQL, call external endpoints, or create provider execution evidence.
 
-Framework sample mode without `--dry-run` may execute only framework-owned fake providers that are deterministic, local, self-contained, and marked as framework verification evidence. It must not execute production provider types such as WireMock, JDBC, NATS, Kafka, REST/gRPC, K8s, VM, or external runner.
+Golden E2E framework sample mode without `--dry-run` may execute only framework-owned fake providers that are deterministic, local, self-contained, and marked as framework verification evidence. Provider capability suite-path mode may execute only checked-in framework provider capability samples explicitly listed in the provider capability plan and marked as framework provider capability evidence. Neither mode may execute Product/RP/RU topology interpretation, SIT/preprod release evidence, downstream deployment, K8s, VM, external runner, or non-selected provider types.
 
 ### `regress report`
 
@@ -104,8 +106,8 @@ Commands may print additional diagnostic lines, but these keys are stable for au
 | Command | Stable Keys |
 |---|---|
 | `validate` | `status`, `valid`, `errors`, `warnings`, `selected_tests`, `provider_instances_used`, `provider_contracts_used`, `env_profiles_used`, `owner_action` |
-| `run --dry-run` | `execution_started`, `environment_gaps`, `dsl_gaps`, `binding_gaps`, `provider_instances_used`, `provider_contracts_used`, `provider_contract_gaps`, `ap_gate_status`, `resolved_execution_plan`, `run_status` |
-| `run` | `batch_id`, `run_status`, `test_case_id`, `run_id`, `run_dir`, `status`, `exit_code`, `timeout`, `stdout`, `stderr` |
+| `run --dry-run` | `execution_started`, `environment_gaps`, `dsl_gaps`, `binding_gaps`, `provider_instances_used`, `provider_contracts_used`, `provider_contract_gaps`, `ap_gate_status`, `resolved_execution_plan`, `child_suites`, `run_status` |
+| `run` | `batch_id`, `run_status`, `test_case_id`, `run_id`, `run_dir`, `status`, `exit_code`, `timeout`, `stdout`, `stderr`, `test_count`, `suite_summary_json`, `suite_summary_yaml`, `allure_results_dir`, `expected_failure_count` |
 | `report` | `report_status`, `coverage_percent`, `covered`, `total_automatable`, `review_dir`, `gaps` |
 
 ## DSL and Test Definition Interface
@@ -124,6 +126,7 @@ The stable DSL surface includes:
 - `targets.<target>.provider_id`; DSL test cases must not contain endpoint, topic, database credential, namespace, or secret values. Active profile selection belongs to CLI or suite manifest, with `compatible_profiles` used only as a guardrail.
 - Execute operation names, verify type names, evidence requirement names, and input binding expression shape.
 - Approved-test eligibility from `tests/approved/`; draft/generated tests are not runtime eligible.
+- Suite group manifests may use `suite_type: suite_group`, `profile`, and `test_cases[].{id,ref,profile,expected_status}` to aggregate checked-in child suites. Child refs must stay under the suite group directory after normalization, and child ids must be unique.
 
 DSL changes that rename fields, change required/conditional field rules, remove enum values, or change input binding semantics require a compatibility decision.
 
@@ -153,6 +156,7 @@ The stable provider runtime configuration surface includes:
 - Provider Contract declares the provider type, allowed runtime modes, allowed operations, allowed input keys, required inputs, binding key schema, bindable outputs, required fields, defaults, output refs, evidence outputs, failure codes, and valid Provider Instance shape. Built-in Provider Contracts are framework-owned and resolved by `provider_type`.
 - Env_Profile supplies environment-specific `runtime_mode` and actual values under `providers.<provider_id>.binding_keys`. The `providers` map keys are Provider Instance `provider_id` values. Each binding key must match the resolved Provider Contract `binding_keys`.
 - Env_Profile binding key values may use `value`, `ref`, `secret_ref`, or `generated_ref` only when allowed by the Provider Contract binding key schema. `generated_ref` values must target a producing Provider Contract `bindable_outputs` entry, such as `generated://wiremock-payment-api.base_url`.
+- WireMock-backed mock Provider Contracts may expose predefined generated endpoint refs, such as `generated://payment-soap-mock.endpoint_url` and `generated://customer-grpc-mock.target_uri`. These refs are suite/batch lifecycle outputs and must not be embedded in DSL test cases.
 - Local and CI Env_Profiles may use mock, stub, ephemeral, Testcontainers-backed, fake-topic, embedded-broker, disposable-schema, or generated-data replacements for external dependencies only when allowed by Env_Profile policy, the framework built-in Provider Contract, and Provider Instance runtime modes. SIT and preprod default to native dependencies and must not produce release evidence from mock substitution.
 - Provider capability registry entries list supported `provider_type` values and blocked unsupported or ambiguous provider selections.
 - Product/RP/RU labels remain traceability metadata and must not select runtime behavior.
@@ -193,6 +197,14 @@ The framework writes evidence under:
 - `evidence/runs/<run_id>/assertions.yaml`
 - `evidence/runs/<run_id>/cleanup.yaml`
 - `evidence/review/`
+
+Framework sample suite groups write aggregation artifacts under:
+
+- `target/suite-groups/<suite_id>/<batch_id>/<run_id>/suite_summary.json`
+- `target/suite-groups/<suite_id>/<batch_id>/<run_id>/suite_summary.yaml`
+- `target/suite-groups/<suite_id>/<batch_id>/<run_id>/allure-results/`
+
+These suite group artifacts summarize framework provider capability tests only. They are not downstream RP release evidence.
 
 ## Next-Stage Support Commands
 

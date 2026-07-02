@@ -1,0 +1,18 @@
+contract_version: v0.2
+suite_id: MOCK-SERVER-CROSS-VERIFY-REST-FAILURE-v0.2
+purpose: Cross-provider negative sample proving WireMock plus rest_client assertion failure evidence.
+profile: local_wiremock_http
+selection:
+  mode: suite
+  suite: mock-server-cross-verify-rest-wiremock-http-failure
+tests:
+  - test_case_failure.yaml
+artifact_roots:
+  provider_instances: provider_instances/
+  execution_profiles: execution_profiles/
+  environment_bindings: environment_bindings/
+  expected_results: expected_results/
+  fixtures: fixtures/
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

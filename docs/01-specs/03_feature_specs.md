@@ -80,6 +80,7 @@ Framework v0.2 delivery is staged. The current framework verification target is 
 | Provider Area | Framework Verification Target | Heterogeneous Pilot Target |
 |---|---|---|
 | Request/response | REST and native descriptor-driven gRPC unary Provider Contracts with payload binding, timeout, output refs, evidence, and explicit local/CI mock or stub endpoint bindings. | Pilot endpoint validation remains required for release acceptance. |
+| WireMock-backed protocol mocks | WireMock HTTP mock remains the P0 HTTP mock proof. SOAP mock and gRPC unary mock are PR-008 provider capability slices: `soap_mock` uses WireMock HTTP/XML/SOAP conventions; `grpc_mock` uses the WireMock gRPC extension and descriptor refs. | Pilot SOAP/gRPC release evidence still requires owner-provided RP artifacts and real environment proof where release acceptance depends on real endpoints. |
 | Messaging | Local/mock plus native Kafka/NATS publish, NATS request/reply, consume/observe, and bounded cleanup drain behavior with topic/subject binding keys, publish/request payload binding, timeout, correlation checks, cleanup strategy/count, and contract-defined output refs. | Pilot broker validation remains required for release acceptance; Kafka request/reply and persistent broker purge are future work only if selected RP acceptance requires them. |
 | DB fixture | JDBC setup, verification query, cleanup SQL refs, cleanup strategy, isolation key, cleanup evidence, and explicit local/CI mock DB, ephemeral DB, or disposable schema bindings. | Same contract against the selected pilot DB fixture boundary. |
 | Deployment readiness | Local/mock plus native K8s/VM bounded readiness evidence with deployed version ref, timeout, output ref, K8s `kubectl` or direct API probes, K8s pod log tail bound, VM command refs where configured, and bounded probe behavior. | Owner-provided pilot K8s/VM validation remains required for release acceptance. |
@@ -99,7 +100,7 @@ The immediate Track A target is contract completeness, not runtime completeness.
 
 Track B proves one complete Golden E2E framework lifecycle with a deterministic framework-owned fake provider and checked-in `samples/golden_e2e/` artifacts. Track B validates, executes, verifies, writes evidence/result JSON, and reports using the public CLI, but it is not provider-expansion work and is not downstream RP release evidence.
 
-Track C implements only the selected v0.2 P0 provider capability runtime after Track B proves the reusable framework lifecycle: WireMock, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and evidence. Kafka, REST/gRPC, K8s, VM, external runner, Oracle/DB2 Testcontainers, and broader heterogeneous provider behavior remain outside Track C unless moved into P0 by decision log.
+Track C implements only the selected v0.2 P0 provider capability runtime after Track B proves the reusable framework lifecycle: WireMock, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and evidence. PR-008 extends the mock-service area with WireMock-backed `soap_mock` and unary `grpc_mock` capability. Kafka, native REST/gRPC endpoint certification, K8s, VM, external runner, Oracle/DB2 Testcontainers, streaming gRPC, and broader heterogeneous provider behavior remain outside Track C unless moved into P0 by decision log.
 
 ## 3.4 Feature List
 
@@ -116,6 +117,23 @@ Track C implements only the selected v0.2 P0 provider capability runtime after T
 | F009 | Advanced Spec Readiness | Detect deeper cross-artifact spec gaps and drift across product, RP, architecture, data, and change history | Later Agent Skill |
 | F010 | Release Governance Integration | Apply release gate policy, waiver workflow, and Go/No-Go records | Later Governance |
 | F011 | Provider and Verify Plugin Contracts | Support additional provider types and verify types through catalogued Provider Contracts, Provider Instances, and plugin contracts | Framework v0.2 core |
+
+### PR-008 WireMock-backed SOAP and gRPC Mock Feature Boundary
+
+SOAP and gRPC mocks are mock-service provider capabilities, not RU deployment features. They follow the suite/batch lifecycle:
+
+```text
+provision mock service endpoint
+-> expose predefined generated endpoint binding
+-> RU starts or is already ready through an external/local/CI workflow
+-> run one or more DSL test cases
+-> verify mock interactions
+-> reset or stop framework-owned mock services
+```
+
+`soap_mock` shall use WireMock HTTP/XML behavior for SOAPAction/header matching, XPath request matching, static XML response stubs, request journal evidence, server log evidence, HTTP response evidence, and assertion evidence. `grpc_mock` shall use the WireMock gRPC extension with descriptor/proto refs, unary request/response JSON fixtures, request journal evidence, and protobuf JSON diff evidence. The framework must not build a separate SOAP/gRPC server unless WireMock-backed implementation cannot satisfy a documented future requirement.
+
+The test case DSL may load stubs and verify interactions, but it must not start or restart RU, provision mock servers directly, or embed mock endpoint URLs. Endpoint values must be supplied by Env_Profile provider bindings through predefined generated refs such as `generated://payment-soap-mock.endpoint_url` or `generated://customer-grpc-mock.target_uri`.
 
 ## 3.5 Next-Phase Readiness
 

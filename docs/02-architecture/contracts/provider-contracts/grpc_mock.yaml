@@ -1,0 +1,66 @@
+provider_contract_version: v0.2
+provider_type: grpc_mock
+runtime_modes: [mock]
+binding_keys:
+  target_uri:
+    required: false
+    value_type: uri
+    allowed_value_kinds: [generated_ref, value]
+  proto_ref:
+    required: false
+    value_type: string
+    allowed_value_kinds: [ref]
+  descriptor_ref:
+    required: true
+    value_type: string
+    allowed_value_kinds: [ref]
+  service_name:
+    required: true
+    value_type: string
+    allowed_value_kinds: [value]
+  port_strategy:
+    required: false
+    value_type: enum
+    allowed_values: [dynamic, fixed]
+    allowed_value_kinds: [value]
+  fixed_port:
+    required: false
+    value_type: integer
+    allowed_value_kinds: [value]
+bindable_outputs:
+  target_uri:
+    value_type: uri
+    produced_by_operations: [start_grpc_mock, connect_grpc_mock, load_grpc_stub]
+    ref_format: generated://{provider_id}.target_uri
+defaults:
+  timeout_seconds: 60
+  retry: 0
+valid_provider_instance_shape:
+  required_fields: [provider_id, provider_type, runtime_modes]
+  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, defaults, readiness, operations, evidence, failure_mapping, safety, labels]
+operations:
+  start_grpc_mock:
+    allowed_inputs: [mock.port, grpc.proto_ref, grpc.descriptor_ref, grpc.service]
+    required_inputs: [grpc.descriptor_ref, grpc.service]
+    output_refs: [target_uri, server_log]
+  connect_grpc_mock:
+    allowed_inputs: [grpc.target_uri]
+    required_inputs: []
+    output_refs: [target_uri]
+  load_grpc_stub:
+    allowed_inputs: [grpc.service, grpc.method, grpc.request_json, grpc.response_ref, grpc.status_code, grpc.metadata.*, mock.reset_before_load]
+    required_inputs: [grpc.service, grpc.method, grpc.response_ref]
+    output_refs: [target_uri, loaded_stub_count, injected_stub, server_log]
+  grpc_request_received:
+    allowed_inputs: [grpc.service, grpc.method, grpc.request_json, grpc.expected_count]
+    required_inputs: [grpc.service, grpc.method]
+    output_refs: [request_journal, matched_count, server_log]
+  reset_mock:
+    allowed_inputs: []
+    required_inputs: []
+    output_refs: [cleanup_log, server_log]
+evidence:
+  outputs: [target_uri, request_journal, server_log, injected_stub, assertion_result, protobuf_json_diff, timing, cleanup_log, failure_detail, error]
+  redact: [grpc.metadata.authorization]
+failure_mapping:
+  allowed_codes: [PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, PROVIDER_STUB_MISSING, OPERATION_FAILED, ASSERTION_FAILED, PROTO_DESCRIPTOR_INVALID, EVIDENCE_INVALID, SECRET_RESOLUTION_ERROR]

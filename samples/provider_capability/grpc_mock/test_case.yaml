@@ -1,0 +1,106 @@
+dsl_version: v0.2
+test_case_id: GRPC-MOCK-TC-001
+title: Get customer through grpc_client against unary gRPC mock
+status: active
+revision: 1
+source_refs:
+  framework_requirement: docs/03-acceptance/04_acceptance_criteria.md#grpc-mock-sample
+labels:
+  capability: grpc_mock
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false
+compatible_profiles: [local_grpc_mock]
+targets:
+  customer_grpc_mock:
+    provider_id: customer-grpc-mock
+  customer_grpc_client:
+    provider_id: customer-grpc-client
+data:
+  descriptor:
+    ref: proto/customer.desc.b64
+  get_customer_request:
+    ref: fixtures/get_customer_request.json
+  get_customer_response:
+    ref: fixtures/get_customer_response.json
+setup:
+  operations:
+    - id: load_get_customer_stub
+      target: customer_grpc_mock
+      operation: load_grpc_stub
+      inputs:
+        grpc.service:
+          value: com.example.customer.CustomerService
+        grpc.method:
+          value: GetCustomer
+        grpc.request_json:
+          ref: ${data.get_customer_request}
+        grpc.response_ref:
+          ref: ${data.get_customer_response}
+        mock.reset_before_load:
+          value: true
+execute:
+  operations:
+    - id: get_customer
+      target: customer_grpc_client
+      operation: unary_call
+      inputs:
+        grpc.service:
+          value: com.example.customer.CustomerService
+        grpc.method:
+          value: GetCustomer
+        grpc.message:
+          ref: ${data.get_customer_request}
+        grpc.descriptor_ref:
+          ref: ${data.descriptor}
+        grpc.timeout:
+          value: PT10S
+      outputs:
+        response.message: response.message
+        response.status: response.status
+        response.duration_ms: response.duration_ms
+    - id: observe_get_customer_request
+      target: customer_grpc_mock
+      operation: grpc_request_received
+      inputs:
+        grpc.service:
+          value: com.example.customer.CustomerService
+        grpc.method:
+          value: GetCustomer
+        grpc.request_json:
+          ref: ${data.get_customer_request}
+        grpc.expected_count:
+          value: 1
+      outputs:
+        request_journal: request_journal
+        matched_count: matched_count
+verify:
+  checks:
+    - id: get_customer_grpc_status
+      type: value_equals
+      actual:
+        ref: ${execute.get_customer.outputs.response.status}
+      expected: OK
+    - id: get_customer_grpc_request_count
+      type: value_equals
+      actual:
+        ref: ${execute.observe_get_customer_request.outputs.matched_count}
+      expected: 1
+cleanup:
+  operations:
+    - id: reset_customer_grpc_mock
+      target: customer_grpc_mock
+      operation: reset_mock
+      inputs: {}
+evidence:
+  required:
+    - evidence_index.yaml
+    - provider-evidence/grpc/request_journal.json
+    - provider-evidence/grpc/server_log.txt
+    - provider-evidence/grpc-client/response.json
+    - assertions/get_customer_grpc_status.yaml
+    - assertions/get_customer_grpc_request_count.yaml
+    - batch/batch.yaml
+runtime:
+  timeout: PT30S
+  retry:
+    max_attempts: 1

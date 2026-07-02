@@ -1,0 +1,8 @@
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:pay="urn:payment">
+  <soapenv:Body>
+    <pay:SubmitPaymentResponse>
+      <pay:Status>ACCEPTED</pay:Status>
+      <pay:ConfirmationId>C-1001</pay:ConfirmationId>
+    </pay:SubmitPaymentResponse>
+  </soapenv:Body>
+</soapenv:Envelope>

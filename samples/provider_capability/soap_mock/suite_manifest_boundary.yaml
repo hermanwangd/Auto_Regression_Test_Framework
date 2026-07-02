@@ -1,0 +1,19 @@
+contract_version: v0.2
+suite_id: SOAP-MOCK-SAMPLE-BOUNDARY-v0.2
+purpose: Boundary-path SOAP mock sample proving minimal SOAP envelopes can be matched without SOAPAction.
+profile: local_soap_mock
+selection:
+  mode: suite
+  suite: provider-capability-soap-mock-boundary
+tests:
+  - test_case_boundary.yaml
+artifact_roots:
+  provider_instances: provider_instances/
+  env_profiles: env_profiles/
+  execution_profiles: execution_profiles/
+  environment_bindings: environment_bindings/
+  expected_results: expected_results/
+  fixtures: fixtures/
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

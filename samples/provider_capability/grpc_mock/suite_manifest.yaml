@@ -1,0 +1,19 @@
+contract_version: v0.2
+suite_id: GRPC-MOCK-SAMPLE-v0.2
+purpose: Contract sample showing unary gRPC mock behavior through WireMock gRPC extension and dynamic grpc_client stimulus.
+profile: local_grpc_mock
+selection:
+  mode: suite
+  suite: provider-capability-grpc-mock
+tests:
+  - test_case.yaml
+artifact_roots:
+  provider_instances: provider_instances/
+  env_profiles: env_profiles/
+  execution_profiles: execution_profiles/
+  environment_bindings: environment_bindings/
+  fixtures: fixtures/
+  proto: proto/
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

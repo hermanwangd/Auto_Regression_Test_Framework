@@ -1,0 +1,31 @@
+env_profile_id: local_grpc_mock
+execution_mode: local
+isolation_scope: per_run
+dependency_policy:
+  require_readiness_evidence: false
+  allow_framework_managed_dependencies: true
+dependency_substitution_policy:
+  allowed_runtime_modes: [mock, native]
+  mock_evidence_release_claim: prohibited
+dependency_provisioning_policy:
+  allowed_provisioners: [none]
+data_policy:
+  approved_expected_results_required: true
+  production_data_allowed: false
+  generated_data_allowed: true
+  secrets_must_use_refs: true
+providers:
+  customer-grpc-mock:
+    runtime_mode: mock
+    binding_keys:
+      port_strategy:
+        value: dynamic
+      descriptor_ref:
+        ref: proto/customer.desc.b64
+      service_name:
+        value: com.example.customer.CustomerService
+  customer-grpc-client:
+    runtime_mode: native
+    binding_keys:
+      target:
+        generated_ref: generated://customer-grpc-mock.target_uri

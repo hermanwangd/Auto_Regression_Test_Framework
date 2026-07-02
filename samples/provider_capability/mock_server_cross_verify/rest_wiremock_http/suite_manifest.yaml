@@ -1,0 +1,19 @@
+contract_version: v0.2
+suite_id: MOCK-SERVER-CROSS-VERIFY-REST-v0.2
+purpose: Cross-provider sample proving wiremock_http_mock setup is verified through rest_client execution and WireMock request evidence.
+profile: local_wiremock_http
+selection:
+  mode: suite
+  suite: mock-server-cross-verify-rest-wiremock-http
+tests:
+  - test_case.yaml
+artifact_roots:
+  provider_instances: provider_instances/
+  env_profiles: env_profiles/
+  execution_profiles: execution_profiles/
+  environment_bindings: environment_bindings/
+  expected_results: expected_results/
+  fixtures: fixtures/
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

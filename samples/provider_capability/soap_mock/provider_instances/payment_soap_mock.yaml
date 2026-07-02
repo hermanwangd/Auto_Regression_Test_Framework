@@ -1,0 +1,24 @@
+provider_instance_version: v0.2
+provider_id: payment-soap-mock
+provider_type: soap_mock
+runtime_modes: [mock]
+defaults:
+  startup_timeout: PT10S
+  reset_before_load: true
+  request_journal_scope: per_run
+operations:
+  load_soap_stub:
+    outputs: [endpoint_url, loaded_stub_count, injected_stub, server_log]
+  soap_request_received:
+    outputs: [request_journal, matched_count, server_log]
+  reset_mock:
+    outputs: [cleanup_log, server_log]
+evidence:
+  capture: [endpoint_url, server_log, injected_stub, request_journal, cleanup_log, failure_detail]
+failure_mapping:
+  provider_unavailable: PROVIDER_UNAVAILABLE
+  stub_missing: PROVIDER_STUB_MISSING
+  cleanup_failed: OPERATION_FAILED
+labels:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

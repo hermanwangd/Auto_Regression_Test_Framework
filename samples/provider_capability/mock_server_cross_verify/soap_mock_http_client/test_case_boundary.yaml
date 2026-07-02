@@ -1,0 +1,101 @@
+dsl_version: v0.2
+test_case_id: MOCK-SERVER-CROSS-VERIFY-SOAP-TC-BOUNDARY-001
+title: Cross-verify SOAP mock boundary request
+status: active
+revision: 1
+source_refs:
+  framework_requirement: docs/03-acceptance/04_acceptance_criteria.md#mock-server-cross-provider-verification
+labels:
+  capability: mock_server_cross_verify
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false
+compatible_profiles: [local_soap_mock]
+targets:
+  payment_soap_mock:
+    provider_id: payment-soap-mock
+  payment_soap_client:
+    provider_id: payment-soap-client
+data:
+  payment_response:
+    ref: fixtures/payment_boundary_response.xml
+  payment_request:
+    ref: fixtures/payment_boundary_request.xml
+setup:
+  operations:
+    - id: load_ping_stub
+      target: payment_soap_mock
+      operation: load_soap_stub
+      inputs:
+        soap.path:
+          value: /PaymentService
+        soap.operation:
+          value: Ping
+        soap.request_xpath:
+          value: "//*[local-name()='PingRequest']"
+        soap.response_ref:
+          ref: ${data.payment_response}
+        soap.status:
+          value: 200
+        mock.reset_before_load:
+          value: true
+execute:
+  operations:
+    - id: submit_ping
+      target: payment_soap_client
+      operation: http_request
+      inputs:
+        request.method:
+          value: POST
+        request.path:
+          value: /PaymentService
+        request.headers.content-type:
+          value: text/xml; charset=utf-8
+        request.body:
+          ref: ${data.payment_request}
+      outputs:
+        response.status: response.status
+        response.body: response.body
+    - id: observe_ping_request
+      target: payment_soap_mock
+      operation: soap_request_received
+      inputs:
+        soap.path:
+          value: /PaymentService
+        soap.operation:
+          value: Ping
+        soap.expected_count:
+          value: 1
+      outputs:
+        request_journal: request_journal
+        matched_count: matched_count
+verify:
+  checks:
+    - id: ping_soap_status
+      type: value_equals
+      actual:
+        ref: ${execute.submit_ping.outputs.response.status}
+      expected: 200
+    - id: ping_soap_request_count
+      type: value_equals
+      actual:
+        ref: ${execute.observe_ping_request.outputs.matched_count}
+      expected: 1
+cleanup:
+  operations:
+    - id: reset_payment_soap_mock
+      target: payment_soap_mock
+      operation: reset_mock
+      inputs: {}
+evidence:
+  required:
+    - evidence_index.yaml
+    - provider-evidence/soap/request_journal.json
+    - provider-evidence/soap/server_log.txt
+    - provider-evidence/http/response.json
+    - assertions/ping_soap_status.yaml
+    - assertions/ping_soap_request_count.yaml
+    - batch/batch.yaml
+runtime:
+  timeout: PT30S
+  retry:
+    max_attempts: 1

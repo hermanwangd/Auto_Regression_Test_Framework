@@ -4,7 +4,7 @@
 
 ## 1. Summary
 
-Track C implements the selected v0.2 P0 provider and verification capabilities needed for practical framework execution: WireMock HTTP mock plus `rest_client` HTTP request samples, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and provider evidence integration.
+Track C implements the selected v0.2 P0 provider and verification capabilities needed for practical framework execution: WireMock HTTP mock plus `rest_client` HTTP request samples, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and provider evidence integration. PR-008 extends Track C with WireMock-backed SOAP and unary gRPC mock capability after the current P0 lifecycle is stable.
 
 Track C is not all providers. It must not add product topology interpretation, Phase 2 Agent Skill behavior, release governance, or non-P0 providers.
 
@@ -22,7 +22,7 @@ In scope:
 
 Out of scope:
 
-- MockServer, Oracle/DB2 Testcontainers, container runner, K8s job runner, ReportPortal, Pact, OpenAPI/AsyncAPI generation, Flyway/Liquibase, release governance, waiver workflow, release gate, Phase 2 Agent Skill, and RP/RU topology interpretation.
+- MockServer, custom SOAP/gRPC mock server implementation outside WireMock-backed runtime, Oracle/DB2 Testcontainers, container runner, K8s job runner, ReportPortal, Pact, OpenAPI/AsyncAPI generation, Flyway/Liquibase, release governance, waiver workflow, release gate, Phase 2 Agent Skill, and RP/RU topology interpretation.
 
 ## 3. Track C Prerequisites from Track A and Track B
 
@@ -37,6 +37,8 @@ Track C may start only when `samples/provider_capability/` exists and parses.
 | Capability | Provider / Verify Surface | Track C Runtime Target |
 |---|---|---|
 | WireMock + HTTP request | `wiremock_http_mock`, `rest_client`, `http_request`, `http_stub`, `http_mock_called`, `http_mock_request_body_match` | Framework starts local WireMock, injects checked-in stubs, passes generated `base_url` to `rest_client`, executes HTTP requests, and records request journal, server log, and `http_request_response` evidence. |
+| WireMock-backed SOAP mock | `soap_mock`, `load_soap_stub`, `soap_request_received`, XPath/XML match, SOAPAction match | PR-008A: Framework uses WireMock HTTP/XML behavior to expose generated `endpoint_url`, load SOAP stubs, verify SOAP requests, and record request journal, server log, HTTP response, and assertion evidence. |
+| WireMock-backed gRPC unary mock | `grpc_mock`, `load_grpc_stub`, `grpc_request_received`, descriptor/proto refs, request JSON match | PR-008B: Framework uses the WireMock gRPC extension to expose generated `target_uri`, load unary stubs, verify requests, and record request journal, server log, protobuf JSON diff, and assertion evidence. |
 | JDBC Oracle/DB2 | `jdbc_database`, `db_seed`, `db_cleanup`, `db_record_exists`, SQL params, dialect | Executes against configured JDBC binding or controlled fixture; validates Oracle/DB2 dialect contracts. |
 | NATS | `nats`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match` | Uses framework local capability binding or controlled CI binding without SIT release evidence claims. |
 | JSON/Schema/File Diff | `artifact_compare`, `json_match`, `schema_match`, `file_diff` | Framework-owned compare target with ignore paths, normalization, ignore order, and diff evidence. |
@@ -107,6 +109,64 @@ Failure tests:
 Non-goal:
 
 - Do not implement Oracle/DB2 Testcontainers unless moved into P0 by decision log.
+
+## 6A. PR-008A SOAP Mock Capability
+
+Implement SOAP mock as a WireMock-backed provider capability, not as a custom SOAP server.
+
+Required runtime:
+
+- Validate `soap_mock` Provider Contract and Provider Instance.
+- Resolve Env_Profile `endpoint_url` generated binding or static mock endpoint.
+- Load checked-in SOAP response fixtures.
+- Match SOAPAction/header and XPath/XML request conditions.
+- Return XML response or SOAP fault.
+- Record request journal, server log, HTTP response, and assertion evidence.
+- Reset mock state between tests without restarting the whole suite when suite-scoped lifecycle is selected.
+
+Failure tests:
+
+- Missing SOAP response ref.
+- Invalid XPath.
+- Expected SOAP request missing.
+- XML request mismatch.
+- SOAP fault expected/unexpected mismatch.
+- Raw secret in SOAP headers is blocked or masked.
+
+Boundary tests:
+
+- SOAP namespaces are matched with namespace-aware or local-name XPath.
+- Empty SOAP body or SOAP fault is represented by checked-in refs.
+- Mock server starts once per suite/batch when framework-owned; DSL setup only loads stubs.
+
+## 6B. PR-008B gRPC Unary Mock Capability
+
+Implement gRPC mock through the WireMock gRPC extension, not a custom gRPC server.
+
+Required runtime:
+
+- Validate `grpc_mock` Provider Contract and Provider Instance.
+- Resolve Env_Profile descriptor/service binding keys and expose generated `target_uri` for the paired `grpc_client`.
+- Load descriptor/proto refs from checked-in artifacts.
+- Load unary request/response JSON fixtures.
+- Match service, method, request JSON, optional metadata, and gRPC status.
+- Record request journal, server log, protobuf JSON diff, and assertion evidence.
+- Reset mock state between tests without restarting the whole suite when suite-scoped lifecycle is selected.
+
+Failure tests:
+
+- Missing descriptor ref.
+- Unknown service or method.
+- Request JSON mismatch.
+- Response fixture invalid for descriptor.
+- Non-OK gRPC status handling.
+- Raw authorization metadata is blocked or masked.
+
+Boundary tests:
+
+- Unary request/response only.
+- Client/server streaming fails before execution as unsupported.
+- Mock server starts once per suite/batch when framework-owned; DSL setup only loads stubs.
 
 ## 7. NATS Capability
 
@@ -214,6 +274,8 @@ regress run --suite samples/provider_capability/suite_manifest.yaml --profile lo
 regress report --result <generated_result_json>
 ```
 
+The root `samples/provider_capability/suite_manifest.yaml` may be an aggregate index only. Executable provider capability acceptance may run per-capability suite manifests until an aggregate executable suite has canonical provider instances, Env_Profile, and environment bindings.
+
 CLI must:
 
 - Return deterministic exit codes.
@@ -234,6 +296,20 @@ Required sample artifacts live under `samples/provider_capability/`:
 - `wiremock/fixtures/payment_success_stub.json`
 - `wiremock/fixtures/payment_failure_stub.json`
 - `wiremock/expected_results/expected_request.json`
+- `soap_mock/test_case.yaml`
+- `soap_mock/provider_instances/payment_soap_mock.yaml`
+- `soap_mock/env_profiles/local_soap_mock.yaml`
+- `soap_mock/fixtures/payment_submit_request.xml`
+- `soap_mock/fixtures/payment_submit_response.xml`
+- `soap_mock/fixtures/payment_boundary_request.xml`
+- `soap_mock/fixtures/payment_boundary_response.xml`
+- `grpc_mock/test_case.yaml`
+- `grpc_mock/provider_instances/customer_grpc_mock.yaml`
+- `grpc_mock/env_profiles/local_grpc_mock.yaml`
+- `grpc_mock/proto/customer.proto`
+- `grpc_mock/proto/customer.desc.b64`
+- `grpc_mock/fixtures/get_customer_request.json`
+- `grpc_mock/fixtures/get_customer_response.json`
 - `jdbc/test_case.yaml`
 - `jdbc/provider_contract.yaml`
 - `jdbc/provider_instances/oracle_like.yaml`
@@ -275,6 +351,8 @@ Required sample artifacts live under `samples/provider_capability/`:
 | Provider suite run | `regress run --suite samples/provider_capability/suite_manifest.yaml --profile local_provider` | Exit `0`; batch/run IDs, result JSON, and evidence folder are written. |
 | Provider report | `regress report --result <generated_result_json>` | Exit `0`; report consumes all provider results. |
 | WireMock happy path | WireMock sample | Stub injected, base URL output produced, request journal and server log evidence emitted. |
+| SOAP mock happy path | SOAP mock sample | SOAP stub loaded, endpoint URL output produced, SOAPAction/XPath match passes, XML response returned, request journal/server log/HTTP response/assertion evidence emitted. |
+| gRPC mock happy path | gRPC mock sample | Descriptor-backed unary stub loaded, target URI output produced, request JSON match passes, response returned, request journal/server log/protobuf JSON diff evidence emitted. |
 | JDBC happy path | Oracle-like and DB2-like samples | Seed/query/cleanup run with masked query evidence. |
 | NATS happy path | NATS sample | Event observed from test start time and payload matches. |
 | Compare happy path | Compare sample | JSON/schema/file checks pass with ignore/normalize rules. |
@@ -294,6 +372,11 @@ Required failure tests:
 - Raw secret in config.
 - WireMock call missing.
 - WireMock request body mismatch.
+- SOAP request missing.
+- SOAP XPath/XML mismatch.
+- gRPC descriptor missing.
+- gRPC request mismatch.
+- gRPC streaming operation unsupported.
 - DB record not found.
 - SQL param missing.
 - NATS event not found.
@@ -332,6 +415,9 @@ Every failure must produce owner-actionable error output and evidence when execu
 10. Raw secrets are blocked or masked.
 11. Report consumes all provider capability results.
 12. Future tracks and Phase 2 Agent Skill can reuse provider contracts without changing the public contract.
+13. PR-008A SOAP mock works through WireMock-backed XML/SOAP behavior with request journal, server log, HTTP response, assertion evidence, and report-consumable evidence.
+14. PR-008B gRPC mock works through WireMock gRPC extension unary behavior with descriptor validation, request journal, protobuf JSON diff, and report-consumable evidence.
+15. SOAP/gRPC mock lifecycle is suite/batch scoped; DSL setup loads stubs but does not start RU or mock-server processes directly.
 
 ## 17. First PR Plan
 

@@ -397,6 +397,8 @@ The following verify types define the minimum v0.2 oracle surface. Additional ve
 | `http_mock_request_body_match` | `target`, `expected.match` | `selector`, `ignore_paths`, `severity`, `evidence` | Inline request expectation or approved request body | `ASSERTION_FAILED`, `ASSERTION_INPUT_NOT_FOUND` |
 | `http_mock_request_count` | `target`, `expected.count` | `options.timeout`, `severity`, `evidence` | Inline count | `ASSERTION_FAILED`, `TIMEOUT` |
 | `http_mock_not_called` | `target`, `expected` | `options.timeout`, `severity`, `evidence` | Inline negative expectation | `ASSERTION_FAILED`, `TIMEOUT` |
+| `soap_request_received` | `target`, `soap.operation` | `soap.path`, `soap.action`, `soap.request_xpath`, `soap.expected_count`, `options.timeout`, `severity`, `evidence` | Inline SOAP request expectation or approved XML request ref | `ASSERTION_FAILED`, `ASSERTION_INPUT_NOT_FOUND`, `XML_MISMATCH`, `TIMEOUT` |
+| `grpc_request_received` | `target`, `grpc.service`, `grpc.method` | `grpc.request_json`, `expected.count`, `options.timeout`, `severity`, `evidence` | Inline gRPC request expectation or checked-in JSON fixture | `ASSERTION_FAILED`, `ASSERTION_INPUT_NOT_FOUND`, `PROTO_DESCRIPTOR_INVALID`, `TIMEOUT` |
 
 Each verify implementation must produce the verify result contract described below.
 
@@ -740,8 +742,10 @@ A Provider Instance defines one logical runtime target for an RP. It must use th
 | --- | --- | --- | --- |
 | `shell_command` | `provider-contracts/shell_command.yaml` | `command` | `run_batch`, `execute_command` |
 | `rest_client` | `provider-contracts/rest_client.yaml` | `base_url` | `http_request` |
-| `grpc_client` | `provider-contracts/grpc_client.yaml` | `target` | `unary_call`, `server_stream_call` |
+| `grpc_client` | `provider-contracts/grpc_client.yaml` | `target` | `unary_call` |
 | `wiremock_http_mock` | `provider-contracts/wiremock_http_mock.yaml` | `mappings_ref` | `start_mock`, `connect_mock`, `load_stubs`, `verify_requests` |
+| `soap_mock` | `provider-contracts/soap_mock.yaml` | none required; local/CI usually uses `port_strategy` and generated `endpoint_url` output | `start_soap_mock`, `connect_soap_mock`, `load_soap_stub`, `soap_request_received`, `reset_mock` |
+| `grpc_mock` | `provider-contracts/grpc_mock.yaml` | `descriptor_ref`, `service_name`; `target_uri` is a generated bindable output for clients | `start_grpc_mock`, `connect_grpc_mock`, `load_grpc_stub`, `grpc_request_received`, `reset_mock` |
 | `kafka_messaging` | `provider-contracts/kafka_messaging.yaml` | `bootstrap_servers` | `publish_message`, `consume_message` |
 | `nats` | `provider-contracts/nats.yaml` | `connection`, `subject` | `nats_publish`, `nats_observe`, `event_published`, `event_payload_match` |
 | `jdbc` | `provider-contracts/jdbc.yaml` | `connection.secret_ref`, `dialect` | `db_seed`, `db_cleanup`, `db_query`, `db_record_exists` |
@@ -752,6 +756,8 @@ A Provider Instance defines one logical runtime target for an RP. It must use th
 | `polling_observer` | `provider-contracts/polling_observer.yaml` | none | `observe_condition` |
 
 In v0.2 provider capability mode, `rest_client` is executable for checked-in WireMock + HTTP request samples. It resolves `base_url` from Env_Profile, including generated WireMock outputs such as `generated://wiremock-payment-api.base_url`, executes `http_request`, exposes `response.status`, `response.headers`, `response.body`, and `response.duration_ms`, and writes `http_request_response` evidence. Downstream SIT/preprod endpoint validation still requires owner-provided RP artifacts and real Env_Profiles.
+
+`soap_mock` and `grpc_mock` are PR-008 WireMock-backed mock capabilities. `soap_mock` is executable in PR-008A through WireMock HTTP/XML/SOAP behavior for SOAPAction/header and XPath matching. `grpc_mock` is executable in PR-008B through the WireMock gRPC extension and descriptor refs for unary calls. They are mock providers for local/CI framework evidence; they do not prove downstream SIT/preprod release readiness and do not imply custom SOAP/gRPC server ownership by the framework.
 
 ### 10.2 Provider Instance Examples
 
@@ -890,6 +896,28 @@ providers:
       base_url:
         generated_ref: generated://wiremock-payment-api.base_url
 
+  payment-soap-mock:
+    runtime_mode: mock
+    binding_keys:
+      endpoint_url:
+        generated_ref: generated://payment-soap-mock.endpoint_url
+      wsdl_ref:
+        ref: contracts/payment.wsdl
+
+  customer-grpc-mock:
+    runtime_mode: mock
+    binding_keys:
+      descriptor_ref:
+        ref: proto/customer.desc
+      service_name:
+        value: CustomerService
+
+  customer-grpc-client:
+    runtime_mode: native
+    binding_keys:
+      target:
+        generated_ref: generated://customer-grpc-mock.target_uri
+
   payment-db:
     runtime_mode: ephemeral
     binding_keys:
@@ -1008,6 +1036,8 @@ Typical execution modes:
 
 Validate checks the DSL, suite manifest, Env_Profile, Provider Instance, framework built-in Provider Contract catalog, secret guardrails, result schema, and evidence contract without provider execution.
 
+Malformed suite YAML is a validation failure. The command returns `validation_status: failed` with `reason: invalid_yaml`, does not enter provider runtime, and requires the owner to fix the YAML or referenced contract artifact before retrying.
+
 ```bash
 regress validate \
   --root . \
@@ -1055,7 +1085,103 @@ regress report --result <generated_result_json>
 
 The WireMock + HTTP request sample also includes `suite_manifest_failure.yaml` for deterministic assertion-failure evidence and `suite_manifest_boundary.yaml` for empty request plus HTTP 204 no-content behavior.
 
-Provider Capability suite-path mode may execute only checked-in framework provider capability samples for WireMock HTTP mock, `rest_client` HTTP request, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and evidence/report behavior. It must not execute non-P0 providers, Product/RP/RU topology interpretation, release governance, SIT/preprod release evidence, or downstream product deployment.
+Provider Capability suite-path mode may execute only checked-in framework provider capability samples for WireMock HTTP mock, `rest_client` HTTP request, SOAP mock, gRPC unary mock, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and evidence/report behavior. It must not execute non-P0 providers, Product/RP/RU topology interpretation, release governance, SIT/preprod release evidence, or downstream product deployment.
+
+### 13.1 Mock Server Usage
+
+Mock server providers replace external REST, SOAP, or gRPC dependencies with deterministic checked-in stubs for local/CI framework verification. They are provider capability evidence only and must not be treated as downstream SIT/preprod RP release evidence.
+
+| Provider Type | Purpose | Typical Client | Generated Binding Output |
+| --- | --- | --- | --- |
+| `wiremock_http_mock` | REST/HTTP stubs and request journal verification | `rest_client` | `base_url` |
+| `soap_mock` | SOAP-over-HTTP XML/SOAPAction stubs and request verification | HTTP/SOAP request flow | `endpoint_url` |
+| `grpc_mock` | Unary gRPC mock behavior through WireMock gRPC extension | `grpc_client` | `target_uri` |
+
+Mock server lifecycle:
+
+1. `validate` checks suite, test case DSL, Provider Instances, Env_Profile bindings, stubs, descriptors, and expected refs.
+2. `run --dry-run` resolves mock server and client targets without starting runtime.
+3. `run` starts the mock server at suite/batch scope.
+4. Test case `setup` loads checked-in stubs or mappings.
+5. Test case `execute` calls the client provider, such as `rest_client` or `grpc_client`.
+6. Test case `verify` checks response, request journal, SOAP request, gRPC request, or assertion output.
+7. Cleanup resets or stops mock runtime and records evidence.
+
+DSL rules:
+
+- Test cases reference `provider_id` and `profile`; they must not embed generated endpoint URLs.
+- Mock stubs, mappings, descriptors, and expected results must be checked-in artifacts referenced by `ref`.
+- Env_Profile supplies or resolves binding keys.
+- Generated mock outputs, such as `generated://wiremock-payment-api.base_url`, are bound through Env_Profile and consumed by client providers.
+- `grpc_mock` v0.2 supports unary calls only.
+
+Evidence generated by mock server samples includes request journals, server logs, client request/response evidence, assertion diffs, suite summaries, and raw Allure result files when running a suite group.
+
+### 13.2 Provider Capability Suite Groups
+
+Provider Capability suite groups aggregate multiple checked-in child suite manifests and summarize expected happy, failure, and boundary paths. Child refs must stay under the suite group directory and child ids must be unique.
+
+Suite group lifecycle:
+
+- `regress validate --suite <suite_group>` validates child refs, duplicate child ids, child suite YAML, and child suite contract artifacts.
+- `regress run --suite <suite_group> --dry-run` validates child suites and returns `provider_runtime_invoked: false`.
+- `regress run --suite <suite_group> --profile <profile>` validates child suites before execution. Runtime starts only after all preflight checks pass.
+
+```bash
+regress validate --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml
+
+regress run \
+  --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml \
+  --dry-run
+
+regress run \
+  --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml \
+  --profile local_mock_server_cross_verify
+```
+
+The following suite group problems are preflight blockers:
+
+- missing child suite manifest
+- child ref escaping the suite group directory
+- duplicate child id
+- malformed child suite YAML
+- invalid child contract artifacts
+
+Blocked suite group runs return `run_status: blocked` and must not produce `batch_id`, `run_id`, `suite_summary_json`, or `allure_results_dir`.
+
+`expected_status: failed` means the child suite is expected to execute and finish with observed status `failed`. `blocked` is not an expected failure pass. Configuration, schema, missing file, malformed YAML, or invalid contract problems are preflight blockers and must be fixed before execution.
+
+| Command | Success Output | Blocked Output |
+| --- | --- | --- |
+| `validate` | `validation_status: passed` | `validation_status: failed` |
+| `run --dry-run` | `run_status: dry_run_ready`, `provider_runtime_invoked: false` | `run_status: blocked`, no runtime |
+| `run` | `batch_id`, `run_id`, `suite_summary_json`, `allure_results_dir` | `run_status: blocked`, no run artifacts |
+
+A successful suite group run writes `suite_summary.json`, `suite_summary.yaml`, and raw Allure result files under `target/suite-groups/<suite_id>/<batch_id>/<run_id>/`.
+
+PR-008A SOAP provider capability samples use separate suite manifests:
+
+```bash
+regress validate --suite samples/provider_capability/soap_mock/suite_manifest.yaml
+
+regress run \
+  --suite samples/provider_capability/soap_mock/suite_manifest.yaml \
+  --profile local_soap_mock
+```
+
+PR-008B gRPC provider capability samples use the same pattern:
+
+```bash
+regress validate --suite samples/provider_capability/grpc_mock/suite_manifest.yaml
+
+regress run \
+  --suite samples/provider_capability/grpc_mock/suite_manifest.yaml \
+  --profile local_grpc_mock
+
+regress report --result <generated_result_json>
+```
+
+SOAP/gRPC mock samples may start WireMock-backed mock services at suite/batch scope. Test case `setup` loads stubs; it must not start RU, restart RU, or embed generated endpoint values in the DSL. gRPC v0.2 mock scope is unary only.
 
 Dry run validates the same contract graph and produces a resolved execution plan. It should not perform real test execution.
 
