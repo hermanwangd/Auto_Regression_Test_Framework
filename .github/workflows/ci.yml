@@ -67,7 +67,7 @@ jobs:
     env:
       MAVEN_OPTS: -Xmx1536m
       DEPENDENCY_CHECK_VERSION: 12.2.2
-      DEPENDENCY_CHECK_DATA_DIR: ${{ runner.temp }}/dependency-check-data
+      DEPENDENCY_CHECK_DATA_DIR: .dependency-check-data
       NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
     steps:
       - name: Checkout
