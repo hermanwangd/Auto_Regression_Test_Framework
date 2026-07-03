@@ -63,7 +63,7 @@ jobs:
   dependency-security:
     name: Dependency Security Scan
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
     env:
       MAVEN_OPTS: -Xmx1536m
       DEPENDENCY_CHECK_VERSION: 12.2.2

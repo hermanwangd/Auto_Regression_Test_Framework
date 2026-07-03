@@ -18,7 +18,7 @@ jobs:
   release:
     name: Build and Publish Release
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 150
     env:
       MAVEN_OPTS: -Xmx1536m
       DEPENDENCY_CHECK_VERSION: 12.2.2
