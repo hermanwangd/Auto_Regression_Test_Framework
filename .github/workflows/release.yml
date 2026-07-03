@@ -21,6 +21,8 @@ jobs:
     timeout-minutes: 70
     env:
       MAVEN_OPTS: -Xmx1536m
+      DEPENDENCY_CHECK_VERSION: 12.2.2
+      DEPENDENCY_CHECK_DATA_DIR: ${{ runner.temp }}/dependency-check-data
       NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
     steps:
       - name: Checkout
@@ -45,6 +47,20 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: maven
+
+      - name: Resolve Dependency-Check cache key date
+        id: dependency-check-cache-date
+        shell: bash
+        run: echo "date=$(/bin/date -u '+%Y%m%d')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Dependency-Check data
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DEPENDENCY_CHECK_DATA_DIR }}
+          key: ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-${{ steps.dependency-check-cache-date.outputs.date }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-
+            ${{ runner.os }}-dependency-check-
 
       - name: Unit, integration, and packaged CLI verification
         run: ./mvnw -B -ntp verify

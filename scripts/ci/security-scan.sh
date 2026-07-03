@@ -5,6 +5,15 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 DEPENDENCY_CHECK_VERSION="${DEPENDENCY_CHECK_VERSION:-12.2.2}"
+if [[ -n "${DEPENDENCY_CHECK_DATA_DIR:-}" ]]; then
+  dependency_check_data_dir="$DEPENDENCY_CHECK_DATA_DIR"
+elif [[ -n "${XDG_CACHE_HOME:-}" ]]; then
+  dependency_check_data_dir="${XDG_CACHE_HOME}/spec-driven-auto-regression/dependency-check-data"
+elif [[ -n "${HOME:-}" ]]; then
+  dependency_check_data_dir="${HOME}/.cache/spec-driven-auto-regression/dependency-check-data"
+else
+  dependency_check_data_dir="${ROOT_DIR}/target/dependency-check-data"
+fi
 
 github_error() {
   local title="$1"
@@ -23,6 +32,9 @@ if [[ -z "${NVD_API_KEY:-}" && "${ALLOW_SLOW_NVD_WITHOUT_API_KEY:-false}" != "tr
   exit 2
 fi
 
+mkdir -p "$dependency_check_data_dir"
+echo "dependency_check_data_dir: ${dependency_check_data_dir}"
+
 ARGS=(
   -B
   -ntp
@@ -30,11 +42,11 @@ ARGS=(
   "org.owasp:dependency-check-maven:${DEPENDENCY_CHECK_VERSION}:check"
   -DfailBuildOnCVSS=7
   -Dformat=ALL
-  -DdataDirectory=target/dependency-check-data
+  "-DdataDirectory=${dependency_check_data_dir}"
 )
 
 if [[ -n "${NVD_API_KEY:-}" ]]; then
-  ARGS+=("-DnvdApiKey=${NVD_API_KEY}")
+  ARGS+=("-DnvdApiKeyEnvironmentVariable=NVD_API_KEY")
 fi
 
 if ! MAVEN_OPTS="${MAVEN_OPTS:-"-Xmx1536m"}" ./mvnw "${ARGS[@]}"; then
