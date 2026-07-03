@@ -151,7 +151,7 @@
   ],
   "evidence_refs": [
     "../evidence/evidence_index.yaml",
-    "../evidence/runs/RUN-CONTRACT-001/logs/execution.log",
+    "../evidence/runs/RUN-CONTRACT-001/logs/execution.txt",
     "../evidence/runs/RUN-CONTRACT-001/batch/batch_summary.json",
     "../evidence/runs/RUN-CONTRACT-001/provider-evidence/payment-api/request_journal.yaml",
     "../evidence/runs/RUN-CONTRACT-001/provider-evidence/payment-api/server_log.txt",

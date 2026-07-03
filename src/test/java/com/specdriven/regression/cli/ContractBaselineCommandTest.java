@@ -48,7 +48,8 @@ class ContractBaselineCommandTest {
                 "samples/contract_baseline/environment_bindings/ci.yaml",
                 "samples/contract_baseline/environment_bindings/sit.yaml",
                 "samples/contract_baseline/result/sample_result.json",
-                "samples/contract_baseline/evidence/evidence_index.yaml");
+                "samples/contract_baseline/evidence/evidence_index.yaml",
+                "samples/contract_baseline/evidence/runs/RUN-CONTRACT-001/logs/execution.txt");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")

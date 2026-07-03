@@ -1,0 +1,7 @@
+run_id=RUN-CONTRACT-001
+suite_id=RP-FWK-CONTRACT-SAMPLE-regression
+test_case_id=RP-FWK-CONTRACT-SAMPLE-TC-001
+profile=ci
+status=passed
+masking_applied=true
+message=Contract baseline sample execution completed with provider runtime evidence recorded.
