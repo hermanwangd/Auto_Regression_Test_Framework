@@ -246,7 +246,7 @@ class ContractBaselineCommandTest {
     void reportSuiteResultPrintsDeterministicSummary() {
         CommandResult result = execute("report", "--result", BASELINE_RESULT.toString());
 
-        assertThat(result.exit()).as(result.stderr()).isZero();
+        assertThat(result.exit()).as(() -> commandOutput(result)).isZero();
         assertThat(result.stdout())
                 .contains("report_status: review_ready")
                 .contains("test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001")
@@ -1033,6 +1033,15 @@ class ContractBaselineCommandTest {
         ByteArrayOutputStream stderr = new ByteArrayOutputStream();
         int exit = command.execute(args, print(stdout), print(stderr));
         return new CommandResult(exit, stdout.toString(), stderr.toString());
+    }
+
+    private String commandOutput(CommandResult result) {
+        return """
+                stdout:
+                %s
+                stderr:
+                %s
+                """.formatted(result.stdout(), result.stderr());
     }
 
     private PrintStream print(ByteArrayOutputStream stream) {
