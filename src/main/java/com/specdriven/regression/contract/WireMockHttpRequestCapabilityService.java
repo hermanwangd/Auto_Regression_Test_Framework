@@ -81,8 +81,8 @@ public class WireMockHttpRequestCapabilityService {
             return MixedRunResult.blocked(validation.suiteId(), requestedProfile, profileFindings);
         }
 
-        RuntimeSelection selection = selectRuntime(suiteManifest, requestedProfile, outputBase);
-        if (selection == null) {
+        List<RuntimeSelection> selections = selectRuntimes(suiteManifest, requestedProfile, outputBase);
+        if (selections.isEmpty()) {
             return MixedRunResult.blocked(validation.suiteId(), requestedProfile, List.of(new ContractFinding(
                     suiteManifest.toString(),
                     "targets",
@@ -93,7 +93,8 @@ public class WireMockHttpRequestCapabilityService {
                     "",
                     "Declare one WireMock target and one rest_client target in the sample DSL.")));
         }
-        recreateDirectory(selection.runDir());
+        RuntimeSelection firstSelection = selections.get(0);
+        recreateDirectory(firstSelection.suiteRunDir());
 
         WireMockHttpMockProviderRuntime wireMockRuntime = new WireMockHttpMockProviderRuntime();
         RestClientProviderRuntime restRuntime = new RestClientProviderRuntime();
@@ -104,78 +105,59 @@ public class WireMockHttpRequestCapabilityService {
         Instant startedAt = Instant.now();
         String status = "passed";
         ProviderFailure failure = null;
+        RuntimeSelection failureSelection = null;
         boolean providerRuntimeExecuted = false;
-        Map<String, Map<String, Object>> capturedOutputs = new LinkedHashMap<>();
         Map<String, Object> aggregateOutputs = new LinkedHashMap<>();
         List<Map<String, Object>> stepResults = new ArrayList<>();
         List<Map<String, Object>> verifyResults = new ArrayList<>();
+        List<Map<String, Object>> testResults = new ArrayList<>();
+        List<Map<String, Object>> providerResults = new ArrayList<>();
         List<String> evidenceRefs = new ArrayList<>();
-        Map<String, Object> restBindingValues = new LinkedHashMap<>(selection.restBindingValues());
-        ProviderExecutionContext wireContext = context(selection, selection.wireBindingValues(), selection.wireProviderId(),
-                WIREMOCK, selection.wireRuntimeMode(), selection.wireContract(), selection.wireInstance());
 
-        try {
-            SelectedOperation setup = operation(selection.testCase(), "setup", selection.wireTarget(), "load_stubs");
-            ProviderRuntimeResolution setupResolution = resolver.resolve(wireContext, setup.request());
-            if (!setupResolution.valid()) {
-                return blocked(selection, requestedProfile, setupResolution.failure());
-            }
-            ProviderOperationResult setupResult = setupResolution.runtime().execute(wireContext, setup.request());
-            providerRuntimeExecuted = true;
-            capture(setup.id(), setupResult, capturedOutputs, aggregateOutputs, stepResults, evidenceRefs);
-            if (!setupResult.passed()) {
+        for (RuntimeSelection selection : selections) {
+            TestExecution execution = executeTestCase(resolver, wireMockRuntime, selection, requestedProfile);
+            providerRuntimeExecuted = providerRuntimeExecuted || execution.providerRuntimeExecuted();
+            aggregateOutputs.put(safe(stringValue(selection.testCase().get("test_case_id"))), execution.outputs());
+            stepResults.addAll(execution.stepResults());
+            verifyResults.addAll(execution.verifyResults());
+            testResults.add(execution.testResult());
+            providerResults.addAll(execution.providerResults());
+            evidenceRefs.addAll(prefixEvidenceRefs(selection, execution.evidenceRefs()));
+            if (!execution.passed() && "passed".equals(status)) {
                 status = "failed";
-                failure = setupResult.failure();
-            } else {
-                restBindingValues.put("base_url", stringValue(setupResult.outputs().get("base_url")));
-                ProviderExecutionContext restContext = context(selection, restBindingValues, selection.restProviderId(),
-                        REST_CLIENT, selection.restRuntimeMode(), selection.restContract(), selection.restInstance());
-                SelectedOperation execute = operation(selection.testCase(), "execute", selection.restTarget(), "http_request");
-                ProviderRuntimeResolution executeResolution = resolver.resolve(restContext, execute.request());
-                if (!executeResolution.valid()) {
-                    return blocked(selection, requestedProfile, executeResolution.failure());
-                }
-                ProviderOperationResult executeResult = executeResolution.runtime().execute(restContext, execute.request());
-                capture(execute.id(), executeResult, capturedOutputs, aggregateOutputs, stepResults, evidenceRefs);
-                writeWireMockRequestJournal(selection, stringValue(setupResult.outputs().get("base_url")));
-                evidenceRefs.add("provider-evidence/wiremock/request_journal.json");
-                if (!executeResult.passed()) {
-                    status = "failed";
-                    failure = executeResult.failure();
-                } else {
-                    VerificationOutcome verification = verify(selection, capturedOutputs);
-                    verifyResults.addAll(verification.verifyResults());
-                    evidenceRefs.addAll(verification.evidenceRefs());
-                    if (!verification.passed()) {
-                        status = "failed";
-                        failure = ProviderFailure.of(
-                                "ASSERTION_FAILED",
-                                "ASSERTION_FAILED",
-                                "One or more WireMock + HTTP request verification checks failed.",
-                                "Review assertion evidence and provider request/response evidence.");
-                    }
-                }
+                failure = execution.failure();
+                failureSelection = selection;
             }
-        } finally {
-            SelectedOperation cleanup = operation(selection.testCase(), "cleanup", selection.wireTarget(), "reset_mock");
-            ProviderOperationResult cleanupResult = wireMockRuntime.execute(wireContext, cleanup.request());
-            capture(cleanup.id(), cleanupResult, capturedOutputs, aggregateOutputs, stepResults, evidenceRefs);
         }
 
         Instant finishedAt = Instant.now();
-        writeExecutionLog(selection, status, aggregateOutputs);
+        writeExecutionLog(firstSelection.suiteRunDir(), firstSelection, status, aggregateOutputs);
         evidenceRefs.add("logs/execution.log");
-        writeBatch(selection, status);
+        writeBatch(firstSelection.suiteRunDir(), firstSelection, status, selections.size());
         evidenceRefs.add("batch/batch.yaml");
-        writeEvidenceIndex(selection, evidenceRefs);
+        if ("failed".equals(status)) {
+            RuntimeSelection failedSelection = failureSelection == null ? firstSelection : failureSelection;
+            writeFailureDetail(firstSelection.suiteRunDir(), failedSelection, failure);
+            evidenceRefs.add("provider-evidence/wiremock_http_request/failure_detail.yaml");
+        }
+        writeEvidenceIndex(
+                firstSelection.suiteRunDir(),
+                firstSelection,
+                topLevelTestCaseId(firstSelection, selections.size()),
+                evidenceRefs);
         evidenceRefs.add(0, "evidence_index.yaml");
         Path resultJson = writeResult(
-                selection,
+                firstSelection.suiteRunDir(),
+                firstSelection,
                 requestedProfile,
+                topLevelTestCaseId(firstSelection, selections.size()),
+                selections.size(),
                 status,
                 aggregateOutputs,
                 stepResults,
                 verifyResults,
+                testResults,
+                providerResults,
                 evidenceRefs,
                 failure,
                 startedAt,
@@ -183,15 +165,16 @@ public class WireMockHttpRequestCapabilityService {
         return new MixedRunResult(
                 "passed".equals(status),
                 status,
-                stringValue(selection.suite().get("suite_id")),
-                selection.batchId(),
-                selection.runId(),
-                stringValue(selection.testCase().get("test_case_id")),
+                stringValue(firstSelection.suite().get("suite_id")),
+                firstSelection.batchId(),
+                firstSelection.runId(),
+                topLevelTestCaseId(firstSelection, selections.size()),
                 requestedProfile,
-                List.of(selection.wireProviderId(), selection.restProviderId()),
+                List.of(firstSelection.wireProviderId(), firstSelection.restProviderId()),
                 List.of(WIREMOCK, REST_CLIENT),
                 resultJson,
-                selection.runDir(),
+                firstSelection.suiteRunDir(),
+                selections.size(),
                 providerRuntimeExecuted,
                 List.of());
     }
@@ -236,6 +219,148 @@ public class WireMockHttpRequestCapabilityService {
                 bindingValues);
     }
 
+    private TestExecution executeTestCase(
+            ProviderRuntimeResolver resolver,
+            WireMockHttpMockProviderRuntime wireMockRuntime,
+            RuntimeSelection selection,
+            String requestedProfile) {
+        recreateDirectory(selection.runDir());
+        String testCaseId = stringValue(selection.testCase().get("test_case_id"));
+        String status = "passed";
+        ProviderFailure failure = null;
+        boolean providerRuntimeExecuted = false;
+        Map<String, Map<String, Object>> capturedOutputs = new LinkedHashMap<>();
+        Map<String, Object> outputs = new LinkedHashMap<>();
+        List<Map<String, Object>> stepResults = new ArrayList<>();
+        List<Map<String, Object>> verifyResults = new ArrayList<>();
+        List<String> evidenceRefs = new ArrayList<>();
+        Map<String, Object> restBindingValues = new LinkedHashMap<>(selection.restBindingValues());
+        ProviderExecutionContext wireContext = context(selection, selection.wireBindingValues(), selection.wireProviderId(),
+                WIREMOCK, selection.wireRuntimeMode(), selection.wireContract(), selection.wireInstance());
+
+        try {
+            SelectedOperation setup = operation(selection.testCase(), "setup", selection.wireTarget(), "load_stubs");
+            ProviderRuntimeResolution setupResolution = resolver.resolve(wireContext, setup.request());
+            if (!setupResolution.valid()) {
+                return blockedExecution(selection, requestedProfile, setupResolution.failure());
+            }
+            ProviderOperationResult setupResult = setupResolution.runtime().execute(wireContext, setup.request());
+            providerRuntimeExecuted = true;
+            capture(setup.id(), setupResult, capturedOutputs, outputs, stepResults, evidenceRefs);
+            if (!setupResult.passed()) {
+                status = "failed";
+                failure = setupResult.failure();
+            } else {
+                restBindingValues.put("base_url", stringValue(setupResult.outputs().get("base_url")));
+                ProviderExecutionContext restContext = context(selection, restBindingValues, selection.restProviderId(),
+                        REST_CLIENT, selection.restRuntimeMode(), selection.restContract(), selection.restInstance());
+                SelectedOperation execute = operation(selection.testCase(), "execute", selection.restTarget(), "http_request");
+                ProviderRuntimeResolution executeResolution = resolver.resolve(restContext, execute.request());
+                if (!executeResolution.valid()) {
+                    return blockedExecution(selection, requestedProfile, executeResolution.failure());
+                }
+                ProviderOperationResult executeResult = executeResolution.runtime().execute(restContext, execute.request());
+                capture(execute.id(), executeResult, capturedOutputs, outputs, stepResults, evidenceRefs);
+                writeWireMockRequestJournal(selection, stringValue(setupResult.outputs().get("base_url")));
+                evidenceRefs.add("provider-evidence/wiremock/request_journal.json");
+                if (!executeResult.passed()) {
+                    status = "failed";
+                    failure = executeResult.failure();
+                } else {
+                    VerificationOutcome verification = verify(selection, capturedOutputs);
+                    verifyResults.addAll(verification.verifyResults());
+                    evidenceRefs.addAll(verification.evidenceRefs());
+                    if (!verification.passed()) {
+                        status = "failed";
+                        failure = ProviderFailure.of(
+                                "ASSERTION_FAILED",
+                                "ASSERTION_FAILED",
+                                "One or more WireMock + HTTP request verification checks failed.",
+                                "Review assertion evidence and provider request/response evidence.");
+                    }
+                }
+            }
+        } finally {
+            SelectedOperation cleanup = operation(selection.testCase(), "cleanup", selection.wireTarget(), "reset_mock");
+            ProviderOperationResult cleanupResult = wireMockRuntime.execute(wireContext, cleanup.request());
+            capture(cleanup.id(), cleanupResult, capturedOutputs, outputs, stepResults, evidenceRefs);
+            if (!cleanupResult.passed() && "passed".equals(status)) {
+                status = "failed";
+                failure = cleanupResult.failure();
+            }
+        }
+
+        writeExecutionLog(selection.runDir(), selection, status, outputs);
+        evidenceRefs.add("logs/execution.log");
+        writeBatch(selection.runDir(), selection, status, 1);
+        evidenceRefs.add("batch/batch.yaml");
+        List<Map<String, Object>> providerResults = List.of(
+                providerResult(selection.wireProviderId(), WIREMOCK, selection.wireRuntimeMode(), status, outputs),
+                providerResult(selection.restProviderId(), REST_CLIENT, selection.restRuntimeMode(), status, outputs));
+        Map<String, Object> testResult = new LinkedHashMap<>();
+        testResult.put("test_case_id", testCaseId);
+        testResult.put("profile", requestedProfile);
+        testResult.put("provider_ids", List.of(selection.wireProviderId(), selection.restProviderId()));
+        testResult.put("provider_types", List.of(WIREMOCK, REST_CLIENT));
+        testResult.put("status", status);
+        testResult.put("step_count", stepResults.size());
+        testResult.put("verify_count", verifyResults.size());
+        if (failure != null) {
+            testResult.put("failure_code", failure.code());
+            testResult.put("failure_classification", failure.classification());
+        }
+        return new TestExecution(
+                "passed".equals(status),
+                status,
+                providerRuntimeExecuted,
+                outputs,
+                stepResults,
+                verifyResults,
+                testResult,
+                providerResults,
+                evidenceRefs,
+                failure);
+    }
+
+    private TestExecution blockedExecution(RuntimeSelection selection, String requestedProfile, ProviderFailure failure) {
+        ProviderFailure resolvedFailure = failure == null
+                ? ProviderFailure.of("PROVIDER_RUNTIME_BLOCKED", "PROVIDER_RUNTIME_ERROR", "Provider runtime blocked.", "Review provider runtime validation.")
+                : failure;
+        Map<String, Object> testResult = new LinkedHashMap<>();
+        testResult.put("test_case_id", selection.testCase().get("test_case_id"));
+        testResult.put("profile", requestedProfile);
+        testResult.put("provider_ids", List.of(selection.wireProviderId(), selection.restProviderId()));
+        testResult.put("provider_types", List.of(WIREMOCK, REST_CLIENT));
+        testResult.put("status", "failed");
+        testResult.put("failure_code", resolvedFailure.code());
+        testResult.put("failure_classification", resolvedFailure.classification());
+        writeFailureDetail(selection.runDir(), selection, resolvedFailure);
+        return new TestExecution(
+                false,
+                "failed",
+                false,
+                Map.of(),
+                List.of(),
+                List.of(),
+                testResult,
+                List.of(),
+                List.of("provider-evidence/wiremock_http_request/failure_detail.yaml"),
+                resolvedFailure);
+    }
+
+    private List<String> prefixEvidenceRefs(RuntimeSelection selection, List<String> refs) {
+        if (selection.runDir().equals(selection.suiteRunDir())) {
+            return refs.stream()
+                    .filter(ref -> ref != null && !ref.isBlank())
+                    .toList();
+        }
+        String prefix = "tests/" + safe(stringValue(selection.testCase().get("test_case_id"))) + "/";
+        return refs.stream()
+                .filter(ref -> ref != null && !ref.isBlank())
+                .map(ref -> prefix + ref)
+                .toList();
+    }
+
     private void capture(
             String operationId,
             ProviderOperationResult result,
@@ -252,14 +377,22 @@ public class WireMockHttpRequestCapabilityService {
                 .toList());
     }
 
-    private RuntimeSelection selectRuntime(Path suiteManifest, String requestedProfile, Path outputBase) {
+    private List<RuntimeSelection> selectRuntimes(Path suiteManifest, String requestedProfile, Path outputBase) {
         Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
         Map<String, Object> suite = readMap(suiteManifest);
         Map<String, Map<String, Object>> instancesById =
                 readDirectoryByField(suiteRoot.resolve("provider_instances"), "provider_id");
         Map<String, Map<String, Object>> contractsByType =
                 readDirectoryByField(frameworkProviderContractsDirectory(suiteRoot), "provider_type");
-        for (Object testRef : listValue(suite.get("tests"))) {
+        RunIds runIds = newRunIds();
+        Path suiteRunDir = outputBase
+                .resolve(safe(stringValue(suite.get("suite_id"))))
+                .resolve(runIds.batchId())
+                .resolve(runIds.runId());
+        List<RuntimeSelection> selections = new ArrayList<>();
+        List<Object> testRefs = listValue(suite.get("tests"));
+        boolean multiTestSuite = testRefs.size() > 1;
+        for (Object testRef : testRefs) {
             Map<String, Object> testCase = readMap(suiteRoot.resolve(stringValue(testRef)).normalize());
             TargetSelection wireTarget = null;
             TargetSelection restTarget = null;
@@ -283,12 +416,10 @@ public class WireMockHttpRequestCapabilityService {
                 }
             }
             if (wireTarget != null && restTarget != null) {
-                RunIds runIds = newRunIds();
-                Path runDir = outputBase
-                        .resolve(safe(stringValue(suite.get("suite_id"))))
-                        .resolve(runIds.batchId())
-                        .resolve(runIds.runId());
-                return new RuntimeSelection(
+                Path runDir = multiTestSuite
+                        ? suiteRunDir.resolve("tests").resolve(safe(stringValue(testCase.get("test_case_id"))))
+                        : suiteRunDir;
+                selections.add(new RuntimeSelection(
                         suiteRoot,
                         suite,
                         testCase,
@@ -307,10 +438,11 @@ public class WireMockHttpRequestCapabilityService {
                         restTarget.bindingValues(),
                         runIds.batchId(),
                         runIds.runId(),
-                        runDir);
+                        suiteRunDir,
+                        runDir));
             }
         }
-        return null;
+        return List.copyOf(selections);
     }
 
     private List<ContractFinding> requestedProfileFindings(Path suiteManifest, String requestedProfile) {
@@ -486,8 +618,8 @@ public class WireMockHttpRequestCapabilityService {
                         passed ? "" : "failure_code: ASSERTION_FAILED"));
     }
 
-    private void writeExecutionLog(RuntimeSelection selection, String status, Map<String, Object> outputs) {
-        write(selection.runDir().resolve("logs/execution.log"), """
+    private void writeExecutionLog(Path runDir, RuntimeSelection selection, String status, Map<String, Object> outputs) {
+        write(runDir.resolve("logs/execution.log"), """
                 evidence_type: execution_log
                 evidence_classification: framework_provider_capability_only
                 downstream_release_evidence: false
@@ -502,8 +634,8 @@ public class WireMockHttpRequestCapabilityService {
                         outputs.getOrDefault("response.status", "")));
     }
 
-    private void writeBatch(RuntimeSelection selection, String status) {
-        write(selection.runDir().resolve("batch/batch.yaml"), """
+    private void writeBatch(Path runDir, RuntimeSelection selection, String status, int testCount) {
+        write(runDir.resolve("batch/batch.yaml"), """
                 evidence_type: batch_summary
                 evidence_classification: framework_provider_capability_only
                 downstream_release_evidence: false
@@ -511,13 +643,15 @@ public class WireMockHttpRequestCapabilityService {
                 batch_id: %s
                 run_id: %s
                 test_case_id: %s
+                test_count: %s
                 provider_types: [wiremock_http_mock, rest_client]
                 status: %s
                 """.formatted(
                         selection.suite().get("suite_id"),
                         selection.batchId(),
                         selection.runId(),
-                        selection.testCase().get("test_case_id"),
+                        topLevelTestCaseId(selection, testCount),
+                        testCount,
                         status));
     }
 
@@ -554,20 +688,47 @@ public class WireMockHttpRequestCapabilityService {
         }
     }
 
-    private void writeEvidenceIndex(RuntimeSelection selection, List<String> evidenceRefs) {
+    private void writeFailureDetail(Path runDir, RuntimeSelection selection, ProviderFailure failure) {
+        ProviderFailure resolvedFailure = failure == null
+                ? ProviderFailure.of("ASSERTION_FAILED", "ASSERTION_FAILED", "WireMock HTTP request capability failed.", "Review provider and assertion evidence.")
+                : failure;
+        write(runDir.resolve("provider-evidence/wiremock_http_request/failure_detail.yaml"), """
+                evidence_type: failure_detail
+                evidence_classification: framework_provider_capability_only
+                downstream_release_evidence: false
+                provider_types: [wiremock_http_mock, rest_client]
+                provider_ids: [%s, %s]
+                profile: %s
+                failure_code: %s
+                classification: %s
+                reason: %s
+                owner_action: %s
+                masking:
+                  raw_secret_found: false
+                """.formatted(
+                selection.wireProviderId(),
+                selection.restProviderId(),
+                selection.profile(),
+                resolvedFailure.code(),
+                resolvedFailure.classification(),
+                resolvedFailure.reason(),
+                resolvedFailure.ownerAction()));
+    }
+
+    private void writeEvidenceIndex(Path runDir, RuntimeSelection selection, String testCaseId, List<String> evidenceRefs) {
         StringBuilder index = new StringBuilder();
         index.append("evidence_index_version: v0.2\n");
         index.append("suite_id: ").append(selection.suite().get("suite_id")).append('\n');
         index.append("batch_id: ").append(selection.batchId()).append('\n');
         index.append("run_id: ").append(selection.runId()).append('\n');
-        index.append("test_case_id: ").append(selection.testCase().get("test_case_id")).append('\n');
+        index.append("test_case_id: ").append(testCaseId).append('\n');
         index.append("profile: ").append(selection.profile()).append('\n');
         index.append("entries:\n");
         for (String ref : distinct(evidenceRefs)) {
             if (ref == null || ref.isBlank() || ref.endsWith("evidence_index.yaml")) {
                 continue;
             }
-            EvidenceEntry entry = evidenceEntry(selection, ref);
+            EvidenceEntry entry = evidenceEntry(runDir, selection, ref);
             index.append("  - evidence_id: ").append(entry.evidenceId()).append('\n');
             index.append("    evidence_type: ").append(entry.evidenceType()).append('\n');
             index.append("    produced_by: ").append(entry.producedBy()).append('\n');
@@ -575,7 +736,7 @@ public class WireMockHttpRequestCapabilityService {
                 index.append("    provider_type: ").append(entry.providerType()).append('\n');
                 index.append("    provider_id: ").append(entry.providerId()).append('\n');
             }
-            index.append("    test_case_id: ").append(selection.testCase().get("test_case_id")).append('\n');
+            index.append("    test_case_id: ").append(testCaseId).append('\n');
             index.append("    run_id: ").append(selection.runId()).append('\n');
             index.append("    batch_id: ").append(selection.batchId()).append('\n');
             index.append("    file_path: ").append(ref).append('\n');
@@ -589,22 +750,25 @@ public class WireMockHttpRequestCapabilityService {
             }
         }
         index.append("masking:\n  raw_secret_found: false\n");
-        write(selection.runDir().resolve("evidence_index.yaml"), index.toString());
+        write(runDir.resolve("evidence_index.yaml"), index.toString());
     }
 
-    private EvidenceEntry evidenceEntry(RuntimeSelection selection, String ref) {
+    private EvidenceEntry evidenceEntry(Path runDir, RuntimeSelection selection, String ref) {
         String evidenceType = evidenceType(ref);
-        String content = read(selection.runDir().resolve(ref));
+        String content = read(runDir.resolve(ref));
         String status = evidenceFailed(evidenceType, content) ? "failed" : "passed";
         String failureCode = "failed".equals(status) ? firstNonBlank(failureCode(content), "ASSERTION_FAILED") : "";
         String providerType = "";
         String providerId = "";
-        if (ref.startsWith("provider-evidence/wiremock/")) {
+        if (ref.contains("provider-evidence/wiremock/")) {
             providerType = WIREMOCK;
             providerId = selection.wireProviderId();
-        } else if (ref.startsWith("provider-evidence/http/")) {
+        } else if (ref.contains("provider-evidence/http/")) {
             providerType = REST_CLIENT;
             providerId = selection.restProviderId();
+        } else if (ref.contains("provider-evidence/wiremock_http_request/")) {
+            providerType = WIREMOCK;
+            providerId = selection.wireProviderId();
         }
         return new EvidenceEntry(
                 evidenceType + "-" + safe(ref),
@@ -654,50 +818,45 @@ public class WireMockHttpRequestCapabilityService {
     }
 
     private Path writeResult(
+            Path runDir,
             RuntimeSelection selection,
             String profile,
+            String testCaseId,
+            int testCount,
             String status,
             Map<String, Object> outputs,
             List<Map<String, Object>> stepResults,
             List<Map<String, Object>> verifyResults,
+            List<Map<String, Object>> testResults,
+            List<Map<String, Object>> providerResults,
             List<String> evidenceRefs,
             ProviderFailure failure,
             Instant startedAt,
             Instant finishedAt) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("framework_version", "v0.2");
-        result.put("dsl_version", selection.testCase().get("dsl_version"));
-        result.put("suite_id", selection.suite().get("suite_id"));
-        result.put("batch_id", selection.batchId());
-        result.put("run_id", selection.runId());
-        result.put("test_case_id", selection.testCase().get("test_case_id"));
-        result.put("profile", profile);
-        result.put("environment", profile);
-        result.put("status", status);
-        result.put("start_time", startedAt.toString());
-        result.put("end_time", finishedAt.toString());
-        result.put("duration_ms", Duration.between(startedAt, finishedAt).toMillis());
-        result.put("timestamps", Map.of("started_at", startedAt.toString(), "finished_at", finishedAt.toString()));
-        result.put("labels", selection.testCase().get("labels"));
-        result.put("source_refs", selection.testCase().get("source_refs"));
-        result.put("step_results", stepResults);
-        result.put("steps", stepResults);
-        result.put("verify_results", verifyResults);
-        result.put("provider_results", List.of(
-                providerResult(selection.wireProviderId(), WIREMOCK, selection.wireRuntimeMode(), status, outputs),
-                providerResult(selection.restProviderId(), REST_CLIENT, selection.restRuntimeMode(), status, outputs)));
-        result.put("evidence_index_ref", "evidence_index.yaml");
-        result.put("provider_evidence_refs", distinct(evidenceRefs));
-        result.put("evidence_refs", distinct(evidenceRefs));
-        Map<String, Object> failureObject = new LinkedHashMap<>();
-        failureObject.put("code", failure == null ? null : failure.code());
-        failureObject.put("classification", failure == null ? null : failure.classification());
-        failureObject.put("reason", failure == null ? null : failure.reason());
-        failureObject.put("owner_action", failure == null ? null : failure.ownerAction());
-        result.put("failure", failureObject);
-        Path resultJson = selection.runDir().resolve("result.json");
-        write(resultJson, toJson(result) + "\n");
-        return resultJson;
+        return ProviderCapabilityResultWriter.write(runDir, new ProviderCapabilityResultWriter.ResultDocument(
+                selection.testCase().get("dsl_version"),
+                selection.suite().get("suite_id"),
+                selection.batchId(),
+                selection.runId(),
+                testCaseId,
+                testCount,
+                profile,
+                profile,
+                status,
+                startedAt,
+                finishedAt,
+                selection.testCase().get("labels"),
+                selection.testCase().get("source_refs"),
+                stepResults,
+                verifyResults,
+                testResults,
+                providerResults,
+                distinct(evidenceRefs),
+                distinct(evidenceRefs),
+                Map.of(),
+                failure,
+                null,
+                true));
     }
 
     private Map<String, Object> providerResult(
@@ -716,6 +875,11 @@ public class WireMockHttpRequestCapabilityService {
                 "outputs", outputs));
         result.put("release_evidence_eligible", false);
         return result;
+    }
+
+    private String topLevelTestCaseId(RuntimeSelection selection, int testCount) {
+        return ProviderCapabilityResultWriter.topLevelTestCaseId(
+                selection.suite().get("suite_id"), selection.testCase().get("test_case_id"), testCount);
     }
 
     private Map<String, Object> step(String id, String status, Map<String, Object> outputs) {
@@ -963,6 +1127,7 @@ public class WireMockHttpRequestCapabilityService {
             List<String> providerTypes,
             Path resultJson,
             Path evidenceDir,
+            int testCount,
             boolean providerRuntimeExecuted,
             List<ContractFinding> findings) {
 
@@ -979,6 +1144,7 @@ public class WireMockHttpRequestCapabilityService {
                     List.of(WIREMOCK, REST_CLIENT),
                     null,
                     null,
+                    0,
                     false,
                     List.copyOf(findings));
         }
@@ -1003,6 +1169,7 @@ public class WireMockHttpRequestCapabilityService {
             Map<String, Object> restBindingValues,
             String batchId,
             String runId,
+            Path suiteRunDir,
             Path runDir) {
     }
 
@@ -1025,6 +1192,19 @@ public class WireMockHttpRequestCapabilityService {
             boolean passed,
             List<Map<String, Object>> verifyResults,
             List<String> evidenceRefs) {
+    }
+
+    private record TestExecution(
+            boolean passed,
+            String status,
+            boolean providerRuntimeExecuted,
+            Map<String, Object> outputs,
+            List<Map<String, Object>> stepResults,
+            List<Map<String, Object>> verifyResults,
+            Map<String, Object> testResult,
+            List<Map<String, Object>> providerResults,
+            List<String> evidenceRefs,
+            ProviderFailure failure) {
     }
 
     private record EvidenceEntry(

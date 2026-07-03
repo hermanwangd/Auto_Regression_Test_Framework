@@ -1,10 +1,17 @@
 {
-  "framework_version": "v0.2",
+  "framework_version": "0.2.0",
   "dsl_version": "v0.2",
+  "suite_id": "RP-FWK-CONTRACT-SAMPLE-regression",
+  "batch_id": "BATCH-CONTRACT-001",
+  "run_id": "RUN-CONTRACT-001",
   "test_case_id": "RP-FWK-CONTRACT-SAMPLE-TC-001",
+  "test_count": 1,
   "status": "passed",
   "profile": "ci",
   "environment": "ci-contract-sample",
+  "start_time": "2026-06-29T00:00:00Z",
+  "end_time": "2026-06-29T00:00:05Z",
+  "duration_ms": 5000,
   "timestamps": {
     "started_at": "2026-06-29T00:00:00Z",
     "finished_at": "2026-06-29T00:00:05Z"
@@ -13,6 +20,40 @@
     "rp_id": "RP-FWK-CONTRACT-SAMPLE",
     "feature_id": "F007"
   },
+  "test_results": [
+    {
+      "test_case_id": "RP-FWK-CONTRACT-SAMPLE-TC-001",
+      "status": "passed",
+      "profile": "ci",
+      "provider_ids": [
+        "wiremock-payment-api",
+        "oracle-database",
+        "nats-event-bus"
+      ],
+      "provider_types": [
+        "wiremock_http_mock",
+        "jdbc",
+        "nats"
+      ]
+    }
+  ],
+  "provider_summary": [
+    {
+      "provider_id": "wiremock-payment-api",
+      "provider_type": "wiremock_http_mock",
+      "runtime_mode": "mock"
+    },
+    {
+      "provider_id": "oracle-database",
+      "provider_type": "jdbc",
+      "runtime_mode": "ephemeral"
+    },
+    {
+      "provider_id": "nats-event-bus",
+      "provider_type": "nats",
+      "runtime_mode": "ephemeral"
+    }
+  ],
   "provider_results": [
     {
       "provider_id": "wiremock-payment-api",
@@ -30,11 +71,11 @@
     },
     {
       "provider_id": "oracle-database",
-      "provider_type": "jdbc_database",
+      "provider_type": "jdbc",
       "profile": "ci",
       "runtime_mode": "ephemeral",
       "resolved_operation_result": {
-        "operation": "query",
+        "operation": "db_query",
         "status": "passed",
         "outputs": {
           "row_count": 1
@@ -55,6 +96,20 @@
         }
       },
       "release_evidence_eligible": false
+    }
+  ],
+  "step_results": [
+    {
+      "id": "verify_payment_mock_request",
+      "status": "passed"
+    },
+    {
+      "id": "query_order",
+      "status": "passed"
+    },
+    {
+      "id": "publish_payment_event",
+      "status": "passed"
     }
   ],
   "steps": [
@@ -85,12 +140,28 @@
       "status": "passed"
     }
   ],
+  "evidence_index_ref": "../evidence/evidence_index.yaml",
+  "provider_evidence_refs": [
+    "../evidence/runs/RUN-CONTRACT-001/provider-evidence/payment-api/request_journal.yaml",
+    "../evidence/runs/RUN-CONTRACT-001/provider-evidence/payment-api/server_log.txt",
+    "../evidence/runs/RUN-CONTRACT-001/query-evidence/order_database/seed.yaml",
+    "../evidence/runs/RUN-CONTRACT-001/query-evidence/order_database/query_result.yaml",
+    "../evidence/runs/RUN-CONTRACT-001/query-evidence/order_database/cleanup.yaml",
+    "../evidence/runs/RUN-CONTRACT-001/event-evidence/nats_event_bus/published_message.yaml"
+  ],
   "evidence_refs": [
-    "evidence/runs/RUN-CONTRACT-001/provider-evidence/payment-api/request_journal.yaml",
-    "evidence/runs/RUN-CONTRACT-001/query-evidence/order_database/query_result.yaml",
-    "evidence/runs/RUN-CONTRACT-001/event-evidence/nats_event_bus/published_message.yaml"
+    "../evidence/evidence_index.yaml",
+    "../evidence/runs/RUN-CONTRACT-001/logs/execution.log",
+    "../evidence/runs/RUN-CONTRACT-001/batch/batch_summary.json",
+    "../evidence/runs/RUN-CONTRACT-001/provider-evidence/payment-api/request_journal.yaml",
+    "../evidence/runs/RUN-CONTRACT-001/provider-evidence/payment-api/server_log.txt",
+    "../evidence/runs/RUN-CONTRACT-001/query-evidence/order_database/seed.yaml",
+    "../evidence/runs/RUN-CONTRACT-001/query-evidence/order_database/query_result.yaml",
+    "../evidence/runs/RUN-CONTRACT-001/query-evidence/order_database/cleanup.yaml",
+    "../evidence/runs/RUN-CONTRACT-001/event-evidence/nats_event_bus/published_message.yaml"
   ],
   "failure": {
+    "code": null,
     "classification": null,
     "reason": null,
     "owner_action": null

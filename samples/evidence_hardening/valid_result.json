@@ -1,10 +1,11 @@
 {
-  "framework_version": "v0.2",
+  "framework_version": "0.2.0",
   "dsl_version": "v0.2",
   "suite_id": "EVIDENCE-HARDENING-v0.2",
   "batch_id": "BATCH-EVIDENCE-001",
   "run_id": "RUN-EVIDENCE-001",
   "test_case_id": "EVIDENCE-HARDENING-TC-001",
+  "test_count": 1,
   "status": "passed",
   "profile": "local_evidence",
   "environment": "local_evidence",
@@ -15,6 +16,40 @@
     "started_at": "2026-06-30T00:00:00Z",
     "finished_at": "2026-06-30T00:00:01Z"
   },
+  "test_results": [
+    {
+      "test_case_id": "EVIDENCE-HARDENING-TC-001",
+      "status": "passed",
+      "profile": "local_evidence",
+      "provider_ids": [
+        "wiremock-payment-api",
+        "oracle-like-db",
+        "local-nats-event-bus"
+      ],
+      "provider_types": [
+        "wiremock_http_mock",
+        "jdbc",
+        "nats"
+      ]
+    }
+  ],
+  "provider_summary": [
+    {
+      "provider_id": "wiremock-payment-api",
+      "provider_type": "wiremock_http_mock",
+      "runtime_mode": "mock"
+    },
+    {
+      "provider_id": "oracle-like-db",
+      "provider_type": "jdbc",
+      "runtime_mode": "ephemeral"
+    },
+    {
+      "provider_id": "local-nats-event-bus",
+      "provider_type": "nats",
+      "runtime_mode": "mock"
+    }
+  ],
   "provider_results": [
     {
       "provider_id": "wiremock-payment-api",
@@ -44,13 +79,27 @@
       "provider_id": "local-nats-event-bus",
       "provider_type": "nats",
       "profile": "local_evidence",
-      "runtime_mode": "local",
+      "runtime_mode": "mock",
       "resolved_operation_result": {
         "operation": "event_payload_match",
         "status": "passed"
       },
       "cleanup_status": "passed",
       "release_evidence_eligible": false
+    }
+  ],
+  "step_results": [
+    {
+      "id": "seed_order",
+      "status": "passed"
+    },
+    {
+      "id": "verify_payment_mock",
+      "status": "passed"
+    },
+    {
+      "id": "cleanup_order",
+      "status": "passed"
     }
   ],
   "steps": [
@@ -100,6 +149,16 @@
     "nats-event-001",
     "assertion-diff-001",
     "polling-observation-001"
+  ],
+  "provider_evidence_refs": [
+    "fixture-setup-001",
+    "fixture-cleanup-001",
+    "wiremock-request-journal-001",
+    "wiremock-server-log-001",
+    "jdbc-seed-001",
+    "jdbc-query-001",
+    "jdbc-cleanup-001",
+    "nats-event-001"
   ],
   "failure": {
     "code": null,

@@ -5,7 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.yaml.snakeyaml.Yaml;
@@ -60,6 +64,46 @@ class FrameworkPublicInterfaceContractTest {
     }
 
     @Test
+    @DisplayName("FWK-013 | provider capability samples rely on the built-in provider contract catalog")
+    void FWK_013_providerCapabilitySamplesDoNotCopyBuiltInProviderContracts() throws Exception {
+        Path samples = Path.of("samples/provider_capability");
+        try (var paths = Files.walk(samples)) {
+            List<Path> suiteLocalBuiltInContracts = paths
+                    .filter(path -> path.toString().contains("/provider_contracts/"))
+                    .toList();
+
+            assertThat(suiteLocalBuiltInContracts)
+                    .as("Provider capability runtime samples must use the framework built-in Provider Contract catalog; suite-local contracts are custom/snapshot opt-in only.")
+                    .isEmpty();
+        }
+
+        assertThat(Files.exists(Path.of("samples/provider_contracts")))
+                .as("Use docs/02-architecture/contracts/provider-contracts as the canonical built-in Provider Contract catalog; do not keep a second samples/provider_contracts catalog.")
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("FWK-013 | user guide declares standard evidence index and provider evidence refs")
+    void FWK_013_userGuideDeclaresStandardEvidenceIndexContract() throws Exception {
+        String userGuide = Files.readString(Path.of("docs/09-operations/test_framework_user_guide.md"));
+        String evidenceContract = Files.readString(CONTRACT_ROOT.resolve("evidence_folder_structure.v0.2.md"));
+
+        for (String text : List.of(userGuide, evidenceContract)) {
+            assertThat(text)
+                    .contains("evidence_id:")
+                    .contains("file_path:")
+                    .contains("masking_applied:")
+                    .contains("provider_evidence_refs[]")
+                    .contains("evidence_refs[]");
+        }
+        assertThat(userGuide)
+                .contains("Do not publish legacy compact entries")
+                .contains("Framework logs, batch summaries, assertion diffs, and expected artifacts belong in `evidence_refs[]` only.");
+        assertThat(evidenceContract)
+                .contains("Legacy compact entries using `ref:` plus `masked:` are not valid");
+    }
+
+    @Test
     @DisplayName("FWK-013 | referenced YAML and plugin contract artifacts exist and parse")
     void FWK_013_referencedContractArtifactsExistAndParse() throws Exception {
         for (String file : yamlContracts()) {
@@ -80,6 +124,118 @@ class FrameworkPublicInterfaceContractTest {
         }
     }
 
+    @Test
+    @DisplayName("FWK-013 | provider runtime modes do not use execution mode names")
+    void FWK_013_providerRuntimeModesUseProviderRuntimeTaxonomy() throws Exception {
+        List<String> invalidModes = new ArrayList<>();
+        for (Path path : runtimeContractArtifacts()) {
+            Object document = loadYaml(path);
+            collectInvalidRuntimeModes(path.toString(), document, invalidModes);
+        }
+
+        assertThat(invalidModes)
+                .as("Use execution_mode for local/ci/sit/preprod; runtime_mode must use native/mock/stub/ephemeral.")
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("FWK-013 | provider registry required binding keys match Provider Contracts")
+    void FWK_013_providerRegistryRequiredBindingKeysMatchContracts() throws Exception {
+        Map<?, ?> registry = map(loadYaml(CONTRACT_ROOT.resolve("provider_capability_registry.v0.2.yaml")));
+        Map<?, ?> providerTypes = map(registry.get("provider_types"));
+        List<String> mismatches = new ArrayList<>();
+
+        for (Map.Entry<?, ?> entry : providerTypes.entrySet()) {
+            String providerType = String.valueOf(entry.getKey());
+            Map<?, ?> registryEntry = map(entry.getValue());
+            String contractRef = String.valueOf(registryEntry.get("contract_ref"));
+            Map<?, ?> contract = map(loadYaml(CONTRACT_ROOT.resolve(contractRef)));
+            Set<String> registryRequired = Set.copyOf(strings(registryEntry.get("required_binding_keys")));
+            Set<String> contractRequired = requiredBindingKeys(contract);
+            if (!registryRequired.equals(contractRequired)) {
+                mismatches.add(providerType + ": registry=" + registryRequired + ", contract=" + contractRequired);
+            }
+        }
+
+        assertThat(mismatches).isEmpty();
+    }
+
+    @Test
+    @DisplayName("FWK-013 | provider registry runtime status values are cataloged")
+    void FWK_013_providerRegistryRuntimeStatusValuesAreCataloged() throws Exception {
+        Map<?, ?> registry = map(loadYaml(CONTRACT_ROOT.resolve("provider_capability_registry.v0.2.yaml")));
+        Set<String> catalog = Set.copyOf(map(registry.get("runtime_status_catalog")).keySet().stream()
+                .map(String::valueOf)
+                .toList());
+        List<String> uncataloged = new ArrayList<>();
+
+        for (Map.Entry<?, ?> entry : map(registry.get("provider_types")).entrySet()) {
+            String providerType = String.valueOf(entry.getKey());
+            String runtimeStatus = String.valueOf(map(entry.getValue()).get("runtime_status"));
+            if (!catalog.contains(runtimeStatus)) {
+                uncataloged.add(providerType + ": " + runtimeStatus);
+            }
+        }
+
+        assertThat(uncataloged).isEmpty();
+    }
+
+    @Test
+    @DisplayName("FWK-013 | provider registry distinguishes contract runtime vocabulary from executable runtime modes")
+    void FWK_013_providerRegistryRuntimeModesDistinguishContractVocabularyFromExecutableSupport() throws Exception {
+        Map<?, ?> registry = map(loadYaml(CONTRACT_ROOT.resolve("provider_capability_registry.v0.2.yaml")));
+        Map<?, ?> providerTypes = map(registry.get("provider_types"));
+        List<String> mismatches = new ArrayList<>();
+
+        for (Map.Entry<?, ?> entry : providerTypes.entrySet()) {
+            String providerType = String.valueOf(entry.getKey());
+            Map<?, ?> registryEntry = map(entry.getValue());
+            Map<?, ?> contract = map(loadYaml(CONTRACT_ROOT.resolve(String.valueOf(registryEntry.get("contract_ref")))));
+            Set<String> contractRuntimeModes = Set.copyOf(strings(contract.get("runtime_modes")));
+            Set<String> supportedRuntimeModes = Set.copyOf(strings(registryEntry.get("supported_runtime_modes")));
+            Set<String> executableRuntimeModes = Set.copyOf(strings(contract.get("executable_runtime_modes")));
+            Set<String> contractOnlyRuntimeModes = Set.copyOf(strings(contract.get("contract_only_runtime_modes")));
+
+            if (!contractRuntimeModes.containsAll(supportedRuntimeModes)) {
+                mismatches.add(providerType + ": supported_runtime_modes not in Provider Contract runtime_modes");
+            }
+            if (!executableRuntimeModes.isEmpty() && !supportedRuntimeModes.equals(executableRuntimeModes)) {
+                mismatches.add(providerType + ": registry supported_runtime_modes must equal contract executable_runtime_modes");
+            }
+            if (!contractRuntimeModes.containsAll(executableRuntimeModes)) {
+                mismatches.add(providerType + ": executable_runtime_modes not in Provider Contract runtime_modes");
+            }
+            if (!contractRuntimeModes.containsAll(contractOnlyRuntimeModes)) {
+                mismatches.add(providerType + ": contract_only_runtime_modes not in Provider Contract runtime_modes");
+            }
+        }
+
+        assertThat(mismatches).isEmpty();
+        for (String providerType : List.of("kafka", "ibm_mq")) {
+            Map<?, ?> registryEntry = map(providerTypes.get(providerType));
+            Map<?, ?> contract = map(loadYaml(CONTRACT_ROOT.resolve(String.valueOf(registryEntry.get("contract_ref")))));
+            assertThat(strings(registryEntry.get("supported_runtime_modes"))).containsExactly("mock");
+            assertThat(strings(contract.get("executable_runtime_modes"))).containsExactly("mock");
+            assertThat(strings(contract.get("contract_only_runtime_modes"))).containsExactly("native", "ephemeral");
+        }
+    }
+
+    @Test
+    @DisplayName("FWK-013 | suite manifest public docs expose tests and child suites, not suite type discriminators")
+    void FWK_013_suiteManifestDocsDoNotExposeSuiteTypeDiscriminator() throws Exception {
+        for (Path path : List.of(
+                Path.of("schemas/suite_manifest.v0.2.schema.yaml"),
+                CONTRACT_ROOT.resolve("suite_manifest.v0.2.schema.yaml"),
+                PUBLIC_INTERFACE,
+                Path.of("docs/09-operations/test_framework_user_guide.md"))) {
+            String text = Files.readString(path);
+            assertThat(text)
+                    .as(path.toString())
+                    .contains("tests[]")
+                    .doesNotContain("suite_type");
+        }
+    }
+
     private List<String> yamlContracts() {
         return List.of(
                 "test_case_dsl.v0.2.schema.yaml",
@@ -94,6 +250,7 @@ class FrameworkPublicInterfaceContractTest {
 
     private List<String> markdownContracts() {
         return List.of(
+                "evidence_folder_structure.v0.2.md",
                 "runner_plugin_contract.md",
                 "provider_plugin_contract.md",
                 "verify_plugin_contract.md");
@@ -101,5 +258,80 @@ class FrameworkPublicInterfaceContractTest {
 
     private Object loadYaml(Path path) throws IOException {
         return new Yaml().load(Files.readString(path));
+    }
+
+    private Set<String> requiredBindingKeys(Map<?, ?> contract) {
+        Map<?, ?> bindingKeys = map(contract.get("binding_keys"));
+        Set<String> required = new java.util.LinkedHashSet<>();
+        for (Map.Entry<?, ?> entry : bindingKeys.entrySet()) {
+            Map<?, ?> spec = map(entry.getValue());
+            if (Boolean.TRUE.equals(spec.get("required"))) {
+                required.add(String.valueOf(entry.getKey()));
+            }
+        }
+        return required;
+    }
+
+    private List<String> strings(Object value) {
+        if (!(value instanceof Collection<?> collection)) {
+            return List.of();
+        }
+        return collection.stream().map(String::valueOf).toList();
+    }
+
+    private Map<?, ?> map(Object value) {
+        return value instanceof Map<?, ?> map ? map : Map.of();
+    }
+
+    private List<Path> runtimeContractArtifacts() throws IOException {
+        List<Path> roots = List.of(
+                CONTRACT_ROOT.resolve("provider-contracts"),
+                Path.of("samples"));
+        List<Path> paths = new ArrayList<>();
+        for (Path root : roots) {
+            if (!Files.exists(root)) {
+                continue;
+            }
+            try (var stream = Files.walk(root)) {
+                stream
+                        .filter(Files::isRegularFile)
+                        .filter(path -> path.getFileName().toString().endsWith(".yaml"))
+                        .filter(path -> path.toString().contains("provider-contracts")
+                                || path.toString().contains("provider_contracts")
+                                || path.toString().contains("provider_instances")
+                                || path.toString().contains("env_profiles")
+                                || path.toString().contains("environment_bindings"))
+                        .sorted()
+                        .forEach(paths::add);
+            }
+        }
+        return paths;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void collectInvalidRuntimeModes(String path, Object value, List<String> invalidModes) {
+        Set<String> executionModes = Set.of("local", "ci", "sit", "preprod");
+        if (value instanceof Map<?, ?> map) {
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String key = String.valueOf(entry.getKey());
+                Object child = entry.getValue();
+                if ("runtime_mode".equals(key) && executionModes.contains(String.valueOf(child))) {
+                    invalidModes.add(path + ": runtime_mode=" + child);
+                }
+                if (Set.of("runtime_modes", "allowed_runtime_modes", "supported_runtime_modes").contains(key)
+                        && child instanceof Collection<?> modes) {
+                    for (Object mode : modes) {
+                        if (executionModes.contains(String.valueOf(mode))) {
+                            invalidModes.add(path + ": " + key + " contains " + mode);
+                        }
+                    }
+                }
+                collectInvalidRuntimeModes(path, child, invalidModes);
+            }
+        } else if (value instanceof Collection<?> collection) {
+            for (Object item : collection) {
+                collectInvalidRuntimeModes(path, item, invalidModes);
+            }
+        }
     }
 }

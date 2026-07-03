@@ -1,15 +1,109 @@
 {
-  "framework_version": "v0.2",
+  "framework_version": "0.2.0",
   "dsl_version": "v0.2",
   "suite_id": "JDBC-CAPABILITY-v0.2",
+  "batch_id": "BATCH-JDBC-001",
+  "run_id": "RUN-JDBC-001",
+  "test_case_id": "JDBC-CAPABILITY-TC-001",
+  "test_count": 1,
+  "profile": "local_jdbc",
+  "environment": "local_jdbc",
+  "provider_summary": [
+    {
+      "provider_id": "oracle-like-db",
+      "provider_type": "jdbc",
+      "runtime_mode": "ephemeral",
+      "dialect": "oracle"
+    }
+  ],
   "provider_type": "jdbc",
   "provider_id": "oracle-like-db",
   "runtime_mode": "ephemeral",
   "dialect": "oracle",
   "status": "passed",
-  "required_refs": [
+  "start_time": "2026-06-29T00:00:00Z",
+  "end_time": "2026-06-29T00:00:01Z",
+  "duration_ms": 1000,
+  "timestamps": {
+    "started_at": "2026-06-29T00:00:00Z",
+    "finished_at": "2026-06-29T00:00:01Z"
+  },
+  "test_results": [
+    {
+      "test_case_id": "JDBC-CAPABILITY-TC-001",
+      "status": "passed",
+      "profile": "local_jdbc",
+      "provider_id": "oracle-like-db",
+      "provider_type": "jdbc"
+    }
+  ],
+  "provider_results": [
+    {
+      "provider_id": "oracle-like-db",
+      "provider_type": "jdbc",
+      "profile": "local_jdbc",
+      "runtime_mode": "ephemeral",
+      "dialect": "oracle",
+      "resolved_operation_result": {
+        "operation": "jdbc_capability_flow",
+        "status": "passed",
+        "outputs": {
+          "row_count": 1,
+          "dialect": "oracle"
+        }
+      },
+      "release_evidence_eligible": false
+    }
+  ],
+  "step_results": [
+    {
+      "id": "seed_order",
+      "operation": "db_seed",
+      "status": "passed"
+    },
+    {
+      "id": "cleanup_order",
+      "operation": "db_cleanup",
+      "status": "passed"
+    }
+  ],
+  "steps": [
+    {
+      "id": "seed_order",
+      "operation": "db_seed",
+      "status": "passed"
+    },
+    {
+      "id": "cleanup_order",
+      "operation": "db_cleanup",
+      "status": "passed"
+    }
+  ],
+  "verify_results": [
+    {
+      "id": "query_order_oracle",
+      "type": "db_record_exists",
+      "status": "passed"
+    }
+  ],
+  "evidence_index_ref": "evidence_index.yaml",
+  "provider_evidence_refs": [
     "provider-evidence/jdbc/seed_seed_order.yaml",
     "provider-evidence/jdbc/query_query_order_oracle.yaml",
     "provider-evidence/jdbc/cleanup_cleanup_order.yaml"
-  ]
+  ],
+  "evidence_refs": [
+    "evidence_index.yaml",
+    "provider-evidence/jdbc/seed_seed_order.yaml",
+    "provider-evidence/jdbc/query_query_order_oracle.yaml",
+    "provider-evidence/jdbc/cleanup_cleanup_order.yaml",
+    "logs/execution.log",
+    "batch/batch.yaml"
+  ],
+  "failure": {
+    "code": null,
+    "classification": null,
+    "reason": null,
+    "owner_action": null
+  }
 }

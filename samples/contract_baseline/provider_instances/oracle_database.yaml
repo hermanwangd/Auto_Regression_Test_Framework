@@ -1,19 +1,23 @@
 provider_instance_version: v0.2
 provider_id: oracle-database
-provider_type: jdbc_database
+provider_type: jdbc
 runtime_modes: [native, ephemeral]
 defaults:
   timeout_seconds: 60
   dialect: oracle
 operations:
-  execute_script:
-    outputs: [script_result, affected_rows, duration_ms]
-  query:
-    outputs: [query_result, row_count, duration_ms]
+  db_seed:
+    outputs: [affected_rows, duration_ms, seed_evidence_ref]
+  db_cleanup:
+    outputs: [affected_rows, duration_ms, cleanup_evidence_ref]
+  db_query:
+    outputs: [row_count, sample_rows, duration_ms, query_evidence_ref]
+  db_record_exists:
+    outputs: [matched, row_count, duration_ms, query_evidence_ref]
 evidence:
-  capture: [script_result, query_result, affected_rows]
-  redact: [password]
+  capture: [seed_evidence, cleanup_evidence, query_evidence]
+  redact: [connection, password, secret, token]
 failure_mapping:
   provider_unavailable: PROVIDER_UNAVAILABLE
-  operation_failed: OPERATION_FAILED
+  operation_failed: DB_EXECUTION_FAILED
   cleanup_failed: CLEANUP_FAILED

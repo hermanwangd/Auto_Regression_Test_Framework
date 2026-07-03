@@ -1,15 +1,63 @@
 evidence_index_version: v0.2
 suite_id: JDBC-CAPABILITY-v0.2
-provider_type: jdbc
-provider_id: oracle-like-db
-runtime_mode: ephemeral
-dialect: oracle
-evidence_classification: framework_provider_capability_only
-downstream_release_evidence: false
-required_entries:
-  - provider-evidence/jdbc/seed_seed_order.yaml
-  - provider-evidence/jdbc/query_query_order_oracle.yaml
-  - provider-evidence/jdbc/cleanup_cleanup_order.yaml
-  - assertions/order_record_exists.yaml
+batch_id: BATCH-JDBC-001
+run_id: RUN-JDBC-001
+test_case_id: JDBC-CAPABILITY-TC-001
+profile: local_jdbc
+entries:
+  - evidence_id: jdbc-seed-001
+    evidence_type: jdbc_seed
+    produced_by: provider
+    provider_type: jdbc
+    provider_id: oracle-like-db
+    test_case_id: JDBC-CAPABILITY-TC-001
+    run_id: RUN-JDBC-001
+    batch_id: BATCH-JDBC-001
+    file_path: provider-evidence/jdbc/seed_seed_order.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:01Z"
+    masking_applied: true
+    linked_result_field: steps
+  - evidence_id: jdbc-query-001
+    evidence_type: jdbc_query
+    produced_by: provider
+    provider_type: jdbc
+    provider_id: oracle-like-db
+    test_case_id: JDBC-CAPABILITY-TC-001
+    run_id: RUN-JDBC-001
+    batch_id: BATCH-JDBC-001
+    file_path: provider-evidence/jdbc/query_query_order_oracle.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:02Z"
+    masking_applied: true
+    linked_result_field: provider_results.resolved_operation_result
+  - evidence_id: jdbc-cleanup-001
+    evidence_type: jdbc_cleanup
+    produced_by: provider
+    provider_type: jdbc
+    provider_id: oracle-like-db
+    test_case_id: JDBC-CAPABILITY-TC-001
+    run_id: RUN-JDBC-001
+    batch_id: BATCH-JDBC-001
+    file_path: provider-evidence/jdbc/cleanup_cleanup_order.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:03Z"
+    masking_applied: true
+    linked_result_field: provider_results.cleanup_status
+  - evidence_id: assertion-order-record-001
+    evidence_type: assertion_diff
+    produced_by: assertion_engine
+    test_case_id: JDBC-CAPABILITY-TC-001
+    run_id: RUN-JDBC-001
+    batch_id: BATCH-JDBC-001
+    file_path: assertions/order_record_exists.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:02Z"
+    masking_applied: true
+    linked_result_field: verify_results
 masking:
   raw_secret_found: false

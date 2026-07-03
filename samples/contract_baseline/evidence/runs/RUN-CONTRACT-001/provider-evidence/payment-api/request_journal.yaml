@@ -1,0 +1,11 @@
+evidence_type: wiremock_request_journal
+provider_type: wiremock_http_mock
+provider_id: wiremock-payment-api
+test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001
+run_id: RUN-CONTRACT-001
+status: passed
+masking_applied: true
+matched_requests:
+  - method: POST
+    path: /payments
+    status: matched

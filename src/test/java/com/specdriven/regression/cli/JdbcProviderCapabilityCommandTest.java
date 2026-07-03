@@ -110,6 +110,35 @@ class JdbcProviderCapabilityCommandTest {
     }
 
     @Test
+    void jdbcSuiteRunsAllTestsWithSharedProfile() throws Exception {
+        Path suite = mutableJdbc();
+        Path secondTestCase = suite.getParent().resolve("second_test_case.yaml");
+        Files.copy(suite.getParent().resolve("test_case.yaml"), secondTestCase);
+        Files.writeString(secondTestCase, read(secondTestCase)
+                .replace("JDBC-CAPABILITY-TC-001", "JDBC-CAPABILITY-TC-002"));
+        Files.writeString(suite, read(suite)
+                .replace("  - test_case.yaml", "  - test_case.yaml\n  - second_test_case.yaml"));
+
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
+
+        assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+        assertThat(run.stdout())
+                .contains("test_count: 2")
+                .contains("profile: local_jdbc");
+        Path resultJson = extractPath(run.stdout(), "result_json");
+        String resultText = read(resultJson);
+        assertThat(resultText)
+                .contains("\"test_case_id\": \"JDBC-CAPABILITY-v0.2-MULTI\"")
+                .contains("\"test_count\": 2")
+                .contains("\"test_case_id\": \"JDBC-CAPABILITY-TC-001\"")
+                .contains("\"test_case_id\": \"JDBC-CAPABILITY-TC-002\"");
+        Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
+        assertThat(read(evidenceDir.resolve("evidence_index.yaml")))
+                .contains("test_case_id: JDBC-CAPABILITY-TC-001")
+                .contains("test_case_id: JDBC-CAPABILITY-TC-002");
+    }
+
+    @Test
     void jdbcRunRejectsUnsupportedDialectBeforeExecution() throws Exception {
         Path suite = mutableJdbc();
         Path envProfile = suite.getParent().resolve("env_profiles/local_jdbc.yaml");
@@ -191,7 +220,7 @@ class JdbcProviderCapabilityCommandTest {
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("reason: missing_required_binding_key")
-                .contains("field_path: provider_bindings.oracle-like-db.binding_values.dialect")
+                .contains("field_path: providers.oracle-like-db.binding_keys.dialect")
                 .contains("provider_type: jdbc");
     }
 

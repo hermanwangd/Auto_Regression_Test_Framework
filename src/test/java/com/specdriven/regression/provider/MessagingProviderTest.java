@@ -98,6 +98,59 @@ class MessagingProviderTest {
     }
 
     @Test
+    void defaultsBlankActionModeToPublishAndUsesFirstMessageBinding() throws Exception {
+        writePayload("fixtures/events/order.json", "{\"orderId\":\"ORD-001\"}\n");
+        RecordingMessagingTransport transport = new RecordingMessagingTransport();
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "order_events",
+                Map.of(
+                        "provider_type", "kafka",
+                        "bootstrap_servers_ref", "env://KAFKA_BOOTSTRAP_SERVERS",
+                        "topic_ref", "orders.created",
+                        "actions", Map.of("publish_order_event", Map.of())),
+                Map.of("steps", List.of(Map.of("action", "publish_order_event"))),
+                List.of(
+                        new ResolvedBinding("ignored_config", "fixture", "fixtures/events/ignored.json"),
+                        new ResolvedBinding("order_event", "message_event", "fixtures/events/order.json")));
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(transport.request.mode()).isEqualTo("publish");
+        assertThat(transport.request.payloadBinding()).isEqualTo("order_event");
+        assertThat(transport.request.payload()).isEqualTo("{\"orderId\":\"ORD-001\"}\n");
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("mode: publish")
+                .contains("payload_binding: order_event");
+    }
+
+    @Test
+    void observesMessagingTargetWithoutPayloadBinding() throws Exception {
+        RecordingMessagingTransport transport = new RecordingMessagingTransport(new MessagingTransportResult(
+                "observed 1 message from payment.events\n",
+                "{\"eventId\":\"EVT-001\"}\n",
+                1));
+
+        AdapterExecutionResult result = executeProvider(
+                new MessagingProvider(transport),
+                "payment_events",
+                Map.of(
+                        "provider_type", "mock",
+                        "topic_ref", "payment.events",
+                        "actions", Map.of("observe_payment_event", Map.of("mode", "observe"))),
+                Map.of("steps", List.of(Map.of("action", "observe_payment_event"))),
+                List.of());
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(transport.request.mode()).isEqualTo("observe");
+        assertThat(transport.request.payloadBinding()).isEmpty();
+        assertThat(transport.request.payload()).isEmpty();
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("mode: observe")
+                .doesNotContain("payload_binding:");
+    }
+
+    @Test
     void requestsNatsReplyThroughNativeTransportAndWritesEvidence() throws Exception {
         writePayload("fixtures/requests/payment-authorization.json", "{\"paymentId\":\"PAY-REQ-001\"}\n");
         RecordingMessagingTransport transport = new RecordingMessagingTransport(

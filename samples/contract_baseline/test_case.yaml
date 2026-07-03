@@ -32,9 +32,9 @@ setup:
   operations:
     - id: seed_order
       target: order_database
-      operation: execute_script
+      operation: db_seed
       inputs:
-        db.script_ref:
+        sql_ref:
           ref: ${data.order_seed}
     - id: load_payment_stub
       target: payment_api_mock
@@ -46,9 +46,9 @@ cleanup:
   operations:
     - id: cleanup_order
       target: order_database
-      operation: execute_script
+      operation: db_cleanup
       inputs:
-        db.script_ref:
+        sql_ref:
           ref: ${data.order_cleanup}
 execute:
   operations:
@@ -65,14 +65,14 @@ execute:
         matched_count: matched_count
     - id: query_order
       target: order_database
-      operation: query
+      operation: db_query
       inputs:
-        db.sql_ref:
+        query_ref:
           ref: fixtures/sql/find_order.sql
-        db.parameters.order_id:
+        params.order_id:
           ref: expected_results/sample_expected.json#/db/order_id
       outputs:
-        query_result: query_result
+        query_evidence_ref: query_evidence_ref
         row_count: row_count
     - id: publish_payment_event
       target: event_bus

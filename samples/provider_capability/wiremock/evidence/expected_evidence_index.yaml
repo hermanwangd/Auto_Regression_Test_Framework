@@ -4,31 +4,96 @@ batch_id: BATCH-WIREMOCK-001
 run_id: RUN-WIREMOCK-001
 test_case_id: WIREMOCK-CAPABILITY-TC-001
 profile: local_wiremock
-provider_type: wiremock_http_mock
-provider_id: wiremock-payment-api
-evidence_classification: framework_provider_capability_only
-downstream_release_evidence: false
 entries:
-  - evidence_type: request_journal
-    ref: provider-evidence/wiremock/request_journal.json
-    masked: true
-  - evidence_type: server_log
-    ref: provider-evidence/wiremock/server_log.txt
-    masked: true
-  - evidence_type: injected_stub
-    ref: provider-evidence/wiremock/injected_stubs.yaml
-    masked: true
-  - evidence_type: execution_log
-    ref: logs/execution.log
-    masked: true
-  - evidence_type: assertion_result
-    ref: assertions/http_mock_called.yaml
-    masked: true
-  - evidence_type: assertion_result
-    ref: assertions/http_mock_request_body_match.yaml
-    masked: true
-  - evidence_type: batch_summary
-    ref: batch/batch.yaml
-    masked: true
+  - evidence_id: wiremock-request-journal-001
+    evidence_type: wiremock_request_journal
+    produced_by: provider
+    provider_type: wiremock_http_mock
+    provider_id: wiremock-payment-api
+    test_case_id: WIREMOCK-CAPABILITY-TC-001
+    run_id: RUN-WIREMOCK-001
+    batch_id: BATCH-WIREMOCK-001
+    file_path: provider-evidence/wiremock/request_journal.json
+    content_type: application/json
+    status: passed
+    created_at: "2026-06-29T00:00:01Z"
+    masking_applied: true
+    linked_result_field: provider_results.resolved_operation_result
+  - evidence_id: wiremock-server-log-001
+    evidence_type: wiremock_server_log
+    produced_by: provider
+    provider_type: wiremock_http_mock
+    provider_id: wiremock-payment-api
+    test_case_id: WIREMOCK-CAPABILITY-TC-001
+    run_id: RUN-WIREMOCK-001
+    batch_id: BATCH-WIREMOCK-001
+    file_path: provider-evidence/wiremock/server_log.txt
+    content_type: text/plain
+    status: passed
+    created_at: "2026-06-29T00:00:01Z"
+    masking_applied: true
+    linked_result_field: provider_results.resolved_operation_result
+  - evidence_id: fixture-setup-wiremock-001
+    evidence_type: fixture_setup
+    produced_by: provider
+    provider_type: wiremock_http_mock
+    provider_id: wiremock-payment-api
+    test_case_id: WIREMOCK-CAPABILITY-TC-001
+    run_id: RUN-WIREMOCK-001
+    batch_id: BATCH-WIREMOCK-001
+    file_path: provider-evidence/wiremock/injected_stubs.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:01Z"
+    masking_applied: true
+    linked_result_field: steps
+  - evidence_id: execution-log-wiremock-001
+    evidence_type: execution_log
+    produced_by: framework
+    test_case_id: WIREMOCK-CAPABILITY-TC-001
+    run_id: RUN-WIREMOCK-001
+    batch_id: BATCH-WIREMOCK-001
+    file_path: logs/execution.log
+    content_type: text/plain
+    status: passed
+    created_at: "2026-06-29T00:00:00Z"
+    masking_applied: true
+    linked_result_field: evidence_refs
+  - evidence_id: assertion-called-wiremock-001
+    evidence_type: assertion_diff
+    produced_by: assertion_engine
+    test_case_id: WIREMOCK-CAPABILITY-TC-001
+    run_id: RUN-WIREMOCK-001
+    batch_id: BATCH-WIREMOCK-001
+    file_path: assertions/http_mock_called.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:02Z"
+    masking_applied: true
+    linked_result_field: verify_results
+  - evidence_id: assertion-body-wiremock-001
+    evidence_type: assertion_diff
+    produced_by: assertion_engine
+    test_case_id: WIREMOCK-CAPABILITY-TC-001
+    run_id: RUN-WIREMOCK-001
+    batch_id: BATCH-WIREMOCK-001
+    file_path: assertions/http_mock_request_body_match.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:02Z"
+    masking_applied: true
+    linked_result_field: verify_results
+  - evidence_id: batch-summary-wiremock-001
+    evidence_type: batch_summary
+    produced_by: framework
+    test_case_id: WIREMOCK-CAPABILITY-TC-001
+    run_id: RUN-WIREMOCK-001
+    batch_id: BATCH-WIREMOCK-001
+    file_path: batch/batch.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:03Z"
+    masking_applied: true
+    linked_result_field: evidence_refs
 masking:
   raw_secret_found: false

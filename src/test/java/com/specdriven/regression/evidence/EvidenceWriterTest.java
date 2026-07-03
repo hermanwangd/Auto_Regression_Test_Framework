@@ -125,6 +125,35 @@ class EvidenceWriterTest {
     }
 
     @Test
+    void executionRunOmitsCleanupAndBlankTargetProviderWhenNotDeclared() throws Exception {
+        Path runDir = tempDir.resolve("evidence/runs/RUN-NO-CLEANUP");
+        Map<String, Object> testCase = v02TestCaseWithEmptyOutputs();
+        testCase.put("targets", Map.of(
+                "RU-api", Map.of(
+                        "type", "application",
+                        "provider_id", "payment-api",
+                        "environment", "ci://api")));
+        testCase.put("fixture", Map.of("cleanup", List.of()));
+
+        new EvidenceWriter().writeExecutionRun(
+                runDir,
+                "BATCH-V02",
+                "RUN-NO-CLEANUP",
+                testCase,
+                "passed",
+                adapterResult(runDir),
+                null);
+
+        String runYaml = Files.readString(runDir.resolve("run.yaml"));
+        assertThat(runYaml)
+                .doesNotContain("cleanup: cleanup.yaml")
+                .doesNotContain("cleanup_result: cleanup.yaml")
+                .doesNotContain("provider: \n")
+                .contains("provider_id: payment-api");
+        assertThat(runDir.resolve("cleanup.yaml")).doesNotExist();
+    }
+
+    @Test
     void executionRunWritesV02OutputMapFallbackWhenOutputRefIsAbsent() throws Exception {
         Path runDir = tempDir.resolve("evidence/runs/RUN-V02-OUTPUT-FALLBACK");
         Map<String, Object> testCase = v02TestCaseWithEmptyOutputs();

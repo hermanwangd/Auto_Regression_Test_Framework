@@ -62,7 +62,7 @@ class NatsProviderCapabilityCommandTest {
                 .contains("provider_runtime_executed: true")
                 .contains("provider_type: nats")
                 .contains("provider_id: local-nats-event-bus")
-                .contains("runtime_mode: local")
+                .contains("runtime_mode: mock")
                 .contains("subject: orders.ready")
                 .contains("evidence_classification: framework_provider_capability_only");
 
@@ -77,7 +77,7 @@ class NatsProviderCapabilityCommandTest {
                 .contains("\"suite_id\": \"NATS-CAPABILITY-v0.2\"")
                 .contains("\"provider_type\": \"nats\"")
                 .contains("\"provider_id\": \"local-nats-event-bus\"")
-                .contains("\"runtime_mode\": \"local\"")
+                .contains("\"runtime_mode\": \"mock\"")
                 .contains("\"subject\": \"orders.ready\"")
                 .contains("\"status\": \"passed\"")
                 .contains("\"matched\": true")
@@ -106,6 +106,35 @@ class NatsProviderCapabilityCommandTest {
     }
 
     @Test
+    void natsSuiteRunsAllTestsWithSharedProfile() throws Exception {
+        Path suite = mutableNats();
+        Path secondTestCase = suite.getParent().resolve("second_test_case.yaml");
+        Files.copy(suite.getParent().resolve("test_case.yaml"), secondTestCase);
+        Files.writeString(secondTestCase, read(secondTestCase)
+                .replace("NATS-CAPABILITY-TC-001", "NATS-CAPABILITY-TC-002"));
+        Files.writeString(suite, read(suite)
+                .replace("  - test_case.yaml", "  - test_case.yaml\n  - second_test_case.yaml"));
+
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_nats");
+
+        assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+        assertThat(run.stdout())
+                .contains("test_count: 2")
+                .contains("profile: local_nats");
+        Path resultJson = extractPath(run.stdout(), "result_json");
+        String resultText = read(resultJson);
+        assertThat(resultText)
+                .contains("\"test_case_id\": \"NATS-CAPABILITY-v0.2-MULTI\"")
+                .contains("\"test_count\": 2")
+                .contains("\"test_case_id\": \"NATS-CAPABILITY-TC-001\"")
+                .contains("\"test_case_id\": \"NATS-CAPABILITY-TC-002\"");
+        Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
+        assertThat(read(evidenceDir.resolve("evidence_index.yaml")))
+                .contains("test_case_id: NATS-CAPABILITY-TC-001")
+                .contains("test_case_id: NATS-CAPABILITY-TC-002");
+    }
+
+    @Test
     void natsValidateRejectsMissingSubjectBeforeExecution() throws Exception {
         Path suite = mutableNats();
         Path binding = suite.getParent().resolve("env_profiles/local_nats.yaml");
@@ -119,7 +148,7 @@ class NatsProviderCapabilityCommandTest {
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("reason: missing_required_binding_key")
-                .contains("field_path: provider_bindings.local-nats-event-bus.binding_values.subject")
+                .contains("field_path: providers.local-nats-event-bus.binding_keys.subject")
                 .contains("provider_type: nats");
     }
 
@@ -148,7 +177,7 @@ class NatsProviderCapabilityCommandTest {
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("reason: missing_required_binding_key")
-                .contains("field_path: provider_bindings.local-nats-event-bus.binding_values.connection")
+                .contains("field_path: providers.local-nats-event-bus.binding_keys.connection")
                 .contains("provider_type: nats");
     }
 

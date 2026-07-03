@@ -15,7 +15,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -75,8 +74,8 @@ public class GrpcMockCapabilityService {
             return GrpcRunResult.blocked(validation.suiteId(), requestedProfile, profileFindings);
         }
 
-        RuntimeSelection selection = selectRuntime(suiteManifest, requestedProfile, outputBase);
-        if (selection == null) {
+        List<RuntimeSelection> selections = selectRuntimes(suiteManifest, requestedProfile, outputBase);
+        if (selections.isEmpty()) {
             return GrpcRunResult.blocked(validation.suiteId(), requestedProfile, List.of(new ContractFinding(
                     suiteManifest.toString(),
                     "targets",
@@ -87,7 +86,8 @@ public class GrpcMockCapabilityService {
                     "",
                     "Declare one grpc_mock target and one grpc_client target in the gRPC sample DSL.")));
         }
-        recreateDirectory(selection.runDir());
+        RuntimeSelection firstSelection = selections.get(0);
+        recreateDirectory(firstSelection.suiteRunDir());
 
         GrpcMockProviderRuntime mockRuntime = new GrpcMockProviderRuntime();
         GrpcClientProviderRuntime clientRuntime = new GrpcClientProviderRuntime();
@@ -99,131 +99,80 @@ public class GrpcMockCapabilityService {
         String status = "passed";
         ProviderFailure failure = null;
         ProviderFailure cleanupFailure = null;
-        String cleanupStatus = "not_run";
+        RuntimeSelection failureSelection = null;
         boolean providerRuntimeExecuted = false;
-        Map<String, Map<String, Object>> capturedOutputs = new LinkedHashMap<>();
         Map<String, Object> aggregateOutputs = new LinkedHashMap<>();
         List<Map<String, Object>> stepResults = new ArrayList<>();
         List<Map<String, Object>> verifyResults = new ArrayList<>();
+        List<Map<String, Object>> testResults = new ArrayList<>();
+        List<Map<String, Object>> providerResults = new ArrayList<>();
         List<String> evidenceRefs = new ArrayList<>();
-        Map<String, Object> clientBindingValues = new LinkedHashMap<>(selection.clientBindingValues());
-        ProviderExecutionContext mockContext = context(
-                selection,
-                selection.mockBindingValues(),
-                selection.mockProviderId(),
-                GRPC_MOCK,
-                selection.mockRuntimeMode(),
-                selection.mockContract(),
-                selection.mockInstance());
 
-        try {
-            SelectedOperation setup = operation(selection.testCase(), "setup", selection.mockTarget(), "load_grpc_stub");
-            ProviderRuntimeResolution setupResolution = resolver.resolve(mockContext, setup.request());
-            if (!setupResolution.valid()) {
-                return blocked(selection, requestedProfile, setupResolution.failure());
+        for (RuntimeSelection selection : selections) {
+            TestExecution execution = executeTestCase(resolver, mockRuntime, selection, requestedProfile);
+            providerRuntimeExecuted = providerRuntimeExecuted || execution.providerRuntimeExecuted();
+            aggregateOutputs.put(safe(stringValue(selection.testCase().get("test_case_id"))), execution.outputs());
+            stepResults.addAll(execution.stepResults());
+            verifyResults.addAll(execution.verifyResults());
+            testResults.add(execution.testResult());
+            providerResults.addAll(execution.providerResults());
+            evidenceRefs.addAll(prefixEvidenceRefs(selection, execution.evidenceRefs()));
+            if (execution.cleanupFailure() != null && cleanupFailure == null) {
+                cleanupFailure = execution.cleanupFailure();
             }
-            ProviderOperationResult setupResult = setupResolution.runtime().execute(mockContext, setup.request());
-            providerRuntimeExecuted = true;
-            capture(setup.id(), "load_grpc_stub", setupResult, capturedOutputs, aggregateOutputs, stepResults, evidenceRefs);
-            if (!setupResult.passed()) {
+            if (!execution.passed() && "passed".equals(status)) {
                 status = "failed";
-                failure = setupResult.failure();
-            } else {
-                clientBindingValues.put("target", stringValue(setupResult.outputs().get("target_uri")));
-                ProviderExecutionContext clientContext = context(
-                        selection,
-                        clientBindingValues,
-                        selection.clientProviderId(),
-                        GRPC_CLIENT,
-                        selection.clientRuntimeMode(),
-                        selection.clientContract(),
-                        selection.clientInstance());
-                SelectedOperation execute = operation(selection.testCase(), "execute", selection.clientTarget(), "unary_call");
-                ProviderRuntimeResolution executeResolution = resolver.resolve(clientContext, execute.request());
-                if (!executeResolution.valid()) {
-                    return blocked(selection, requestedProfile, executeResolution.failure());
-                }
-                ProviderOperationResult executeResult = executeResolution.runtime().execute(clientContext, execute.request());
-                capture(execute.id(), "unary_call", executeResult, capturedOutputs, aggregateOutputs, stepResults, evidenceRefs);
-                if (!executeResult.passed()) {
-                    status = "failed";
-                    failure = executeResult.failure();
-                } else {
-                    SelectedOperation observe =
-                            operation(selection.testCase(), "execute", selection.mockTarget(), "grpc_request_received");
-                    ProviderRuntimeResolution observeResolution = resolver.resolve(mockContext, observe.request());
-                    if (!observeResolution.valid()) {
-                        return blocked(selection, requestedProfile, observeResolution.failure());
-                    }
-                    ProviderOperationResult observeResult =
-                            observeResolution.runtime().execute(mockContext, observe.request());
-                    capture(observe.id(), "grpc_request_received", observeResult,
-                            capturedOutputs, aggregateOutputs, stepResults, evidenceRefs);
-                    if (!observeResult.passed()) {
-                        status = "failed";
-                        failure = observeResult.failure();
-                    } else {
-                        VerificationOutcome verification = verify(selection, capturedOutputs);
-                        verifyResults.addAll(verification.verifyResults());
-                        evidenceRefs.addAll(verification.evidenceRefs());
-                        if (!verification.passed()) {
-                            status = "failed";
-                            failure = ProviderFailure.of(
-                                    "ASSERTION_FAILED",
-                                    "ASSERTION_FAILED",
-                                    "One or more gRPC mock verification checks failed.",
-                                    "Review gRPC request journal, client response evidence, and assertion evidence.");
-                        }
-                    }
-                }
-            }
-        } finally {
-            SelectedOperation cleanup = operation(selection.testCase(), "cleanup", selection.mockTarget(), "reset_mock");
-            ProviderOperationResult cleanupResult = mockRuntime.execute(mockContext, cleanup.request());
-            cleanupStatus = cleanupResult.passed() ? "passed" : "failed";
-            capture(cleanup.id(), "reset_mock", cleanupResult,
-                    capturedOutputs, aggregateOutputs, stepResults, evidenceRefs);
-            if (!cleanupResult.passed()) {
-                cleanupFailure = cleanupResult.failure();
-                if ("passed".equals(status)) {
-                    status = "failed";
-                    failure = cleanupResult.failure();
-                }
+                failure = execution.failure();
+                failureSelection = selection;
             }
         }
 
         Instant finishedAt = Instant.now();
-        writeExecutionLog(selection, status, aggregateOutputs);
+        writeExecutionLog(firstSelection.suiteRunDir(), firstSelection, status, aggregateOutputs);
         evidenceRefs.add("logs/execution.log");
-        writeBatch(selection, status);
+        writeBatch(firstSelection.suiteRunDir(), firstSelection, status, selections.size());
         evidenceRefs.add("batch/batch.yaml");
-        writeEvidenceIndex(selection, evidenceRefs);
+        if ("failed".equals(status)) {
+            RuntimeSelection failedSelection = failureSelection == null ? firstSelection : failureSelection;
+            writeFailureDetail(firstSelection.suiteRunDir(), failedSelection, failure);
+            evidenceRefs.add("provider-evidence/grpc_mock/failure_detail.yaml");
+        }
+        writeEvidenceIndex(
+                firstSelection.suiteRunDir(),
+                firstSelection,
+                topLevelTestCaseId(firstSelection, selections.size()),
+                evidenceRefs);
         evidenceRefs.add(0, "evidence_index.yaml");
         Path resultJson = writeResult(
-                selection,
+                firstSelection.suiteRunDir(),
+                firstSelection,
                 requestedProfile,
+                topLevelTestCaseId(firstSelection, selections.size()),
+                selections.size(),
                 status,
                 aggregateOutputs,
                 stepResults,
                 verifyResults,
+                testResults,
+                providerResults,
                 evidenceRefs,
                 failure,
                 cleanupFailure,
-                cleanupStatus,
                 startedAt,
                 finishedAt);
         return new GrpcRunResult(
                 "passed".equals(status),
                 status,
-                stringValue(selection.suite().get("suite_id")),
-                selection.batchId(),
-                selection.runId(),
-                stringValue(selection.testCase().get("test_case_id")),
+                stringValue(firstSelection.suite().get("suite_id")),
+                firstSelection.batchId(),
+                firstSelection.runId(),
+                topLevelTestCaseId(firstSelection, selections.size()),
                 requestedProfile,
-                List.of(selection.mockProviderId(), selection.clientProviderId()),
+                List.of(firstSelection.mockProviderId(), firstSelection.clientProviderId()),
                 List.of(GRPC_MOCK, GRPC_CLIENT),
                 resultJson,
-                selection.runDir(),
+                firstSelection.suiteRunDir(),
+                selections.size(),
                 providerRuntimeExecuted,
                 List.of());
     }
@@ -268,6 +217,183 @@ public class GrpcMockCapabilityService {
                 bindingValues);
     }
 
+    private TestExecution executeTestCase(
+            ProviderRuntimeResolver resolver,
+            GrpcMockProviderRuntime mockRuntime,
+            RuntimeSelection selection,
+            String requestedProfile) {
+        recreateDirectory(selection.runDir());
+        String status = "passed";
+        ProviderFailure failure = null;
+        ProviderFailure cleanupFailure = null;
+        String cleanupStatus = "not_run";
+        boolean providerRuntimeExecuted = false;
+        Map<String, Map<String, Object>> capturedOutputs = new LinkedHashMap<>();
+        Map<String, Object> outputs = new LinkedHashMap<>();
+        List<Map<String, Object>> stepResults = new ArrayList<>();
+        List<Map<String, Object>> verifyResults = new ArrayList<>();
+        List<String> evidenceRefs = new ArrayList<>();
+        Map<String, Object> clientBindingValues = new LinkedHashMap<>(selection.clientBindingValues());
+        ProviderExecutionContext mockContext = context(
+                selection,
+                selection.mockBindingValues(),
+                selection.mockProviderId(),
+                GRPC_MOCK,
+                selection.mockRuntimeMode(),
+                selection.mockContract(),
+                selection.mockInstance());
+
+        try {
+            SelectedOperation setup = operation(selection.testCase(), "setup", selection.mockTarget(), "load_grpc_stub");
+            ProviderRuntimeResolution setupResolution = resolver.resolve(mockContext, setup.request());
+            if (!setupResolution.valid()) {
+                return blockedExecution(selection, requestedProfile, setupResolution.failure());
+            }
+            ProviderOperationResult setupResult = setupResolution.runtime().execute(mockContext, setup.request());
+            providerRuntimeExecuted = true;
+            capture(setup.id(), "load_grpc_stub", setupResult, capturedOutputs, outputs, stepResults, evidenceRefs);
+            if (!setupResult.passed()) {
+                status = "failed";
+                failure = setupResult.failure();
+            } else {
+                clientBindingValues.put("target", stringValue(setupResult.outputs().get("target_uri")));
+                ProviderExecutionContext clientContext = context(
+                        selection,
+                        clientBindingValues,
+                        selection.clientProviderId(),
+                        GRPC_CLIENT,
+                        selection.clientRuntimeMode(),
+                        selection.clientContract(),
+                        selection.clientInstance());
+                SelectedOperation execute = operation(selection.testCase(), "execute", selection.clientTarget(), "unary_call");
+                ProviderRuntimeResolution executeResolution = resolver.resolve(clientContext, execute.request());
+                if (!executeResolution.valid()) {
+                    return blockedExecution(selection, requestedProfile, executeResolution.failure());
+                }
+                ProviderOperationResult executeResult = executeResolution.runtime().execute(clientContext, execute.request());
+                capture(execute.id(), "unary_call", executeResult, capturedOutputs, outputs, stepResults, evidenceRefs);
+                if (!executeResult.passed()) {
+                    status = "failed";
+                    failure = executeResult.failure();
+                } else {
+                    SelectedOperation observe =
+                            operation(selection.testCase(), "execute", selection.mockTarget(), "grpc_request_received");
+                    ProviderRuntimeResolution observeResolution = resolver.resolve(mockContext, observe.request());
+                    if (!observeResolution.valid()) {
+                        return blockedExecution(selection, requestedProfile, observeResolution.failure());
+                    }
+                    ProviderOperationResult observeResult =
+                            observeResolution.runtime().execute(mockContext, observe.request());
+                    capture(observe.id(), "grpc_request_received", observeResult,
+                            capturedOutputs, outputs, stepResults, evidenceRefs);
+                    if (!observeResult.passed()) {
+                        status = "failed";
+                        failure = observeResult.failure();
+                    } else {
+                        VerificationOutcome verification = verify(selection, capturedOutputs);
+                        verifyResults.addAll(verification.verifyResults());
+                        evidenceRefs.addAll(verification.evidenceRefs());
+                        if (!verification.passed()) {
+                            status = "failed";
+                            failure = ProviderFailure.of(
+                                    "ASSERTION_FAILED",
+                                    "ASSERTION_FAILED",
+                                    "One or more gRPC mock verification checks failed.",
+                                    "Review gRPC request journal, client response evidence, and assertion evidence.");
+                        }
+                    }
+                }
+            }
+        } finally {
+            SelectedOperation cleanup = operation(selection.testCase(), "cleanup", selection.mockTarget(), "reset_mock");
+            ProviderOperationResult cleanupResult = mockRuntime.execute(mockContext, cleanup.request());
+            cleanupStatus = cleanupResult.passed() ? "passed" : "failed";
+            capture(cleanup.id(), "reset_mock", cleanupResult,
+                    capturedOutputs, outputs, stepResults, evidenceRefs);
+            if (!cleanupResult.passed()) {
+                cleanupFailure = cleanupResult.failure();
+                if ("passed".equals(status)) {
+                    status = "failed";
+                    failure = cleanupResult.failure();
+                }
+            }
+        }
+
+        writeExecutionLog(selection.runDir(), selection, status, outputs);
+        evidenceRefs.add("logs/execution.log");
+        writeBatch(selection.runDir(), selection, status, 1);
+        evidenceRefs.add("batch/batch.yaml");
+        List<Map<String, Object>> providerResults = List.of(
+                providerResult(selection.mockProviderId(), GRPC_MOCK, selection.mockRuntimeMode(), status, outputs,
+                        "load_grpc_stub", cleanupStatus),
+                providerResult(selection.clientProviderId(), GRPC_CLIENT, selection.clientRuntimeMode(), status, outputs,
+                        "unary_call", "not_applicable"));
+        Map<String, Object> testResult = new LinkedHashMap<>();
+        testResult.put("test_case_id", selection.testCase().get("test_case_id"));
+        testResult.put("profile", requestedProfile);
+        testResult.put("provider_ids", List.of(selection.mockProviderId(), selection.clientProviderId()));
+        testResult.put("provider_types", List.of(GRPC_MOCK, GRPC_CLIENT));
+        testResult.put("status", status);
+        testResult.put("step_count", stepResults.size());
+        testResult.put("verify_count", verifyResults.size());
+        if (failure != null) {
+            testResult.put("failure_code", failure.code());
+            testResult.put("failure_classification", failure.classification());
+        }
+        return new TestExecution(
+                "passed".equals(status),
+                status,
+                providerRuntimeExecuted,
+                outputs,
+                stepResults,
+                verifyResults,
+                testResult,
+                providerResults,
+                evidenceRefs,
+                failure,
+                cleanupFailure);
+    }
+
+    private TestExecution blockedExecution(RuntimeSelection selection, String requestedProfile, ProviderFailure failure) {
+        ProviderFailure resolvedFailure = failure == null
+                ? ProviderFailure.of("PROVIDER_RUNTIME_BLOCKED", "PROVIDER_RUNTIME_ERROR", "Provider runtime blocked.", "Review provider runtime validation.")
+                : failure;
+        Map<String, Object> testResult = new LinkedHashMap<>();
+        testResult.put("test_case_id", selection.testCase().get("test_case_id"));
+        testResult.put("profile", requestedProfile);
+        testResult.put("provider_ids", List.of(selection.mockProviderId(), selection.clientProviderId()));
+        testResult.put("provider_types", List.of(GRPC_MOCK, GRPC_CLIENT));
+        testResult.put("status", "failed");
+        testResult.put("failure_code", resolvedFailure.code());
+        testResult.put("failure_classification", resolvedFailure.classification());
+        writeFailureDetail(selection.runDir(), selection, resolvedFailure);
+        return new TestExecution(
+                false,
+                "failed",
+                false,
+                Map.of(),
+                List.of(),
+                List.of(),
+                testResult,
+                List.of(),
+                List.of("provider-evidence/grpc_mock/failure_detail.yaml"),
+                resolvedFailure,
+                null);
+    }
+
+    private List<String> prefixEvidenceRefs(RuntimeSelection selection, List<String> refs) {
+        if (selection.runDir().equals(selection.suiteRunDir())) {
+            return refs.stream()
+                    .filter(ref -> ref != null && !ref.isBlank())
+                    .toList();
+        }
+        String prefix = "tests/" + safe(stringValue(selection.testCase().get("test_case_id"))) + "/";
+        return refs.stream()
+                .filter(ref -> ref != null && !ref.isBlank())
+                .map(ref -> prefix + ref)
+                .toList();
+    }
+
     private void capture(
             String operationId,
             String operation,
@@ -285,14 +411,22 @@ public class GrpcMockCapabilityService {
                 .toList());
     }
 
-    private RuntimeSelection selectRuntime(Path suiteManifest, String requestedProfile, Path outputBase) {
+    private List<RuntimeSelection> selectRuntimes(Path suiteManifest, String requestedProfile, Path outputBase) {
         Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
         Map<String, Object> suite = readMap(suiteManifest);
         Map<String, Map<String, Object>> instancesById =
                 readDirectoryByField(suiteRoot.resolve("provider_instances"), "provider_id");
         Map<String, Map<String, Object>> contractsByType =
                 readDirectoryByField(frameworkProviderContractsDirectory(suiteRoot), "provider_type");
-        for (Object testRef : listValue(suite.get("tests"))) {
+        RunIds runIds = newRunIds();
+        Path suiteRunDir = outputBase
+                .resolve(safe(stringValue(suite.get("suite_id"))))
+                .resolve(runIds.batchId())
+                .resolve(runIds.runId());
+        List<RuntimeSelection> selections = new ArrayList<>();
+        List<Object> testRefs = listValue(suite.get("tests"));
+        boolean multiTestSuite = testRefs.size() > 1;
+        for (Object testRef : testRefs) {
             Map<String, Object> testCase = readMap(suiteRoot.resolve(stringValue(testRef)).normalize());
             TargetSelection mockTarget = null;
             TargetSelection clientTarget = null;
@@ -319,12 +453,10 @@ public class GrpcMockCapabilityService {
                 }
             }
             if (mockTarget != null && clientTarget != null) {
-                RunIds runIds = newRunIds();
-                Path runDir = outputBase
-                        .resolve(safe(stringValue(suite.get("suite_id"))))
-                        .resolve(runIds.batchId())
-                        .resolve(runIds.runId());
-                return new RuntimeSelection(
+                Path runDir = multiTestSuite
+                        ? suiteRunDir.resolve("tests").resolve(safe(stringValue(testCase.get("test_case_id"))))
+                        : suiteRunDir;
+                selections.add(new RuntimeSelection(
                         suiteRoot,
                         suite,
                         testCase,
@@ -343,10 +475,11 @@ public class GrpcMockCapabilityService {
                         clientTarget.bindingValues(),
                         runIds.batchId(),
                         runIds.runId(),
-                        runDir);
+                        suiteRunDir,
+                        runDir));
             }
         }
-        return null;
+        return List.copyOf(selections);
     }
 
     private List<ContractFinding> requestedProfileFindings(Path suiteManifest, String requestedProfile) {
@@ -468,8 +601,8 @@ public class GrpcMockCapabilityService {
                         passed ? "" : "failure_code: ASSERTION_FAILED"));
     }
 
-    private void writeExecutionLog(RuntimeSelection selection, String status, Map<String, Object> outputs) {
-        write(selection.runDir().resolve("logs/execution.log"), """
+    private void writeExecutionLog(Path runDir, RuntimeSelection selection, String status, Map<String, Object> outputs) {
+        write(runDir.resolve("logs/execution.log"), """
                 evidence_type: execution_log
                 evidence_classification: framework_provider_capability_only
                 downstream_release_evidence: false
@@ -486,8 +619,8 @@ public class GrpcMockCapabilityService {
                         outputs.getOrDefault("matched_count", "")));
     }
 
-    private void writeBatch(RuntimeSelection selection, String status) {
-        write(selection.runDir().resolve("batch/batch.yaml"), """
+    private void writeBatch(Path runDir, RuntimeSelection selection, String status, int testCount) {
+        write(runDir.resolve("batch/batch.yaml"), """
                 evidence_type: batch_summary
                 evidence_classification: framework_provider_capability_only
                 downstream_release_evidence: false
@@ -495,30 +628,59 @@ public class GrpcMockCapabilityService {
                 batch_id: %s
                 run_id: %s
                 test_case_id: %s
+                test_count: %s
                 provider_types: [grpc_mock, grpc_client]
                 status: %s
                 """.formatted(
                         selection.suite().get("suite_id"),
                         selection.batchId(),
                         selection.runId(),
-                        selection.testCase().get("test_case_id"),
+                        topLevelTestCaseId(selection, testCount),
+                        testCount,
                         status));
     }
 
-    private void writeEvidenceIndex(RuntimeSelection selection, List<String> evidenceRefs) {
+    private void writeFailureDetail(Path runDir, RuntimeSelection selection, ProviderFailure failure) {
+        ProviderFailure resolvedFailure = failure == null
+                ? ProviderFailure.of("ASSERTION_FAILED", "ASSERTION_FAILED", "gRPC mock capability failed.", "Review gRPC mock, client response, and assertion evidence.")
+                : failure;
+        write(runDir.resolve("provider-evidence/grpc_mock/failure_detail.yaml"), """
+                evidence_type: failure_detail
+                evidence_classification: framework_provider_capability_only
+                downstream_release_evidence: false
+                provider_types: [grpc_mock, grpc_client]
+                provider_ids: [%s, %s]
+                profile: %s
+                failure_code: %s
+                classification: %s
+                reason: %s
+                owner_action: %s
+                masking:
+                  raw_secret_found: false
+                """.formatted(
+                selection.mockProviderId(),
+                selection.clientProviderId(),
+                selection.profile(),
+                resolvedFailure.code(),
+                resolvedFailure.classification(),
+                resolvedFailure.reason(),
+                resolvedFailure.ownerAction()));
+    }
+
+    private void writeEvidenceIndex(Path runDir, RuntimeSelection selection, String testCaseId, List<String> evidenceRefs) {
         StringBuilder index = new StringBuilder();
         index.append("evidence_index_version: v0.2\n");
         index.append("suite_id: ").append(selection.suite().get("suite_id")).append('\n');
         index.append("batch_id: ").append(selection.batchId()).append('\n');
         index.append("run_id: ").append(selection.runId()).append('\n');
-        index.append("test_case_id: ").append(selection.testCase().get("test_case_id")).append('\n');
+        index.append("test_case_id: ").append(testCaseId).append('\n');
         index.append("profile: ").append(selection.profile()).append('\n');
         index.append("entries:\n");
         for (String ref : distinct(evidenceRefs)) {
             if (ref == null || ref.isBlank() || ref.endsWith("evidence_index.yaml")) {
                 continue;
             }
-            EvidenceEntry entry = evidenceEntry(selection, ref);
+            EvidenceEntry entry = evidenceEntry(runDir, selection, ref);
             index.append("  - evidence_id: ").append(entry.evidenceId()).append('\n');
             index.append("    evidence_type: ").append(entry.evidenceType()).append('\n');
             index.append("    produced_by: ").append(entry.producedBy()).append('\n');
@@ -526,7 +688,7 @@ public class GrpcMockCapabilityService {
                 index.append("    provider_type: ").append(entry.providerType()).append('\n');
                 index.append("    provider_id: ").append(entry.providerId()).append('\n');
             }
-            index.append("    test_case_id: ").append(selection.testCase().get("test_case_id")).append('\n');
+            index.append("    test_case_id: ").append(testCaseId).append('\n');
             index.append("    run_id: ").append(selection.runId()).append('\n');
             index.append("    batch_id: ").append(selection.batchId()).append('\n');
             index.append("    file_path: ").append(ref).append('\n');
@@ -540,22 +702,25 @@ public class GrpcMockCapabilityService {
             }
         }
         index.append("masking:\n  raw_secret_found: false\n");
-        write(selection.runDir().resolve("evidence_index.yaml"), index.toString());
+        write(runDir.resolve("evidence_index.yaml"), index.toString());
     }
 
-    private EvidenceEntry evidenceEntry(RuntimeSelection selection, String ref) {
+    private EvidenceEntry evidenceEntry(Path runDir, RuntimeSelection selection, String ref) {
         String evidenceType = evidenceType(ref);
-        String content = read(selection.runDir().resolve(ref));
+        String content = read(runDir.resolve(ref));
         String status = evidenceFailed(content) ? "failed" : "passed";
         String failureCode = "failed".equals(status) ? firstNonBlank(failureCode(content), "ASSERTION_FAILED") : "";
         String providerType = "";
         String providerId = "";
-        if (ref.startsWith("provider-evidence/grpc/")) {
+        if (ref.contains("provider-evidence/grpc/")) {
             providerType = GRPC_MOCK;
             providerId = selection.mockProviderId();
-        } else if (ref.startsWith("provider-evidence/grpc-client/")) {
+        } else if (ref.contains("provider-evidence/grpc-client/")) {
             providerType = GRPC_CLIENT;
             providerId = selection.clientProviderId();
+        } else if (ref.contains("provider-evidence/grpc_mock/")) {
+            providerType = GRPC_MOCK;
+            providerId = selection.mockProviderId();
         }
         return new EvidenceEntry(
                 evidenceType + "-" + safe(ref),
@@ -609,61 +774,46 @@ public class GrpcMockCapabilityService {
     }
 
     private Path writeResult(
+            Path runDir,
             RuntimeSelection selection,
             String profile,
+            String testCaseId,
+            int testCount,
             String status,
             Map<String, Object> outputs,
             List<Map<String, Object>> stepResults,
             List<Map<String, Object>> verifyResults,
+            List<Map<String, Object>> testResults,
+            List<Map<String, Object>> providerResults,
             List<String> evidenceRefs,
             ProviderFailure failure,
             ProviderFailure cleanupFailure,
-            String cleanupStatus,
             Instant startedAt,
             Instant finishedAt) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("framework_version", "v0.2");
-        result.put("dsl_version", selection.testCase().get("dsl_version"));
-        result.put("suite_id", selection.suite().get("suite_id"));
-        result.put("batch_id", selection.batchId());
-        result.put("run_id", selection.runId());
-        result.put("test_case_id", selection.testCase().get("test_case_id"));
-        result.put("profile", profile);
-        result.put("environment", profile);
-        result.put("status", status);
-        result.put("start_time", startedAt.toString());
-        result.put("end_time", finishedAt.toString());
-        result.put("duration_ms", Duration.between(startedAt, finishedAt).toMillis());
-        result.put("timestamps", Map.of("started_at", startedAt.toString(), "finished_at", finishedAt.toString()));
-        result.put("labels", selection.testCase().get("labels"));
-        result.put("source_refs", selection.testCase().get("source_refs"));
-        result.put("step_results", stepResults);
-        result.put("steps", stepResults);
-        result.put("verify_results", verifyResults);
-        result.put("provider_results", List.of(
-                providerResult(selection.mockProviderId(), GRPC_MOCK, selection.mockRuntimeMode(), status, outputs,
-                        "load_grpc_stub", cleanupStatus),
-                providerResult(selection.clientProviderId(), GRPC_CLIENT, selection.clientRuntimeMode(), status, outputs,
-                        "unary_call", "not_applicable")));
-        result.put("evidence_index_ref", "evidence_index.yaml");
-        result.put("provider_evidence_refs", distinct(evidenceRefs));
-        result.put("evidence_refs", distinct(evidenceRefs));
-        Map<String, Object> failureObject = new LinkedHashMap<>();
-        failureObject.put("code", failure == null ? null : failure.code());
-        failureObject.put("classification", failure == null ? null : failure.classification());
-        failureObject.put("reason", failure == null ? null : failure.reason());
-        failureObject.put("owner_action", failure == null ? null : failure.ownerAction());
-        if (cleanupFailure != null) {
-            failureObject.put("cleanup_failure", Map.of(
-                    "code", cleanupFailure.code(),
-                    "classification", cleanupFailure.classification(),
-                    "reason", cleanupFailure.reason(),
-                    "owner_action", cleanupFailure.ownerAction()));
-        }
-        result.put("failure", failureObject);
-        Path resultJson = selection.runDir().resolve("result.json");
-        write(resultJson, toJson(result) + "\n");
-        return resultJson;
+        return ProviderCapabilityResultWriter.write(runDir, new ProviderCapabilityResultWriter.ResultDocument(
+                selection.testCase().get("dsl_version"),
+                selection.suite().get("suite_id"),
+                selection.batchId(),
+                selection.runId(),
+                testCaseId,
+                testCount,
+                profile,
+                profile,
+                status,
+                startedAt,
+                finishedAt,
+                selection.testCase().get("labels"),
+                selection.testCase().get("source_refs"),
+                stepResults,
+                verifyResults,
+                testResults,
+                providerResults,
+                distinct(evidenceRefs),
+                distinct(evidenceRefs),
+                Map.of(),
+                failure,
+                cleanupFailure,
+                true));
     }
 
     private Map<String, Object> providerResult(
@@ -685,6 +835,11 @@ public class GrpcMockCapabilityService {
                 "outputs", outputs));
         result.put("release_evidence_eligible", false);
         return result;
+    }
+
+    private String topLevelTestCaseId(RuntimeSelection selection, int testCount) {
+        return ProviderCapabilityResultWriter.topLevelTestCaseId(
+                selection.suite().get("suite_id"), selection.testCase().get("test_case_id"), testCount);
     }
 
     private Map<String, Object> step(String id, String operation, String status, Map<String, Object> outputs) {
@@ -871,50 +1026,6 @@ public class GrpcMockCapabilityService {
         return value.replaceAll("[^A-Za-z0-9]+", "-").replaceAll("(^-|-$)", "");
     }
 
-    private String toJson(Object value) {
-        if (value == null) {
-            return "null";
-        }
-        if (value instanceof String text) {
-            return "\"" + escape(text) + "\"";
-        }
-        if (value instanceof Number || value instanceof Boolean) {
-            return String.valueOf(value);
-        }
-        if (value instanceof Map<?, ?> map) {
-            StringBuilder json = new StringBuilder("{");
-            boolean first = true;
-            for (Map.Entry<?, ?> entry : map.entrySet()) {
-                if (!first) {
-                    json.append(", ");
-                }
-                first = false;
-                json.append(toJson(entry.getKey())).append(": ").append(toJson(entry.getValue()));
-            }
-            return json.append("}").toString();
-        }
-        if (value instanceof Iterable<?> iterable) {
-            StringBuilder json = new StringBuilder("[");
-            boolean first = true;
-            for (Object item : iterable) {
-                if (!first) {
-                    json.append(", ");
-                }
-                first = false;
-                json.append(toJson(item));
-            }
-            return json.append("]").toString();
-        }
-        return toJson(String.valueOf(value));
-    }
-
-    private String escape(String value) {
-        return value.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r");
-    }
-
     public record GrpcRunResult(
             boolean passed,
             String status,
@@ -927,13 +1038,14 @@ public class GrpcMockCapabilityService {
             List<String> providerTypes,
             Path resultJson,
             Path evidenceDir,
+            int testCount,
             boolean providerRuntimeExecuted,
             List<ContractFinding> findings) {
 
         static GrpcRunResult blocked(String suiteId, String profile, List<ContractFinding> findings) {
             return new GrpcRunResult(
                     false, "blocked", suiteId, "", "", "", profile,
-                    List.of(), List.of(), null, null, false, List.copyOf(findings));
+                    List.of(), List.of(), null, null, 0, false, List.copyOf(findings));
         }
     }
 
@@ -956,6 +1068,7 @@ public class GrpcMockCapabilityService {
             Map<String, Object> clientBindingValues,
             String batchId,
             String runId,
+            Path suiteRunDir,
             Path runDir) {
     }
 
@@ -975,6 +1088,20 @@ public class GrpcMockCapabilityService {
             boolean passed,
             List<Map<String, Object>> verifyResults,
             List<String> evidenceRefs) {
+    }
+
+    private record TestExecution(
+            boolean passed,
+            String status,
+            boolean providerRuntimeExecuted,
+            Map<String, Object> outputs,
+            List<Map<String, Object>> stepResults,
+            List<Map<String, Object>> verifyResults,
+            Map<String, Object> testResult,
+            List<Map<String, Object>> providerResults,
+            List<String> evidenceRefs,
+            ProviderFailure failure,
+            ProviderFailure cleanupFailure) {
     }
 
     private record EvidenceEntry(

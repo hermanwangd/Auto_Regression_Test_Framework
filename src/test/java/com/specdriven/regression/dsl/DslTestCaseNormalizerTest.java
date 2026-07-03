@@ -437,4 +437,99 @@ class DslTestCaseNormalizerTest {
         assertThat(normalized).doesNotContainKey("expected");
         assertThat((Map<?, ?>) normalized.get("oracles")).isEmpty();
     }
+
+    @Test
+    void normalizesValueInputsCleanupOperationsAndDirectExpectedArtifacts() {
+        Map<String, Object> setupInputs = new LinkedHashMap<>();
+        setupInputs.put("fixture.seed_ref", Map.of("ref", "${data.seed}"));
+        setupInputs.put("fixture.batch_size", Map.of("value", 25));
+        Map<String, Object> executeInputs = new LinkedHashMap<>();
+        executeInputs.put("http.body", Map.of("ref", "${data.input}"));
+        executeInputs.put("", Map.of("ref", "ignored/blank-input.json"));
+        Map<String, Object> cleanupInputs = new LinkedHashMap<>();
+        cleanupInputs.put("fixture.cleanup_ref", Map.of("ref", "${data.cleanup}"));
+
+        Map<String, Object> testCase = new LinkedHashMap<>();
+        testCase.put("dsl_version", "v0.2");
+        testCase.put("test_case_id", "TC-VALUE-CLEANUP-001");
+        testCase.put("status", "active");
+        testCase.put("revision", 1);
+        testCase.put("targets", Map.of(
+                "runtime", Map.of("provider_id", "http-runtime")));
+        testCase.put("data", Map.of(
+                "input", Map.of("ref", "fixtures/request.json"),
+                "cleanup", Map.of("ref", "fixtures/cleanup.yaml"),
+                "expected_payload", Map.of("ref", "expected/results/payload.xml"),
+                "expected_without_ref", Map.of("value", "literal")));
+        testCase.put("setup", Map.of("operations", List.of(
+                Map.of(
+                        "id", "prepare",
+                        "target", "runtime",
+                        "operation", "setup_fixture",
+                        "inputs", setupInputs),
+                Map.of("id", "", "operation", "setup_fixture"))));
+        testCase.put("execute", Map.of("operations", List.of(Map.of(
+                "id", "invoke",
+                "target", "runtime",
+                "operation", "http_request",
+                "inputs", executeInputs,
+                "outputs", Map.of("response", "response")))));
+        testCase.put("verify", Map.of("checks", List.of(
+                Map.of(
+                        "id", "payload_schema",
+                        "type", "schema_match",
+                        "actual", Map.of("ref", "${execute.invoke.outputs.response}"),
+                        "expected", "${data.expected_payload.ref}",
+                        "options", Map.of("epsilon", "0.01")),
+                Map.of(
+                        "type", "value_equals",
+                        "actual", "${execute.invoke.outputs.response}",
+                        "expected", "OK"))));
+        testCase.put("cleanup", Map.of("operations", List.of(
+                Map.of(
+                        "id", "clean",
+                        "target", "runtime",
+                        "operation", "cleanup_fixture",
+                        "inputs", cleanupInputs),
+                Map.of("id", "skip_missing_operation"))));
+
+        Map<String, Object> normalized = new DslTestCaseNormalizer().normalize(testCase);
+
+        Map<?, ?> inputs = (Map<?, ?>) ((Map<?, ?>) normalized.get("package_inputs")).get("inputs");
+        assertThat(inputs.keySet().stream().map(Object::toString).toList()).contains(
+                "prepare_fixture_seed_ref",
+                "prepare_fixture_batch_size",
+                "invoke_http_body",
+                "clean_fixture_cleanup_ref");
+        Map<?, ?> batchSizeInput = (Map<?, ?>) inputs.get("prepare_fixture_batch_size");
+        assertThat(batchSizeInput.get("value")).isEqualTo(25);
+        assertThat(batchSizeInput.get("bind_as")).isEqualTo("fixture.batch_size");
+        assertThat(inputs.keySet().stream().map(Object::toString).toList()).doesNotContain("invoke");
+
+        Map<?, ?> fixture = (Map<?, ?>) normalized.get("fixture");
+        assertThat((List<?>) fixture.get("setup"))
+                .singleElement()
+                .satisfies(action -> assertThat(((Map<?, ?>) action).get("id")).isEqualTo("prepare"));
+        assertThat((List<?>) fixture.get("cleanup"))
+                .singleElement()
+                .satisfies(action -> assertThat(((Map<?, ?>) action).get("id")).isEqualTo("clean"));
+
+        assertThat(((Map<?, ?>) normalized.get("expected")).get("ref"))
+                .isEqualTo("expected/results/payload.xml");
+        Map<?, ?> oracles = (Map<?, ?>) normalized.get("oracles");
+        Map<?, ?> expectedPayload = (Map<?, ?>) oracles.get("expected_payload");
+        assertThat(expectedPayload.get("type")).isEqualTo("expected_result_artifact");
+        assertThat(expectedPayload.get("ref")).isEqualTo("expected/results/payload.xml");
+        Map<?, ?> schemaOracle = (Map<?, ?>) oracles.get("payload_schema_expected");
+        assertThat(schemaOracle.get("type")).isEqualTo("schema");
+        assertThat(schemaOracle.get("ref")).isEqualTo("expected/results/payload.xml");
+        assertThat((List<?>) normalized.get("assertions"))
+                .anySatisfy(assertion -> {
+                    Map<?, ?> assertionMap = (Map<?, ?>) assertion;
+                    assertThat(assertionMap.get("type")).isEqualTo("schema_matches");
+                    assertThat(assertionMap.get("epsilon")).isEqualTo("0.01");
+                    assertThat(assertionMap.get("oracle")).isEqualTo("${oracles.payload_schema_expected}");
+                })
+                .anySatisfy(assertion -> assertThat(((Map<?, ?>) assertion).get("expected_value")).isEqualTo("OK"));
+    }
 }

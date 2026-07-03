@@ -98,6 +98,36 @@ class WireMockProviderCapabilityCommandTest {
     }
 
     @Test
+    void wireMockSuiteRunsAllTestsWithSharedProfile() throws Exception {
+        Path suite = mutableWireMock();
+        Path secondTestCase = suite.getParent().resolve("second_test_case.yaml");
+        Files.copy(suite.getParent().resolve("test_case.yaml"), secondTestCase);
+        Files.writeString(secondTestCase, read(secondTestCase)
+                .replace("WIREMOCK-CAPABILITY-TC-001", "WIREMOCK-CAPABILITY-TC-002"));
+        Files.writeString(suite, read(suite)
+                .replace("  - test_case.yaml", "  - test_case.yaml\n  - second_test_case.yaml"));
+
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_wiremock");
+
+        assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+        assertThat(run.stdout())
+                .contains("test_count: 2")
+                .contains("profile: local_wiremock")
+                .doesNotContain("\nbase_url:");
+        Path resultJson = extractPath(run.stdout(), "result_json");
+        String resultText = read(resultJson);
+        assertThat(resultText)
+                .contains("\"test_case_id\": \"WIREMOCK-CAPABILITY-v0.2-MULTI\"")
+                .contains("\"test_count\": 2")
+                .contains("\"test_case_id\": \"WIREMOCK-CAPABILITY-TC-001\"")
+                .contains("\"test_case_id\": \"WIREMOCK-CAPABILITY-TC-002\"");
+        Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
+        assertThat(read(evidenceDir.resolve("evidence_index.yaml")))
+                .contains("test_case_id: WIREMOCK-CAPABILITY-TC-001")
+                .contains("test_case_id: WIREMOCK-CAPABILITY-TC-002");
+    }
+
+    @Test
     void wireMockRunRejectsProfileNotSelectedBySuiteBeforeRuntimeExecution() {
         CommandResult result = execute("run", "--suite", WIREMOCK_SUITE.toString(), "--profile", "wrong_profile");
 

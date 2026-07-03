@@ -69,8 +69,8 @@ Status meanings:
 | Provider Type | Purpose | Example Technologies | Minimum Contract |
 |---|---|---|---|
 | `rest_client` / `grpc_client` | Invoke synchronous APIs and capture response evidence | REST, gRPC, Orbix bridge through external runner if needed | Service binding key, operation, allowed request input keys, auth secret ref, timeout, output refs |
-| `kafka_messaging` / `nats` | Publish, consume, observe, cleanup, and correlate events | Kafka, NATS | Topic/subject or connection/subject binding key, payload input keys, key/correlation id where supported, serialization, timeout, output refs, observation rule, cleanup strategy, max cleanup count |
-| `jdbc_database` | Prepare and validate state | SQL/NoSQL DBs through JDBC where supported | Connection binding key, query refs, setup/cleanup SQL refs, isolation key, cleanup strategy |
+| `kafka` / `ibm_mq` / `nats` | Publish/put, browse, observe, match, and correlate messages | Kafka, IBM MQ, NATS | Topic/queue/subject binding key, Kafka consumer group, IBM MQ queue-manager/channel/connection/credential refs, payload input keys, key/correlation id where supported, serialization, timeout, output refs, observation rule, non-mutating default behavior |
+| `jdbc` | Prepare and validate state | SQL/NoSQL DBs through JDBC where supported | Connection binding key, query refs, setup/cleanup SQL refs, isolation key, cleanup strategy |
 | `kubernetes_runtime` / `vm_runtime` | Block execution until deployed targets are ready | K8s, VM | Namespace/host binding key, target selector, readiness probe, version/deployment ref, timeout, output refs, log/evidence refs |
 | `external_runner` | Governed escape hatch for existing tools or legacy runtimes that cannot yet use built-in providers | JUnit, Newman, Robot, C++ or VB.NET harness | Approval ref, command or container ref, inputs, outputs, success codes, timeout, evidence artifact map |
 | `shell_command` | Run file, CLI, batch, or data-pipeline style tests | Spring Boot CLI, scripts, scheduled jobs | Command binding key, inputs, output refs, logs, success codes, bounded timeout |
@@ -105,19 +105,17 @@ provider_instances:
   payment-db:
     provider_instance_version: v0.2
     provider_id: payment-db
-    provider_type: jdbc_database
+    provider_type: jdbc
     runtime_modes: [native]
     binding_keys:
-      jdbc_url:
+      connection.secret_ref:
         required: true
-      username:
-        required: true
-      password:
+      dialect:
         required: true
   payment-events:
     provider_instance_version: v0.2
     provider_id: payment-events
-    provider_type: kafka_messaging
+    provider_type: kafka
     runtime_modes: [native]
     binding_keys:
       bootstrap_servers:
@@ -136,6 +134,8 @@ providers:
     binding_keys:
       connection.secret_ref:
         secret_ref: vault://sit/payment/db-connection
+      dialect:
+        value: oracle
       dialect:
         value: oracle
   payment-events:

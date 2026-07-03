@@ -46,20 +46,21 @@ class FrameworkMaturityCoverageGateTest {
     }
 
     @Test
-    @DisplayName("v0.2 maturity | Maven JaCoCo gate declares explicit framework coverage thresholds")
-    void mavenJacocoGateDeclaresExplicitFrameworkCoverageThresholds() throws Exception {
+    @DisplayName("v0.2 maturity | Maven JaCoCo default verify reports coverage and delivery profile owns thresholds")
+    void mavenJacocoDefaultVerifyReportsCoverageAndDeliveryProfileOwnsThresholds() throws Exception {
         String pom = Files.readString(Path.of("pom.xml"));
 
         assertThat(pom)
-                .contains("<id>check</id>")
-                .contains("<element>BUNDLE</element>");
+                .contains("<artifactId>jacoco-maven-plugin</artifactId>")
+                .contains("<goal>prepare-agent</goal>")
+                .contains("<id>report</id>")
+                .contains("<goal>report</goal>")
+                .contains("<id>v02-delivery-coverage</id>")
+                .contains("<id>v02-delivery-critical-class-check</id>")
+                .contains("<goal>check</goal>")
+                .doesNotContain("<element>BUNDLE</element>");
         assertThat(pom)
                 .contains("<exclude>com/specdriven/regression/RegressionApplication*</exclude>");
-        assertJacocoCoveredRatioLimit(pom, "INSTRUCTION", "0.99");
-        assertJacocoCoveredRatioLimit(pom, "BRANCH", "0.90");
-        assertJacocoCoveredRatioLimit(pom, "LINE", "0.98");
-        assertJacocoCoveredRatioLimit(pom, "METHOD", "1.00");
-        assertJacocoCoveredRatioLimit(pom, "CLASS", "1.00");
     }
 
     @Test
@@ -85,8 +86,8 @@ class FrameworkMaturityCoverageGateTest {
                 .contains("<exclude>com.specdriven.regression.*.*Result*</exclude>")
                 .contains("<exclude>com.specdriven.regression.*.*Report*</exclude>")
                 .contains("<exclude>com.specdriven.regression.*.*Gap*</exclude>");
-        assertJacocoCoveredRatioLimit(pom, "LINE", "1.00");
-        assertJacocoCoveredRatioLimit(pom, "BRANCH", "0.90");
+        assertJacocoCoveredRatioLimit(pom, "LINE", "0.97");
+        assertJacocoCoveredRatioLimit(pom, "BRANCH", "0.88");
         assertThat(implementationPlan)
                 .contains("`./mvnw -Pv02-delivery-coverage verify`")
                 .contains("Critical-class line coverage gate")

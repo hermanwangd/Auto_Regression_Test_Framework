@@ -1,0 +1,58 @@
+dsl_version: v0.2
+test_case_id: KAFKA-CAPABILITY-TC-001
+title: Kafka client provider capability
+status: active
+revision: 1
+source_refs:
+  capability_spec: docs/01-specs/03_feature_specs.md#314-kafka-and-ibm-mq-client-provider-model
+labels:
+  capability: kafka
+  evidence_classification: framework_provider_capability_only
+compatible_profiles: [local_messaging]
+targets:
+  event_bus:
+    provider_id: order-events
+data:
+  order_event:
+    ref: fixtures/order_event.json
+  order_expected:
+    ref: expected_results/order_event.json
+execute:
+  operations:
+    - id: publish_order_event
+      target: event_bus
+      operation: kafka_publish
+      inputs:
+        key:
+          value: ORD-K-001
+        payload_ref:
+          ref: ${data.order_event}
+      outputs:
+        topic: topic
+        partition: partition
+        offset: offset
+        key: key
+        event_evidence_ref: event_evidence_ref
+verify:
+  checks:
+    - id: kafka_payload_match
+      type: kafka_payload_match
+      target: event_bus
+      inputs:
+        expected_ref:
+          ref: ${data.order_expected}
+        consume_from:
+          value: test_start_time
+        timeout:
+          value: PT5S
+        poll_interval:
+          value: PT0.05S
+evidence:
+  required:
+    - provider-evidence/kafka/publish_order_event.yaml
+    - provider-evidence/kafka/kafka_payload_match.yaml
+    - assertions/kafka_payload_match.yaml
+runtime:
+  timeout: PT1M
+  retry:
+    max_attempts: 1

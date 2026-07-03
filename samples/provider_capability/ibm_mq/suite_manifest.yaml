@@ -1,0 +1,17 @@
+contract_version: v0.2
+suite_id: IBM-MQ-CAPABILITY-v0.2
+purpose: Framework-owned IBM MQ client provider capability verification sample.
+profile: local_ibm_mq
+selection:
+  mode: suite
+  suite: provider-capability-ibm-mq
+tests:
+  - test_case.yaml
+artifact_roots:
+  provider_instances: provider_instances/
+  env_profiles: env_profiles/
+  expected_results: expected_results/
+  fixtures: fixtures/
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

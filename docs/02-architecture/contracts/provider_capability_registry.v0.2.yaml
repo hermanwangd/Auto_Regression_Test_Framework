@@ -5,6 +5,7 @@ purpose: >
   Catalogs provider_type values supported by the framework runtime and maps
   each provider_type to its contract schema, runtime status, evidence outputs,
   and standard failure classification.
+release_support_matrix_ref: docs/09-operations/provider_support_matrix.md
 version_compatibility:
   supported_versions: [v0.2]
   unsupported_version_behavior: block_before_provider_dispatch
@@ -17,6 +18,26 @@ registry_entry_required_fields:
   - supported_operations
   - evidence_outputs
   - failure_classification
+runtime_status_catalog:
+  supported:
+    validation_behavior: validate_and_allow_dispatch_for_supported_operations
+    execution_behavior: provider_runtime_may_execute_when_profile_allows
+  partial:
+    validation_behavior: validate_contract_instance_env_profile_and_supported_runtime_operations
+    execution_behavior: only_supported_runtime_modes_may_execute_contract_only_modes_block_before_dispatch
+  planned_p1_client_provider:
+    validation_behavior: validate_contract_instance_env_profile_and_dry_run
+    execution_behavior: block_before_provider_dispatch_until_runtime_slice_is_implemented
+  deprecated_alias:
+    validation_behavior: compatibility_only_for_existing_v0_2_artifacts
+    execution_behavior: new_artifacts_must_use_canonical_provider_type
+  approved_escape_hatch_only:
+    validation_behavior: validate_contract_instance_env_profile_safety_and_explicit_approval
+    execution_behavior: block_before_provider_dispatch_without_provider_safety_approval
+runtime_mode_semantics:
+  supported_runtime_modes: runtime modes accepted by this registry entry; partial providers may narrow this from the Provider Contract vocabulary
+  contract_runtime_modes: optional runtime modes named by the Provider Contract vocabulary when broader than supported_runtime_modes
+  contract_only_runtime_modes: optional runtime modes reserved for later implementation and blocked before dispatch today
 provider_types:
   shell_command:
     contract_ref: provider-contracts/shell_command.yaml
@@ -43,14 +64,14 @@ provider_types:
     contract_ref: provider-contracts/wiremock_http_mock.yaml
     runtime_status: supported
     supported_runtime_modes: [mock]
-    required_binding_keys: [mappings_ref]
+    required_binding_keys: []
     supported_operations: [start_mock, connect_mock, load_stubs, verify_requests]
     evidence_outputs: [base_url, request_journal, server_log, timing, error]
   soap_mock:
     contract_ref: provider-contracts/soap_mock.yaml
     runtime_status: partial
     supported_runtime_modes: [mock]
-    required_binding_keys: [endpoint_url]
+    required_binding_keys: []
     supported_operations: [start_soap_mock, connect_soap_mock, load_soap_stub, soap_request_received, reset_mock]
     evidence_outputs: [endpoint_url, request_journal, server_log, xml_diff, timing, error]
   grpc_mock:
@@ -60,9 +81,27 @@ provider_types:
     required_binding_keys: [descriptor_ref, service_name]
     supported_operations: [start_grpc_mock, connect_grpc_mock, load_grpc_stub, grpc_request_received, reset_mock]
     evidence_outputs: [target_uri, request_journal, server_log, protobuf_json_diff, timing, error]
+  kafka:
+    contract_ref: provider-contracts/kafka.yaml
+    runtime_status: partial
+    supported_runtime_modes: [mock]
+    contract_runtime_modes: [native, mock, ephemeral]
+    contract_only_runtime_modes: [native, ephemeral]
+    required_binding_keys: [bootstrap_servers, topic, consumer_group]
+    supported_operations: [kafka_publish, kafka_observe, kafka_payload_match]
+    evidence_outputs: [event_evidence, assertion_evidence, topic, partition, offset, timing, error]
+  ibm_mq:
+    contract_ref: provider-contracts/ibm_mq.yaml
+    runtime_status: partial
+    supported_runtime_modes: [mock]
+    contract_runtime_modes: [native, mock, ephemeral]
+    contract_only_runtime_modes: [native, ephemeral]
+    required_binding_keys: [queue_manager, channel, conn_name, queue, credential.secret_ref]
+    supported_operations: [mq_put, mq_browse, mq_message_exists, mq_payload_match]
+    evidence_outputs: [mq_evidence, assertion_evidence, queue, message_id, correlation_id, timing, error]
   kafka_messaging:
     contract_ref: provider-contracts/kafka_messaging.yaml
-    runtime_status: supported
+    runtime_status: deprecated_alias
     supported_runtime_modes: [native, mock, ephemeral]
     required_binding_keys: [bootstrap_servers]
     supported_operations: [publish_message, consume_message]
@@ -70,7 +109,7 @@ provider_types:
   nats:
     contract_ref: provider-contracts/nats.yaml
     runtime_status: supported
-    supported_runtime_modes: [local, ci, sit, preprod]
+    supported_runtime_modes: [native, mock, ephemeral]
     required_binding_keys: [connection, subject]
     supported_operations: [nats_publish, nats_observe, event_published, event_payload_match]
     evidence_outputs: [event_evidence, assertion_evidence, timing, error]

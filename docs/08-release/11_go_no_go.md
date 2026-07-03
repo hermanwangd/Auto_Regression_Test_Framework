@@ -2,6 +2,8 @@
 
 This document belongs to F010 / M3 governance. M1 produces release review inputs only; final Go / No-Go remains human-owned.
 
+Framework release readiness is governed separately by `docs/08-release/framework/framework_release_readiness.md`. This document is for downstream Release Package review inputs, not for publishing the framework artifact itself.
+
 ## 11.1 Go Review Inputs
 
 A Release Package may be recommended for release review when:

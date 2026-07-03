@@ -7,10 +7,12 @@ import com.specdriven.regression.provider.SampleFakeProvider;
 import com.specdriven.regression.provider.SampleFakeProvider.CleanupResult;
 import com.specdriven.regression.provider.SampleFakeProvider.ExecutionResult;
 import com.specdriven.regression.provider.SampleFakeProvider.SetupResult;
+import com.specdriven.regression.provider.runtime.ProviderFailure;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -72,24 +74,117 @@ public class GoldenE2eService {
 
         Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
         Map<String, Object> suite = readMap(suiteManifest);
-        Path testCasePath = suiteRoot.resolve(stringValue(listValue(suite.get("tests")).get(0))).normalize();
-        Map<String, Object> testCase = readMap(testCasePath);
-        if (!profileAllowed(suite, testCase, requestedProfile)) {
-            return GoldenRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, List.of(new ContractFinding(
-                    testCasePath.toString(),
-                    "profile",
-                    "profile_mismatch",
-                    "",
-                    "sample_fake_provider",
-                    requestedProfile,
-                    "",
-                    "Run with a profile selected by the suite manifest and allowed by compatible_profiles.")));
+        List<TestCaseDocument> testCases = new ArrayList<>();
+        List<ContractFinding> profileFindings = new ArrayList<>();
+        for (Object testRef : listValue(suite.get("tests"))) {
+            Path testCasePath = suiteRoot.resolve(stringValue(testRef)).normalize();
+            Map<String, Object> testCase = readMap(testCasePath);
+            testCases.add(new TestCaseDocument(testCasePath, testCase));
+            if (!profileAllowed(suite, testCase, requestedProfile)) {
+                profileFindings.add(new ContractFinding(
+                        testCasePath.toString(),
+                        "profile",
+                        "profile_mismatch",
+                        "",
+                        "sample_fake_provider",
+                        requestedProfile,
+                        "",
+                        "Run with a profile selected by the suite manifest and allowed by compatible_profiles."));
+            }
+        }
+        if (!profileFindings.isEmpty()) {
+            return GoldenRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, profileFindings);
         }
 
         Path runDir = outputBase.resolve(safe(stringValue(suite.get("suite_id")))).resolve(BATCH_ID).resolve(RUN_ID);
         recreateDirectory(runDir);
 
         String generatedAt = resolveGeneratedAt(suiteRoot, requestedProfile);
+        String status = "passed";
+        String failureClassification = null;
+        String failureReason = null;
+        String ownerAction = null;
+        boolean fakeProviderExecuted = false;
+        List<Map<String, Object>> stepResults = new ArrayList<>();
+        List<Map<String, Object>> verifyResults = new ArrayList<>();
+        List<Map<String, Object>> testResults = new ArrayList<>();
+        List<Map<String, Object>> providerResults = new ArrayList<>();
+        List<String> evidenceRefs = new ArrayList<>();
+        boolean multiTestSuite = testCases.size() > 1;
+
+        for (TestCaseDocument document : testCases) {
+            Path testRunDir = multiTestSuite
+                    ? runDir.resolve("tests").resolve(safe(stringValue(document.testCase().get("test_case_id"))))
+                    : runDir;
+            GoldenTestExecution execution = executeTestCase(suiteRoot, document.testCase(), requestedProfile, testRunDir, generatedAt);
+            fakeProviderExecuted = fakeProviderExecuted || execution.fakeProviderExecuted();
+            stepResults.addAll(execution.stepResults());
+            verifyResults.addAll(execution.verifyResults());
+            testResults.add(execution.testResult());
+            providerResults.add(providerResult(requestedProfile, execution.status()));
+            evidenceRefs.addAll(prefixEvidenceRefs(document.testCase(), execution.evidenceRefs(), multiTestSuite));
+            if (!execution.passed() && "passed".equals(status)) {
+                status = "failed";
+                failureClassification = execution.failureClassification();
+                failureReason = execution.failureReason();
+                ownerAction = execution.ownerAction();
+            }
+        }
+
+        TestCaseDocument firstTestCase = testCases.get(0);
+        String topLevelTestCaseId = topLevelTestCaseId(suite, firstTestCase.testCase(), testCases.size());
+        if (multiTestSuite) {
+            writeAggregateExecutionLog(
+                    runDir,
+                    suite,
+                    topLevelTestCaseId,
+                    requestedProfile,
+                    status,
+                    verifyResults.size(),
+                    fakeProviderExecuted);
+            evidenceRefs.add("logs/execution.log");
+        }
+        evidenceRefs.add("batch/batch.yaml");
+        writeBatch(runDir, suite, topLevelTestCaseId, status, testCases.size());
+        writeEvidenceIndex(runDir, suite, topLevelTestCaseId, requestedProfile, distinctWithIndex(evidenceRefs));
+        Path resultJson = writeResult(
+                runDir,
+                suite,
+                firstTestCase.testCase(),
+                requestedProfile,
+                topLevelTestCaseId,
+                testCases.size(),
+                status,
+                stepResults,
+                verifyResults,
+                testResults,
+                providerResults,
+                distinctWithIndex(evidenceRefs),
+                failureClassification,
+                failureReason,
+                ownerAction);
+        return new GoldenRunResult(
+                "passed".equals(status),
+                status,
+                stringValue(suite.get("suite_id")),
+                BATCH_ID,
+                RUN_ID,
+                topLevelTestCaseId,
+                testCases.size(),
+                requestedProfile,
+                resultJson,
+                runDir,
+                fakeProviderExecuted,
+                List.of());
+    }
+
+    private GoldenTestExecution executeTestCase(
+            Path suiteRoot,
+            Map<String, Object> testCase,
+            String requestedProfile,
+            Path runDir,
+            String generatedAt) {
+        createDirectories(runDir);
         Path inputFile = suiteRoot.resolve(resolveDataRef(testCase, "${data.input}")).normalize();
         Path setupFixture = suiteRoot.resolve(resolveDataRef(testCase, "${data.setup_fixture}")).normalize();
         Path cleanupFixture = suiteRoot.resolve(resolveDataRef(testCase, "${data.cleanup_fixture}")).normalize();
@@ -105,7 +200,6 @@ public class GoldenE2eService {
 
         SetupResult setup = fakeProvider.setup(setupFixture, inputFile, runDir);
         stepResults.add(step("prepare_sample_workspace", "setup_fixture", setup.passed() ? "passed" : "failed"));
-        ExecutionResult execution = null;
         CleanupResult cleanup;
         try {
             if (!setup.passed()) {
@@ -114,7 +208,7 @@ public class GoldenE2eService {
                 failureReason = "Fixture setup failed.";
                 ownerAction = "Check setup fixture and input refs.";
             } else {
-                execution = fakeProvider.execute(inputFile, generatedAt, runDir);
+                ExecutionResult execution = fakeProvider.execute(inputFile, generatedAt, runDir);
                 fakeProviderExecuted = true;
                 stepResults.add(executeStep(execution));
                 writeExpectedRef(runDir, expectedResult);
@@ -149,32 +243,28 @@ public class GoldenE2eService {
             failureReason = "Fixture cleanup failed.";
             ownerAction = "Check cleanup fixture and cleanup evidence.";
         }
-
-        writeBatch(runDir, suite, testCase, status);
-        writeEvidenceIndex(runDir, suite, testCase, requestedProfile);
-        Path resultJson = writeResult(
-                runDir,
-                suite,
-                testCase,
-                requestedProfile,
+        Map<String, Object> testResult = new LinkedHashMap<>();
+        testResult.put("test_case_id", testCase.get("test_case_id"));
+        testResult.put("profile", requestedProfile);
+        testResult.put("provider_id", "sample-fake-runtime");
+        testResult.put("provider_type", "sample_fake_provider");
+        testResult.put("status", status);
+        testResult.put("step_count", stepResults.size());
+        testResult.put("verify_count", verifyResults.size());
+        if (failureClassification != null) {
+            testResult.put("failure_classification", failureClassification);
+        }
+        return new GoldenTestExecution(
+                "passed".equals(status),
                 status,
+                fakeProviderExecuted,
                 stepResults,
                 verifyResults,
+                testResult,
+                EVIDENCE_REFS,
                 failureClassification,
                 failureReason,
                 ownerAction);
-        return new GoldenRunResult(
-                "passed".equals(status),
-                status,
-                stringValue(suite.get("suite_id")),
-                BATCH_ID,
-                RUN_ID,
-                stringValue(testCase.get("test_case_id")),
-                requestedProfile,
-                resultJson,
-                runDir,
-                fakeProviderExecuted,
-                List.of());
     }
 
     private VerificationOutcome verify(
@@ -270,7 +360,25 @@ public class GoldenE2eService {
         write(runDir.resolve("diffs/output_matches_expected_json.diff"), content);
     }
 
-    private void writeBatch(Path runDir, Map<String, Object> suite, Map<String, Object> testCase, String status) {
+    private void writeAggregateExecutionLog(
+            Path runDir,
+            Map<String, Object> suite,
+            String testCaseId,
+            String profile,
+            String status,
+            int verifyCount,
+            boolean fakeProviderExecuted) {
+        write(runDir.resolve("logs/execution.log"), """
+                suite_id: %s
+                test_case_id: %s
+                profile: %s
+                fake_provider_executed: %s
+                verifier_count: %d
+                status: %s
+                """.formatted(suite.get("suite_id"), testCaseId, profile, fakeProviderExecuted, verifyCount, status));
+    }
+
+    private void writeBatch(Path runDir, Map<String, Object> suite, String testCaseId, String status, int testCount) {
         write(runDir.resolve("batch/batch.yaml"), """
                 evidence_type: batch_summary
                 evidence_classification: framework_verification_only
@@ -279,22 +387,23 @@ public class GoldenE2eService {
                 batch_id: %s
                 run_id: %s
                 test_case_id: %s
+                test_count: %s
                 status: %s
-                """.formatted(suite.get("suite_id"), BATCH_ID, RUN_ID, testCase.get("test_case_id"), status));
+                """.formatted(suite.get("suite_id"), BATCH_ID, RUN_ID, testCaseId, testCount, status));
     }
 
-    private void writeEvidenceIndex(Path runDir, Map<String, Object> suite, Map<String, Object> testCase, String profile) {
+    private void writeEvidenceIndex(Path runDir, Map<String, Object> suite, String testCaseId, String profile, List<String> evidenceRefs) {
         write(runDir.resolve("evidence_index.yaml"), EvidenceIndexFormatter.format(
                 new EvidenceIndexFormatter.Context(
                         stringValue(suite.get("suite_id")),
                         BATCH_ID,
                         RUN_ID,
-                        stringValue(testCase.get("test_case_id")),
+                        testCaseId,
                         profile,
                         "sample_fake_provider",
-                        "sample-fake-provider"),
+                        "sample-fake-runtime"),
                 runDir,
-                EVIDENCE_REFS));
+                evidenceRefs));
     }
 
     private Path writeResult(
@@ -302,43 +411,44 @@ public class GoldenE2eService {
             Map<String, Object> suite,
             Map<String, Object> testCase,
             String profile,
+            String testCaseId,
+            int testCount,
             String status,
             List<Map<String, Object>> stepResults,
             List<Map<String, Object>> verifyResults,
+            List<Map<String, Object>> testResults,
+            List<Map<String, Object>> providerResults,
+            List<String> evidenceRefs,
             String failureClassification,
             String failureReason,
             String ownerAction) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("framework_version", "v0.2");
-        result.put("dsl_version", testCase.get("dsl_version"));
-        result.put("suite_id", suite.get("suite_id"));
-        result.put("batch_id", BATCH_ID);
-        result.put("run_id", RUN_ID);
-        result.put("test_case_id", testCase.get("test_case_id"));
-        result.put("profile", profile);
-        result.put("environment", "local_golden");
-        result.put("status", status);
-        result.put("start_time", "2026-06-29T00:00:00Z");
-        result.put("end_time", "2026-06-29T00:00:01Z");
-        result.put("duration_ms", 1000);
-        result.put("timestamps", Map.of(
-                "started_at", "2026-06-29T00:00:00Z",
-                "finished_at", "2026-06-29T00:00:01Z"));
-        result.put("labels", testCase.get("labels"));
-        result.put("source_refs", testCase.get("source_refs"));
-        result.put("step_results", stepResults);
-        result.put("steps", stepResults);
-        result.put("provider_results", List.of(providerResult(profile, status)));
-        result.put("verify_results", verifyResults);
-        result.put("evidence_refs", EVIDENCE_REFS);
-        Map<String, Object> failure = new LinkedHashMap<>();
-        failure.put("classification", failureClassification);
-        failure.put("reason", failureReason);
-        failure.put("owner_action", ownerAction);
-        result.put("failure", failure);
-        Path resultJson = runDir.resolve("result.json");
-        write(resultJson, toJson(result) + "\n");
-        return resultJson;
+        ProviderFailure failure = failureClassification == null
+                ? null
+                : ProviderFailure.of(failureClassification, failureClassification, failureReason, ownerAction);
+        return ProviderCapabilityResultWriter.write(runDir, new ProviderCapabilityResultWriter.ResultDocument(
+                testCase.get("dsl_version"),
+                suite.get("suite_id"),
+                BATCH_ID,
+                RUN_ID,
+                testCaseId,
+                testCount,
+                profile,
+                "local_golden",
+                status,
+                Instant.parse("2026-06-29T00:00:00Z"),
+                Instant.parse("2026-06-29T00:00:01Z"),
+                testCase.get("labels"),
+                testCase.get("source_refs"),
+                stepResults,
+                verifyResults,
+                testResults,
+                providerResults,
+                evidenceRefs,
+                evidenceRefs,
+                ProviderCapabilityResultWriter.singleProviderRootFields(providerResults),
+                failure,
+                null,
+                true));
     }
 
     private Map<String, Object> providerResult(String profile, String status) {
@@ -356,6 +466,36 @@ public class GoldenE2eService {
                         "execution_log", "logs/execution.log")));
         result.put("release_evidence_eligible", false);
         return result;
+    }
+
+    private List<String> prefixEvidenceRefs(Map<String, Object> testCase, List<String> refs, boolean multiTestSuite) {
+        if (!multiTestSuite) {
+            return refs;
+        }
+        String prefix = "tests/" + safe(stringValue(testCase.get("test_case_id"))) + "/";
+        return refs.stream()
+                .filter(ref -> ref != null && !ref.isBlank())
+                .filter(ref -> !"evidence_index.yaml".equals(ref) && !"batch/batch.yaml".equals(ref))
+                .map(ref -> prefix + ref)
+                .toList();
+    }
+
+    private List<String> distinctWithIndex(List<String> refs) {
+        List<String> values = new ArrayList<>();
+        values.add("evidence_index.yaml");
+        for (String ref : refs) {
+            if (ref != null && !ref.isBlank() && !"evidence_index.yaml".equals(ref) && !values.contains(ref)) {
+                values.add(ref);
+            }
+        }
+        return List.copyOf(values);
+    }
+
+    private String topLevelTestCaseId(Map<String, Object> suite, Map<String, Object> firstTestCase, int testCount) {
+        if (testCount == 1) {
+            return stringValue(firstTestCase.get("test_case_id"));
+        }
+        return stringValue(suite.get("suite_id")) + "-MULTI";
     }
 
     private String resolveGeneratedAt(Path suiteRoot, String profile) {
@@ -540,6 +680,7 @@ public class GoldenE2eService {
             String batchId,
             String runId,
             String testCaseId,
+            int testCount,
             String profile,
             Path resultJson,
             Path evidenceDir,
@@ -554,12 +695,29 @@ public class GoldenE2eService {
                     "",
                     "",
                     "",
+                    0,
                     profile,
                     null,
                     null,
                     false,
                     List.copyOf(findings));
         }
+    }
+
+    private record TestCaseDocument(Path path, Map<String, Object> testCase) {
+    }
+
+    private record GoldenTestExecution(
+            boolean passed,
+            String status,
+            boolean fakeProviderExecuted,
+            List<Map<String, Object>> stepResults,
+            List<Map<String, Object>> verifyResults,
+            Map<String, Object> testResult,
+            List<String> evidenceRefs,
+            String failureClassification,
+            String failureReason,
+            String ownerAction) {
     }
 
     private record VerificationOutcome(boolean passed, List<Map<String, Object>> verifyResults) {

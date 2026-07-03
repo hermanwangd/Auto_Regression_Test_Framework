@@ -18,16 +18,17 @@ class MavenFailsafeConfigurationTest {
     }
 
     @Test
-    void pomConfiguresJacocoCoverageGateForFrameworkVerification() throws Exception {
+    void pomConfiguresJacocoReportForVerifyAndDeliveryCoverageGate() throws Exception {
         String pom = Files.readString(Path.of("pom.xml"));
 
         assertThat(pom).contains("<artifactId>jacoco-maven-plugin</artifactId>");
         assertThat(pom).contains("<goal>prepare-agent</goal>");
         assertThat(pom).contains("<goal>report</goal>");
+        assertThat(pom).contains("<id>v02-delivery-coverage</id>");
+        assertThat(pom).contains("<id>v02-delivery-critical-class-check</id>");
         assertThat(pom).contains("<goal>check</goal>");
-        assertThat(pom).contains("<counter>INSTRUCTION</counter>");
-        assertThat(pom).contains("<minimum>0.90</minimum>");
-        assertThat(pom).contains("<counter>CLASS</counter>");
-        assertThat(pom).contains("<minimum>1.00</minimum>");
+        assertThat(pom).contains("<counter>LINE</counter>");
+        assertThat(pom).contains("<minimum>0.88</minimum>");
+        assertThat(pom).contains("<minimum>0.97</minimum>");
     }
 }

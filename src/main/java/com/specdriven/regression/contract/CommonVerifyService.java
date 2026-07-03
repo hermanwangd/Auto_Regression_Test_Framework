@@ -3,6 +3,7 @@ package com.specdriven.regression.contract;
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.evidence.EvidenceIndexFormatter;
+import com.specdriven.regression.provider.runtime.ProviderFailure;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -29,6 +30,7 @@ public class CommonVerifyService {
     private static final Object MISSING_FRAGMENT = new Object();
 
     private final ContractBaselineService contractBaselineService = new ContractBaselineService();
+    private final RuntimeBindingResolver runtimeBindingResolver = new RuntimeBindingResolver();
     private final Yaml yaml = new Yaml();
 
     public CommonVerifyRunResult run(Path suiteManifest, String requestedProfile, Path outputBase) {
@@ -62,83 +64,109 @@ public class CommonVerifyService {
         Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
         Map<String, Object> suite = readMap(suiteManifest);
         List<Object> tests = listValue(suite.get("tests"));
-        if (tests.size() != 1) {
-            return CommonVerifyRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, List.of(new ContractFinding(
-                    suiteManifest.toString(),
-                    "tests",
-                    "unsupported_suite_shape",
-                    "",
-                    PROVIDER_TYPE,
-                    requestedProfile,
-                    "",
-                    "Common verifier run currently supports exactly one test case per suite; split suites or add batch result support before adding more than one test case.")));
+        List<SuiteProfileGate.TestCaseDocument> testDocuments = new ArrayList<>();
+        for (Object testRef : tests) {
+            Path testCasePath = suiteRoot.resolve(stringValue(testRef)).normalize();
+            testDocuments.add(new SuiteProfileGate.TestCaseDocument(testCasePath, readMap(testCasePath)));
         }
-        Path testCasePath = suiteRoot.resolve(stringValue(tests.get(0))).normalize();
-        Map<String, Object> testCase = readMap(testCasePath);
         List<ContractFinding> profileFindings = SuiteProfileGate.validate(
                 suiteManifest,
                 suite,
-                List.of(new SuiteProfileGate.TestCaseDocument(testCasePath, testCase)),
+                testDocuments,
                 requestedProfile,
                 PROVIDER_TYPE);
         if (!profileFindings.isEmpty()) {
             return CommonVerifyRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, profileFindings);
         }
-        TargetSelection selection = selectTarget(testCase, requestedProfile);
-        if (selection.providerId().isBlank()) {
-            return CommonVerifyRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, List.of(new ContractFinding(
-                    testCasePath.toString(),
-                    "targets",
-                    "missing_provider_instance",
-                    "",
-                    PROVIDER_TYPE,
-                    requestedProfile,
-                    "",
-                    "Declare a DSL target with provider_id for the common verifier runtime.")));
+        List<TestCaseSelection> selections = new ArrayList<>();
+        List<ContractFinding> preflightFindings = new ArrayList<>();
+        for (SuiteProfileGate.TestCaseDocument document : testDocuments) {
+            TargetSelection selection = selectTarget(suiteRoot, document.document(), requestedProfile);
+            if (selection.providerId().isBlank()) {
+                preflightFindings.add(new ContractFinding(
+                        document.path().toString(),
+                        "targets",
+                        "missing_provider_instance",
+                        "",
+                        PROVIDER_TYPE,
+                        requestedProfile,
+                        "",
+                        "Declare a DSL target with provider_id for the common verifier runtime."));
+            }
+            preflightFindings.addAll(pollingConfigFindings(document.path(), document.document(), requestedProfile));
+            selections.add(new TestCaseSelection(document.path(), document.document(), selection));
         }
-        List<ContractFinding> configFindings = pollingConfigFindings(testCasePath, testCase, requestedProfile);
-        if (!configFindings.isEmpty()) {
-            return CommonVerifyRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, configFindings);
+        if (!preflightFindings.isEmpty()) {
+            return CommonVerifyRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, preflightFindings);
         }
 
         RunIds ids = runIds("COMMON");
         Path runDir = outputBase.resolve(safe(stringValue(suite.get("suite_id")))).resolve(ids.batchId()).resolve(ids.runId());
         recreateDirectory(runDir);
         Instant startedAt = Instant.now();
-        List<Map<String, Object>> verifyResults = new ArrayList<>();
         List<Map<String, Object>> stepResults = new ArrayList<>();
         List<String> evidenceRefs = new ArrayList<>(List.of("evidence_index.yaml", "logs/execution.log", "batch/batch.yaml"));
+        List<Map<String, Object>> verifyResults = new ArrayList<>();
+        List<Map<String, Object>> testResults = new ArrayList<>();
+        List<Map<String, Object>> providerResults = new ArrayList<>();
         String status = "passed";
         Failure failure = null;
+        TestCaseSelection failureSelection = null;
 
-        for (Object value : verifyValues(testCase)) {
-            Map<String, Object> verify = mapValue(value);
-            VerifyOutcome outcome = evaluateVerifier(suiteRoot, runDir, verify);
-            verifyResults.add(outcome.result());
-            evidenceRefs.addAll(outcome.evidenceRefs());
-            if (!outcome.passed() && "passed".equals(status)) {
+        boolean multiTestSuite = selections.size() > 1;
+        for (TestCaseSelection selection : selections) {
+            Path testRunDir = multiTestSuite
+                    ? runDir.resolve("tests").resolve(safe(stringValue(selection.testCase().get("test_case_id"))))
+                    : runDir;
+            createDirectories(testRunDir);
+            List<Map<String, Object>> testVerifyResults = new ArrayList<>();
+            List<String> testEvidenceRefs = new ArrayList<>();
+            String testStatus = "passed";
+            Failure testFailure = null;
+            for (Object value : verifyValues(selection.testCase())) {
+                Map<String, Object> verify = mapValue(value);
+                VerifyOutcome outcome = evaluateVerifier(suiteRoot, testRunDir, verify);
+                testVerifyResults.add(outcome.result());
+                testEvidenceRefs.addAll(outcome.evidenceRefs());
+                if (!outcome.passed() && "passed".equals(testStatus)) {
+                    testStatus = "failed";
+                    testFailure = new Failure(
+                            outcome.failureCode(),
+                            outcome.polling() ? "POLLING_TIMEOUT" : "ASSERTION_FAILED",
+                            outcome.reason(),
+                            outcome.ownerAction());
+                }
+            }
+            verifyResults.addAll(testVerifyResults);
+            evidenceRefs.addAll(prefixEvidenceRefs(selection, testEvidenceRefs, multiTestSuite));
+            testResults.add(testResult(selection, requestedProfile, testStatus, testVerifyResults, testFailure));
+            providerResults.add(providerResult(selection.selection(), requestedProfile, testStatus, testVerifyResults));
+            if ("failed".equals(testStatus) && "passed".equals(status)) {
                 status = "failed";
-                failure = new Failure(
-                        outcome.failureCode(),
-                        outcome.polling() ? "POLLING_TIMEOUT" : "ASSERTION_FAILED",
-                        outcome.reason(),
-                        outcome.ownerAction());
+                failure = testFailure;
+                failureSelection = selection;
             }
         }
         Instant finishedAt = Instant.now();
-        writeExecutionLog(runDir, suite, testCase, requestedProfile, status, verifyResults);
-        writeBatch(runDir, suite, testCase, ids, requestedProfile, status);
-        writeEvidenceIndex(runDir, suite, testCase, ids, requestedProfile, selection, evidenceRefs);
+        TestCaseSelection firstSelection = selections.get(0);
+        String topLevelTestCaseId = topLevelTestCaseId(suite, firstSelection.testCase(), selections.size());
+        writeExecutionLog(runDir, suite, topLevelTestCaseId, requestedProfile, status, verifyResults);
+        writeBatch(runDir, suite, topLevelTestCaseId, ids, requestedProfile, status, selections.size());
+        writeEvidenceIndex(runDir, suite, topLevelTestCaseId, ids, requestedProfile, firstSelection.selection(), evidenceRefs);
         Path resultJson = writeResult(
                 runDir,
                 suite,
-                testCase,
+                firstSelection.testCase(),
                 ids,
                 requestedProfile,
-                selection,
+                firstSelection.selection(),
+                topLevelTestCaseId,
+                selections.size(),
                 status,
                 stepResults,
                 verifyResults,
+                testResults,
+                providerResults,
                 distinct(evidenceRefs),
                 failure,
                 startedAt,
@@ -149,13 +177,14 @@ public class CommonVerifyService {
                 stringValue(suite.get("suite_id")),
                 ids.batchId(),
                 ids.runId(),
-                stringValue(testCase.get("test_case_id")),
+                topLevelTestCaseId,
+                selections.size(),
                 requestedProfile,
                 resultJson,
                 runDir,
                 false,
                 PROVIDER_TYPE,
-                selection.providerId(),
+                firstSelection.selection().providerId(),
                 List.of());
     }
 
@@ -822,10 +851,13 @@ public class CommonVerifyService {
         return current;
     }
 
-    private TargetSelection selectTarget(Map<String, Object> testCase, String profile) {
+    private TargetSelection selectTarget(Path suiteRoot, Map<String, Object> testCase, String profile) {
         for (Map.Entry<String, Object> entry : mapValue(testCase.get("targets")).entrySet()) {
             Map<String, Object> target = mapValue(entry.getValue());
-            return new TargetSelection(entry.getKey(), stringValue(target.get("provider_id")), "local");
+            String providerId = stringValue(target.get("provider_id"));
+            String runtimeMode = stringValue(runtimeBindingResolver.providerBinding(suiteRoot, profile, providerId)
+                    .get("runtime_mode"));
+            return new TargetSelection(entry.getKey(), providerId, runtimeMode.isBlank() ? "stub" : runtimeMode);
         }
         return new TargetSelection("", "", "");
     }
@@ -917,7 +949,7 @@ public class CommonVerifyService {
     private void writeExecutionLog(
             Path runDir,
             Map<String, Object> suite,
-            Map<String, Object> testCase,
+            String testCaseId,
             String profile,
             String status,
             List<Map<String, Object>> verifyResults) {
@@ -930,13 +962,13 @@ public class CommonVerifyService {
                 status: %s
                 """.formatted(
                 suite.get("suite_id"),
-                testCase.get("test_case_id"),
+                testCaseId,
                 profile,
                 verifyResults.size(),
                 status));
     }
 
-    private void writeBatch(Path runDir, Map<String, Object> suite, Map<String, Object> testCase, RunIds ids, String profile, String status) {
+    private void writeBatch(Path runDir, Map<String, Object> suite, String testCaseId, RunIds ids, String profile, String status, int testCount) {
         write(runDir.resolve("batch/batch.yaml"), """
                 evidence_type: batch_summary
                 evidence_classification: %s
@@ -945,6 +977,7 @@ public class CommonVerifyService {
                 batch_id: %s
                 run_id: %s
                 test_case_id: %s
+                test_count: %s
                 profile: %s
                 status: %s
                 """.formatted(
@@ -952,7 +985,8 @@ public class CommonVerifyService {
                 suite.get("suite_id"),
                 ids.batchId(),
                 ids.runId(),
-                testCase.get("test_case_id"),
+                testCaseId,
+                testCount,
                 profile,
                 status));
     }
@@ -960,7 +994,7 @@ public class CommonVerifyService {
     private void writeEvidenceIndex(
             Path runDir,
             Map<String, Object> suite,
-            Map<String, Object> testCase,
+            String testCaseId,
             RunIds ids,
             String profile,
             TargetSelection selection,
@@ -970,7 +1004,7 @@ public class CommonVerifyService {
                         stringValue(suite.get("suite_id")),
                         ids.batchId(),
                         ids.runId(),
-                        stringValue(testCase.get("test_case_id")),
+                        testCaseId,
                         profile,
                         PROVIDER_TYPE,
                         selection.providerId()),
@@ -985,46 +1019,44 @@ public class CommonVerifyService {
             RunIds ids,
             String profile,
             TargetSelection selection,
+            String testCaseId,
+            int testCount,
             String status,
             List<Map<String, Object>> stepResults,
             List<Map<String, Object>> verifyResults,
+            List<Map<String, Object>> testResults,
+            List<Map<String, Object>> providerResults,
             List<String> evidenceRefs,
             Failure failure,
             Instant startedAt,
             Instant finishedAt) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("framework_version", "v0.2");
-        result.put("dsl_version", testCase.get("dsl_version"));
-        result.put("suite_id", suite.get("suite_id"));
-        result.put("batch_id", ids.batchId());
-        result.put("run_id", ids.runId());
-        result.put("test_case_id", testCase.get("test_case_id"));
-        result.put("profile", profile);
-        result.put("environment", profile);
-        result.put("provider_type", PROVIDER_TYPE);
-        result.put("provider_id", selection.providerId());
-        result.put("runtime_mode", selection.runtimeMode());
-        result.put("status", status);
-        result.put("start_time", startedAt.toString());
-        result.put("end_time", finishedAt.toString());
-        result.put("duration_ms", Duration.between(startedAt, finishedAt).toMillis());
-        result.put("timestamps", Map.of("started_at", startedAt.toString(), "finished_at", finishedAt.toString()));
-        result.put("labels", testCase.get("labels"));
-        result.put("source_refs", testCase.get("source_refs"));
-        result.put("step_results", stepResults);
-        result.put("steps", stepResults);
-        result.put("verify_results", verifyResults);
-        result.put("provider_results", List.of(providerResult(selection, profile, status, verifyResults)));
-        result.put("evidence_refs", evidenceRefs);
-        Map<String, Object> failureObject = new LinkedHashMap<>();
-        failureObject.put("code", failure == null ? null : failure.code());
-        failureObject.put("classification", failure == null ? null : failure.classification());
-        failureObject.put("reason", failure == null ? null : failure.reason());
-        failureObject.put("owner_action", failure == null ? null : failure.ownerAction());
-        result.put("failure", failureObject);
-        Path resultJson = runDir.resolve("result.json");
-        write(resultJson, toJson(result) + "\n");
-        return resultJson;
+        ProviderFailure providerFailure = failure == null
+                ? null
+                : ProviderFailure.of(failure.code(), failure.classification(), failure.reason(), failure.ownerAction());
+        return ProviderCapabilityResultWriter.write(runDir, new ProviderCapabilityResultWriter.ResultDocument(
+                testCase.get("dsl_version"),
+                suite.get("suite_id"),
+                ids.batchId(),
+                ids.runId(),
+                testCaseId,
+                testCount,
+                profile,
+                profile,
+                status,
+                startedAt,
+                finishedAt,
+                testCase.get("labels"),
+                testCase.get("source_refs"),
+                stepResults,
+                verifyResults,
+                testResults,
+                providerResults,
+                evidenceRefs,
+                evidenceRefs,
+                ProviderCapabilityResultWriter.singleProviderRootFields(providerResults),
+                providerFailure,
+                null,
+                true));
     }
 
     private Map<String, Object> providerResult(
@@ -1043,6 +1075,46 @@ public class CommonVerifyService {
                 "outputs", Map.of("verify_results_count", verifyResults.size())));
         result.put("release_evidence_eligible", false);
         return result;
+    }
+
+    private Map<String, Object> testResult(
+            TestCaseSelection selection,
+            String profile,
+            String status,
+            List<Map<String, Object>> verifyResults,
+            Failure failure) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("test_case_id", selection.testCase().get("test_case_id"));
+        result.put("profile", profile);
+        result.put("provider_id", selection.selection().providerId());
+        result.put("provider_type", PROVIDER_TYPE);
+        result.put("status", status);
+        result.put("verify_count", verifyResults.size());
+        if (failure != null) {
+            result.put("failure_code", failure.code());
+            result.put("failure_classification", failure.classification());
+        }
+        return result;
+    }
+
+    private List<String> prefixEvidenceRefs(TestCaseSelection selection, List<String> refs, boolean multiTestSuite) {
+        if (!multiTestSuite) {
+            return refs.stream()
+                    .filter(ref -> ref != null && !ref.isBlank())
+                    .toList();
+        }
+        String prefix = "tests/" + safe(stringValue(selection.testCase().get("test_case_id"))) + "/";
+        return refs.stream()
+                .filter(ref -> ref != null && !ref.isBlank())
+                .map(ref -> prefix + ref)
+                .toList();
+    }
+
+    private String topLevelTestCaseId(Map<String, Object> suite, Map<String, Object> firstTestCase, int testCount) {
+        if (testCount == 1) {
+            return stringValue(firstTestCase.get("test_case_id"));
+        }
+        return stringValue(suite.get("suite_id")) + "-MULTI";
     }
 
     private void appendYamlValue(StringBuilder builder, Object value, int indent) {
@@ -1320,6 +1392,7 @@ public class CommonVerifyService {
             String batchId,
             String runId,
             String testCaseId,
+            int testCount,
             String profile,
             Path resultJson,
             Path evidenceDir,
@@ -1336,6 +1409,7 @@ public class CommonVerifyService {
                     "",
                     "",
                     "",
+                    0,
                     profile,
                     null,
                     null,
@@ -1347,6 +1421,9 @@ public class CommonVerifyService {
     }
 
     private record TargetSelection(String targetName, String providerId, String runtimeMode) {
+    }
+
+    private record TestCaseSelection(Path path, Map<String, Object> testCase, TargetSelection selection) {
     }
 
     private record RunIds(String batchId, String runId) {

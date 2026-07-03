@@ -3,7 +3,7 @@ profile: local_nats
 provider_bindings:
   - provider_id: local-nats-event-bus
     provider_instance_ref: provider_instances/local_nats.yaml
-    runtime_mode: local
+    runtime_mode: mock
     binding_values:
       connection:
         local_ref: approved_local_nats_ref

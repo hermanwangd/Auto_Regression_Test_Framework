@@ -1,5 +1,8 @@
 provider_contract_version: v0.2
 provider_type: kafka_messaging
+status: deprecated_alias
+canonical_provider_type: kafka
+deprecation_note: Use provider_type `kafka` for new DSL, Provider Instance, Env_Profile, and provider capability work. `kafka_messaging` remains only for compatibility with existing contract-baseline artifacts during v0.2 transition.
 runtime_modes: [native, mock, ephemeral]
 binding_keys:
   bootstrap_servers:

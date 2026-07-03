@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, for example 0.2.0
+        required: true
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    name: Build and Publish Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    env:
+      MAVEN_OPTS: -Xmx1536m
+      NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve requested version
+        id: version
+        shell: bash
+        run: |
+          requested="${{ github.event.inputs.version }}"
+          if [[ -z "$requested" ]]; then
+            requested="${GITHUB_REF_NAME#v}"
+          fi
+          version="$(scripts/release/verify-release-version.sh "$requested")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Unit, integration, and packaged CLI verification
+        run: ./mvnw -B -ntp verify
+
+      - name: Critical delivery coverage gate
+        run: ./mvnw -B -ntp -Pv02-delivery-coverage -DskipTests jacoco:check@v02-delivery-critical-class-check
+
+      - name: Contract and evidence consistency
+        run: scripts/ci/verify-contracts.sh
+
+      - name: Secret scan
+        run: scripts/ci/secret-scan.sh
+
+      - name: Dependency vulnerability scan
+        run: scripts/ci/security-scan.sh
+
+      - name: Generate SBOM
+        run: scripts/ci/generate-sbom.sh
+
+      - name: Build immutable release jar
+        run: ./mvnw -B -ntp -DskipTests package
+
+      - name: Generate checksums
+        run: scripts/release/write-checksums.sh "${{ steps.version.outputs.version }}"
+
+      - name: Extract release notes
+        run: scripts/release/extract-release-notes.sh "${{ steps.version.outputs.version }}"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign release artifacts
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          for artifact in \
+            "target/spec-driven-auto-regression-${version}.jar" \
+            target/bom.json \
+            target/bom.xml \
+            target/checksums.sha256
+          do
+            cosign sign-blob --yes "$artifact" \
+              --output-signature "${artifact}.sig" \
+              --output-certificate "${artifact}.pem"
+          done
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Auto Regression Test Framework ${{ steps.version.outputs.version }}
+          body_path: target/release-notes.md
+          generate_release_notes: false
+          files: |
+            target/spec-driven-auto-regression-${{ steps.version.outputs.version }}.jar
+            target/spec-driven-auto-regression-${{ steps.version.outputs.version }}.jar.sig
+            target/spec-driven-auto-regression-${{ steps.version.outputs.version }}.jar.pem
+            target/bom.json
+            target/bom.json.sig
+            target/bom.json.pem
+            target/bom.xml
+            target/bom.xml.sig
+            target/bom.xml.pem
+            target/checksums.sha256
+            target/checksums.sha256.sig
+            target/checksums.sha256.pem
+            target/dependency-check-report.html
+            target/dependency-check-report.json

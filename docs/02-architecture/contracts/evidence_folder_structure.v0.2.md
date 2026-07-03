@@ -31,7 +31,31 @@ Required batch evidence:
 
 - `batch.yaml`: batch ID, profile, status, selected tests, included run IDs, source refs, timing, failure classification.
 - `coverage_summary.yaml`: covered AC, total automatable AC, coverage percentage, exclusions as evidence metadata only.
-- `evidence_index.yaml`: durable list of evidence refs and masking status.
+- `evidence_index.yaml`: durable standard evidence index with one entry per retained evidence artifact.
+
+Standard evidence index entries:
+
+```yaml
+entries:
+  - evidence_id: jdbc-query-001
+    evidence_type: jdbc_query
+    produced_by: provider
+    provider_type: jdbc
+    provider_id: oracle-like-db
+    test_case_id: JDBC-CAPABILITY-TC-001
+    run_id: RUN-JDBC-001
+    batch_id: BATCH-JDBC-001
+    file_path: provider-evidence/jdbc/query_query_order_oracle.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:02Z"
+    masking_applied: true
+    linked_result_field: provider_results.resolved_operation_result
+masking:
+  raw_secret_found: false
+```
+
+Legacy compact entries using `ref:` plus `masked:` are not valid for current public samples. `provider_evidence_refs[]` in result JSON must contain provider-produced evidence only; framework logs, batch summaries, assertion diffs, and expected artifacts remain in `evidence_refs[]`.
 
 Required run evidence:
 

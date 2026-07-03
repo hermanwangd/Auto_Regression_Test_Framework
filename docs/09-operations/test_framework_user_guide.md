@@ -708,7 +708,9 @@ If a command-capable provider instance does not define required `safety.access_p
 
 The canonical built-in Provider Contracts are materialized under `docs/02-architecture/contracts/provider-contracts/` and indexed by `docs/02-architecture/contracts/provider_capability_registry.v0.2.yaml`. The user guide must not redefine a second provider contract catalog. Runtime suite manifests use this built-in catalog by default.
 
-RP/suite repositories do not need a `provider_contracts/` folder for built-in provider types such as `wiremock_http_mock`, `rest_client`, `jdbc`, `nats`, `artifact_compare`, or `polling_observer`. Suite-local contracts are an explicit opt-in for custom provider plugins or contract snapshot pinning:
+Framework `0.2.0` production support by provider runtime mode is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is the release boundary for whether a provider mode is production-ready, framework-verification-only, contract-only, deprecated, or an approved escape hatch.
+
+RP/suite repositories do not need a `provider_contracts/` folder for built-in provider types such as `wiremock_http_mock`, `rest_client`, `jdbc`, `nats`, `kafka`, `ibm_mq`, `artifact_compare`, or `polling_observer`. Suite-local contracts are an explicit opt-in for custom provider plugins or contract snapshot pinning:
 
 ```yaml
 provider_contract_resolution:
@@ -725,6 +727,8 @@ A Provider Contract defines reusable rules for one `provider_type`:
 - `provider_contract_version`
 - `provider_type`
 - `runtime_modes`
+- `executable_runtime_modes` when only a subset is runnable by the current framework build
+- `contract_only_runtime_modes` when remaining modes are vocabulary for future implementation
 - `binding_keys`
 - `bindable_outputs`
 - `defaults`
@@ -734,7 +738,7 @@ A Provider Contract defines reusable rules for one `provider_type`:
 - `evidence`
 - `failure_mapping`
 
-A Provider Instance defines one logical runtime target for an RP. It must use the top-level shape allowed by its Provider Contract and must not contain physical endpoint, topic, DB credential, namespace, host, or secret values. It declares `runtime_modes` as the subset it may use; the selected `runtime_mode` and all Provider Contract `binding_keys` are supplied by Env_Profile for the active environment.
+A Provider Instance defines one logical runtime target for an RP. It must use the top-level shape allowed by its Provider Contract and must not contain physical endpoint, topic, DB credential, namespace, host, or secret values. It declares `runtime_modes` as the subset it may use; the selected `runtime_mode` and all Provider Contract `binding_keys` are supplied by Env_Profile for the active environment. For messaging client providers, destination keys such as Kafka `topic`, Kafka `consumer_group`, and IBM MQ `queue` are Env_Profile bindings. Model different destinations as different Provider Instances instead of overriding them from operation inputs.
 
 ### 10.1 Built-In Provider Contract Catalog
 
@@ -743,10 +747,12 @@ A Provider Instance defines one logical runtime target for an RP. It must use th
 | `shell_command` | `provider-contracts/shell_command.yaml` | `command` | `run_batch`, `execute_command` |
 | `rest_client` | `provider-contracts/rest_client.yaml` | `base_url` | `http_request` |
 | `grpc_client` | `provider-contracts/grpc_client.yaml` | `target` | `unary_call` |
-| `wiremock_http_mock` | `provider-contracts/wiremock_http_mock.yaml` | `mappings_ref` | `start_mock`, `connect_mock`, `load_stubs`, `verify_requests` |
+| `wiremock_http_mock` | `provider-contracts/wiremock_http_mock.yaml` | none required; local/CI usually uses `mappings_ref` and `port_strategy` | `start_mock`, `connect_mock`, `load_stubs`, `verify_requests` |
 | `soap_mock` | `provider-contracts/soap_mock.yaml` | none required; local/CI usually uses `port_strategy` and generated `endpoint_url` output | `start_soap_mock`, `connect_soap_mock`, `load_soap_stub`, `soap_request_received`, `reset_mock` |
 | `grpc_mock` | `provider-contracts/grpc_mock.yaml` | `descriptor_ref`, `service_name`; `target_uri` is a generated bindable output for clients | `start_grpc_mock`, `connect_grpc_mock`, `load_grpc_stub`, `grpc_request_received`, `reset_mock` |
-| `kafka_messaging` | `provider-contracts/kafka_messaging.yaml` | `bootstrap_servers` | `publish_message`, `consume_message` |
+| `kafka` | `provider-contracts/kafka.yaml` | `bootstrap_servers`, `topic`, `consumer_group` | `kafka_publish`, `kafka_observe`, `kafka_payload_match` |
+| `ibm_mq` | `provider-contracts/ibm_mq.yaml` | `queue_manager`, `channel`, `conn_name`, `queue`, `credential.secret_ref` | `mq_put`, `mq_browse`, `mq_message_exists`, `mq_payload_match` |
+| `kafka_messaging` | `provider-contracts/kafka_messaging.yaml` | `bootstrap_servers` | deprecated alias for legacy `publish_message`, `consume_message` artifacts |
 | `nats` | `provider-contracts/nats.yaml` | `connection`, `subject` | `nats_publish`, `nats_observe`, `event_published`, `event_payload_match` |
 | `jdbc` | `provider-contracts/jdbc.yaml` | `connection.secret_ref`, `dialect` | `db_seed`, `db_cleanup`, `db_query`, `db_record_exists` |
 | `kubernetes_runtime` | `provider-contracts/kubernetes_runtime.yaml` | `context`, `namespace` | `check_deployment_ready`, `check_pod_ready`, `get_logs`, `wait_rollout`, `exec_command` |
@@ -758,6 +764,8 @@ A Provider Instance defines one logical runtime target for an RP. It must use th
 In v0.2 provider capability mode, `rest_client` is executable for checked-in WireMock + HTTP request samples. It resolves `base_url` from Env_Profile, including generated WireMock outputs such as `generated://wiremock-payment-api.base_url`, executes `http_request`, exposes `response.status`, `response.headers`, `response.body`, and `response.duration_ms`, and writes `http_request_response` evidence. Downstream SIT/preprod endpoint validation still requires owner-provided RP artifacts and real Env_Profiles.
 
 `soap_mock` and `grpc_mock` are PR-008 WireMock-backed mock capabilities. `soap_mock` is executable in PR-008A through WireMock HTTP/XML/SOAP behavior for SOAPAction/header and XPath matching. `grpc_mock` is executable in PR-008B through the WireMock gRPC extension and descriptor refs for unary calls. They are mock providers for local/CI framework evidence; they do not prove downstream SIT/preprod release readiness and do not imply custom SOAP/gRPC server ownership by the framework.
+
+`kafka` and `ibm_mq` are P1 client provider contracts with framework-owned mock capability runtimes. Their Provider Contracts may list `runtime_modes: [native, mock, ephemeral]` as vocabulary, but the current executable baseline declares `executable_runtime_modes: [mock]`; native broker, queue-manager, and ephemeral dependency execution are `contract_only_runtime_modes` until a dedicated runtime slice implements them. They describe how the test runner consumes Env_Profile binding keys and writes framework evidence without starting brokers, queue managers, Testcontainers, or RUs. A single messaging suite may include Kafka and IBM MQ test cases together when every test case uses the same selected Env_Profile and each test case has exactly one messaging runtime target. If an Env_Profile uses `generated_ref` for Kafka or IBM MQ connection values, that generated value must come from a separate approved dependency provisioner or producing Provider Contract; the client provider only consumes it.
 
 ### 10.2 Provider Instance Examples
 
@@ -796,6 +804,30 @@ defaults:
   query_timeout: PT10S
 ```
 
+Kafka client Provider Instance:
+
+```yaml
+provider_instance_version: v0.2
+provider_id: payment-events
+provider_type: kafka
+runtime_modes: [mock]
+defaults:
+  consume_from: test_start_time
+  timeout: PT10S
+```
+
+IBM MQ client Provider Instance:
+
+```yaml
+provider_instance_version: v0.2
+provider_id: payment-mq
+provider_type: ibm_mq
+runtime_modes: [mock]
+defaults:
+  browse_only: true
+  timeout: PT10S
+```
+
 Command-capable Provider Instance:
 
 ```yaml
@@ -828,6 +860,7 @@ Before dispatch, the framework validates:
 - Provider Contract exists in the framework built-in catalog for the Provider Instance `provider_type`, unless an explicit custom/snapshot resolution mode is declared.
 - Provider Instance fields are allowed by `valid_provider_instance_shape`.
 - Provider Instance `runtime_modes` are a subset of Provider Contract `runtime_modes`.
+- When Provider Contract `executable_runtime_modes` is present, selected Env_Profile `runtime_mode` must be listed there.
 - Env_Profile exists for the selected `env_profile_id`.
 - Env_Profile has `providers.<provider_id>` for every DSL target.
 - Env_Profile `providers.<provider_id>.binding_keys` supplies all required Provider Contract binding keys.
@@ -872,11 +905,30 @@ providers:
     binding_keys:
       bootstrap_servers:
         secret_ref: vault://sit/payment/kafka-bootstrap
+      topic:
+        value: payment.events
+      consumer_group:
+        value: artf-payment-sit
+
+  payment-mq:
+    runtime_mode: native
+    readiness_ref: evidence/readiness/payment-mq-sit.yaml
+    binding_keys:
+      queue_manager:
+        value: QM.PAYMENT.SIT
+      channel:
+        value: APP.SVRCONN
+      conn_name:
+        secret_ref: vault://sit/payment/mq-conn-name
+      queue:
+        value: PAYMENT.REQUEST.SIT
+      credential.secret_ref:
+        secret_ref: vault://sit/payment/mq-credential
 ```
 
 Each provider binding must declare the selected runtime mode. Local and CI Env_Profiles usually replace external services, databases, and messaging with mocks, stubs, fake topics, embedded brokers, ephemeral DBs, disposable schemas, or generated data.
 
-The `binding_keys` under each provider must match the keys defined by that provider's Provider Contract. Allowed value kinds are `value`, `ref`, `secret_ref`, and `generated_ref`, but the Provider Contract decides which kinds are valid for each binding key.
+The `binding_keys` under each provider must match the keys defined by that provider's Provider Contract. Allowed value kinds are `value`, `ref`, `secret_ref`, `generated_ref`, and approved `local_ref`, but the Provider Contract decides which kinds are valid for each binding key. Use `local_ref` only for framework-controlled local/CI fixtures; it must not be used as SIT/preprod release evidence.
 
 ```yaml
 env_profile_id: local_wiremock_http
@@ -930,10 +982,28 @@ providers:
     runtime_mode: mock
     binding_keys:
       bootstrap_servers:
-        generated_ref: generated://payment-kafka.bootstrap_servers
+        value: localhost:19092
+      topic:
+        value: payment.events.test
+      consumer_group:
+        value: artf-payment-ci
+
+  payment-mq:
+    runtime_mode: mock
+    binding_keys:
+      queue_manager:
+        value: QM.PAYMENT.CI
+      channel:
+        value: APP.SVRCONN
+      conn_name:
+        value: localhost(1414)
+      queue:
+        value: PAYMENT.REQUEST.CI
+      credential.secret_ref:
+        secret_ref: env://PAYMENT_MQ_CREDENTIAL_REF
 ```
 
-`generated_ref` can reference only outputs declared in the producing Provider Contract `bindable_outputs`, such as `generated://wiremock-payment-api.base_url`.
+`generated_ref` can reference only outputs declared in the producing Provider Contract `bindable_outputs`, such as `generated://wiremock-payment-api.base_url`, or outputs declared by an approved dependency provisioner in the same Env_Profile. If no producer or provisioner is declared, use a literal `value`, `secret_ref`, or an approved local/CI-only `local_ref`.
 
 `sit` and `preprod` Env_Profiles default to `runtime_mode: native`. Mock substitution in those execution modes must not be used as downstream RP release evidence.
 
@@ -965,7 +1035,7 @@ data_policy:
   secrets_must_use_refs: true
 ```
 
-Local and CI Env_Profiles may provision ephemeral dependencies before execution. The Env_Profile defines the allowed provisioner and lifecycle policy; generated connection values must be exposed through Provider Contract `bindable_outputs` and referenced by Env_Profile `generated_ref`.
+Local and CI Env_Profiles may provision ephemeral dependencies before execution only when an approved provisioner is available. This is separate from client providers: Kafka and IBM MQ client providers consume resolved connection values but do not create brokers or queue managers. Generated connection values must be exposed through Provider Contract `bindable_outputs` or dependency provisioner output declarations and referenced by Env_Profile `generated_ref`.
 
 ```yaml
 env_profile_id: ci
@@ -990,6 +1060,9 @@ dependency_provisioning_policy:
       startup_timeout: PT60S
       readiness_check: jdbc_connect
       cleanup_scope: per_run
+      outputs:
+        connection:
+          value_type: secret_ref
 
     - dependency_id: payment-kafka
       provider_id: payment-events
@@ -998,6 +1071,9 @@ dependency_provisioning_policy:
       startup_timeout: PT90S
       readiness_check: broker_connect
       cleanup_scope: per_run
+      outputs:
+        bootstrap_servers:
+          value_type: string
 
 providers:
   payment-db:
@@ -1063,7 +1139,9 @@ regress report --result <generated_result_json>
 
 Golden E2E suite-path mode may execute only deterministic framework-owned fake providers. It must not start WireMock, JDBC, NATS, Kafka, REST/gRPC, K8s, VM, external runner, SIT, or downstream product deployment.
 
-Provider Capability suite-path mode proves selected v0.2 P0 provider capabilities as framework evidence:
+Provider Capability suite-path mode proves selected v0.2 P0 provider capabilities as framework evidence. A standard suite run creates one `batch_id`, one `run_id`, one result JSON, and per-test outcomes in `test_results[]`; all selected `tests[]` share the selected Env_Profile. Provider identity for suite-level reporting comes from `provider_summary[]` and `provider_results[]`. Multi-provider standard results, inferred from either `test_results[]` or `provider_results[]`, must include `provider_summary[]`. Top-level `provider_id`, `provider_type`, or destination fields are single-provider compatibility fields only and must not be used to summarize a multi-provider suite.
+
+`regress validate-evidence --result <generated_result_json>` and `regress report --result <generated_result_json>` validate the standard result JSON before publishing or reporting. Any result with non-empty `provider_results`, `batch_id`, `run_id`, `test_count`, or `test_results` is treated as a standard suite run and must include `suite_id`, `batch_id`, `run_id`, `test_count`, `test_results`, `start_time`, `end_time`, and `duration_ms`. `test_count` must be a positive JSON integer value that equals `test_results.length`, and every `test_results[]` entry must be an object containing `test_case_id`, `status`, and `profile`. Allowed per-test status values are `passed`, `failed`, and `blocked`. Quoted numeric strings such as `"1"` are invalid. Invalid suite summaries return a non-zero exit and must be fixed before the result can be published.
 
 ```bash
 regress validate --suite samples/provider_capability/wiremock_http_request/suite_manifest.yaml
@@ -1083,7 +1161,7 @@ regress run \
 regress report --result <generated_result_json>
 ```
 
-The WireMock + HTTP request sample also includes `suite_manifest_failure.yaml` for deterministic assertion-failure evidence and `suite_manifest_boundary.yaml` for empty request plus HTTP 204 no-content behavior.
+The WireMock + HTTP request sample keeps happy and boundary cases in the canonical `suite_manifest.yaml` `tests[]` list so both run under one shared Env_Profile. It also includes `suite_manifest_failure.yaml` for deterministic assertion-failure evidence.
 
 Provider Capability suite-path mode may execute only checked-in framework provider capability samples for WireMock HTTP mock, `rest_client` HTTP request, SOAP mock, gRPC unary mock, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and evidence/report behavior. It must not execute non-P0 providers, Product/RP/RU topology interpretation, release governance, SIT/preprod release evidence, or downstream product deployment.
 
@@ -1101,7 +1179,7 @@ Mock server lifecycle:
 
 1. `validate` checks suite, test case DSL, Provider Instances, Env_Profile bindings, stubs, descriptors, and expected refs.
 2. `run --dry-run` resolves mock server and client targets without starting runtime.
-3. `run` starts the mock server at suite/batch scope.
+3. `run` executes every selected test in the suite with one selected Env_Profile.
 4. Test case `setup` loads checked-in stubs or mappings.
 5. Test case `execute` calls the client provider, such as `rest_client` or `grpc_client`.
 6. Test case `verify` checks response, request journal, SOAP request, gRPC request, or assertion output.
@@ -1109,23 +1187,25 @@ Mock server lifecycle:
 
 DSL rules:
 
-- Test cases reference `provider_id` and `profile`; they must not embed generated endpoint URLs.
+- Test cases reference `provider_id` only. The active profile is selected once for the suite by CLI `--profile` or suite manifest `profile`; test cases must not embed generated endpoint URLs or select a different runtime profile.
 - Mock stubs, mappings, descriptors, and expected results must be checked-in artifacts referenced by `ref`.
 - Env_Profile supplies or resolves binding keys.
 - Generated mock outputs, such as `generated://wiremock-payment-api.base_url`, are bound through Env_Profile and consumed by client providers.
 - `grpc_mock` v0.2 supports unary calls only.
 
-Evidence generated by mock server samples includes request journals, server logs, client request/response evidence, assertion diffs, suite summaries, and raw Allure result files when running a suite group.
+Evidence generated by mock server samples includes request journals, server logs, client request/response evidence, assertion diffs, suite summaries, and raw Allure result files when running a child-suite aggregation manifest.
 
-### 13.2 Provider Capability Suite Groups
+### 13.2 Provider Capability Multi-Test Suites
 
-Provider Capability suite groups aggregate multiple checked-in child suite manifests and summarize expected happy, failure, and boundary paths. Child refs must stay under the suite group directory and child ids must be unique.
+The primary multi-test runner model is a standard suite manifest with `tests[]`, where every selected test case shares the same suite profile and Env_Profile. Single-suite provider capability runs may mix supported executable provider types, such as Kafka and IBM MQ client-provider test cases, when the selected Env_Profile contains provider bindings for each referenced `provider_id`.
 
-Suite group lifecycle:
+`child_suites[]` aggregation manifests are a compatibility model for checked-in child suite manifests and summarize provider-pair suites plus expected-failure suites. Child refs must stay under the aggregation manifest directory and child ids must be unique. Boundary paths should live inside the canonical child suite `tests[]` when they share the same Env_Profile.
 
-- `regress validate --suite <suite_group>` validates child refs, duplicate child ids, child suite YAML, and child suite contract artifacts.
-- `regress run --suite <suite_group> --dry-run` validates child suites and returns `provider_runtime_invoked: false`.
-- `regress run --suite <suite_group> --profile <profile>` validates child suites before execution. Runtime starts only after all preflight checks pass.
+Aggregation lifecycle:
+
+- `regress validate --suite <suite_manifest>` validates child refs, duplicate child ids, child suite YAML, and child suite contract artifacts.
+- `regress run --suite <suite_manifest> --dry-run` validates child suites and returns `provider_runtime_invoked: false`.
+- `regress run --suite <suite_manifest> --profile <profile>` validates child suites before execution. Runtime starts only after all preflight checks pass.
 
 ```bash
 regress validate --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml
@@ -1139,15 +1219,15 @@ regress run \
   --profile local_mock_server_cross_verify
 ```
 
-The following suite group problems are preflight blockers:
+The following child-suite aggregation problems are preflight blockers:
 
 - missing child suite manifest
-- child ref escaping the suite group directory
+- child ref escaping the aggregation manifest directory
 - duplicate child id
 - malformed child suite YAML
 - invalid child contract artifacts
 
-Blocked suite group runs return `run_status: blocked` and must not produce `batch_id`, `run_id`, `suite_summary_json`, or `allure_results_dir`.
+Blocked aggregation runs return `run_status: blocked` and must not produce `batch_id`, `run_id`, `suite_summary_json`, or `allure_results_dir`.
 
 `expected_status: failed` means the child suite is expected to execute and finish with observed status `failed`. `blocked` is not an expected failure pass. Configuration, schema, missing file, malformed YAML, or invalid contract problems are preflight blockers and must be fixed before execution.
 
@@ -1157,7 +1237,7 @@ Blocked suite group runs return `run_status: blocked` and must not produce `batc
 | `run --dry-run` | `run_status: dry_run_ready`, `provider_runtime_invoked: false` | `run_status: blocked`, no runtime |
 | `run` | `batch_id`, `run_id`, `suite_summary_json`, `allure_results_dir` | `run_status: blocked`, no run artifacts |
 
-A successful suite group run writes `suite_summary.json`, `suite_summary.yaml`, and raw Allure result files under `target/suite-groups/<suite_id>/<batch_id>/<run_id>/`.
+A successful aggregation run writes `suite_summary.json`, `suite_summary.yaml`, and raw Allure result files under `target/suite-groups/<suite_id>/<batch_id>/<run_id>/`.
 
 PR-008A SOAP provider capability samples use separate suite manifests:
 
@@ -1242,9 +1322,42 @@ evidence/
     report.txt
 ```
 
+`evidence_index.yaml` is a structured index, not a compact ref list. Each entry must include the stable evidence identity, file location, producer, status, and masking state:
+
+```yaml
+evidence_index_version: v0.2
+suite_id: RP-PAYMENT-001-regression
+batch_id: BATCH-001
+run_id: RUN-001
+test_case_id: RP-PAYMENT-001-TC-001
+profile: ci
+entries:
+  - evidence_id: wiremock-request-journal-001
+    evidence_type: wiremock_request_journal
+    produced_by: provider
+    provider_type: wiremock_http_mock
+    provider_id: payment-api-mock
+    test_case_id: RP-PAYMENT-001-TC-001
+    run_id: RUN-001
+    batch_id: BATCH-001
+    file_path: provider-evidence/payment-api/request_journal.json
+    content_type: application/json
+    status: passed
+    created_at: "2026-06-29T00:00:01Z"
+    masking_applied: true
+    linked_result_field: provider_results.resolved_operation_result
+masking:
+  raw_secret_found: false
+```
+
+Do not publish legacy compact entries such as `ref:` plus `masked:`. Result JSON `evidence_refs[]` is the complete evidence list; `provider_evidence_refs[]` must contain only provider-produced refs such as provider, query, event, fixture, actual, HTTP, gRPC, Kafka, IBM MQ, JDBC, NATS, or WireMock evidence. Framework logs, batch summaries, assertion diffs, and expected artifacts belong in `evidence_refs[]` only.
+
 Generate a release-level report:
 
 ```bash
+regress validate-evidence \
+  --result <generated_result_json>
+
 regress report \
   --root . \
   --rp-id RP-PAYMENT-001 \

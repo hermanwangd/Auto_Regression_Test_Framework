@@ -53,6 +53,20 @@ class OracleResolverTest {
     }
 
     @Test
+    void resolvesScalarExpectedPayloadAsDirectArtifact() throws Exception {
+        Files.writeString(tempDir.resolve("expected.txt"), "OK\n");
+
+        ResolvedOracle oracle = resolver.resolveExpectedResultArtifact(
+                tempDir,
+                "primary",
+                "${oracles.primary}",
+                Map.of("ref", "expected.txt"));
+
+        assertThat(oracle.expectedRef()).isEqualTo("expected.txt");
+        assertThat(oracle.expectedPath()).isEqualTo(tempDir.resolve("expected.txt"));
+    }
+
+    @Test
     void throwsUncheckedIoWhenExpectedResultArtifactCannotBeRead() throws Exception {
         Files.createDirectories(tempDir.resolve("expected.yaml"));
 

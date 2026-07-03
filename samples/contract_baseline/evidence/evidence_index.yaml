@@ -1,31 +1,117 @@
 evidence_index_version: v0.2
+suite_id: RP-FWK-CONTRACT-SAMPLE-regression
 batch_id: BATCH-CONTRACT-001
 run_id: RUN-CONTRACT-001
 test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001
 profile: ci
-release_evidence_eligible: false
 entries:
-  - evidence_type: resolved_execution_plan
-    ref: evidence/runs/RUN-CONTRACT-001/execution_plan.yaml
-    masked: true
-  - evidence_type: provider_result
-    provider_id: wiremock-payment-api
+  - evidence_id: execution-log-contract-001
+    evidence_type: execution_log
+    produced_by: framework
+    test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001
+    run_id: RUN-CONTRACT-001
+    batch_id: BATCH-CONTRACT-001
+    file_path: runs/RUN-CONTRACT-001/logs/execution.log
+    content_type: text/plain
+    status: passed
+    created_at: "2026-06-29T00:00:00Z"
+    masking_applied: true
+    linked_result_field: evidence_refs
+  - evidence_id: batch-summary-contract-001
+    evidence_type: batch_summary
+    produced_by: framework
+    test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001
+    run_id: RUN-CONTRACT-001
+    batch_id: BATCH-CONTRACT-001
+    file_path: runs/RUN-CONTRACT-001/batch/batch_summary.json
+    content_type: application/json
+    status: passed
+    created_at: "2026-06-29T00:00:00Z"
+    masking_applied: true
+    linked_result_field: evidence_refs
+  - evidence_id: wiremock-request-journal-contract-001
+    evidence_type: wiremock_request_journal
+    produced_by: provider
     provider_type: wiremock_http_mock
-    runtime_mode: mock
-    ref: evidence/runs/RUN-CONTRACT-001/provider-evidence/payment-api/request_journal.yaml
-    masked: true
-  - evidence_type: query_result
+    provider_id: wiremock-payment-api
+    test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001
+    run_id: RUN-CONTRACT-001
+    batch_id: BATCH-CONTRACT-001
+    file_path: runs/RUN-CONTRACT-001/provider-evidence/payment-api/request_journal.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:01Z"
+    masking_applied: true
+    linked_result_field: provider_results.resolved_operation_result
+  - evidence_id: wiremock-server-log-contract-001
+    evidence_type: wiremock_server_log
+    produced_by: provider
+    provider_type: wiremock_http_mock
+    provider_id: wiremock-payment-api
+    test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001
+    run_id: RUN-CONTRACT-001
+    batch_id: BATCH-CONTRACT-001
+    file_path: runs/RUN-CONTRACT-001/provider-evidence/payment-api/server_log.txt
+    content_type: text/plain
+    status: passed
+    created_at: "2026-06-29T00:00:01Z"
+    masking_applied: true
+    linked_result_field: provider_results.resolved_operation_result
+  - evidence_id: jdbc-seed-contract-001
+    evidence_type: jdbc_seed
+    produced_by: provider
+    provider_type: jdbc
     provider_id: oracle-database
-    provider_type: jdbc_database
-    runtime_mode: ephemeral
-    ref: evidence/runs/RUN-CONTRACT-001/query-evidence/order_database/query_result.yaml
-    masked: true
-  - evidence_type: event_result
-    provider_id: nats-event-bus
+    test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001
+    run_id: RUN-CONTRACT-001
+    batch_id: BATCH-CONTRACT-001
+    file_path: runs/RUN-CONTRACT-001/query-evidence/order_database/seed.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:01Z"
+    masking_applied: true
+    linked_result_field: steps.seed_order
+  - evidence_id: jdbc-query-contract-001
+    evidence_type: jdbc_query
+    produced_by: provider
+    provider_type: jdbc
+    provider_id: oracle-database
+    test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001
+    run_id: RUN-CONTRACT-001
+    batch_id: BATCH-CONTRACT-001
+    file_path: runs/RUN-CONTRACT-001/query-evidence/order_database/query_result.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:02Z"
+    masking_applied: true
+    linked_result_field: provider_results.resolved_operation_result
+  - evidence_id: jdbc-cleanup-contract-001
+    evidence_type: jdbc_cleanup
+    produced_by: provider
+    provider_type: jdbc
+    provider_id: oracle-database
+    test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001
+    run_id: RUN-CONTRACT-001
+    batch_id: BATCH-CONTRACT-001
+    file_path: runs/RUN-CONTRACT-001/query-evidence/order_database/cleanup.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:04Z"
+    masking_applied: true
+    linked_result_field: provider_results.cleanup_status
+  - evidence_id: nats-event-contract-001
+    evidence_type: nats_event
+    produced_by: provider
     provider_type: nats
-    runtime_mode: ephemeral
-    ref: evidence/runs/RUN-CONTRACT-001/event-evidence/nats_event_bus/published_message.yaml
-    masked: true
+    provider_id: nats-event-bus
+    test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001
+    run_id: RUN-CONTRACT-001
+    batch_id: BATCH-CONTRACT-001
+    file_path: runs/RUN-CONTRACT-001/event-evidence/nats_event_bus/published_message.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:03Z"
+    masking_applied: true
+    linked_result_field: provider_results.resolved_operation_result
 masking:
   raw_secret_found: false
-  report_ref: evidence/runs/RUN-CONTRACT-001/masking_report.yaml

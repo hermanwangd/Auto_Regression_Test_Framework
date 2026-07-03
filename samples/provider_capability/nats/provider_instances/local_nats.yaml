@@ -1,7 +1,7 @@
 provider_instance_version: v0.2
 provider_id: local-nats-event-bus
 provider_type: nats
-runtime_modes: [local]
+runtime_modes: [mock]
 defaults:
   timeout: PT5S
   poll_interval: PT0.05S

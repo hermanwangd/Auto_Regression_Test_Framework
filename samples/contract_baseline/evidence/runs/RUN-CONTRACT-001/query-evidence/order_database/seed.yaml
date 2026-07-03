@@ -1,0 +1,8 @@
+evidence_type: jdbc_seed
+provider_type: jdbc
+provider_id: oracle-database
+test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001
+run_id: RUN-CONTRACT-001
+status: passed
+masking_applied: true
+seeded_rows: 1

@@ -15,12 +15,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -73,8 +71,8 @@ public class JdbcProviderCapabilityService {
             return JdbcRunResult.blocked(validation.suiteId(), requestedProfile, profileFindings);
         }
 
-        RuntimeSelection selection = selectJdbcRuntime(suiteManifest, requestedProfile, outputBase);
-        if (selection == null) {
+        List<RuntimeSelection> selections = selectJdbcRuntimes(suiteManifest, requestedProfile, outputBase);
+        if (selections.isEmpty()) {
             return JdbcRunResult.blocked(validation.suiteId(), requestedProfile, List.of(new ContractFinding(
                     suiteManifest.toString(),
                     "targets",
@@ -85,11 +83,96 @@ public class JdbcProviderCapabilityService {
                     "",
                     "Add a DSL target using provider_type `jdbc` for profile `" + requestedProfile + "`.")));
         }
-        recreateDirectory(selection.runDir());
+        RuntimeSelection firstSelection = selections.get(0);
+        recreateDirectory(firstSelection.runDir());
 
         JdbcProviderRuntime jdbcRuntime = new JdbcProviderRuntime();
         ProviderRuntimeResolver resolver = new ProviderRuntimeResolver(
                 new ProviderRuntimeRegistry(Map.of(PROVIDER_TYPE, jdbcRuntime)));
+
+        Instant startedAt = Instant.now();
+        String status = "passed";
+        ProviderFailure failure = null;
+        ProviderFailure cleanupFailure = null;
+        RuntimeSelection failureSelection = null;
+        boolean providerRuntimeExecuted = false;
+        List<Map<String, Object>> stepResults = new ArrayList<>();
+        List<Map<String, Object>> verifyResults = new ArrayList<>();
+        List<Map<String, Object>> testResults = new ArrayList<>();
+        List<Map<String, Object>> providerResults = new ArrayList<>();
+        List<String> evidenceRefs = new ArrayList<>();
+
+        boolean multiTestSuite = selections.size() > 1;
+        for (RuntimeSelection selection : selections) {
+            TestExecution execution = executeTestCase(resolver, selection, requestedProfile, multiTestSuite);
+            providerRuntimeExecuted = providerRuntimeExecuted || execution.providerRuntimeExecuted();
+            stepResults.addAll(execution.stepResults());
+            verifyResults.addAll(execution.verifyResults());
+            testResults.add(execution.testResult());
+            providerResults.add(providerResult(selection, requestedProfile, execution.status(), execution.outputs()));
+            evidenceRefs.addAll(execution.evidenceRefs());
+            if (execution.cleanupFailure() != null && cleanupFailure == null) {
+                cleanupFailure = execution.cleanupFailure();
+            }
+            if (!execution.passed() && "passed".equals(status)) {
+                status = "failed";
+                failure = execution.failure();
+                failureSelection = selection;
+            }
+        }
+
+        Instant finishedAt = Instant.now();
+        writeExecutionLog(firstSelection.runDir(), firstSelection, status);
+        evidenceRefs.add("logs/execution.log");
+        writeBatch(firstSelection.runDir(), firstSelection, status, selections.size());
+        evidenceRefs.add("batch/batch.yaml");
+        if ("failed".equals(status)) {
+            RuntimeSelection failedSelection = failureSelection == null ? firstSelection : failureSelection;
+            writeFailureDetail(firstSelection.runDir(), failedSelection, failure, cleanupFailure);
+            evidenceRefs.add("provider-evidence/jdbc/failure_detail.yaml");
+        }
+        writeEvidenceIndex(firstSelection.runDir(), firstSelection, selections.size(), evidenceRefs);
+        evidenceRefs.add(0, "evidence_index.yaml");
+        Path resultJson = writeResult(
+                firstSelection.runDir(),
+                firstSelection,
+                requestedProfile,
+                topLevelTestCaseId(firstSelection, selections.size()),
+                selections.size(),
+                status,
+                stepResults,
+                verifyResults,
+                testResults,
+                providerResults,
+                evidenceRefs,
+                failure,
+                cleanupFailure,
+                startedAt,
+                finishedAt);
+        return new JdbcRunResult(
+                "passed".equals(status),
+                status,
+                stringValue(firstSelection.suite().get("suite_id")),
+                firstSelection.batchId(),
+                firstSelection.runId(),
+                topLevelTestCaseId(firstSelection, selections.size()),
+                selections.size(),
+                requestedProfile,
+                firstSelection.providerId(),
+                firstSelection.providerType(),
+                firstSelection.runtimeMode(),
+                firstSelection.dialect(),
+                resultJson,
+                firstSelection.runDir(),
+                providerRuntimeExecuted,
+                List.of());
+    }
+
+    private TestExecution executeTestCase(
+            ProviderRuntimeResolver resolver,
+            RuntimeSelection selection,
+            String requestedProfile,
+            boolean multiTestSuite) {
         ProviderExecutionContext context = new ProviderExecutionContext(
                 selection.providerId(),
                 selection.providerType(),
@@ -100,118 +183,103 @@ public class JdbcProviderCapabilityService {
                 selection.providerContract(),
                 selection.providerInstance(),
                 selection.bindingValues());
-
-        Instant startedAt = Instant.now();
-        String status = "passed";
-        ProviderFailure failure = null;
+        String operationPrefix = multiTestSuite ? safe(stringValue(selection.testCase().get("test_case_id"))) + "__" : "";
+        String testStatus = "passed";
+        ProviderFailure testFailure = null;
         ProviderFailure cleanupFailure = null;
         boolean providerRuntimeExecuted = false;
-        Map<String, Object> aggregateOutputs = new LinkedHashMap<>();
+        Map<String, Object> outputs = new LinkedHashMap<>();
         List<Map<String, Object>> stepResults = new ArrayList<>();
         List<Map<String, Object>> verifyResults = new ArrayList<>();
         List<String> evidenceRefs = new ArrayList<>();
 
         try {
-            for (SelectedOperation operation : setupOperations(selection.testCase(), selection.targetName())) {
+            for (SelectedOperation operation : setupOperations(selection.testCase(), selection.targetName(), operationPrefix)) {
                 ProviderOperationResult result = executeOperation(resolver, context, operation);
                 providerRuntimeExecuted = true;
-                recordOperationOutput(aggregateOutputs, operation, result);
+                recordOperationOutput(outputs, operation, result);
                 stepResults.add(step(operation.id(), operation.request().operation(), result));
                 evidenceRefs.addAll(refs(result));
                 if (!result.passed()) {
-                    status = "failed";
-                    failure = result.failure();
+                    testStatus = "failed";
+                    testFailure = result.failure();
                     break;
                 }
             }
-            if ("passed".equals(status)) {
-                for (SelectedOperation operation : executeOperations(selection.testCase(), selection.targetName())) {
+            if ("passed".equals(testStatus)) {
+                for (SelectedOperation operation : executeOperations(selection.testCase(), selection.targetName(), operationPrefix)) {
                     ProviderOperationResult result = executeOperation(resolver, context, operation);
                     providerRuntimeExecuted = true;
-                    recordOperationOutput(aggregateOutputs, operation, result);
+                    recordOperationOutput(outputs, operation, result);
                     stepResults.add(step(operation.id(), operation.request().operation(), result));
                     evidenceRefs.addAll(refs(result));
                     if (!result.passed()) {
-                        status = "failed";
-                        failure = result.failure();
+                        testStatus = "failed";
+                        testFailure = result.failure();
                         break;
                     }
                 }
             }
-            if ("passed".equals(status)) {
+            if ("passed".equals(testStatus)) {
                 for (SelectedOperation operation : verifyOperations(
-                        selection.suiteRoot(), selection.testCase(), selection.targetName())) {
+                        selection.suiteRoot(), selection.testCase(), selection.targetName(), operationPrefix)) {
                     ProviderOperationResult result = executeOperation(resolver, context, operation);
                     providerRuntimeExecuted = true;
-                    recordOperationOutput(aggregateOutputs, operation, result);
+                    recordOperationOutput(outputs, operation, result);
                     verifyResults.add(assertion(operation.id(), "db_record_exists", result.passed() ? "passed" : "failed"));
                     evidenceRefs.addAll(refs(result));
                     writeAssertion(selection.runDir(), operation.id(), result);
                     evidenceRefs.add("assertions/" + operation.id() + ".yaml");
                     if (!result.passed()) {
-                        status = "failed";
-                        failure = result.failure();
+                        testStatus = "failed";
+                        testFailure = result.failure();
                         break;
                     }
                 }
             }
         } finally {
-            for (SelectedOperation operation : cleanupOperations(selection.testCase(), selection.targetName())) {
+            for (SelectedOperation operation : cleanupOperations(selection.testCase(), selection.targetName(), operationPrefix)) {
                 ProviderOperationResult result = executeOperation(resolver, context, operation);
                 providerRuntimeExecuted = true;
-                recordOperationOutput(aggregateOutputs, operation, result);
+                recordOperationOutput(outputs, operation, result);
                 stepResults.add(step(operation.id(), operation.request().operation(), result));
                 evidenceRefs.addAll(refs(result));
                 if (!result.passed()) {
                     cleanupFailure = result.failure();
-                    if ("passed".equals(status)) {
-                        status = "failed";
-                        failure = result.failure();
+                    if ("passed".equals(testStatus)) {
+                        testStatus = "failed";
+                        testFailure = result.failure();
                     }
                 }
             }
         }
 
-        Instant finishedAt = Instant.now();
-        writeExecutionLog(selection.runDir(), selection, status);
-        evidenceRefs.add("logs/execution.log");
-        writeBatch(selection.runDir(), selection, status);
-        evidenceRefs.add("batch/batch.yaml");
-        if ("failed".equals(status)) {
-            writeFailureDetail(selection.runDir(), selection, failure, cleanupFailure);
-            evidenceRefs.add("provider-evidence/jdbc/failure_detail.yaml");
+        Map<String, Object> testResult = new LinkedHashMap<>();
+        testResult.put("test_case_id", selection.testCase().get("test_case_id"));
+        testResult.put("profile", requestedProfile);
+        testResult.put("provider_id", selection.providerId());
+        testResult.put("provider_type", selection.providerType());
+        testResult.put("status", testStatus);
+        testResult.put("step_count", stepResults.size());
+        testResult.put("verify_count", verifyResults.size());
+        if (testFailure != null) {
+            testResult.put("failure_code", testFailure.code());
+            testResult.put("failure_classification", testFailure.classification());
         }
-        writeEvidenceIndex(selection.runDir(), selection, evidenceRefs);
-        evidenceRefs.add(0, "evidence_index.yaml");
-        Path resultJson = writeResult(
-                selection.runDir(),
-                selection,
-                requestedProfile,
-                status,
-                aggregateOutputs,
+        if (cleanupFailure != null) {
+            testResult.put("cleanup_failure_code", cleanupFailure.code());
+        }
+        return new TestExecution(
+                "passed".equals(testStatus),
+                testStatus,
+                providerRuntimeExecuted,
+                outputs,
                 stepResults,
                 verifyResults,
+                testResult,
                 evidenceRefs,
-                failure,
-                cleanupFailure,
-                startedAt,
-                finishedAt);
-        return new JdbcRunResult(
-                "passed".equals(status),
-                status,
-                stringValue(selection.suite().get("suite_id")),
-                selection.batchId(),
-                selection.runId(),
-                stringValue(selection.testCase().get("test_case_id")),
-                requestedProfile,
-                selection.providerId(),
-                selection.providerType(),
-                selection.runtimeMode(),
-                selection.dialect(),
-                resultJson,
-                selection.runDir(),
-                providerRuntimeExecuted,
-                List.of());
+                testFailure,
+                cleanupFailure);
     }
 
     private ProviderOperationResult executeOperation(
@@ -240,13 +308,19 @@ public class JdbcProviderCapabilityService {
         aggregateOutputs.put(operation.id(), output);
     }
 
-    private RuntimeSelection selectJdbcRuntime(Path suiteManifest, String requestedProfile, Path outputBase) {
+    private List<RuntimeSelection> selectJdbcRuntimes(Path suiteManifest, String requestedProfile, Path outputBase) {
         Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
         Map<String, Object> suite = readMap(suiteManifest);
         Map<String, Map<String, Object>> instancesById =
                 readDirectoryByField(suiteRoot.resolve("provider_instances"), "provider_id");
         Map<String, Map<String, Object>> contractsByType =
                 readDirectoryByField(frameworkProviderContractsDirectory(suiteRoot), "provider_type");
+        RunIds runIds = newRunIds();
+        Path runDir = outputBase
+                .resolve(safe(stringValue(suite.get("suite_id"))))
+                .resolve(runIds.batchId())
+                .resolve(runIds.runId());
+        List<RuntimeSelection> selections = new ArrayList<>();
         for (Object testRef : listValue(suite.get("tests"))) {
             Map<String, Object> testCase = readMap(suiteRoot.resolve(stringValue(testRef)).normalize());
             for (Map.Entry<String, Object> targetEntry : mapValue(testCase.get("targets")).entrySet()) {
@@ -270,12 +344,7 @@ public class JdbcProviderCapabilityService {
                 Map<String, Object> providerBinding =
                         runtimeBindingResolver.providerBinding(suiteRoot, requestedProfile, providerId);
                 Map<String, Object> bindingValues = mapValue(providerBinding.get("binding_values"));
-                RunIds runIds = newRunIds();
-                Path runDir = outputBase
-                        .resolve(safe(stringValue(suite.get("suite_id"))))
-                        .resolve(runIds.batchId())
-                        .resolve(runIds.runId());
-                return new RuntimeSelection(
+                selections.add(new RuntimeSelection(
                         suiteRoot,
                         suite,
                         testCase,
@@ -290,10 +359,10 @@ public class JdbcProviderCapabilityService {
                         bindingValues,
                         runIds.batchId(),
                         runIds.runId(),
-                        runDir);
+                        runDir));
             }
         }
-        return null;
+        return List.copyOf(selections);
     }
 
     private List<ContractFinding> requestedProfileFindings(Path suiteManifest, String requestedProfile) {
@@ -360,54 +429,57 @@ public class JdbcProviderCapabilityService {
         return new RunIds("BATCH-JDBC-" + suffix, "RUN-JDBC-" + suffix);
     }
 
-    private List<SelectedOperation> setupOperations(Map<String, Object> testCase, String targetName) {
+    private List<SelectedOperation> setupOperations(Map<String, Object> testCase, String targetName, String operationPrefix) {
         List<SelectedOperation> operations = new ArrayList<>();
         for (Object value : listValue(mapValue(testCase.get("setup")).get("operations"))) {
             Map<String, Object> operation = mapValue(value);
             if (targetName.equals(stringValue(operation.get("target")))
                     && "db_seed".equals(stringValue(operation.get("operation")))) {
                 String id = stringValue(operation.get("id"));
+                String operationId = operationPrefix + (id.isBlank() ? "db_seed" : id);
                 operations.add(new SelectedOperation(
-                        id.isBlank() ? "db_seed" : id,
+                        operationId,
                         new ProviderOperationRequest(
                                 stringValue(operation.get("operation")),
                                 resolvedOperationInputs(testCase, operation),
-                                runtimeOutputs(id, Map.of()))));
+                                runtimeOutputs(operationId, Map.of()))));
             }
         }
         for (Map.Entry<String, Object> entry : mapValue(mapValue(testCase.get("setup")).get("fixtures")).entrySet()) {
             Map<String, Object> fixture = mapValue(entry.getValue());
             if (targetName.equals(stringValue(fixture.get("target")))
                     && "db_seed".equals(stringValue(fixture.get("operation")))) {
+                String operationId = operationPrefix + entry.getKey();
                 operations.add(new SelectedOperation(
-                        entry.getKey(),
+                        operationId,
                         new ProviderOperationRequest(
                                 stringValue(fixture.get("operation")),
                                 resolvedParameters(testCase, listValue(fixture.get("parameters"))),
-                                runtimeOutputs(entry.getKey(), Map.of()))));
+                                runtimeOutputs(operationId, Map.of()))));
             }
         }
         return List.copyOf(operations);
     }
 
-    private List<SelectedOperation> executeOperations(Map<String, Object> testCase, String targetName) {
+    private List<SelectedOperation> executeOperations(Map<String, Object> testCase, String targetName, String operationPrefix) {
         List<SelectedOperation> operations = new ArrayList<>();
         for (Object value : executeOperationValues(testCase)) {
             Map<String, Object> step = mapValue(value);
             if (targetName.equals(stringValue(step.get("target")))) {
                 String id = stringValue(step.get("id"));
+                String operationId = operationPrefix + (id.isBlank() ? "execute" : id);
                 operations.add(new SelectedOperation(
-                        id.isBlank() ? "execute" : id,
+                        operationId,
                         new ProviderOperationRequest(
                                 stringValue(step.get("operation")),
                                 resolvedOperationInputs(testCase, step),
-                                runtimeOutputs(id, mapValue(step.get("outputs"))))));
+                                runtimeOutputs(operationId, mapValue(step.get("outputs"))))));
             }
         }
         return List.copyOf(operations);
     }
 
-    private List<SelectedOperation> verifyOperations(Path suiteRoot, Map<String, Object> testCase, String targetName) {
+    private List<SelectedOperation> verifyOperations(Path suiteRoot, Map<String, Object> testCase, String targetName, String operationPrefix) {
         List<SelectedOperation> operations = new ArrayList<>();
         for (Object value : verifyValues(testCase)) {
             Map<String, Object> verify = mapValue(value);
@@ -432,38 +504,41 @@ public class JdbcProviderCapabilityService {
                 }
             }
             String id = stringValue(verify.get("id"));
+            String operationId = operationPrefix + (id.isBlank() ? "db_record_exists" : id);
             operations.add(new SelectedOperation(
-                    id.isBlank() ? "db_record_exists" : id,
-                    new ProviderOperationRequest("db_record_exists", List.copyOf(parameters), runtimeOutputs(id, Map.of()))));
+                    operationId,
+                    new ProviderOperationRequest("db_record_exists", List.copyOf(parameters), runtimeOutputs(operationId, Map.of()))));
         }
         return List.copyOf(operations);
     }
 
-    private List<SelectedOperation> cleanupOperations(Map<String, Object> testCase, String targetName) {
+    private List<SelectedOperation> cleanupOperations(Map<String, Object> testCase, String targetName, String operationPrefix) {
         List<SelectedOperation> operations = new ArrayList<>();
         for (Object value : listValue(mapValue(testCase.get("cleanup")).get("operations"))) {
             Map<String, Object> operation = mapValue(value);
             if (targetName.equals(stringValue(operation.get("target")))
                     && "db_cleanup".equals(stringValue(operation.get("operation")))) {
                 String id = stringValue(operation.get("id"));
+                String operationId = operationPrefix + (id.isBlank() ? "db_cleanup" : id);
                 operations.add(new SelectedOperation(
-                        id.isBlank() ? "db_cleanup" : id,
+                        operationId,
                         new ProviderOperationRequest(
                                 stringValue(operation.get("operation")),
                                 resolvedOperationInputs(testCase, operation),
-                                runtimeOutputs(id, Map.of()))));
+                                runtimeOutputs(operationId, Map.of()))));
             }
         }
         for (Map.Entry<String, Object> entry : mapValue(mapValue(testCase.get("cleanup")).get("fixtures")).entrySet()) {
             Map<String, Object> fixture = mapValue(entry.getValue());
             if (targetName.equals(stringValue(fixture.get("target")))
                     && "db_cleanup".equals(stringValue(fixture.get("operation")))) {
+                String operationId = operationPrefix + entry.getKey();
                 operations.add(new SelectedOperation(
-                        entry.getKey(),
+                        operationId,
                         new ProviderOperationRequest(
                                 stringValue(fixture.get("operation")),
                                 resolvedParameters(testCase, listValue(fixture.get("parameters"))),
-                                runtimeOutputs(entry.getKey(), Map.of()))));
+                                runtimeOutputs(operationId, Map.of()))));
             }
         }
         return List.copyOf(operations);
@@ -621,7 +696,7 @@ public class JdbcProviderCapabilityService {
                         status));
     }
 
-    private void writeBatch(Path runDir, RuntimeSelection selection, String status) {
+    private void writeBatch(Path runDir, RuntimeSelection selection, String status, int testCount) {
         write(runDir.resolve("batch/batch.yaml"), """
                 evidence_type: batch_summary
                 evidence_classification: framework_provider_capability_only
@@ -630,6 +705,7 @@ public class JdbcProviderCapabilityService {
                 batch_id: %s
                 run_id: %s
                 test_case_id: %s
+                test_count: %s
                 profile: %s
                 provider_type: %s
                 provider_id: %s
@@ -637,25 +713,26 @@ public class JdbcProviderCapabilityService {
                 dialect: %s
                 status: %s
                 """.formatted(
-                        selection.suite().get("suite_id"),
-                        selection.batchId(),
-                        selection.runId(),
-                        selection.testCase().get("test_case_id"),
-                        selection.profile(),
-                        selection.providerType(),
-                        selection.providerId(),
+                selection.suite().get("suite_id"),
+                selection.batchId(),
+                selection.runId(),
+                topLevelTestCaseId(selection, testCount),
+                testCount,
+                selection.profile(),
+                selection.providerType(),
+                selection.providerId(),
                         selection.runtimeMode(),
                         selection.dialect(),
                         status));
     }
 
-    private void writeEvidenceIndex(Path runDir, RuntimeSelection selection, List<String> evidenceRefs) {
+    private void writeEvidenceIndex(Path runDir, RuntimeSelection selection, int testCount, List<String> evidenceRefs) {
         write(runDir.resolve("evidence_index.yaml"), EvidenceIndexFormatter.format(
                 new EvidenceIndexFormatter.Context(
                         stringValue(selection.suite().get("suite_id")),
                         selection.batchId(),
                         selection.runId(),
-                        stringValue(selection.testCase().get("test_case_id")),
+                        topLevelTestCaseId(selection, testCount),
                         selection.profile(),
                         selection.providerType(),
                         selection.providerId()),
@@ -697,59 +774,42 @@ public class JdbcProviderCapabilityService {
             Path runDir,
             RuntimeSelection selection,
             String profile,
+            String testCaseId,
+            int testCount,
             String status,
-            Map<String, Object> outputs,
             List<Map<String, Object>> stepResults,
             List<Map<String, Object>> verifyResults,
+            List<Map<String, Object>> testResults,
+            List<Map<String, Object>> providerResults,
             List<String> evidenceRefs,
             ProviderFailure failure,
             ProviderFailure cleanupFailure,
             Instant startedAt,
             Instant finishedAt) {
-        String started = startedAt.toString();
-        String finished = finishedAt.toString();
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("framework_version", "v0.2");
-        result.put("dsl_version", selection.testCase().get("dsl_version"));
-        result.put("suite_id", selection.suite().get("suite_id"));
-        result.put("batch_id", selection.batchId());
-        result.put("run_id", selection.runId());
-        result.put("test_case_id", selection.testCase().get("test_case_id"));
-        result.put("profile", profile);
-        result.put("environment", profile);
-        result.put("provider_type", selection.providerType());
-        result.put("provider_id", selection.providerId());
-        result.put("runtime_mode", selection.runtimeMode());
-        result.put("dialect", selection.dialect());
-        result.put("status", status);
-        result.put("start_time", started);
-        result.put("end_time", finished);
-        result.put("duration_ms", Duration.between(startedAt, finishedAt).toMillis());
-        result.put("timestamps", Map.of("started_at", started, "finished_at", finished));
-        result.put("labels", selection.testCase().get("labels"));
-        result.put("source_refs", selection.testCase().get("source_refs"));
-        result.put("step_results", stepResults);
-        result.put("steps", stepResults);
-        result.put("verify_results", verifyResults);
-        result.put("provider_results", List.of(providerResult(selection, profile, status, outputs)));
-        result.put("provider_evidence_refs", distinct(evidenceRefs));
-        result.put("evidence_refs", distinct(evidenceRefs));
-        Map<String, Object> failureObject = new LinkedHashMap<>();
-        failureObject.put("code", failure == null ? null : failure.code());
-        failureObject.put("classification", failure == null ? null : failure.classification());
-        failureObject.put("reason", failure == null ? null : failure.reason());
-        failureObject.put("owner_action", failure == null ? null : failure.ownerAction());
-        if (cleanupFailure != null) {
-            failureObject.put("cleanup_failure", Map.of(
-                    "code", cleanupFailure.code(),
-                    "classification", cleanupFailure.classification(),
-                    "reason", cleanupFailure.reason(),
-                    "owner_action", cleanupFailure.ownerAction()));
-        }
-        result.put("failure", failureObject);
-        Path resultJson = runDir.resolve("result.json");
-        write(resultJson, toJson(result) + "\n");
-        return resultJson;
+        return ProviderCapabilityResultWriter.write(runDir, new ProviderCapabilityResultWriter.ResultDocument(
+                selection.testCase().get("dsl_version"),
+                selection.suite().get("suite_id"),
+                selection.batchId(),
+                selection.runId(),
+                testCaseId,
+                testCount,
+                profile,
+                profile,
+                status,
+                startedAt,
+                finishedAt,
+                selection.testCase().get("labels"),
+                selection.testCase().get("source_refs"),
+                stepResults,
+                verifyResults,
+                testResults,
+                providerResults,
+                distinct(evidenceRefs),
+                distinct(evidenceRefs),
+                ProviderCapabilityResultWriter.singleProviderRootFields(providerResults),
+                failure,
+                cleanupFailure,
+                true));
     }
 
     private Map<String, Object> providerResult(
@@ -769,6 +829,13 @@ public class JdbcProviderCapabilityService {
                 "outputs", outputs));
         result.put("release_evidence_eligible", false);
         return result;
+    }
+
+    private String topLevelTestCaseId(RuntimeSelection selection, int testCount) {
+        if (testCount == 1) {
+            return stringValue(selection.testCase().get("test_case_id"));
+        }
+        return stringValue(selection.suite().get("suite_id")) + "-MULTI";
     }
 
     private Map<String, Map<String, Object>> readDirectoryByField(Path directory, String field) {
@@ -896,43 +963,6 @@ public class JdbcProviderCapabilityService {
         }
     }
 
-    private String toJson(Object value) {
-        if (value == null) {
-            return "null";
-        }
-        if (value instanceof String text) {
-            return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
-        }
-        if (value instanceof Number || value instanceof Boolean) {
-            return String.valueOf(value);
-        }
-        if (value instanceof Map<?, ?> map) {
-            StringBuilder json = new StringBuilder("{");
-            boolean first = true;
-            for (Map.Entry<?, ?> entry : map.entrySet()) {
-                if (!first) {
-                    json.append(", ");
-                }
-                first = false;
-                json.append(toJson(entry.getKey())).append(": ").append(toJson(entry.getValue()));
-            }
-            return json.append("}").toString();
-        }
-        if (value instanceof Collection<?> collection) {
-            StringBuilder json = new StringBuilder("[");
-            boolean first = true;
-            for (Object item : collection) {
-                if (!first) {
-                    json.append(", ");
-                }
-                first = false;
-                json.append(toJson(item));
-            }
-            return json.append("]").toString();
-        }
-        return toJson(String.valueOf(value));
-    }
-
     public record JdbcRunResult(
             boolean passed,
             String status,
@@ -940,6 +970,7 @@ public class JdbcProviderCapabilityService {
             String batchId,
             String runId,
             String testCaseId,
+            int testCount,
             String profile,
             String providerId,
             String providerType,
@@ -958,6 +989,7 @@ public class JdbcProviderCapabilityService {
                     "",
                     "",
                     "",
+                    0,
                     profile,
                     "",
                     PROVIDER_TYPE,
@@ -989,6 +1021,19 @@ public class JdbcProviderCapabilityService {
     }
 
     private record SelectedOperation(String id, ProviderOperationRequest request) {
+    }
+
+    private record TestExecution(
+            boolean passed,
+            String status,
+            boolean providerRuntimeExecuted,
+            Map<String, Object> outputs,
+            List<Map<String, Object>> stepResults,
+            List<Map<String, Object>> verifyResults,
+            Map<String, Object> testResult,
+            List<String> evidenceRefs,
+            ProviderFailure failure,
+            ProviderFailure cleanupFailure) {
     }
 
     private record RunIds(String batchId, String runId) {

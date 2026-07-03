@@ -33,13 +33,10 @@ class MockServerCrossVerifySampleCommandTest {
                 "samples/provider_capability/mock_server_cross_verify/README.md",
                 REST_SUITE.toString(),
                 "samples/provider_capability/mock_server_cross_verify/rest_wiremock_http/suite_manifest_failure.yaml",
-                "samples/provider_capability/mock_server_cross_verify/rest_wiremock_http/suite_manifest_boundary.yaml",
                 SOAP_SUITE.toString(),
                 "samples/provider_capability/mock_server_cross_verify/soap_mock_http_client/suite_manifest_failure.yaml",
-                "samples/provider_capability/mock_server_cross_verify/soap_mock_http_client/suite_manifest_boundary.yaml",
                 GRPC_SUITE.toString(),
                 "samples/provider_capability/mock_server_cross_verify/grpc_mock_grpc_client/suite_manifest_failure.yaml",
-                "samples/provider_capability/mock_server_cross_verify/grpc_mock_grpc_client/suite_manifest_boundary.yaml",
                 "samples/provider_capability/mock_server_cross_verify/rest_wiremock_http/test_case.yaml",
                 "samples/provider_capability/mock_server_cross_verify/rest_wiremock_http/test_case_failure.yaml",
                 "samples/provider_capability/mock_server_cross_verify/rest_wiremock_http/test_case_boundary.yaml",
@@ -62,7 +59,7 @@ class MockServerCrossVerifySampleCommandTest {
         assertThat(validation.stdout())
                 .contains("validation_status: passed")
                 .contains("suite_id: MOCK-SERVER-CROSS-VERIFY-v0.2")
-                .contains("test_count: 9");
+                .contains("test_count: 6");
 
         CommandResult run = execute(
                 "run",
@@ -74,8 +71,8 @@ class MockServerCrossVerifySampleCommandTest {
         assertThat(run.stdout())
                 .contains("run_status: passed")
                 .contains("suite_id: MOCK-SERVER-CROSS-VERIFY-v0.2")
-                .contains("test_count: 9")
-                .contains("passed_count: 9")
+                .contains("test_count: 6")
+                .contains("passed_count: 6")
                 .contains("failed_count: 0")
                 .contains("expected_failure_count: 3")
                 .contains("suite_summary_json:")
@@ -88,8 +85,8 @@ class MockServerCrossVerifySampleCommandTest {
                 .doesNotContain("target/provider-capability/mock_server_cross_verify");
         assertThat(Files.readString(suiteSummary))
                 .contains("\"suite_id\": \"MOCK-SERVER-CROSS-VERIFY-v0.2\"")
-                .contains("\"test_count\": 9")
-                .contains("\"passed_count\": 9")
+                .contains("\"test_count\": 6")
+                .contains("\"passed_count\": 6")
                 .contains("\"expected_failure_count\": 3")
                 .contains("\"expected_status\": \"failed\"")
                 .contains("\"observed_status\": \"failed\"")
@@ -97,7 +94,7 @@ class MockServerCrossVerifySampleCommandTest {
                 .contains("\"child_suite_id\": \"MOCK-SERVER-CROSS-VERIFY-REST-v0.2\"")
                 .contains("\"child_suite_id\": \"MOCK-SERVER-CROSS-VERIFY-SOAP-v0.2\"")
                 .contains("\"child_suite_id\": \"MOCK-SERVER-CROSS-VERIFY-GRPC-v0.2\"");
-        assertThat(countFiles(allureResults, "-result.json")).isEqualTo(9);
+        assertThat(countFiles(allureResults, "-result.json")).isEqualTo(6);
         assertThat(countFiles(allureResults, "-container.json")).isEqualTo(1);
         assertThat(Files.readString(firstFile(allureResults, "-result.json")))
                 .contains("\"status\": \"passed\"")
@@ -114,7 +111,7 @@ class MockServerCrossVerifySampleCommandTest {
                 .contains("provider_runtime_invoked: false")
                 .contains("run_status: dry_run_ready")
                 .contains("suite_id: MOCK-SERVER-CROSS-VERIFY-v0.2")
-                .contains("test_count: 9")
+                .contains("test_count: 6")
                 .contains("child_suites:")
                 .contains("expected_status: failed")
                 .doesNotContain("provider_runtime_executed: true");
@@ -126,10 +123,9 @@ class MockServerCrossVerifySampleCommandTest {
                 "escape_suite_manifest.yaml",
                 """
                 contract_version: v0.2
-                suite_type: suite_group
                 suite_id: ESCAPE-SUITE
                 profile: local_escape
-                test_cases:
+                child_suites:
                   - id: ESCAPE-001
                     ref: ../outside/suite_manifest.yaml
                     profile: local_escape
@@ -150,10 +146,9 @@ class MockServerCrossVerifySampleCommandTest {
                 "duplicate_suite_manifest.yaml",
                 """
                 contract_version: v0.2
-                suite_type: suite_group
                 suite_id: DUPLICATE-SUITE
                 profile: local_duplicate
-                test_cases:
+                child_suites:
                   - id: DUP-001
                     ref: child_a/suite_manifest.yaml
                     profile: local_duplicate
@@ -169,7 +164,106 @@ class MockServerCrossVerifySampleCommandTest {
         assertThat(validation.stdout())
                 .contains("validation_status: failed")
                 .contains("duplicate_child_id")
-                .contains("test_cases[1].id");
+                .contains("child_suites[1].id");
+    }
+
+    @Test
+    void suiteGroupValidationRejectsMalformedChildEntryShape() throws Exception {
+        Path manifest = writeSuiteGroupManifest(
+                "malformed_child_entry_suite_manifest.yaml",
+                """
+                contract_version: v0.2
+                suite_id: MALFORMED-CHILD-ENTRY-SUITE
+                profile: local_malformed
+                child_suites:
+                  - invalid-child-entry
+                """);
+
+        CommandResult validation = execute("validate", "--suite", manifest.toString());
+
+        assertThat(validation.exit()).isEqualTo(1);
+        assertThat(validation.stdout())
+                .contains("validation_status: failed")
+                .contains("invalid_field_type")
+                .contains("child_suites[0]")
+                .contains("owner_action:");
+    }
+
+    @Test
+    void suiteGroupValidationRejectsMissingChildFieldsAndUnsupportedExpectedStatus() throws Exception {
+        Path manifest = writeSuiteGroupManifest(
+                "missing_child_fields_suite_manifest.yaml",
+                """
+                contract_version: v0.2
+                suite_id: MISSING-CHILD-FIELDS-SUITE
+                profile: local_missing_fields
+                child_suites:
+                  - expected_status: blocked
+                """);
+
+        CommandResult validation = execute("validate", "--suite", manifest.toString());
+
+        assertThat(validation.exit()).isEqualTo(1);
+        assertThat(validation.stdout())
+                .contains("validation_status: failed")
+                .contains("child_suites[0].id")
+                .contains("child_suites[0].ref")
+                .contains("child_suites[0].profile")
+                .contains("child_suites[0].expected_status")
+                .contains("unsupported_expected_status");
+    }
+
+    @Test
+    void legacySuiteGroupManifestFieldsRemainReadableForCompatibility() throws Exception {
+        Path manifest = writeSuiteGroupManifest(
+                "legacy_suite_manifest.yaml",
+                """
+                contract_version: v0.2
+                suite_type: suite_group
+                suite_id: LEGACY-SUITE
+                profile: local_legacy
+                test_cases:
+                  - id: LEGACY-001
+                    ref: child/suite_manifest.yaml
+                    profile: local_legacy
+                    expected_status: passed
+                """);
+
+        CommandResult validation = execute("validate", "--suite", manifest.toString());
+
+        assertThat(validation.exit()).isEqualTo(1);
+        assertThat(validation.stdout())
+                .contains("validation_status: failed")
+                .contains("suite_id: LEGACY-SUITE")
+                .contains("missing_required_file")
+                .contains("test_cases[0].ref");
+    }
+
+    @Test
+    void suiteTypeWithoutLegacyChildrenDoesNotSelectAggregationRunner() throws Exception {
+        Path manifest = writeSuiteGroupManifest(
+                "standard_manifest_with_legacy_type.yaml",
+                """
+                contract_version: v0.2
+                suite_type: suite_group
+                suite_id: STANDARD-SUITE
+                profile: local_standard
+                selection:
+                  mode: suite
+                  suite: standard-suite
+                tests: []
+                """);
+
+        CommandResult validation = execute("validate", "--suite", manifest.toString());
+
+        assertThat(validation.exit()).isEqualTo(1);
+        assertThat(validation.stdout())
+                .contains("validation_status: failed")
+                .contains("suite_id: STANDARD-SUITE")
+                .contains("prohibited_legacy_field")
+                .contains("suite_type")
+                .doesNotContain("child_suites:")
+                .doesNotContain("test_count:");
     }
 
     @Test
@@ -179,10 +273,9 @@ class MockServerCrossVerifySampleCommandTest {
                 manifest,
                 """
                 contract_version: v0.2
-                suite_type: suite_group
                 suite_id: ROOT-LEVEL-SUITE
                 profile: local_root
-                test_cases:
+                child_suites:
                   - id: ROOT-001
                     ref: child/suite_manifest.yaml
                     profile: local_root
@@ -210,10 +303,9 @@ class MockServerCrossVerifySampleCommandTest {
                 "missing_child_run_suite_manifest.yaml",
                 """
                 contract_version: v0.2
-                suite_type: suite_group
                 suite_id: MISSING-CHILD-RUN-SUITE
                 profile: local_missing_child
-                test_cases:
+                child_suites:
                   - id: MISSING-001
                     ref: child/suite_manifest.yaml
                     profile: local_missing_child
@@ -272,6 +364,7 @@ class MockServerCrossVerifySampleCommandTest {
                 .contains("run_status: passed")
                 .contains("provider_runtime_executed: true")
                 .contains("provider_types: " + providerTypes)
+                .contains("test_count: 2")
                 .contains("result_json:");
 
         CommandResult report = execute("report", "--result", extractPath(run.stdout(), "result_json").toString());
@@ -279,6 +372,7 @@ class MockServerCrossVerifySampleCommandTest {
         assertThat(report.stdout())
                 .contains("report_status: review_ready")
                 .contains("suite_id: " + suiteId)
+                .contains("test_count: 2")
                 .contains("provider_evidence_summary:")
                 .contains("masking_status: passed");
     }

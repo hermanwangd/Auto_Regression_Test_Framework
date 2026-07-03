@@ -1148,6 +1148,90 @@ class ProviderCapabilityRegistryTest {
     }
 
     @Test
+    void infersProviderContractKindWhenContractKindIsNotDeclared() {
+        ProviderCapabilityRegistry.ProviderContractValidation rest = registry.validate(
+                "providers",
+                "payment_api",
+                Map.of(
+                        "provider_type", "rest",
+                        "endpoint_ref", "https://payment.example.test",
+                        "timeout_seconds", 5,
+                        "outputs", Map.of("actual_output_ref", "actual/rest.json"),
+                        "actions", Map.of("submit", Map.of("method", "POST", "path", "/payments"))),
+                "ci_ephemeral");
+        ProviderCapabilityRegistry.ProviderContractValidation messagingByName = registry.validate(
+                "providers",
+                "payment_message_channel",
+                Map.of(
+                        "provider_type", "mock",
+                        "topic_ref", "mock://payment.events",
+                        "timeout_seconds", 5,
+                        "outputs", Map.of("actual_output_ref", "actual/message.json")),
+                "local_fixture");
+        ProviderCapabilityRegistry.ProviderContractValidation jdbcFixture = registry.validate(
+                "fixtures",
+                "order_seed",
+                Map.of(
+                        "provider_type", "jdbc",
+                        "connection_ref", "db://orders",
+                        "cleanup_strategy", "delete_by_run_id",
+                        "isolation_key", "run_id"),
+                "ci_ephemeral");
+        ProviderCapabilityRegistry.ProviderContractValidation readinessByName = registry.validate(
+                "providers",
+                "payment_readiness",
+                Map.of(
+                        "provider_type", "mock",
+                        "readiness_probe", "http_get",
+                        "deployment_ref", "payment-api",
+                        "deployed_version_ref", "build-43",
+                        "timeout_seconds", 5,
+                        "outputs", Map.of("actual_output_ref", "actual/readiness.txt")),
+                "ci_ephemeral");
+        ProviderCapabilityRegistry.ProviderContractValidation externalRunnerByType = registry.validate(
+                "providers",
+                "payment_bridge",
+                Map.of(
+                        "provider_type", "command_runner",
+                        "approval_ref", "docs/adr/approved-runner.md",
+                        "approved_by", "test-architecture",
+                        "reason", "legacy bridge requires approved external runner",
+                        "command", "./run-bridge.sh",
+                        "timeout_seconds", 30,
+                        "inputs", Map.of("payload", "fixtures/request.json"),
+                        "outputs", Map.of("actual_output_ref", "actual/runner-output.json"),
+                        "evidence_map", Map.of("runner_log", "logs/external-runner.log")),
+                "ci_ephemeral");
+        ProviderCapabilityRegistry.ProviderContractValidation fileByType = registry.validate(
+                "providers",
+                "static_fixture",
+                Map.of("provider_type", "file_fixture"),
+                "local_fixture");
+        ProviderCapabilityRegistry.ProviderContractValidation defaultFromSection = registry.validate(
+                "bindings",
+                "custom_value",
+                Map.of(
+                        "provider_type", "custom",
+                        "bind_as", "fixture.custom"),
+                "local_fixture");
+
+        assertThat(rest.providerFamily()).isEqualTo("request_response");
+        assertThat(rest.ready()).isTrue();
+        assertThat(messagingByName.providerFamily()).isEqualTo("messaging");
+        assertThat(messagingByName.ready()).isTrue();
+        assertThat(jdbcFixture.providerFamily()).isEqualTo("db_fixture");
+        assertThat(jdbcFixture.ready()).isTrue();
+        assertThat(readinessByName.providerFamily()).isEqualTo("deployment_readiness");
+        assertThat(readinessByName.ready()).isTrue();
+        assertThat(externalRunnerByType.providerFamily()).isEqualTo("external_runner");
+        assertThat(externalRunnerByType.ready()).isTrue();
+        assertThat(fileByType.providerFamily()).isEqualTo("file_batch");
+        assertThat(fileByType.ready()).isTrue();
+        assertThat(defaultFromSection.providerFamily()).isEqualTo("binding");
+        assertUnsupported(defaultFromSection);
+    }
+
+    @Test
     void acceptsGrpcServiceRefAndSkipsMalformedActionEntries() {
         ProviderCapabilityRegistry.ProviderContractValidation validation = registry.validate(
                 "providers",

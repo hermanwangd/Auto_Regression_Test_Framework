@@ -22,7 +22,7 @@ This project uses Maven Wrapper with Spring Boot 3.x and Java 17+.
 - `./mvnw package`: compile, test, and package the Spring Boot jar without the Failsafe integration-test phase.
 - `./mvnw spring-boot:run`: start the application locally.
 - `./mvnw test -Dtest=RegressionCommandTest`: run a focused CLI behavior test.
-- `java -jar target/spec-driven-auto-regression-0.1.0-SNAPSHOT.jar check-readiness --root .`: run the packaged CLI.
+- `java -jar target/spec-driven-auto-regression-0.2.0.jar check-readiness --root .`: run the packaged CLI.
 
 Prefer deterministic scripts that do not require hidden local state.
 

@@ -69,18 +69,23 @@ class GoldenE2eCommandTest {
         assertThat(resultJson).isRegularFile();
         assertThat(evidenceDir).isDirectory();
         assertEvidenceFilesExist(evidenceDir);
+        assertThat(Files.readString(evidenceDir.resolve("evidence_index.yaml")))
+                .contains("provider_id: sample-fake-runtime");
 
         String resultText = Files.readString(resultJson);
         assertThat(resultText)
-                .contains("\"framework_version\": \"v0.2\"")
+                .contains("\"framework_version\": \"0.2.0\"")
                 .contains("\"suite_id\": \"GOLDEN-E2E-v0.2\"")
                 .contains("\"batch_id\": \"BATCH-GOLDEN-E2E-001\"")
                 .contains("\"run_id\": \"RUN-GOLDEN-E2E-001\"")
                 .contains("\"status\": \"passed\"")
                 .contains("\"evidence_classification\": \"framework_verification_only\"")
                 .contains("\"step_results\"")
+                .contains("\"provider_summary\"")
                 .contains("\"provider_results\"")
                 .contains("\"verify_results\"")
+                .contains("\"evidence_index_ref\": \"evidence_index.yaml\"")
+                .contains("\"provider_evidence_refs\"")
                 .contains("\"evidence_refs\"")
                 .contains("\"failure\"");
 
@@ -93,6 +98,37 @@ class GoldenE2eCommandTest {
                 .contains("run_id: RUN-GOLDEN-E2E-001")
                 .contains("test_case_id: GOLDEN-E2E-TC-001")
                 .contains("status: passed");
+    }
+
+    @Test
+    void goldenSuiteRunsAllTestsWithSharedProfile() throws Exception {
+        Path suite = mutableGolden();
+        Path secondTestCase = suite.getParent().resolve("second_test_case.yaml");
+        Files.copy(suite.getParent().resolve("test_case.yaml"), secondTestCase);
+        Files.writeString(secondTestCase, Files.readString(secondTestCase)
+                .replace("GOLDEN-E2E-TC-001", "GOLDEN-E2E-TC-002"));
+        Files.writeString(suite, Files.readString(suite)
+                .replace("  - test_case.yaml", "  - test_case.yaml\n  - second_test_case.yaml"));
+
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_golden");
+
+        assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+        assertThat(run.stdout())
+                .contains("test_count: 2")
+                .contains("profile: local_golden");
+        Path resultJson = extractPath(run.stdout(), "result_json");
+        String resultText = Files.readString(resultJson);
+        assertThat(resultText)
+                .contains("\"test_case_id\": \"GOLDEN-E2E-v0.2-MULTI\"")
+                .contains("\"test_count\": 2")
+                .contains("\"test_case_id\": \"GOLDEN-E2E-TC-001\"")
+                .contains("\"test_case_id\": \"GOLDEN-E2E-TC-002\"");
+        Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
+        assertThat(evidenceDir.resolve("tests/GOLDEN-E2E-TC-001/assertions/status_is_ok.yaml")).isRegularFile();
+        assertThat(evidenceDir.resolve("tests/GOLDEN-E2E-TC-002/assertions/status_is_ok.yaml")).isRegularFile();
+        assertThat(Files.readString(evidenceDir.resolve("evidence_index.yaml")))
+                .contains("test_case_id: GOLDEN-E2E-TC-001")
+                .contains("test_case_id: GOLDEN-E2E-TC-002");
     }
 
     @Test

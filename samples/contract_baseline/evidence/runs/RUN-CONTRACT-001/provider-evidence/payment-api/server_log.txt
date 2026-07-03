@@ -1,0 +1,6 @@
+provider_type=wiremock_http_mock
+provider_id=wiremock-payment-api
+run_id=RUN-CONTRACT-001
+status=passed
+masking_applied=true
+message=WireMock request journal matched the expected payment request.

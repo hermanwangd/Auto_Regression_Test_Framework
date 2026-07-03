@@ -36,7 +36,7 @@ class ContractBaselineCommandTest {
                 "samples/contract_baseline/suite_manifest.yaml",
                 "samples/contract_baseline/test_case.yaml",
                 "docs/02-architecture/contracts/provider-contracts/wiremock_http_mock.yaml",
-                "docs/02-architecture/contracts/provider-contracts/jdbc_database.yaml",
+                "docs/02-architecture/contracts/provider-contracts/jdbc.yaml",
                 "docs/02-architecture/contracts/provider-contracts/nats.yaml",
                 "samples/contract_baseline/provider_instances/wiremock_payment_api.yaml",
                 "samples/contract_baseline/provider_instances/oracle_database.yaml",
@@ -67,6 +67,17 @@ class ContractBaselineCommandTest {
                 .contains("wiremock-payment-api")
                 .contains("oracle-database")
                 .contains("nats-event-bus");
+    }
+
+    @Test
+    void validateCommandsFailClearlyWhenRequiredPathArgumentsAreMissing() {
+        CommandResult validate = execute("validate");
+        assertThat(validate.exit()).isEqualTo(2);
+        assertThat(validate.stderr()).contains("Missing required option: --suite");
+
+        CommandResult validateEvidence = execute("validate-evidence");
+        assertThat(validateEvidence.exit()).isEqualTo(2);
+        assertThat(validateEvidence.stderr()).contains("Missing required option: --result");
     }
 
     @Test
@@ -226,7 +237,7 @@ class ContractBaselineCommandTest {
                 .contains("provider_id: wiremock-payment-api")
                 .contains("provider_type: wiremock_http_mock")
                 .contains("provider_id: oracle-database")
-                .contains("provider_type: jdbc_database")
+                .contains("provider_type: jdbc")
                 .contains("provider_id: nats-event-bus")
                 .contains("provider_type: nats");
     }
@@ -237,7 +248,7 @@ class ContractBaselineCommandTest {
 
         assertThat(result.exit()).as(result.stderr()).isZero();
         assertThat(result.stdout())
-                .contains("report_status: passed")
+                .contains("report_status: review_ready")
                 .contains("test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001")
                 .contains("profile: ci")
                 .contains("provider_results_count: 3")
@@ -338,7 +349,7 @@ class ContractBaselineCommandTest {
         Path suite = mutableBaseline();
         Path binding = suite.getParent().resolve("env_profiles/ci.yaml");
         Files.writeString(binding, Files.readString(binding)
-                .replace("secret_ref: generated://oracle-ephemeral.password", "value: raw-password"));
+                .replace("value: oracle", "value: jdbc:h2:mem:leaked_dialect;DB_CLOSE_DELAY=-1"));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
@@ -355,10 +366,10 @@ class ContractBaselineCommandTest {
         Path rawConnectionBinding = rawConnectionSuite.getParent().resolve("env_profiles/ci.yaml");
         Files.writeString(rawConnectionBinding, Files.readString(rawConnectionBinding)
                 .replace("""
-                              jdbc_url:
-                                generated_ref: generated://oracle-ephemeral.jdbc_url
+                              connection.secret_ref:
+                                secret_ref: generated://oracle-ephemeral.connection
                         """, """
-                              jdbc_url:
+                              connection.secret_ref:
                                 value: jdbc:h2:mem:leaked_db;DB_CLOSE_DELAY=-1
                         """));
 
@@ -366,9 +377,11 @@ class ContractBaselineCommandTest {
         Path sensitiveUsernameBinding = sensitiveUsernameSuite.getParent().resolve("env_profiles/ci.yaml");
         Files.writeString(sensitiveUsernameBinding, Files.readString(sensitiveUsernameBinding)
                 .replace("""
-                              username:
-                                generated_ref: generated://oracle-ephemeral.username
+                              dialect:
+                                value: oracle
                         """, """
+                              dialect:
+                                value: oracle
                               username:
                                 sensitive: true
                                 value: dbadmin
@@ -485,7 +498,7 @@ class ContractBaselineCommandTest {
         Path suite = mutableBaseline();
         Path providerInstance = suite.getParent().resolve("provider_instances/oracle_database.yaml");
         Files.writeString(providerInstance, Files.readString(providerInstance)
-                .replace("provider_type: jdbc_database", "provider_type: unknown_database"));
+                .replace("provider_type: jdbc", "provider_type: unknown_database"));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
@@ -606,6 +619,223 @@ class ContractBaselineCommandTest {
                 .contains("owner_action:");
     }
 
+    @Test
+    void reportRejectsProviderResultWithoutStandardSuiteSummary() throws Exception {
+        Path resultJson = tempDir.resolve("provider-result-without-suite-summary.json");
+        Files.writeString(resultJson, withoutEvidenceRefs(removeStandardSuiteSummary(Files.readString(BASELINE_RESULT))));
+
+        CommandResult result = execute("report", "--result", resultJson.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("report_status: invalid")
+                .contains("reason: missing_required_field")
+                .contains("field_path: test_count")
+                .contains("owner_action:");
+    }
+
+    @Test
+    void reportRejectsStandardSuiteResultWithoutBatchAndRunIds() throws Exception {
+        Path resultJson = tempDir.resolve("standard-suite-missing-run-context.json");
+        Files.writeString(resultJson, withoutEvidenceRefs(removeRunContext(Files.readString(BASELINE_RESULT))));
+
+        CommandResult result = execute("report", "--result", resultJson.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("report_status: invalid")
+                .contains("reason: missing_required_field")
+                .contains("field_path: batch_id")
+                .contains("field_path: run_id")
+                .contains("owner_action:");
+    }
+
+    @Test
+    void reportRejectsMismatchedMultiTestResultCount() throws Exception {
+        Path resultJson = tempDir.resolve("mismatched-test-count.json");
+        Files.writeString(resultJson, addMultiTestResultFields(
+                Files.readString(BASELINE_RESULT),
+                2,
+                """
+                    {
+                      "test_case_id": "RP-FWK-CONTRACT-SAMPLE-TC-001",
+                      "status": "passed",
+                      "profile": "ci"
+                    }
+                """));
+
+        CommandResult result = execute("report", "--result", resultJson.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("report_status: invalid")
+                .contains("reason: invalid_test_count")
+                .contains("field_path: test_count")
+                .contains("owner_action:");
+    }
+
+    @Test
+    void reportRejectsNonIntegerMultiTestResultCount() throws Exception {
+        Path resultJson = tempDir.resolve("non-integer-test-count.json");
+        Files.writeString(resultJson, addMultiTestResultFields(
+                Files.readString(BASELINE_RESULT),
+                "\"1\"",
+                """
+                    {
+                      "test_case_id": "RP-FWK-CONTRACT-SAMPLE-TC-001",
+                      "status": "passed",
+                      "profile": "ci"
+                    }
+                """));
+
+        CommandResult result = execute("report", "--result", resultJson.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("report_status: invalid")
+                .contains("reason: invalid_test_count")
+                .contains("field_path: test_count")
+                .contains("owner_action:");
+    }
+
+    @Test
+    void reportRejectsTestResultMissingRequiredFields() throws Exception {
+        Path resultJson = tempDir.resolve("invalid-test-results.json");
+        Files.writeString(resultJson, addMultiTestResultFields(
+                Files.readString(BASELINE_RESULT),
+                1,
+                """
+                    {
+                      "test_case_id": "RP-FWK-CONTRACT-SAMPLE-TC-001",
+                      "profile": "ci"
+                    }
+                """));
+
+        CommandResult result = execute("report", "--result", resultJson.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("report_status: invalid")
+                .contains("reason: missing_required_field")
+                .contains("field_path: test_results[0].status")
+                .contains("owner_action:");
+    }
+
+    @Test
+    void reportRejectsNonObjectTestResultEntries() throws Exception {
+        Path resultJson = tempDir.resolve("non-object-test-results.json");
+        Files.writeString(resultJson, addMultiTestResultFields(
+                Files.readString(BASELINE_RESULT),
+                1,
+                """
+                    "not-a-test-result-object"
+                """));
+
+        CommandResult result = execute("report", "--result", resultJson.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("report_status: invalid")
+                .contains("reason: invalid_test_results")
+                .contains("field_path: test_results[0]")
+                .contains("owner_action:")
+                .doesNotContain("field_path: test_results[0].status")
+                .doesNotContain("field_path: test_results[0].profile");
+    }
+
+    @Test
+    void reportRejectsMultiProviderResultWithTopLevelProviderIdentity() throws Exception {
+        Path resultJson = tempDir.resolve("multi-provider-root-provider.json");
+        String multiProviderResult = addMultiTestResultFields(
+                Files.readString(BASELINE_RESULT),
+                2,
+                """
+                    {
+                      "test_case_id": "KAFKA-CAPABILITY-TC-001",
+                      "status": "passed",
+                      "profile": "local_messaging",
+                      "provider_id": "order-events",
+                      "provider_type": "kafka"
+                    },
+                    {
+                      "test_case_id": "IBM-MQ-CAPABILITY-TC-001",
+                      "status": "passed",
+                      "profile": "local_messaging",
+                      "provider_id": "payment-mq",
+                      "provider_type": "ibm_mq"
+                    }
+                """).replaceFirst("  \\\"status\\\": \\\"passed\\\",\\n", "  \"provider_type\": \"kafka\",\n  \"status\": \"passed\",\n");
+        Files.writeString(resultJson, multiProviderResult);
+
+        CommandResult result = execute("report", "--result", resultJson.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("report_status: invalid")
+                .contains("reason: invalid_provider_summary")
+                .contains("field_path: provider_type")
+                .contains("owner_action:");
+    }
+
+    @Test
+    void reportRejectsMultiProviderResultWithoutProviderSummary() throws Exception {
+        Path resultJson = tempDir.resolve("multi-provider-missing-summary.json");
+        String multiProviderResult = addMultiTestResultFields(
+                Files.readString(BASELINE_RESULT),
+                2,
+                """
+                    {
+                      "test_case_id": "KAFKA-CAPABILITY-TC-001",
+                      "status": "passed",
+                      "profile": "local_messaging",
+                      "provider_id": "order-events",
+                      "provider_type": "kafka"
+                    },
+                    {
+                      "test_case_id": "IBM-MQ-CAPABILITY-TC-001",
+                      "status": "passed",
+                      "profile": "local_messaging",
+                      "provider_id": "payment-mq",
+                      "provider_type": "ibm_mq"
+                    }
+                """);
+        Files.writeString(resultJson, multiProviderResult);
+
+        CommandResult result = execute("report", "--result", resultJson.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("report_status: invalid")
+                .contains("reason: missing_required_field")
+                .contains("field_path: provider_summary")
+                .contains("owner_action:");
+    }
+
+    @Test
+    void reportRejectsMultiProviderResultWithoutProviderSummaryWhenInferredFromProviderResults() throws Exception {
+        Path resultJson = tempDir.resolve("multi-provider-provider-results-missing-summary.json");
+        String multiProviderResult = addMultiTestResultFields(
+                Files.readString(BASELINE_RESULT),
+                1,
+                """
+                    {
+                      "test_case_id": "RP-FWK-CONTRACT-SAMPLE-TC-001",
+                      "status": "passed",
+                      "profile": "ci"
+                    }
+                """);
+        Files.writeString(resultJson, multiProviderResult);
+
+        CommandResult result = execute("report", "--result", resultJson.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("report_status: invalid")
+                .contains("reason: missing_required_field")
+                .contains("field_path: provider_summary")
+                .contains("owner_action:");
+    }
+
     private Path mutableBaseline() throws IOException {
         return mutableBaseline("contract_baseline");
     }
@@ -644,14 +874,10 @@ class ContractBaselineCommandTest {
                   oracle-database:
                     runtime_mode: ephemeral
                     binding_keys:
-                      jdbc_url:
-                        generated_ref: generated://oracle-ephemeral.jdbc_url
-                      username:
-                        generated_ref: generated://oracle-ephemeral.username
+                      connection.secret_ref:
+                        secret_ref: generated://oracle-ephemeral.connection
                       dialect:
                         value: oracle
-                      password:
-                        secret_ref: generated://oracle-ephemeral.password
                   nats-event-bus:
                     runtime_mode: ephemeral
                     binding_keys:
@@ -690,14 +916,10 @@ class ContractBaselineCommandTest {
                   oracle-database:
                     runtime_mode: native
                     binding_keys:
-                      jdbc_url:
-                        secret_ref: vault://sit/oracle/jdbc-url
-                      username:
-                        secret_ref: vault://sit/oracle/username
+                      connection.secret_ref:
+                        secret_ref: vault://sit/oracle/connection
                       dialect:
                         value: oracle
-                      password:
-                        secret_ref: vault://sit/oracle/password
                   nats-event-bus:
                     runtime_mode: native
                     binding_keys:
@@ -736,6 +958,73 @@ class ContractBaselineCommandTest {
 
     private String withoutScenarioBlock(String yaml) {
         return yaml.replaceFirst("(?m)^scenario:\\n(?:  [^\\n]*\\n)+", "");
+    }
+
+    private String addMultiTestResultFields(String resultJson, int testCount, String testResultsJson) {
+        return addMultiTestResultFields(resultJson, String.valueOf(testCount), testResultsJson);
+    }
+
+    private String addMultiTestResultFields(String resultJson, String testCountJson, String testResultsJson) {
+        String stripped = withoutEvidenceRefs(removeStandardSuiteSummary(resultJson));
+        return stripped.replace(
+                "  \"environment\": \"ci-contract-sample\",\n",
+                "  \"environment\": \"ci-contract-sample\",\n"
+                        + "  \"test_count\": " + testCountJson + ",\n"
+                        + "  \"test_results\": [\n"
+                        + testResultsJson.indent(4)
+                        + "  ],\n");
+    }
+
+    private String addStandardSuiteResultFields(String resultJson) {
+        return resultJson.replace(
+                "  \"provider_results\": [\n",
+                """
+                  "test_count": 1,
+                  "test_results": [
+                    {
+                      "test_case_id": "RP-FWK-CONTRACT-SAMPLE-TC-001",
+                      "status": "passed",
+                      "profile": "ci",
+                      "provider_ids": ["wiremock-payment-api", "oracle-database", "nats-event-bus"],
+                      "provider_types": ["wiremock_http_mock", "jdbc", "nats"]
+                    }
+                  ],
+                  "provider_summary": [
+                    {
+                      "provider_id": "wiremock-payment-api",
+                      "provider_type": "wiremock_http_mock",
+                      "runtime_mode": "mock"
+                    },
+                    {
+                      "provider_id": "oracle-database",
+                      "provider_type": "jdbc",
+                      "runtime_mode": "ephemeral"
+                    },
+                    {
+                      "provider_id": "nats-event-bus",
+                      "provider_type": "nats",
+                      "runtime_mode": "ephemeral"
+                    }
+                  ],
+                  "provider_results": [
+                """);
+    }
+
+    private String removeStandardSuiteSummary(String resultJson) {
+        return resultJson
+                .replaceFirst("(?m)^  \\\"test_count\\\": 1,\\n", "")
+                .replaceFirst("(?s)  \\\"test_results\\\": \\[.*?\\n  \\],\\n", "")
+                .replaceFirst("(?s)  \\\"provider_summary\\\": \\[.*?\\n  \\],\\n", "");
+    }
+
+    private String removeRunContext(String resultJson) {
+        return resultJson
+                .replaceFirst("(?m)^  \\\"batch_id\\\": \\\"BATCH-CONTRACT-001\\\",\\n", "")
+                .replaceFirst("(?m)^  \\\"run_id\\\": \\\"RUN-CONTRACT-001\\\",\\n", "");
+    }
+
+    private String withoutEvidenceRefs(String resultJson) {
+        return resultJson.replaceFirst("(?s)  \\\"evidence_refs\\\": \\[.*?\\n  \\],\\n", "  \"evidence_refs\": [],\n");
     }
 
     private CommandResult execute(String... args) {

@@ -1,6 +1,7 @@
 package com.specdriven.regression.evidence;
 
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
+import com.specdriven.regression.contract.ResultContractValidator;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,6 +29,8 @@ public class EvidenceHardeningService {
             "jdbc_query",
             "jdbc_cleanup",
             "nats_event",
+            "kafka_event",
+            "ibm_mq_event",
             "http_request_response",
             "grpc_request_response",
             "assertion_diff",
@@ -41,6 +44,8 @@ public class EvidenceHardeningService {
             "jdbc_query",
             "jdbc_cleanup",
             "nats_event",
+            "kafka_event",
+            "ibm_mq_event",
             "http_request_response",
             "grpc_request_response");
     private static final List<String> ENTRY_REQUIRED_FIELDS = List.of(
@@ -95,6 +100,7 @@ public class EvidenceHardeningService {
             findings.add(finding(resultJson, "result", "raw_secret",
                     "Mask passwords, tokens, JDBC URLs, credentials, Authorization headers, and private keys in result JSON."));
         }
+        findings.addAll(ResultContractValidator.validate(resultJson, result));
 
         Path indexPath = evidenceIndexPath(resultJson, result);
         if (indexPath == null || !Files.isRegularFile(indexPath)) {
@@ -269,6 +275,8 @@ public class EvidenceHardeningService {
                     requiredTypes.add("jdbc_cleanup");
                 }
                 case "nats" -> requiredTypes.add("nats_event");
+                case "kafka" -> requiredTypes.add("kafka_event");
+                case "ibm_mq" -> requiredTypes.add("ibm_mq_event");
                 case "rest_client" -> requiredTypes.add("http_request_response");
                 case "grpc_mock" -> {
                     requiredTypes.add("wiremock_request_journal");
@@ -448,14 +456,24 @@ public class EvidenceHardeningService {
                 .count();
         boolean maskingPassed = findings.stream().noneMatch(finding -> Set.of("raw_secret", "masking_not_applied")
                 .contains(finding.reason()));
-        int passCount = "passed".equals(stringValue(result.get("status"))) ? 1 : 0;
-        int failCount = result.isEmpty() || "passed".equals(stringValue(result.get("status"))) ? 0 : 1;
+        List<Map<String, Object>> testResults = mapList(result.get("test_results"));
+        int testCount = testResults.isEmpty()
+                ? (stringValue(result.get("test_case_id")).isBlank() ? 0 : 1)
+                : testResults.size();
+        int passCount = testResults.isEmpty()
+                ? ("passed".equals(stringValue(result.get("status"))) ? 1 : 0)
+                : (int) testResults.stream()
+                        .filter(testResult -> "passed".equals(stringValue(testResult.get("status"))))
+                        .count();
+        int failCount = testResults.isEmpty()
+                ? (result.isEmpty() || "passed".equals(stringValue(result.get("status"))) ? 0 : 1)
+                : testCount - passCount;
         return new EvidenceValidationResult(
                 findings.isEmpty(),
                 stringValue(result.get("suite_id")),
                 stringValue(result.get("batch_id")),
                 stringValue(result.get("run_id")),
-                stringValue(result.get("test_case_id")).isBlank() ? 0 : 1,
+                testCount,
                 passCount,
                 failCount,
                 indexPath == null ? resultJson.getParent() : indexPath.getParent(),

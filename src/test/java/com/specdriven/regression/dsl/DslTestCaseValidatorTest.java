@@ -994,6 +994,261 @@ class DslTestCaseValidatorTest {
     }
 
     @Test
+    void blocksNonMapDataSectionBeforeRuntimeResolution() {
+        String yaml = validProviderInputsDsl().replace("""
+                data:
+                  input:
+                    ref: fixtures/input.json
+                  setup_fixture:
+                    ref: fixtures/setup_fixture.yaml
+                  cleanup_fixture:
+                    ref: fixtures/cleanup_fixture.yaml
+                  expected_output:
+                    ref: expected_results/expected_output.json
+                """, """
+                data:
+                  - fixtures/input.json
+                """);
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains("data");
+        assertThat(report.gaps()).extracting(DslValidationGap::ownerAction)
+                .contains("Declare data as a map of reusable data names to ref or value sources.");
+    }
+
+    @Test
+    void blocksOperationInputsThatAreNotProviderInputMaps() {
+        String yaml = validProviderInputsDsl()
+                .replace("""
+                      inputs:
+                        fixture.setup_ref:
+                          ref: ${data.setup_fixture}
+                        fixture.input_ref:
+                          ref: ${data.input}
+                """, """
+                      inputs:
+                        - fixture.setup_ref
+                """)
+                .replace("""
+                        sample.input_ref:
+                          ref: ${data.input}
+                """, """
+                        sample.input_ref: ${data.input}
+                """);
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains(
+                        "setup.operations[0].inputs",
+                        "execute.operations[0].inputs.sample.input_ref");
+        assertThat(report.gaps()).extracting(DslValidationGap::ownerAction)
+                .contains(
+                        "Declare operation inputs as a map keyed by Provider Contract input name.",
+                        "Declare a data/input source as a map with exactly one of `ref` or `value`.");
+    }
+
+    @Test
+    void blocksInputSourceWithBothRefAndValue() {
+        String yaml = validProviderInputsDsl().replace("""
+                        sample.input_ref:
+                          ref: ${data.input}
+                """, """
+                        sample.input_ref:
+                          ref: ${data.input}
+                          value: inline
+                """);
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains("execute.operations[0].inputs.sample.input_ref");
+        assertThat(report.gaps()).extracting(DslValidationGap::ownerAction)
+                .contains("Declare exactly one source: `ref` for checked-in artifact references or `value` for safe literals.");
+    }
+
+    @Test
+    void blocksLegacyParametersOnModernOperations() {
+        String yaml = validProviderInputsDsl().replace("""
+                    - id: produce_sample_output
+                      target: sample_runtime
+                      operation: execute_sample
+                      inputs:
+                """, """
+                    - id: produce_sample_output
+                      target: sample_runtime
+                      operation: execute_sample
+                      parameters:
+                        - name: sample.input_ref
+                          ref: ${data.input}
+                      inputs:
+                """);
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains("execute.operations[0].parameters");
+        assertThat(report.gaps()).extracting(DslValidationGap::ownerAction)
+                .contains("Use execute.operations[].inputs instead of legacy parameters/bind_as.");
+    }
+
+    @Test
+    void blocksStateMutatingFixtureLifecycleAliasesWithoutCleanup() {
+        String yaml = validExecutionFocusedDsl().replace("  fixtures: {}", """
+                  fixtures:
+                    orders_seed:
+                      type: file_input
+                      lifecycle: state_mutating
+                      ref: fixtures/orders.yaml
+                    nats_seed:
+                      type: file_input
+                      lifecycle: mutates_state
+                      ref: fixtures/nats.yaml
+                    queue_seed:
+                      type: file_input
+                      lifecycle: mutating
+                      ref: fixtures/queue.yaml
+                """);
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains(
+                        "setup.fixtures.orders_seed.cleanup_ref",
+                        "setup.fixtures.nats_seed.cleanup_ref",
+                        "setup.fixtures.queue_seed.cleanup_ref");
+    }
+
+    @Test
+    void blocksStateAndEventVerificationTargetAndPayloadShapes() {
+        String yaml = validExecutionFocusedDsl()
+                .replace("""
+                  - id: verify_output
+                    type: file_diff
+                    actual: ${execute.run_pipeline.outputs.actual_output}
+                    expected: ${expected_results.primary.ref}
+                """, """
+                  - id: verify_database
+                    type: db_record_exists
+                    target: missing_target
+                    query: queries/order_exists.sql
+                    expected:
+                      min_rows: 1
+                  - id: verify_event
+                    type: event_published
+                    target: missing_target
+                    event: orders.created
+                    expected: true
+                """)
+                .replace("${verify.verify_output.result}", "${verify.verify_database.result}");
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains(
+                        "verify[0].target",
+                        "verify[0].query.ref",
+                        "verify[1].target",
+                        "verify[1].event");
+    }
+
+    @Test
+    void acceptsSelectorsAndNumericToleranceDeclaredWithAlternateFields() {
+        String yaml = validProviderInputsDsl()
+                .replace("""
+                    - id: output_matches_expected_json
+                      type: json_match
+                      actual:
+                        ref: ${execute.produce_sample_output.outputs.actual_json}
+                      expected_ref: expected_results/expected_output.json
+                """, """
+                    - id: verify_status
+                      type: json_path_equals
+                      actual: ${execute.produce_sample_output.outputs.actual_json}
+                      json_path: $.status
+                      expected: NORMALIZED
+                    - id: verify_score
+                      type: numeric_tolerance
+                      actual: ${execute.produce_sample_output.outputs.actual_json}
+                      path: $.score
+                      expected: 0.5
+                      options:
+                        epsilon: 0.01
+                """)
+                .replace("${verify.output_matches_expected_json.result}", "${verify.verify_status.result}");
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isTrue();
+    }
+
+    @Test
+    void blocksEmptyEvidenceReferences() {
+        String yaml = validProviderInputsDsl().replace("""
+                evidence:
+                  required:
+                    - ${execute.produce_sample_output.outputs.actual_json}
+                    - ${verify.output_matches_expected_json.result}
+                """, """
+                evidence:
+                  required: []
+                """);
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains("evidence.required");
+    }
+
+    @Test
+    void blocksLegacyExpectedResultsWhenRequiredFieldsAreMissing() {
+        String yaml = validExecutionFocusedDsl()
+                .replace("dsl_version: v0.2", "dsl_version: v1")
+                .replace("""
+                labels:
+                  package: RP-001
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#RP-001-AC-001
+                """, """
+                labels:
+                  package: RP-001
+                source_refs:
+                  acceptance_criteria: acceptance_criteria.md#RP-001-AC-001
+                traceability:
+                  package_id: RP-001
+                  acceptance_criteria_id: RP-001-AC-001
+                  source: acceptance_criteria.md#RP-001-AC-001
+                """)
+                .replace("""
+                expected_results:
+                  primary:
+                    type: expected_result_artifact
+                    ref: expected-results/approved/RP-001-ER-001.yaml
+                """, """
+                expected_results:
+                  primary:
+                    type: ""
+                  metrics:
+                    type: query_result
+                """);
+
+        DslValidationReport report = new DslTestCaseValidator().validate(yaml);
+
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).extracting(DslValidationGap::fieldPath)
+                .contains("expected_results.primary.type", "expected_results.primary.ref");
+    }
+
+    @Test
     void blocksNonMapYamlDocuments() {
         DslValidationReport report = new DslTestCaseValidator().validate("""
                 - not

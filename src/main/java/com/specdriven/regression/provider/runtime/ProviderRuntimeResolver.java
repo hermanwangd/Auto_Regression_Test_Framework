@@ -17,6 +17,16 @@ public class ProviderRuntimeResolver {
         if (!runtime.valid()) {
             return ProviderRuntimeResolution.failed(runtime.failure());
         }
+        List<String> executableRuntimeModes = stringList(context.providerContract().get("executable_runtime_modes"));
+        if (!executableRuntimeModes.isEmpty() && !executableRuntimeModes.contains(context.runtimeMode())) {
+            return ProviderRuntimeResolution.failed(ProviderFailure.of(
+                    "UNSUPPORTED_RUNTIME_MODE",
+                    "TARGET_RESOLUTION_FAILED",
+                    "runtime_mode `" + context.runtimeMode() + "` is not executable for provider_type `"
+                            + context.providerType() + "` in this framework build.",
+                    "Use one of the executable_runtime_modes declared by the Provider Contract: "
+                            + executableRuntimeModes + "."));
+        }
         Map<String, Object> operation = operation(context.providerContract(), request.operation());
         if (operation.isEmpty()) {
             return ProviderRuntimeResolution.failed(ProviderFailure.of(

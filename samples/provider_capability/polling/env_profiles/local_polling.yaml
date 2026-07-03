@@ -5,7 +5,7 @@ dependency_policy:
   require_readiness_evidence: false
   allow_framework_managed_dependencies: true
 dependency_substitution_policy:
-  allowed_runtime_modes: [local]
+  allowed_runtime_modes: [stub]
   mock_evidence_release_claim: prohibited
 dependency_provisioning_policy:
   allowed_provisioners: [none]
@@ -16,7 +16,7 @@ data_policy:
   secrets_must_use_refs: true
 providers:
   local-common-polling:
-    runtime_mode: local
+    runtime_mode: stub
     binding_keys:
       workspace_ref:
         value: samples/provider_capability/polling

@@ -1,6 +1,6 @@
 provider_contract_version: v0.2
 provider_type: nats
-runtime_modes: [local, native, mock, ephemeral]
+runtime_modes: [native, mock, ephemeral]
 binding_keys:
   connection:
     required: true

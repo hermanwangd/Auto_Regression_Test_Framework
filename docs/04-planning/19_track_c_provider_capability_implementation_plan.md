@@ -39,7 +39,7 @@ Track C may start only when `samples/provider_capability/` exists and parses.
 | WireMock + HTTP request | `wiremock_http_mock`, `rest_client`, `http_request`, `http_stub`, `http_mock_called`, `http_mock_request_body_match` | Framework starts local WireMock, injects checked-in stubs, passes generated `base_url` to `rest_client`, executes HTTP requests, and records request journal, server log, and `http_request_response` evidence. |
 | WireMock-backed SOAP mock | `soap_mock`, `load_soap_stub`, `soap_request_received`, XPath/XML match, SOAPAction match | PR-008A: Framework uses WireMock HTTP/XML behavior to expose generated `endpoint_url`, load SOAP stubs, verify SOAP requests, and record request journal, server log, HTTP response, and assertion evidence. |
 | WireMock-backed gRPC unary mock | `grpc_mock`, `load_grpc_stub`, `grpc_request_received`, descriptor/proto refs, request JSON match | PR-008B: Framework uses the WireMock gRPC extension to expose generated `target_uri`, load unary stubs, verify requests, and record request journal, server log, protobuf JSON diff, and assertion evidence. |
-| JDBC Oracle/DB2 | `jdbc_database`, `db_seed`, `db_cleanup`, `db_record_exists`, SQL params, dialect | Executes against configured JDBC binding or controlled fixture; validates Oracle/DB2 dialect contracts. |
+| JDBC Oracle/DB2 | `jdbc`, `db_seed`, `db_cleanup`, `db_record_exists`, SQL params, dialect | Executes against configured JDBC binding or controlled fixture; validates Oracle/DB2 dialect contracts. |
 | NATS | `nats`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match` | Uses framework local capability binding or controlled CI binding without SIT release evidence claims. |
 | JSON/Schema/File Diff | `artifact_compare`, `json_match`, `schema_match`, `file_diff` | Framework-owned compare target with ignore paths, normalization, ignore order, and diff evidence. |
 | Polling | `polling_observer`, `poll_until_condition`, timeout, poll interval, last observed evidence | Polls observation-style verify checks only; does not retry product execute actions. |
@@ -515,6 +515,8 @@ WireMock, JDBC, and NATS should follow only after the compare/evidence foundatio
 
 P1 backlog:
 
+- Kafka client provider contract/runtime seam with `kafka_publish`, `kafka_observe`, `kafka_payload_match`, mocked client tests, and optional profile-gated native broker execution.
+- IBM MQ client provider contract/runtime seam with `mq_put`, browse-first `mq_browse`, `mq_message_exists`, `mq_payload_match`, mocked client tests, and optional profile-gated native queue-manager execution.
 - NATS stream handling and consumer management.
 - Connection-error fail-fast policy.
 - CSV diff and YAML diff if not covered by the common diff engine.

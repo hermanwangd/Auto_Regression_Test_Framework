@@ -267,6 +267,132 @@ class ProviderContractResolverTest {
     }
 
     @Test
+    void infersProviderFamilyMetadataWhenContractKindIsNotDeclared() throws Exception {
+        Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
+        Files.writeString(mapping, heterogeneousMapping("""
+                  - ru_id: RU-payment-api
+                    repo: /repo/payment-api
+                    validation_boundary: request_response_api
+                    execution_mode: ci_ephemeral
+                    provider: request_response
+                    provider_contracts:
+                      providers:
+                        request_response:
+                          provider_type: rest
+                          endpoint_ref: env://PAYMENT_API
+                          timeout_seconds: 10
+                          outputs:
+                            actual_output_ref: actual/response.json
+                          actions:
+                            submit_payment:
+                              method: POST
+                              path: /payments
+                      bindings:
+                        api_payload:
+                          provider_type: request_body
+                          bind_as: request_body
+                      fixtures: {}
+                  - ru_id: RU-payment-events
+                    repo: /repo/payment-events
+                    validation_boundary: event_observation
+                    execution_mode: ci_ephemeral
+                    provider: message_bus
+                    provider_contracts:
+                      providers:
+                        message_bus:
+                          provider_type: kafka
+                          bootstrap_servers_ref: env://KAFKA_BOOTSTRAP
+                          topic_ref: kafka://payment.events
+                          timeout_seconds: 10
+                          outputs:
+                            actual_output_ref: actual/event.json
+                          actions:
+                            publish_payment_event:
+                              payload_binding: message_event
+                      bindings:
+                        message_event:
+                          provider_type: event_payload
+                          bind_as: event_payload
+                      fixtures:
+                        relational_db:
+                          provider_type: jdbc
+                          connection_ref: secret://ci/payment-db
+                          isolation_key: test_run_id
+                          cleanup_strategy: by_test_run_id
+                  - ru_id: RU-payment-runtime
+                    repo: /repo/payment-runtime
+                    validation_boundary: deployed_runtime
+                    execution_mode: ci_ephemeral
+                    provider: payment_readiness
+                    provider_contracts:
+                      providers:
+                        payment_readiness:
+                          provider_type: mock
+                          readiness_probe: http_get
+                          deployment_ref: payment-api
+                          deployed_version_ref: build-43
+                          timeout_seconds: 5
+                          outputs:
+                            actual_output_ref: actual/readiness.txt
+                        payment_runner:
+                          provider_type: command_runner
+                          approval_ref: docs/adr/approved-runner.md
+                          approved_by: test-architecture
+                          reason: legacy bridge requires approved external runner
+                          command: ./run-bridge.sh
+                          timeout_seconds: 30
+                          inputs:
+                            payload: fixtures/request.json
+                          outputs:
+                            actual_output_ref: actual/runner-output.json
+                          evidence_map:
+                            runner_log: logs/external-runner.log
+                        spring_boot_cli:
+                          provider_type: shell
+                          command: java -jar target/payment.jar
+                          timeout_seconds: 10
+                          outputs:
+                            actual_output_ref: actual/cli-output.txt
+                      bindings: {}
+                      fixtures: {}
+                """));
+
+        ProviderContractResolver resolver = new ProviderContractResolver();
+        ProviderContractResolutionReport request = resolver.resolve(
+                mapping,
+                "request_response",
+                List.of("api_payload"),
+                List.of());
+        ProviderContractResolutionReport messaging = resolver.resolve(
+                mapping,
+                "message_bus",
+                List.of("message_event"),
+                List.of("relational_db"));
+        ProviderContractResolutionReport readiness = resolver.resolve(mapping, "payment_readiness", List.of(), List.of());
+        ProviderContractResolutionReport runner = resolver.resolve(mapping, "payment_runner", List.of(), List.of());
+        ProviderContractResolutionReport cli = resolver.resolve(mapping, "spring_boot_cli", List.of(), List.of());
+
+        assertThat(request.ready()).isTrue();
+        assertThat(request.resolvedContracts()).extracting(ResolvedProviderContract::providerFamily)
+                .contains("request_response");
+        assertThat(messaging.ready()).isTrue();
+        assertThat(messaging.resolvedContracts()).extracting(ResolvedProviderContract::providerFamily)
+                .contains("messaging", "db_fixture");
+        assertThat(readiness.ready()).isTrue();
+        assertThat(readiness.resolvedContracts()).singleElement()
+                .extracting(ResolvedProviderContract::providerFamily)
+                .isEqualTo("deployment_readiness");
+        assertThat(runner.ready()).isTrue();
+        assertThat(runner.resolvedContracts()).singleElement()
+                .extracting(ResolvedProviderContract::providerFamily)
+                .isEqualTo("external_runner");
+        assertThat(cli.ready()).isTrue();
+        assertThat(cli.resolvedContracts()).singleElement()
+                .extracting(ResolvedProviderContract::providerFamily)
+                .isEqualTo("file_batch");
+    }
+
+    @Test
     void reportsAffectedRuAndProviderFamilyForMissingHeterogeneousContracts() throws Exception {
         Path mapping = tempDir.resolve("rp_ru_mapping.yaml");
         Files.writeString(mapping, heterogeneousMapping("""

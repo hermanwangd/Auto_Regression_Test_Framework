@@ -7,7 +7,7 @@ dependency_policy:
   require_readiness_evidence: false
   allow_framework_managed_dependencies: false
 dependency_substitution_policy:
-  allowed_runtime_modes: [local]
+  allowed_runtime_modes: [stub]
 dependency_provisioning_policy:
   allowed_provisioners: []
   dependencies: []

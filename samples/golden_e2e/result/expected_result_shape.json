@@ -1,15 +1,31 @@
 {
-  "framework_version": "v0.2",
+  "framework_version": "0.2.0",
   "dsl_version": "v0.2",
   "suite_id": "GOLDEN-E2E-v0.2",
   "batch_id": "BATCH-GOLDEN-E2E-001",
   "run_id": "RUN-GOLDEN-E2E-001",
   "test_case_id": "GOLDEN-E2E-TC-001",
+  "test_count": 1,
   "profile": "local_golden",
+  "environment": "local_golden",
+  "provider_summary": [
+    {
+      "provider_id": "sample-fake-runtime",
+      "provider_type": "sample_fake_provider",
+      "runtime_mode": "stub"
+    }
+  ],
+  "provider_type": "sample_fake_provider",
+  "provider_id": "sample-fake-runtime",
+  "runtime_mode": "stub",
   "status": "passed",
   "start_time": "2026-06-29T00:00:00Z",
   "end_time": "2026-06-29T00:00:01Z",
   "duration_ms": 1000,
+  "timestamps": {
+    "started_at": "2026-06-29T00:00:00Z",
+    "finished_at": "2026-06-29T00:00:01Z"
+  },
   "labels": {
     "evidence_classification": "framework_verification_only",
     "sample_id": "GOLDEN-E2E"
@@ -17,7 +33,56 @@
   "source_refs": {
     "framework_requirement": "docs/03-acceptance/04_acceptance_criteria.md#track-b-golden-e2e"
   },
+  "test_results": [
+    {
+      "test_case_id": "GOLDEN-E2E-TC-001",
+      "status": "passed",
+      "profile": "local_golden",
+      "provider_id": "sample-fake-runtime",
+      "provider_type": "sample_fake_provider"
+    }
+  ],
+  "provider_results": [
+    {
+      "provider_id": "sample-fake-runtime",
+      "provider_type": "sample_fake_provider",
+      "profile": "local_golden",
+      "runtime_mode": "stub",
+      "resolved_operation_result": {
+        "operation": "execute_sample",
+        "status": "passed",
+        "outputs": {
+          "actual_json": "actual/actual_output.json",
+          "actual_text": "actual/actual_output.txt",
+          "execution_log": "logs/execution.log"
+        }
+      },
+      "release_evidence_eligible": false
+    }
+  ],
   "step_results": [
+    {
+      "id": "prepare_sample_workspace",
+      "operation": "setup_fixture",
+      "status": "passed"
+    },
+    {
+      "id": "produce_sample_output",
+      "operation": "execute_sample",
+      "status": "passed",
+      "outputs": {
+        "actual_json": "actual/actual_output.json",
+        "actual_text": "actual/actual_output.txt",
+        "execution_log": "logs/execution.log"
+      }
+    },
+    {
+      "id": "cleanup_sample_workspace",
+      "operation": "cleanup_fixture",
+      "status": "passed"
+    }
+  ],
+  "steps": [
     {
       "id": "prepare_sample_workspace",
       "operation": "setup_fixture",
@@ -59,12 +124,21 @@
     "fixture/cleanup.yaml",
     "actual/actual_output.json",
     "actual/actual_output.txt",
+    "expected/expected_output.ref",
     "assertions/status_is_ok.yaml",
     "assertions/output_matches_expected_json.yaml",
     "diffs/output_matches_expected_json.diff",
     "batch/batch.yaml"
   ],
+  "evidence_index_ref": "evidence_index.yaml",
+  "provider_evidence_refs": [
+    "fixture/setup.yaml",
+    "fixture/cleanup.yaml",
+    "actual/actual_output.json",
+    "actual/actual_output.txt"
+  ],
   "failure": {
+    "code": null,
     "classification": null,
     "reason": null,
     "owner_action": null

@@ -190,9 +190,11 @@ These statuses describe the current contract baseline and the implemented framew
 | `wiremock_http_mock` | Track C P0 | Track C implements WireMock server lifecycle for framework provider capability evidence and can feed generated `base_url` to `rest_client` samples | mappings ref, mock runtime mode, stub loading, request journal outputs, server log outputs | Contract validation, dry-run planning, local provider capability execution, request journal/server log evidence, and paired WireMock + HTTP request sample coverage. |
 | `soap_mock` | PR-008A implemented for local/CI provider capability evidence | WireMock-backed SOAP mock over HTTP/XML. It starts once per suite/batch when framework-owned, loads SOAP stubs, exposes generated `endpoint_url`, records request journal/server log, and verifies SOAP interactions. | endpoint URL bindable output, optional WSDL ref, SOAP operation/action, XPath matcher, XML response ref, request journal outputs, server log outputs, assertion evidence | Contract validation, dry-run planning, executable happy/failure/boundary samples, standard result JSON, indexed evidence, and report consumption. |
 | `grpc_mock` | PR-008B implemented for local/CI provider capability evidence | WireMock gRPC-extension-backed unary mock. It starts once per suite/batch when framework-owned, loads descriptor-backed unary stubs, exposes generated `target_uri`, records request journal/server log, and verifies gRPC unary interactions. | target URI bindable output, descriptor/proto refs, service/method, request JSON matcher, response ref, gRPC status, request journal outputs, protobuf JSON diff evidence | Contract validation, dry-run planning, executable happy/failure/boundary samples, standard result JSON, indexed evidence, and report consumption. Streaming is future. |
-| `kafka_messaging` | Contract baseline | Full Kafka runtime is beyond Track C P0 unless selected by decision log | broker binding key, topic binding key, publish/consume operation mode, payload binding, timeout, output refs | Contract validation and dry-run planning; pilot broker evidence remains future. |
+| `kafka` | P1 client provider target | Client-side Kafka provider only; connects to Env_Profile-supplied broker bindings and does not provision broker/Testcontainer/RU runtime in this slice | `bootstrap_servers`, `topic`, `consumer_group`, optional security refs, `kafka_publish`, `kafka_observe`, `kafka_payload_match`, timeout, poll interval, output refs | Contract validation, dry-run planning, mocked client tests, optional profile-gated native broker execution, and messaging evidence. Pilot broker evidence remains future. |
+| `kafka_messaging` | Deprecated compatibility alias | Existing v0.2 compatibility surface for older contract-baseline artifacts; new artifacts should use `kafka` | legacy `bootstrap_servers`, `publish_message`, `consume_message` | Compatibility validation only; no new provider work should target this name. |
+| `ibm_mq` | P1 client provider target | Client-side IBM MQ provider only; connects to Env_Profile-supplied queue manager and queue bindings and does not provision queue manager/Testcontainer/RU runtime in this slice | `queue_manager`, `channel`, `conn_name`, `queue`, `credential.secret_ref`, `mq_put`, `mq_browse`, `mq_message_exists`, `mq_payload_match`, timeout, poll interval, output refs | Contract validation, dry-run planning, mocked client tests, optional profile-gated native broker execution, and MQ evidence. Pilot queue-manager evidence remains future. |
 | `nats` | Track C P0 | Track C implements NATS publish/observe/payload-match verification for framework provider capability evidence | connection and subject binding keys, `nats_publish`, `nats_observe`, payload binding, `consume_from: test_start_time`, timeout, poll interval, output refs | Contract validation, local provider capability execution, and framework evidence only; pilot broker evidence remains future. |
-| `jdbc_database` | Track C P0 | Track C implements JDBC Oracle/DB2-style seed/query/cleanup verification for framework provider capability evidence | connection binding keys or secret refs, dialect metadata, SQL refs, parameter binding, cleanup strategy, query/result output refs | Contract validation and dry-run planning; real DB evidence remains future. |
+| `jdbc` | Track C P0 | Track C implements JDBC Oracle/DB2-style seed/query/cleanup verification for framework provider capability evidence | connection binding keys or secret refs, dialect metadata, SQL refs, parameter binding, cleanup strategy, query/result output refs | Contract validation and dry-run planning; real DB evidence remains future. |
 | `artifact_compare` | Track C P0 | Track C implements artifact loading for JSON/schema/file diff verification | file refs, output refs, diff evidence | Contract validation, dry-run planning, and sample artifact syntax. |
 | `polling_observer` | Track C P0 | Track C implements observation polling for framework provider capability evidence | timeout, poll interval, expected state, last observed output ref | Contract validation, dry-run planning, and sample artifact syntax. |
 | `kubernetes_runtime` | Contract baseline | Full K8s readiness/runtime provider is beyond Track C P0 unless selected by decision log | namespace/context refs, deployment/service/selector refs, deployed version ref, positive timeout, bounded log tail refs, output refs | Contract validation and dry-run planning; pilot cluster evidence remains future. |
@@ -367,15 +369,15 @@ providers:
         secret_ref: vault://sit/order-api/base-url
 ```
 
-Example configurable JDBC Provider Instance using the built-in `jdbc_database` Provider Contract:
+Example configurable JDBC Provider Instance using the built-in `jdbc` Provider Contract:
 
 ```yaml
 provider_instance_version: v0.2
 provider_id: order-db
-provider_type: jdbc_database
+provider_type: jdbc
 runtime_modes: [native]
 operations:
-  execute_script:
+  db_seed:
     cleanup_strategy: by_test_run_id
     outputs:
       affected_rows: affected_rows
@@ -424,7 +426,7 @@ CLI contracts:
 - `generate-tests` writes package-neutral DSL drafts to `tests/draft/` and proposes updates when approved tests already exist.
 - `validate` reads generated suite/run/Env_Profile artifacts and checked-in package-neutral DSL tests, validates the contract graph, and does not execute providers.
 - `run --dry-run` resolves a provider execution plan without executing providers, mutating fixtures, publishing messages, running SQL, or writing provider execution evidence.
-- `run` reads generated suite/run/Env_Profile artifacts and checked-in package-neutral DSL tests, creates one batch ID for the suite execution, creates one run ID per approved test case, and does not regenerate tests by default.
+- `run` reads generated suite/run/Env_Profile artifacts and checked-in package-neutral DSL tests, creates one batch ID and one run ID for the suite execution, records each selected test case in `test_results[]`, and does not regenerate tests by default.
 - `report` produces coverage, traceability, evidence index, and failure summary from batch-level evidence. Single-run reports may support debugging, but they are not RP release coverage.
 
 ## 5.7 Data Ownership and Storage
@@ -656,7 +658,7 @@ Framework acceptance criteria validate the reusable execution framework only:
 | AC-005 | Shell/file-batch provider execution captures bounded command outputs, duration, status, and logs | `execution`, `provider`, `evidence` |
 | AC-006 | HTTP/request-response execution captures request/response evidence and provider metadata | `execution`, `provider`, `evidence` |
 | AC-007 | JDBC execution and DB verification use referenced connections/queries and normalized evidence | `execution`, `provider`, `assertion`, `evidence` |
-| AC-008 | Kafka/NATS publish, consume, observe, cleanup, and NATS request/reply provider mode are validated through messaging contracts | `provider`, `execution`, `assertion`, `evidence` |
+| AC-008 | Kafka/NATS/IBM MQ client-provider publish, put, browse, observe, and payload-match behavior is validated through messaging contracts without implying broker provisioning | `provider`, `execution`, `assertion`, `evidence` |
 | AC-009 | File existence and diff verification use explicit actual/expected refs and normalization rules | `assertion`, `evidence` |
 | AC-010 | DB polling verifies bounded final state without retrying product actions | `assertion`, `provider`, `evidence` |
 | AC-011 | Event polling verifies bounded observations from an explicit observation position | `assertion`, `provider`, `evidence` |

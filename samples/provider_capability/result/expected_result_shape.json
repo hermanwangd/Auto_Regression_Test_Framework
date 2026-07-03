@@ -1,12 +1,40 @@
 {
-  "framework_version": "v0.2",
+  "framework_version": "0.2.0",
   "dsl_version": "v0.2",
   "suite_id": "PROVIDER-CAPABILITY-P0-v0.2",
   "batch_id": "BATCH-PROVIDER-CAPABILITY-001",
   "run_id": "RUN-PROVIDER-CAPABILITY-001",
   "test_case_id": "PROVIDER-CAPABILITY-WIREMOCK-TC-001",
+  "test_count": 1,
   "profile": "local_provider",
+  "environment": "local_provider",
+  "provider_summary": [
+    {
+      "provider_id": "wiremock-payment-mock",
+      "provider_type": "wiremock_http_mock",
+      "runtime_mode": "mock"
+    }
+  ],
+  "provider_type": "wiremock_http_mock",
+  "provider_id": "wiremock-payment-mock",
+  "runtime_mode": "mock",
   "status": "passed",
+  "start_time": "2026-06-29T00:00:00Z",
+  "end_time": "2026-06-29T00:00:01Z",
+  "duration_ms": 1000,
+  "timestamps": {
+    "started_at": "2026-06-29T00:00:00Z",
+    "finished_at": "2026-06-29T00:00:01Z"
+  },
+  "test_results": [
+    {
+      "test_case_id": "PROVIDER-CAPABILITY-WIREMOCK-TC-001",
+      "status": "passed",
+      "profile": "local_provider",
+      "provider_id": "wiremock-payment-mock",
+      "provider_type": "wiremock_http_mock"
+    }
+  ],
   "provider_results": [
     {
       "provider_id": "wiremock-payment-mock",
@@ -20,17 +48,39 @@
       "release_evidence_eligible": false
     }
   ],
-  "verify_results": [
+  "step_results": [
     {
-      "id": "mock_called",
+      "id": "load_payment_stub",
+      "operation": "load_stubs",
       "status": "passed"
     }
   ],
-  "evidence_refs": [
-    "evidence_index.yaml",
+  "steps": [
+    {
+      "id": "load_payment_stub",
+      "operation": "load_stubs",
+      "status": "passed"
+    }
+  ],
+  "verify_results": [
+    {
+      "id": "mock_called",
+      "type": "http_mock_called",
+      "status": "passed"
+    }
+  ],
+  "evidence_index_ref": "evidence_index.yaml",
+  "provider_evidence_refs": [
     "provider-evidence/wiremock/request_journal.yaml"
   ],
+  "evidence_refs": [
+    "evidence_index.yaml",
+    "provider-evidence/wiremock/request_journal.yaml",
+    "logs/execution.log",
+    "batch/batch.yaml"
+  ],
   "failure": {
+    "code": null,
     "classification": null,
     "reason": null,
     "owner_action": null

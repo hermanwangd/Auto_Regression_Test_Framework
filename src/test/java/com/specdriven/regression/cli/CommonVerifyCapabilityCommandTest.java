@@ -75,6 +75,7 @@ class CommonVerifyCapabilityCommandTest {
         assertThat(read(resultJson))
                 .contains("\"id\": \"payload_matches\"")
                 .contains("\"type\": \"json_match\"")
+                .contains("\"runtime_mode\": \"stub\"")
                 .contains("\"id\": \"payload_schema_matches\"")
                 .contains("\"type\": \"schema_match\"")
                 .contains("\"id\": \"file_matches\"")
@@ -82,6 +83,9 @@ class CommonVerifyCapabilityCommandTest {
                 .contains("\"ignore_paths\"")
                 .contains("\"normalize\": \"canonical_json\"")
                 .contains("\"ignore_order\": true")
+                .contains("\"provider_summary\"")
+                .contains("\"evidence_index_ref\": \"evidence_index.yaml\"")
+                .contains("\"provider_evidence_refs\"")
                 .contains("\"release_evidence_eligible\": false");
         assertThat(read(evidenceDir.resolve("assertions/payload_matches.yaml")))
                 .contains("verifier_type: json_match")
@@ -131,18 +135,60 @@ class CommonVerifyCapabilityCommandTest {
     }
 
     @Test
-    void commonVerifyRunRejectsMultiTestSuiteInsteadOfSilentlySkippingTests() throws Exception {
-        Path suite = mutableCommonVerify("multi_test_rejected");
+    void commonVerifyRunExecutesAllTestsInSuiteWithSharedProfile() throws Exception {
+        Path suite = mutableCommonVerify("multi_test_suite");
         Files.copy(suite.getParent().resolve("test_case.yaml"), suite.getParent().resolve("second_test_case.yaml"));
+        Files.writeString(suite.getParent().resolve("second_test_case.yaml"),
+                read(suite.getParent().resolve("second_test_case.yaml"))
+                        .replace("COMMON-VERIFY-TC-001", "COMMON-VERIFY-TC-002"));
+        Files.writeString(suite, read(suite).replace("  - test_case.yaml", "  - test_case.yaml\n  - second_test_case.yaml"));
+
+        CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_verify");
+
+        assertThat(result.exit()).as(result.stderr() + result.stdout()).isZero();
+        assertThat(result.stdout())
+                .contains("test_count: 2")
+                .contains("profile: local_verify");
+        Path resultJson = extractPath(result.stdout(), "result_json");
+        Path evidenceDir = extractPath(result.stdout(), "evidence_dir");
+        assertThat(read(resultJson))
+                .contains("\"test_case_id\": \"COMMON-VERIFY-CAPABILITY-v0.2-MULTI\"")
+                .contains("\"test_count\": 2")
+                .contains("\"test_case_id\": \"COMMON-VERIFY-TC-001\"")
+                .contains("\"test_case_id\": \"COMMON-VERIFY-TC-002\"");
+        assertThat(evidenceDir.resolve("tests/COMMON-VERIFY-TC-001/assertions/payload_matches.yaml"))
+                .isRegularFile();
+        assertThat(evidenceDir.resolve("tests/COMMON-VERIFY-TC-002/assertions/payload_matches.yaml"))
+                .isRegularFile();
+        assertThat(read(evidenceDir.resolve("evidence_index.yaml")))
+                .contains("test_case_id: COMMON-VERIFY-TC-001")
+                .contains("test_case_id: COMMON-VERIFY-TC-002");
+    }
+
+    @Test
+    void commonVerifyFailedMultiTestRunKeepsSuiteLevelRunIdentifierInCliOutput() throws Exception {
+        Path suite = mutableCommonVerify("multi_test_failure_suite");
+        Path secondTestCase = suite.getParent().resolve("second_test_case.yaml");
+        Path badActual = suite.getParent().resolve("actual_samples/actual_payload_bad.json");
+        Files.copy(suite.getParent().resolve("test_case.yaml"), secondTestCase);
+        Files.copy(suite.getParent().resolve("actual_samples/actual_payload.json"), badActual);
+        Files.writeString(badActual, read(badActual).replace("\"id\": \"ORDER-100\"", "\"id\": \"ORDER-BAD\""));
+        Files.writeString(secondTestCase, read(secondTestCase)
+                .replace("COMMON-VERIFY-TC-001", "COMMON-VERIFY-TC-002")
+                .replace("actual_samples/actual_payload.json", "actual_samples/actual_payload_bad.json"));
         Files.writeString(suite, read(suite).replace("  - test_case.yaml", "  - test_case.yaml\n  - second_test_case.yaml"));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_verify");
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
-                .contains("run_status: blocked")
-                .contains("reason: unsupported_suite_shape")
-                .contains("one test case");
+                .contains("test_case_id: COMMON-VERIFY-CAPABILITY-v0.2-MULTI")
+                .contains("test_count: 2")
+                .doesNotContain("test_case_id: COMMON-VERIFY-TC-002");
+        assertThat(read(extractPath(result.stdout(), "result_json")))
+                .contains("\"test_case_id\": \"COMMON-VERIFY-CAPABILITY-v0.2-MULTI\"")
+                .contains("\"test_case_id\": \"COMMON-VERIFY-TC-002\"")
+                .contains("\"status\": \"failed\"");
     }
 
     @Test

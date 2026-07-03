@@ -33,10 +33,10 @@ public final class EvidenceIndexFormatter {
             index.append("    evidence_type: ").append(entry.evidenceType()).append('\n');
             index.append("    produced_by: ").append(entry.producedBy()).append('\n');
             if (entry.providerEvidence()) {
-                index.append("    provider_type: ").append(context.providerType()).append('\n');
-                index.append("    provider_id: ").append(context.providerId()).append('\n');
+                index.append("    provider_type: ").append(entry.providerType()).append('\n');
+                index.append("    provider_id: ").append(entry.providerId()).append('\n');
             }
-            index.append("    test_case_id: ").append(context.testCaseId()).append('\n');
+            index.append("    test_case_id: ").append(entry.testCaseId()).append('\n');
             index.append("    run_id: ").append(context.runId()).append('\n');
             index.append("    batch_id: ").append(context.batchId()).append('\n');
             index.append("    file_path: ").append(ref).append('\n');
@@ -56,6 +56,9 @@ public final class EvidenceIndexFormatter {
     private static Entry entry(Context context, Path runDir, String ref) {
         String evidenceType = evidenceType(context.providerType(), ref);
         String content = read(runDir.resolve(ref));
+        String providerType = firstNonBlank(metadataValue(content, "provider_type"), context.providerType());
+        String providerId = firstNonBlank(metadataValue(content, "provider_id"), context.providerId());
+        String testCaseId = firstNonBlank(metadataValue(content, "test_case_id"), testCaseIdFromRef(ref), context.testCaseId());
         String extractedFailureCode = failureCode(content);
         String status = failed(content) || ref.contains("failure_detail") ? "failed" : "passed";
         String failureCode = status.equals("failed")
@@ -66,6 +69,9 @@ public final class EvidenceIndexFormatter {
                 evidenceType,
                 producedBy(evidenceType),
                 providerEvidence(evidenceType),
+                providerType,
+                providerId,
+                testCaseId,
                 linkedResultField(evidenceType),
                 status,
                 failureCode);
@@ -100,7 +106,22 @@ public final class EvidenceIndexFormatter {
         if (normalized.contains("query_")) {
             return "jdbc_query";
         }
-        if ("nats".equals(providerType) || normalized.contains("provider-evidence/nats/")) {
+        if (normalized.contains("provider-evidence/kafka/")) {
+            return "kafka_event";
+        }
+        if (normalized.contains("provider-evidence/ibm_mq/")) {
+            return "ibm_mq_event";
+        }
+        if (normalized.contains("provider-evidence/nats/")) {
+            return "nats_event";
+        }
+        if ("kafka".equals(providerType)) {
+            return "kafka_event";
+        }
+        if ("ibm_mq".equals(providerType)) {
+            return "ibm_mq_event";
+        }
+        if ("nats".equals(providerType)) {
             return "nats_event";
         }
         if ("wiremock_http_mock".equals(providerType)) {
@@ -134,7 +155,9 @@ public final class EvidenceIndexFormatter {
                 "jdbc_seed",
                 "jdbc_query",
                 "jdbc_cleanup",
-                "nats_event").contains(evidenceType);
+                "nats_event",
+                "kafka_event",
+                "ibm_mq_event").contains(evidenceType);
     }
 
     private static String linkedResultField(String evidenceType) {
@@ -171,6 +194,58 @@ public final class EvidenceIndexFormatter {
             }
         }
         return "";
+    }
+
+    private static String metadataValue(String content, String field) {
+        for (String line : content.split("\\R")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith(field + ":")) {
+                return unquote(trimmed.substring((field + ":").length()).trim());
+            }
+            if (trimmed.startsWith("\"" + field + "\"")) {
+                int colon = trimmed.indexOf(':');
+                if (colon >= 0) {
+                    return unquote(trimmed.substring(colon + 1).replace(",", "").trim());
+                }
+            }
+        }
+        return "";
+    }
+
+    private static String testCaseIdFromRef(String ref) {
+        Path path = Path.of(ref);
+        for (int i = 0; i < path.getNameCount() - 1; i++) {
+            if ("tests".equals(path.getName(i).toString())) {
+                String candidate = path.getName(i + 1).toString();
+                if (!Set.of("approved", "draft").contains(candidate)) {
+                    return candidate;
+                }
+            }
+        }
+        Path fileName = path.getFileName();
+        if (fileName == null) {
+            return "";
+        }
+        String name = fileName.toString();
+        int marker = name.indexOf("__");
+        return marker > 0 ? name.substring(0, marker) : "";
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private static String unquote(String value) {
+        String trimmed = value.trim();
+        if (trimmed.length() >= 2 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
+        return trimmed;
     }
 
     private static String contentType(String ref) {
@@ -225,6 +300,9 @@ public final class EvidenceIndexFormatter {
             String evidenceType,
             String producedBy,
             boolean providerEvidence,
+            String providerType,
+            String providerId,
+            String testCaseId,
             String linkedResultField,
             String status,
             String failureCode) {

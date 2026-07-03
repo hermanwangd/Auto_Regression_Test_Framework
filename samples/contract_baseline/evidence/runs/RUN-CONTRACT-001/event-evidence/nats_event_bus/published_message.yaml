@@ -1,0 +1,9 @@
+evidence_type: nats_event
+provider_type: nats
+provider_id: nats-event-bus
+test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001
+run_id: RUN-CONTRACT-001
+status: passed
+masking_applied: true
+subject: payments.authorized
+message_id: MSG-CONTRACT-001

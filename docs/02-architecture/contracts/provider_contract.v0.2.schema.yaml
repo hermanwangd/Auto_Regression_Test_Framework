@@ -5,7 +5,7 @@ purpose: >
   Defines one reusable provider type, the valid Provider Instance shape for
   that provider type, environment binding key schema, bindable runtime outputs,
   allowed operations, allowed input names, output refs, evidence outputs,
-  runtime modes, defaults, required fields, and failure codes.
+  runtime modes, executable runtime modes, defaults, required fields, and failure codes.
 version_compatibility:
   supported_versions: [v0.2]
   unsupported_version_behavior: block_before_provider_dispatch
@@ -19,7 +19,13 @@ required_fields:
   - failure_mapping
 provider_contract_required_sections:
   runtime_modes:
-    purpose: Defines whether this provider type supports native, mock, stub, or ephemeral dependency execution for selected profiles.
+    purpose: "Defines the Provider Contract runtime-mode vocabulary: native, mock, stub, or ephemeral."
+  executable_runtime_modes:
+    purpose: >
+      Optional. Narrows runtime_modes to the modes executable by this framework build.
+      When present, Env_Profile providers.<provider_id>.runtime_mode must be listed here before dispatch.
+  contract_only_runtime_modes:
+    purpose: Optional. Documents runtime_modes reserved for later implementation and blocked before dispatch today.
   binding_keys:
     purpose: >
       Defines binding keys that must be supplied by Env_Profile.providers.<provider_id>.binding_keys.

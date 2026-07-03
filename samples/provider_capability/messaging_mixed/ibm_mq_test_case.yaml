@@ -1,0 +1,57 @@
+dsl_version: v0.2
+test_case_id: IBM-MQ-CAPABILITY-TC-001
+title: IBM MQ client provider capability
+status: active
+revision: 1
+source_refs:
+  capability_spec: docs/01-specs/03_feature_specs.md#314-kafka-and-ibm-mq-client-provider-model
+labels:
+  capability: ibm_mq
+  evidence_classification: framework_provider_capability_only
+compatible_profiles: [local_messaging]
+targets:
+  request_queue:
+    provider_id: payment-mq
+data:
+  order_request:
+    ref: fixtures/order_request.json
+  order_expected:
+    ref: expected_results/order_request.json
+execute:
+  operations:
+    - id: put_order_request
+      target: request_queue
+      operation: mq_put
+      inputs:
+        correlation_id:
+          value: CORR-MQ-001
+        payload_ref:
+          ref: ${data.order_request}
+      outputs:
+        queue: queue
+        message_id: message_id
+        correlation_id: correlation_id
+        mq_evidence_ref: mq_evidence_ref
+verify:
+  checks:
+    - id: mq_payload_match
+      type: mq_payload_match
+      target: request_queue
+      inputs:
+        expected_ref:
+          ref: ${data.order_expected}
+        correlation_id:
+          value: CORR-MQ-001
+        timeout:
+          value: PT5S
+        poll_interval:
+          value: PT0.05S
+evidence:
+  required:
+    - provider-evidence/ibm_mq/put_order_request.yaml
+    - provider-evidence/ibm_mq/mq_payload_match.yaml
+    - assertions/mq_payload_match.yaml
+runtime:
+  timeout: PT1M
+  retry:
+    max_attempts: 1

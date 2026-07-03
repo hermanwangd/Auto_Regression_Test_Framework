@@ -23,14 +23,10 @@ providers:
   oracle-database:
     runtime_mode: native
     binding_keys:
-      jdbc_url:
-        secret_ref: vault://sit/oracle/jdbc-url
-      username:
-        secret_ref: vault://sit/oracle/username
+      connection.secret_ref:
+        secret_ref: vault://sit/oracle/connection
       dialect:
         value: oracle
-      password:
-        secret_ref: vault://sit/oracle/password
   nats-event-bus:
     runtime_mode: native
     binding_keys:

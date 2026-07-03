@@ -1,0 +1,10 @@
+{
+  "suite_id": "RP-FWK-CONTRACT-SAMPLE-regression",
+  "batch_id": "BATCH-CONTRACT-001",
+  "run_id": "RUN-CONTRACT-001",
+  "test_count": 1,
+  "pass_count": 1,
+  "fail_count": 0,
+  "status": "passed",
+  "masking_applied": true
+}

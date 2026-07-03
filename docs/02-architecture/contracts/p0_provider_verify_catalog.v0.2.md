@@ -2,7 +2,7 @@
 
 Status: framework-owned current-stage contract.
 
-This catalog defines the v0.2 P0 contract and provider capability baseline. Track B proves the framework lifecycle with a fake provider. Track C rows identify framework-owned executable provider scenarios only inside the stated local/CI verification boundary.
+This catalog defines the v0.2 P0 contract and provider capability baseline plus the selected P1 client-provider contract additions. Track B proves the framework lifecycle with a fake provider. Track C rows identify framework-owned executable provider scenarios only inside the stated local/CI verification boundary. P1 rows are contract-complete; their runtime status depends on the row-specific boundary.
 
 | Area | P0 Contract Surface | Runtime Boundary |
 |---|---|---|
@@ -11,9 +11,11 @@ This catalog defines the v0.2 P0 contract and provider capability baseline. Trac
 | gRPC / Mock | `grpc_mock`, `grpc_client`, `load_grpc_stub`, `unary_call`, `grpc_request_received`, descriptor/proto refs, unary request/response JSON fixtures, gRPC status, request journal, `grpc_request_response`, protobuf JSON diff evidence | PR-008B executable WireMock gRPC-extension capability through `samples/provider_capability/grpc_mock/` for local/CI happy, failure, and boundary paths. Unary only for v0.2; streaming remains future. |
 | DB | `jdbc`, `connection.secret_ref`, SQL params binding, Oracle / DB2 dialect metadata, `db_seed`, `db_query`, `db_record_exists`, `db_cleanup`, query evidence | PR-004 runtime capability for local/CI framework evidence; no MariaDB, MongoDB, Testcontainers, or full polling engine. |
 | NATS / Event | `nats`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match`, `consume_from: test_start_time`, subject handling, event evidence | PR-005 runtime capability for local/CI framework evidence; no Kafka, JetStream, durable consumer, or request/reply scope. |
+| Kafka / Event | `kafka`, `kafka_publish`, `kafka_observe`, `kafka_payload_match`, `consume_from: test_start_time`, test-owned consumer group, event evidence | P1 client-provider contract with framework-managed `mock` runtime evidence through `samples/provider_capability/kafka/` and mixed messaging samples. The contract vocabulary includes native/mock/ephemeral, but `executable_runtime_modes` is `[mock]` in this build. Native broker execution, broker provisioning, request/reply, shared offset mutation, and broker purge remain out of scope. |
+| IBM MQ / Queue | `ibm_mq`, `mq_put`, `mq_browse`, `mq_message_exists`, `mq_payload_match`, browse-first queue observation, MQ evidence | P1 client-provider contract with framework-managed `mock` runtime evidence through `samples/provider_capability/ibm_mq/` and mixed messaging samples. The contract vocabulary includes native/mock/ephemeral, but `executable_runtime_modes` is `[mock]` in this build. Native queue-manager execution, queue-manager provisioning, destructive `mq_get`, and queue purge remain out of scope. |
 | Polling | `polling_observer`, timeout, `poll_interval`, last observed evidence, poll-until-condition semantics | Provider target for observation plus verify contract and evidence shape. |
 | JSON / Schema / File | `artifact_compare`, `json_match`, `schema_match`, `ignore_paths`, `file_diff`, `normalize`, `ignore_order` | Provider target for artifact loading plus verify contract and result/evidence shape. |
 | Test Data Injection | DSL `data` catalog, operation `inputs`, `db_seed`, `db_cleanup`, `http_stub` | Fixture contract and dry-run validation only. |
 | Reporting | standard result JSON, evidence folder structure, deterministic report output | Contract-complete report shape only. |
 
-Provider naming is mandatory in v0.2 public contracts. Public docs must describe `jdbc`, `nats`, and other runtime targets as Provider Contracts and Provider Instances.
+Provider naming is mandatory in v0.2 public contracts. Public docs must describe `jdbc`, `nats`, `kafka`, `ibm_mq`, and other runtime targets as Provider Contracts and Provider Instances.

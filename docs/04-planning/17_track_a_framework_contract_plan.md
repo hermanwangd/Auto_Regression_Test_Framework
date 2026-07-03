@@ -54,7 +54,7 @@ Reads result/evidence only. Exit codes are `0` ready, `1` blocked/failed/not-rev
 Track A documents contract placeholders for:
 
 - HTTP/Mock: `wiremock_http_mock`, `http_stub`, `http_mock_called`, `http_mock_request_body_match`.
-- DB: `jdbc_database`, `secret_ref` connection, SQL params binding, Oracle/DB2 dialect metadata, `db_record_exists`, query evidence.
+- DB: `jdbc`, `secret_ref` connection, SQL params binding, Oracle/DB2 dialect metadata, `db_record_exists`, query evidence.
 - NATS/Event: `nats`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match`, `consume_from: test_start_time`, subject handling, event evidence.
 - Polling: timeout, `poll_interval`, last observed evidence.
 - JSON/Schema/File: `json_match`, `schema_match`, `ignore_paths`, `file_diff`, `normalize`, `ignore_order`.
@@ -73,16 +73,16 @@ Raw secrets are prohibited in DSL, data binding, Execution Profile, Environment 
 
 Required sample paths:
 
-- `samples/suite_manifest.yaml`
-- `samples/test_case.yaml`
-- `samples/provider_contracts/{wiremock_http_mock,jdbc,nats}.yaml`
-- `samples/provider_instances/{wiremock_payment_api,oracle_database,nats_event_bus}.yaml`
-- `samples/execution_profiles/{ci_pr,sit_regression}.yaml`
-- `samples/environment_bindings/{ci,sit}.yaml`
-- `samples/expected_results/sample_expected.json`
-- `samples/fixtures/{sample_db_seed,sample_db_cleanup}.yaml`
-- `samples/result/sample_result.json`
-- `samples/evidence/evidence_index.yaml`
+- `samples/contract_baseline/suite_manifest.yaml`
+- `samples/contract_baseline/test_case.yaml`
+- `samples/contract_baseline/provider_contracts/{wiremock_http_mock,jdbc,nats}.yaml`
+- `samples/contract_baseline/provider_instances/{wiremock_payment_api,oracle_database,nats_event_bus}.yaml`
+- `samples/contract_baseline/execution_profiles/{ci_pr,sit_regression}.yaml`
+- `samples/contract_baseline/environment_bindings/{ci,sit}.yaml`
+- `samples/contract_baseline/expected_results/sample_expected.json`
+- `samples/contract_baseline/fixtures/{sample_db_seed,sample_db_cleanup}.yaml`
+- `samples/contract_baseline/result/sample_result.json`
+- `samples/contract_baseline/evidence/evidence_index.yaml`
 
 ## 10 Result and Evidence Contract
 

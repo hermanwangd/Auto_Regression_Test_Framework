@@ -15,13 +15,14 @@ The child suites remain split by provider pair because the v0.2 CLI dispatches r
 - `soap_mock_http_client/`: `soap_mock -> rest_client`
 - `grpc_mock_grpc_client/`: `grpc_mock -> grpc_client`
 
-Each provider pair includes happy, failure, and boundary manifests. The suite group treats failure manifests as expected negative tests with `expected_status: failed`.
+Each provider pair has one canonical multi-test suite manifest plus one expected-failure suite manifest:
 
 - `suite_manifest.yaml`
 - `suite_manifest_failure.yaml`
-- `suite_manifest_boundary.yaml`
 
-Each suite follows the same lifecycle:
+The canonical `suite_manifest.yaml` uses `tests[]` to run happy and boundary test cases under one shared Env_Profile. The suite group treats failure manifests as expected negative tests with `expected_status: failed`.
+
+Each test case follows the same lifecycle:
 
 1. Load a mock server stub.
 2. Resolve the generated endpoint or target into the client provider.

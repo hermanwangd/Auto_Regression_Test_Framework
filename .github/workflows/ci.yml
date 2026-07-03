@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release/**'
+  push:
+    branches:
+      - main
+      - 'release/**'
+      - 'codex/release-*'
+
+permissions:
+  contents: read
+
+jobs:
+  framework-gates:
+    name: Framework Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      MAVEN_OPTS: -Xmx1536m
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Unit, integration, and packaged CLI verification
+        run: ./mvnw -B -ntp verify
+
+      - name: Critical delivery coverage gate
+        run: ./mvnw -B -ntp -Pv02-delivery-coverage -DskipTests jacoco:check@v02-delivery-critical-class-check
+
+      - name: Contract and evidence consistency
+        run: scripts/ci/verify-contracts.sh
+
+      - name: Secret scan
+        run: scripts/ci/secret-scan.sh
+
+      - name: Generate SBOM
+        run: scripts/ci/generate-sbom.sh
+
+      - name: Upload verification artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: framework-verification-${{ github.run_id }}
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+            target/site/jacoco/
+            target/bom.json
+            target/bom.xml
+          if-no-files-found: ignore
+
+  dependency-security:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      MAVEN_OPTS: -Xmx1536m
+      NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: OWASP dependency vulnerability scan
+        run: scripts/ci/security-scan.sh
+
+      - name: Upload dependency scan reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-security-${{ github.run_id }}
+          path: |
+            target/dependency-check-report.*
+          if-no-files-found: ignore

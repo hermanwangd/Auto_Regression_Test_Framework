@@ -57,6 +57,9 @@ public class ContractBaselineService {
             "risk_approval");
     private static final Set<String> DEPRECATED_DSL_FIELDS = Set.of(
             "scenario");
+    private static final Set<String> PROHIBITED_SUITE_FIELDS = Set.of(
+            "suite_type",
+            "test_cases");
     private static final Set<String> BINDING_VALUE_KIND_FIELDS = Set.of(
             "value",
             "ref",
@@ -87,6 +90,7 @@ public class ContractBaselineService {
     public ValidationResult validateSuite(Path suiteManifest) {
         ContractGraph graph = loadGraph(suiteManifest);
         List<ContractFinding> findings = new ArrayList<>(graph.loadFindings());
+        validateProhibitedSuiteFields(graph, findings);
         if (graph.loadBlocked()) {
             return new ValidationResult(false, graph.suiteId(), List.of(), List.of(), List.of(), List.copyOf(findings));
         }
@@ -203,6 +207,7 @@ public class ContractBaselineService {
                 }
             }
         }
+        findings.addAll(ResultContractValidator.validate(resultJson, result));
         detectRawSecrets(resultJson.toString(), result, findings);
         List<Map<String, Object>> providerResults = mapList(result.get("provider_results"));
         List<String> failedVerifySummary = mapList(result.get("verify_results")).stream()
@@ -296,6 +301,15 @@ public class ContractBaselineService {
             Map<String, Object> binding = entry.getValue();
             for (String field : List.of("environment_id", "profile", "provider_bindings")) {
                 require(entry.getKey(), binding, field, findings);
+            }
+        }
+    }
+
+    private void validateProhibitedSuiteFields(ContractGraph graph, List<ContractFinding> findings) {
+        for (String field : PROHIBITED_SUITE_FIELDS) {
+            if (graph.suite().containsKey(field)) {
+                findings.add(finding(graph.suitePath(), field, "prohibited_legacy_field",
+                        "Remove legacy suite field `" + field + "`; use standard `tests[]` for multi-test execution or `child_suites[]` for compatibility aggregation."));
             }
         }
     }
@@ -943,14 +957,14 @@ public class ContractBaselineService {
                             contract,
                             findings);
                 }
-                validateRuntimeMode(bindingPath, providerId, providerType, profile, providerBinding,
+                validateRuntimeMode(bindingPath, bindingDoc.envProfile(), providerId, providerType, profile, providerBinding,
                         providerInstance, contract, graph, findings);
                 Map<String, Object> bindingValues = mapValue(providerBinding.get("binding_values"));
                 for (String requiredKey : requiredBindingKeys) {
                     if (isMissing(valueAtPath(bindingValues, requiredKey))) {
                         findings.add(new ContractFinding(
                                 bindingPath.toString(),
-                                "provider_bindings." + providerId + ".binding_values." + requiredKey,
+                                bindingValueFieldPath(bindingDoc.envProfile(), providerId, requiredKey),
                                 "missing_required_binding_key",
                                 providerId,
                                 providerType,
@@ -962,6 +976,7 @@ public class ContractBaselineService {
                 if ("jdbc".equals(providerType)) {
                     validateJdbcEnvironmentBinding(
                             bindingPath,
+                            bindingDoc.envProfile(),
                             providerId,
                             providerType,
                             profile,
@@ -971,6 +986,7 @@ public class ContractBaselineService {
                 } else if ("nats".equals(providerType)) {
                     validateNatsEnvironmentBinding(
                             bindingPath,
+                            bindingDoc.envProfile(),
                             providerId,
                             providerType,
                             profile,
@@ -1043,6 +1059,7 @@ public class ContractBaselineService {
 
     private void validateRuntimeMode(
             Path bindingPath,
+            boolean envProfile,
             String providerId,
             String providerType,
             String profile,
@@ -1052,7 +1069,9 @@ public class ContractBaselineService {
             ContractGraph graph,
             List<ContractFinding> findings) {
         String runtimeMode = stringValue(providerBinding.get("runtime_mode"));
-        String fieldPath = "provider_bindings." + providerId + ".runtime_mode";
+        String fieldPath = envProfile
+                ? "providers." + providerId + ".runtime_mode"
+                : "provider_bindings." + providerId + ".runtime_mode";
         if (runtimeMode.isBlank()) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
@@ -1067,6 +1086,8 @@ public class ContractBaselineService {
         }
         validateRuntimeModeAllowed(bindingPath, fieldPath, providerId, providerType, profile, runtimeMode,
                 stringList(contract.get("runtime_modes")), "Provider Contract", findings);
+        validateRuntimeModeAllowed(bindingPath, fieldPath, providerId, providerType, profile, runtimeMode,
+                stringList(contract.get("executable_runtime_modes")), "Provider Contract executable runtime support", findings);
         validateRuntimeModeAllowed(bindingPath, fieldPath, providerId, providerType, profile, runtimeMode,
                 stringList(providerInstance.get("runtime_modes")), "Provider Instance", findings);
         validateRuntimeModeAllowed(bindingPath, fieldPath, providerId, providerType, profile, runtimeMode,
@@ -1220,6 +1241,7 @@ public class ContractBaselineService {
 
     private void validateJdbcEnvironmentBinding(
             Path bindingPath,
+            boolean envProfile,
             String providerId,
             String providerType,
             String profile,
@@ -1230,7 +1252,7 @@ public class ContractBaselineService {
         if (dialect.isBlank()) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    "provider_bindings." + providerId + ".binding_values.dialect",
+                    bindingValueFieldPath(envProfile, providerId, "dialect"),
                     "missing_required_binding_key",
                     providerId,
                     providerType,
@@ -1240,7 +1262,7 @@ public class ContractBaselineService {
         } else if (!jdbcSupportedDialects(contract).contains(dialect)) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    "provider_bindings." + providerId + ".binding_values.dialect",
+                    bindingValueFieldPath(envProfile, providerId, "dialect"),
                     "unsupported_dialect",
                     providerId,
                     providerType,
@@ -1253,7 +1275,7 @@ public class ContractBaselineService {
         if (secretRef.isBlank()) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    "provider_bindings." + providerId + ".binding_values.connection.secret_ref",
+                    bindingValueFieldPath(envProfile, providerId, "connection.secret_ref"),
                     "missing_required_binding_key",
                     providerId,
                     providerType,
@@ -1265,6 +1287,7 @@ public class ContractBaselineService {
 
     private void validateNatsEnvironmentBinding(
             Path bindingPath,
+            boolean envProfile,
             String providerId,
             String providerType,
             String profile,
@@ -1276,7 +1299,7 @@ public class ContractBaselineService {
         if (secretRef.isBlank() && localRef.isBlank()) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    "provider_bindings." + providerId + ".binding_values.connection",
+                    bindingValueFieldPath(envProfile, providerId, "connection"),
                     "missing_required_binding_key",
                     providerId,
                     providerType,
@@ -1287,7 +1310,7 @@ public class ContractBaselineService {
         if (!localRef.isBlank() && !approvedLocalNatsRef(localRef)) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    "provider_bindings." + providerId + ".binding_values.connection.local_ref",
+                    bindingValueFieldPath(envProfile, providerId, "connection.local_ref"),
                     "unsupported_local_ref",
                     providerId,
                     providerType,
@@ -1299,7 +1322,7 @@ public class ContractBaselineService {
         if (subject.isBlank()) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    "provider_bindings." + providerId + ".binding_values.subject",
+                    bindingValueFieldPath(envProfile, providerId, "subject"),
                     "missing_required_binding_key",
                     providerId,
                     providerType,
@@ -1312,6 +1335,12 @@ public class ContractBaselineService {
     private boolean approvedLocalNatsRef(String localRef) {
         return localRef.startsWith("approved_local_nats")
                 || localRef.startsWith("generated://provider-capability/nats/");
+    }
+
+    private String bindingValueFieldPath(boolean envProfile, String providerId, String bindingKey) {
+        return envProfile
+                ? "providers." + providerId + ".binding_keys." + bindingKey
+                : "provider_bindings." + providerId + ".binding_values." + bindingKey;
     }
 
     private ContractGraph loadGraph(Path suiteManifest) {
@@ -2098,6 +2127,8 @@ public class ContractBaselineService {
                 || normalized.equals("credential")
                 || normalized.equals("credentials")
                 || normalized.equals("secret")
+                || normalized.endsWith(".secret_ref")
+                || normalized.endsWith("_secret_ref")
                 || normalized.equals("connection")
                 || normalized.equals("api_key")
                 || normalized.equals("authorization");
@@ -2310,7 +2341,7 @@ public class ContractBaselineService {
                         "prohibited_data_catalog_field",
                         "prohibited_governance_field", "prohibited_deprecated_field",
                         "prohibited_data_binding_category", "prohibited_source_ref", "invalid_source_refs",
-                        "invalid_duration",
+                        "invalid_duration", "invalid_status", "invalid_test_count", "invalid_test_results",
                         "invalid_instant", "invalid_polling_config" -> "VALIDATION_ERROR";
                 default -> "VALIDATION_ERROR";
             };

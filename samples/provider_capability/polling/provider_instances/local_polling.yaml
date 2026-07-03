@@ -1,7 +1,7 @@
 provider_instance_version: v0.2
 provider_id: local-common-polling
 provider_type: common_verify
-runtime_modes: [local]
+runtime_modes: [stub]
 operations:
   event_published:
     outputs: [polling_evidence_ref, last_observed_ref]

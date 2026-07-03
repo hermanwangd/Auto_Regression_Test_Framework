@@ -621,9 +621,13 @@ class HeterogeneousProviderRuntimeIT {
                 compatible_profiles: [ci_ephemeral]
                 targets:
                   %s:
+                    provider_id: %s
                     type: runtime_target
                     runner: %s
                     environment: ci://framework-verification/%s
+                data:
+                  main_expected:
+                    ref: expected-results/approved/%s.yaml
                 setup:
                   fixtures:
                 %s
@@ -635,15 +639,11 @@ class HeterogeneousProviderRuntimeIT {
                 %s
                     outputs:
                       %s: %s
-                expected_results:
-                  main:
-                    type: expected_result_artifact
-                    ref: expected-results/approved/%s.yaml
                 verify:
                   - id: verify
                     type: file_diff
                     actual: ${execute.execute.outputs.%s}
-                    expected: ${expected_results.main}
+                    expected: ${data.main_expected}
                 evidence:
                   required:
                     - ${execute.execute.outputs.%s}
@@ -659,15 +659,16 @@ class HeterogeneousProviderRuntimeIT {
                 RP_ID,
                 targetId,
                 targetId,
+                targetId,
                 runner,
                 targetId,
+                expectedResultId,
                 fixturesYaml.equals("{}") ? "    {}\n" : fixturesYaml.indent(4),
                 targetId,
                 operation,
                 withYaml.isBlank() ? "      {}\n" : withYaml.indent(6),
                 outputName,
                 outputRef,
-                expectedResultId,
                 outputName,
                 outputName));
     }

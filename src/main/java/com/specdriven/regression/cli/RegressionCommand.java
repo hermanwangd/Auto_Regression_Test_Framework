@@ -18,6 +18,8 @@ import com.specdriven.regression.contract.GrpcMockCapabilityService;
 import com.specdriven.regression.contract.GrpcMockCapabilityService.GrpcRunResult;
 import com.specdriven.regression.contract.JdbcProviderCapabilityService;
 import com.specdriven.regression.contract.JdbcProviderCapabilityService.JdbcRunResult;
+import com.specdriven.regression.contract.MessagingClientProviderCapabilityService;
+import com.specdriven.regression.contract.MessagingClientProviderCapabilityService.MessagingClientRunResult;
 import com.specdriven.regression.contract.NatsProviderCapabilityService;
 import com.specdriven.regression.contract.NatsProviderCapabilityService.NatsRunResult;
 import com.specdriven.regression.contract.SoapMockCapabilityService;
@@ -151,6 +153,8 @@ public class RegressionCommand {
             new JdbcProviderCapabilityService();
     private final NatsProviderCapabilityService natsProviderCapabilityService =
             new NatsProviderCapabilityService();
+    private final MessagingClientProviderCapabilityService messagingClientProviderCapabilityService =
+            new MessagingClientProviderCapabilityService();
     private final SoapMockCapabilityService soapMockCapabilityService =
             new SoapMockCapabilityService();
     private final GrpcMockCapabilityService grpcMockCapabilityService =
@@ -379,6 +383,9 @@ public class RegressionCommand {
     }
 
     private void printEvidenceReportSummary(PrintStream out, EvidenceValidationResult result) {
+        out.println("test_count: " + result.testCount());
+        out.println("pass_count: " + result.passCount());
+        out.println("fail_count: " + result.failCount());
         out.println("evidence_folder_path: " + result.evidenceDir());
         out.println("missing_evidence_count: " + result.missingEvidenceCount());
         out.println("failed_evidence_count: " + result.failedEvidenceCount());
@@ -761,6 +768,7 @@ public class RegressionCommand {
                     out.println("batch_id: " + result.batchId());
                     out.println("run_id: " + result.runId());
                     out.println("test_case_id: " + result.testCaseId());
+                    out.println("test_count: " + result.testCount());
                     out.println("profile: " + result.profile());
                     out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
                     out.println("provider_types: " + String.join(",", result.providerTypes()));
@@ -783,6 +791,7 @@ public class RegressionCommand {
                     out.println("batch_id: " + result.batchId());
                     out.println("run_id: " + result.runId());
                     out.println("test_case_id: " + result.testCaseId());
+                    out.println("test_count: " + result.testCount());
                     out.println("profile: " + result.profile());
                     out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
                     out.println("provider_types: " + String.join(",", result.providerTypes()));
@@ -805,6 +814,7 @@ public class RegressionCommand {
                     out.println("batch_id: " + result.batchId());
                     out.println("run_id: " + result.runId());
                     out.println("test_case_id: " + result.testCaseId());
+                    out.println("test_count: " + result.testCount());
                     out.println("profile: " + result.profile());
                     out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
                     out.println("provider_types: " + String.join(",", result.providerTypes()));
@@ -827,11 +837,14 @@ public class RegressionCommand {
                     out.println("batch_id: " + result.batchId());
                     out.println("run_id: " + result.runId());
                     out.println("test_case_id: " + result.testCaseId());
+                    out.println("test_count: " + result.testCount());
                     out.println("profile: " + result.profile());
                     out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
                     out.println("provider_type: " + result.providerType());
                     out.println("provider_id: " + result.providerId());
-                    out.println("base_url: " + result.baseUrl());
+                    if (!result.baseUrl().isBlank()) {
+                        out.println("base_url: " + result.baseUrl());
+                    }
                     out.println("evidence_classification: framework_provider_capability_only");
                     out.println("result_json: " + result.resultJson());
                     out.println("evidence_dir: " + result.evidenceDir());
@@ -850,12 +863,35 @@ public class RegressionCommand {
                     out.println("batch_id: " + result.batchId());
                     out.println("run_id: " + result.runId());
                     out.println("test_case_id: " + result.testCaseId());
+                    out.println("test_count: " + result.testCount());
                     out.println("profile: " + result.profile());
                     out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
                     out.println("provider_type: " + result.providerType());
                     out.println("provider_id: " + result.providerId());
                     out.println("runtime_mode: " + result.runtimeMode());
                     out.println("dialect: " + result.dialect());
+                    out.println("evidence_classification: framework_provider_capability_only");
+                    out.println("result_json: " + result.resultJson());
+                    out.println("evidence_dir: " + result.evidenceDir());
+                }
+                printContractFindings(out, result.findings());
+                return result.passed() ? 0 : 1;
+            }
+            if (supportsMessagingClientSample(validation.providerTypesUsed(), suite)) {
+                MessagingClientRunResult result = messagingClientProviderCapabilityService.run(
+                        root.resolve(suite).normalize(),
+                        profile,
+                        root.resolve("target/provider-capability/messaging-client").normalize());
+                out.println("run_status: " + result.status());
+                out.println("suite_id: " + result.suiteId());
+                if (result.resultJson() != null) {
+                    out.println("batch_id: " + result.batchId());
+                    out.println("run_id: " + result.runId());
+                    out.println("test_case_id: " + result.testCaseId());
+                    out.println("test_count: " + result.testCount());
+                    out.println("profile: " + result.profile());
+                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
+                    result.providerOutputLines().forEach(out::println);
                     out.println("evidence_classification: framework_provider_capability_only");
                     out.println("result_json: " + result.resultJson());
                     out.println("evidence_dir: " + result.evidenceDir());
@@ -874,6 +910,7 @@ public class RegressionCommand {
                     out.println("batch_id: " + result.batchId());
                     out.println("run_id: " + result.runId());
                     out.println("test_case_id: " + result.testCaseId());
+                    out.println("test_count: " + result.testCount());
                     out.println("profile: " + result.profile());
                     out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
                     out.println("provider_type: " + result.providerType());
@@ -900,6 +937,7 @@ public class RegressionCommand {
                     out.println("batch_id: " + result.batchId());
                     out.println("run_id: " + result.runId());
                     out.println("test_case_id: " + result.testCaseId());
+                    out.println("test_count: " + result.testCount());
                     out.println("profile: " + result.profile());
                     out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
                     out.println("provider_type: " + result.providerType());
@@ -921,6 +959,7 @@ public class RegressionCommand {
                 out.println("batch_id: " + result.batchId());
                 out.println("run_id: " + result.runId());
                 out.println("test_case_id: " + result.testCaseId());
+                out.println("test_count: " + result.testCount());
                 out.println("profile: " + result.profile());
                 out.println("fake_provider_executed: " + result.fakeProviderExecuted());
                 out.println("evidence_classification: framework_verification_only");
@@ -1010,7 +1049,7 @@ public class RegressionCommand {
             if (!Files.isRegularFile(child.suiteManifest())) {
                 findings.add(finding(
                         child.suiteManifest(),
-                        "test_cases." + child.id() + ".ref",
+                        child.fieldPath() + ".ref",
                         "missing_required_file",
                         "Create or correct the child suite manifest referenced by the suite group."));
                 continue;
@@ -1253,7 +1292,9 @@ public class RegressionCommand {
         try {
             Object loaded = new Yaml().load(Files.readString(suiteManifest));
             return loaded instanceof Map<?, ?> map
-                    && "suite_group".equals(stringValue(map.get("suite_type")));
+                    && (map.containsKey("child_suites")
+                            || ("suite_group".equals(stringValue(map.get("suite_type")))
+                                    && map.containsKey("test_cases")));
         } catch (IOException | RuntimeException e) {
             return false;
         }
@@ -1271,9 +1312,14 @@ public class RegressionCommand {
         if (profile.isBlank()) {
             findings.add(finding(suiteManifest, "profile", "missing_required_field", "Set the default suite group profile."));
         }
-        Object testCasesValue = manifest.get("test_cases");
-        if (!(testCasesValue instanceof List<?> entries) || entries.isEmpty()) {
-            findings.add(finding(suiteManifest, "test_cases", "missing_required_field", "List at least one child test case suite."));
+        String childrenField = manifest.containsKey("child_suites") ? "child_suites" : "test_cases";
+        Object childrenValue = manifest.get(childrenField);
+        if (!(childrenValue instanceof List<?> entries) || entries.isEmpty()) {
+            findings.add(finding(
+                    suiteManifest,
+                    childrenField,
+                    "missing_required_field",
+                    "List at least one child suite manifest."));
             return new SuiteGroupDefinition(suiteId, profile, List.of());
         }
         Path suiteRoot = suiteDirectory(suiteManifest);
@@ -1281,9 +1327,9 @@ public class RegressionCommand {
         List<String> seenChildIds = new ArrayList<>();
         int index = 0;
         for (Object entry : entries) {
-            String fieldPath = "test_cases[" + index + "]";
+            String fieldPath = childrenField + "[" + index + "]";
             if (!(entry instanceof Map<?, ?> map)) {
-                findings.add(finding(suiteManifest, fieldPath, "invalid_field_type", "Use a map for each suite group test case entry."));
+                findings.add(finding(suiteManifest, fieldPath, "invalid_field_type", "Use a map for each child suite entry."));
                 index++;
                 continue;
             }
@@ -1328,11 +1374,11 @@ public class RegressionCommand {
                         suiteManifest,
                         fieldPath + ".ref",
                         "invalid_child_suite_ref",
-                        "Keep child suite refs under the suite group directory."));
+                        "Keep child suite refs under the aggregation manifest directory."));
                 index++;
                 continue;
             }
-            children.add(new SuiteGroupChild(id, ref, childSuite, childProfile, expectedStatus));
+            children.add(new SuiteGroupChild(id, ref, childSuite, childProfile, expectedStatus, fieldPath));
             index++;
         }
         return new SuiteGroupDefinition(suiteId, profile, List.copyOf(children));
@@ -1377,6 +1423,12 @@ public class RegressionCommand {
         return providerTypes.size() == 2
                 && providerTypes.contains("grpc_mock")
                 && providerTypes.contains("grpc_client");
+    }
+
+    private boolean supportsMessagingClientSample(List<String> providerTypes, String suite) {
+        return (!providerTypes.isEmpty() && providerTypes.stream().allMatch(List.of("kafka", "ibm_mq")::contains))
+                || suite.contains("provider_capability/kafka")
+                || suite.contains("provider_capability/ibm_mq");
     }
 
     private void printContractFindings(PrintStream out, List<ContractFinding> findings) {
@@ -2607,7 +2659,8 @@ public class RegressionCommand {
             String ref,
             Path suiteManifest,
             String profile,
-            String expectedStatus) {
+            String expectedStatus,
+            String fieldPath) {
     }
 
     private record SuiteGroupOutput(Path summaryJson, Path summaryYaml, Path allureResultsDir) {

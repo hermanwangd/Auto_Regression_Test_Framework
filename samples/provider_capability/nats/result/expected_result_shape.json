@@ -1,10 +1,97 @@
 {
-  "framework_version": "v0.2",
+  "framework_version": "0.2.0",
+  "dsl_version": "v0.2",
   "suite_id": "NATS-CAPABILITY-v0.2",
+  "batch_id": "BATCH-NATS-001",
+  "run_id": "RUN-NATS-001",
+  "test_case_id": "NATS-CAPABILITY-TC-001",
+  "test_count": 1,
+  "profile": "local_nats",
+  "environment": "local_nats",
+  "provider_summary": [
+    {
+      "provider_id": "local-nats-event-bus",
+      "provider_type": "nats",
+      "runtime_mode": "mock",
+      "subject": "orders.ready"
+    }
+  ],
   "provider_type": "nats",
   "provider_id": "local-nats-event-bus",
-  "runtime_mode": "local",
+  "runtime_mode": "mock",
   "subject": "orders.ready",
   "status": "passed",
-  "release_evidence_eligible": false
+  "start_time": "2026-06-29T00:00:00Z",
+  "end_time": "2026-06-29T00:00:01Z",
+  "duration_ms": 1000,
+  "timestamps": {
+    "started_at": "2026-06-29T00:00:00Z",
+    "finished_at": "2026-06-29T00:00:01Z"
+  },
+  "test_results": [
+    {
+      "test_case_id": "NATS-CAPABILITY-TC-001",
+      "status": "passed",
+      "profile": "local_nats",
+      "provider_id": "local-nats-event-bus",
+      "provider_type": "nats"
+    }
+  ],
+  "provider_results": [
+    {
+      "provider_id": "local-nats-event-bus",
+      "provider_type": "nats",
+      "profile": "local_nats",
+      "runtime_mode": "mock",
+      "subject": "orders.ready",
+      "resolved_operation_result": {
+        "operation": "nats_capability_flow",
+        "status": "passed",
+        "outputs": {
+          "subject": "orders.ready",
+          "observed_count": 1
+        }
+      },
+      "release_evidence_eligible": false
+    }
+  ],
+  "step_results": [
+    {
+      "id": "publish_order_event",
+      "operation": "nats_publish",
+      "status": "passed"
+    }
+  ],
+  "steps": [
+    {
+      "id": "publish_order_event",
+      "operation": "nats_publish",
+      "status": "passed"
+    }
+  ],
+  "verify_results": [
+    {
+      "id": "order_event_observed",
+      "type": "event_published",
+      "status": "passed"
+    }
+  ],
+  "evidence_index_ref": "evidence_index.yaml",
+  "provider_evidence_refs": [
+    "provider-evidence/nats/publish_order_event.yaml",
+    "provider-evidence/nats/order_event_observed.yaml"
+  ],
+  "evidence_refs": [
+    "evidence_index.yaml",
+    "provider-evidence/nats/publish_order_event.yaml",
+    "provider-evidence/nats/order_event_observed.yaml",
+    "logs/execution.log",
+    "batch/batch.yaml"
+  ],
+  "failure": {
+    "code": null,
+    "classification": null,
+    "reason": null,
+    "owner_action": null
+  }
 }

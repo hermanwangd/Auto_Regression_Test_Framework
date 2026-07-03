@@ -4,39 +4,94 @@ batch_id: BATCH-GOLDEN-E2E-001
 run_id: RUN-GOLDEN-E2E-001
 test_case_id: GOLDEN-E2E-TC-001
 profile: local_golden
-evidence_classification: framework_verification_only
-downstream_release_evidence: false
 entries:
-  - evidence_type: execution_log
-    ref: logs/execution.log
-    masked: true
-  - evidence_type: fixture_setup
-    ref: fixture/setup.yaml
-    masked: true
-  - evidence_type: fixture_cleanup
-    ref: fixture/cleanup.yaml
-    masked: true
-  - evidence_type: actual_output
-    ref: actual/actual_output.json
-    masked: true
-  - evidence_type: actual_output
-    ref: actual/actual_output.txt
-    masked: true
-  - evidence_type: expected_result_ref
-    ref: expected/expected_output.ref
-    masked: true
-  - evidence_type: assertion_result
-    ref: assertions/status_is_ok.yaml
-    masked: true
-  - evidence_type: assertion_result
-    ref: assertions/output_matches_expected_json.yaml
-    masked: true
-  - evidence_type: diff
-    ref: diffs/output_matches_expected_json.diff
-    masked: true
-  - evidence_type: batch_summary
-    ref: batch/batch.yaml
-    masked: true
+  - evidence_id: execution-log-golden-001
+    evidence_type: execution_log
+    produced_by: framework
+    test_case_id: GOLDEN-E2E-TC-001
+    run_id: RUN-GOLDEN-E2E-001
+    batch_id: BATCH-GOLDEN-E2E-001
+    file_path: logs/execution.log
+    content_type: text/plain
+    status: passed
+    created_at: "2026-06-29T00:00:00Z"
+    masking_applied: true
+    linked_result_field: evidence_refs
+  - evidence_id: fixture-setup-golden-001
+    evidence_type: fixture_setup
+    produced_by: provider
+    provider_type: sample_fake_provider
+    provider_id: sample-fake-runtime
+    test_case_id: GOLDEN-E2E-TC-001
+    run_id: RUN-GOLDEN-E2E-001
+    batch_id: BATCH-GOLDEN-E2E-001
+    file_path: fixture/setup.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:00Z"
+    masking_applied: true
+    linked_result_field: steps
+  - evidence_id: fixture-cleanup-golden-001
+    evidence_type: fixture_cleanup
+    produced_by: provider
+    provider_type: sample_fake_provider
+    provider_id: sample-fake-runtime
+    test_case_id: GOLDEN-E2E-TC-001
+    run_id: RUN-GOLDEN-E2E-001
+    batch_id: BATCH-GOLDEN-E2E-001
+    file_path: fixture/cleanup.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:05Z"
+    masking_applied: true
+    linked_result_field: provider_results.cleanup_status
+  - evidence_id: assertion-status-golden-001
+    evidence_type: assertion_diff
+    produced_by: assertion_engine
+    test_case_id: GOLDEN-E2E-TC-001
+    run_id: RUN-GOLDEN-E2E-001
+    batch_id: BATCH-GOLDEN-E2E-001
+    file_path: assertions/status_is_ok.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:03Z"
+    masking_applied: true
+    linked_result_field: verify_results
+  - evidence_id: assertion-output-golden-001
+    evidence_type: assertion_diff
+    produced_by: assertion_engine
+    test_case_id: GOLDEN-E2E-TC-001
+    run_id: RUN-GOLDEN-E2E-001
+    batch_id: BATCH-GOLDEN-E2E-001
+    file_path: assertions/output_matches_expected_json.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:03Z"
+    masking_applied: true
+    linked_result_field: verify_results
+  - evidence_id: diff-output-golden-001
+    evidence_type: assertion_diff
+    produced_by: assertion_engine
+    test_case_id: GOLDEN-E2E-TC-001
+    run_id: RUN-GOLDEN-E2E-001
+    batch_id: BATCH-GOLDEN-E2E-001
+    file_path: diffs/output_matches_expected_json.diff
+    content_type: text/plain
+    status: passed
+    created_at: "2026-06-29T00:00:03Z"
+    masking_applied: true
+    linked_result_field: verify_results
+  - evidence_id: batch-summary-golden-001
+    evidence_type: batch_summary
+    produced_by: framework
+    test_case_id: GOLDEN-E2E-TC-001
+    run_id: RUN-GOLDEN-E2E-001
+    batch_id: BATCH-GOLDEN-E2E-001
+    file_path: batch/batch.yaml
+    content_type: application/yaml
+    status: passed
+    created_at: "2026-06-29T00:00:05Z"
+    masking_applied: true
+    linked_result_field: evidence_refs
 masking:
   raw_secret_found: false
-  report_ref: masking_report.yaml

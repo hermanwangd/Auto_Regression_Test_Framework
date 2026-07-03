@@ -1,0 +1,11 @@
+evidence_type: jdbc_query
+provider_type: jdbc
+provider_id: oracle-database
+test_case_id: RP-FWK-CONTRACT-SAMPLE-TC-001
+run_id: RUN-CONTRACT-001
+status: passed
+masking_applied: true
+row_count: 1
+masked_sample_result:
+  order_id: ORDER-001
+  payment_status: AUTHORIZED

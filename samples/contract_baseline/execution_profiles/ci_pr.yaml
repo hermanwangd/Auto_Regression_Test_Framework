@@ -20,9 +20,7 @@ dependency_provisioning_policy:
       readiness_check: jdbc_connect
       cleanup_scope: per_run
       output_binding_keys:
-        jdbc_url: oracle-ephemeral.jdbc_url
-        username: oracle-ephemeral.username
-        password: oracle-ephemeral.password
+        connection.secret_ref: oracle-ephemeral.connection
     - dependency_id: nats-ephemeral
       provider_id: nats-event-bus
       dependency_type: nats

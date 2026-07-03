@@ -10,12 +10,9 @@ provider_bindings:
     runtime_mode: native
     readiness_ref: evidence/readiness/oracle-database-sit.yaml
     binding_values:
-      jdbc_url: vault://sit/payment/db-jdbc-url
-      username:
-        secret_ref: vault://sit/payment/db-username
+      connection:
+        secret_ref: vault://sit/payment/db-connection
       dialect: oracle
-      password:
-        secret_ref: vault://sit/payment/db-password
   - provider_id: nats-event-bus
     runtime_mode: native
     readiness_ref: evidence/readiness/nats-event-bus-sit.yaml

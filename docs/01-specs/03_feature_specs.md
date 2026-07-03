@@ -81,7 +81,7 @@ Framework v0.2 delivery is staged. The current framework verification target is 
 |---|---|---|
 | Request/response | REST and native descriptor-driven gRPC unary Provider Contracts with payload binding, timeout, output refs, evidence, and explicit local/CI mock or stub endpoint bindings. | Pilot endpoint validation remains required for release acceptance. |
 | WireMock-backed protocol mocks | WireMock HTTP mock remains the P0 HTTP mock proof. SOAP mock and gRPC unary mock are PR-008 provider capability slices: `soap_mock` uses WireMock HTTP/XML/SOAP conventions; `grpc_mock` uses the WireMock gRPC extension and descriptor refs. | Pilot SOAP/gRPC release evidence still requires owner-provided RP artifacts and real environment proof where release acceptance depends on real endpoints. |
-| Messaging | Local/mock plus native Kafka/NATS publish, NATS request/reply, consume/observe, and bounded cleanup drain behavior with topic/subject binding keys, publish/request payload binding, timeout, correlation checks, cleanup strategy/count, and contract-defined output refs. | Pilot broker validation remains required for release acceptance; Kafka request/reply and persistent broker purge are future work only if selected RP acceptance requires them. |
+| Messaging | Local/mock plus native Kafka/NATS/IBM MQ client-provider publish, put, browse, consume/observe, and payload-match behavior with topic/subject/queue binding keys, payload binding, timeout, correlation checks, and contract-defined output refs. | Pilot broker validation remains required for release acceptance; broker/server provisioning, Kafka request/reply, IBM MQ destructive get, and persistent broker/queue purge are future work only if selected RP acceptance requires them. |
 | DB fixture | JDBC setup, verification query, cleanup SQL refs, cleanup strategy, isolation key, cleanup evidence, and explicit local/CI mock DB, ephemeral DB, or disposable schema bindings. | Same contract against the selected pilot DB fixture boundary. |
 | Deployment readiness | Local/mock plus native K8s/VM bounded readiness evidence with deployed version ref, timeout, output ref, K8s `kubectl` or direct API probes, K8s pod log tail bound, VM command refs where configured, and bounded probe behavior. | Owner-provided pilot K8s/VM validation remains required for release acceptance. |
 | External runner | Approved command-runner escape hatch with provider safety approval metadata, bounded timeout, inputs, outputs, evidence map, and mapped-artifact checks. External runner approval is provider safety approval, not release approval. | Optional only when no reusable built-in provider can represent the selected boundary. |
@@ -100,7 +100,7 @@ The immediate Track A target is contract completeness, not runtime completeness.
 
 Track B proves one complete Golden E2E framework lifecycle with a deterministic framework-owned fake provider and checked-in `samples/golden_e2e/` artifacts. Track B validates, executes, verifies, writes evidence/result JSON, and reports using the public CLI, but it is not provider-expansion work and is not downstream RP release evidence.
 
-Track C implements only the selected v0.2 P0 provider capability runtime after Track B proves the reusable framework lifecycle: WireMock, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and evidence. PR-008 extends the mock-service area with WireMock-backed `soap_mock` and unary `grpc_mock` capability. Kafka, native REST/gRPC endpoint certification, K8s, VM, external runner, Oracle/DB2 Testcontainers, streaming gRPC, and broader heterogeneous provider behavior remain outside Track C unless moved into P0 by decision log.
+Track C implements only the selected v0.2 P0 provider capability runtime after Track B proves the reusable framework lifecycle: WireMock, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and evidence. PR-008 extends the mock-service area with WireMock-backed `soap_mock` and unary `grpc_mock` capability. Kafka, IBM MQ, native REST/gRPC endpoint certification, K8s, VM, external runner, Oracle/DB2 Testcontainers, streaming gRPC, and broader heterogeneous provider behavior remain outside Track C unless moved into P0 by decision log.
 
 ## 3.4 Feature List
 
@@ -252,7 +252,7 @@ Validation alone is not enough. At least one checked-in `tests/approved/` execut
 New execution-focused DSL artifacts must:
 
 - Reference runtime targets through `targets.<name>.provider_id`. Use `compatible_profiles` only to restrict allowed profiles; do not select runtime behavior from labels.
-- Use operations allowed by the referenced Provider Contract, such as `http_request`, `unary_call`, `publish_message`, `consume_message`, `nats_publish`, `nats_observe`, `execute_script`, `query`, `check_deployment_ready`, `run_command`, or `run_and_collect`.
+- Use operations allowed by the referenced Provider Contract, such as `http_request`, `unary_call`, `kafka_publish`, `kafka_observe`, `mq_put`, `mq_browse`, `nats_publish`, `nats_observe`, `db_seed`, `db_cleanup`, `db_query`, `db_record_exists`, `check_deployment_ready`, `run_command`, or `run_and_collect`.
 - Use `source_refs` for source truth and `labels` for opaque product/RP/RU reporting metadata. New generated DSL must not require `traceability.package_id`, `traceability.acceptance_criteria_id`, or `traceability.source`; those fields are compatibility inputs until migrated.
 - Use `targets`, optional `data`, `setup` when needed, `execute`, `verify`, `evidence`, and `runtime` instead of framework-internal legacy fields.
 - Allow multiple `execute.operations[]` items only when each operation has a unique ID, declared target, Provider Contract operation, inputs, outputs, ordering semantics, and evidence refs. The framework must block ambiguous or unsupported multi-step execution.
@@ -331,7 +331,7 @@ P0 is required for v0.2 core and pilot execution. P1 is strongly recommended for
 |---|---|---|---|
 | HTTP / AP Mock | WireMock, `rest_client` `http_request` against framework-owned WireMock samples, `http_stub`, `http_mock_called`, `http_mock_request_body_match` | `http_mock_request_count`, `http_mock_not_called` | MockServer |
 | DB / Oracle / DB2 | JDBC Provider, `secret_ref` connection, SQL params binding, Oracle / DB2 dialect, `db_record_exists`, query evidence | `db_field_equals`, `db_row_count_equals`, cleanup by marker | Oracle / DB2 Testcontainers |
-| NATS / Event | NATS Provider, `event_published`, `event_payload_match`, `consume_from: test_start_time`, subject handling, event evidence | `event_not_published`, stream handling, consumer handling | Advanced broker purge / persistent stream cleanup |
+| Messaging / Event | NATS Provider, `event_published`, `event_payload_match`, `consume_from: test_start_time`, subject handling, event evidence | Kafka client Provider with `kafka_publish`, `kafka_observe`, `kafka_payload_match`; IBM MQ client Provider with `mq_put`, `mq_browse`, `mq_message_exists`, `mq_payload_match`; NATS `event_not_published`, stream handling, consumer handling | Broker/server provisioning, Kafka request/reply, IBM MQ destructive get, advanced broker purge / persistent stream cleanup |
 | Polling | `polling_observer`, poll until condition, timeout, `poll_interval`, last observed evidence | Fail-fast on connection error | Advanced retry policy |
 | JSON / Schema | `artifact_compare`, `json_match`, `schema_match`, `ignore_paths` | `numeric_tolerance`, `unordered_array`, `partial_match` | `contract_match` |
 | File Diff | `artifact_compare`, `file_diff`, normalize, `ignore_order`, `ignore_paths` | `csv_diff`, `yaml_diff`, `json_diff`, `file_exists`, `file_not_empty` | Approval-test workflow |
@@ -434,7 +434,43 @@ verify:
         consume_from: test_start_time
 ```
 
-## 3.14 Polling / Eventually Consistent Verification
+## 3.14 Kafka and IBM MQ Client Provider Model
+
+Framework v0.2 P1 adds client-side messaging providers for Kafka and IBM MQ. These providers are test-runner clients only: they use connection values supplied by Env_Profile and do not start Kafka brokers, queue managers, Testcontainers, or RUs in this slice. Their Provider Contracts may define the runtime vocabulary `[native, mock, ephemeral]`, but this framework build exposes `executable_runtime_modes: [mock]`; `native` and `ephemeral` remain contract-only future work and must block before provider dispatch.
+
+`kafka` is the canonical Kafka provider type for new artifacts. Existing `kafka_messaging` is a deprecated compatibility alias during the v0.2 transition. The `kafka` Provider Contract shall support `kafka_publish`, `kafka_observe`, and `kafka_payload_match`. Required Env_Profile binding keys are `bootstrap_servers`, `topic`, and `consumer_group`. Optional binding keys include `security_config.secret_ref`, `security_protocol`, `sasl_mechanism`, `ssl_config_ref`, `schema_registry_url`, `serialization`, `timeout`, and `poll_interval`. Kafka observation shall default to `consume_from: test_start_time`, use a test-owned consumer group, and must not commit or mutate shared consumer offsets.
+
+`ibm_mq` is the canonical IBM MQ provider type. It shall support `mq_put`, `mq_browse`, `mq_message_exists`, and `mq_payload_match`. Required Env_Profile binding keys are `queue_manager`, `channel`, `conn_name`, `queue`, and `credential.secret_ref`. Optional binding keys include `ccdt_ref`, `tls_config_ref`, `message_selector`, `timeout`, and `poll_interval`. IBM MQ verification shall be browse-first for shared queues. Destructive `mq_get` and queue purge are unsupported in this slice unless a future contract adds explicit destructive opt-in and cleanup policy.
+
+Kafka `topic`, Kafka `consumer_group`, and IBM MQ `queue` are Env_Profile binding keys, not operation-level destination overrides. If one test suite must exercise multiple topics or queues, it should declare separate Provider Instances and Env_Profile provider bindings for those logical destinations.
+
+Kafka and IBM MQ evidence shall include provider identity, target topic or queue, correlation/key metadata when available, payload ref, masked payload sample, observation start/end, attempts, timeout status, matched status, and failure code. Raw broker credentials, SASL/SSL details, CCDT content, TLS material, authorization headers, and secret values must be blocked or masked.
+
+```yaml
+execute:
+  operations:
+    publish_order:
+      target: order-events
+      operation: kafka_publish
+      inputs:
+        key:
+          ref: data/order_created.json#/order_id
+        payload_ref:
+          ref: data/order_created.json
+
+verify:
+  checks:
+    order_message_exists:
+      type: mq_payload_match
+      target: order-queue
+      expected:
+        ref: expected/order_message.json
+      options:
+        timeout: PT10S
+        poll_interval: PT1S
+```
+
+## 3.15 Polling / Eventually Consistent Verification
 
 Framework v0.2 shall provide a polling engine for eventually consistent verification.
 
@@ -442,7 +478,7 @@ P0 polling capabilities use the framework-owned `polling_observer` Provider Cont
 
 Execute steps shall not be retried automatically as product actions. Verify checks may poll when the verify type supports observation, such as `db_record_exists`, `event_published`, `file_exists`, and deployment readiness checks. Product assertion failures shall not be retried unless expressed as observation polling. Infrastructure connection errors may support fail-fast behavior when configured. Timeout failures shall include last observed evidence.
 
-## 3.15 JSON / Schema / File Diff Verification
+## 3.16 JSON / Schema / File Diff Verification
 
 Framework v0.2 shall provide structured payload and artifact comparison.
 
@@ -470,7 +506,7 @@ verify:
         - $.run_id
 ```
 
-## 3.16 Test Data Injection Model
+## 3.17 Test Data Injection Model
 
 Framework v0.2 shall provide a test data injection model.
 
@@ -512,7 +548,7 @@ setup:
           ref: ${data.payment_api_mappings}
 ```
 
-## 3.17 Reporting / Evidence Integration
+## 3.18 Reporting / Evidence Integration
 
 P0 reporting outputs are standard result JSON and evidence folder. P1 outputs are basic HTML report and Allure format output. P2 output is ReportPortal integration.
 
@@ -701,7 +737,7 @@ Execute checked-in execution-eligible package-neutral DSL regression test cases 
 
 The framework shall resolve targets, setup inputs, execute inputs, cleanup inputs, expected refs, verify rules, evidence refs, runtime policy, Provider Instances, framework-owned Provider Contracts, and Env_Profiles; confirm environment readiness; set up state; execute operations through selected provider runtimes; collect actual results; run verification; clean up state; and emit raw execution evidence.
 
-One suite execution is a batch. A batch may contain one or more test runs. Each test run validates one execution-eligible DSL test case and produces run-level evidence. Product/RP labels are carried as report metadata so F008 can package RP-level coverage, but runtime decisions come from framework artifacts only.
+One suite execution is a batch/run context. A suite may contain one or more execution-eligible DSL test cases, all selected under one suite-level Env_Profile. The standard result JSON records suite-level `batch_id`, `run_id`, `test_count`, `test_results[]`, provider summaries, and evidence refs. Product/RP labels are carried as report metadata so F008 can package RP-level coverage, but runtime decisions come from framework artifacts only.
 
 The execution process and DSL shall remain package-type-neutral. v0.2 provider implementations shall prioritize reusable built-in providers for request/response, messaging, DB fixture, deployment readiness, and file/batch execution. External runner support is not the default extension path; it is an approved escape hatch when a legacy or specialized boundary cannot yet be represented by a reusable Provider Contract.
 
@@ -727,7 +763,7 @@ F007 implementation must not proceed directly to provider runtime expansion unti
 - Block raw secrets in DSL, Env_Profile, result, and evidence; allow only `secret_ref`, runtime-generated secrets, CI secret references, or vault references.
 - Require explicit approval metadata before using an external runner escape hatch, including reason, owner, bounded command or container ref, timeout, inputs, outputs, and evidence map.
 - Create one unique batch ID for the suite execution request.
-- Create one unique run ID per execution-eligible test case in that batch.
+- Create one unique run ID for the suite execution request and record per-test outcomes in `test_results[]`.
 - Resolve the execution mode from the selected Env_Profile, including local, CI, SIT, and preprod constraints.
 - Follow the generated logical target dependency graph and stop downstream execution when a required upstream target validation fails.
 - Check deployment and environment readiness before running `sit` or `preprod` tests.

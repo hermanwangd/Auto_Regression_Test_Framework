@@ -1,0 +1,26 @@
+provider_instance_version: v0.2
+provider_id: payment-mq
+provider_type: ibm_mq
+runtime_modes: [mock]
+defaults:
+  timeout: PT5S
+  poll_interval: PT0.05S
+  browse_only: true
+operations:
+  mq_put:
+    outputs: [queue, message_id, correlation_id, put_at, mq_evidence_ref]
+  mq_browse:
+    outputs: [queue, browse_count, message_ids, last_observed_message_id, duration_ms, mq_evidence_ref]
+  mq_message_exists:
+    outputs: [queue, browse_count, matched, last_observed_message_id, duration_ms, mq_evidence_ref]
+  mq_payload_match:
+    outputs: [queue, browse_count, matched, matched_fields, duration_ms, mq_evidence_ref, assertion_evidence_ref]
+evidence:
+  capture: [queue, message_id, correlation_id, attempts, browse_count, matched, matched_fields, masked_observed_payload, duration_ms, status, failure_code]
+  redact: [credential, password, secret, token, authorization, ccdt, tls]
+failure_mapping:
+  message_not_found: ASSERTION_FAILED
+  payload_mismatch: ASSERTION_FAILED
+  timeout: MQ_TIMEOUT
+labels:
+  evidence_classification: framework_provider_capability_only

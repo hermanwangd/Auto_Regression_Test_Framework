@@ -1,17 +1,16 @@
 contract_version: v0.2
 suite_id: MOCK-SERVER-CROSS-VERIFY-SOAP-v0.2
-purpose: Cross-provider sample proving soap_mock setup is verified through rest_client execution and SOAP request evidence.
+purpose: Cross-provider multi-test sample proving soap_mock setup is verified through rest_client execution and SOAP request evidence under one Env_Profile.
 profile: local_soap_mock
 selection:
   mode: suite
   suite: mock-server-cross-verify-soap-http-client
 tests:
   - test_case.yaml
+  - test_case_boundary.yaml
 artifact_roots:
   provider_instances: provider_instances/
   env_profiles: env_profiles/
-  execution_profiles: execution_profiles/
-  environment_bindings: environment_bindings/
   expected_results: expected_results/
   fixtures: fixtures/
 evidence_policy:

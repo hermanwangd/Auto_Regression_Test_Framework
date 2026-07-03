@@ -23,14 +23,10 @@ providers:
   oracle-database:
     runtime_mode: ephemeral
     binding_keys:
-      jdbc_url:
-        generated_ref: generated://oracle-ephemeral.jdbc_url
-      username:
-        generated_ref: generated://oracle-ephemeral.username
+      connection.secret_ref:
+        secret_ref: generated://oracle-ephemeral.connection
       dialect:
         value: oracle
-      password:
-        secret_ref: generated://oracle-ephemeral.password
   nats-event-bus:
     runtime_mode: ephemeral
     binding_keys:

@@ -1,6 +1,6 @@
 provider_contract_version: v0.2
 provider_type: common_verify
-runtime_modes: [local]
+runtime_modes: [stub]
 binding_keys:
   workspace_ref:
     required: true
