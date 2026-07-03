@@ -85,8 +85,9 @@ jobs:
         shell: bash
         run: echo "date=$(/bin/date -u '+%Y%m%d')" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Dependency-Check data
-        uses: actions/cache@v4
+      - name: Restore Dependency-Check data
+        id: dependency-check-cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.DEPENDENCY_CHECK_DATA_DIR }}
           key: ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-${{ steps.dependency-check-cache-date.outputs.date }}-${{ hashFiles('**/pom.xml') }}
@@ -105,3 +106,10 @@ jobs:
           path: |
             target/dependency-check-report.*
           if-no-files-found: ignore
+
+      - name: Save Dependency-Check data
+        uses: actions/cache/save@v4
+        if: always() && steps.dependency-check-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.DEPENDENCY_CHECK_DATA_DIR }}
+          key: ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-${{ steps.dependency-check-cache-date.outputs.date }}-${{ hashFiles('**/pom.xml') }}
