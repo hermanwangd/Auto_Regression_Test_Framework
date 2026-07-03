@@ -33,7 +33,7 @@ jobs:
           cache: maven
 
       - name: Unit, integration, and packaged CLI verification
-        run: ./mvnw -B -ntp verify
+        run: scripts/ci/maven-verify-with-diagnostics.sh
 
       - name: Critical delivery coverage gate
         run: ./mvnw -B -ntp -Pv02-delivery-coverage -DskipTests jacoco:check@v02-delivery-critical-class-check
