@@ -92,7 +92,7 @@ jobs:
         run: scripts/ci/security-scan.sh
 
       - name: Upload dependency scan reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: release-dependency-security-${{ github.run_id }}
