@@ -41,14 +41,15 @@ New v0.2 documentation and generated artifacts must use Provider Contract, Provi
 
 | Command | Required Options | Optional Options | Success | Blocking / Failure |
 |---|---|---|---|---|
-| `regress validate` | Product Repo mode: `--rp-id <rp-id>`, `--env <profile>`; framework sample mode: `--suite <suite_manifest_path>` | `--root <product-repo>` default `.`, `--test-case <test-case-id>`, `--tag <tag>`, `--format yaml|json` default `yaml`, `--strict` | Validates DSL, suite manifest, Env_Profile or compatibility profile/binding artifacts, Provider Instance, framework Provider Contract catalog, secret guardrails, and evidence/result contract readiness without provider execution. | Returns non-zero and prints deterministic owner-actionable validation errors. |
-| `regress run` | Product Repo mode: `--rp-id <rp-id>`, `--env <profile>`; framework sample mode: `--suite <suite_manifest_path>`, `--profile <env_profile_id>` | `--root <product-repo>` default `.`, `--dry-run`, `--test-case <test-case-id>`, `--tag <tag>` | Creates one batch ID and one run ID for the selected suite execution, records per-test outcomes in `test_results[]`, and writes run/batch evidence. | Blocks before unsafe provider dispatch when validation, binding, environment, provider contract, provider instance, expected-result, or secret checks fail. |
-| `regress report` | Product Repo mode: `--rp-id <rp-id>`, `--batch-id <batch-id>`; framework sample mode: `--result <generated_result_json>` | `--root <product-repo>` default `.`, `--format text|yaml|json` default `text` | Produces review-ready coverage/evidence summary from batch evidence or a framework verification result JSON. | Returns non-zero when evidence is incomplete, coverage is not review-ready, result JSON is missing, or result schema is invalid. |
+| `regress validate` | `--suite <suite_manifest_path>` | `--profile <env_profile_id>`, `--test-case <test-case-id>`, `--tag <tag>`, `--format yaml|json` default `yaml`, `--strict` | Validates DSL, suite manifest, Env_Profile, Provider Instance, framework Provider Contract catalog, secret guardrails, and evidence/result contract readiness without provider execution. | Returns non-zero and prints deterministic owner-actionable validation errors. |
+| `regress run` | `--suite <suite_manifest_path>` | `--profile <env_profile_id>`, `--dry-run`, `--test-case <test-case-id>`, `--tag <tag>` | Creates one batch ID and one run ID for the selected suite execution, records per-test outcomes in `test_results[]`, and writes run/batch evidence. | Blocks before unsafe provider dispatch when validation, binding, environment, provider contract, provider instance, expected-result, or secret checks fail. |
+| `regress report` | `--result <generated_result_json>` | `--format text|yaml|json` default `text` | Produces review-ready coverage/evidence summary from a standard result JSON and its evidence index. | Returns non-zero when evidence is incomplete, coverage is not review-ready, result JSON is missing, or result schema is invalid. |
 
 Debug-only compatibility:
 
 - `regress report --run-id <run-id>` may exist for local debugging, but it is not a release coverage interface and must not satisfy RP release evidence.
 - Compatibility option markers retained for older contract tests: `--strict-schema`, `--suite <suite-id>`, `--format text`.
+- Product Repo `run --root <product-repo> --rp-id <rp-id> --env <profile>` is blocked in the public v0.2.2 runtime path with `LEGACY_RP_MODE_DEPRECATED`. Any remaining direct Product Repo runner is internal compatibility only and must not be used as a release gate.
 
 ## Stable Exit Codes
 
@@ -65,12 +66,11 @@ Debug-only compatibility:
 Syntax:
 
 ```bash
-regress validate --root <product-repo> --rp-id <rp-id> --env <profile> [--test-case <id> | --suite <id> | --tag <tag>] [--format yaml|json] [--strict]
-regress validate --suite samples/golden_e2e/suite_manifest.yaml [--format yaml|json] [--strict]
-regress validate --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml [--format yaml|json] [--strict]
+regress validate --suite samples/golden_e2e/suite_manifest.yaml [--profile <profile>] [--format yaml|json] [--strict]
+regress validate --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml [--profile <profile>] [--format yaml|json] [--strict]
 ```
 
-Product Repo mode requires `--rp-id` and `--env`; `--root` defaults to `.`. Framework sample mode requires `--suite <suite_manifest_path>` and resolves artifacts relative to the suite manifest. A standard suite may include multiple checked-in tests in `tests[]`; all selected tests share one suite-level profile from CLI `--profile` or `suite_manifest.profile`. Compatibility aggregation manifests may use `child_suites[]` to point at checked-in child suite manifests. The command validates selected checked-in approved DSL tests and generated framework artifacts only. It must not start providers, provision dependencies, mutate fixtures, write run evidence, or infer Product/RP/RU topology.
+Suite-mode requires `--suite <suite_manifest_path>` and resolves artifacts relative to the suite manifest. A standard suite may include multiple checked-in tests in `tests[]`; all selected tests share one suite-level profile from CLI `--profile` or `suite_manifest.profile`. Compatibility aggregation manifests may use `child_suites[]` to point at checked-in child suite manifests. The command validates selected checked-in approved DSL tests and generated framework artifacts only. It must not start providers, provision dependencies, mutate fixtures, write run evidence, or infer Product/RP/RU topology.
 
 Machine-readable output must include `status`, `valid`, `errors`, `warnings`, `selected_tests`, `provider_instances_used`, `provider_contracts_used`, `env_profiles_used`, and `owner_action`. Compatibility output may also include `environment_bindings_used` until migration completes. Errors follow `validation_error_taxonomy.v0.2.yaml`.
 
@@ -79,7 +79,6 @@ Machine-readable output must include `status`, `valid`, `errors`, `warnings`, `s
 Syntax:
 
 ```bash
-regress run --root <product-repo> --rp-id <rp-id> --env <profile> --dry-run [--test-case <id> | --suite <id> | --tag <tag>]
 regress run --suite samples/golden_e2e/suite_manifest.yaml --dry-run
 regress run --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml --dry-run
 ```
@@ -96,7 +95,6 @@ Syntax:
 
 ```bash
 regress validate-evidence --result <generated_result_json>
-regress report --root <product-repo> --rp-id <rp-id> --batch-id <batch-id> [--format text|yaml|json]
 regress report --result <generated_result_json> [--format text|yaml|json]
 ```
 
@@ -223,3 +221,4 @@ These commands support Product Repo and Phase 2 Agent Skill workflows. They are 
 - `regress draft-expected-results`
 
 They may be tested as support behavior, but they do not prove framework runtime maturity.
+Phase 2 Product Repo translation must emit suite-mode artifacts and invoke `regress run --suite <suite_manifest_path> --profile <env_profile_id>`. Direct public RP-mode execution remains blocked in v0.2.2.

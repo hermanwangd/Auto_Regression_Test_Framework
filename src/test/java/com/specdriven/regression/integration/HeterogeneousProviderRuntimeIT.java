@@ -3,8 +3,7 @@ package com.specdriven.regression.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.specdriven.regression.cli.RegressionCommand;
-import com.specdriven.regression.discovery.ReleasePackageService;
-import com.specdriven.regression.productrepo.ProductRepoService;
+import com.specdriven.regression.cli.RegressionCommandTestSupport;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Files;
@@ -22,9 +21,9 @@ class HeterogeneousProviderRuntimeIT {
     Path tempDir;
 
     @Test
-    void publicRunExecutesHeterogeneousProviderRuntimeBatchWithFrameworkEvidence() throws Exception {
+    void compatibilityRunExecutesHeterogeneousProviderRuntimeBatchWithFrameworkEvidence() throws Exception {
         Path packageRoot = createHeterogeneousRuntimeFixture();
-        RegressionCommand command = new RegressionCommand(new ProductRepoService(), new ReleasePackageService());
+        RegressionCommand command = RegressionCommandTestSupport.legacyRpModeCommand();
         ByteArrayOutputStream stdout = new ByteArrayOutputStream();
 
         int exit = command.execute(new String[] {
@@ -63,7 +62,7 @@ class HeterogeneousProviderRuntimeIT {
     }
 
     private Path createHeterogeneousRuntimeFixture() throws Exception {
-        RegressionCommand command = new RegressionCommand(new ProductRepoService(), new ReleasePackageService());
+        RegressionCommand command = RegressionCommandTestSupport.legacyRpModeCommand();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
         command.execute(new String[] {

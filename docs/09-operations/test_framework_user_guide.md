@@ -84,32 +84,42 @@ init-product-repo
   -> report
 ```
 
-`init-product-repo`, `init-rp`, `check-rp`, `generate-tests`, and `draft-expected-results` are Product Repo / Phase 2 Agent Skill support steps. The v0.2 runtime public interface is proven by `validate`, `run --dry-run`, `run`, and `report`.
+`init-product-repo`, `init-rp`, `check-rp`, `generate-tests`, and `draft-expected-results` are Product Repo / Phase 2 Agent Skill support steps. They are not the v0.2.2 runtime release interface. The v0.2.2 runtime public interface is suite-mode: `validate --suite`, `run --suite --dry-run`, `run --suite`, and `report --result`.
 
-Typical commands:
+Typical v0.2.2 runtime commands:
 
 ```bash
-regress init-product-repo --root .
-
-regress init-rp \
-  --root . \
-  --rp-id RP-PAYMENT-001 \
-  --package-type service
-
-regress check-rp \
-  --root . \
-  --rp-id RP-PAYMENT-001 \
-  --strict-schema \
-  --include-ac-readiness \
-  --include-expected-results
-
 regress validate \
-  --root . \
-  --rp-id RP-PAYMENT-001 \
-  --env ci \
-  --suite smoke \
-  --format yaml
+  --suite samples/provider_capability/suite_manifest.yaml \
+  --profile local_provider
+
+regress run \
+  --suite samples/provider_capability/suite_manifest.yaml \
+  --profile local_provider \
+  --dry-run
+
+regress run \
+  --suite samples/provider_capability/suite_manifest.yaml \
+  --profile local_provider
+
+regress report --result <generated_result_json>
 ```
+
+Public legacy Product Repo runtime execution is blocked in v0.2.2:
+
+```bash
+regress run --root <product-repo> --rp-id <rp-id> --env <profile>
+```
+
+returns:
+
+```yaml
+run_status: blocked
+failure_code: LEGACY_RP_MODE_DEPRECATED
+owner_action: Use run --suite <suite_manifest> --profile <profile>.
+```
+
+It must not create `batch_id`, `run_id`, result JSON, evidence files, or suite summary artifacts. Phase 2 Product Repo tooling must translate owner-authored Product/RP artifacts into suite-mode artifacts first, then invoke `regress run --suite <suite_manifest> --profile <env_profile_id>`.
 
 During framework development, keep Maven memory bounded:
 
@@ -1116,11 +1126,8 @@ Malformed suite YAML is a validation failure. The command returns `validation_st
 
 ```bash
 regress validate \
-  --root . \
-  --rp-id RP-PAYMENT-001 \
-  --env ci \
-  --suite smoke \
-  --format yaml
+  --suite samples/provider_capability/suite_manifest.yaml \
+  --profile local_provider
 ```
 
 Framework-owned samples may use suite-path mode. This mode is for framework verification only and must not be treated as downstream RP release evidence.
@@ -1277,29 +1284,25 @@ Dry run validates the same contract graph and produces a resolved execution plan
 
 ```bash
 regress run \
-  --root . \
-  --rp-id RP-PAYMENT-001 \
-  --env sit \
+  --suite samples/provider_capability/suite_manifest.yaml \
+  --profile local_provider \
   --dry-run
 ```
 
-Run approved tests:
+Run approved tests in the suite:
 
 ```bash
 regress run \
-  --root . \
-  --rp-id RP-PAYMENT-001 \
-  --env sit \
-  --suite smoke
+  --suite samples/provider_capability/suite_manifest.yaml \
+  --profile local_provider
 ```
 
 Run by tag:
 
 ```bash
 regress run \
-  --root . \
-  --rp-id RP-PAYMENT-001 \
-  --env sit \
+  --suite samples/provider_capability/suite_manifest.yaml \
+  --profile local_provider \
   --tag happy-path
 ```
 
@@ -1369,13 +1372,11 @@ regress validate-evidence \
   --result <generated_result_json>
 
 regress report \
-  --root . \
-  --rp-id RP-PAYMENT-001 \
-  --batch-id BATCH-001 \
+  --result <generated_result_json> \
   --format text
 ```
 
-Use `--batch-id` for release readiness. Use `--run-id` for single-run diagnostics.
+Use `--result` for v0.2.2 suite-mode release readiness. Product Repo `--batch-id` and `--run-id` report forms are compatibility support and must not be treated as the v0.2.2 runtime release interface.
 
 Evidence must answer:
 

@@ -164,6 +164,7 @@ public class RegressionCommand {
     private final GrpcMockCapabilityService grpcMockCapabilityService =
             new GrpcMockCapabilityService();
     private final SuiteRuntimeDispatcher suiteRuntimeDispatcher = new SuiteRuntimeDispatcher();
+    private boolean legacyRpModeEnabledForCompatibilityTests;
 
     public RegressionCommand(ProductRepoService productRepoService, ReleasePackageService releasePackageService) {
         this(
@@ -212,6 +213,10 @@ public class RegressionCommand {
         this.oracleReadinessService = oracleReadinessService;
         this.evidenceWriter = evidenceWriter;
         this.coverageReportService = coverageReportService;
+    }
+
+    void enableLegacyRpModeForCompatibilityTests() {
+        this.legacyRpModeEnabledForCompatibilityTests = true;
     }
 
     public int execute(String[] args, PrintStream out, PrintStream err) {
@@ -660,11 +665,11 @@ public class RegressionCommand {
         if (options.containsKey("--suite") && !options.containsKey("--rp-id")) {
             return runSuite(root, options, out, err);
         }
-        if ("RP-DUMMY-REST-001".equals(options.get("--rp-id"))) {
+        if (!legacyRpModeEnabledForCompatibilityTests) {
             printLegacyRpModeBlocked(out);
             return 1;
         }
-        err.println("RP-mode is deprecated for v0.2.2 PI-run. Use suite-mode with --suite and --profile.");
+        err.println("RP-mode is deprecated for v0.2.2 PI-run and is only available through compatibility tests.");
         String rpId = requiredOption(options, "--rp-id", err);
         String requestedEnv = requiredOption(options, "--env", err);
         if (rpId == null || requestedEnv == null) {
@@ -986,9 +991,10 @@ public class RegressionCommand {
     private int validateSuiteGroup(Path suiteManifest, String requestedProfile, PrintStream out) {
         SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest);
         SuiteGroupDefinition definition = validation.definition();
+        List<ContractFinding> profileFindings = suiteGroupProfileFindings(suiteManifest, definition, requestedProfile);
         List<ContractFinding> findings = new ArrayList<>(validation.findings());
-        findings.addAll(suiteGroupProfileFindings(suiteManifest, definition, requestedProfile));
-        boolean valid = findings.isEmpty();
+        findings.addAll(profileFindings);
+        boolean valid = validation.valid() && profileFindings.isEmpty();
         out.println("validation_status: " + (valid ? "passed" : "failed"));
         out.println("suite_id: " + definition.suiteId());
         out.println("test_count: " + definition.children().size());
@@ -1013,9 +1019,10 @@ public class RegressionCommand {
     private int dryRunSuiteGroup(Path suiteManifest, String requestedProfile, PrintStream out) {
         SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest);
         SuiteGroupDefinition definition = validation.definition();
+        List<ContractFinding> profileFindings = suiteGroupProfileFindings(suiteManifest, definition, requestedProfile);
         List<ContractFinding> findings = new ArrayList<>(validation.findings());
-        findings.addAll(suiteGroupProfileFindings(suiteManifest, definition, requestedProfile));
-        boolean valid = findings.isEmpty();
+        findings.addAll(profileFindings);
+        boolean valid = validation.valid() && profileFindings.isEmpty();
         out.println("provider_runtime_invoked: false");
         out.println("run_status: " + (valid ? "dry_run_ready" : "blocked"));
         out.println("suite_id: " + definition.suiteId());
@@ -1167,7 +1174,7 @@ public class RegressionCommand {
                     "profile_mismatch",
                     "Run the suite group with --profile " + definition.profile() + " or update the suite group profile."));
         }
-        if (!findings.isEmpty()) {
+        if (!validation.valid() || !findings.isEmpty()) {
             out.println("run_status: blocked");
             out.println("suite_id: " + definition.suiteId());
             out.println("test_count: " + definition.children().size());
@@ -3041,54 +3048,6 @@ public class RegressionCommand {
             Path resultJson,
             Path evidenceDir,
             List<ContractFinding> findings) {
-
-        static SuiteGroupChildResult fromMixed(SuiteGroupChild child, MixedRunResult result) {
-            return new SuiteGroupChildResult(
-                    child.id(),
-                    child.ref(),
-                    result.suiteId(),
-                    result.profile(),
-                    child.expectedStatus(),
-                    result.status(),
-                    child.expectedStatus().equals(result.status()),
-                    result.providerIds(),
-                    result.providerTypes(),
-                    result.resultJson(),
-                    result.evidenceDir(),
-                    result.findings());
-        }
-
-        static SuiteGroupChildResult fromSoap(SuiteGroupChild child, SoapRunResult result) {
-            return new SuiteGroupChildResult(
-                    child.id(),
-                    child.ref(),
-                    result.suiteId(),
-                    result.profile(),
-                    child.expectedStatus(),
-                    result.status(),
-                    child.expectedStatus().equals(result.status()),
-                    result.providerIds(),
-                    result.providerTypes(),
-                    result.resultJson(),
-                    result.evidenceDir(),
-                    result.findings());
-        }
-
-        static SuiteGroupChildResult fromGrpc(SuiteGroupChild child, GrpcRunResult result) {
-            return new SuiteGroupChildResult(
-                    child.id(),
-                    child.ref(),
-                    result.suiteId(),
-                    result.profile(),
-                    child.expectedStatus(),
-                    result.status(),
-                    child.expectedStatus().equals(result.status()),
-                    result.providerIds(),
-                    result.providerTypes(),
-                    result.resultJson(),
-                    result.evidenceDir(),
-                    result.findings());
-        }
 
         static SuiteGroupChildResult fromSuiteRuntime(SuiteGroupChild child, SuiteRuntimeResult result) {
             return new SuiteGroupChildResult(

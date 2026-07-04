@@ -26,7 +26,7 @@ Framework verification shall prove that v0.2 can:
 | Sample generated-artifact integration verification | Framework end-to-end behavior | `./mvnw verify` | `src/test/resources/framework-verification/sample-product-repo/` generated framework artifacts | Maven Failsafe reports and generated temporary sample evidence. |
 | Provider public-interface contract verification | Provider capability registry validation, Provider Contract schema validation, Provider Instance validation, Env_Profile validation, runtime mode validation, local/CI dependency provisioning policy validation, DSL target resolution, dry-run dispatch, unsupported capability blocking, provider-safety-unapproved escape-hatch blocking, and normalized evidence shape | `./mvnw verify` | Local/CI mock, WireMock HTTP mock, stub, ephemeral, Testcontainers-backed, fake-topic, embedded-broker, disposable-schema, and native provider fixtures plus injectable native messaging transport coverage for request/response, Kafka/NATS publish, NATS request/reply provider mode, consume/observe, cleanup, DB fixture, deployment readiness, file/batch, and escape-hatch contract validation when declared | Maven Failsafe reports and generated temporary provider evidence. |
 | Track A contract artifact verification | Public interface docs, contract schemas, P0 provider/verify catalog, validation taxonomy, secret guardrails, evidence folder structure, and sample artifacts | Docs review plus YAML/JSON parse checks; future automation through contract tests | `samples/` and `docs/02-architecture/contracts/` | Contract review evidence and parse output. |
-| Packaged CLI smoke verification | Spring Boot jar CLI entrypoint | `java -jar target/spec-driven-auto-regression-0.2.2.jar validate --root . --rp-id RP-FWK-SAMPLE --env ci` | Sample Product Repo fixture or current repository fixture | CLI output and exit code. |
+| Packaged CLI smoke verification | Spring Boot jar CLI entrypoint | `java -jar target/spec-driven-auto-regression-0.2.2.jar validate --suite samples/provider_capability/suite_manifest.yaml --profile local_provider` | Checked-in suite-mode framework sample fixture | CLI output and exit code. |
 
 `./mvnw test` must stay fast and deterministic. `./mvnw verify` may execute a local shell provider through the sample fixture, but must not require SIT/UAT deployment.
 Provider public-interface contract verification must prove that local and CI Env_Profiles can replace external service, DB, messaging, K8s, and VM dependencies with explicit mock, WireMock HTTP mock, stub, ephemeral, Testcontainers-backed, fake-topic, embedded-broker, disposable-schema, or generated-data bindings. It must validate dependency provisioning policy, provider runtime mode, provider `binding_keys`, binding key value kinds, and generated refs to Provider Contract `bindable_outputs` or declared dependency provisioner outputs. Track A limits this to contract validation, sample parsing, and dry-run planning; provider behavior is verified in later runtime tracks. It must not require real SIT/UAT endpoints, real K8s clusters, real VMs, production data, or committed secrets. It must also prove that SIT/preprod release evidence cannot silently use mock substitution. External runner verification is limited to contract validation and provider safety approved escape-hatch behavior unless an explicit runner implementation slice is selected later. External runner approval is provider safety approval, not release approval.
@@ -65,12 +65,11 @@ Provider public-interface verification cases use a separate local/CI mock-stub-e
 The integration flow shall:
 
 ```text
-copy sample Product Repo fixture to temp directory
--> check-rp --root <temp-product-repo> --rp-id RP-FWK-SAMPLE --strict-schema
--> validate --root <temp-product-repo> --rp-id RP-FWK-SAMPLE --env ci
--> run --root <temp-product-repo> --rp-id RP-FWK-SAMPLE --env ci --dry-run
--> run --root <temp-product-repo> --rp-id RP-FWK-SAMPLE --env ci
--> report --batch-id BATCH-001
+copy suite-mode framework sample fixture to temp directory
+-> validate --suite <suite_manifest.yaml> --profile <env_profile_id>
+-> run --suite <suite_manifest.yaml> --profile <env_profile_id> --dry-run
+-> run --suite <suite_manifest.yaml> --profile <env_profile_id>
+-> report --result <generated_result_json>
 -> assert batch evidence, run evidence, and coverage evidence
 ```
 
@@ -169,7 +168,7 @@ This is a pre-provider-runtime gate. FWK-008 must be green before sample fixture
 | Data and expected refs | Resolves `data` refs used by setup, execute, verify, and cleanup | Duplicated legacy oracle/expected references, legacy lifecycle data categories, or missing expected/data ref blocks before assertion evaluation. |
 | Verify | Supports captured-output actual/expected checks, provider-metadata `response_status_equals`, canonical `selector`, `db_record_exists`, and `event_published` semantics. `json_path_equals` and `json_path_absent` must keep `actual` as the captured output ref and use `selector` for the JSON/YAML path. | Missing required `actual`, missing `expected`, missing provider metadata, missing selector for JSON path verification, query ref, event ref, or unsupported verify type blocks with verify ID. |
 | Evidence, result, and runtime | Resolves `evidence.required`, `runtime.timeout`, `runtime.retry.max_attempts`, evidence types, technical failure classification, and standard result JSON | Evidence refs that do not point to execute/verify outputs, unbounded runtime policy, missing result fields, or unclassified failures block completion. |
-| Run/report consumption | `run` executes one active v0.2 approved test and `report --batch-id` produces review-ready source refs, optional report labels, result refs, evidence refs, and coverage | A run that passes but cannot be included in a review-ready batch report fails the gate. |
+| Run/report consumption | `run --suite <suite_manifest> --profile <env_profile_id>` executes one active v0.2 approved test and `report --result <generated_result_json>` produces review-ready source refs, optional report labels, result refs, evidence refs, and coverage | A run that passes but cannot be included in a review-ready result report fails the gate. |
 | Prohibited fields | Accepts execution-focused fields only in new artifacts | `rp_id`, `ac_id`, `execution_target`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, `policy`, approval fields, waiver fields, release gate fields, or risk approval fields block before execution. |
 | Legacy compatibility | Legacy sample artifacts remain readable through an explicit compatibility path until migrated | Legacy-only input must not be silently promoted as a new execution-focused artifact. |
 
@@ -185,9 +184,9 @@ Minimum FWK-008 test cases:
 - Operation-level `inputs` with a reviewed two-case parameter set creates two run IDs, two run evidence directories, recorded `parameter_case_id`, resolved input values, and batch/report coverage that counts the AC once.
 - Malformed v0.2 input sets or input keys not allowed by the selected Provider Contract block before provider dispatch.
 - CLI `run` selection honors `--test-case`, `--tag`, and `--suite` by limiting preflight, execution, batch evidence, and run evidence to selected approved tests. Empty selector matches block with `run.selection.*` gaps and owner action instead of reporting the approved-test folder as missing.
-- CLI dry-run blocks selected tests whose `compatible_profiles` do not include the requested `--env` Env_Profile; Env_Profile blocks when selected provider bindings omit required binding keys, use invalid value kinds, or reference missing bindable outputs; unsupported `execution_mode` blocks before dispatch; `sit` and `preprod` execution modes block when target readiness refs are missing.
+- CLI dry-run blocks selected tests whose `compatible_profiles` do not include the requested `--profile` Env_Profile; Env_Profile blocks when selected provider bindings omit required binding keys, use invalid value kinds, or reference missing bindable outputs; unsupported `execution_mode` blocks before dispatch; `sit` and `preprod` execution modes block when target readiness refs are missing.
 - CLI dry-run reports DSL validation gaps with AP, field path, test case ID, acceptance-criteria source ref when available, reason, and owner action.
-- CLI `run` accepts one `tests/approved/` v0.2 test with `status: active`, writes standard result JSON plus run and batch evidence, and CLI `report --batch-id` returns review-ready coverage with source ref, labels or traceability-map labels when provided, test case ID, and run ID.
+- CLI `run --suite` accepts one `tests/approved/` v0.2 test with `status: active`, writes standard result JSON plus run and batch evidence, and CLI `report --result` returns review-ready coverage with source ref, labels or traceability-map labels when provided, test case ID, and run ID.
 
 This verification may initially run against parser tests, CLI dry-run tests, compatibility translation tests, plugin catalog tests, secret guardrail tests, result schema tests, and one CLI run/report consumption test. It must be green before migrating the sample fixture or changing provider runtime dispatch.
 
@@ -295,10 +294,10 @@ Required Track C verification:
 
 FWK-013 must verify both `docs/09-operations/test_framework_user_guide.md` and `docs/02-architecture/contracts/framework_usage_interface.v0.2.md` before provider/runtime expansion is accepted. Automated mapping: `FrameworkPublicInterfaceContractTest` verifies the public interface contract and referenced contract artifacts.
 
-- `regress validate` supports Product Repo mode with `--rp-id` and `--env`, and framework sample mode with `--suite <suite_manifest_path>` for standard multi-test suites plus compatibility `child_suites[]` aggregation manifests. It supports optional `--root` default `.`, `--test-case`, `--tag`, `--format yaml|json`, and `--strict`, returns exit code `0`, `1`, or `2`, and prints stable keys `status`, `valid`, `errors`, `warnings`, `selected_tests`, `provider_instances_used`, `provider_contracts_used`, `env_profiles_used`, `child_suites`, and `owner_action`.
-- `regress run` supports Product Repo mode with `--rp-id` and `--env`, and framework sample mode with `--suite <suite_manifest_path>` and `--profile <profile>`. It supports optional `--root` default `.`, `--dry-run`, `--test-case`, and `--tag`, creates one batch/run context when execution starts, records per-test outcomes in `test_results[]`, and prints stable dry-run and run keys. Suite group dry-run must not execute provider runtime; suite group run must write `suite_summary_json`, `suite_summary_yaml`, and `allure_results_dir`.
+- `regress validate` supports suite-mode with `--suite <suite_manifest_path>` for standard multi-test suites plus compatibility `child_suites[]` aggregation manifests. It supports optional `--profile`, `--test-case`, `--tag`, `--format yaml|json`, and `--strict`, returns exit code `0`, `1`, or `2`, and prints stable keys `status`, `valid`, `errors`, `warnings`, `selected_tests`, `provider_instances_used`, `provider_contracts_used`, `env_profiles_used`, `child_suites`, and `owner_action`.
+- `regress run` supports suite-mode with `--suite <suite_manifest_path>` and `--profile <profile>`. It supports optional `--dry-run`, `--test-case`, and `--tag`, creates one batch/run context when execution starts, records per-test outcomes in `test_results[]`, and prints stable dry-run and run keys. Suite group dry-run must not execute provider runtime; suite group run must write `suite_summary_json`, `suite_summary_yaml`, and `allure_results_dir`. Public `run --root <product-repo> --rp-id <rp-id> --env <profile>` must return `LEGACY_RP_MODE_DEPRECATED` and must not create run artifacts.
 - Single-suite `tests[]` execution uses one selected suite-level profile for every test case; test cases reference Provider Instances by `provider_id` and do not select their own runtime profile. Provider capability samples must include coverage that a multi-test suite shares one Env_Profile and reports one suite-level `batch_id`, one `run_id`, `test_count`, `test_results[]`, `provider_summary[]`, pass count, fail count, evidence, and result JSON. Messaging coverage must include a mixed Kafka + IBM MQ suite using one Env_Profile with bindings for both provider IDs and provider evidence summary entries for both provider types. Mixed-provider result JSON must not expose first-provider top-level `provider_id`, `provider_type`, `topic`, or `queue` as if they describe the whole suite.
-- `regress report` supports Product Repo mode with `--rp-id` and `--batch-id`, and framework sample mode with `--result <generated_result_json>`. It supports optional `--root` default `.`, supports `--format text|yaml|json`, and prints stable review keys.
+- `regress report` supports suite-mode with `--result <generated_result_json>`. It supports `--format text|yaml|json` and prints stable review keys.
 - `regress validate-evidence --result` and `regress report --result` must reject malformed standard result JSON, including execution-started results where `suite_id`, `batch_id`, `run_id`, `test_count`, `test_results`, `start_time`, `end_time`, or `duration_ms` is missing, `test_count` is not a positive JSON integer value, `test_count` does not equal `test_results.length`, a `test_results[]` entry is not an object, a `test_results[]` entry is missing `test_case_id`, `status`, or `profile`, a per-test status is outside `passed`, `failed`, and `blocked`, or a multi-provider standard result inferred from `test_results[]` or `provider_results[]` is missing `provider_summary[]`.
 - DSL and suite contracts exist and define stable runtime-consumed fields for identity/status/source refs, labels, compatible profiles, optional data catalog, operation inputs, targets, setup, execute, cleanup, expected refs, verify, evidence, runtime policy, suite/test/tag selection, and suite group child aggregation fields with duplicate-id and path-escape validation.
 - Env_Profile contract exists and defines stable runtime-consumed fields for environment selection, execution mode, target provider bindings, secret refs, readiness refs, dependency model, constraints, runtime_mode, and binding key values.
@@ -414,11 +413,11 @@ When owner-provided Product/RP artifacts exist, release package regression shall
 
 ```bash
 agent product-mapping-translate --root <product-repo> --rp-id <rp-id> --out generated-framework/
-regress run --root <product-repo> --rp-id <rp-id> --env <mode>
-regress report --batch-id <batch-id>
+regress run --suite generated-framework/suite_manifest.yaml --profile <env_profile_id>
+regress report --result <generated_result_json>
 ```
 
-That flow produces real RP batch/run evidence under the Product Repo. It may use `local`, `ci`, `sit`, or `preprod` depending on the selected Env_Profile `execution_mode`. SIT/preprod runs require deployed target versions and environment readiness evidence.
+That flow produces real RP batch/run evidence from suite-mode artifacts. Direct public `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` is blocked in v0.2.2; Product Repo translation must produce suite manifests first. It may use `local`, `ci`, `sit`, or `preprod` depending on the selected Env_Profile `execution_mode`. SIT/preprod runs require deployed target versions and environment readiness evidence.
 
 ## 7.10 CI/CD Execution Policy
 
@@ -427,8 +426,8 @@ That flow produces real RP batch/run evidence under the Product Repo. It may use
 | Pull request | `./mvnw test` | Fast framework unit/component verification. |
 | Main or release branch | `./mvnw verify` | Framework integration verification with sample generated framework artifacts. |
 | Provider public-interface contract verification | `./mvnw verify` | Local/CI mock-stub-ephemeral Provider Contract, Provider Instance, and Env_Profile proof for heterogeneous execution boundaries without real downstream RP release evidence. |
-| Packaged CLI smoke | `java -jar target/spec-driven-auto-regression-0.2.2.jar validate --root . --rp-id RP-FWK-SAMPLE --env ci` | Verify packaged command delegation through the public runtime command surface. |
-| RP release pipeline | Agent translation plus `regress run --root <product-repo> --rp-id <rp-id> --env <mode>` | Downstream RP regression execution, outside this framework verification plan. |
+| Packaged CLI smoke | `java -jar target/spec-driven-auto-regression-0.2.2.jar validate --suite samples/provider_capability/suite_manifest.yaml --profile local_provider` | Verify packaged command delegation through the public runtime command surface. |
+| RP release pipeline | Agent translation plus `regress run --suite generated-framework/suite_manifest.yaml --profile <env_profile_id>` | Downstream RP regression execution, outside this framework verification plan. |
 
 All commands should be bounded and avoid memory-heavy execution. Local and CI runs should stay under the repository guidance of 8 GB RAM.
 

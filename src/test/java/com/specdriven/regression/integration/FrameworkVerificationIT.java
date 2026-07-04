@@ -3,9 +3,8 @@ package com.specdriven.regression.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.specdriven.regression.cli.RegressionCommand;
-import com.specdriven.regression.discovery.ReleasePackageService;
+import com.specdriven.regression.cli.RegressionCommandTestSupport;
 import com.specdriven.regression.mapping.RpRuMappingService;
-import com.specdriven.regression.productrepo.ProductRepoService;
 import com.specdriven.regression.provider.ProviderContractGap;
 import com.specdriven.regression.provider.ProviderContractResolutionReport;
 import com.specdriven.regression.provider.ProviderContractResolver;
@@ -580,17 +579,18 @@ class FrameworkVerificationIT {
     }
 
     private RegressionCommand command() {
-        return new RegressionCommand(new ProductRepoService(), new ReleasePackageService());
+        return RegressionCommandTestSupport.legacyRpModeCommand();
     }
 
     private CommandResult execute(RegressionCommand command, String commandName, Path productRepo, String... extraArgs) {
         String[] args = new String[5 + extraArgs.length];
-        args[0] = commandName;
-        args[1] = "--root";
-        args[2] = productRepo.toString();
-        args[3] = "--rp-id";
-        args[4] = SAMPLE_RP_ID;
-        System.arraycopy(extraArgs, 0, args, 5, extraArgs.length);
+        int index = 0;
+        args[index++] = commandName;
+        args[index++] = "--root";
+        args[index++] = productRepo.toString();
+        args[index++] = "--rp-id";
+        args[index++] = SAMPLE_RP_ID;
+        System.arraycopy(extraArgs, 0, args, index, extraArgs.length);
         ByteArrayOutputStream stdout = new ByteArrayOutputStream();
         ByteArrayOutputStream stderr = new ByteArrayOutputStream();
         int exitCode = command.execute(args, print(stdout), print(stderr));

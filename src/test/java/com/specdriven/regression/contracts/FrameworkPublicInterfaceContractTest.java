@@ -18,6 +18,8 @@ class FrameworkPublicInterfaceContractTest {
 
     private static final Path CONTRACT_ROOT = Path.of("docs/02-architecture/contracts");
     private static final Path PUBLIC_INTERFACE = CONTRACT_ROOT.resolve("framework_usage_interface.v0.2.md");
+    private static final Path USER_GUIDE = Path.of("docs/09-operations/test_framework_user_guide.md");
+    private static final Path TEST_PLAN = Path.of("docs/07-validation-evidence/07_regression_test_plan.md");
 
     @Test
     @DisplayName("FWK-013 | public interface contract freezes runtime invocation and artifact surfaces")
@@ -36,16 +38,14 @@ class FrameworkPublicInterfaceContractTest {
                 .contains("`regress check-rp`")
                 .contains("`regress run`")
                 .contains("`regress report`")
-                .contains("`--rp-id <rp-id>`")
-                .contains("`--root <product-repo>`")
                 .contains("`--strict-schema`")
-                .contains("`--env <profile>`")
                 .contains("`--dry-run`")
                 .contains("`--test-case <test-case-id>`")
-                .contains("`--suite <suite-id>`")
+                .contains("`--suite <suite_manifest_path>`")
+                .contains("`--profile <env_profile_id>`")
                 .contains("`--tag <tag>`")
-                .contains("`--batch-id <batch-id>`")
                 .contains("`--format text`")
+                .contains("`LEGACY_RP_MODE_DEPRECATED`")
                 .contains("operation-level `inputs` maps")
                 .contains("`data.<name>.ref`")
                 .contains("`generated-framework/suite_manifest.yaml`")
@@ -61,6 +61,30 @@ class FrameworkPublicInterfaceContractTest {
                 .contains("`regress draft-expected-results`")
                 .contains("framework runtime consumes")
                 .contains("must not infer Product/RP/RU topology");
+        assertThat(contract)
+                .doesNotContain("regress run --root <product-repo> --rp-id <rp-id> --env <profile> --dry-run")
+                .doesNotContain("regress report --root <product-repo> --rp-id <rp-id> --batch-id");
+    }
+
+    @Test
+    @DisplayName("FWK-013 | user docs keep v0.2.2 runtime release interface suite-mode only")
+    void FWK_013_userDocsKeepRuntimeReleaseInterfaceSuiteModeOnly() throws Exception {
+        String userGuide = Files.readString(USER_GUIDE);
+        String testPlan = Files.readString(TEST_PLAN);
+
+        assertThat(userGuide)
+                .contains("The v0.2.2 runtime public interface is suite-mode")
+                .contains("failure_code: LEGACY_RP_MODE_DEPRECATED")
+                .contains("It must not create `batch_id`, `run_id`, result JSON, evidence files, or suite summary artifacts")
+                .contains("translate owner-authored Product/RP artifacts into suite-mode artifacts first");
+        assertThat(testPlan)
+                .contains("run --suite <suite_manifest>")
+                .contains("report --result <generated_result_json>")
+                .contains("Public `run --root <product-repo> --rp-id <rp-id> --env <profile>` must return `LEGACY_RP_MODE_DEPRECATED`")
+                .doesNotContain("report --batch-id")
+                .doesNotContain("requested `--env` Env_Profile")
+                .doesNotContain("`regress run` supports Product Repo mode")
+                .doesNotContain("`regress report` supports Product Repo mode");
     }
 
     @Test
@@ -85,7 +109,7 @@ class FrameworkPublicInterfaceContractTest {
     @Test
     @DisplayName("FWK-013 | user guide declares standard evidence index and provider evidence refs")
     void FWK_013_userGuideDeclaresStandardEvidenceIndexContract() throws Exception {
-        String userGuide = Files.readString(Path.of("docs/09-operations/test_framework_user_guide.md"));
+        String userGuide = Files.readString(USER_GUIDE);
         String evidenceContract = Files.readString(CONTRACT_ROOT.resolve("evidence_folder_structure.v0.2.md"));
 
         for (String text : List.of(userGuide, evidenceContract)) {

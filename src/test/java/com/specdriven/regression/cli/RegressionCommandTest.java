@@ -4254,7 +4254,7 @@ class RegressionCommandTest {
     }
 
     private RegressionCommand command() {
-        return new RegressionCommand(new ProductRepoService(), new ReleasePackageService());
+        return RegressionCommandTestSupport.legacyRpModeCommand();
     }
 
     private PrintStream print(ByteArrayOutputStream output) {
