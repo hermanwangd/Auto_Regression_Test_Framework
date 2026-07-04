@@ -82,7 +82,11 @@ accepted_findings_by_package = {
         "CVE-2014-3577",
         "CVE-2020-13956",
     },
-    "pkg:maven/org.wiremock/wiremock-grpc-extension@1.0.0-beta.5": {"CVE-2018-9116"},
+    "pkg:maven/org.wiremock/wiremock-grpc-extension@1.0.0-beta.5": {
+        "CVE-2018-9116",
+        "CVE-2018-9117",
+        "CVE-2023-41329",
+    },
     "pkg:maven/org.wiremock/wiremock-grpc-extension-core@1.0.0-beta.5": {
         "CVE-2018-9116",
         "CVE-2018-9117",
@@ -98,7 +102,11 @@ accepted_findings_by_file_name = {
     "commons-lang3-3.17.0.jar": {"CVE-2025-48924"},
     "jackson-databind-2.22.0.jar": {"CVE-2026-54515"},
     "wiremock-httpclient-apache5-4.0.0-beta.38.jar": {"CVE-2014-3577", "CVE-2020-13956"},
-    "wiremock-grpc-extension-1.0.0-beta.5.jar": {"CVE-2018-9116"},
+    "wiremock-grpc-extension-1.0.0-beta.5.jar": {
+        "CVE-2018-9116",
+        "CVE-2018-9117",
+        "CVE-2023-41329",
+    },
     "wiremock-grpc-extension-core-1.0.0-beta.5.jar": {
         "CVE-2018-9116",
         "CVE-2018-9117",

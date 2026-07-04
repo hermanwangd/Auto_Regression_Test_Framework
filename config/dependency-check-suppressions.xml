@@ -141,6 +141,24 @@
     </suppress>
     <suppress until="2026-10-01Z">
         <notes><![CDATA[
+        WireMock gRPC extension is used only for framework-verification local/CI mock
+        samples. It is not a downstream product runtime surface. Re-evaluate with the next
+        WireMock gRPC extension upgrade.
+        ]]></notes>
+        <gav regex="true">^org\.wiremock:wiremock-grpc-extension:1\.0\.0-beta\.5$</gav>
+        <cve>CVE-2018-9117</cve>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        WireMock gRPC extension is used only for framework-verification local/CI mock
+        samples. It is not a downstream product runtime surface. Re-evaluate with the next
+        WireMock gRPC extension upgrade.
+        ]]></notes>
+        <gav regex="true">^org\.wiremock:wiremock-grpc-extension:1\.0\.0-beta\.5$</gav>
+        <cve>CVE-2023-41329</cve>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
         WireMock gRPC extension core is used only for framework-verification local/CI mock
         samples. It is not a downstream product runtime surface. Re-evaluate with the next
         WireMock gRPC extension upgrade.
