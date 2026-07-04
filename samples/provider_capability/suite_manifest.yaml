@@ -23,6 +23,10 @@ child_suites:
     ref: common_verify/suite_manifest.yaml
     profile: local_verify
     expected_status: passed
+  - id: compare
+    ref: compare/suite_manifest.yaml
+    profile: local_compare
+    expected_status: passed
   - id: polling
     ref: polling/suite_manifest.yaml
     profile: local_polling

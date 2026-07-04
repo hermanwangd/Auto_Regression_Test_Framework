@@ -119,8 +119,8 @@ class MockServerCrossVerifySampleCommandTest {
         assertThat(run.stdout())
                 .contains("run_status: passed")
                 .contains("suite_id: PROVIDER-CAPABILITY-P0-v0.2")
-                .contains("test_count: 11")
-                .contains("passed_count: 11")
+                .contains("test_count: 12")
+                .contains("passed_count: 12")
                 .contains("failed_count: 0");
 
         Path suiteSummary = extractPath(run.stdout(), "suite_summary_json");
@@ -130,10 +130,137 @@ class MockServerCrossVerifySampleCommandTest {
                 .contains("\"child_suite_id\": \"JDBC-CAPABILITY-v0.2\"")
                 .contains("\"child_suite_id\": \"NATS-CAPABILITY-v0.2\"")
                 .contains("\"child_suite_id\": \"COMMON-VERIFY-CAPABILITY-v0.2\"")
+                .contains("\"child_suite_id\": \"PROVIDER-CAPABILITY-COMPARE-v0.2\"")
                 .contains("\"child_suite_id\": \"KAFKA-CAPABILITY-v0.2\"")
                 .contains("\"child_suite_id\": \"IBM-MQ-CAPABILITY-v0.2\"")
+                .contains("\"unsupported_count\": 0")
                 .doesNotContain("unsupported_provider_type")
                 .doesNotContain("VALIDATION_UNSUPPORTED_PROVIDER_TYPE");
+    }
+
+    @Test
+    void suiteGroupSummaryClassifiesUnsupportedChildSeparatelyFromBlocked() throws Exception {
+        Path manifest = writeSuiteGroupManifest(
+                "unsupported_child_suite_manifest.yaml",
+                """
+                contract_version: v0.2
+                suite_id: UNSUPPORTED-CHILD-SUITE
+                profile: local_unsupported
+                child_suites:
+                  - id: unsupported_child
+                    ref: child/suite_manifest.yaml
+                    profile: local_unsupported
+                    expected_status: passed
+                """);
+        Path childDir = manifest.getParent().resolve("child");
+        Files.createDirectories(childDir.resolve("provider_instances"));
+        Files.createDirectories(childDir.resolve("env_profiles"));
+        Files.createDirectories(childDir.resolve("custom-provider-contracts"));
+        Files.writeString(
+                childDir.resolve("suite_manifest.yaml"),
+                """
+                contract_version: v0.2
+                suite_id: CHILD-UNSUPPORTED-v0.2
+                profile: local_unsupported
+                provider_contract_resolution:
+                  mode: suite_override
+                  custom_provider_contracts: custom-provider-contracts
+                  allowed_provider_types: [unsupported_provider]
+                selection:
+                  mode: suite
+                  suite: unsupported-child
+                tests:
+                  - test_case.yaml
+                artifact_roots:
+                  provider_instances: provider_instances/
+                  env_profiles: env_profiles/
+                """);
+        Files.writeString(
+                childDir.resolve("test_case.yaml"),
+                """
+                dsl_version: v0.2
+                test_case_id: CHILD-UNSUPPORTED-TC-001
+                title: Unsupported provider child
+                status: active
+                revision: 1
+                compatible_profiles: [local_unsupported]
+                targets:
+                  unsupported_target:
+                    provider_id: unsupported-provider
+                execute: []
+                verify:
+                  checks: []
+                evidence:
+                  required: []
+                runtime:
+                  timeout: PT30S
+                  retry:
+                    max_attempts: 1
+                """);
+        Files.writeString(
+                childDir.resolve("provider_instances/unsupported-provider.yaml"),
+                """
+                provider_instance_version: v0.2
+                provider_id: unsupported-provider
+                provider_type: unsupported_provider
+                runtime_modes: [external]
+                """);
+        Files.writeString(
+                childDir.resolve("custom-provider-contracts/unsupported_provider.yaml"),
+                """
+                provider_contract_version: v0.2
+                provider_type: unsupported_provider
+                runtime_modes: [external]
+                binding_keys: {}
+                valid_provider_instance_shape:
+                  required_fields: [provider_id, provider_type, runtime_modes]
+                  allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes]
+                operations:
+                  observe:
+                    allowed_inputs: []
+                    required_inputs: []
+                    output_refs: []
+                evidence:
+                  outputs: []
+                  redact: []
+                failure_mapping:
+                  allowed_codes: [UNSUPPORTED_RUNTIME]
+                """);
+        Files.writeString(
+                childDir.resolve("env_profiles/local_unsupported.yaml"),
+                """
+                env_profile_id: local_unsupported
+                execution_mode: local
+                providers:
+                  unsupported-provider:
+                    runtime_mode: external
+                    binding_keys: {}
+                dependency_policy:
+                  require_readiness_evidence: false
+                  allow_framework_managed_dependencies: false
+                dependency_substitution_policy:
+                  allowed_runtime_modes: [external]
+                dependency_provisioning_policy:
+                  allowed_provisioners: []
+                data_policy:
+                  approved_expected_results_required: false
+                  production_data_allowed: false
+                  generated_data_allowed: true
+                  secrets_must_use_refs: true
+                """);
+
+        CommandResult run = execute("run", "--suite", manifest.toString(), "--profile", "local_unsupported");
+
+        assertThat(run.exit()).isEqualTo(1);
+        assertThat(run.stdout())
+                .contains("run_status: failed")
+                .contains("unsupported_provider")
+                .contains("unsupported_suite_runtime");
+        Path suiteSummary = extractPath(run.stdout(), "suite_summary_json");
+        assertThat(Files.readString(suiteSummary))
+                .contains("\"status_taxonomy\": \"unsupported\"")
+                .contains("\"unsupported_count\": 1")
+                .contains("\"blocked_count\": 0");
     }
 
     @Test

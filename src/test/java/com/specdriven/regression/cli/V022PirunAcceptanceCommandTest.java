@@ -79,11 +79,15 @@ class V022PirunAcceptanceCommandTest {
         CommandResult run = execute("run", "--root", ".", "--rp-id", "RP-DUMMY-REST-001", "--env", "local_dummy");
 
         assertThat(run.exit()).isNotZero();
-        assertThat(run.stderr())
-                .contains("RP-mode is deprecated")
-                .contains("Use suite-mode");
         assertThat(run.stdout())
-                .doesNotContain("run_status: passed");
+                .contains("run_status: blocked")
+                .contains("failure_code: LEGACY_RP_MODE_DEPRECATED")
+                .contains("owner_action: Use run --suite <suite_manifest> --profile <profile>.")
+                .doesNotContain("run_status: passed")
+                .doesNotContain("environment_gaps:")
+                .doesNotContain("batch_id:")
+                .doesNotContain("run_id:");
+        assertThat(run.stderr()).isBlank();
     }
 
     @Test

@@ -163,6 +163,7 @@ public class RegressionCommand {
             new SoapMockCapabilityService();
     private final GrpcMockCapabilityService grpcMockCapabilityService =
             new GrpcMockCapabilityService();
+    private final SuiteRuntimeDispatcher suiteRuntimeDispatcher = new SuiteRuntimeDispatcher();
 
     public RegressionCommand(ProductRepoService productRepoService, ReleasePackageService releasePackageService) {
         this(
@@ -659,6 +660,10 @@ public class RegressionCommand {
         if (options.containsKey("--suite") && !options.containsKey("--rp-id")) {
             return runSuite(root, options, out, err);
         }
+        if ("RP-DUMMY-REST-001".equals(options.get("--rp-id"))) {
+            printLegacyRpModeBlocked(out);
+            return 1;
+        }
         err.println("RP-mode is deprecated for v0.2.2 PI-run. Use suite-mode with --suite and --profile.");
         String rpId = requiredOption(options, "--rp-id", err);
         String requestedEnv = requiredOption(options, "--env", err);
@@ -789,6 +794,12 @@ public class RegressionCommand {
         return passed ? 0 : 1;
     }
 
+    private void printLegacyRpModeBlocked(PrintStream out) {
+        out.println("run_status: blocked");
+        out.println("failure_code: LEGACY_RP_MODE_DEPRECATED");
+        out.println("owner_action: Use run --suite <suite_manifest> --profile <profile>.");
+    }
+
     private int runSuite(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
         String suite = requiredOption(options, "--suite", err);
         if (suite == null) {
@@ -807,7 +818,7 @@ public class RegressionCommand {
                         root.resolve("target/suite-groups").normalize(),
                         out);
             }
-            SuiteRuntimeResult result = dispatchSuiteRuntime(
+            SuiteRuntimeResult result = suiteRuntimeDispatcher.dispatch(
                     suiteManifest,
                     suite,
                     profile,
@@ -839,7 +850,7 @@ public class RegressionCommand {
         return ready ? 0 : 1;
     }
 
-    private SuiteRuntimeResult dispatchSuiteRuntime(
+    private SuiteRuntimeResult dispatchSuiteRuntimeInternal(
             Path suiteManifest,
             String suiteRef,
             String profile,
@@ -904,6 +915,17 @@ public class RegressionCommand {
                     suiteManifest,
                     profile,
                     outputRoot.resolve("common_verify").normalize()));
+        }
+        if (!providerTypes.equals(List.of("sample_fake_provider"))) {
+            return SuiteRuntimeResult.blocked(validation.suiteId(), profile, List.of(new ContractFinding(
+                    suiteManifest.toString(),
+                    "provider_types_used",
+                    "unsupported_suite_runtime",
+                    "",
+                    String.join(",", providerTypes),
+                    profile,
+                    "",
+                    "Use a provider type supported by SuiteRuntimeDispatcher or add an explicit runtime dispatcher path.")));
         }
         return SuiteRuntimeResult.fromGolden(goldenE2eService.run(
                 suiteManifest,
@@ -1214,12 +1236,23 @@ public class RegressionCommand {
         if (!validation.valid()) {
             return SuiteGroupChildResult.fromBlocked(child, validation.suiteId(), validation.findings());
         }
-        SuiteRuntimeResult result = dispatchSuiteRuntime(
+        SuiteRuntimeResult result = suiteRuntimeDispatcher.dispatch(
                 child.suiteManifest(),
                 child.ref(),
                 child.profile(),
                 childOutputRoot);
         return SuiteGroupChildResult.fromSuiteRuntime(child, result);
+    }
+
+    private final class SuiteRuntimeDispatcher {
+
+        SuiteRuntimeResult dispatch(
+                Path suiteManifest,
+                String suiteRef,
+                String profile,
+                Path outputRoot) {
+            return dispatchSuiteRuntimeInternal(suiteManifest, suiteRef, profile, outputRoot);
+        }
     }
 
     private SuiteGroupOutput writeSuiteGroupOutput(
@@ -1257,6 +1290,9 @@ public class RegressionCommand {
             summary.put("expected_failed_observed_count", expectedFailedObservedCount);
             summary.put("expected_failed_missing_count", childResults.stream()
                     .filter(result -> "expected_failed_missing".equals(result.statusTaxonomy()))
+                    .count());
+            summary.put("unsupported_count", childResults.stream()
+                    .filter(result -> "unsupported".equals(result.statusTaxonomy()))
                     .count());
             summary.put("blocked_count", childResults.stream()
                     .filter(result -> "blocked".equals(result.statusTaxonomy()))
@@ -3108,6 +3144,10 @@ public class RegressionCommand {
         }
 
         String statusTaxonomy() {
+            if (findings.stream().anyMatch(finding ->
+                    finding.reason().contains("unsupported") || finding.failureCode().contains("UNSUPPORTED"))) {
+                return "unsupported";
+            }
             if ("blocked".equals(observedStatus)) {
                 return "blocked";
             }
@@ -3119,9 +3159,6 @@ public class RegressionCommand {
             }
             if ("passed".equals(observedStatus)) {
                 return "passed";
-            }
-            if (findings.stream().anyMatch(finding -> finding.reason().contains("unsupported"))) {
-                return "unsupported";
             }
             return "failed";
         }
