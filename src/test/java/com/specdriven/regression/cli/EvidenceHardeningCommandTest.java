@@ -641,7 +641,7 @@ class EvidenceHardeningCommandTest {
         Path resultJson = target.resolve("result.json");
         Files.writeString(resultJson, """
                 {
-                  "framework_version": "0.2.0",
+                  "framework_version": "0.2.1",
                   "suite_id": "%s-REQUIRED-EVIDENCE",
                   "batch_id": "BATCH-001",
                   "run_id": "RUN-001",

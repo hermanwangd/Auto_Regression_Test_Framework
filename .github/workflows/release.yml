@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version, for example 0.2.0
+        description: Release version, for example 0.2.1
         required: true
 
 permissions:
@@ -111,6 +111,12 @@ jobs:
       - name: Build immutable release jar
         run: ./mvnw -B -ntp -DskipTests package
 
+      - name: Build usage kit
+        run: scripts/release/build-usage-kit.sh "${{ steps.version.outputs.version }}"
+
+      - name: Verify usage kit
+        run: scripts/release/verify-usage-kit.sh "target/spec-driven-auto-regression-${{ steps.version.outputs.version }}-usage-kit.zip" "${{ steps.version.outputs.version }}"
+
       - name: Generate checksums
         run: scripts/release/write-checksums.sh "${{ steps.version.outputs.version }}"
 
@@ -126,6 +132,7 @@ jobs:
           version="${{ steps.version.outputs.version }}"
           for artifact in \
             "target/spec-driven-auto-regression-${version}.jar" \
+            "target/spec-driven-auto-regression-${version}-usage-kit.zip" \
             target/bom.json \
             target/bom.xml \
             target/checksums.sha256
@@ -146,6 +153,9 @@ jobs:
             target/spec-driven-auto-regression-${{ steps.version.outputs.version }}.jar
             target/spec-driven-auto-regression-${{ steps.version.outputs.version }}.jar.sig
             target/spec-driven-auto-regression-${{ steps.version.outputs.version }}.jar.pem
+            target/spec-driven-auto-regression-${{ steps.version.outputs.version }}-usage-kit.zip
+            target/spec-driven-auto-regression-${{ steps.version.outputs.version }}-usage-kit.zip.sig
+            target/spec-driven-auto-regression-${{ steps.version.outputs.version }}-usage-kit.zip.pem
             target/bom.json
             target/bom.json.sig
             target/bom.json.pem

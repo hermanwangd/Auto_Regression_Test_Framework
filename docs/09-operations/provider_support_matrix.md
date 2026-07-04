@@ -1,6 +1,6 @@
 # Provider Support Matrix
 
-This matrix defines Framework `0.2.0` production support by provider runtime mode. It does not decide downstream Product/RP release readiness; owners still provide AC, Env_Profile, deployment readiness, expected results, and release evidence.
+This matrix defines Framework `0.2.1` production support by provider runtime mode. It does not decide downstream Product/RP release readiness; owners still provide AC, Env_Profile, deployment readiness, expected results, and release evidence.
 
 Status meanings:
 
@@ -13,7 +13,7 @@ Status meanings:
 | Provider Type | Native | Mock | Ephemeral | Production Boundary |
 | --- | --- | --- | --- | --- |
 | `rest_client` | production-ready | framework-verification-only | n/a | Native evidence requires owner-provided endpoint bindings and readiness context. |
-| `grpc_client` | production-ready for unary calls | framework-verification-only | n/a | Streaming is outside v0.2.0. |
+| `grpc_client` | production-ready for unary calls | framework-verification-only | n/a | Streaming is outside v0.2.1. |
 | `wiremock_http_mock` | n/a | framework-verification-only | n/a | Local/CI REST dependency substitute only. |
 | `soap_mock` | n/a | framework-verification-only | n/a | WireMock-backed SOAP mock; not a custom SOAP server. |
 | `grpc_mock` | n/a | framework-verification-only | n/a | WireMock gRPC extension, unary only. |

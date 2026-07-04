@@ -13,7 +13,7 @@ class PackagedCliSmokeIT {
 
     @Test
     void packagedJarDelegatesCheckReadinessCommand() throws Exception {
-        Path jar = Path.of("target/spec-driven-auto-regression-0.2.0.jar");
+        Path jar = Path.of("target/spec-driven-auto-regression-0.2.1.jar");
         assertThat(Files.isRegularFile(jar)).isTrue();
 
         Process process = new ProcessBuilder(

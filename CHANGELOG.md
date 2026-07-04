@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.1
+
+Framework v0.2.1 is a release packaging hardening patch for v0.2.
+
+- Adds a curated usage kit release artifact containing user guide, Provider Contract catalog, schemas, runnable samples, manifest, and verification commands.
+- Adds release workflow validation for the usage kit before checksum, signing, and GitHub Release publication.
+- Aligns sample result `framework_version` values with the immutable framework artifact version `0.2.1`.
+
+Known boundaries:
+
+- DSL and contract artifacts remain at public contract version `v0.2`.
+- The usage kit is documentation and sample packaging only; it does not add new provider runtime capability.
+
 ## 0.2.0
 
 Framework v0.2.0 is the first immutable pre-release artifact for the product-agnostic Auto Regression Test Framework.

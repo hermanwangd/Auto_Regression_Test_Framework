@@ -14,7 +14,7 @@ import java.util.Map;
 
 final class ProviderCapabilityResultWriter {
 
-    static final String FRAMEWORK_VERSION = "0.2.0";
+    static final String FRAMEWORK_VERSION = "0.2.1";
 
     private ProviderCapabilityResultWriter() {
     }
