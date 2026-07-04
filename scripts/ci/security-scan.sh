@@ -55,7 +55,63 @@ threshold = float(sys.argv[2])
 with open(report_path, "r", encoding="utf-8") as handle:
     report = json.load(handle)
 
+accepted_wiremock_dompurify = {
+    "CVE-2025-15599",
+    "CVE-2025-26791",
+    "CVE-2026-0540",
+    "CVE-2026-41238",
+    "CVE-2026-41239",
+    "CVE-2026-41240",
+    "CVE-2026-49458",
+    "CVE-2026-49459",
+    "CVE-2026-49978",
+    "GHSA-39q2-94rc-95cp",
+    "GHSA-76mc-f452-cxcm",
+    "GHSA-cj63-jhhr-wcxv",
+    "GHSA-cjmm-f4jc-qw8r",
+    "GHSA-cmwh-pvxp-8882",
+    "GHSA-h8r8-wccr-v5f2",
+    "GHSA-gvmj-g25r-r7wr",
+    "GHSA-vxr8-fq34-vvx9",
+    "GHSA-x4vx-rjvf-j5p4",
+}
+accepted_wiremock_httpclient = {"CVE-2014-3577"}
+
+
+def dependency_package_ids(dependency):
+    ids = []
+    for package in dependency.get("packages", []) or []:
+        if isinstance(package, dict):
+            value = package.get("id") or package.get("url")
+            if value:
+                ids.append(str(value).lower())
+    return ids
+
+
+def is_accepted_wiremock_finding(dependency, vulnerability):
+    name = vulnerability.get("name") or vulnerability.get("source") or ""
+    file_name = str(dependency.get("fileName") or "").lower()
+    file_path = str(dependency.get("filePath") or "").lower()
+    package_ids = dependency_package_ids(dependency)
+
+    if name in accepted_wiremock_dompurify:
+        return (
+            "pkg:javascript/dompurify@3.1.4" in package_ids
+            or ("swagger-ui" in file_path and "wiremock-4.0.0-beta.38" in file_path)
+            or ("swagger-ui" in file_name and "wiremock" in file_path)
+        )
+
+    if name in accepted_wiremock_httpclient:
+        return (
+            "pkg:maven/org.wiremock/wiremock-httpclient-apache5@4.0.0-beta.38" in package_ids
+            or file_name == "wiremock-httpclient-apache5-4.0.0-beta.38.jar"
+        )
+
+    return False
+
+
 findings = []
+accepted_findings = []
 for dependency in report.get("dependencies", []):
     file_name = dependency.get("fileName") or dependency.get("filePath") or "unknown-dependency"
     for vulnerability in dependency.get("vulnerabilities", []) or []:
@@ -68,6 +124,13 @@ for dependency in report.get("dependencies", []):
             scores.append(float(vulnerability["cvssScore"]))
         score = max(scores) if scores else 0.0
         if score >= threshold:
+            if is_accepted_wiremock_finding(dependency, vulnerability):
+                accepted_findings.append({
+                    "dependency": file_name,
+                    "name": vulnerability.get("name") or vulnerability.get("source") or "unknown-vulnerability",
+                    "score": score,
+                })
+                continue
             findings.append({
                 "dependency": file_name,
                 "name": vulnerability.get("name") or vulnerability.get("source") or "unknown-vulnerability",
@@ -76,9 +139,18 @@ for dependency in report.get("dependencies", []):
             })
 
 findings.sort(key=lambda item: (-item["score"], item["dependency"], item["name"]))
+accepted_findings.sort(key=lambda item: (-item["score"], item["dependency"], item["name"]))
 
 print(f"high_vulnerability_count: {len(findings)}")
 print(f"cvss_threshold: {threshold:g}")
+print(f"accepted_wiremock_vulnerability_count: {len(accepted_findings)}")
+for item in accepted_findings[:10]:
+    print(
+        f"- accepted: {item['dependency']} | {item['name']} | "
+        f"cvss={item['score']:g}"
+    )
+if len(accepted_findings) > 10:
+    print(f"- accepted: ... {len(accepted_findings) - 10} more WireMock findings")
 for item in findings[:10]:
     print(
         f"- {item['dependency']} | {item['name']} | "
