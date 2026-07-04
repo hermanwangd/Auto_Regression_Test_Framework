@@ -4,13 +4,6 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '20 18 * * *'
-  push:
-    branches:
-      - main
-    paths:
-      - pom.xml
-      - scripts/ci/security-scan.sh
-      - .github/workflows/dependency-check-cache.yml
 
 permissions:
   contents: read

@@ -24,8 +24,10 @@ scripts/ci/security-scan.sh
 
 `security-scan.sh` uses OWASP Dependency-Check. Production release CI must provide `NVD_API_KEY`; local bootstrap scans without a key must opt in with `ALLOW_SLOW_NVD_WITHOUT_API_KEY=true`.
 
-Before cutting a tag, run or verify the default-branch `Dependency-Check Cache`
-workflow. GitHub Actions caches are scoped by branch or tag, and release tags can
+Before cutting a tag, run or verify that the default branch has warmed the
+Dependency-Check cache. The scheduled/manual `Dependency-Check Cache` workflow
+can warm it directly, and default-branch CI can also create it after a cache
+miss. GitHub Actions caches are scoped by branch or tag, and release tags can
 restore caches from the default branch but not from sibling release tags or
 feature branches. Keeping the NVD data cache warm on `main` prevents each patch
 release from downloading the full vulnerability database again.
