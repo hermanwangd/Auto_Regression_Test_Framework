@@ -110,9 +110,11 @@ def is_accepted_wiremock_finding(dependency, vulnerability):
 
     if name in accepted_wiremock_grpc_extension:
         return (
-            "pkg:maven/org.wiremock/wiremock-grpc-extension-core@1.0.0-beta.5" in package_ids
+            "pkg:maven/org.wiremock/wiremock-grpc-extension@1.0.0-beta.5" in package_ids
+            or "pkg:maven/org.wiremock/wiremock-grpc-extension-core@1.0.0-beta.5" in package_ids
             or "pkg:maven/org.wiremock/wiremock-grpc-extension-jetty@1.0.0-beta.5" in package_ids
             or file_name in {
+                "wiremock-grpc-extension-1.0.0-beta.5.jar",
                 "wiremock-grpc-extension-core-1.0.0-beta.5.jar",
                 "wiremock-grpc-extension-jetty-1.0.0-beta.5.jar",
             }

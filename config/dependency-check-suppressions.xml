@@ -91,6 +91,15 @@
         product line affected by CVE-2018-9116. The framework uses WireMock core 4.0.0-beta.38;
         CVE-2018-9116 applies to WireMock before 2.16.0. Re-evaluate when upgrading WireMock gRPC.
         ]]></notes>
+        <gav regex="true">^org\.wiremock:wiremock-grpc-extension:1\.0\.0-beta\.5$</gav>
+        <cve>CVE-2018-9116</cve>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        Dependency-Check maps WireMock gRPC extension artifacts 1.0.0-beta.5 to the old WireMock
+        product line affected by CVE-2018-9116. The framework uses WireMock core 4.0.0-beta.38;
+        CVE-2018-9116 applies to WireMock before 2.16.0. Re-evaluate when upgrading WireMock gRPC.
+        ]]></notes>
         <gav regex="true">^org\.wiremock:wiremock-grpc-extension-core:1\.0\.0-beta\.5$</gav>
         <cve>CVE-2018-9116</cve>
     </suppress>
