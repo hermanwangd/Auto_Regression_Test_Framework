@@ -30,6 +30,10 @@ restore caches from the default branch but not from sibling release tags or
 feature branches. Keeping the NVD data cache warm on `main` prevents each patch
 release from downloading the full vulnerability database again.
 
+Release jobs intentionally fail fast when the Dependency-Check cache is missing.
+They must not download NVD data during release publication; warm the cache on
+the default branch first, then rerun the tag release.
+
 ## Release Artifacts
 
 Each published framework release must include:
