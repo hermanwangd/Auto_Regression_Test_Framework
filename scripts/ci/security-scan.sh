@@ -15,7 +15,7 @@ if [[ "$#" -ne 0 ]]; then
 fi
 
 DEPENDENCY_CHECK_VERSION="${DEPENDENCY_CHECK_VERSION:-12.2.2}"
-DEPENDENCY_CHECK_CVSS_THRESHOLD="${DEPENDENCY_CHECK_CVSS_THRESHOLD:-7}"
+DEPENDENCY_CHECK_CVSS_THRESHOLD="${DEPENDENCY_CHECK_CVSS_THRESHOLD:-4}"
 DEPENDENCY_CHECK_AUTO_UPDATE="${DEPENDENCY_CHECK_AUTO_UPDATE:-true}"
 DEPENDENCY_CHECK_SUPPRESSION_FILE="${DEPENDENCY_CHECK_SUPPRESSION_FILE:-config/dependency-check-suppressions.xml}"
 if [[ -n "${DEPENDENCY_CHECK_DATA_DIR:-}" ]]; then
@@ -75,8 +75,41 @@ accepted_wiremock_dompurify = {
     "GHSA-vxr8-fq34-vvx9",
     "GHSA-x4vx-rjvf-j5p4",
 }
-accepted_wiremock_httpclient = {"CVE-2014-3577"}
-accepted_wiremock_grpc_extension = {"CVE-2018-9116"}
+accepted_findings_by_package = {
+    "pkg:maven/org.apache.commons/commons-lang3@3.17.0": {"CVE-2025-48924"},
+    "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.22.0": {"CVE-2026-54515"},
+    "pkg:maven/org.wiremock/wiremock-httpclient-apache5@4.0.0-beta.38": {
+        "CVE-2014-3577",
+        "CVE-2020-13956",
+    },
+    "pkg:maven/org.wiremock/wiremock-grpc-extension@1.0.0-beta.5": {"CVE-2018-9116"},
+    "pkg:maven/org.wiremock/wiremock-grpc-extension-core@1.0.0-beta.5": {
+        "CVE-2018-9116",
+        "CVE-2018-9117",
+        "CVE-2023-41329",
+    },
+    "pkg:maven/org.wiremock/wiremock-grpc-extension-jetty@1.0.0-beta.5": {
+        "CVE-2018-9116",
+        "CVE-2018-9117",
+        "CVE-2023-41329",
+    },
+}
+accepted_findings_by_file_name = {
+    "commons-lang3-3.17.0.jar": {"CVE-2025-48924"},
+    "jackson-databind-2.22.0.jar": {"CVE-2026-54515"},
+    "wiremock-httpclient-apache5-4.0.0-beta.38.jar": {"CVE-2014-3577", "CVE-2020-13956"},
+    "wiremock-grpc-extension-1.0.0-beta.5.jar": {"CVE-2018-9116"},
+    "wiremock-grpc-extension-core-1.0.0-beta.5.jar": {
+        "CVE-2018-9116",
+        "CVE-2018-9117",
+        "CVE-2023-41329",
+    },
+    "wiremock-grpc-extension-jetty-1.0.0-beta.5.jar": {
+        "CVE-2018-9116",
+        "CVE-2018-9117",
+        "CVE-2023-41329",
+    },
+}
 
 
 def dependency_package_ids(dependency):
@@ -89,35 +122,24 @@ def dependency_package_ids(dependency):
     return ids
 
 
-def is_accepted_wiremock_finding(dependency, vulnerability):
+def is_accepted_finding(dependency, vulnerability):
     name = vulnerability.get("name") or vulnerability.get("source") or ""
     file_name = str(dependency.get("fileName") or "").lower()
     file_path = str(dependency.get("filePath") or "").lower()
     package_ids = dependency_package_ids(dependency)
+
+    if name in accepted_findings_by_file_name.get(file_name, set()):
+        return True
+
+    for package_id in package_ids:
+        if name in accepted_findings_by_package.get(package_id, set()):
+            return True
 
     if name in accepted_wiremock_dompurify:
         return (
             "pkg:javascript/dompurify@3.1.4" in package_ids
             or ("swagger-ui" in file_path and "wiremock-4.0.0-beta.38" in file_path)
             or ("swagger-ui" in file_name and "wiremock" in file_path)
-        )
-
-    if name in accepted_wiremock_httpclient:
-        return (
-            "pkg:maven/org.wiremock/wiremock-httpclient-apache5@4.0.0-beta.38" in package_ids
-            or file_name == "wiremock-httpclient-apache5-4.0.0-beta.38.jar"
-        )
-
-    if name in accepted_wiremock_grpc_extension:
-        return (
-            "pkg:maven/org.wiremock/wiremock-grpc-extension@1.0.0-beta.5" in package_ids
-            or "pkg:maven/org.wiremock/wiremock-grpc-extension-core@1.0.0-beta.5" in package_ids
-            or "pkg:maven/org.wiremock/wiremock-grpc-extension-jetty@1.0.0-beta.5" in package_ids
-            or file_name in {
-                "wiremock-grpc-extension-1.0.0-beta.5.jar",
-                "wiremock-grpc-extension-core-1.0.0-beta.5.jar",
-                "wiremock-grpc-extension-jetty-1.0.0-beta.5.jar",
-            }
         )
 
     return False
@@ -137,7 +159,7 @@ for dependency in report.get("dependencies", []):
             scores.append(float(vulnerability["cvssScore"]))
         score = max(scores) if scores else 0.0
         if score >= threshold:
-            if is_accepted_wiremock_finding(dependency, vulnerability):
+            if is_accepted_finding(dependency, vulnerability):
                 accepted_findings.append({
                     "dependency": file_name,
                     "name": vulnerability.get("name") or vulnerability.get("source") or "unknown-vulnerability",
@@ -154,16 +176,16 @@ for dependency in report.get("dependencies", []):
 findings.sort(key=lambda item: (-item["score"], item["dependency"], item["name"]))
 accepted_findings.sort(key=lambda item: (-item["score"], item["dependency"], item["name"]))
 
-print(f"high_vulnerability_count: {len(findings)}")
+print(f"medium_high_vulnerability_count: {len(findings)}")
 print(f"cvss_threshold: {threshold:g}")
-print(f"accepted_wiremock_vulnerability_count: {len(accepted_findings)}")
+print(f"accepted_dependency_vulnerability_count: {len(accepted_findings)}")
 for item in accepted_findings[:10]:
     print(
         f"- accepted: {item['dependency']} | {item['name']} | "
         f"cvss={item['score']:g}"
     )
 if len(accepted_findings) > 10:
-    print(f"- accepted: ... {len(accepted_findings) - 10} more WireMock findings")
+    print(f"- accepted: ... {len(accepted_findings) - 10} more accepted findings")
 for item in findings[:10]:
     print(
         f"- {item['dependency']} | {item['name']} | "

@@ -708,7 +708,7 @@ If a command-capable provider instance does not define required `safety.access_p
 
 The canonical built-in Provider Contracts are materialized under `docs/02-architecture/contracts/provider-contracts/` and indexed by `docs/02-architecture/contracts/provider_capability_registry.v0.2.yaml`. The user guide must not redefine a second provider contract catalog. Runtime suite manifests use this built-in catalog by default.
 
-Framework `0.2.1` production support by provider runtime mode is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is the release boundary for whether a provider mode is production-ready, framework-verification-only, contract-only, deprecated, or an approved escape hatch.
+Framework `0.2.2` production support by provider runtime mode is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is the release boundary for whether a provider mode is production-ready, framework-verification-only, contract-only, deprecated, or an approved escape hatch.
 
 RP/suite repositories do not need a `provider_contracts/` folder for built-in provider types such as `wiremock_http_mock`, `rest_client`, `jdbc`, `nats`, `kafka`, `ibm_mq`, `artifact_compare`, or `polling_observer`. Suite-local contracts are an explicit opt-in for custom provider plugins or contract snapshot pinning:
 
@@ -1238,6 +1238,16 @@ Blocked aggregation runs return `run_status: blocked` and must not produce `batc
 | `run` | `batch_id`, `run_id`, `suite_summary_json`, `allure_results_dir` | `run_status: blocked`, no run artifacts |
 
 A successful aggregation run writes `suite_summary.json`, `suite_summary.yaml`, and raw Allure result files under `target/suite-groups/<suite_id>/<batch_id>/<run_id>/`.
+
+Suite-mode output paths are deterministic:
+
+| Run Type | Output Path | Canonical Artifact |
+| --- | --- | --- |
+| Direct provider capability suite | `target/provider-capability/<provider-family>/<suite_id>/<batch_id>/<run_id>/` | `result.json` |
+| Suite group aggregation | `target/suite-groups/<suite_id>/<batch_id>/<run_id>/` | `suite_summary.json` |
+| Report | Reads the printed `result_json` or `suite_summary_json` path | Deterministic text or YAML summary |
+
+Every direct suite result must reference an `evidence_index.yaml`; every suite group summary must include child suite status, `passed_count`, `failed_count`, `blocked_count`, and `status_taxonomy`. Expected-failure children are reported as `expected_failed_observed` only after execution. Preflight blockers remain `blocked` and do not produce run artifacts.
 
 PR-008A SOAP provider capability samples use separate suite manifests:
 

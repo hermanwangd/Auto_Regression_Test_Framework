@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.2
+
+Framework v0.2.2 is a PI-run hardening patch for v0.2 suite-mode execution.
+
+- Routes direct provider suites and parent suite child execution through the shared suite-mode dispatcher.
+- Adds a runnable dummy REST suite, executable artifact-compare sample, `pi-run` alias, YAML report output, and clearer CLI help.
+- Deprecates RP-mode execution for PI-run validation and makes profile validation consistent across `validate`, `run --dry-run`, and `run`.
+- Standardizes suite summary status taxonomy and provider capability output paths for report consumption.
+- Expands dependency security triage to cover MEDIUM/HIGH/CRITICAL findings with documented suppressions.
+
+Known boundaries:
+
+- DSL and contract artifacts remain at public contract version `v0.2`.
+- This release does not add new provider runtime families; it hardens suite-mode execution and evidence/report behavior.
+
 ## 0.2.1
 
 Framework v0.2.1 is a release packaging hardening patch for v0.2.

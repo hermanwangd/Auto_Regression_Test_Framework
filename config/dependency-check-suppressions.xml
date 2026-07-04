@@ -112,4 +112,67 @@
         <gav regex="true">^org\.wiremock:wiremock-grpc-extension-jetty:1\.0\.0-beta\.5$</gav>
         <cve>CVE-2018-9116</cve>
     </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        commons-lang3 3.17.0 is used as a transitive utility dependency and is not exposed
+        as a network-facing framework provider surface. Risk is accepted for v0.2.2 pending
+        dependency BOM upgrade review before the next framework release.
+        ]]></notes>
+        <gav regex="true">^org\.apache\.commons:commons-lang3:3\.17\.0$</gav>
+        <cve>CVE-2025-48924</cve>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        jackson-databind 2.22.0 is used for framework result/evidence JSON handling.
+        The framework does not enable default typing or untrusted polymorphic deserialization
+        in the runtime paths covered by v0.2.2. Re-evaluate on Jackson BOM upgrade.
+        ]]></notes>
+        <gav regex="true">^com\.fasterxml\.jackson\.core:jackson-databind:2\.22\.0$</gav>
+        <cve>CVE-2026-54515</cve>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        Dependency-Check maps WireMock's Apache5 HTTP client helper to old Apache HttpClient
+        CPEs. The framework also pins HttpClient 5.x directly, and this WireMock helper is
+        used only for local/CI mock-provider verification, not downstream product runtime.
+        ]]></notes>
+        <gav regex="true">^org\.wiremock:wiremock-httpclient-apache5:4\.0\.0-beta\.38$</gav>
+        <cve>CVE-2020-13956</cve>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        WireMock gRPC extension core is used only for framework-verification local/CI mock
+        samples. It is not a downstream product runtime surface. Re-evaluate with the next
+        WireMock gRPC extension upgrade.
+        ]]></notes>
+        <gav regex="true">^org\.wiremock:wiremock-grpc-extension-core:1\.0\.0-beta\.5$</gav>
+        <cve>CVE-2018-9117</cve>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        WireMock gRPC extension core is used only for framework-verification local/CI mock
+        samples. It is not a downstream product runtime surface. Re-evaluate with the next
+        WireMock gRPC extension upgrade.
+        ]]></notes>
+        <gav regex="true">^org\.wiremock:wiremock-grpc-extension-core:1\.0\.0-beta\.5$</gav>
+        <cve>CVE-2023-41329</cve>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        WireMock gRPC extension Jetty helper is used only for framework-verification local/CI
+        mock samples. It is not a downstream product runtime surface. Re-evaluate with the
+        next WireMock gRPC extension upgrade.
+        ]]></notes>
+        <gav regex="true">^org\.wiremock:wiremock-grpc-extension-jetty:1\.0\.0-beta\.5$</gav>
+        <cve>CVE-2018-9117</cve>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        WireMock gRPC extension Jetty helper is used only for framework-verification local/CI
+        mock samples. It is not a downstream product runtime surface. Re-evaluate with the
+        next WireMock gRPC extension upgrade.
+        ]]></notes>
+        <gav regex="true">^org\.wiremock:wiremock-grpc-extension-jetty:1\.0\.0-beta\.5$</gav>
+        <cve>CVE-2023-41329</cve>
+    </suppress>
 </suppressions>

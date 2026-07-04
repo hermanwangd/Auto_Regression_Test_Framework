@@ -4,10 +4,10 @@ This checklist governs releases of the Auto Regression Test Framework itself. It
 
 ## Release Identity
 
-- Maven artifact version must be immutable, for example `0.2.1`, and must not contain `SNAPSHOT`.
+- Maven artifact version must be immutable, for example `0.2.2`, and must not contain `SNAPSHOT`.
 - Standard result JSON `framework_version` must match the framework artifact release version.
 - DSL, Provider Contract, Provider Instance, Env_Profile, result schema, and evidence schema may remain on public contract version `v0.2`.
-- Git tags must use `v<artifact-version>`, for example `v0.2.1`.
+- Git tags must use `v<artifact-version>`, for example `v0.2.2`.
 
 ## Required Gates
 

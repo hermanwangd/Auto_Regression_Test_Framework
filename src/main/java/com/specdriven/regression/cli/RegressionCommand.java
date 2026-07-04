@@ -22,6 +22,8 @@ import com.specdriven.regression.contract.MessagingClientProviderCapabilityServi
 import com.specdriven.regression.contract.MessagingClientProviderCapabilityService.MessagingClientRunResult;
 import com.specdriven.regression.contract.NatsProviderCapabilityService;
 import com.specdriven.regression.contract.NatsProviderCapabilityService.NatsRunResult;
+import com.specdriven.regression.contract.RestClientCapabilityService;
+import com.specdriven.regression.contract.RestClientCapabilityService.RestClientRunResult;
 import com.specdriven.regression.contract.SoapMockCapabilityService;
 import com.specdriven.regression.contract.SoapMockCapabilityService.SoapRunResult;
 import com.specdriven.regression.contract.WireMockProviderCapabilityService;
@@ -149,6 +151,8 @@ public class RegressionCommand {
             new WireMockProviderCapabilityService();
     private final WireMockHttpRequestCapabilityService wireMockHttpRequestCapabilityService =
             new WireMockHttpRequestCapabilityService();
+    private final RestClientCapabilityService restClientCapabilityService =
+            new RestClientCapabilityService();
     private final JdbcProviderCapabilityService jdbcProviderCapabilityService =
             new JdbcProviderCapabilityService();
     private final NatsProviderCapabilityService natsProviderCapabilityService =
@@ -211,12 +215,21 @@ public class RegressionCommand {
 
     public int execute(String[] args, PrintStream out, PrintStream err) {
         if (args.length == 0) {
-            err.println("Missing command.");
-            return 2;
+            printGeneralUsage(out);
+            return 0;
         }
         String command = args[0];
         Map<String, String> options = parseOptions(args);
         Path root = Path.of(options.getOrDefault("--root", "."));
+
+        if ("help".equals(command) || "--help".equals(command) || "-h".equals(command)) {
+            printGeneralUsage(out);
+            return 0;
+        }
+        if (options.containsKey("--help") || options.containsKey("-h")) {
+            printCommandUsage(command, out);
+            return 0;
+        }
 
         return switch (command) {
             case "init-product-repo" -> initProductRepo(root, out);
@@ -227,13 +240,38 @@ public class RegressionCommand {
             case "draft-expected-results" -> draftExpectedResults(root, options, out, err);
             case "validate" -> validate(root, options, out, err);
             case "validate-evidence" -> validateEvidence(root, options, out, err);
-            case "run" -> runRegression(root, options, out, err);
+            case "run", "pi-run" -> runRegression(root, options, out, err);
             case "report" -> report(root, options, out, err);
             default -> {
                 err.println("Unknown command: " + command);
                 yield 2;
             }
         };
+    }
+
+    private void printGeneralUsage(PrintStream out) {
+        out.println("usage: regress <command> [options]");
+        out.println("commands:");
+        out.println("  validate --suite <suite_manifest> [--profile <profile>]");
+        out.println("  run --suite <suite_manifest> --profile <profile>");
+        out.println("  run --suite <suite_manifest> --dry-run [--profile <profile>]");
+        out.println("  pi-run --suite <suite_manifest> --profile <profile>");
+        out.println("  report --result <result_json> [--format text|yaml]");
+        out.println("  validate-evidence --result <result_json>");
+    }
+
+    private void printCommandUsage(String command, PrintStream out) {
+        switch (command) {
+            case "run", "pi-run" -> {
+                out.println("usage: regress run --suite <suite_manifest> --profile <profile>");
+                out.println("       regress run --suite <suite_manifest> --dry-run [--profile <profile>]");
+                out.println("       regress pi-run --suite <suite_manifest> --profile <profile>");
+            }
+            case "validate" -> out.println("usage: regress validate --suite <suite_manifest> [--profile <profile>]");
+            case "report" -> out.println("usage: regress report --result <result_json> [--format text|yaml]");
+            case "validate-evidence" -> out.println("usage: regress validate-evidence --result <result_json>");
+            default -> printGeneralUsage(out);
+        }
     }
 
     private int validate(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
@@ -243,10 +281,12 @@ public class RegressionCommand {
         }
         Path suiteManifest = root.resolve(suite).normalize();
         if (isSuiteGroupManifest(suiteManifest)) {
-            return validateSuiteGroup(suiteManifest, out);
+            return validateSuiteGroup(suiteManifest, options.get("--profile"), out);
         }
         ValidationResult result = contractBaselineService.validateSuite(suiteManifest);
-        out.println("validation_status: " + (result.valid() ? "passed" : "failed"));
+        List<ContractFinding> profileFindings = suiteProfileFindings(suiteManifest, options.get("--profile"));
+        boolean valid = result.valid() && profileFindings.isEmpty();
+        out.println("validation_status: " + (valid ? "passed" : "failed"));
         out.println("suite_id: " + result.suiteId());
         out.println("provider_instances_used:");
         for (String providerId : result.providerInstancesUsed()) {
@@ -256,8 +296,10 @@ public class RegressionCommand {
         for (String providerType : result.providerTypesUsed()) {
             out.println("  - " + providerType);
         }
-        printContractFindings(out, result.findings());
-        return result.valid() ? 0 : 1;
+        List<ContractFinding> findings = new ArrayList<>(result.findings());
+        findings.addAll(profileFindings);
+        printContractFindings(out, findings);
+        return valid ? 0 : 1;
     }
 
     private int validateEvidence(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
@@ -317,6 +359,11 @@ public class RegressionCommand {
         if (resultPath == null) {
             return 2;
         }
+        String format = options.getOrDefault("--format", "text");
+        if (!List.of("text", "yaml").contains(format)) {
+            err.println("Unsupported --format: " + format);
+            return 2;
+        }
         Path resolvedResult = root.resolve(resultPath).normalize();
         ReportResult result = contractBaselineService.report(resolvedResult);
         if (!result.valid() && result.findings().stream().anyMatch(finding -> "missing_result_json".equals(finding.reason()))) {
@@ -356,11 +403,21 @@ public class RegressionCommand {
         }
         out.println("release_evidence_eligible: " + result.releaseEvidenceEligible());
         if (evidenceResult != null) {
+            out.println("coverage_percent: " + coveragePercent(evidenceResult));
             printEvidenceReportSummary(out, evidenceResult);
             printContractFindings(out, evidenceResult.findings());
             return evidenceResult.valid() ? 0 : 1;
         }
+        out.println("coverage_percent: " + ("passed".equals(result.status()) ? "100.0" : "0.0"));
         return 0;
+    }
+
+    private String coveragePercent(EvidenceValidationResult result) {
+        if (result.testCount() <= 0) {
+            return result.valid() ? "100.0" : "0.0";
+        }
+        double coverage = (100.0 * result.passCount()) / result.testCount();
+        return String.format(java.util.Locale.ROOT, "%.1f", coverage);
     }
 
     private void printEvidenceValidationSummary(
@@ -602,6 +659,7 @@ public class RegressionCommand {
         if (options.containsKey("--suite") && !options.containsKey("--rp-id")) {
             return runSuite(root, options, out, err);
         }
+        err.println("RP-mode is deprecated for v0.2.2 PI-run. Use suite-mode with --suite and --profile.");
         String rpId = requiredOption(options, "--rp-id", err);
         String requestedEnv = requiredOption(options, "--env", err);
         if (rpId == null || requestedEnv == null) {
@@ -749,232 +807,22 @@ public class RegressionCommand {
                         root.resolve("target/suite-groups").normalize(),
                         out);
             }
-            ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
-            if (!validation.valid()) {
-                out.println("run_status: blocked");
-                out.println("suite_id: " + validation.suiteId());
-                out.println("provider_runtime_invoked: false");
-                printContractFindings(out, validation.findings());
-                return 1;
-            }
-            if (validation.valid() && supportsWireMockHttpRequestSample(validation.providerTypesUsed())) {
-                MixedRunResult result = wireMockHttpRequestCapabilityService.run(
-                        root.resolve(suite).normalize(),
-                        profile,
-                        root.resolve("target/provider-capability/wiremock_http_request").normalize());
-                out.println("run_status: " + result.status());
-                out.println("suite_id: " + result.suiteId());
-                if (result.resultJson() != null) {
-                    out.println("batch_id: " + result.batchId());
-                    out.println("run_id: " + result.runId());
-                    out.println("test_case_id: " + result.testCaseId());
-                    out.println("test_count: " + result.testCount());
-                    out.println("profile: " + result.profile());
-                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
-                    out.println("provider_types: " + String.join(",", result.providerTypes()));
-                    out.println("provider_ids: " + String.join(",", result.providerIds()));
-                    out.println("evidence_classification: framework_provider_capability_only");
-                    out.println("result_json: " + result.resultJson());
-                    out.println("evidence_dir: " + result.evidenceDir());
-                }
-                printContractFindings(out, result.findings());
-                return result.passed() ? 0 : 1;
-            }
-            if (validation.valid() && supportsSoapMockSample(validation.providerTypesUsed())) {
-                SoapRunResult result = soapMockCapabilityService.run(
-                        root.resolve(suite).normalize(),
-                        profile,
-                        root.resolve("target/provider-capability/soap_mock").normalize());
-                out.println("run_status: " + result.status());
-                out.println("suite_id: " + result.suiteId());
-                if (result.resultJson() != null) {
-                    out.println("batch_id: " + result.batchId());
-                    out.println("run_id: " + result.runId());
-                    out.println("test_case_id: " + result.testCaseId());
-                    out.println("test_count: " + result.testCount());
-                    out.println("profile: " + result.profile());
-                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
-                    out.println("provider_types: " + String.join(",", result.providerTypes()));
-                    out.println("provider_ids: " + String.join(",", result.providerIds()));
-                    out.println("evidence_classification: framework_provider_capability_only");
-                    out.println("result_json: " + result.resultJson());
-                    out.println("evidence_dir: " + result.evidenceDir());
-                }
-                printContractFindings(out, result.findings());
-                return result.passed() ? 0 : 1;
-            }
-            if (validation.valid() && supportsGrpcMockSample(validation.providerTypesUsed())) {
-                GrpcRunResult result = grpcMockCapabilityService.run(
-                        root.resolve(suite).normalize(),
-                        profile,
-                        root.resolve("target/provider-capability/grpc_mock").normalize());
-                out.println("run_status: " + result.status());
-                out.println("suite_id: " + result.suiteId());
-                if (result.resultJson() != null) {
-                    out.println("batch_id: " + result.batchId());
-                    out.println("run_id: " + result.runId());
-                    out.println("test_case_id: " + result.testCaseId());
-                    out.println("test_count: " + result.testCount());
-                    out.println("profile: " + result.profile());
-                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
-                    out.println("provider_types: " + String.join(",", result.providerTypes()));
-                    out.println("provider_ids: " + String.join(",", result.providerIds()));
-                    out.println("evidence_classification: framework_provider_capability_only");
-                    out.println("result_json: " + result.resultJson());
-                    out.println("evidence_dir: " + result.evidenceDir());
-                }
-                printContractFindings(out, result.findings());
-                return result.passed() ? 0 : 1;
-            }
-            if (validation.valid() && validation.providerTypesUsed().equals(List.of("wiremock_http_mock"))) {
-                WireMockRunResult result = wireMockProviderCapabilityService.run(
-                        root.resolve(suite).normalize(),
-                        profile,
-                        root.resolve("target/provider-capability/wiremock").normalize());
-                out.println("run_status: " + result.status());
-                out.println("suite_id: " + result.suiteId());
-                if (result.resultJson() != null) {
-                    out.println("batch_id: " + result.batchId());
-                    out.println("run_id: " + result.runId());
-                    out.println("test_case_id: " + result.testCaseId());
-                    out.println("test_count: " + result.testCount());
-                    out.println("profile: " + result.profile());
-                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
-                    out.println("provider_type: " + result.providerType());
-                    out.println("provider_id: " + result.providerId());
-                    if (!result.baseUrl().isBlank()) {
-                        out.println("base_url: " + result.baseUrl());
-                    }
-                    out.println("evidence_classification: framework_provider_capability_only");
-                    out.println("result_json: " + result.resultJson());
-                    out.println("evidence_dir: " + result.evidenceDir());
-                }
-                printContractFindings(out, result.findings());
-                return result.passed() ? 0 : 1;
-            }
-            if (validation.providerTypesUsed().equals(List.of("jdbc")) || suite.contains("provider_capability/jdbc")) {
-                JdbcRunResult result = jdbcProviderCapabilityService.run(
-                        root.resolve(suite).normalize(),
-                        profile,
-                        root.resolve("target/provider-capability/jdbc").normalize());
-                out.println("run_status: " + result.status());
-                out.println("suite_id: " + result.suiteId());
-                if (result.resultJson() != null) {
-                    out.println("batch_id: " + result.batchId());
-                    out.println("run_id: " + result.runId());
-                    out.println("test_case_id: " + result.testCaseId());
-                    out.println("test_count: " + result.testCount());
-                    out.println("profile: " + result.profile());
-                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
-                    out.println("provider_type: " + result.providerType());
-                    out.println("provider_id: " + result.providerId());
-                    out.println("runtime_mode: " + result.runtimeMode());
-                    out.println("dialect: " + result.dialect());
-                    out.println("evidence_classification: framework_provider_capability_only");
-                    out.println("result_json: " + result.resultJson());
-                    out.println("evidence_dir: " + result.evidenceDir());
-                }
-                printContractFindings(out, result.findings());
-                return result.passed() ? 0 : 1;
-            }
-            if (supportsMessagingClientSample(validation.providerTypesUsed(), suite)) {
-                MessagingClientRunResult result = messagingClientProviderCapabilityService.run(
-                        root.resolve(suite).normalize(),
-                        profile,
-                        root.resolve("target/provider-capability/messaging-client").normalize());
-                out.println("run_status: " + result.status());
-                out.println("suite_id: " + result.suiteId());
-                if (result.resultJson() != null) {
-                    out.println("batch_id: " + result.batchId());
-                    out.println("run_id: " + result.runId());
-                    out.println("test_case_id: " + result.testCaseId());
-                    out.println("test_count: " + result.testCount());
-                    out.println("profile: " + result.profile());
-                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
-                    result.providerOutputLines().forEach(out::println);
-                    out.println("evidence_classification: framework_provider_capability_only");
-                    out.println("result_json: " + result.resultJson());
-                    out.println("evidence_dir: " + result.evidenceDir());
-                }
-                printContractFindings(out, result.findings());
-                return result.passed() ? 0 : 1;
-            }
-            if (validation.providerTypesUsed().equals(List.of("nats")) || suite.contains("provider_capability/nats")) {
-                NatsRunResult result = natsProviderCapabilityService.run(
-                        root.resolve(suite).normalize(),
-                        profile,
-                        root.resolve("target/provider-capability/nats").normalize());
-                out.println("run_status: " + result.status());
-                out.println("suite_id: " + result.suiteId());
-                if (result.resultJson() != null) {
-                    out.println("batch_id: " + result.batchId());
-                    out.println("run_id: " + result.runId());
-                    out.println("test_case_id: " + result.testCaseId());
-                    out.println("test_count: " + result.testCount());
-                    out.println("profile: " + result.profile());
-                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
-                    out.println("provider_type: " + result.providerType());
-                    out.println("provider_id: " + result.providerId());
-                    out.println("runtime_mode: " + result.runtimeMode());
-                    out.println("subject: " + result.subject());
-                    out.println("evidence_classification: framework_provider_capability_only");
-                    out.println("result_json: " + result.resultJson());
-                    out.println("evidence_dir: " + result.evidenceDir());
-                }
-                printContractFindings(out, result.findings());
-                return result.passed() ? 0 : 1;
-            }
-            if (validation.providerTypesUsed().equals(List.of("common_verify"))
-                    || suite.contains("provider_capability/common_verify")
-                    || suite.contains("provider_capability/polling")) {
-                CommonVerifyRunResult result = commonVerifyService.run(
-                        root.resolve(suite).normalize(),
-                        profile,
-                        root.resolve("target/provider-capability/common_verify").normalize());
-                out.println("run_status: " + result.status());
-                out.println("suite_id: " + result.suiteId());
-                if (result.resultJson() != null) {
-                    out.println("batch_id: " + result.batchId());
-                    out.println("run_id: " + result.runId());
-                    out.println("test_case_id: " + result.testCaseId());
-                    out.println("test_count: " + result.testCount());
-                    out.println("profile: " + result.profile());
-                    out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
-                    out.println("provider_type: " + result.providerType());
-                    out.println("provider_id: " + result.providerId());
-                    out.println("evidence_classification: framework_provider_capability_only");
-                    out.println("result_json: " + result.resultJson());
-                    out.println("evidence_dir: " + result.evidenceDir());
-                }
-                printContractFindings(out, result.findings());
-                return result.passed() ? 0 : 1;
-            }
-            GoldenRunResult result = goldenE2eService.run(
-                    root.resolve(suite).normalize(),
+            SuiteRuntimeResult result = dispatchSuiteRuntime(
+                    suiteManifest,
+                    suite,
                     profile,
-                    root.resolve("target/golden-e2e").normalize());
-            out.println("run_status: " + result.status());
-            out.println("suite_id: " + result.suiteId());
-            if (result.resultJson() != null) {
-                out.println("batch_id: " + result.batchId());
-                out.println("run_id: " + result.runId());
-                out.println("test_case_id: " + result.testCaseId());
-                out.println("test_count: " + result.testCount());
-                out.println("profile: " + result.profile());
-                out.println("fake_provider_executed: " + result.fakeProviderExecuted());
-                out.println("evidence_classification: framework_verification_only");
-                out.println("result_json: " + result.resultJson());
-                out.println("evidence_dir: " + result.evidenceDir());
-            }
-            printContractFindings(out, result.findings());
+                    root.resolve("target/provider-capability").normalize());
+            printSuiteRuntimeResult(out, result);
             return result.passed() ? 0 : 1;
         }
         if (isSuiteGroupManifest(suiteManifest)) {
-            return dryRunSuiteGroup(suiteManifest, out);
+            return dryRunSuiteGroup(suiteManifest, options.get("--profile"), out);
         }
         DryRunResult result = contractBaselineService.dryRun(suiteManifest);
+        List<ContractFinding> profileFindings = suiteProfileFindings(suiteManifest, options.get("--profile"));
+        boolean ready = result.ready() && profileFindings.isEmpty();
         out.println("provider_runtime_invoked: false");
-        out.println("run_status: " + (result.ready() ? "dry_run_ready" : "blocked"));
+        out.println("run_status: " + (ready ? "dry_run_ready" : "blocked"));
         out.println("suite_id: " + result.validation().suiteId());
         out.println("resolved_execution_plan:");
         for (ResolvedTarget target : result.plan()) {
@@ -985,14 +833,141 @@ public class RegressionCommand {
             out.println("    profile: " + target.profile());
             out.println("    runtime_mode: " + target.runtimeMode());
         }
-        printContractFindings(out, result.validation().findings());
-        return result.ready() ? 0 : 1;
+        List<ContractFinding> findings = new ArrayList<>(result.validation().findings());
+        findings.addAll(profileFindings);
+        printContractFindings(out, findings);
+        return ready ? 0 : 1;
     }
 
-    private int validateSuiteGroup(Path suiteManifest, PrintStream out) {
+    private SuiteRuntimeResult dispatchSuiteRuntime(
+            Path suiteManifest,
+            String suiteRef,
+            String profile,
+            Path outputRoot) {
+        ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
+        if (!validation.valid()) {
+            return SuiteRuntimeResult.blocked(validation.suiteId(), profile, validation.findings());
+        }
+        List<String> providerTypes = validation.providerTypesUsed();
+        if (supportsWireMockHttpRequestSample(providerTypes)) {
+            return SuiteRuntimeResult.fromMixed(wireMockHttpRequestCapabilityService.run(
+                    suiteManifest,
+                    profile,
+                    outputRoot.resolve("wiremock_http_request").normalize()));
+        }
+        if (supportsSoapMockSample(providerTypes)) {
+            return SuiteRuntimeResult.fromSoap(soapMockCapabilityService.run(
+                    suiteManifest,
+                    profile,
+                    outputRoot.resolve("soap_mock").normalize()));
+        }
+        if (supportsGrpcMockSample(providerTypes)) {
+            return SuiteRuntimeResult.fromGrpc(grpcMockCapabilityService.run(
+                    suiteManifest,
+                    profile,
+                    outputRoot.resolve("grpc_mock").normalize()));
+        }
+        if (providerTypes.equals(List.of("rest_client"))) {
+            return SuiteRuntimeResult.fromRest(restClientCapabilityService.run(
+                    suiteManifest,
+                    profile,
+                    outputRoot.resolve("rest_client").normalize()));
+        }
+        if (providerTypes.equals(List.of("wiremock_http_mock"))) {
+            return SuiteRuntimeResult.fromWireMock(wireMockProviderCapabilityService.run(
+                    suiteManifest,
+                    profile,
+                    outputRoot.resolve("wiremock").normalize()));
+        }
+        if (providerTypes.equals(List.of("jdbc")) || suiteRef.contains("provider_capability/jdbc")) {
+            return SuiteRuntimeResult.fromJdbc(jdbcProviderCapabilityService.run(
+                    suiteManifest,
+                    profile,
+                    outputRoot.resolve("jdbc").normalize()));
+        }
+        if (supportsMessagingClientSample(providerTypes, suiteRef)) {
+            return SuiteRuntimeResult.fromMessaging(messagingClientProviderCapabilityService.run(
+                    suiteManifest,
+                    profile,
+                    outputRoot.resolve("messaging-client").normalize()));
+        }
+        if (providerTypes.equals(List.of("nats")) || suiteRef.contains("provider_capability/nats")) {
+            return SuiteRuntimeResult.fromNats(natsProviderCapabilityService.run(
+                    suiteManifest,
+                    profile,
+                    outputRoot.resolve("nats").normalize()));
+        }
+        if (providerTypes.equals(List.of("common_verify"))
+                || suiteRef.contains("provider_capability/common_verify")
+                || suiteRef.contains("provider_capability/polling")) {
+            return SuiteRuntimeResult.fromCommonVerify(commonVerifyService.run(
+                    suiteManifest,
+                    profile,
+                    outputRoot.resolve("common_verify").normalize()));
+        }
+        return SuiteRuntimeResult.fromGolden(goldenE2eService.run(
+                suiteManifest,
+                profile,
+                outputRoot.resolve("golden-e2e").normalize()));
+    }
+
+    private void printSuiteRuntimeResult(PrintStream out, SuiteRuntimeResult result) {
+        out.println("run_status: " + result.status());
+        out.println("suite_id: " + result.suiteId());
+        if (result.resultJson() != null) {
+            out.println("batch_id: " + result.batchId());
+            out.println("run_id: " + result.runId());
+            out.println("test_case_id: " + result.testCaseId());
+            out.println("test_count: " + result.testCount());
+            StatusCounts statusCounts = suiteRuntimeStatusCounts(result);
+            out.println("passed_count: " + statusCounts.passedCount());
+            out.println("failed_count: " + statusCounts.failedCount());
+            out.println("profile: " + result.profile());
+            out.println("provider_runtime_executed: " + result.providerRuntimeExecuted());
+            result.outputLines().forEach(out::println);
+            out.println("evidence_classification: " + result.evidenceClassification());
+            out.println("result_json: " + result.resultJson());
+            out.println("evidence_dir: " + result.evidenceDir());
+        } else {
+            out.println("provider_runtime_invoked: false");
+        }
+        printContractFindings(out, result.findings());
+    }
+
+    private StatusCounts suiteRuntimeStatusCounts(SuiteRuntimeResult result) {
+        if (result.resultJson() != null && Files.isRegularFile(result.resultJson())) {
+            try {
+                Map<String, Object> resultDocument = readYamlMap(result.resultJson());
+                Object tests = resultDocument.get("test_results");
+                if (tests instanceof List<?> testResults && !testResults.isEmpty()) {
+                    int passed = 0;
+                    int failed = 0;
+                    for (Object value : testResults) {
+                        String status = value instanceof Map<?, ?> map ? stringValue(map.get("status")) : "";
+                        if ("passed".equals(status)) {
+                            passed++;
+                        } else {
+                            failed++;
+                        }
+                    }
+                    return new StatusCounts(passed, failed);
+                }
+            } catch (RuntimeException ignored) {
+                // CLI summary should remain printable even if result validation reports details later.
+            }
+        }
+        return result.passed()
+                ? new StatusCounts(result.testCount(), 0)
+                : new StatusCounts(0, result.testCount());
+    }
+
+    private int validateSuiteGroup(Path suiteManifest, String requestedProfile, PrintStream out) {
         SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest);
         SuiteGroupDefinition definition = validation.definition();
-        out.println("validation_status: " + (validation.valid() ? "passed" : "failed"));
+        List<ContractFinding> findings = new ArrayList<>(validation.findings());
+        findings.addAll(suiteGroupProfileFindings(suiteManifest, definition, requestedProfile));
+        boolean valid = findings.isEmpty();
+        out.println("validation_status: " + (valid ? "passed" : "failed"));
         out.println("suite_id: " + definition.suiteId());
         out.println("test_count: " + definition.children().size());
         out.println("provider_instances_used:");
@@ -1009,15 +984,18 @@ public class RegressionCommand {
             out.println("    ref: " + child.ref());
             out.println("    expected_status: " + child.expectedStatus());
         }
-        printContractFindings(out, validation.findings());
-        return validation.valid() ? 0 : 1;
+        printContractFindings(out, findings);
+        return valid ? 0 : 1;
     }
 
-    private int dryRunSuiteGroup(Path suiteManifest, PrintStream out) {
+    private int dryRunSuiteGroup(Path suiteManifest, String requestedProfile, PrintStream out) {
         SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest);
         SuiteGroupDefinition definition = validation.definition();
+        List<ContractFinding> findings = new ArrayList<>(validation.findings());
+        findings.addAll(suiteGroupProfileFindings(suiteManifest, definition, requestedProfile));
+        boolean valid = findings.isEmpty();
         out.println("provider_runtime_invoked: false");
-        out.println("run_status: " + (validation.valid() ? "dry_run_ready" : "blocked"));
+        out.println("run_status: " + (valid ? "dry_run_ready" : "blocked"));
         out.println("suite_id: " + definition.suiteId());
         out.println("test_count: " + definition.children().size());
         out.println("provider_instances_used:");
@@ -1035,8 +1013,96 @@ public class RegressionCommand {
             out.println("    profile: " + child.profile());
             out.println("    expected_status: " + child.expectedStatus());
         }
-        printContractFindings(out, validation.findings());
-        return validation.valid() ? 0 : 1;
+        printContractFindings(out, findings);
+        return valid ? 0 : 1;
+    }
+
+    private List<ContractFinding> suiteGroupProfileFindings(
+            Path suiteManifest,
+            SuiteGroupDefinition definition,
+            String requestedProfile) {
+        if (requestedProfile == null || requestedProfile.isBlank()) {
+            return List.of();
+        }
+        if (!definition.profile().isBlank() && !definition.profile().equals(requestedProfile)) {
+            return List.of(finding(
+                    suiteManifest,
+                    "profile",
+                    "profile_mismatch",
+                    "Run with an allowed profile: [" + definition.profile() + "]."));
+        }
+        return List.of();
+    }
+
+    private List<ContractFinding> suiteProfileFindings(Path suiteManifest, String requestedProfile) {
+        if (requestedProfile == null || requestedProfile.isBlank() || !Files.isRegularFile(suiteManifest)) {
+            return List.of();
+        }
+        Map<String, Object> suite;
+        try {
+            suite = readYamlMap(suiteManifest);
+        } catch (RuntimeException e) {
+            return List.of();
+        }
+        List<ContractFinding> findings = new ArrayList<>();
+        List<String> selectedProfiles = selectedProfiles(suite);
+        if (!selectedProfiles.isEmpty() && !selectedProfiles.contains(requestedProfile)) {
+            findings.add(finding(
+                    suiteManifest,
+                    "profile",
+                    "profile_mismatch",
+                    "Run with an allowed profile: " + selectedProfiles + "."));
+        }
+        Path suiteRoot = suiteDirectory(suiteManifest);
+        for (Object testRef : objectList(suite.get("tests"))) {
+            Path testCasePath = suiteRoot.resolve(stringValue(testRef)).normalize();
+            if (!Files.isRegularFile(testCasePath)) {
+                continue;
+            }
+            Map<String, Object> testCase;
+            try {
+                testCase = readYamlMap(testCasePath);
+            } catch (RuntimeException e) {
+                continue;
+            }
+            List<String> compatibleProfiles = stringListValue(testCase.get("compatible_profiles"));
+            if (!compatibleProfiles.isEmpty() && !compatibleProfiles.contains(requestedProfile)) {
+                findings.add(finding(
+                        testCasePath,
+                        "compatible_profiles",
+                        "profile_mismatch",
+                        "Run with an allowed profile: " + compatibleProfiles + "."));
+            }
+        }
+        return List.copyOf(findings);
+    }
+
+    private List<String> selectedProfiles(Map<String, Object> suite) {
+        List<String> profiles = new ArrayList<>();
+        addProfile(profiles, stringValue(suite.get("profile")));
+        profiles.addAll(stringListValue(suite.get("profiles")));
+        Object selection = suite.get("selection");
+        if (selection instanceof Map<?, ?> map) {
+            addProfile(profiles, stringValue(map.get("profile")));
+        }
+        return profiles.stream().distinct().toList();
+    }
+
+    private void addProfile(List<String> profiles, String profile) {
+        if (!profile.isBlank()) {
+            profiles.add(profile);
+        }
+    }
+
+    private List<String> stringListValue(Object value) {
+        return objectList(value).stream().map(this::stringValue).filter(text -> !text.isBlank()).toList();
+    }
+
+    private List<Object> objectList(Object value) {
+        if (value instanceof List<?> list) {
+            return new ArrayList<>(list);
+        }
+        return List.of();
     }
 
     private SuiteGroupValidation validateSuiteGroupArtifacts(Path suiteManifest) {
@@ -1109,6 +1175,9 @@ public class RegressionCommand {
         int expectedFailureCount = (int) childResults.stream()
                 .filter(result -> "failed".equals(result.expectedStatus()))
                 .count();
+        int expectedFailedObservedCount = (int) childResults.stream()
+                .filter(result -> "expected_failed_observed".equals(result.statusTaxonomy()))
+                .count();
         String status = failedCount == 0 ? "passed" : "failed";
         SuiteGroupOutput output = writeSuiteGroupOutput(
                 definition,
@@ -1120,7 +1189,8 @@ public class RegressionCommand {
                 System.currentTimeMillis(),
                 runDir,
                 childResults,
-                expectedFailureCount);
+                expectedFailureCount,
+                expectedFailedObservedCount);
 
         out.println("run_status: " + status);
         out.println("suite_id: " + definition.suiteId());
@@ -1131,6 +1201,7 @@ public class RegressionCommand {
         out.println("passed_count: " + passedCount);
         out.println("failed_count: " + failedCount);
         out.println("expected_failure_count: " + expectedFailureCount);
+        out.println("expected_failed_observed_count: " + expectedFailedObservedCount);
         out.println("suite_summary_json: " + output.summaryJson());
         out.println("suite_summary_yaml: " + output.summaryYaml());
         out.println("allure_results_dir: " + output.allureResultsDir());
@@ -1143,35 +1214,12 @@ public class RegressionCommand {
         if (!validation.valid()) {
             return SuiteGroupChildResult.fromBlocked(child, validation.suiteId(), validation.findings());
         }
-        if (supportsWireMockHttpRequestSample(validation.providerTypesUsed())) {
-            MixedRunResult result = wireMockHttpRequestCapabilityService.run(
-                    child.suiteManifest(),
-                    child.profile(),
-                    childOutputRoot.resolve("wiremock_http_request").normalize());
-            return SuiteGroupChildResult.fromMixed(child, result);
-        }
-        if (supportsSoapMockSample(validation.providerTypesUsed())) {
-            SoapRunResult result = soapMockCapabilityService.run(
-                    child.suiteManifest(),
-                    child.profile(),
-                    childOutputRoot.resolve("soap_mock").normalize());
-            return SuiteGroupChildResult.fromSoap(child, result);
-        }
-        if (supportsGrpcMockSample(validation.providerTypesUsed())) {
-            GrpcRunResult result = grpcMockCapabilityService.run(
-                    child.suiteManifest(),
-                    child.profile(),
-                    childOutputRoot.resolve("grpc_mock").normalize());
-            return SuiteGroupChildResult.fromGrpc(child, result);
-        }
-        return SuiteGroupChildResult.fromBlocked(
-                child,
-                validation.suiteId(),
-                List.of(finding(
-                        child.suiteManifest(),
-                        "provider_types_used",
-                        "unsupported_provider_type",
-                        "Use a suite group child suite supported by the current CLI provider runtime dispatch.")));
+        SuiteRuntimeResult result = dispatchSuiteRuntime(
+                child.suiteManifest(),
+                child.ref(),
+                child.profile(),
+                childOutputRoot);
+        return SuiteGroupChildResult.fromSuiteRuntime(child, result);
     }
 
     private SuiteGroupOutput writeSuiteGroupOutput(
@@ -1184,7 +1232,8 @@ public class RegressionCommand {
             long stoppedAt,
             Path runDir,
             List<SuiteGroupChildResult> childResults,
-            int expectedFailureCount) {
+            int expectedFailureCount,
+            int expectedFailedObservedCount) {
         try {
             Files.createDirectories(runDir);
             Path allureResultsDir = runDir.resolve("allure-results");
@@ -1205,6 +1254,13 @@ public class RegressionCommand {
             summary.put("passed_count", childResults.stream().filter(SuiteGroupChildResult::passed).count());
             summary.put("failed_count", childResults.stream().filter(result -> !result.passed()).count());
             summary.put("expected_failure_count", expectedFailureCount);
+            summary.put("expected_failed_observed_count", expectedFailedObservedCount);
+            summary.put("expected_failed_missing_count", childResults.stream()
+                    .filter(result -> "expected_failed_missing".equals(result.statusTaxonomy()))
+                    .count());
+            summary.put("blocked_count", childResults.stream()
+                    .filter(result -> "blocked".equals(result.statusTaxonomy()))
+                    .count());
             summary.put("allure_results_dir", allureResultsDir.toString());
             summary.put("children", childResults.stream().map(SuiteGroupChildResult::toSummary).toList());
 
@@ -2666,6 +2722,276 @@ public class RegressionCommand {
     private record SuiteGroupOutput(Path summaryJson, Path summaryYaml, Path allureResultsDir) {
     }
 
+    private record StatusCounts(int passedCount, int failedCount) {
+    }
+
+    private record SuiteRuntimeResult(
+            boolean passed,
+            String status,
+            String suiteId,
+            String batchId,
+            String runId,
+            String testCaseId,
+            int testCount,
+            String profile,
+            boolean providerRuntimeExecuted,
+            List<String> providerIds,
+            List<String> providerTypes,
+            Path resultJson,
+            Path evidenceDir,
+            String evidenceClassification,
+            List<String> outputLines,
+            List<ContractFinding> findings) {
+
+        static SuiteRuntimeResult blocked(String suiteId, String profile, List<ContractFinding> findings) {
+            return new SuiteRuntimeResult(
+                    false,
+                    "blocked",
+                    suiteId,
+                    "",
+                    "",
+                    "",
+                    0,
+                    profile,
+                    false,
+                    List.of(),
+                    List.of(),
+                    null,
+                    null,
+                    "framework_provider_capability_only",
+                    List.of(),
+                    List.copyOf(findings));
+        }
+
+        static SuiteRuntimeResult fromMixed(MixedRunResult result) {
+            return new SuiteRuntimeResult(
+                    result.passed(),
+                    result.status(),
+                    result.suiteId(),
+                    result.batchId(),
+                    result.runId(),
+                    result.testCaseId(),
+                    result.testCount(),
+                    result.profile(),
+                    result.providerRuntimeExecuted(),
+                    result.providerIds(),
+                    result.providerTypes(),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    "framework_provider_capability_only",
+                    List.of(
+                            "provider_types: " + String.join(",", result.providerTypes()),
+                            "provider_ids: " + String.join(",", result.providerIds())),
+                    result.findings());
+        }
+
+        static SuiteRuntimeResult fromSoap(SoapRunResult result) {
+            return new SuiteRuntimeResult(
+                    result.passed(),
+                    result.status(),
+                    result.suiteId(),
+                    result.batchId(),
+                    result.runId(),
+                    result.testCaseId(),
+                    result.testCount(),
+                    result.profile(),
+                    result.providerRuntimeExecuted(),
+                    result.providerIds(),
+                    result.providerTypes(),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    "framework_provider_capability_only",
+                    List.of(
+                            "provider_types: " + String.join(",", result.providerTypes()),
+                            "provider_ids: " + String.join(",", result.providerIds())),
+                    result.findings());
+        }
+
+        static SuiteRuntimeResult fromGrpc(GrpcRunResult result) {
+            return new SuiteRuntimeResult(
+                    result.passed(),
+                    result.status(),
+                    result.suiteId(),
+                    result.batchId(),
+                    result.runId(),
+                    result.testCaseId(),
+                    result.testCount(),
+                    result.profile(),
+                    result.providerRuntimeExecuted(),
+                    result.providerIds(),
+                    result.providerTypes(),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    "framework_provider_capability_only",
+                    List.of(
+                            "provider_types: " + String.join(",", result.providerTypes()),
+                            "provider_ids: " + String.join(",", result.providerIds())),
+                    result.findings());
+        }
+
+        static SuiteRuntimeResult fromRest(RestClientRunResult result) {
+            return new SuiteRuntimeResult(
+                    result.passed(),
+                    result.status(),
+                    result.suiteId(),
+                    result.batchId(),
+                    result.runId(),
+                    result.testCaseId(),
+                    result.testCount(),
+                    result.profile(),
+                    result.providerRuntimeExecuted(),
+                    blankListFiltered(result.providerId()),
+                    blankListFiltered(result.providerType()),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    "product_release_evidence_candidate",
+                    List.of(
+                            "provider_type: " + result.providerType(),
+                            "provider_id: " + result.providerId()),
+                    result.findings());
+        }
+
+        static SuiteRuntimeResult fromWireMock(WireMockRunResult result) {
+            List<String> outputLines = new ArrayList<>();
+            outputLines.add("provider_type: " + result.providerType());
+            outputLines.add("provider_id: " + result.providerId());
+            if (!result.baseUrl().isBlank()) {
+                outputLines.add("base_url: " + result.baseUrl());
+            }
+            return new SuiteRuntimeResult(
+                    result.passed(),
+                    result.status(),
+                    result.suiteId(),
+                    result.batchId(),
+                    result.runId(),
+                    result.testCaseId(),
+                    result.testCount(),
+                    result.profile(),
+                    result.providerRuntimeExecuted(),
+                    blankListFiltered(result.providerId()),
+                    blankListFiltered(result.providerType()),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    "framework_provider_capability_only",
+                    outputLines,
+                    result.findings());
+        }
+
+        static SuiteRuntimeResult fromJdbc(JdbcRunResult result) {
+            return new SuiteRuntimeResult(
+                    result.passed(),
+                    result.status(),
+                    result.suiteId(),
+                    result.batchId(),
+                    result.runId(),
+                    result.testCaseId(),
+                    result.testCount(),
+                    result.profile(),
+                    result.providerRuntimeExecuted(),
+                    blankListFiltered(result.providerId()),
+                    blankListFiltered(result.providerType()),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    "framework_provider_capability_only",
+                    List.of(
+                            "provider_type: " + result.providerType(),
+                            "provider_id: " + result.providerId(),
+                            "runtime_mode: " + result.runtimeMode(),
+                            "dialect: " + result.dialect()),
+                    result.findings());
+        }
+
+        static SuiteRuntimeResult fromMessaging(MessagingClientRunResult result) {
+            return new SuiteRuntimeResult(
+                    result.passed(),
+                    result.status(),
+                    result.suiteId(),
+                    result.batchId(),
+                    result.runId(),
+                    result.testCaseId(),
+                    result.testCount(),
+                    result.profile(),
+                    result.providerRuntimeExecuted(),
+                    blankListFiltered(result.providerId()),
+                    blankListFiltered(result.providerType()),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    "framework_provider_capability_only",
+                    result.providerOutputLines(),
+                    result.findings());
+        }
+
+        static SuiteRuntimeResult fromNats(NatsRunResult result) {
+            return new SuiteRuntimeResult(
+                    result.passed(),
+                    result.status(),
+                    result.suiteId(),
+                    result.batchId(),
+                    result.runId(),
+                    result.testCaseId(),
+                    result.testCount(),
+                    result.profile(),
+                    result.providerRuntimeExecuted(),
+                    blankListFiltered(result.providerId()),
+                    blankListFiltered(result.providerType()),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    "framework_provider_capability_only",
+                    List.of(
+                            "provider_type: " + result.providerType(),
+                            "provider_id: " + result.providerId(),
+                            "runtime_mode: " + result.runtimeMode(),
+                            "subject: " + result.subject()),
+                    result.findings());
+        }
+
+        static SuiteRuntimeResult fromCommonVerify(CommonVerifyRunResult result) {
+            return new SuiteRuntimeResult(
+                    result.passed(),
+                    result.status(),
+                    result.suiteId(),
+                    result.batchId(),
+                    result.runId(),
+                    result.testCaseId(),
+                    result.testCount(),
+                    result.profile(),
+                    result.providerRuntimeExecuted(),
+                    blankListFiltered(result.providerId()),
+                    blankListFiltered(result.providerType()),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    "framework_provider_capability_only",
+                    List.of(
+                            "provider_type: " + result.providerType(),
+                            "provider_id: " + result.providerId()),
+                    result.findings());
+        }
+
+        static SuiteRuntimeResult fromGolden(GoldenRunResult result) {
+            return new SuiteRuntimeResult(
+                    result.passed(),
+                    result.status(),
+                    result.suiteId(),
+                    result.batchId(),
+                    result.runId(),
+                    result.testCaseId(),
+                    result.testCount(),
+                    result.profile(),
+                    result.fakeProviderExecuted(),
+                    result.fakeProviderExecuted() ? List.of("sample-fake-runtime") : List.of(),
+                    List.of("sample_fake_provider"),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    "framework_verification_only",
+                    List.of("fake_provider_executed: " + result.fakeProviderExecuted()),
+                    result.findings());
+        }
+
+        private static List<String> blankListFiltered(String value) {
+            return value == null || value.isBlank() ? List.of() : List.of(value);
+        }
+    }
+
     private record SuiteGroupChildResult(
             String id,
             String ref,
@@ -2728,6 +3054,22 @@ public class RegressionCommand {
                     result.findings());
         }
 
+        static SuiteGroupChildResult fromSuiteRuntime(SuiteGroupChild child, SuiteRuntimeResult result) {
+            return new SuiteGroupChildResult(
+                    child.id(),
+                    child.ref(),
+                    result.suiteId(),
+                    result.profile(),
+                    child.expectedStatus(),
+                    result.status(),
+                    child.expectedStatus().equals(result.status()),
+                    result.providerIds(),
+                    result.providerTypes(),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    result.findings());
+        }
+
         static SuiteGroupChildResult fromBlocked(
                 SuiteGroupChild child,
                 String childSuiteId,
@@ -2755,6 +3097,7 @@ public class RegressionCommand {
             summary.put("profile", profile);
             summary.put("expected_status", expectedStatus);
             summary.put("observed_status", observedStatus);
+            summary.put("status_taxonomy", statusTaxonomy());
             summary.put("status", passed ? "passed" : "failed");
             summary.put("provider_ids", providerIds);
             summary.put("provider_types", providerTypes);
@@ -2762,6 +3105,25 @@ public class RegressionCommand {
             summary.put("evidence_dir", evidenceDir == null ? "" : evidenceDir.toString());
             summary.put("finding_count", findings.size());
             return summary;
+        }
+
+        String statusTaxonomy() {
+            if ("blocked".equals(observedStatus)) {
+                return "blocked";
+            }
+            if ("failed".equals(expectedStatus) && "failed".equals(observedStatus)) {
+                return "expected_failed_observed";
+            }
+            if ("failed".equals(expectedStatus)) {
+                return "expected_failed_missing";
+            }
+            if ("passed".equals(observedStatus)) {
+                return "passed";
+            }
+            if (findings.stream().anyMatch(finding -> finding.reason().contains("unsupported"))) {
+                return "unsupported";
+            }
+            return "failed";
         }
     }
 

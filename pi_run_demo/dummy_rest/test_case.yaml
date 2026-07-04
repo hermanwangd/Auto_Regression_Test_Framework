@@ -1,0 +1,55 @@
+dsl_version: v0.2
+test_case_id: PI-RUN-DUMMY-REST-TC-001
+title: Get order from dummy REST app through rest_client
+status: active
+revision: 1
+labels:
+  capability: pi_run_dummy_rest
+  evidence_classification: product_release_evidence_candidate
+  downstream_release_evidence: true
+compatible_profiles: [local_dummy]
+targets:
+  dummy_api:
+    provider_id: dummy-rest-client
+data:
+  expected_order:
+    ref: expected_results/order_response.json
+execute:
+  operations:
+    - id: get_order
+      target: dummy_api
+      operation: http_request
+      inputs:
+        request.method:
+          value: GET
+        request.path:
+          value: /orders/1001
+      outputs:
+        response.status: response.status
+        response.headers: response.headers
+        response.body: response.body
+        response.duration_ms: response.duration_ms
+verify:
+  checks:
+    - id: order_response_status
+      type: value_equals
+      actual:
+        ref: ${execute.get_order.outputs.response.status}
+      expected: 200
+    - id: order_response_body
+      type: json_match
+      actual:
+        ref: ${execute.get_order.outputs.response.body}
+      expected_ref: expected_results/order_response.json
+evidence:
+  required:
+    - evidence_index.yaml
+    - provider-evidence/http/request.json
+    - provider-evidence/http/response.json
+    - assertions/order_response_status.yaml
+    - assertions/order_response_body.json
+    - batch/batch.yaml
+runtime:
+  timeout: PT30S
+  retry:
+    max_attempts: 1

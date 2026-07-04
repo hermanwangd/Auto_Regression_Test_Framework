@@ -8,7 +8,7 @@ source_refs:
 labels:
   capability: compare
   evidence_classification: framework_provider_capability_only
-compatible_profiles: [local_provider]
+compatible_profiles: [local_compare]
 targets:
   compare_engine:
     provider_id: compare-engine
@@ -19,46 +19,59 @@ data:
     ref: expected_results/expected_schema.json
   expected_file:
     ref: expected_results/expected_file.json
-execute:
-  operations:
-    - id: load_actual_samples
-      target: compare_engine
-      operation: read_artifact
-      inputs:
-        file.path:
-          ref: actual_samples/actual_payload.json
-      outputs:
-        actual_payload: actual_payload
-        actual_file: actual_file
+execute: []
 verify:
   checks:
     - id: payload_json_matches
       type: json_match
-      actual:
-        ref: actual_samples/actual_payload.json
+      target: compare_engine
+      actual_ref: actual_samples/actual_payload.json
       expected_ref: expected_results/expected_payload.json
       options:
-        ignore_paths: [$.generatedAt]
+        ignore_paths: [generatedAt]
         ignore_order: true
-        normalize: true
+        normalize: canonical_json
+      inputs:
+        expected_ref:
+          ref: expected_results/expected_payload.json
+        actual_ref:
+          ref: actual_samples/actual_payload.json
+        ignore_order:
+          value: "true"
+        normalize:
+          value: canonical_json
     - id: payload_schema_matches
       type: schema_match
-      actual:
-        ref: actual_samples/actual_payload.json
+      target: compare_engine
+      actual_ref: actual_samples/actual_payload.json
       schema_ref: expected_results/expected_schema.json
+      inputs:
+        schema_ref:
+          ref: expected_results/expected_schema.json
+        actual_ref:
+          ref: actual_samples/actual_payload.json
     - id: file_diff_matches
       type: file_diff
-      actual:
-        ref: actual_samples/actual_file.json
+      target: compare_engine
+      actual_ref: actual_samples/actual_file.json
       expected_ref: expected_results/expected_file.json
       options:
-        normalize: true
+        normalize: trim_lines
         ignore_order: true
+      inputs:
+        expected_ref:
+          ref: expected_results/expected_file.json
+        actual_ref:
+          ref: actual_samples/actual_file.json
+        normalize:
+          value: trim_lines
+        ignore_order:
+          value: "true"
 evidence:
   required:
-    - assertion-results/payload_json_matches.yaml
-    - assertion-results/payload_schema_matches.yaml
-    - assertion-results/file_diff_matches.yaml
+    - assertions/payload_json_matches.yaml
+    - assertions/payload_schema_matches.yaml
+    - assertions/file_diff_matches.yaml
     - diffs/file_diff_matches.diff
 runtime:
   timeout: PT30S

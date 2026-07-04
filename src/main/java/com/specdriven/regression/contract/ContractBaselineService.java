@@ -217,7 +217,12 @@ public class ContractBaselineService {
                 .toList();
         boolean releaseEvidenceEligible = providerResults.stream()
                 .anyMatch(providerResult -> Boolean.TRUE.equals(providerResult.get("release_evidence_eligible")));
-        if (findings.isEmpty() && releaseEvidenceEligible) {
+        Map<String, Object> labels = mapValue(result.get("labels"));
+        boolean downstreamReleaseEvidence = Boolean.TRUE.equals(labels.get("downstream_release_evidence"));
+        String evidenceClassification = stringValue(labels.get("evidence_classification"));
+        boolean frameworkOnlyEvidence = "framework_provider_capability_only".equals(evidenceClassification)
+                || "framework_verification_only".equals(evidenceClassification);
+        if (findings.isEmpty() && releaseEvidenceEligible && (!downstreamReleaseEvidence || frameworkOnlyEvidence)) {
             findings.add(new ContractFinding(
                     resultJson.toString(),
                     "provider_results.release_evidence_eligible",

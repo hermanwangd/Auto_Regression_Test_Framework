@@ -1,0 +1,23 @@
+provider_instance_version: v0.2
+provider_id: compare-engine
+provider_type: common_verify
+runtime_modes: [stub]
+defaults:
+  timeout: PT5S
+  poll_interval: PT0S
+operations:
+  json_match:
+    outputs: [assertion_evidence_ref, diff_ref]
+  schema_match:
+    outputs: [assertion_evidence_ref, diff_ref]
+  file_diff:
+    outputs: [assertion_evidence_ref, diff_ref]
+evidence:
+  capture: [assertion_result, assertion_diff]
+failure_mapping:
+  mismatch: ASSERTION_MISMATCH
+  schema_mismatch: SCHEMA_MISMATCH
+  missing_input: ACTUAL_ARTIFACT_MISSING
+labels:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

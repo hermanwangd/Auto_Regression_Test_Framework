@@ -23,6 +23,8 @@ class MockServerCrossVerifySampleCommandTest {
             Path.of("samples/provider_capability/mock_server_cross_verify/soap_mock_http_client/suite_manifest.yaml");
     private static final Path GRPC_SUITE =
             Path.of("samples/provider_capability/mock_server_cross_verify/grpc_mock_grpc_client/suite_manifest.yaml");
+    private static final Path PROVIDER_CAPABILITY_SUITE =
+            Path.of("samples/provider_capability/suite_manifest.yaml");
 
     @TempDir
     Path tempDir;
@@ -88,6 +90,8 @@ class MockServerCrossVerifySampleCommandTest {
                 .contains("\"test_count\": 6")
                 .contains("\"passed_count\": 6")
                 .contains("\"expected_failure_count\": 3")
+                .contains("\"expected_failed_observed_count\": 3")
+                .contains("\"status_taxonomy\": \"expected_failed_observed\"")
                 .contains("\"expected_status\": \"failed\"")
                 .contains("\"observed_status\": \"failed\"")
                 .contains("\"status\": \"passed\"")
@@ -100,6 +104,36 @@ class MockServerCrossVerifySampleCommandTest {
                 .contains("\"status\": \"passed\"")
                 .contains("\"labels\"")
                 .contains("\"suite\"");
+    }
+
+    @Test
+    void providerCapabilityParentSuiteRunsEveryChildThroughSharedRuntimeDispatch() throws Exception {
+        CommandResult run = execute(
+                "run",
+                "--suite",
+                PROVIDER_CAPABILITY_SUITE.toString(),
+                "--profile",
+                "local_provider");
+
+        assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+        assertThat(run.stdout())
+                .contains("run_status: passed")
+                .contains("suite_id: PROVIDER-CAPABILITY-P0-v0.2")
+                .contains("test_count: 11")
+                .contains("passed_count: 11")
+                .contains("failed_count: 0");
+
+        Path suiteSummary = extractPath(run.stdout(), "suite_summary_json");
+        String summary = Files.readString(suiteSummary);
+        assertThat(summary)
+                .contains("\"child_suite_id\": \"WIREMOCK-CAPABILITY-v0.2\"")
+                .contains("\"child_suite_id\": \"JDBC-CAPABILITY-v0.2\"")
+                .contains("\"child_suite_id\": \"NATS-CAPABILITY-v0.2\"")
+                .contains("\"child_suite_id\": \"COMMON-VERIFY-CAPABILITY-v0.2\"")
+                .contains("\"child_suite_id\": \"KAFKA-CAPABILITY-v0.2\"")
+                .contains("\"child_suite_id\": \"IBM-MQ-CAPABILITY-v0.2\"")
+                .doesNotContain("unsupported_provider_type")
+                .doesNotContain("VALIDATION_UNSUPPORTED_PROVIDER_TYPE");
     }
 
     @Test

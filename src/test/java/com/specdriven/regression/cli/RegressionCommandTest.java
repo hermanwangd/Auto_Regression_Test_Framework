@@ -29,17 +29,19 @@ class RegressionCommandTest {
     @Test
     void commandReturnsUsageErrorForMissingAndUnknownCommand() {
         RegressionCommand command = command();
+        ByteArrayOutputStream missingOutput = new ByteArrayOutputStream();
         ByteArrayOutputStream missingError = new ByteArrayOutputStream();
         ByteArrayOutputStream unknownError = new ByteArrayOutputStream();
 
         int missingExit = command.execute(new String[] {},
-                print(new ByteArrayOutputStream()), print(missingError));
+                print(missingOutput), print(missingError));
         int unknownExit = command.execute(new String[] {"dance"},
                 print(new ByteArrayOutputStream()), print(unknownError));
 
-        assertThat(missingExit).isEqualTo(2);
+        assertThat(missingExit).isZero();
         assertThat(unknownExit).isEqualTo(2);
-        assertThat(missingError.toString()).contains("Missing command.");
+        assertThat(missingOutput.toString()).contains("usage:");
+        assertThat(missingError.toString()).isBlank();
         assertThat(unknownError.toString()).contains("Unknown command: dance");
     }
 

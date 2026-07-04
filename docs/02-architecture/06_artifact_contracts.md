@@ -1161,7 +1161,7 @@ Standard result JSON shape:
 
 ```yaml
 test_result:
-  framework_version: 0.2.1
+  framework_version: 0.2.2
   dsl_version: v0.2
   test_case_id: RP-AR-M1-data-pipeline-TC-001
   parameter_case_id: valid_order_001

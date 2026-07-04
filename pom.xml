@@ -13,9 +13,38 @@
 
     <groupId>com.specdriven</groupId>
     <artifactId>spec-driven-auto-regression</artifactId>
-    <version>0.2.1</version>
+    <version>0.2.2</version>
     <name>Spec Driven Auto Regression</name>
-    <description>Release Package regression framework</description>
+    <description>Spec-driven auto regression test framework for suite-mode provider execution.</description>
+    <url>https://github.com/hermanwangd/Auto_Regression_Test_Framework</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>hermanwangd</id>
+            <name>Herman Wang</name>
+            <url>https://github.com/hermanwangd</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/hermanwangd/Auto_Regression_Test_Framework.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/hermanwangd/Auto_Regression_Test_Framework.git</developerConnection>
+        <url>https://github.com/hermanwangd/Auto_Regression_Test_Framework</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/hermanwangd/Auto_Regression_Test_Framework/issues</url>
+    </issueManagement>
 
     <properties>
         <java.version>17</java.version>
