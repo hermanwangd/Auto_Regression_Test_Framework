@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   framework-gates:
     name: Framework Gates
@@ -95,7 +99,21 @@ jobs:
             ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-
             ${{ runner.os }}-dependency-check-
 
+      - name: Warm Dependency-Check data
+        if: steps.dependency-check-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 80
+        run: scripts/ci/security-scan.sh --warmup
+
+      - name: Save warmed Dependency-Check data
+        uses: actions/cache/save@v4
+        if: steps.dependency-check-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.DEPENDENCY_CHECK_DATA_DIR }}
+          key: ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-${{ steps.dependency-check-cache-date.outputs.date }}-${{ hashFiles('**/pom.xml') }}
+
       - name: OWASP dependency vulnerability scan
+        env:
+          DEPENDENCY_CHECK_AUTO_UPDATE: false
         run: scripts/ci/security-scan.sh
 
       - name: Upload dependency scan reports
@@ -106,10 +124,3 @@ jobs:
           path: |
             target/dependency-check-report.*
           if-no-files-found: ignore
-
-      - name: Save Dependency-Check data
-        uses: actions/cache/save@v4
-        if: always() && steps.dependency-check-cache.outputs.cache-hit != 'true'
-        with:
-          path: ${{ env.DEPENDENCY_CHECK_DATA_DIR }}
-          key: ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-${{ steps.dependency-check-cache-date.outputs.date }}-${{ hashFiles('**/pom.xml') }}

@@ -4,8 +4,19 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+mode="scan"
+if [[ "${1:-}" == "--warmup" ]]; then
+  mode="warmup"
+  shift
+fi
+if [[ "$#" -ne 0 ]]; then
+  echo "Usage: scripts/ci/security-scan.sh [--warmup]" >&2
+  exit 2
+fi
+
 DEPENDENCY_CHECK_VERSION="${DEPENDENCY_CHECK_VERSION:-12.2.2}"
 DEPENDENCY_CHECK_CVSS_THRESHOLD="${DEPENDENCY_CHECK_CVSS_THRESHOLD:-7}"
+DEPENDENCY_CHECK_AUTO_UPDATE="${DEPENDENCY_CHECK_AUTO_UPDATE:-true}"
 if [[ -n "${DEPENDENCY_CHECK_DATA_DIR:-}" ]]; then
   dependency_check_data_dir="$DEPENDENCY_CHECK_DATA_DIR"
 elif [[ -n "${XDG_CACHE_HOME:-}" ]]; then
@@ -90,6 +101,26 @@ fi
 mkdir -p "$dependency_check_data_dir"
 echo "dependency_check_data_dir: ${dependency_check_data_dir}"
 
+if [[ "$mode" == "warmup" ]]; then
+  ARGS=(
+    -B
+    -ntp
+    -DskipTests
+    "org.owasp:dependency-check-maven:${DEPENDENCY_CHECK_VERSION}:update-only"
+    "-DdataDirectory=${dependency_check_data_dir}"
+    -DautoUpdate=true
+  )
+
+  if [[ -n "${NVD_API_KEY:-}" ]]; then
+    ARGS+=("-DnvdApiKeyEnvironmentVariable=NVD_API_KEY")
+  fi
+
+  echo "dependency_security_cache_warmup_status: started"
+  MAVEN_OPTS="${MAVEN_OPTS:-"-Xmx1536m"}" ./mvnw "${ARGS[@]}"
+  echo "dependency_security_cache_warmup_status: passed"
+  exit 0
+fi
+
 ARGS=(
   -B
   -ntp
@@ -98,6 +129,7 @@ ARGS=(
   -DfailBuildOnCVSS=11
   -Dformat=ALL
   "-DdataDirectory=${dependency_check_data_dir}"
+  "-DautoUpdate=${DEPENDENCY_CHECK_AUTO_UPDATE}"
 )
 
 if [[ -n "${NVD_API_KEY:-}" ]]; then
