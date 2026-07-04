@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.4.xsd"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.4.xsd
+                                  https://dependency-check.github.io/DependencyCheck/dependency-suppression.1.4.xsd">
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        WireMock 4.0.0-beta.38 embeds Swagger UI assets containing DOMPurify 3.1.4.
+        The framework does not expose WireMock Swagger UI as a product-facing release surface;
+        WireMock mock providers are framework-verification/local-CI substitution only.
+        Re-evaluate when upgrading WireMock or before the next framework release.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.1\.4$</packageUrl>
+        <vulnerabilityName>CVE-2025-15599</vulnerabilityName>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        Same WireMock embedded Swagger UI DOMPurify false-positive/risk-accepted asset boundary as above.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.1\.4$</packageUrl>
+        <vulnerabilityName>CVE-2025-26791</vulnerabilityName>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        Same WireMock embedded Swagger UI DOMPurify false-positive/risk-accepted asset boundary as above.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.1\.4$</packageUrl>
+        <vulnerabilityName>CVE-2026-0540</vulnerabilityName>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        Same WireMock embedded Swagger UI DOMPurify false-positive/risk-accepted asset boundary as above.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.1\.4$</packageUrl>
+        <vulnerabilityName>CVE-2026-41238</vulnerabilityName>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        Same WireMock embedded Swagger UI DOMPurify false-positive/risk-accepted asset boundary as above.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.1\.4$</packageUrl>
+        <vulnerabilityName>CVE-2026-41239</vulnerabilityName>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        Same WireMock embedded Swagger UI DOMPurify false-positive/risk-accepted asset boundary as above.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.1\.4$</packageUrl>
+        <vulnerabilityName>CVE-2026-41240</vulnerabilityName>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        Same WireMock embedded Swagger UI DOMPurify false-positive/risk-accepted asset boundary as above.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.1\.4$</packageUrl>
+        <vulnerabilityName>CVE-2026-49458</vulnerabilityName>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        Same WireMock embedded Swagger UI DOMPurify false-positive/risk-accepted asset boundary as above.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.1\.4$</packageUrl>
+        <vulnerabilityName>CVE-2026-49459</vulnerabilityName>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        Same WireMock embedded Swagger UI DOMPurify false-positive/risk-accepted asset boundary as above.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.1\.4$</packageUrl>
+        <vulnerabilityName>CVE-2026-49978</vulnerabilityName>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        Same WireMock embedded Swagger UI DOMPurify false-positive/risk-accepted asset boundary as above.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.1\.4$</packageUrl>
+        <vulnerabilityName regex="true">^GHSA-(39q2-94rc-95cp|76mc-f452-cxcm|cj63-jhhr-wcxv|cjmm-f4jc-qw8r|cmwh-pvxp-8882|h8r8-wccr-v5f2|gvmj-g25r-r7wr|vxr8-fq34-vvx9|x4vx-rjvf-j5p4)$</vulnerabilityName>
+    </suppress>
+    <suppress until="2026-10-01Z">
+        <notes><![CDATA[
+        Dependency-Check maps WireMock's wiremock-httpclient-apache5 4.0.0-beta.38 artifact
+        to an Apache HttpClient 4.0.0 CPE. The project also pins Apache HttpClient 5.6.2 directly.
+        Re-evaluate when upgrading WireMock or before the next framework release.
+        ]]></notes>
+        <gav regex="true">^org\.wiremock:wiremock-httpclient-apache5:4\.0\.0-beta\.38$</gav>
+        <cve>CVE-2014-3577</cve>
+    </suppress>
+</suppressions>

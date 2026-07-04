@@ -17,6 +17,7 @@ fi
 DEPENDENCY_CHECK_VERSION="${DEPENDENCY_CHECK_VERSION:-12.2.2}"
 DEPENDENCY_CHECK_CVSS_THRESHOLD="${DEPENDENCY_CHECK_CVSS_THRESHOLD:-7}"
 DEPENDENCY_CHECK_AUTO_UPDATE="${DEPENDENCY_CHECK_AUTO_UPDATE:-true}"
+DEPENDENCY_CHECK_SUPPRESSION_FILE="${DEPENDENCY_CHECK_SUPPRESSION_FILE:-config/dependency-check-suppressions.xml}"
 if [[ -n "${DEPENDENCY_CHECK_DATA_DIR:-}" ]]; then
   dependency_check_data_dir="$DEPENDENCY_CHECK_DATA_DIR"
 elif [[ -n "${XDG_CACHE_HOME:-}" ]]; then
@@ -131,6 +132,10 @@ ARGS=(
   "-DdataDirectory=${dependency_check_data_dir}"
   "-DautoUpdate=${DEPENDENCY_CHECK_AUTO_UPDATE}"
 )
+
+if [[ -s "$DEPENDENCY_CHECK_SUPPRESSION_FILE" ]]; then
+  ARGS+=("-DsuppressionFiles=${DEPENDENCY_CHECK_SUPPRESSION_FILE}")
+fi
 
 if [[ -n "${NVD_API_KEY:-}" ]]; then
   ARGS+=("-DnvdApiKeyEnvironmentVariable=NVD_API_KEY")

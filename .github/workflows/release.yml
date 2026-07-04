@@ -96,6 +96,15 @@ jobs:
           DEPENDENCY_CHECK_AUTO_UPDATE: false
         run: scripts/ci/security-scan.sh
 
+      - name: Upload dependency scan reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-dependency-security-${{ github.run_id }}
+          path: |
+            target/dependency-check-report.*
+          if-no-files-found: ignore
+
       - name: Generate SBOM
         run: scripts/ci/generate-sbom.sh
 
