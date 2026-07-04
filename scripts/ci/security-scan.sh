@@ -76,6 +76,7 @@ accepted_wiremock_dompurify = {
     "GHSA-x4vx-rjvf-j5p4",
 }
 accepted_wiremock_httpclient = {"CVE-2014-3577"}
+accepted_wiremock_grpc_extension = {"CVE-2018-9116"}
 
 
 def dependency_package_ids(dependency):
@@ -105,6 +106,16 @@ def is_accepted_wiremock_finding(dependency, vulnerability):
         return (
             "pkg:maven/org.wiremock/wiremock-httpclient-apache5@4.0.0-beta.38" in package_ids
             or file_name == "wiremock-httpclient-apache5-4.0.0-beta.38.jar"
+        )
+
+    if name in accepted_wiremock_grpc_extension:
+        return (
+            "pkg:maven/org.wiremock/wiremock-grpc-extension-core@1.0.0-beta.5" in package_ids
+            or "pkg:maven/org.wiremock/wiremock-grpc-extension-jetty@1.0.0-beta.5" in package_ids
+            or file_name in {
+                "wiremock-grpc-extension-core-1.0.0-beta.5.jar",
+                "wiremock-grpc-extension-jetty-1.0.0-beta.5.jar",
+            }
         )
 
     return False
