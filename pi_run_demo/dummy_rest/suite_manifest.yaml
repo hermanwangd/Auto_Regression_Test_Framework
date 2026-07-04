@@ -1,6 +1,6 @@
 contract_version: v0.2
 suite_id: PI-RUN-DUMMY-REST-v0.2
-purpose: v0.2.2 PI-run suite-mode demo proving a custom REST target can execute through the built-in rest_client provider.
+purpose: v0.2.3 PI-run suite-mode demo proving a custom REST target can execute through the built-in rest_client provider.
 profile: local_dummy
 selection:
   mode: suite

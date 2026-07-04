@@ -586,8 +586,19 @@ public class RestClientCapabilityService {
                 "operation", "http_request",
                 "status", status,
                 "outputs", outputs));
-        result.put("release_evidence_eligible", true);
+        result.put("release_evidence_eligible", releaseEvidenceEligible(selection));
         return result;
+    }
+
+    private boolean releaseEvidenceEligible(RuntimeSelection selection) {
+        return releaseCandidate(mapValue(selection.suite().get("evidence_policy")))
+                && releaseCandidate(mapValue(selection.testCase().get("labels")))
+                && releaseCandidate(mapValue(selection.instance().get("labels")));
+    }
+
+    private boolean releaseCandidate(Map<String, Object> labels) {
+        return Boolean.TRUE.equals(labels.get("downstream_release_evidence"))
+                && "product_release_evidence_candidate".equals(stringValue(labels.get("evidence_classification")));
     }
 
     private String topLevelTestCaseId(RuntimeSelection selection, int testCount) {
@@ -929,7 +940,7 @@ public class RestClientCapabilityService {
 
         static DemoRestServer startIfNeeded(Map<String, Object> bindingValues) {
             String baseUrl = stringValue(bindingValues.get("base_url"));
-            if (!"generated://dummy-rest-app.base_url".equals(baseUrl)) {
+            if (!"local://framework-demo-server".equals(baseUrl)) {
                 return new DemoRestServer(null, "");
             }
             try {

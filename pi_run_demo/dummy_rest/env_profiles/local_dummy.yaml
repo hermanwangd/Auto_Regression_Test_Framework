@@ -19,4 +19,4 @@ providers:
     runtime_mode: native
     binding_keys:
       base_url:
-        generated_ref: generated://dummy-rest-app.base_url
+        value: local://framework-demo-server

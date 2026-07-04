@@ -67,13 +67,13 @@ class FrameworkPublicInterfaceContractTest {
     }
 
     @Test
-    @DisplayName("FWK-013 | user docs keep v0.2.2 runtime release interface suite-mode only")
+    @DisplayName("FWK-013 | user docs keep v0.2.3 runtime release interface suite-mode only")
     void FWK_013_userDocsKeepRuntimeReleaseInterfaceSuiteModeOnly() throws Exception {
         String userGuide = Files.readString(USER_GUIDE);
         String testPlan = Files.readString(TEST_PLAN);
 
         assertThat(userGuide)
-                .contains("The v0.2.2 runtime public interface is suite-mode")
+                .contains("The v0.2.3 runtime public interface is suite-mode")
                 .contains("failure_code: LEGACY_RP_MODE_DEPRECATED")
                 .contains("It must not create `batch_id`, `run_id`, result JSON, evidence files, or suite summary artifacts")
                 .contains("translate owner-authored Product/RP artifacts into suite-mode artifacts first");

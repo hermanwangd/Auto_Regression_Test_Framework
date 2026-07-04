@@ -28,6 +28,8 @@ data:
     ref: fixtures/sample_db_cleanup.yaml
   payment_event_expected:
     ref: expected_results/sample_expected.json
+  payment_event_payload:
+    ref: fixtures/payment_event_payload.json
 setup:
   operations:
     - id: seed_order
@@ -36,6 +38,8 @@ setup:
       inputs:
         sql_ref:
           ref: ${data.order_seed}
+        params.order_id:
+          ref: expected_results/sample_expected.json#/db/order_id
     - id: load_payment_stub
       target: payment_api_mock
       operation: load_stubs
@@ -44,22 +48,32 @@ setup:
           ref: ${data.payment_api_mappings}
 cleanup:
   operations:
+    - id: cleanup_payment_mock
+      target: payment_api_mock
+      operation: reset_mock
+      inputs: {}
     - id: cleanup_order
       target: order_database
       operation: db_cleanup
       inputs:
         sql_ref:
           ref: ${data.order_cleanup}
+        params.order_id:
+          ref: expected_results/sample_expected.json#/db/order_id
 execute:
   operations:
     - id: verify_payment_mock_request
       target: payment_api_mock
-      operation: verify_requests
+      operation: send_http_request
       inputs:
+        http.method:
+          value: POST
+        http.path:
+          value: /payments
+        http.request_body:
+          ref: ${data.payment_request}
         mock.request_filter:
           ref: fixtures/wiremock/payment-request-filter.json
-        mock.expected_count:
-          ref: expected_results/sample_expected.json#/http/expected_count
       outputs:
         request_journal: request_journal
         matched_count: matched_count
@@ -81,7 +95,7 @@ execute:
         subject:
           ref: expected_results/sample_expected.json#/event/subject
         payload_ref:
-          ref: expected_results/sample_expected.json#/event/payload
+          ref: ${data.payment_event_payload}
       outputs:
         subject: subject
         published: published
@@ -97,29 +111,41 @@ verify:
     - id: order_exists
       type: db_record_exists
       target: order_database
-      query:
-        ref: fixtures/sql/find_order.sql
-      expected_ref: expected_results/sample_expected.json#/db
+      inputs:
+        query_ref:
+          ref: fixtures/sql/find_order.sql
+        params.order_id:
+          ref: expected_results/sample_expected.json#/db/order_id
+        expected.min_rows:
+          value: 1
       options:
         timeout: PT30S
         poll_interval: PT2S
     - id: event_payload_matches
       type: event_payload_match
       target: event_bus
-      event:
-        subject_ref: expected_results/sample_expected.json#/event/subject
-        consume_from: test_start_time
-      expected_ref: expected_results/sample_expected.json#/event/payload
+      inputs:
+        subject:
+          ref: expected_results/sample_expected.json#/event/subject
+        consume_from:
+          value: test_start_time
+        expected_ref:
+          ref: expected_results/sample_expected.json#/event/payload
+        timeout:
+          value: PT30S
+        poll_interval:
+          value: PT2S
       options:
         timeout: PT30S
         poll_interval: PT2S
 evidence:
   required:
-    - provider-evidence/payment-api/request_journal.yaml
-    - query-evidence/order_database/query_result.yaml
-    - event-evidence/nats_event_bus/published_message.yaml
-    - assertion-results/mock_called_once.yaml
-    - cleanup-results/cleanup_order.yaml
+    - provider-evidence/wiremock/request_journal.json
+    - provider-evidence/jdbc/query_query_order.yaml
+    - provider-evidence/nats/publish_payment_event.yaml
+    - assertions/mock_called_once.yaml
+    - provider-evidence/wiremock/cleanup.yaml
+    - provider-evidence/jdbc/cleanup_cleanup_order.yaml
 runtime:
   timeout: PT2M
   retry:

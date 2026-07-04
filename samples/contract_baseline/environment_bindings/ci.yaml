@@ -9,13 +9,13 @@ provider_bindings:
     runtime_mode: ephemeral
     binding_values:
       connection:
-        secret_ref: generated://oracle-ephemeral.connection
+        local_ref: approved_local_h2_oracle
       dialect: oracle
   - provider_id: nats-event-bus
     runtime_mode: ephemeral
     binding_values:
       connection:
-        secret_ref: generated://nats-ephemeral.connection
+        local_ref: approved_local_nats_ref
       subject: payments.accepted
       timeout: PT30S
       poll_interval: PT0.5S

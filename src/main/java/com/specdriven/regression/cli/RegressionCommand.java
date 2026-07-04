@@ -10,6 +10,8 @@ import com.specdriven.regression.contract.ContractBaselineService.DryRunResult;
 import com.specdriven.regression.contract.ContractBaselineService.ReportResult;
 import com.specdriven.regression.contract.ContractBaselineService.ResolvedTarget;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
+import com.specdriven.regression.contract.ContractBaselineRuntimeService;
+import com.specdriven.regression.contract.ContractBaselineRuntimeService.ContractBaselineRunResult;
 import com.specdriven.regression.contract.CommonVerifyService;
 import com.specdriven.regression.contract.CommonVerifyService.CommonVerifyRunResult;
 import com.specdriven.regression.contract.GoldenE2eService;
@@ -144,6 +146,7 @@ public class RegressionCommand {
     private final GeneratedRuntimeArtifacts generatedRuntimeArtifacts = new GeneratedRuntimeArtifacts();
     private final ParameterSetResolver parameterSetResolver = new ParameterSetResolver();
     private final ContractBaselineService contractBaselineService = new ContractBaselineService();
+    private final ContractBaselineRuntimeService contractBaselineRuntimeService = new ContractBaselineRuntimeService();
     private final EvidenceHardeningService evidenceHardeningService = new EvidenceHardeningService();
     private final CommonVerifyService commonVerifyService = new CommonVerifyService();
     private final GoldenE2eService goldenE2eService = new GoldenE2eService();
@@ -669,7 +672,7 @@ public class RegressionCommand {
             printLegacyRpModeBlocked(out);
             return 1;
         }
-        err.println("RP-mode is deprecated for v0.2.2 PI-run and is only available through compatibility tests.");
+        err.println("RP-mode is deprecated for v0.2.3 PI-run and is only available through compatibility tests.");
         String rpId = requiredOption(options, "--rp-id", err);
         String requestedEnv = requiredOption(options, "--env", err);
         if (rpId == null || requestedEnv == null) {
@@ -870,6 +873,12 @@ public class RegressionCommand {
                     suiteManifest,
                     profile,
                     outputRoot.resolve("wiremock_http_request").normalize()));
+        }
+        if (supportsContractBaselineMixedSample(providerTypes)) {
+            return SuiteRuntimeResult.fromContractBaseline(contractBaselineRuntimeService.run(
+                    suiteManifest,
+                    profile,
+                    outputRoot.resolve("contract_baseline").normalize()));
         }
         if (supportsSoapMockSample(providerTypes)) {
             return SuiteRuntimeResult.fromSoap(soapMockCapabilityService.run(
@@ -1510,6 +1519,13 @@ public class RegressionCommand {
         return providerTypes.size() == 2
                 && providerTypes.contains("wiremock_http_mock")
                 && providerTypes.contains("rest_client");
+    }
+
+    private boolean supportsContractBaselineMixedSample(List<String> providerTypes) {
+        return providerTypes.size() == 3
+                && providerTypes.contains("wiremock_http_mock")
+                && providerTypes.contains("jdbc")
+                && providerTypes.contains("nats");
     }
 
     private boolean supportsSoapMockSample(List<String> providerTypes) {
@@ -2807,6 +2823,28 @@ public class RegressionCommand {
         }
 
         static SuiteRuntimeResult fromMixed(MixedRunResult result) {
+            return new SuiteRuntimeResult(
+                    result.passed(),
+                    result.status(),
+                    result.suiteId(),
+                    result.batchId(),
+                    result.runId(),
+                    result.testCaseId(),
+                    result.testCount(),
+                    result.profile(),
+                    result.providerRuntimeExecuted(),
+                    result.providerIds(),
+                    result.providerTypes(),
+                    result.resultJson(),
+                    result.evidenceDir(),
+                    "framework_provider_capability_only",
+                    List.of(
+                            "provider_types: " + String.join(",", result.providerTypes()),
+                            "provider_ids: " + String.join(",", result.providerIds())),
+                    result.findings());
+        }
+
+        static SuiteRuntimeResult fromContractBaseline(ContractBaselineRunResult result) {
             return new SuiteRuntimeResult(
                     result.passed(),
                     result.status(),

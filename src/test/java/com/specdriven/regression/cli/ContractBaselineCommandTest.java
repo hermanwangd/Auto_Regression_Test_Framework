@@ -367,10 +367,10 @@ class ContractBaselineCommandTest {
         Path rawConnectionBinding = rawConnectionSuite.getParent().resolve("env_profiles/ci.yaml");
         Files.writeString(rawConnectionBinding, Files.readString(rawConnectionBinding)
                 .replace("""
-                              connection.secret_ref:
-                                secret_ref: generated://oracle-ephemeral.connection
+                              connection:
+                                local_ref: approved_local_h2_oracle
                         """, """
-                              connection.secret_ref:
+                              connection:
                                 value: jdbc:h2:mem:leaked_db;DB_CLOSE_DELAY=-1
                         """));
 
@@ -421,14 +421,14 @@ class ContractBaselineCommandTest {
         Path suite = mutableBaseline();
         Path testCase = suite.getParent().resolve("test_case.yaml");
         Files.writeString(testCase, Files.readString(testCase)
-                .replace("expected_ref: expected_results/sample_expected.json#/db",
-                        "expected: expected_results/missing_expected.json"));
+                .replace("ref: expected_results/sample_expected.json#/event/payload",
+                        "ref: expected_results/missing_expected.json#/event/payload"));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
-                .contains("field_path: verify.order_exists.expected")
+                .contains("expected_results/missing_expected.json")
                 .contains("reason: unresolved_artifact_ref")
                 .contains("Restore runtime-critical artifact ref `expected_results/missing_expected.json` under the suite directory before execution.");
     }
@@ -482,15 +482,15 @@ class ContractBaselineCommandTest {
         Path suite = mutableBaseline();
         Path testCase = suite.getParent().resolve("test_case.yaml");
         Files.writeString(testCase, Files.readString(testCase)
-                .replace("expected_results/sample_expected.json#/event/payload",
-                        "expected_results/missing_expected.json#/event/payload"));
+                .replace("fixtures/payment_event_payload.json",
+                        "fixtures/missing_payment_event_payload.json"));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("reason: unresolved_artifact_ref")
-                .contains("expected_results/missing_expected.json")
+                .contains("fixtures/missing_payment_event_payload.json")
                 .contains("category: CONFIGURATION_ERROR");
     }
 
@@ -575,7 +575,7 @@ class ContractBaselineCommandTest {
     void validateSuiteRejectsUnsupportedOperation() throws Exception {
         Path suite = mutableBaseline();
         Path testCase = suite.getParent().resolve("test_case.yaml");
-        Files.writeString(testCase, Files.readString(testCase).replace("operation: verify_requests", "operation: call_api"));
+        Files.writeString(testCase, Files.readString(testCase).replace("operation: send_http_request", "operation: call_api"));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
@@ -860,7 +860,7 @@ class ContractBaselineCommandTest {
                   allowed_runtime_modes: [mock, stub, ephemeral]
                   mock_evidence_release_claim: prohibited
                 dependency_provisioning_policy:
-                  allowed_provisioners: [testcontainers]
+                  allowed_provisioners: [embedded_h2, in_memory]
                 data_policy:
                   approved_expected_results_required: true
                   production_data_allowed: false
@@ -875,15 +875,15 @@ class ContractBaselineCommandTest {
                   oracle-database:
                     runtime_mode: ephemeral
                     binding_keys:
-                      connection.secret_ref:
-                        secret_ref: generated://oracle-ephemeral.connection
+                      connection:
+                        local_ref: approved_local_h2_oracle
                       dialect:
                         value: oracle
                   nats-event-bus:
                     runtime_mode: ephemeral
                     binding_keys:
                       connection:
-                        secret_ref: generated://nats-ephemeral.connection
+                        local_ref: approved_local_nats_ref
                       subject:
                         value: payments.accepted
                       timeout:

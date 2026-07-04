@@ -787,6 +787,10 @@ public class ContractBaselineService {
             String ref,
             TargetResolution targetResolution,
             List<ContractFinding> findings) {
+        Map<String, Object> parameter = operationRef.parameters().get(parameterIndex);
+        if (parameter.containsKey("value") && !parameter.containsKey("ref")) {
+            return;
+        }
         ref = resolveDataRef(testCase, ref);
         String filePart = refFilePart(ref);
         if (!looksLikeLocalFileRef(bindAs, ref, filePart)) {
@@ -804,6 +808,16 @@ public class ContractBaselineService {
                     targetResolution.profile(),
                     operationRef.operation(),
                     "Keep parameter refs under the suite directory; use checked-in fixtures or expected_results."));
+        } else if (!Files.isRegularFile(resolved)) {
+            findings.add(new ContractFinding(
+                    testCasePath.toString(),
+                    parameterFieldPath(operationRef, parameterIndex, operationRef.parameters().get(parameterIndex)),
+                    "unresolved_artifact_ref",
+                    targetResolution.providerId(),
+                    targetResolution.providerType(),
+                    targetResolution.profile(),
+                    operationRef.operation(),
+                    "Restore runtime-critical artifact ref `" + filePart + "` under the suite directory before execution."));
         }
     }
 
@@ -980,6 +994,7 @@ public class ContractBaselineService {
                 }
                 if ("jdbc".equals(providerType)) {
                     validateJdbcEnvironmentBinding(
+                            graph,
                             bindingPath,
                             bindingDoc.envProfile(),
                             providerId,
@@ -1245,6 +1260,7 @@ public class ContractBaselineService {
     }
 
     private void validateJdbcEnvironmentBinding(
+            ContractGraph graph,
             Path bindingPath,
             boolean envProfile,
             String providerId,
@@ -1277,17 +1293,47 @@ public class ContractBaselineService {
                             + "` is outside PR-004."));
         }
         String secretRef = stringValue(valueAtPath(bindingValues, "connection.secret_ref"));
-        if (secretRef.isBlank()) {
+        String localRef = stringValue(valueAtPath(bindingValues, "connection.local_ref"));
+        if (secretRef.isBlank() && localRef.isBlank()) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    bindingValueFieldPath(envProfile, providerId, "connection.secret_ref"),
+                    bindingValueFieldPath(envProfile, providerId, "connection"),
                     "missing_required_binding_key",
                     providerId,
                     providerType,
                     profile,
                     "",
-                    "Supply JDBC connection.secret_ref; raw DB URLs, usernames, and passwords are prohibited."));
+                    "Supply JDBC connection.secret_ref or approved connection.local_ref; raw DB URLs, usernames, and passwords are prohibited."));
         }
+        if (secretRef.startsWith("generated://")
+                && !secretRef.startsWith("generated://provider-capability/")
+                && !declaredDependencyGeneratedOutput(graph, profile, secretRef)) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    bindingValueFieldPath(envProfile, providerId, "connection.secret_ref"),
+                    "unresolved_generated_ref",
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Materialize generated ref `" + secretRef
+                            + "` into standard Env_Profile/Environment Binding artifacts before running the framework."));
+        }
+        if (!localRef.isBlank() && !approvedJdbcLocalRef(localRef)) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    bindingValueFieldPath(envProfile, providerId, "connection.local_ref"),
+                    "unsupported_local_ref",
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Use approved JDBC local_ref `approved_local_h2_oracle` or `approved_local_h2_db2` for local/CI materialized samples."));
+        }
+    }
+
+    private boolean approvedJdbcLocalRef(String localRef) {
+        return "approved_local_h2_oracle".equals(localRef) || "approved_local_h2_db2".equals(localRef);
     }
 
     private void validateNatsEnvironmentBinding(
@@ -1655,18 +1701,40 @@ public class ContractBaselineService {
                     providerType,
                     profile,
                     "",
-                    "Use generated_ref format `generated://<provider_id>.<bindable_output>` or an approved provisioner-generated ref."));
+                    "Use generated_ref format `generated://<provider_id>.<bindable_output>` from a Provider Contract bindable output."));
             return;
         }
         String target = generatedRef.substring(prefix.length());
         int separator = target.indexOf('.');
         if (separator < 1 || separator == target.length() - 1) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    "providers." + providerId + ".binding_keys." + rawKey + ".generated_ref",
+                    "invalid_generated_ref",
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Use generated_ref format `generated://<provider_id>.<bindable_output>` from a Provider Contract bindable output."));
             return;
         }
         String generatedProviderId = target.substring(0, separator);
         String output = target.substring(separator + 1);
+        if (declaredDependencyGeneratedOutput(graph, profile, generatedRef)) {
+            return;
+        }
         Map<String, Object> generatedProvider = graph.providerInstances().get(generatedProviderId);
         if (generatedProvider == null) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    "providers." + providerId + ".binding_keys." + rawKey + ".generated_ref",
+                    "unresolved_generated_ref",
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Materialize generated ref `" + generatedRef
+                            + "` into standard Env_Profile/Environment Binding artifacts before running the framework."));
             return;
         }
         String generatedProviderType = stringValue(generatedProvider.get("provider_type"));
@@ -1686,6 +1754,64 @@ public class ContractBaselineService {
                     "Reference a bindable output declared by Provider Contract `" + generatedProviderType
                             + "`. Unknown output `" + output + "`."));
         }
+    }
+
+    private boolean declaredDependencyGeneratedOutput(ContractGraph graph, String profile, String generatedRef) {
+        EnvironmentBindingDoc bindingDoc = graph.environmentBindingsByProfile().get(profile);
+        if (bindingDoc == null || !bindingDoc.envProfile()) {
+            return false;
+        }
+        Map<String, Object> provisioningPolicy = mapValue(bindingDoc.document().get("dependency_provisioning_policy"));
+        return generatedOutputMatches(provisioningPolicy.get("generated_outputs"), generatedRef)
+                || generatedOutputMatches(provisioningPolicy.get("dependency_outputs"), generatedRef);
+    }
+
+    private boolean generatedOutputMatches(Object value, String generatedRef) {
+        if (value == null) {
+            return false;
+        }
+        String text = stringValue(value);
+        if (generatedRef.equals(text)
+                || (text.contains(".") && generatedRef.equals("generated://" + text))) {
+            return true;
+        }
+        if (value instanceof Map<?, ?> map) {
+            if (generatedOutputMatches(map.get("generated_ref"), generatedRef)
+                    || generatedOutputMatches(map.get("ref"), generatedRef)
+                    || generatedOutputMatches(map.get("value"), generatedRef)) {
+                return true;
+            }
+            String providerId = firstNonBlank(
+                    stringValue(map.get("provider_id")),
+                    stringValue(map.get("dependency_id")),
+                    stringValue(map.get("id")));
+            String output = firstNonBlank(
+                    stringValue(map.get("output")),
+                    stringValue(map.get("output_name")),
+                    stringValue(map.get("name")));
+            if (!providerId.isBlank() && !output.isBlank()
+                    && generatedRef.equals("generated://" + providerId + "." + output)) {
+                return true;
+            }
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String key = stringValue(entry.getKey());
+                if (generatedRef.equals(key)
+                        || (key.contains(".") && generatedRef.equals("generated://" + key))) {
+                    return true;
+                }
+                if (generatedOutputMatches(entry.getValue(), generatedRef)) {
+                    return true;
+                }
+            }
+        }
+        if (value instanceof Collection<?> collection) {
+            for (Object item : collection) {
+                if (generatedOutputMatches(item, generatedRef)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private Map<String, Object> providerBinding(ContractGraph graph, String profile, String providerId) {
@@ -2152,6 +2278,8 @@ public class ContractBaselineService {
     private boolean safeSecretReference(String value) {
         return value.startsWith("vault://")
                 || value.startsWith("generated://")
+                || value.startsWith("local://")
+                || value.startsWith("approved_local_")
                 || value.startsWith("${")
                 || value.endsWith("_ref")
                 || value.endsWith(".password");
@@ -2308,6 +2436,9 @@ public class ContractBaselineService {
         }
 
         private static String failureCodeFor(String reason) {
+            if ("unresolved_generated_ref".equals(reason)) {
+                return "CONFIGURATION_UNRESOLVED_GENERATED_REF";
+            }
             String normalized = reason == null || reason.isBlank()
                     ? "UNKNOWN"
                     : reason.toUpperCase().replaceAll("[^A-Z0-9]+", "_").replaceAll("(^_|_$)", "");
@@ -2330,7 +2461,7 @@ public class ContractBaselineService {
                         "missing_required_binding_key", "unsupported_runtime_mode",
                         "invalid_target_ref", "unresolved_artifact_ref",
                         "unsupported_local_ref", "missing_jdbc_target", "missing_nats_target",
-                        "profile_mismatch", "invalid_generated_ref" -> "CONFIGURATION_ERROR";
+                        "profile_mismatch", "invalid_generated_ref", "unresolved_generated_ref" -> "CONFIGURATION_ERROR";
                 case "unknown_provider_type", "unsupported_operation", "unsupported_bind_as",
                         "unsupported_input",
                         "unsupported_dialect", "missing_output_ref", "missing_supported_dialect",

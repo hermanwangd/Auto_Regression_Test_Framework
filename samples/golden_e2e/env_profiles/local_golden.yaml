@@ -19,6 +19,6 @@ providers:
     runtime_mode: stub
     binding_keys:
       workspace_ref:
-        generated_ref: generated://golden-e2e/workspace
+        value: local://golden-e2e-workspace
       clock_ref:
         value: fixed://2026-06-29T00:00:00Z

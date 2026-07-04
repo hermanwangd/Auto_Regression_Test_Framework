@@ -117,7 +117,7 @@ provider_types:
     contract_ref: provider-contracts/jdbc.yaml
     runtime_status: supported
     supported_runtime_modes: [native, ephemeral]
-    required_binding_keys: [connection.secret_ref, dialect]
+    required_binding_keys: [dialect]
     supported_operations: [db_seed, db_cleanup, db_query, db_record_exists]
     evidence_outputs: [seed_evidence, cleanup_evidence, query_evidence, error]
   kubernetes_runtime:

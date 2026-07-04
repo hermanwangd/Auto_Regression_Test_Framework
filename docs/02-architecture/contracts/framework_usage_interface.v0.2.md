@@ -49,7 +49,7 @@ Debug-only compatibility:
 
 - `regress report --run-id <run-id>` may exist for local debugging, but it is not a release coverage interface and must not satisfy RP release evidence.
 - Compatibility option markers retained for older contract tests: `--strict-schema`, `--suite <suite-id>`, `--format text`.
-- Product Repo `run --root <product-repo> --rp-id <rp-id> --env <profile>` is blocked in the public v0.2.2 runtime path with `LEGACY_RP_MODE_DEPRECATED`. Any remaining direct Product Repo runner is internal compatibility only and must not be used as a release gate.
+- Product Repo `run --root <product-repo> --rp-id <rp-id> --env <profile>` is blocked in the public v0.2.3 runtime path with `LEGACY_RP_MODE_DEPRECATED`. Any remaining direct Product Repo runner is internal compatibility only and must not be used as a release gate.
 
 ## Stable Exit Codes
 
@@ -157,9 +157,9 @@ The stable provider runtime configuration surface includes:
 - Provider Instance declares one logical runtime target with `provider_id`, `provider_type`, allowed runtime modes, defaults, evidence capture choices, and failure mapping. It must not redefine Provider Contract binding key schema.
 - Provider Contract declares the provider type, runtime-mode vocabulary, executable runtime modes when only a subset is runnable by this framework build, allowed operations, allowed input keys, required inputs, binding key schema, bindable outputs, required fields, defaults, output refs, evidence outputs, failure codes, and valid Provider Instance shape. Built-in Provider Contracts are framework-owned and resolved by `provider_type`.
 - Env_Profile supplies environment-specific `runtime_mode` and actual values under `providers.<provider_id>.binding_keys`. The `providers` map keys are Provider Instance `provider_id` values. Each binding key must match the resolved Provider Contract `binding_keys`.
-- Env_Profile binding key values may use `value`, `ref`, `secret_ref`, `generated_ref`, or approved `local_ref` only when allowed by the Provider Contract binding key schema. `generated_ref` values must target a producing Provider Contract `bindable_outputs` entry, such as `generated://wiremock-payment-api.base_url`; `local_ref` is limited to framework-controlled local/CI fixtures and must not be used as SIT/preprod release evidence.
+- Env_Profile binding key values may use `value`, `ref`, `secret_ref`, `generated_ref`, or approved `local_ref` only when allowed by the Provider Contract binding key schema. `generated_ref` values must target a producing Provider Contract `bindable_outputs` entry, such as `generated://wiremock-payment-api.base_url`, or a selected Env_Profile `dependency_provisioning_policy.generated_outputs` entry; `local_ref` is limited to framework-controlled local/CI fixtures and must not be used as SIT/preprod release evidence.
 - WireMock-backed mock Provider Contracts may expose predefined generated endpoint refs, such as `generated://payment-soap-mock.endpoint_url` and `generated://customer-grpc-mock.target_uri`. These refs are suite/batch lifecycle outputs and must not be embedded in DSL test cases.
-- Local and CI Env_Profiles may use mock, stub, ephemeral, Testcontainers-backed, fake-topic, embedded-broker, disposable-schema, or generated-data replacements for external dependencies only when allowed by Env_Profile policy, the framework built-in Provider Contract executable runtime modes, and Provider Instance runtime modes. SIT and preprod default to native dependencies and must not produce release evidence from mock substitution.
+- Local and CI Env_Profiles may use mock, stub, ephemeral, fake-topic, embedded-broker, disposable-schema, or generated-data replacements for external dependencies only when those dependencies are materialized before framework execution and allowed by Env_Profile policy, the framework built-in Provider Contract executable runtime modes, and Provider Instance runtime modes. SIT and preprod default to native dependencies and must not produce release evidence from mock substitution.
 - Provider capability registry entries list supported `provider_type` values and blocked unsupported or ambiguous provider selections.
 - Product/RP/RU labels remain traceability metadata and must not select runtime behavior.
 
@@ -221,4 +221,4 @@ These commands support Product Repo and Phase 2 Agent Skill workflows. They are 
 - `regress draft-expected-results`
 
 They may be tested as support behavior, but they do not prove framework runtime maturity.
-Phase 2 Product Repo translation must emit suite-mode artifacts and invoke `regress run --suite <suite_manifest_path> --profile <env_profile_id>`. Direct public RP-mode execution remains blocked in v0.2.2.
+Phase 2 Product Repo translation must emit suite-mode artifacts and invoke `regress run --suite <suite_manifest_path> --profile <env_profile_id>`. Direct public RP-mode execution remains blocked in v0.2.3.

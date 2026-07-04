@@ -1,7 +1,15 @@
-stubs:
-  - id: payment-success
-    request:
-      method: POST
-      path: /payments
-    response:
-      status: 202
+{
+  "request": {
+    "method": "POST",
+    "url": "/payments"
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "status": "accepted"
+    }
+  }
+}

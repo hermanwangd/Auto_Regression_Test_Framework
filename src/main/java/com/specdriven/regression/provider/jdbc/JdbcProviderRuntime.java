@@ -260,13 +260,24 @@ public class JdbcProviderRuntime implements ProviderRuntime {
     }
 
     private SecretConnection resolveConnection(ProviderExecutionContext context, String dialect) {
+        String localRef = stringValue(valueAtPath(context.bindingValues(), "connection.local_ref"));
+        if (!localRef.isBlank()) {
+            if (!approvedLocalRef(localRef, dialect)) {
+                return SecretConnection.failed(ProviderFailure.of(
+                        "SECRET_RESOLUTION_ERROR",
+                        "SECRET_RESOLUTION_ERROR",
+                        "JDBC connection.local_ref `" + localRef + "` is not approved for local provider capability runtime.",
+                        "Use approved_local_h2_oracle or approved_local_h2_db2."));
+            }
+            return localH2Connection(context, dialect);
+        }
         String secretRef = stringValue(valueAtPath(context.bindingValues(), "connection.secret_ref"));
         if (secretRef.isBlank()) {
             return SecretConnection.failed(ProviderFailure.of(
                     "SECRET_RESOLUTION_ERROR",
                     "SECRET_RESOLUTION_ERROR",
-                    "JDBC connection.secret_ref is missing.",
-                    "Supply connection.secret_ref in Environment Binding."));
+                    "JDBC connection.secret_ref or connection.local_ref is missing.",
+                    "Supply connection.secret_ref or an approved connection.local_ref in Environment Binding."));
         }
         String normalizedRef = secretRef.toLowerCase(Locale.ROOT);
         if (!normalizedRef.startsWith("generated://provider-capability/")) {
@@ -276,10 +287,19 @@ public class JdbcProviderRuntime implements ProviderRuntime {
                     "JDBC secret_ref `" + secretRef + "` cannot be resolved by local provider capability runtime.",
                     "Use a supported generated:// provider capability secret ref for local_jdbc or configure a secret resolver."));
         }
+        return localH2Connection(context, dialect);
+    }
+
+    private SecretConnection localH2Connection(ProviderExecutionContext context, String dialect) {
         String dbName = safe(context.providerId() + "-" + context.runDir().getFileName());
         String mode = "db2".equals(dialect) ? "DB2" : "Oracle";
         String jdbcUrl = "jdbc:h2:mem:" + dbName + ";MODE=" + mode + ";DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=true";
         return new SecretConnection(jdbcUrl, "sa", "", null);
+    }
+
+    private boolean approvedLocalRef(String localRef, String dialect) {
+        return ("oracle".equals(dialect) && "approved_local_h2_oracle".equals(localRef))
+                || ("db2".equals(dialect) && "approved_local_h2_db2".equals(localRef));
     }
 
     private Map<String, Object> parameterValues(ProviderExecutionContext context, ProviderOperationRequest request) {

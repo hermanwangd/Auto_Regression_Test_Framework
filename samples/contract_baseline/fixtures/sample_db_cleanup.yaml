@@ -1,5 +1,1 @@
-operation: cleanup_order
-records:
-  - table: orders
-    where:
-      order_id: ORD-001
+delete from ORDERS where ORDER_ID = :order_id;

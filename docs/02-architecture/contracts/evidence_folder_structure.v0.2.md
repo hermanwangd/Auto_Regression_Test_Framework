@@ -19,7 +19,7 @@ docs/08-release/release-packages/<rp_id>/evidence/
     provider-evidence/
     query-evidence/
     event-evidence/
-    assertion-results/
+    assertions/
     cleanup-results/
     masking_report.yaml
   review/
@@ -64,7 +64,7 @@ Required run evidence:
 - `provider-evidence/`: provider-specific request/response, command, DB, event, mock, or readiness evidence.
 - `query-evidence/`: DB query evidence, masked params, row counts, and final observed rows when allowed.
 - `event-evidence/`: event observation evidence, consume position, attempts, timeout, and last observed event.
-- `assertion-results/`: assertion result records and diffs.
+- `assertions/`: assertion result records and diffs.
 - `cleanup-results/`: cleanup actions, strategy, status, and failure evidence.
 - `masking_report.yaml`: secret guardrail and redaction status.
 

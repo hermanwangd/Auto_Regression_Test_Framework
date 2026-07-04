@@ -1,6 +1,6 @@
 # Provider Support Matrix
 
-This matrix defines Framework `0.2.2` production support by provider runtime mode. It does not decide downstream Product/RP release readiness; owners still provide AC, Env_Profile, deployment readiness, expected results, and release evidence.
+This matrix defines Framework `0.2.3` production support by provider runtime mode. It does not decide downstream Product/RP release readiness; owners still provide AC, Env_Profile, deployment readiness, expected results, and release evidence.
 
 Status meanings:
 
@@ -13,7 +13,7 @@ Status meanings:
 | Provider Type | Native | Mock | Ephemeral | Production Boundary |
 | --- | --- | --- | --- | --- |
 | `rest_client` | production-ready | framework-verification-only | n/a | Native evidence requires owner-provided endpoint bindings and readiness context. |
-| `grpc_client` | production-ready for unary calls | framework-verification-only | n/a | Streaming is outside v0.2.2. |
+| `grpc_client` | production-ready for unary calls | framework-verification-only | n/a | Streaming is outside v0.2.3. |
 | `wiremock_http_mock` | n/a | framework-verification-only | n/a | Local/CI REST dependency substitute only. |
 | `soap_mock` | n/a | framework-verification-only | n/a | WireMock-backed SOAP mock; not a custom SOAP server. |
 | `grpc_mock` | n/a | framework-verification-only | n/a | WireMock gRPC extension, unary only. |
@@ -30,6 +30,17 @@ Status meanings:
 | `external_runner` | escape-hatch | framework-verification-only | n/a | Approval is provider safety approval, not release approval. |
 | `sample_fake_provider` | n/a | framework-verification-only | n/a | Golden E2E framework verification only. |
 
+## Supported Mixed Suites
+
+Framework `0.2.3` supports only explicit mixed-provider suite paths:
+
+- `samples/contract_baseline/`: `wiremock_http_mock` + `jdbc` + `nats`, framework verification evidence only.
+- `samples/provider_capability/wiremock_http_request/`: `wiremock_http_mock` + `rest_client`, framework verification evidence only unless owner-provided release labels and native bindings are present.
+- `samples/provider_capability/mock_server_cross_verify/`: checked-in REST/SOAP/gRPC mock-client child suites, framework verification evidence only.
+- `samples/provider_capability/messaging_mixed/`: Kafka + IBM MQ client mock capability suites, framework verification evidence only.
+
+Other arbitrary provider combinations remain blocked before dispatch until an explicit runtime path is implemented and tested.
+
 ## Release Evidence Rule
 
-Only native or approved ephemeral modes marked `production-ready` can contribute framework runtime evidence that may be reviewed alongside downstream RP release evidence. Any mock, fake, deprecated, or contract-only result must be labeled as framework verification or local/CI substitution evidence.
+Only native or approved ephemeral modes marked `production-ready` can contribute framework runtime evidence that may be reviewed alongside downstream RP release evidence. A result may set `release_evidence_eligible: true` only when suite evidence policy, test labels, and Provider Instance labels all explicitly set `downstream_release_evidence: true` with `evidence_classification: product_release_evidence_candidate`. Any mock, fake, deprecated, contract-only, or framework-owned sample result must be labeled as framework verification or local/CI substitution evidence.

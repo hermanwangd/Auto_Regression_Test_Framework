@@ -5,6 +5,6 @@ target_provider_id: sample-fake-runtime
 operation: cleanup_fixture
 cleanup_policy: always
 inputs:
-  workspace_ref: generated://golden-e2e/workspace
+  workspace_ref: local://golden-e2e-workspace
 expected_outputs:
   - cleanup_log

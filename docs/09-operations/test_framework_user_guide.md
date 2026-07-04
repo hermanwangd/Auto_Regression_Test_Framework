@@ -84,9 +84,9 @@ init-product-repo
   -> report
 ```
 
-`init-product-repo`, `init-rp`, `check-rp`, `generate-tests`, and `draft-expected-results` are Product Repo / Phase 2 Agent Skill support steps. They are not the v0.2.2 runtime release interface. The v0.2.2 runtime public interface is suite-mode: `validate --suite`, `run --suite --dry-run`, `run --suite`, and `report --result`.
+`init-product-repo`, `init-rp`, `check-rp`, `generate-tests`, and `draft-expected-results` are Product Repo / Phase 2 Agent Skill support steps. They are not the v0.2.3 runtime release interface. The v0.2.3 runtime public interface is suite-mode: `validate --suite`, `run --suite --dry-run`, `run --suite`, and `report --result`.
 
-Typical v0.2.2 runtime commands:
+Typical v0.2.3 runtime commands:
 
 ```bash
 regress validate \
@@ -105,7 +105,7 @@ regress run \
 regress report --result <generated_result_json>
 ```
 
-Public legacy Product Repo runtime execution is blocked in v0.2.2:
+Public legacy Product Repo runtime execution is blocked in v0.2.3:
 
 ```bash
 regress run --root <product-repo> --rp-id <rp-id> --env <profile>
@@ -587,7 +587,7 @@ failure_code: ASSERTION_FAILED
 message: Expected $.status to equal ACCEPTED but was PENDING
 evidence_refs:
   - provider-evidence/payment-api-response.json
-  - assertion-results/payment_status_is_accepted.yaml
+  - assertions/payment_status_is_accepted.yaml
 ```
 
 Allowed statuses:
@@ -718,7 +718,7 @@ If a command-capable provider instance does not define required `safety.access_p
 
 The canonical built-in Provider Contracts are materialized under `docs/02-architecture/contracts/provider-contracts/` and indexed by `docs/02-architecture/contracts/provider_capability_registry.v0.2.yaml`. The user guide must not redefine a second provider contract catalog. Runtime suite manifests use this built-in catalog by default.
 
-Framework `0.2.2` production support by provider runtime mode is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is the release boundary for whether a provider mode is production-ready, framework-verification-only, contract-only, deprecated, or an approved escape hatch.
+Framework `0.2.3` production support by provider runtime mode is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is the release boundary for whether a provider mode is production-ready, framework-verification-only, contract-only, deprecated, or an approved escape hatch.
 
 RP/suite repositories do not need a `provider_contracts/` folder for built-in provider types such as `wiremock_http_mock`, `rest_client`, `jdbc`, `nats`, `kafka`, `ibm_mq`, `artifact_compare`, or `polling_observer`. Suite-local contracts are an explicit opt-in for custom provider plugins or contract snapshot pinning:
 
@@ -764,7 +764,7 @@ A Provider Instance defines one logical runtime target for an RP. It must use th
 | `ibm_mq` | `provider-contracts/ibm_mq.yaml` | `queue_manager`, `channel`, `conn_name`, `queue`, `credential.secret_ref` | `mq_put`, `mq_browse`, `mq_message_exists`, `mq_payload_match` |
 | `kafka_messaging` | `provider-contracts/kafka_messaging.yaml` | `bootstrap_servers` | deprecated alias for legacy `publish_message`, `consume_message` artifacts |
 | `nats` | `provider-contracts/nats.yaml` | `connection`, `subject` | `nats_publish`, `nats_observe`, `event_published`, `event_payload_match` |
-| `jdbc` | `provider-contracts/jdbc.yaml` | `connection.secret_ref`, `dialect` | `db_seed`, `db_cleanup`, `db_query`, `db_record_exists` |
+| `jdbc` | `provider-contracts/jdbc.yaml` | `connection.secret_ref` or approved `connection.local_ref`, `dialect` | `db_seed`, `db_cleanup`, `db_query`, `db_record_exists` |
 | `kubernetes_runtime` | `provider-contracts/kubernetes_runtime.yaml` | `context`, `namespace` | `check_deployment_ready`, `check_pod_ready`, `get_logs`, `wait_rollout`, `exec_command` |
 | `vm_runtime` | `provider-contracts/vm_runtime.yaml` | `host`, `user` | `check_host_ready`, `run_command`, `collect_file`, `collect_logs`, `check_process` |
 | `external_runner` | `provider-contracts/external_runner.yaml` | `command` | `run`, `run_and_collect`, `check_status` |
@@ -775,7 +775,7 @@ In v0.2 provider capability mode, `rest_client` is executable for checked-in Wir
 
 `soap_mock` and `grpc_mock` are PR-008 WireMock-backed mock capabilities. `soap_mock` is executable in PR-008A through WireMock HTTP/XML/SOAP behavior for SOAPAction/header and XPath matching. `grpc_mock` is executable in PR-008B through the WireMock gRPC extension and descriptor refs for unary calls. They are mock providers for local/CI framework evidence; they do not prove downstream SIT/preprod release readiness and do not imply custom SOAP/gRPC server ownership by the framework.
 
-`kafka` and `ibm_mq` are P1 client provider contracts with framework-owned mock capability runtimes. Their Provider Contracts may list `runtime_modes: [native, mock, ephemeral]` as vocabulary, but the current executable baseline declares `executable_runtime_modes: [mock]`; native broker, queue-manager, and ephemeral dependency execution are `contract_only_runtime_modes` until a dedicated runtime slice implements them. They describe how the test runner consumes Env_Profile binding keys and writes framework evidence without starting brokers, queue managers, Testcontainers, or RUs. A single messaging suite may include Kafka and IBM MQ test cases together when every test case uses the same selected Env_Profile and each test case has exactly one messaging runtime target. If an Env_Profile uses `generated_ref` for Kafka or IBM MQ connection values, that generated value must come from a separate approved dependency provisioner or producing Provider Contract; the client provider only consumes it.
+`kafka` and `ibm_mq` are P1 client provider contracts with framework-owned mock capability runtimes. Their Provider Contracts may list `runtime_modes: [native, mock, ephemeral]` as vocabulary, but the current executable baseline declares `executable_runtime_modes: [mock]`; native broker, queue-manager, and ephemeral dependency execution are `contract_only_runtime_modes` until a dedicated runtime slice implements them. They describe how the test runner consumes Env_Profile binding keys and writes framework evidence without starting brokers, queue managers, Testcontainers, or RUs. A single messaging suite may include Kafka and IBM MQ test cases together when every test case uses the same selected Env_Profile and each test case has exactly one messaging runtime target. Project-side generated broker or queue-manager values must be materialized into `value`, `secret_ref`, or approved `local_ref` before framework execution; client providers only consume resolved bindings.
 
 ### 10.2 Provider Instance Examples
 
@@ -875,7 +875,7 @@ Before dispatch, the framework validates:
 - Env_Profile has `providers.<provider_id>` for every DSL target.
 - Env_Profile `providers.<provider_id>.binding_keys` supplies all required Provider Contract binding keys.
 - Env_Profile binding value kinds are allowed by the Provider Contract `binding_keys`.
-- Env_Profile `generated_ref` values resolve to Provider Contract `bindable_outputs`.
+- Env_Profile `generated_ref` values resolve to Provider Contract `bindable_outputs` or selected Env_Profile `dependency_provisioning_policy.generated_outputs`.
 - Selected `runtime_mode` is allowed by Env_Profile, Provider Contract, and Provider Instance.
 - Operation exists in the Provider Contract.
 - Every operation `inputs` key is allowed by the Provider Contract operation.
@@ -983,8 +983,8 @@ providers:
   payment-db:
     runtime_mode: ephemeral
     binding_keys:
-      connection.secret_ref:
-        secret_ref: generated://payment-postgres.connection
+      connection:
+        local_ref: approved_local_h2_oracle
       dialect:
         value: oracle
 
@@ -1013,7 +1013,7 @@ providers:
         secret_ref: env://PAYMENT_MQ_CREDENTIAL_REF
 ```
 
-`generated_ref` can reference only outputs declared in the producing Provider Contract `bindable_outputs`, such as `generated://wiremock-payment-api.base_url`, or outputs declared by an approved dependency provisioner in the same Env_Profile. If no producer or provisioner is declared, use a literal `value`, `secret_ref`, or an approved local/CI-only `local_ref`.
+`generated_ref` can reference outputs declared in a producing Provider Contract `bindable_outputs`, such as `generated://wiremock-payment-api.base_url` from a framework-owned mock provider in the same suite. It may also reference externally provisioned dependency outputs explicitly listed in the selected Env_Profile `dependency_provisioning_policy.generated_outputs`. Undeclared project-specific generated refs are blocked before provider dispatch. Use a literal `value`, `secret_ref`, or approved local/CI-only `local_ref` when the dependency value has already been materialized.
 
 `sit` and `preprod` Env_Profiles default to `runtime_mode: native`. Mock substitution in those execution modes must not be used as downstream RP release evidence.
 
@@ -1045,7 +1045,7 @@ data_policy:
   secrets_must_use_refs: true
 ```
 
-Local and CI Env_Profiles may provision ephemeral dependencies before execution only when an approved provisioner is available. This is separate from client providers: Kafka and IBM MQ client providers consume resolved connection values but do not create brokers or queue managers. Generated connection values must be exposed through Provider Contract `bindable_outputs` or dependency provisioner output declarations and referenced by Env_Profile `generated_ref`.
+Local and CI Env_Profiles may reference ephemeral dependencies only after those dependencies have been provisioned outside the framework runtime and declared through standard artifacts. This is separate from client providers: Kafka and IBM MQ client providers consume resolved connection values but do not create brokers or queue managers. v0.2.3 accepts `generated://` refs only when they target Provider Contract `bindable_outputs` or selected Env_Profile `dependency_provisioning_policy.generated_outputs`; unresolved generated refs block validation before provider dispatch.
 
 ```yaml
 env_profile_id: ci
@@ -1061,36 +1061,14 @@ dependency_substitution_policy:
   mock_evidence_release_claim: prohibited
 
 dependency_provisioning_policy:
-  allowed_provisioners: [testcontainers]
-  dependencies:
-    - dependency_id: payment-postgres
-      provider_id: payment-db
-      dependency_type: postgres
-      image_ref_or_catalog_ref: testcontainers.postgres.default
-      startup_timeout: PT60S
-      readiness_check: jdbc_connect
-      cleanup_scope: per_run
-      outputs:
-        connection:
-          value_type: secret_ref
-
-    - dependency_id: payment-kafka
-      provider_id: payment-events
-      dependency_type: kafka
-      image_ref_or_catalog_ref: testcontainers.kafka.default
-      startup_timeout: PT90S
-      readiness_check: broker_connect
-      cleanup_scope: per_run
-      outputs:
-        bootstrap_servers:
-          value_type: string
+  allowed_provisioners: [external_ci_pre_step]
 
 providers:
   payment-db:
     runtime_mode: ephemeral
     binding_keys:
-      connection.secret_ref:
-        secret_ref: generated://payment-postgres.connection
+      connection:
+        local_ref: approved_local_h2_oracle
       dialect:
         value: oracle
 
@@ -1098,7 +1076,7 @@ providers:
     runtime_mode: mock
     binding_keys:
       bootstrap_servers:
-        generated_ref: generated://payment-kafka.bootstrap_servers
+        value: localhost:9092
 
 max_duration: PT15M
 
@@ -1147,6 +1125,20 @@ regress report --result <generated_result_json>
 Golden E2E suite-path mode may execute only deterministic framework-owned fake providers. It must not start WireMock, JDBC, NATS, Kafka, REST/gRPC, K8s, VM, external runner, SIT, or downstream product deployment.
 
 Provider Capability suite-path mode proves selected v0.2 P0 provider capabilities as framework evidence. A standard suite run creates one `batch_id`, one `run_id`, one result JSON, and per-test outcomes in `test_results[]`; all selected `tests[]` share the selected Env_Profile. Provider identity for suite-level reporting comes from `provider_summary[]` and `provider_results[]`. Multi-provider standard results, inferred from either `test_results[]` or `provider_results[]`, must include `provider_summary[]`. Top-level `provider_id`, `provider_type`, or destination fields are single-provider compatibility fields only and must not be used to summarize a multi-provider suite.
+
+The v0.2.3 contract baseline sample is an executable mixed-provider framework verification suite:
+
+```bash
+regress validate --suite samples/contract_baseline/suite_manifest.yaml --profile ci
+
+regress run \
+  --suite samples/contract_baseline/suite_manifest.yaml \
+  --profile ci
+
+regress report --result <generated_result_json>
+```
+
+This sample dispatches only the checked-in `wiremock_http_mock` + `jdbc` + `nats` combination. It uses local/CI deterministic bindings and always reports `release_evidence_eligible: false`.
 
 `regress validate-evidence --result <generated_result_json>` and `regress report --result <generated_result_json>` validate the standard result JSON before publishing or reporting. Any result with non-empty `provider_results`, `batch_id`, `run_id`, `test_count`, or `test_results` is treated as a standard suite run and must include `suite_id`, `batch_id`, `run_id`, `test_count`, `test_results`, `start_time`, `end_time`, and `duration_ms`. `test_count` must be a positive JSON integer value that equals `test_results.length`, and every `test_results[]` entry must be an object containing `test_case_id`, `status`, and `profile`. Allowed per-test status values are `passed`, `failed`, and `blocked`. Quoted numeric strings such as `"1"` are invalid. Invalid suite summaries return a non-zero exit and must be fixed before the result can be published.
 
@@ -1327,7 +1319,7 @@ evidence/
     provider-evidence/
     query-evidence/
     event-evidence/
-    assertion-results/
+    assertions/
     cleanup-results/
     masking_report.yaml
   review/
@@ -1376,7 +1368,7 @@ regress report \
   --format text
 ```
 
-Use `--result` for v0.2.2 suite-mode release readiness. Product Repo `--batch-id` and `--run-id` report forms are compatibility support and must not be treated as the v0.2.2 runtime release interface.
+Use `--result` for v0.2.3 suite-mode release readiness. Product Repo `--batch-id` and `--run-id` report forms are compatibility support and must not be treated as the v0.2.3 runtime release interface.
 
 Evidence must answer:
 

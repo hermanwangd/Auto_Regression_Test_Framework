@@ -7,8 +7,11 @@ dialects:
   unsupported: [mariadb, mysql, postgres, mongodb]
 binding_keys:
   connection.secret_ref:
-    required: true
+    required: false
     source: env_profile_secret_ref
+  connection.local_ref:
+    required: false
+    source: env_profile_local_ref
   dialect:
     required: true
     source: env_profile
