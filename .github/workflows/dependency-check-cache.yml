@@ -1,0 +1,68 @@
+name: Dependency-Check Cache
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '20 18 * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - pom.xml
+      - scripts/ci/security-scan.sh
+      - .github/workflows/dependency-check-cache.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  warm-dependency-check-cache:
+    name: Warm Dependency-Check Cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      MAVEN_OPTS: -Xmx1536m
+      DEPENDENCY_CHECK_VERSION: 12.2.2
+      DEPENDENCY_CHECK_DATA_DIR: .dependency-check-data
+      NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Resolve Dependency-Check cache key date
+        id: dependency-check-cache-date
+        shell: bash
+        run: echo "date=$(/bin/date -u '+%Y%m%d')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Dependency-Check data
+        id: dependency-check-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.DEPENDENCY_CHECK_DATA_DIR }}
+          key: ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-${{ steps.dependency-check-cache-date.outputs.date }}
+          restore-keys: |
+            ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-
+            ${{ runner.os }}-dependency-check-
+
+      - name: Warm Dependency-Check data
+        if: steps.dependency-check-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 80
+        run: scripts/ci/security-scan.sh --warmup
+
+      - name: Save warmed Dependency-Check data
+        uses: actions/cache/save@v4
+        if: steps.dependency-check-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.DEPENDENCY_CHECK_DATA_DIR }}
+          key: ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-${{ steps.dependency-check-cache-date.outputs.date }}

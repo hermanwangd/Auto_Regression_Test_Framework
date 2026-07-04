@@ -62,7 +62,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.DEPENDENCY_CHECK_DATA_DIR }}
-          key: ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-${{ steps.dependency-check-cache-date.outputs.date }}-${{ hashFiles('**/pom.xml') }}
+          key: ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-${{ steps.dependency-check-cache-date.outputs.date }}
           restore-keys: |
             ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-
             ${{ runner.os }}-dependency-check-
@@ -89,7 +89,7 @@ jobs:
         if: steps.dependency-check-cache.outputs.cache-hit != 'true'
         with:
           path: ${{ env.DEPENDENCY_CHECK_DATA_DIR }}
-          key: ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-${{ steps.dependency-check-cache-date.outputs.date }}-${{ hashFiles('**/pom.xml') }}
+          key: ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-${{ steps.dependency-check-cache-date.outputs.date }}
 
       - name: Dependency vulnerability scan
         env:
