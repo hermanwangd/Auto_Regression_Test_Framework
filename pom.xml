@@ -20,7 +20,7 @@
     <properties>
         <java.version>17</java.version>
         <jacoco.version>0.8.12</jacoco.version>
-        <grpc.version>1.78.0</grpc.version>
+        <grpc.version>1.82.1</grpc.version>
         <protobuf.version>4.33.4</protobuf.version>
         <wiremock.version>4.0.0-beta.38</wiremock.version>
         <wiremock.grpc.version>1.0.0-beta.5</wiremock.grpc.version>
