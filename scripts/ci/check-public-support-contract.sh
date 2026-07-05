@@ -19,7 +19,7 @@ failures=0
 check_absent() {
   local pattern="$1"
   local description="$2"
-  if rg -n --ignore-case "$pattern" "${public_files[@]}" >/tmp/public-support-contract-matches.$$; then
+  if grep -n -i -E "$pattern" "${public_files[@]}" >/tmp/public-support-contract-matches.$$; then
     echo "public_support_contract_status: failed"
     echo "reason: ${description}"
     cat /tmp/public-support-contract-matches.$$
@@ -32,7 +32,7 @@ check_present() {
   local pattern="$1"
   local file="$2"
   local description="$3"
-  if ! rg -n "$pattern" "$file" >/dev/null; then
+  if ! grep -n -E "$pattern" "$file" >/dev/null; then
     echo "public_support_contract_status: failed"
     echo "reason: ${description}"
     echo "missing_pattern: ${pattern}"

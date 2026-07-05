@@ -28,12 +28,12 @@ run_cli validate --suite samples/provider_capability/suite_manifest.yaml
 run_cli validate-evidence --result samples/evidence_hardening/valid_result.json
 run_cli report --result samples/evidence_hardening/valid_result.json
 
-if rg -n "provider_family" docs samples schemas src/main/java; then
+if grep -RInE "provider_family" docs samples schemas src/main/java; then
   echo "provider_family is not allowed in public framework artifacts." >&2
   exit 1
 fi
 
-if rg -n "adapter contract|adapter instance" docs/00-intake-scope docs/01-specs docs/02-architecture docs/03-acceptance docs/04-planning docs/07-validation-evidence docs/09-operations; then
+if grep -RInE "adapter contract|adapter instance" docs/00-intake-scope docs/01-specs docs/02-architecture docs/03-acceptance docs/04-planning docs/07-validation-evidence docs/09-operations; then
   echo "User-facing Adapter terminology is not allowed in active docs." >&2
   exit 1
 fi
