@@ -16,15 +16,15 @@ import org.junit.jupiter.api.io.TempDir;
 class MockServerCrossVerifySampleCommandTest {
 
     private static final Path CROSS_VERIFY_SUITE =
-            Path.of("samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml");
+            Path.of("samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml");
     private static final Path REST_SUITE =
-            Path.of("samples/provider_capability/mock_server_cross_verify/rest_wiremock_http/suite_manifest.yaml");
+            Path.of("samples/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/suite_manifest.yaml");
     private static final Path SOAP_SUITE =
-            Path.of("samples/provider_capability/mock_server_cross_verify/soap_mock_http_client/suite_manifest.yaml");
+            Path.of("samples/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/suite_manifest.yaml");
     private static final Path GRPC_SUITE =
-            Path.of("samples/provider_capability/mock_server_cross_verify/grpc_mock_grpc_client/suite_manifest.yaml");
+            Path.of("samples/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/suite_manifest.yaml");
     private static final Path PROVIDER_CAPABILITY_SUITE =
-            Path.of("samples/provider_capability/suite_manifest.yaml");
+            Path.of("samples/20-provider-capability-p0/suite_manifest.yaml");
 
     @TempDir
     Path tempDir;
@@ -32,22 +32,22 @@ class MockServerCrossVerifySampleCommandTest {
     @Test
     void mockServerCrossVerifySampleArtifactsAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
-                "samples/provider_capability/mock_server_cross_verify/README.md",
+                "samples/30-cross-provider-groups/mock_server_cross_verify/README.md",
                 REST_SUITE.toString(),
-                "samples/provider_capability/mock_server_cross_verify/rest_wiremock_http/suite_manifest_failure.yaml",
+                "samples/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/suite_manifest_failure.yaml",
                 SOAP_SUITE.toString(),
-                "samples/provider_capability/mock_server_cross_verify/soap_mock_http_client/suite_manifest_failure.yaml",
+                "samples/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/suite_manifest_failure.yaml",
                 GRPC_SUITE.toString(),
-                "samples/provider_capability/mock_server_cross_verify/grpc_mock_grpc_client/suite_manifest_failure.yaml",
-                "samples/provider_capability/mock_server_cross_verify/rest_wiremock_http/test_case.yaml",
-                "samples/provider_capability/mock_server_cross_verify/rest_wiremock_http/test_case_failure.yaml",
-                "samples/provider_capability/mock_server_cross_verify/rest_wiremock_http/test_case_boundary.yaml",
-                "samples/provider_capability/mock_server_cross_verify/soap_mock_http_client/test_case.yaml",
-                "samples/provider_capability/mock_server_cross_verify/soap_mock_http_client/test_case_failure.yaml",
-                "samples/provider_capability/mock_server_cross_verify/soap_mock_http_client/test_case_boundary.yaml",
-                "samples/provider_capability/mock_server_cross_verify/grpc_mock_grpc_client/test_case.yaml",
-                "samples/provider_capability/mock_server_cross_verify/grpc_mock_grpc_client/test_case_failure.yaml",
-                "samples/provider_capability/mock_server_cross_verify/grpc_mock_grpc_client/test_case_boundary.yaml");
+                "samples/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/suite_manifest_failure.yaml",
+                "samples/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/test_case.yaml",
+                "samples/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/test_case_failure.yaml",
+                "samples/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/test_case_boundary.yaml",
+                "samples/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/test_case.yaml",
+                "samples/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/test_case_failure.yaml",
+                "samples/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/test_case_boundary.yaml",
+                "samples/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/test_case.yaml",
+                "samples/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/test_case_failure.yaml",
+                "samples/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/test_case_boundary.yaml");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")

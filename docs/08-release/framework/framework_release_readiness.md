@@ -51,6 +51,19 @@ Each published framework release must include:
 
 The usage kit must include the user guide, provider support matrix, framework release readiness guide, Provider Contract catalog, schemas, and checked-in sample suites. It must exclude machine-local files, caches, archived/draft docs, and generated local run outputs.
 
+For v0.2.4, checked-in samples use the canonical sample layout documented in `samples/README.md`. The usage kit also generates one-release legacy aliases for compatibility. Release notes must include this deprecation table:
+
+| Generated legacy path | Canonical path |
+|---|---|
+| `samples/golden_e2e/` | `samples/00-getting-started/golden_e2e/` |
+| `samples/contract_baseline/` | `samples/10-contract-baseline/mixed_wiremock_jdbc_nats/` |
+| `samples/provider_capability/` | `samples/20-provider-capability-p0/` |
+| `samples/provider_capability/mock_server_cross_verify/` | `samples/30-cross-provider-groups/mock_server_cross_verify/` |
+| `samples/provider_capability/dummy_rest/` | `samples/90-compatibility/dummy_rest/` |
+| `samples/evidence_hardening/` | `samples/40-evidence-reporting/evidence_hardening/` |
+
+`dummy_rest` is compatibility-only and must not count as a supported provider capability sample. `scripts/release/verify-usage-kit.sh` must validate both canonical samples and generated legacy aliases while this compatibility window is active.
+
 ## Integrity Metadata
 
 Release notes and artifacts must expose the following integrity decision fields:

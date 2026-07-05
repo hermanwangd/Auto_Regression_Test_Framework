@@ -1,4 +1,4 @@
-env_profile_id: local_polling
+env_profile_id: local_verify
 execution_mode: local
 isolation_scope: per_run
 dependency_policy:
@@ -15,8 +15,8 @@ data_policy:
   generated_data_allowed: true
   secrets_must_use_refs: true
 providers:
-  local-common-polling:
+  local-common-verifier:
     runtime_mode: stub
     binding_keys:
       workspace_ref:
-        value: samples/provider_capability/polling
+        value: samples/20-provider-capability-p0/verification/common_verify

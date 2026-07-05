@@ -15,10 +15,10 @@ import org.junit.jupiter.api.io.TempDir;
 
 class MessagingClientProviderCapabilityCommandTest {
 
-    private static final Path KAFKA_SUITE = Path.of("samples/provider_capability/kafka/suite_manifest.yaml");
-    private static final Path IBM_MQ_SUITE = Path.of("samples/provider_capability/ibm_mq/suite_manifest.yaml");
+    private static final Path KAFKA_SUITE = Path.of("samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml");
+    private static final Path IBM_MQ_SUITE = Path.of("samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml");
     private static final Path MIXED_MESSAGING_SUITE =
-            Path.of("samples/provider_capability/messaging_mixed/suite_manifest.yaml");
+            Path.of("samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/suite_manifest.yaml");
 
     @TempDir
     Path tempDir;
@@ -26,26 +26,26 @@ class MessagingClientProviderCapabilityCommandTest {
     @Test
     void messagingClientSamplesAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
-                "samples/provider_capability/kafka/suite_manifest.yaml",
-                "samples/provider_capability/kafka/test_case.yaml",
-                "samples/provider_capability/kafka/provider_instances/order_events.yaml",
-                "samples/provider_capability/kafka/env_profiles/local_kafka.yaml",
-                "samples/provider_capability/kafka/env_profiles/ci_kafka_external.yaml",
-                "samples/provider_capability/kafka/fixtures/order_event.json",
-                "samples/provider_capability/kafka/expected_results/order_event.json",
-                "samples/provider_capability/ibm_mq/suite_manifest.yaml",
-                "samples/provider_capability/ibm_mq/test_case.yaml",
-                "samples/provider_capability/ibm_mq/provider_instances/payment_mq.yaml",
-                "samples/provider_capability/ibm_mq/env_profiles/local_ibm_mq.yaml",
-                "samples/provider_capability/ibm_mq/env_profiles/ci_ibm_mq_external.yaml",
-                "samples/provider_capability/ibm_mq/fixtures/order_request.json",
-                "samples/provider_capability/ibm_mq/expected_results/order_request.json",
-                "samples/provider_capability/messaging_mixed/suite_manifest.yaml",
-                "samples/provider_capability/messaging_mixed/kafka_test_case.yaml",
-                "samples/provider_capability/messaging_mixed/ibm_mq_test_case.yaml",
-                "samples/provider_capability/messaging_mixed/provider_instances/order_events.yaml",
-                "samples/provider_capability/messaging_mixed/provider_instances/payment_mq.yaml",
-                "samples/provider_capability/messaging_mixed/env_profiles/local_messaging.yaml");
+                "samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml",
+                "samples/20-provider-capability-p0/messaging/kafka/test_case.yaml",
+                "samples/20-provider-capability-p0/messaging/kafka/provider_instances/order_events.yaml",
+                "samples/20-provider-capability-p0/messaging/kafka/env_profiles/local_kafka.yaml",
+                "samples/20-provider-capability-p0/messaging/kafka/env_profiles/ci_kafka_external.yaml",
+                "samples/20-provider-capability-p0/messaging/kafka/fixtures/order_event.json",
+                "samples/20-provider-capability-p0/messaging/kafka/expected_results/order_event.json",
+                "samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml",
+                "samples/20-provider-capability-p0/messaging/ibm_mq/test_case.yaml",
+                "samples/20-provider-capability-p0/messaging/ibm_mq/provider_instances/payment_mq.yaml",
+                "samples/20-provider-capability-p0/messaging/ibm_mq/env_profiles/local_ibm_mq.yaml",
+                "samples/20-provider-capability-p0/messaging/ibm_mq/env_profiles/ci_ibm_mq_external.yaml",
+                "samples/20-provider-capability-p0/messaging/ibm_mq/fixtures/order_request.json",
+                "samples/20-provider-capability-p0/messaging/ibm_mq/expected_results/order_request.json",
+                "samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/suite_manifest.yaml",
+                "samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/kafka_test_case.yaml",
+                "samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/ibm_mq_test_case.yaml",
+                "samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/provider_instances/order_events.yaml",
+                "samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/provider_instances/payment_mq.yaml",
+                "samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/env_profiles/local_messaging.yaml");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -98,7 +98,7 @@ class MessagingClientProviderCapabilityCommandTest {
     @Test
     void kafkaSuiteRunsMultipleTestCasesWithOneSharedProfile() throws Exception {
         Path suiteRoot = tempDir.resolve("multi_test_kafka_shared_profile");
-        copyDirectory(Path.of("samples/provider_capability/kafka"), suiteRoot);
+        copyDirectory(Path.of("samples/20-provider-capability-p0/messaging/kafka"), suiteRoot);
         Files.writeString(suiteRoot.resolve("second_test_case.yaml"), read(suiteRoot.resolve("test_case.yaml"))
                 .replace("test_case_id: KAFKA-CAPABILITY-TC-001", "test_case_id: KAFKA-CAPABILITY-TC-002")
                 .replace("title: Kafka client provider capability", "title: Kafka client provider capability second case")
@@ -135,12 +135,12 @@ class MessagingClientProviderCapabilityCommandTest {
     void messagingSuiteRunsKafkaAndIbmMqTestCasesWithOneSharedProfile() throws Exception {
         Path suiteRoot = tempDir.resolve("mixed_messaging_shared_profile");
         Files.createDirectories(suiteRoot);
-        copyDirectory(Path.of("samples/provider_capability/kafka/provider_instances"), suiteRoot.resolve("provider_instances"));
-        copyDirectory(Path.of("samples/provider_capability/ibm_mq/provider_instances"), suiteRoot.resolve("provider_instances"));
-        copyDirectory(Path.of("samples/provider_capability/kafka/fixtures"), suiteRoot.resolve("fixtures"));
-        copyDirectory(Path.of("samples/provider_capability/ibm_mq/fixtures"), suiteRoot.resolve("fixtures"));
-        copyDirectory(Path.of("samples/provider_capability/kafka/expected_results"), suiteRoot.resolve("expected_results"));
-        copyDirectory(Path.of("samples/provider_capability/ibm_mq/expected_results"), suiteRoot.resolve("expected_results"));
+        copyDirectory(Path.of("samples/20-provider-capability-p0/messaging/kafka/provider_instances"), suiteRoot.resolve("provider_instances"));
+        copyDirectory(Path.of("samples/20-provider-capability-p0/messaging/ibm_mq/provider_instances"), suiteRoot.resolve("provider_instances"));
+        copyDirectory(Path.of("samples/20-provider-capability-p0/messaging/kafka/fixtures"), suiteRoot.resolve("fixtures"));
+        copyDirectory(Path.of("samples/20-provider-capability-p0/messaging/ibm_mq/fixtures"), suiteRoot.resolve("fixtures"));
+        copyDirectory(Path.of("samples/20-provider-capability-p0/messaging/kafka/expected_results"), suiteRoot.resolve("expected_results"));
+        copyDirectory(Path.of("samples/20-provider-capability-p0/messaging/ibm_mq/expected_results"), suiteRoot.resolve("expected_results"));
         Files.createDirectories(suiteRoot.resolve("env_profiles"));
         Files.writeString(suiteRoot.resolve("env_profiles/local_messaging.yaml"), """
                 env_profile_id: local_messaging
@@ -191,9 +191,9 @@ class MessagingClientProviderCapabilityCommandTest {
                       poll_interval:
                         value: PT0.05S
                 """);
-        Files.writeString(suiteRoot.resolve("kafka_test_case.yaml"), read(Path.of("samples/provider_capability/kafka/test_case.yaml"))
+        Files.writeString(suiteRoot.resolve("kafka_test_case.yaml"), read(Path.of("samples/20-provider-capability-p0/messaging/kafka/test_case.yaml"))
                 .replace("compatible_profiles: [local_kafka, ci_kafka_external]", "compatible_profiles: [local_messaging]"));
-        Files.writeString(suiteRoot.resolve("ibm_mq_test_case.yaml"), read(Path.of("samples/provider_capability/ibm_mq/test_case.yaml"))
+        Files.writeString(suiteRoot.resolve("ibm_mq_test_case.yaml"), read(Path.of("samples/20-provider-capability-p0/messaging/ibm_mq/test_case.yaml"))
                 .replace("compatible_profiles: [local_ibm_mq, ci_ibm_mq_external]", "compatible_profiles: [local_messaging]"));
         Files.writeString(suiteRoot.resolve("suite_manifest.yaml"), """
                 contract_version: v0.2
@@ -370,7 +370,7 @@ class MessagingClientProviderCapabilityCommandTest {
     @Test
     void messagingSuiteWithMultipleRuntimeTargetsInOneTestIsBlockedUntilAggregationExists() throws Exception {
         Path suiteRoot = tempDir.resolve("multi_test_kafka");
-        copyDirectory(Path.of("samples/provider_capability/kafka"), suiteRoot);
+        copyDirectory(Path.of("samples/20-provider-capability-p0/messaging/kafka"), suiteRoot);
         Files.writeString(suiteRoot.resolve("test_case.yaml"), read(suiteRoot.resolve("test_case.yaml"))
                 .replace("""
                 targets:
@@ -417,7 +417,7 @@ class MessagingClientProviderCapabilityCommandTest {
     @Test
     void resolverBlockedOperationDoesNotClaimProviderRuntimeExecuted() throws Exception {
         Path suiteRoot = tempDir.resolve("resolver_blocked_kafka");
-        copyDirectory(Path.of("samples/provider_capability/kafka"), suiteRoot);
+        copyDirectory(Path.of("samples/20-provider-capability-p0/messaging/kafka"), suiteRoot);
         Files.writeString(suiteRoot.resolve("test_case.yaml"), read(suiteRoot.resolve("test_case.yaml"))
                 .replace("""
                       inputs:

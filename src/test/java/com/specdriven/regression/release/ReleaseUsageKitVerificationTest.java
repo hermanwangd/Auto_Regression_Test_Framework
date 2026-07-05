@@ -37,8 +37,8 @@ class ReleaseUsageKitVerificationTest {
                 .contains("run --suite")
                 .contains("report --result")
                 .contains("validate-evidence --result")
-                .contains("samples/provider_capability/kafka/suite_manifest.yaml ci_kafka_external")
-                .contains("samples/provider_capability/ibm_mq/suite_manifest.yaml ci_ibm_mq_external")
+                .contains("samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml ci_kafka_external")
+                .contains("samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml ci_ibm_mq_external")
                 .doesNotContain("--rp-id");
     }
 
@@ -57,7 +57,7 @@ class ReleaseUsageKitVerificationTest {
 
     @Test
     void usageKitSamplesCoverSupportedRuntimeModeRows() throws Exception {
-        Set<ProviderRuntimeSample> samples = providerRuntimeSamples(Path.of("samples/provider_capability"));
+        Set<ProviderRuntimeSample> samples = providerRuntimeSamples(Path.of("samples/20-provider-capability-p0"));
 
         assertThat(samples)
                 .contains(

@@ -15,7 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class ReportAndEvidenceCommandTest {
 
-    private static final Path VALID_RESULT = Path.of("samples/evidence_hardening/valid_result.json");
+    private static final Path VALID_RESULT = Path.of("samples/40-evidence-reporting/evidence_hardening/valid_result.json");
 
     @TempDir
     Path tempDir;
@@ -79,7 +79,7 @@ class ReportAndEvidenceCommandTest {
 
     private Path mutableEvidenceResult(String name) throws IOException {
         Path target = tempDir.resolve(name);
-        copyDirectory(Path.of("samples/evidence_hardening"), target);
+        copyDirectory(Path.of("samples/40-evidence-reporting/evidence_hardening"), target);
         return target.resolve("valid_result.json");
     }
 

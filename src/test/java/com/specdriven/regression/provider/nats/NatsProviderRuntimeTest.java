@@ -138,7 +138,7 @@ class NatsProviderRuntimeTest {
                 "nats",
                 "local_nats",
                 "local",
-                Path.of("samples/provider_capability/nats"),
+                Path.of("samples/20-provider-capability-p0/messaging/nats"),
                 tempDir,
                 Map.of(
                         "provider_type", "nats",

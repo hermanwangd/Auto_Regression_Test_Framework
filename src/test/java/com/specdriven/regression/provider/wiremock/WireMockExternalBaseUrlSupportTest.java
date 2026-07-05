@@ -26,7 +26,7 @@ class WireMockExternalBaseUrlSupportTest {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Path REST_WIREMOCK_SUITE =
-            Path.of("samples/provider_capability/mock_server_cross_verify/rest_wiremock_http");
+            Path.of("samples/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http");
 
     @TempDir
     Path tempDir;

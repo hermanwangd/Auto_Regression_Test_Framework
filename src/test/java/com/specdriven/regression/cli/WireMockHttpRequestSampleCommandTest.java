@@ -16,11 +16,11 @@ import org.junit.jupiter.api.io.TempDir;
 class WireMockHttpRequestSampleCommandTest {
 
     private static final Path SUITE =
-            Path.of("samples/provider_capability/wiremock_http_request/suite_manifest.yaml");
+            Path.of("samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml");
     private static final Path FAILURE_SUITE =
-            Path.of("samples/provider_capability/wiremock_http_request/suite_manifest_failure.yaml");
+            Path.of("samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest_failure.yaml");
     private static final Path BOUNDARY_SUITE =
-            Path.of("samples/provider_capability/wiremock_http_request/suite_manifest_boundary.yaml");
+            Path.of("samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest_boundary.yaml");
 
     @TempDir
     Path tempDir;
@@ -28,23 +28,23 @@ class WireMockHttpRequestSampleCommandTest {
     @Test
     void sampleArtifactsAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
-                "samples/provider_capability/wiremock_http_request/suite_manifest.yaml",
-                "samples/provider_capability/wiremock_http_request/test_case.yaml",
-                "samples/provider_capability/wiremock_http_request/provider_instances/wiremock_payment_api.yaml",
-                "samples/provider_capability/wiremock_http_request/provider_instances/payment_api_client.yaml",
-                "samples/provider_capability/wiremock_http_request/provider_instances/payment_api_client_mock.yaml",
-                "samples/provider_capability/wiremock_http_request/provider_instances/payment_api_client_stub.yaml",
-                "samples/provider_capability/wiremock_http_request/execution_profiles/local_wiremock_http.yaml",
-                "samples/provider_capability/wiremock_http_request/environment_bindings/local_wiremock_http.yaml",
-                "samples/provider_capability/wiremock_http_request/fixtures/wiremock/payment_success_stub.json",
-                "samples/provider_capability/wiremock_http_request/fixtures/wiremock/payment_empty_response_stub.json",
-                "samples/provider_capability/wiremock_http_request/fixtures/payment_request.json",
-                "samples/provider_capability/wiremock_http_request/fixtures/payment_empty_request.json",
-                "samples/provider_capability/wiremock_http_request/expected_results/payment_response.json",
-                "samples/provider_capability/wiremock_http_request/suite_manifest_failure.yaml",
-                "samples/provider_capability/wiremock_http_request/test_case_failure.yaml",
-                "samples/provider_capability/wiremock_http_request/suite_manifest_boundary.yaml",
-                "samples/provider_capability/wiremock_http_request/test_case_boundary.yaml");
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/test_case.yaml",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/provider_instances/wiremock_payment_api.yaml",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/provider_instances/payment_api_client.yaml",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/provider_instances/runtime_mode_sample__payment_api_client_mock.yaml",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/provider_instances/runtime_mode_sample__payment_api_client_stub.yaml",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/execution_profiles/local_wiremock_http.yaml",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/environment_bindings/local_wiremock_http.yaml",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/fixtures/wiremock/payment_success_stub.json",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/fixtures/wiremock/payment_empty_response_stub.json",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/fixtures/payment_request.json",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/fixtures/payment_empty_request.json",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/expected_results/payment_response.json",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest_failure.yaml",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/test_case_failure.yaml",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest_boundary.yaml",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/test_case_boundary.yaml");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -171,7 +171,7 @@ class WireMockHttpRequestSampleCommandTest {
 
     private Path mutableWireMockHttpRequest() throws IOException {
         Path target = tempDir.resolve("wiremock_http_request_" + System.nanoTime());
-        copyDirectory(Path.of("samples/provider_capability/wiremock_http_request"), target);
+        copyDirectory(Path.of("samples/20-provider-capability-p0/http/rest_client_with_wiremock"), target);
         return target.resolve("suite_manifest.yaml");
     }
 

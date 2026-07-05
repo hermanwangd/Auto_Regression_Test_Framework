@@ -92,7 +92,7 @@ class FrameworkPublicInterfaceContractTest {
     @Test
     @DisplayName("FWK-013 | provider capability samples rely on the built-in provider contract catalog")
     void FWK_013_providerCapabilitySamplesDoNotCopyBuiltInProviderContracts() throws Exception {
-        Path samples = Path.of("samples/provider_capability");
+        Path samples = Path.of("samples/20-provider-capability-p0");
         try (var paths = Files.walk(samples)) {
             List<Path> suiteLocalBuiltInContracts = paths
                     .filter(path -> path.toString().contains("/provider_contracts/"))

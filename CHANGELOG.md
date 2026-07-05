@@ -10,11 +10,25 @@ Framework v0.2.4 is a provider runtime and release-readiness patch for the v0.2 
 - Adds external Env_Profile samples for Kafka and IBM MQ, plus release sample verification for supported provider claims.
 - Hardens report/evidence release coverage, including `report --format text`, `report --format yaml`, and `validate-evidence`.
 - Supports project-provisioned WireMock `base_url` consumption without starting framework-managed WireMock for that profile.
+- Restructures checked-in samples into canonical usage-kit groups: `00-getting-started`, `10-contract-baseline`, `20-provider-capability-p0`, `30-cross-provider-groups`, `40-evidence-reporting`, and `90-compatibility`.
+- Keeps one-release generated legacy sample aliases inside the usage-kit zip so existing release-asset paths continue to resolve while users migrate to canonical paths.
+
+Sample layout migration:
+
+| Legacy usage-kit path | Canonical usage-kit path |
+|---|---|
+| `samples/golden_e2e/` | `samples/00-getting-started/golden_e2e/` |
+| `samples/contract_baseline/` | `samples/10-contract-baseline/mixed_wiremock_jdbc_nats/` |
+| `samples/provider_capability/` | `samples/20-provider-capability-p0/` |
+| `samples/provider_capability/mock_server_cross_verify/` | `samples/30-cross-provider-groups/mock_server_cross_verify/` |
+| `samples/provider_capability/dummy_rest/` | `samples/90-compatibility/dummy_rest/` |
+| `samples/evidence_hardening/` | `samples/40-evidence-reporting/evidence_hardening/` |
 
 Known boundaries:
 
 - DSL and contract artifacts remain at public contract version `v0.2`.
 - Kafka and IBM MQ native runtime execution requires externally provisioned endpoints and release secrets; the framework consumes bindings and does not start brokers or queue managers.
+- Legacy sample aliases are generated only in the v0.2.4 usage-kit release artifact and remain deprecated; new documentation points to canonical sample paths.
 - Certificate chain trust and build provenance are not proven by this release unless implemented by a later release pipeline.
 
 ## 0.2.3

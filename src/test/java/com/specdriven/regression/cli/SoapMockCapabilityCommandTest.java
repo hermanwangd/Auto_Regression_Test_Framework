@@ -16,11 +16,11 @@ import org.junit.jupiter.api.io.TempDir;
 class SoapMockCapabilityCommandTest {
 
     private static final Path SUITE =
-            Path.of("samples/provider_capability/soap_mock/suite_manifest.yaml");
+            Path.of("samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest.yaml");
     private static final Path FAILURE_SUITE =
-            Path.of("samples/provider_capability/soap_mock/suite_manifest_failure.yaml");
+            Path.of("samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest_failure.yaml");
     private static final Path BOUNDARY_SUITE =
-            Path.of("samples/provider_capability/soap_mock/suite_manifest_boundary.yaml");
+            Path.of("samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest_boundary.yaml");
 
     @TempDir
     Path tempDir;
@@ -28,21 +28,21 @@ class SoapMockCapabilityCommandTest {
     @Test
     void sampleArtifactsAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
-                "samples/provider_capability/soap_mock/suite_manifest.yaml",
-                "samples/provider_capability/soap_mock/test_case.yaml",
-                "samples/provider_capability/soap_mock/provider_instances/payment_soap_mock.yaml",
-                "samples/provider_capability/soap_mock/provider_instances/payment_soap_client.yaml",
-                "samples/provider_capability/soap_mock/env_profiles/local_soap_mock.yaml",
-                "samples/provider_capability/soap_mock/environment_bindings/local_soap_mock.yaml",
-                "samples/provider_capability/soap_mock/execution_profiles/local_soap_mock.yaml",
-                "samples/provider_capability/soap_mock/fixtures/payment_submit_request.xml",
-                "samples/provider_capability/soap_mock/fixtures/payment_submit_response.xml",
-                "samples/provider_capability/soap_mock/fixtures/payment_boundary_request.xml",
-                "samples/provider_capability/soap_mock/fixtures/payment_boundary_response.xml",
-                "samples/provider_capability/soap_mock/suite_manifest_failure.yaml",
-                "samples/provider_capability/soap_mock/test_case_failure.yaml",
-                "samples/provider_capability/soap_mock/suite_manifest_boundary.yaml",
-                "samples/provider_capability/soap_mock/test_case_boundary.yaml");
+                "samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest.yaml",
+                "samples/20-provider-capability-p0/rpc/soap_mock/test_case.yaml",
+                "samples/20-provider-capability-p0/rpc/soap_mock/provider_instances/payment_soap_mock.yaml",
+                "samples/20-provider-capability-p0/rpc/soap_mock/provider_instances/payment_soap_client.yaml",
+                "samples/20-provider-capability-p0/rpc/soap_mock/env_profiles/local_soap_mock.yaml",
+                "samples/20-provider-capability-p0/rpc/soap_mock/environment_bindings/local_soap_mock.yaml",
+                "samples/20-provider-capability-p0/rpc/soap_mock/execution_profiles/local_soap_mock.yaml",
+                "samples/20-provider-capability-p0/rpc/soap_mock/fixtures/payment_submit_request.xml",
+                "samples/20-provider-capability-p0/rpc/soap_mock/fixtures/payment_submit_response.xml",
+                "samples/20-provider-capability-p0/rpc/soap_mock/fixtures/payment_boundary_request.xml",
+                "samples/20-provider-capability-p0/rpc/soap_mock/fixtures/payment_boundary_response.xml",
+                "samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest_failure.yaml",
+                "samples/20-provider-capability-p0/rpc/soap_mock/test_case_failure.yaml",
+                "samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest_boundary.yaml",
+                "samples/20-provider-capability-p0/rpc/soap_mock/test_case_boundary.yaml");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -195,7 +195,7 @@ class SoapMockCapabilityCommandTest {
 
     private Path mutableSoapSample(String name) throws IOException {
         Path target = tempDir.resolve(name);
-        copyDirectory(Path.of("samples/provider_capability/soap_mock"), target);
+        copyDirectory(Path.of("samples/20-provider-capability-p0/rpc/soap_mock"), target);
         return target.resolve("suite_manifest.yaml");
     }
 

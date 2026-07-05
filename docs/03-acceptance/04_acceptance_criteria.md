@@ -105,7 +105,7 @@ Boundary path: Empty request bodies and no-content responses such as HTTP 204 ar
 
 ### WireMock HTTP Request Sample
 
-The checked-in sample under `samples/provider_capability/wiremock_http_request/` must validate, dry-run, execute, and report:
+The checked-in sample under `samples/20-provider-capability-p0/http/rest_client_with_wiremock/` must validate, dry-run, execute, and report:
 
 - Happy path: WireMock stub load, generated `base_url`, `rest_client` `http_request`, response status/body verification, WireMock request journal, server log, `http_request_response` evidence, and report consumption.
 - Failure path: deterministic assertion failure with failed assertion evidence and report status that preserves reviewable provider evidence.
@@ -219,12 +219,12 @@ Track A acceptance requires:
 
 ## Track B Golden E2E Acceptance Overlay
 
-Track B is accepted only when one framework-owned Golden E2E sample runs through the public CLI using checked-in `samples/golden_e2e/` artifacts and the deterministic `sample_fake_provider`. Track B evidence is framework verification evidence only and must not be represented as downstream Product/RP release evidence.
+Track B is accepted only when one framework-owned Golden E2E sample runs through the public CLI using checked-in `samples/00-getting-started/golden_e2e/` artifacts and the deterministic `sample_fake_provider`. Track B evidence is framework verification evidence only and must not be represented as downstream Product/RP release evidence.
 
 Track B acceptance requires:
 
-- `regress validate --suite samples/golden_e2e/suite_manifest.yaml` validates the sample suite without provider execution.
-- `regress run --suite samples/golden_e2e/suite_manifest.yaml --profile local_golden` executes setup, one fake-provider operation, two verify checks, cleanup, result writing, and evidence writing.
+- `regress validate --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml` validates the sample suite without provider execution.
+- `regress run --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml --profile local_golden` executes setup, one fake-provider operation, two verify checks, cleanup, result writing, and evidence writing.
 - `regress report --result <generated_result_json>` consumes generated result JSON and reports review-ready framework verification evidence.
 - DSL, framework Provider Contract catalog, Provider Instance, Env_Profile, target resolution, and secret guardrails are validated before execution.
 - At least one simple value verify and one generic artifact verify pass in the happy path.
@@ -237,8 +237,8 @@ Track C is accepted only when the selected v0.2 P0 provider capabilities run thr
 
 Track C acceptance requires:
 
-- `regress validate --suite samples/provider_capability/suite_manifest.yaml` validates all P0 provider capability artifacts.
-- `regress run --suite samples/provider_capability/suite_manifest.yaml --profile local_provider` executes selected P0 capability scenarios and writes standard result JSON plus indexed evidence.
+- `regress validate --suite samples/20-provider-capability-p0/suite_manifest.yaml` validates all P0 provider capability artifacts.
+- `regress run --suite samples/20-provider-capability-p0/suite_manifest.yaml --profile local_provider` executes selected P0 capability scenarios and writes standard result JSON plus indexed evidence.
 - `regress report --result <generated_result_json>` consumes provider capability results.
 - WireMock supports framework-driven stub injection, base URL output, request journal evidence, server log evidence, `http_mock_called`, and `http_mock_request_body_match`.
 - JDBC supports secret-ref connection, Oracle/DB2 dialect validation, SQL params, `db_seed`, `db_cleanup`, `db_record_exists`, query evidence, and masked DB evidence.

@@ -42,6 +42,7 @@ required_paths=(
   "usage-kit/README.md"
   "usage-kit/CHANGELOG.md"
   "usage-kit/usage-kit-manifest.yaml"
+  "usage-kit/samples/README.md"
   "usage-kit/release/verification_commands.md"
   "usage-kit/docs/09-operations/test_framework_user_guide.md"
   "usage-kit/docs/09-operations/provider_support_matrix.md"
@@ -54,11 +55,21 @@ required_paths=(
   "usage-kit/docs/02-architecture/contracts/provider-contracts/ibm_mq.yaml"
   "usage-kit/schemas/test_case_dsl.v0.2.schema.yaml"
   "usage-kit/schemas/suite_manifest.v0.2.schema.yaml"
+  "usage-kit/samples/00-getting-started/golden_e2e/suite_manifest.yaml"
+  "usage-kit/samples/10-contract-baseline/mixed_wiremock_jdbc_nats/suite_manifest.yaml"
+  "usage-kit/samples/20-provider-capability-p0/suite_manifest.yaml"
+  "usage-kit/samples/20-provider-capability-p0/messaging/kafka/env_profiles/ci_kafka_external.yaml"
+  "usage-kit/samples/20-provider-capability-p0/messaging/ibm_mq/env_profiles/ci_ibm_mq_external.yaml"
+  "usage-kit/samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml"
+  "usage-kit/samples/40-evidence-reporting/evidence_hardening/valid_result.json"
+  "usage-kit/samples/90-compatibility/dummy_rest/suite_manifest.yaml"
   "usage-kit/samples/golden_e2e/suite_manifest.yaml"
   "usage-kit/samples/contract_baseline/suite_manifest.yaml"
   "usage-kit/samples/provider_capability/suite_manifest.yaml"
   "usage-kit/samples/provider_capability/kafka/env_profiles/ci_kafka_external.yaml"
   "usage-kit/samples/provider_capability/ibm_mq/env_profiles/ci_ibm_mq_external.yaml"
+  "usage-kit/samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml"
+  "usage-kit/samples/provider_capability/dummy_rest/suite_manifest.yaml"
   "usage-kit/samples/evidence_hardening/valid_result.json"
 )
 
@@ -93,14 +104,22 @@ if ! grep -q "^version: ${VERSION}$" "${WORK_DIR}/usage-kit/usage-kit-manifest.y
   exit 1
 fi
 
+if ! grep -q "^sample_layout_version: v2$" "${WORK_DIR}/usage-kit/usage-kit-manifest.yaml"; then
+  echo "Usage kit manifest is missing sample_layout_version: v2." >&2
+  exit 1
+fi
+
 run_cli() {
   java -Xmx512m -jar "$JAR" "$@"
 }
 
 (
   cd "$WORK_DIR/usage-kit"
+  run_cli validate --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml
+  run_cli run --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml --dry-run
+  run_cli validate --suite samples/20-provider-capability-p0/suite_manifest.yaml
+  run_cli validate-evidence --result samples/40-evidence-reporting/evidence_hardening/valid_result.json
   run_cli validate --suite samples/golden_e2e/suite_manifest.yaml
-  run_cli run --suite samples/golden_e2e/suite_manifest.yaml --dry-run
   run_cli validate --suite samples/provider_capability/suite_manifest.yaml
   run_cli validate-evidence --result samples/evidence_hardening/valid_result.json
 )

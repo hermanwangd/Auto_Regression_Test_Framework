@@ -62,19 +62,18 @@ external_env_state() {
 }
 
 supported_local_suites=(
-  "samples/provider_capability/compare/suite_manifest.yaml local_compare"
-  "samples/provider_capability/common_verify/suite_manifest.yaml local_verify"
-  "samples/provider_capability/dummy_rest/suite_manifest.yaml local_dummy"
-  "samples/provider_capability/grpc_mock/suite_manifest.yaml local_grpc_mock"
-  "samples/provider_capability/ibm_mq/suite_manifest.yaml local_ibm_mq"
-  "samples/provider_capability/jdbc/suite_manifest.yaml local_jdbc"
-  "samples/provider_capability/kafka/suite_manifest.yaml local_kafka"
-  "samples/provider_capability/messaging_mixed/suite_manifest.yaml local_messaging"
-  "samples/provider_capability/nats/suite_manifest.yaml local_nats"
-  "samples/provider_capability/polling/suite_manifest.yaml local_polling"
-  "samples/provider_capability/soap_mock/suite_manifest.yaml local_soap_mock"
-  "samples/provider_capability/wiremock/suite_manifest.yaml local_wiremock"
-  "samples/provider_capability/wiremock_http_request/suite_manifest.yaml local_wiremock_http"
+  "samples/20-provider-capability-p0/verification/artifact_compare/suite_manifest.yaml local_compare"
+  "samples/20-provider-capability-p0/verification/common_verify/suite_manifest.yaml local_verify"
+  "samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest.yaml local_grpc_mock"
+  "samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml local_ibm_mq"
+  "samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml local_jdbc"
+  "samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml local_kafka"
+  "samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/suite_manifest.yaml local_messaging"
+  "samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml local_nats"
+  "samples/20-provider-capability-p0/verification/polling_observer/suite_manifest.yaml local_polling"
+  "samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest.yaml local_soap_mock"
+  "samples/20-provider-capability-p0/http/wiremock_http_mock/suite_manifest.yaml local_wiremock"
+  "samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml local_wiremock_http"
 )
 
 for entry in "${supported_local_suites[@]}"; do
@@ -82,8 +81,11 @@ for entry in "${supported_local_suites[@]}"; do
   run_suite $entry
 done
 
-run_cli validate --suite samples/provider_capability/kafka/suite_manifest.yaml --profile ci_kafka_external
-run_cli validate --suite samples/provider_capability/ibm_mq/suite_manifest.yaml --profile ci_ibm_mq_external
+echo "compatibility_sample_verification: dummy_rest"
+run_suite samples/90-compatibility/dummy_rest/suite_manifest.yaml local_dummy
+
+run_cli validate --suite samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml --profile ci_kafka_external
+run_cli validate --suite samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml --profile ci_ibm_mq_external
 
 external_env_state
 
@@ -97,8 +99,8 @@ if [[ "$REQUIRE_EXTERNAL_MESSAGING" == "true" || "${#present_external_envs[@]}" 
   require_env KAFKA_BOOTSTRAP_SERVERS
   require_env IBM_MQ_CONN_NAME
   require_env IBM_MQ_CREDENTIAL
-  run_suite samples/provider_capability/kafka/suite_manifest.yaml ci_kafka_external
-  run_suite samples/provider_capability/ibm_mq/suite_manifest.yaml ci_ibm_mq_external
+  run_suite samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml ci_kafka_external
+  run_suite samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml ci_ibm_mq_external
   echo "external_messaging_runtime_verification: passed"
 else
   echo "external_messaging_runtime_verification: not_configured"

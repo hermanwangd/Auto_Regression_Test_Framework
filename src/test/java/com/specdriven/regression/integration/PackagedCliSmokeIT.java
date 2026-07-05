@@ -51,7 +51,7 @@ class PackagedCliSmokeIT {
         Path jar = Path.of("target/spec-driven-auto-regression-0.2.4.jar").toAbsolutePath().normalize();
         assertThat(Files.isRegularFile(jar)).isTrue();
         Path copiedSuite = tempDir.resolve("usage-kit").resolve("nats");
-        copyDirectory(Path.of("samples/provider_capability/nats"), copiedSuite);
+        copyDirectory(Path.of("samples/20-provider-capability-p0/messaging/nats"), copiedSuite);
 
         Process process = new ProcessBuilder(
                 javaBinary(),

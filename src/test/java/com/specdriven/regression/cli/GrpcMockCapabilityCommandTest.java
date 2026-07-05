@@ -16,11 +16,11 @@ import org.junit.jupiter.api.io.TempDir;
 class GrpcMockCapabilityCommandTest {
 
     private static final Path SUITE =
-            Path.of("samples/provider_capability/grpc_mock/suite_manifest.yaml");
+            Path.of("samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest.yaml");
     private static final Path FAILURE_SUITE =
-            Path.of("samples/provider_capability/grpc_mock/suite_manifest_failure.yaml");
+            Path.of("samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest_failure.yaml");
     private static final Path BOUNDARY_SUITE =
-            Path.of("samples/provider_capability/grpc_mock/suite_manifest_boundary.yaml");
+            Path.of("samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest_boundary.yaml");
 
     @TempDir
     Path tempDir;
@@ -28,25 +28,25 @@ class GrpcMockCapabilityCommandTest {
     @Test
     void sampleArtifactsAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
-                "samples/provider_capability/grpc_mock/suite_manifest.yaml",
-                "samples/provider_capability/grpc_mock/test_case.yaml",
-                "samples/provider_capability/grpc_mock/provider_instances/customer_grpc_mock.yaml",
-                "samples/provider_capability/grpc_mock/provider_instances/customer_grpc_client.yaml",
-                "samples/provider_capability/grpc_mock/provider_instances/customer_grpc_client_mock.yaml",
-                "samples/provider_capability/grpc_mock/provider_instances/customer_grpc_client_stub.yaml",
-                "samples/provider_capability/grpc_mock/env_profiles/local_grpc_mock.yaml",
-                "samples/provider_capability/grpc_mock/environment_bindings/local_grpc_mock.yaml",
-                "samples/provider_capability/grpc_mock/execution_profiles/local_grpc_mock.yaml",
-                "samples/provider_capability/grpc_mock/proto/customer.proto",
-                "samples/provider_capability/grpc_mock/proto/customer.desc.b64",
-                "samples/provider_capability/grpc_mock/fixtures/get_customer_request.json",
-                "samples/provider_capability/grpc_mock/fixtures/get_customer_response.json",
-                "samples/provider_capability/grpc_mock/fixtures/ping_request.json",
-                "samples/provider_capability/grpc_mock/fixtures/ping_response.json",
-                "samples/provider_capability/grpc_mock/suite_manifest_failure.yaml",
-                "samples/provider_capability/grpc_mock/test_case_failure.yaml",
-                "samples/provider_capability/grpc_mock/suite_manifest_boundary.yaml",
-                "samples/provider_capability/grpc_mock/test_case_boundary.yaml");
+                "samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest.yaml",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/test_case.yaml",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/provider_instances/customer_grpc_mock.yaml",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/provider_instances/customer_grpc_client.yaml",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/provider_instances/runtime_mode_sample__customer_grpc_client_mock.yaml",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/provider_instances/runtime_mode_sample__customer_grpc_client_stub.yaml",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/env_profiles/local_grpc_mock.yaml",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/environment_bindings/local_grpc_mock.yaml",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/execution_profiles/local_grpc_mock.yaml",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/proto/customer.proto",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/proto/customer.desc.b64",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/fixtures/get_customer_request.json",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/fixtures/get_customer_response.json",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/fixtures/ping_request.json",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/fixtures/ping_response.json",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest_failure.yaml",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/test_case_failure.yaml",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest_boundary.yaml",
+                "samples/20-provider-capability-p0/rpc/grpc_mock/test_case_boundary.yaml");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -205,7 +205,7 @@ class GrpcMockCapabilityCommandTest {
 
     private Path mutableGrpcSample(String name) throws IOException {
         Path target = tempDir.resolve(name);
-        copyDirectory(Path.of("samples/provider_capability/grpc_mock"), target);
+        copyDirectory(Path.of("samples/20-provider-capability-p0/rpc/grpc_mock"), target);
         return target.resolve("suite_manifest.yaml");
     }
 

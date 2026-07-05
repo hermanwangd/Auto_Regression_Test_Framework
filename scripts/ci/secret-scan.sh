@@ -25,7 +25,7 @@ CONFIG_GLOBS=(
 ALLOWLIST_GLOBS=(
   -g '!scripts/ci/secret-scan.sh'
   -g '!src/test/**'
-  -g '!samples/evidence_hardening/invalid_secret_leak_result.json'
+  -g '!samples/40-evidence-reporting/evidence_hardening/invalid_secret_leak_result.json'
 )
 
 SECRET_FIELD_PATTERN='(?i)\b(password|token|api_key|authorization|credential)\b[[:space:]]*[:=][[:space:]]*["'\'']?(?!\*\*\*MASKED\*\*\*|masked|secret://|vault://|generated://|env://|\$\{|true|false|null|[A-Za-z0-9_.-]*ref\b|refs\b|reference\b|required\b|optional\b|allowed\b|policy\b|guardrail\b|field\b|key\b|value\b|values\b)[A-Za-z0-9_./+=:@-]{8,}'
@@ -49,7 +49,7 @@ root = Path(".")
 config_suffixes = {".yaml", ".yml", ".json", ".properties", ".md", ".txt", ".env"}
 excluded_exact = {
     Path("scripts/ci/secret-scan.sh"),
-    Path("samples/evidence_hardening/invalid_secret_leak_result.json"),
+    Path("samples/40-evidence-reporting/evidence_hardening/invalid_secret_leak_result.json"),
 }
 excluded_prefixes = (Path(".git"), Path("target"), Path("src/test"))
 

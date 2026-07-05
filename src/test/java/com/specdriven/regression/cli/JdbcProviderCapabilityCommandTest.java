@@ -15,7 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class JdbcProviderCapabilityCommandTest {
 
-    private static final Path JDBC_SUITE = Path.of("samples/provider_capability/jdbc/suite_manifest.yaml");
+    private static final Path JDBC_SUITE = Path.of("samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml");
 
     @TempDir
     Path tempDir;
@@ -23,21 +23,21 @@ class JdbcProviderCapabilityCommandTest {
     @Test
     void jdbcSampleArtifactsAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
-                "samples/provider_capability/jdbc/suite_manifest.yaml",
-                "samples/provider_capability/jdbc/test_case.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/test_case.yaml",
                 "docs/02-architecture/contracts/provider-contracts/jdbc.yaml",
-                "samples/provider_capability/jdbc/provider_instances/oracle_like.yaml",
-                "samples/provider_capability/jdbc/provider_instances/db2_like.yaml",
-                "samples/provider_capability/jdbc/env_profiles/local_jdbc.yaml",
-                "samples/provider_capability/jdbc/execution_profiles/local_jdbc.yaml",
-                "samples/provider_capability/jdbc/environment_bindings/local_jdbc.yaml",
-                "samples/provider_capability/jdbc/fixtures/db_seed.sql",
-                "samples/provider_capability/jdbc/fixtures/db_cleanup.sql",
-                "samples/provider_capability/jdbc/queries/order_exists_oracle.sql",
-                "samples/provider_capability/jdbc/queries/order_exists_db2.sql",
-                "samples/provider_capability/jdbc/expected_results/db_expected.json",
-                "samples/provider_capability/jdbc/result/expected_result_shape.json",
-                "samples/provider_capability/jdbc/evidence/expected_evidence_index.yaml");
+                "samples/20-provider-capability-p0/data/jdbc/provider_instances/oracle_like.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/provider_instances/db2_like.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/env_profiles/local_jdbc.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/execution_profiles/local_jdbc.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/environment_bindings/local_jdbc.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/fixtures/db_seed.sql",
+                "samples/20-provider-capability-p0/data/jdbc/fixtures/db_cleanup.sql",
+                "samples/20-provider-capability-p0/data/jdbc/queries/order_exists_oracle.sql",
+                "samples/20-provider-capability-p0/data/jdbc/queries/order_exists_db2.sql",
+                "samples/20-provider-capability-p0/data/jdbc/expected_results/db_expected.json",
+                "samples/20-provider-capability-p0/data/jdbc/result/expected_result_shape.json",
+                "samples/20-provider-capability-p0/data/jdbc/evidence/expected_evidence_index.yaml");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -359,7 +359,7 @@ class JdbcProviderCapabilityCommandTest {
 
     private Path mutableJdbc() throws IOException {
         Path target = tempDir.resolve("jdbc_" + System.nanoTime());
-        copyDirectory(Path.of("samples/provider_capability/jdbc"), target);
+        copyDirectory(Path.of("samples/20-provider-capability-p0/data/jdbc"), target);
         return target.resolve("suite_manifest.yaml");
     }
 

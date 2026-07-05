@@ -15,9 +15,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 class EvidenceHardeningCommandTest {
 
-    private static final Path VALID_RESULT = Path.of("samples/evidence_hardening/valid_result.json");
-    private static final Path MISSING_INDEX_RESULT = Path.of("samples/evidence_hardening/invalid_missing_evidence_result.json");
-    private static final Path SECRET_LEAK_RESULT = Path.of("samples/evidence_hardening/invalid_secret_leak_result.json");
+    private static final Path VALID_RESULT = Path.of("samples/40-evidence-reporting/evidence_hardening/valid_result.json");
+    private static final Path MISSING_INDEX_RESULT = Path.of("samples/40-evidence-reporting/evidence_hardening/invalid_missing_evidence_result.json");
+    private static final Path SECRET_LEAK_RESULT = Path.of("samples/40-evidence-reporting/evidence_hardening/invalid_secret_leak_result.json");
 
     @TempDir
     Path tempDir;
@@ -26,14 +26,14 @@ class EvidenceHardeningCommandTest {
     void evidenceHardeningSampleArtifactsAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
                 "schemas/evidence_index.v0.2.schema.yaml",
-                "samples/evidence_hardening/valid_result.json",
-                "samples/evidence_hardening/invalid_missing_evidence_result.json",
-                "samples/evidence_hardening/invalid_secret_leak_result.json",
-                "samples/evidence_hardening/evidence/evidence_index.yaml",
-                "samples/evidence_hardening/evidence/execution_log.txt",
-                "samples/evidence_hardening/evidence/batch_summary.json",
-                "samples/evidence_hardening/evidence/assertion_diff.json",
-                "samples/evidence_hardening/evidence/provider_evidence.json");
+                "samples/40-evidence-reporting/evidence_hardening/valid_result.json",
+                "samples/40-evidence-reporting/evidence_hardening/invalid_missing_evidence_result.json",
+                "samples/40-evidence-reporting/evidence_hardening/invalid_secret_leak_result.json",
+                "samples/40-evidence-reporting/evidence_hardening/evidence/evidence_index.yaml",
+                "samples/40-evidence-reporting/evidence_hardening/evidence/execution_log.txt",
+                "samples/40-evidence-reporting/evidence_hardening/evidence/batch_summary.json",
+                "samples/40-evidence-reporting/evidence_hardening/evidence/assertion_diff.json",
+                "samples/40-evidence-reporting/evidence_hardening/evidence/provider_evidence.json");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -590,7 +590,7 @@ class EvidenceHardeningCommandTest {
 
     private Path mutableEvidenceHardening(String name) throws IOException {
         Path target = tempDir.resolve(name);
-        copyDirectory(Path.of("samples/evidence_hardening"), target);
+        copyDirectory(Path.of("samples/40-evidence-reporting/evidence_hardening"), target);
         return target.resolve("valid_result.json");
     }
 

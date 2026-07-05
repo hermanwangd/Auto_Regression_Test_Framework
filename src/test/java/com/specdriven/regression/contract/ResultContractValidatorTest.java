@@ -114,13 +114,13 @@ class ResultContractValidatorTest {
     @Test
     void checkedInPositiveSampleResultsMatchStandardResultContract() throws IOException {
         for (Path sample : List.of(
-                Path.of("samples/contract_baseline/result/sample_result.json"),
-                Path.of("samples/golden_e2e/result/expected_result_shape.json"),
-                Path.of("samples/provider_capability/result/expected_result_shape.json"),
-                Path.of("samples/provider_capability/wiremock/result/expected_result_shape.json"),
-                Path.of("samples/provider_capability/jdbc/result/expected_result_shape.json"),
-                Path.of("samples/provider_capability/nats/result/expected_result_shape.json"),
-                Path.of("samples/evidence_hardening/valid_result.json"))) {
+                Path.of("samples/10-contract-baseline/mixed_wiremock_jdbc_nats/result/sample_result.json"),
+                Path.of("samples/00-getting-started/golden_e2e/result/expected_result_shape.json"),
+                Path.of("samples/20-provider-capability-p0/result/expected_result_shape.json"),
+                Path.of("samples/20-provider-capability-p0/http/wiremock_http_mock/result/expected_result_shape.json"),
+                Path.of("samples/20-provider-capability-p0/data/jdbc/result/expected_result_shape.json"),
+                Path.of("samples/20-provider-capability-p0/messaging/nats/result/expected_result_shape.json"),
+                Path.of("samples/40-evidence-reporting/evidence_hardening/valid_result.json"))) {
             Map<String, Object> result = loadJsonMap(sample);
 
             assertThat(ResultContractValidator.validate(sample, result))

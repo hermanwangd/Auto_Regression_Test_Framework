@@ -89,16 +89,16 @@ Typical v0.2.4 runtime commands:
 
 ```bash
 regress validate \
-  --suite samples/provider_capability/suite_manifest.yaml \
+  --suite samples/20-provider-capability-p0/suite_manifest.yaml \
   --profile local_provider
 
 regress run \
-  --suite samples/provider_capability/suite_manifest.yaml \
+  --suite samples/20-provider-capability-p0/suite_manifest.yaml \
   --profile local_provider \
   --dry-run
 
 regress run \
-  --suite samples/provider_capability/suite_manifest.yaml \
+  --suite samples/20-provider-capability-p0/suite_manifest.yaml \
   --profile local_provider
 
 regress report --result <generated_result_json>
@@ -1089,7 +1089,7 @@ Malformed suite YAML is a validation failure. The command returns `validation_st
 
 ```bash
 regress validate \
-  --suite samples/provider_capability/suite_manifest.yaml \
+  --suite samples/20-provider-capability-p0/suite_manifest.yaml \
   --profile local_provider
 ```
 
@@ -1098,10 +1098,10 @@ Framework-owned samples may use suite-path mode. This mode is for framework veri
 Golden E2E proves the framework lifecycle with a deterministic fake provider:
 
 ```bash
-regress validate --suite samples/golden_e2e/suite_manifest.yaml
+regress validate --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml
 
 regress run \
-  --suite samples/golden_e2e/suite_manifest.yaml \
+  --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml \
   --profile local_golden
 
 regress report --result <generated_result_json>
@@ -1114,10 +1114,10 @@ Provider Capability suite-path mode proves selected v0.2 P0 provider capabilitie
 The v0.2.4 contract baseline sample is an executable mixed-provider framework verification suite:
 
 ```bash
-regress validate --suite samples/contract_baseline/suite_manifest.yaml --profile ci
+regress validate --suite samples/10-contract-baseline/mixed_wiremock_jdbc_nats/suite_manifest.yaml --profile ci
 
 regress run \
-  --suite samples/contract_baseline/suite_manifest.yaml \
+  --suite samples/10-contract-baseline/mixed_wiremock_jdbc_nats/suite_manifest.yaml \
   --profile ci
 
 regress report --result <generated_result_json>
@@ -1128,18 +1128,18 @@ This sample dispatches only the checked-in `wiremock_http_mock` + `jdbc` + `nats
 `regress validate-evidence --result <generated_result_json>` and `regress report --result <generated_result_json>` validate the standard result JSON before publishing or reporting. Any result with non-empty `provider_results`, `batch_id`, `run_id`, `test_count`, or `test_results` is treated as a standard suite run and must include `suite_id`, `batch_id`, `run_id`, `test_count`, `test_results`, `start_time`, `end_time`, and `duration_ms`. `test_count` must be a positive JSON integer value that equals `test_results.length`, and every `test_results[]` entry must be an object containing `test_case_id`, `status`, and `profile`. Allowed per-test status values are `passed`, `failed`, and `blocked`. Quoted numeric strings such as `"1"` are invalid. Invalid suite summaries return a non-zero exit and must be fixed before the result can be published.
 
 ```bash
-regress validate --suite samples/provider_capability/wiremock_http_request/suite_manifest.yaml
+regress validate --suite samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml
 
 regress run \
-  --suite samples/provider_capability/wiremock_http_request/suite_manifest.yaml \
+  --suite samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml \
   --profile local_wiremock_http
 
 regress report --result <generated_result_json>
 
-regress validate --suite samples/provider_capability/jdbc/suite_manifest.yaml
+regress validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml
 
 regress run \
-  --suite samples/provider_capability/jdbc/suite_manifest.yaml \
+  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
   --profile local_jdbc
 
 regress report --result <generated_result_json>
@@ -1151,7 +1151,22 @@ Provider Capability suite-path mode may execute only checked-in framework provid
 
 Usage-kit provider instance files labeled `sample_scope: usage_kit_runtime_mode_sample` are runtime-mode coverage artifacts. They prove the public Provider Instance shape is represented in the usage kit for that provider/runtime mode, but they are not executed unless a test case target references the `provider_id` and the selected Env_Profile supplies a matching `runtime_mode`.
 
-### 13.1 Mock Server Usage
+### 13.1 Sample Layout
+
+Checked-in samples use a canonical usage-kit layout:
+
+| Path | Purpose |
+| --- | --- |
+| `samples/00-getting-started/golden_e2e/` | Minimal deterministic framework lifecycle sample. |
+| `samples/10-contract-baseline/mixed_wiremock_jdbc_nats/` | Mixed WireMock/JDBC/NATS contract baseline. |
+| `samples/20-provider-capability-p0/` | Executable P0 provider capability suites by capability family. |
+| `samples/30-cross-provider-groups/mock_server_cross_verify/` | Cross-provider mock server suite group. |
+| `samples/40-evidence-reporting/evidence_hardening/` | Result/evidence validation fixtures. |
+| `samples/90-compatibility/dummy_rest/` | Compatibility-only fixture, not a supported provider gate. |
+
+A leaf suite owns `tests[]` in its `suite_manifest.yaml`. A suite group owns `child_suites[]` and no `tests[]`; every child `ref` must remain inside the suite group directory after path normalization. Runtime-mode contract samples labeled `sample_scope: usage_kit_runtime_mode_sample` are coverage artifacts and are not executable targets.
+
+### 13.2 Mock Server Usage
 
 Mock server providers replace external REST, SOAP, or gRPC dependencies with deterministic checked-in stubs for local/CI framework verification. They are provider capability evidence only and must not be treated as downstream SIT/preprod RP release evidence.
 
@@ -1181,7 +1196,7 @@ DSL rules:
 
 Evidence generated by mock server samples includes request journals, server logs, client request/response evidence, assertion diffs, suite summaries, and raw Allure result files when running a child-suite aggregation manifest.
 
-### 13.2 Provider Capability Multi-Test Suites
+### 13.3 Provider Capability Multi-Test Suites
 
 The primary multi-test runner model is a standard suite manifest with `tests[]`, where every selected test case shares the same suite profile and Env_Profile. Single-suite provider capability runs may mix supported executable provider types, such as Kafka and IBM MQ client-provider test cases, when the selected Env_Profile contains provider bindings for each referenced `provider_id`.
 
@@ -1194,14 +1209,14 @@ Aggregation lifecycle:
 - `regress run --suite <suite_manifest> --profile <profile>` validates child suites before execution. Runtime starts only after all preflight checks pass.
 
 ```bash
-regress validate --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml
+regress validate --suite samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml
 
 regress run \
-  --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml \
+  --suite samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml \
   --dry-run
 
 regress run \
-  --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml \
+  --suite samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml \
   --profile local_mock_server_cross_verify
 ```
 
@@ -1238,20 +1253,20 @@ Every direct suite result must reference an `evidence_index.yaml`; every suite g
 PR-008A SOAP provider capability samples use separate suite manifests:
 
 ```bash
-regress validate --suite samples/provider_capability/soap_mock/suite_manifest.yaml
+regress validate --suite samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest.yaml
 
 regress run \
-  --suite samples/provider_capability/soap_mock/suite_manifest.yaml \
+  --suite samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest.yaml \
   --profile local_soap_mock
 ```
 
 PR-008B gRPC provider capability samples use the same pattern:
 
 ```bash
-regress validate --suite samples/provider_capability/grpc_mock/suite_manifest.yaml
+regress validate --suite samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest.yaml
 
 regress run \
-  --suite samples/provider_capability/grpc_mock/suite_manifest.yaml \
+  --suite samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest.yaml \
   --profile local_grpc_mock
 
 regress report --result <generated_result_json>
@@ -1263,7 +1278,7 @@ Dry run validates the same contract graph and produces a resolved execution plan
 
 ```bash
 regress run \
-  --suite samples/provider_capability/suite_manifest.yaml \
+  --suite samples/20-provider-capability-p0/suite_manifest.yaml \
   --profile local_provider \
   --dry-run
 ```
@@ -1272,7 +1287,7 @@ Run approved tests in the suite:
 
 ```bash
 regress run \
-  --suite samples/provider_capability/suite_manifest.yaml \
+  --suite samples/20-provider-capability-p0/suite_manifest.yaml \
   --profile local_provider
 ```
 
@@ -1280,7 +1295,7 @@ Run by tag:
 
 ```bash
 regress run \
-  --suite samples/provider_capability/suite_manifest.yaml \
+  --suite samples/20-provider-capability-p0/suite_manifest.yaml \
   --profile local_provider \
   --tag happy-path
 ```

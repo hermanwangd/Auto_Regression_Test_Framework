@@ -22,11 +22,11 @@ run_cli() {
   java -Xmx512m -jar "$JAR" "$@"
 }
 
-run_cli validate --suite samples/contract_baseline/suite_manifest.yaml
-run_cli validate --suite samples/golden_e2e/suite_manifest.yaml
-run_cli validate --suite samples/provider_capability/suite_manifest.yaml
-run_cli validate-evidence --result samples/evidence_hardening/valid_result.json
-run_cli report --result samples/evidence_hardening/valid_result.json
+run_cli validate --suite samples/10-contract-baseline/mixed_wiremock_jdbc_nats/suite_manifest.yaml
+run_cli validate --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml
+run_cli validate --suite samples/20-provider-capability-p0/suite_manifest.yaml
+run_cli validate-evidence --result samples/40-evidence-reporting/evidence_hardening/valid_result.json
+run_cli report --result samples/40-evidence-reporting/evidence_hardening/valid_result.json
 
 if grep -RInE "provider_family" docs samples schemas src/main/java; then
   echo "provider_family is not allowed in public framework artifacts." >&2

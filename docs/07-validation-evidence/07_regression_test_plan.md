@@ -26,7 +26,7 @@ Framework verification shall prove that v0.2 can:
 | Sample generated-artifact integration verification | Framework end-to-end behavior | `./mvnw verify` | `src/test/resources/framework-verification/sample-product-repo/` generated framework artifacts | Maven Failsafe reports and generated temporary sample evidence. |
 | Provider public-interface contract verification | Provider capability registry validation, Provider Contract schema validation, Provider Instance validation, Env_Profile validation, runtime mode validation, local/CI dependency provisioning policy validation, DSL target resolution, dry-run dispatch, unsupported capability blocking, provider-safety-unapproved command-capable provider blocking, and normalized evidence shape | `./mvnw verify` | Local/CI mock, WireMock HTTP mock, stub, ephemeral, fake-topic, embedded-broker, disposable-schema, externally pre-provisioned, and native provider fixtures plus injectable native messaging transport coverage for request/response, Kafka/NATS publish, NATS request/reply provider mode, consume/observe, cleanup, DB fixture, deployment readiness, file/batch, and safety-approved runner contract validation when declared | Maven Failsafe reports and generated temporary provider evidence. |
 | Track A contract artifact verification | Public interface docs, contract schemas, P0 provider/verify catalog, validation taxonomy, secret guardrails, evidence folder structure, and sample artifacts | Docs review plus YAML/JSON parse checks; future automation through contract tests | `samples/` and `docs/02-architecture/contracts/` | Contract review evidence and parse output. |
-| Packaged CLI smoke verification | Spring Boot jar CLI entrypoint | `java -jar target/spec-driven-auto-regression-0.2.4.jar validate --suite samples/provider_capability/suite_manifest.yaml --profile local_provider` | Checked-in suite-mode framework sample fixture | CLI output and exit code. |
+| Packaged CLI smoke verification | Spring Boot jar CLI entrypoint | `java -jar target/spec-driven-auto-regression-0.2.4.jar validate --suite samples/20-provider-capability-p0/suite_manifest.yaml --profile local_provider` | Checked-in suite-mode framework sample fixture | CLI output and exit code. |
 
 `./mvnw test` must stay fast and deterministic. `./mvnw verify` may execute a local shell provider through the sample fixture, but must not require SIT/UAT deployment.
 Provider public-interface contract verification must prove that local and CI Env_Profiles can replace external service, DB, messaging, K8s, and VM dependencies with explicit mock, WireMock HTTP mock, stub, ephemeral, fake-topic, embedded-broker, disposable-schema, or generated-data bindings. It must validate dependency provisioning policy, provider runtime mode, provider `binding_keys`, binding key value kinds, generated refs to Provider Contract `bindable_outputs` or Env_Profile `dependency_provisioning_policy.generated_outputs`, and unresolved project-side generated refs that must be materialized or declared before execution. Track A limits this to contract validation, sample parsing, and dry-run planning; provider behavior is verified in later runtime tracks. It must not require real SIT/UAT endpoints, real K8s clusters, real VMs, production data, or committed secrets. It must also prove that SIT/preprod release evidence cannot silently use mock substitution. External runner verification is limited to contract validation and provider safety approved command-capable provider behavior unless an explicit runner implementation slice is selected later. External runner approval is provider safety approval, not release approval.
@@ -146,9 +146,9 @@ The contract verification suite shall cover:
 
 WireMock + HTTP request sample coverage must include these CLI paths:
 
-- Happy path: `regress validate --suite samples/provider_capability/wiremock_http_request/suite_manifest.yaml`, `regress run --suite samples/provider_capability/wiremock_http_request/suite_manifest.yaml --profile local_wiremock_http`, and `regress report --result <generated_result_json>` return success with WireMock and `rest_client` provider evidence.
-- Failure path: `regress run --suite samples/provider_capability/wiremock_http_request/suite_manifest_failure.yaml --profile local_wiremock_http` returns a failed run with assertion evidence; `regress report` consumes the result as review-ready with failures.
-- Boundary path: `regress run --suite samples/provider_capability/wiremock_http_request/suite_manifest_boundary.yaml --profile local_wiremock_http` returns success for an empty request ref and HTTP 204 no-content response.
+- Happy path: `regress validate --suite samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml`, `regress run --suite samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml --profile local_wiremock_http`, and `regress report --result <generated_result_json>` return success with WireMock and `rest_client` provider evidence.
+- Failure path: `regress run --suite samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest_failure.yaml --profile local_wiremock_http` returns a failed run with assertion evidence; `regress report` consumes the result as review-ready with failures.
+- Boundary path: `regress run --suite samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest_boundary.yaml --profile local_wiremock_http` returns success for an empty request ref and HTTP 204 no-content response.
 
 Every provider public-interface case must also verify dry-run output. Dry-run must name provider_id, provider_type, env_profile_id, registry status, capability, affected logical target, framework Provider Contract ref, Provider Instance path, Env_Profile path, binding key status, generated_ref status, AP gate, and owner action for missing, ambiguous, unsupported, invalid input key, missing output ref, missing binding key, invalid generated_ref, or unapproved command-capable provider capabilities.
 
@@ -235,14 +235,14 @@ Track A verification may be performed by docs review and syntax checks before im
 
 ### 7.6.1 Track B Golden E2E Verification Gate
 
-Track B proves one complete framework lifecycle through checked-in `samples/golden_e2e/` artifacts and a deterministic framework-owned fake provider. It is not provider-expansion work and must not exercise WireMock, JDBC, NATS, Kafka, REST/gRPC, K8s, VM, external runner, SIT, Oracle, DB2, or downstream product deployment.
+Track B proves one complete framework lifecycle through checked-in `samples/00-getting-started/golden_e2e/` artifacts and a deterministic framework-owned fake provider. It is not provider-expansion work and must not exercise WireMock, JDBC, NATS, Kafka, REST/gRPC, K8s, VM, external runner, SIT, Oracle, DB2, or downstream product deployment.
 
 Required Track B verification:
 
 | Verification | Required Coverage |
 |---|---|
-| Public CLI validate | `regress validate --suite samples/golden_e2e/suite_manifest.yaml` loads the suite and validates DSL, Provider Contract, Provider Instance, Env_Profile or compatibility profile/binding artifacts, target resolution, expected result refs, and secret guardrails. |
-| Public CLI run | `regress run --suite samples/golden_e2e/suite_manifest.yaml --profile local_golden` generates batch ID, run ID, result JSON, and evidence folder. |
+| Public CLI validate | `regress validate --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml` loads the suite and validates DSL, Provider Contract, Provider Instance, Env_Profile or compatibility profile/binding artifacts, target resolution, expected result refs, and secret guardrails. |
+| Public CLI run | `regress run --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml --profile local_golden` generates batch ID, run ID, result JSON, and evidence folder. |
 | Framework fake provider | `sample_fake_provider` executes setup, deterministic sample operation, and cleanup without external services or product topology. |
 | Verify/assertion | At least one `value_equals` and one `json_match` or generic artifact compare pass in the happy path. |
 | Evidence | Evidence includes execution log, fixture setup, fixture cleanup, actual output, expected result reference, assertion result, diff artifact, evidence index, and batch summary. |
@@ -257,8 +257,8 @@ Required Track C verification:
 
 | Verification | Required Coverage |
 |---|---|
-| Public CLI validate | `regress validate --suite samples/provider_capability/suite_manifest.yaml` validates P0 provider contracts, instances, bindings, targets, expected refs, and secret guardrails. |
-| Public CLI run | `regress run --suite samples/provider_capability/suite_manifest.yaml --profile local_provider` generates batch ID, run ID, standard result JSON, and indexed provider evidence. |
+| Public CLI validate | `regress validate --suite samples/20-provider-capability-p0/suite_manifest.yaml` validates P0 provider contracts, instances, bindings, targets, expected refs, and secret guardrails. |
+| Public CLI run | `regress run --suite samples/20-provider-capability-p0/suite_manifest.yaml --profile local_provider` generates batch ID, run ID, standard result JSON, and indexed provider evidence. |
 | WireMock | Stub injection, base URL output, request journal, server log, `http_mock_called`, and `http_mock_request_body_match`. |
 | JDBC | SQL params binding, Oracle/DB2 dialect contract validation, `db_seed`, `db_cleanup`, `db_record_exists`, query evidence, and masked DB evidence. |
 | NATS | Subject handling, `event_published`, `event_payload_match`, `consume_from: test_start_time`, timeout, poll interval, and event evidence. |
@@ -344,10 +344,10 @@ This gate validates that the framework verification plan has complete AC path au
 | `secret_guardrails.v0.2.yaml` | Track A / FWK-004 / FWK-012 / FWK-013 |
 | `evidence_folder_structure.v0.2.md` | Track A / FWK-012 / FWK-013 |
 | `p0_provider_verify_catalog.v0.2.md` | Track A / FWK-010 / FWK-011 / FWK-013 |
-| `samples/golden_e2e/` | Track B / FWK-015 |
-| `samples/provider_capability/` | Track C / FWK-016 |
-| `samples/provider_capability/soap_mock/` | PR-008A / FWK-017 |
-| `samples/provider_capability/grpc_mock/` | PR-008B / FWK-017 |
+| `samples/00-getting-started/golden_e2e/` | Track B / FWK-015 |
+| `samples/20-provider-capability-p0/` | Track C / FWK-016 |
+| `samples/20-provider-capability-p0/rpc/soap_mock/` | PR-008A / FWK-017 |
+| `samples/20-provider-capability-p0/rpc/grpc_mock/` | PR-008B / FWK-017 |
 
 ### 7.6.4 AC Path Coverage Matrix
 
@@ -426,7 +426,7 @@ That flow produces real RP batch/run evidence from suite-mode artifacts. Product
 | Pull request | `./mvnw test` | Fast framework unit/component verification. |
 | Main or release branch | `./mvnw verify` | Framework integration verification with sample generated framework artifacts. |
 | Provider public-interface contract verification | `./mvnw verify` | Local/CI mock-stub-ephemeral Provider Contract, Provider Instance, and Env_Profile proof for heterogeneous execution boundaries without real downstream RP release evidence. |
-| Packaged CLI smoke | `java -jar target/spec-driven-auto-regression-0.2.4.jar validate --suite samples/provider_capability/suite_manifest.yaml --profile local_provider` | Verify packaged command delegation through the public runtime command surface. |
+| Packaged CLI smoke | `java -jar target/spec-driven-auto-regression-0.2.4.jar validate --suite samples/20-provider-capability-p0/suite_manifest.yaml --profile local_provider` | Verify packaged command delegation through the public runtime command surface. |
 | RP release pipeline | Agent translation plus `regress run --suite generated-framework/suite_manifest.yaml --profile <env_profile_id>` | Downstream RP regression execution, outside this framework verification plan. |
 
 All commands should be bounded and avoid memory-heavy execution. Local and CI runs should stay under the repository guidance of 8 GB RAM.

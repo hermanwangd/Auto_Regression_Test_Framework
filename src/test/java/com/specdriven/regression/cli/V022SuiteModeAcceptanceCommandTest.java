@@ -13,12 +13,12 @@ import org.junit.jupiter.api.io.TempDir;
 
 class V022SuiteModeAcceptanceCommandTest {
 
-    private static final Path DUMMY_REST_SUITE = Path.of("samples/provider_capability/dummy_rest/suite_manifest.yaml");
-    private static final Path COMPARE_SUITE = Path.of("samples/provider_capability/compare/suite_manifest.yaml");
+    private static final Path DUMMY_REST_SUITE = Path.of("samples/90-compatibility/dummy_rest/suite_manifest.yaml");
+    private static final Path COMPARE_SUITE = Path.of("samples/20-provider-capability-p0/verification/artifact_compare/suite_manifest.yaml");
     private static final Path CONTRACT_BASELINE_RESULT =
-            Path.of("samples/contract_baseline/result/sample_result.json");
+            Path.of("samples/10-contract-baseline/mixed_wiremock_jdbc_nats/result/sample_result.json");
     private static final Path MOCK_SERVER_CROSS_VERIFY_SUITE =
-            Path.of("samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml");
+            Path.of("samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml");
 
     @TempDir
     Path tempDir;

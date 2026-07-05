@@ -4,4 +4,4 @@ provider_bindings:
   - provider_id: local-common-verifier
     runtime_mode: stub
     binding_values:
-      workspace_ref: samples/provider_capability/common_verify
+      workspace_ref: samples/20-provider-capability-p0/verification/common_verify

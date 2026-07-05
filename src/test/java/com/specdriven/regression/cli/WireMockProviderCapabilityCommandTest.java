@@ -17,7 +17,7 @@ import org.junit.jupiter.api.io.TempDir;
 class WireMockProviderCapabilityCommandTest {
 
     private static final Path WIREMOCK_SUITE =
-            Path.of("samples/provider_capability/wiremock/suite_manifest.yaml");
+            Path.of("samples/20-provider-capability-p0/http/wiremock_http_mock/suite_manifest.yaml");
 
     @TempDir
     Path tempDir;
@@ -25,19 +25,19 @@ class WireMockProviderCapabilityCommandTest {
     @Test
     void wireMockSampleArtifactsAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
-                "samples/provider_capability/wiremock/suite_manifest.yaml",
-                "samples/provider_capability/wiremock/test_case.yaml",
+                "samples/20-provider-capability-p0/http/wiremock_http_mock/suite_manifest.yaml",
+                "samples/20-provider-capability-p0/http/wiremock_http_mock/test_case.yaml",
                 "docs/02-architecture/contracts/provider-contracts/wiremock_http_mock.yaml",
-                "samples/provider_capability/wiremock/provider_instances/wiremock_payment_api.yaml",
-                "samples/provider_capability/wiremock/env_profiles/local_wiremock.yaml",
-                "samples/provider_capability/wiremock/execution_profiles/local_wiremock.yaml",
-                "samples/provider_capability/wiremock/environment_bindings/local_wiremock.yaml",
-                "samples/provider_capability/wiremock/fixtures/payment_success_stub.json",
-                "samples/provider_capability/wiremock/fixtures/payment_failure_stub.json",
-                "samples/provider_capability/wiremock/fixtures/request_input.json",
-                "samples/provider_capability/wiremock/expected_results/expected_request.json",
-                "samples/provider_capability/wiremock/result/expected_result_shape.json",
-                "samples/provider_capability/wiremock/evidence/expected_evidence_index.yaml");
+                "samples/20-provider-capability-p0/http/wiremock_http_mock/provider_instances/wiremock_payment_api.yaml",
+                "samples/20-provider-capability-p0/http/wiremock_http_mock/env_profiles/local_wiremock.yaml",
+                "samples/20-provider-capability-p0/http/wiremock_http_mock/execution_profiles/local_wiremock.yaml",
+                "samples/20-provider-capability-p0/http/wiremock_http_mock/environment_bindings/local_wiremock.yaml",
+                "samples/20-provider-capability-p0/http/wiremock_http_mock/fixtures/payment_success_stub.json",
+                "samples/20-provider-capability-p0/http/wiremock_http_mock/fixtures/payment_failure_stub.json",
+                "samples/20-provider-capability-p0/http/wiremock_http_mock/fixtures/request_input.json",
+                "samples/20-provider-capability-p0/http/wiremock_http_mock/expected_results/expected_request.json",
+                "samples/20-provider-capability-p0/http/wiremock_http_mock/result/expected_result_shape.json",
+                "samples/20-provider-capability-p0/http/wiremock_http_mock/evidence/expected_evidence_index.yaml");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -416,7 +416,7 @@ class WireMockProviderCapabilityCommandTest {
 
     private Path mutableWireMock() throws IOException {
         Path target = tempDir.resolve("wiremock_" + System.nanoTime());
-        copyDirectory(Path.of("samples/provider_capability/wiremock"), target);
+        copyDirectory(Path.of("samples/20-provider-capability-p0/http/wiremock_http_mock"), target);
         return target.resolve("suite_manifest.yaml");
     }
 

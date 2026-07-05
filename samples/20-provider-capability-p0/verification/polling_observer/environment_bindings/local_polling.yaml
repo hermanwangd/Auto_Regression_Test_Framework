@@ -4,4 +4,4 @@ provider_bindings:
   - provider_id: local-common-polling
     runtime_mode: stub
     binding_values:
-      workspace_ref: samples/provider_capability/polling
+      workspace_ref: samples/20-provider-capability-p0/verification/polling_observer

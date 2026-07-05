@@ -68,8 +68,8 @@ Non-runtime boundary:
 Syntax:
 
 ```bash
-regress validate --suite samples/golden_e2e/suite_manifest.yaml [--profile <profile>]
-regress validate --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml [--profile <profile>]
+regress validate --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml [--profile <profile>]
+regress validate --suite samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml [--profile <profile>]
 ```
 
 Suite-mode requires `--suite <suite_manifest_path>` and resolves artifacts relative to the suite manifest. A standard suite may include multiple checked-in tests in `tests[]`; all selected tests share one suite-level profile from CLI `--profile` or `suite_manifest.profile`. Compatibility aggregation manifests may use `child_suites[]` to point at checked-in child suite manifests. The command validates selected checked-in approved DSL tests and generated framework artifacts only. It must not start providers, provision dependencies, mutate fixtures, write run evidence, or infer Product/RP/RU topology.
@@ -81,8 +81,8 @@ Machine-readable output must include `status`, `valid`, `errors`, `warnings`, `s
 Syntax:
 
 ```bash
-regress run --suite samples/golden_e2e/suite_manifest.yaml --dry-run
-regress run --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml --dry-run
+regress run --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml --dry-run
+regress run --suite samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml --dry-run
 ```
 
 Dry-run performs all validation and planning through DSL target resolution, Provider Instance lookup, framework Provider Contract catalog lookup, Env_Profile lookup, required binding key validation, operation input-key validation, output-ref validation, and safety validation. For `child_suites[]` aggregation manifests, dry-run validates every child suite, prints child suite status metadata, and keeps `provider_runtime_invoked: false`. It produces a resolved execution plan or child-suite aggregation plan and must not execute provider operations, mutate fixtures, publish messages, run SQL, call external endpoints, or create provider execution evidence.
