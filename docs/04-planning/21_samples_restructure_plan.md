@@ -226,14 +226,14 @@ Run:
 ```bash
 bash scripts/ci/verify-contracts.sh
 JAVA_TOOL_OPTIONS='-Xmx1024m' MAVEN_OPTS='-Xmx2g' ./mvnw -B -ntp package
-bash scripts/release/build-usage-kit.sh 0.2.4
-bash scripts/release/verify-usage-kit.sh target/spec-driven-auto-regression-0.2.4-usage-kit.zip
+bash scripts/release/build-usage-kit.sh 0.2.5
+bash scripts/release/verify-usage-kit.sh target/spec-driven-auto-regression-0.2.5-usage-kit.zip
 ```
 
 Expected: all commands pass, and the generated usage kit contains canonical paths plus legacy copies, including `samples/README.md`, `samples/provider_capability/mock_server_cross_verify/`, and `samples/provider_capability/dummy_rest/`. Inspect the manifest with:
 
 ```bash
-unzip -p target/spec-driven-auto-regression-0.2.4-usage-kit.zip usage-kit/usage-kit-manifest.yaml
+unzip -p target/spec-driven-auto-regression-0.2.5-usage-kit.zip usage-kit/usage-kit-manifest.yaml
 ```
 
 Expected manifest fields:
@@ -305,7 +305,7 @@ Expected: no active user guide, support docs, or Java tests point users at old c
 bash scripts/ci/check-public-support-contract.sh
 bash scripts/ci/verify-contracts.sh
 bash scripts/ci/secret-scan.sh
-JAVA_TOOL_OPTIONS='-Xmx1024m' MAVEN_OPTS='-Xmx2g' bash scripts/release/verify-supported-provider-samples.sh 0.2.4
+JAVA_TOOL_OPTIONS='-Xmx1024m' MAVEN_OPTS='-Xmx2g' bash scripts/release/verify-supported-provider-samples.sh 0.2.5
 ```
 
 - [x] Run usage-kit matrix verification with the external pi-run inspector against the generated usage kit.
@@ -313,21 +313,21 @@ JAVA_TOOL_OPTIONS='-Xmx1024m' MAVEN_OPTS='-Xmx2g' bash scripts/release/verify-su
 Refresh the external pi-run usage kit from the generated zip, then run the matrix:
 
 ```bash
-rm -rf /Users/herman_mbp2023/Documents/test_framework_pirun/usage-kit-v0.2.4
-mkdir -p /Users/herman_mbp2023/Documents/test_framework_pirun/usage-kit-v0.2.4
-mkdir -p /Users/herman_mbp2023/Documents/test_framework_pirun/release-assets-v0.2.4
-unzip -q target/spec-driven-auto-regression-0.2.4-usage-kit.zip \
-  -d /Users/herman_mbp2023/Documents/test_framework_pirun/usage-kit-v0.2.4
-cp target/spec-driven-auto-regression-0.2.4.jar \
-  /Users/herman_mbp2023/Documents/test_framework_pirun/release-assets-v0.2.4/spec-driven-auto-regression-0.2.4.jar
+rm -rf /Users/herman_mbp2023/Documents/test_framework_pirun/usage-kit-v0.2.5
+mkdir -p /Users/herman_mbp2023/Documents/test_framework_pirun/usage-kit-v0.2.5
+mkdir -p /Users/herman_mbp2023/Documents/test_framework_pirun/release-assets-v0.2.5
+unzip -q target/spec-driven-auto-regression-0.2.5-usage-kit.zip \
+  -d /Users/herman_mbp2023/Documents/test_framework_pirun/usage-kit-v0.2.5
+cp target/spec-driven-auto-regression-0.2.5.jar \
+  /Users/herman_mbp2023/Documents/test_framework_pirun/release-assets-v0.2.5/spec-driven-auto-regression-0.2.5.jar
 cd /Users/herman_mbp2023/Documents/test_framework_pirun
-python3 -m pirun.inspect_usage_kit --framework-version 0.2.4
-python3 -m pirun.run_usage_kit_matrix --framework-version 0.2.4 --command-set validate
+python3 -m pirun.inspect_usage_kit --framework-version 0.2.5
+python3 -m pirun.run_usage_kit_matrix --framework-version 0.2.5 --command-set validate
 python3 - <<'PY'
 import json
 from pathlib import Path
 
-matrix = json.loads(Path("reports/pi-run-v0.2.4-function-coverage-matrix.json").read_text())
+matrix = json.loads(Path("reports/pi-run-v0.2.5-function-coverage-matrix.json").read_text())
 counts = {}
 for row in matrix["matrix_rows"]:
     counts[row["expected_status"]] = counts.get(row["expected_status"], 0) + 1

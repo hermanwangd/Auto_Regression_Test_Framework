@@ -48,10 +48,10 @@ New v0.2 documentation and generated artifacts must use Provider Contract, Provi
 
 Non-runtime boundary:
 
-- Product/RP orchestration wrappers, repo initialization, readiness checks, test generation, and expected-result drafting are outside the v0.2.4 framework runtime public interface.
+- Product/RP orchestration wrappers, repo initialization, readiness checks, test generation, and expected-result drafting are outside the v0.2.5 framework runtime public interface.
 - Product/RP tooling may generate suite-mode artifacts, then invoke the canonical runtime commands above.
 - Any remaining compatibility command in implementation code is not a release gate and must not appear in usage-kit release verification.
-- `regress report --format json` is not a v0.2.4 public report contract and must return usage error exit `2`.
+- `regress report --format json` is not a v0.2.5 public report contract and must return usage error exit `2`.
 
 ## Stable Exit Codes
 
@@ -212,6 +212,6 @@ These suite group artifacts summarize framework provider capability tests only. 
 
 ## Non-Runtime Support Boundary
 
-Product Repo and Phase 2 Agent Skill workflows may initialize folders, perform owner-readiness checks, draft tests, or draft expected results outside the framework runtime. Those workflows are not current-stage framework runtime gates and are not v0.2.4 release-verification commands.
+Product Repo and Phase 2 Agent Skill workflows may initialize folders, perform owner-readiness checks, draft tests, or draft expected results outside the framework runtime. Those workflows are not current-stage framework runtime gates and are not v0.2.5 release-verification commands.
 
 Phase 2 Product Repo translation must emit suite-mode artifacts and invoke `regress validate --suite <suite_manifest_path>`, `regress run --suite <suite_manifest_path> --profile <env_profile_id>`, `regress report --result <generated_result_json>`, and `regress validate-evidence --result <generated_result_json>`.

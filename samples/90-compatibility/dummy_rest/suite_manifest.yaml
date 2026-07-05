@@ -1,6 +1,6 @@
 contract_version: v0.2
 suite_id: SUITE-MODE-DUMMY-REST-v0.2
-purpose: v0.2.4 suite-mode demo proving a custom REST target can execute through the built-in rest_client provider.
+purpose: v0.2.5 suite-mode demo proving a custom REST target can execute through the built-in rest_client provider.
 profile: local_dummy
 selection:
   mode: suite

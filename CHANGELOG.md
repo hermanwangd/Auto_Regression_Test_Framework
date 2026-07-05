@@ -1,17 +1,14 @@
 # Changelog
 
-## 0.2.4
+## 0.2.5
 
-Framework v0.2.4 is a provider runtime and release-readiness patch for the v0.2 suite-mode interface.
+Framework v0.2.5 is a usage-kit sample layout and compatibility patch for the v0.2 suite-mode interface.
 
-- Keeps the public runtime interface limited to canonical suite-mode commands: `validate`, `run`, `run --dry-run`, `report`, and `validate-evidence`.
-- Standardizes public provider support claims on `support_status` and removes runtime lifecycle terms from the support-status model.
-- Adds native external-client runtime baselines for Kafka and IBM MQ while keeping broker and queue-manager provisioning outside the framework.
-- Adds external Env_Profile samples for Kafka and IBM MQ, plus release sample verification for supported provider claims.
-- Hardens report/evidence release coverage, including `report --format text`, `report --format yaml`, and `validate-evidence`.
-- Supports project-provisioned WireMock `base_url` consumption without starting framework-managed WireMock for that profile.
+- Adds runtime-mode sample Provider Instances for mock/stub/ephemeral-style examples without changing the public Provider Contract model.
 - Restructures checked-in samples into canonical usage-kit groups: `00-getting-started`, `10-contract-baseline`, `20-provider-capability-p0`, `30-cross-provider-groups`, `40-evidence-reporting`, and `90-compatibility`.
 - Keeps one-release generated legacy sample aliases inside the usage-kit zip so existing release-asset paths continue to resolve while users migrate to canonical paths.
+- Adds release verification for canonical and legacy sample paths, including the Provider Capability suite group, evidence hardening sample, and compatibility-only dummy REST suite.
+- Documents the sample layout, migration mapping, compatibility strategy, and release verification expectations.
 
 Sample layout migration:
 
@@ -27,8 +24,25 @@ Sample layout migration:
 Known boundaries:
 
 - DSL and contract artifacts remain at public contract version `v0.2`.
+- This release does not add new provider runtimes; it changes sample packaging, documentation, and release verification.
+- Legacy sample aliases are generated only in the v0.2.5 usage-kit release artifact and remain deprecated; new documentation points to canonical sample paths.
+- Kafka and IBM MQ native runtime execution still requires externally provisioned endpoints and release secrets; the framework consumes bindings and does not start brokers or queue managers.
+
+## 0.2.4
+
+Framework v0.2.4 is a provider runtime and release-readiness patch for the v0.2 suite-mode interface.
+
+- Keeps the public runtime interface limited to canonical suite-mode commands: `validate`, `run`, `run --dry-run`, `report`, and `validate-evidence`.
+- Standardizes public provider support claims on `support_status` and removes runtime lifecycle terms from the support-status model.
+- Adds native external-client runtime baselines for Kafka and IBM MQ while keeping broker and queue-manager provisioning outside the framework.
+- Adds external Env_Profile samples for Kafka and IBM MQ, plus release sample verification for supported provider claims.
+- Hardens report/evidence release coverage, including `report --format text`, `report --format yaml`, and `validate-evidence`.
+- Supports project-provisioned WireMock `base_url` consumption without starting framework-managed WireMock for that profile.
+
+Known boundaries:
+
+- DSL and contract artifacts remain at public contract version `v0.2`.
 - Kafka and IBM MQ native runtime execution requires externally provisioned endpoints and release secrets; the framework consumes bindings and does not start brokers or queue managers.
-- Legacy sample aliases are generated only in the v0.2.4 usage-kit release artifact and remain deprecated; new documentation points to canonical sample paths.
 - Certificate chain trust and build provenance are not proven by this release unless implemented by a later release pipeline.
 
 ## 0.2.3

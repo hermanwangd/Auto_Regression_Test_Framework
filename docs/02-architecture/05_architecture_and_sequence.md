@@ -175,7 +175,7 @@ Provider capability registry rules:
 - Provider Contracts must explicitly declare `provider_type`; heuristic inference must not choose a runtime.
 - Resolution follows one explicit chain: DSL target `provider_id` + selected Env_Profile -> Provider Instance -> `provider_type` -> framework Provider Contract catalog -> Env_Profile `providers.<provider_id>.binding_keys`. Suite manifests select tests and may select the active Env_Profile, but must not override provider fields. Ambiguous logical target or provider matches block dry-run and execution.
 - Execution dispatch must go through the registry. Adding a provider runtime should not require adding product-specific conditionals to the execution engine.
-- External runner entries are `contract_only` providers in v0.2.4. They require a later safety-approved runtime slice before release execution.
+- External runner entries are `contract_only` providers in v0.2.5. They require a later safety-approved runtime slice before release execution.
 
 Provider contract and runtime baseline status:
 
@@ -199,7 +199,7 @@ These statuses describe the current contract baseline and the implemented framew
 | `polling_observer` | Track C P0 | Track C implements observation polling for framework provider capability evidence | timeout, poll interval, expected state, last observed output ref | Contract validation, dry-run planning, and sample artifact syntax. |
 | `kubernetes_runtime` | Contract baseline | Full K8s readiness/runtime provider is beyond Track C P0 unless selected by decision log | namespace/context refs, deployment/service/selector refs, deployed version ref, positive timeout, bounded log tail refs, output refs | Contract validation and dry-run planning; pilot cluster evidence remains future. |
 | `vm_runtime` | Contract baseline | Full VM readiness/runtime provider is beyond Track C P0 unless selected by decision log | host/user refs, health or command refs, deployed version ref, positive timeout, output refs, safety policy | Contract validation and dry-run planning; pilot VM evidence remains future. |
-| `external_runner` | Contract baseline | General command execution is not a supported v0.2.4 public release path | provider safety approval ref, owner, reason, command/container ref, inputs, outputs, positive timeout, evidence map, no built-in-provider alternative | Contract validation, safety gating, dry-run planning, and sample artifact syntax. |
+| `external_runner` | Contract baseline | General command execution is not a supported v0.2.5 public release path | provider safety approval ref, owner, reason, command/container ref, inputs, outputs, positive timeout, evidence map, no built-in-provider alternative | Contract validation, safety gating, dry-run planning, and sample artifact syntax. |
 
 The architecture defines the intended verification scope for supported rows only. It does not mean v0.2 has already been implemented or accepted. Pilot acceptance still requires implemented slices, owner-provided RP artifacts, and real environment evidence for the selected Provider Contracts.
 

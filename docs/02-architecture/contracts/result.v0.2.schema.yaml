@@ -45,7 +45,7 @@ optional_fields:
 result_model:
   version_identity:
     description: >
-      framework_version is the immutable framework artifact release version, for example 0.2.4.
+      framework_version is the immutable framework artifact release version, for example 0.2.5.
       dsl_version remains the public DSL contract version, for example v0.2.
   standard_suite_run:
     description: Standard v0.2 runtime output for an execution-started suite.
