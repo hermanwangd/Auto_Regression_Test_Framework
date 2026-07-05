@@ -50,11 +50,15 @@ required_paths=(
   "usage-kit/docs/02-architecture/contracts/provider-contracts/wiremock_http_mock.yaml"
   "usage-kit/docs/02-architecture/contracts/provider-contracts/jdbc.yaml"
   "usage-kit/docs/02-architecture/contracts/provider-contracts/nats.yaml"
+  "usage-kit/docs/02-architecture/contracts/provider-contracts/kafka.yaml"
+  "usage-kit/docs/02-architecture/contracts/provider-contracts/ibm_mq.yaml"
   "usage-kit/schemas/test_case_dsl.v0.2.schema.yaml"
   "usage-kit/schemas/suite_manifest.v0.2.schema.yaml"
   "usage-kit/samples/golden_e2e/suite_manifest.yaml"
   "usage-kit/samples/contract_baseline/suite_manifest.yaml"
   "usage-kit/samples/provider_capability/suite_manifest.yaml"
+  "usage-kit/samples/provider_capability/kafka/env_profiles/ci_kafka_external.yaml"
+  "usage-kit/samples/provider_capability/ibm_mq/env_profiles/ci_ibm_mq_external.yaml"
   "usage-kit/samples/evidence_hardening/valid_result.json"
 )
 

@@ -8,7 +8,7 @@ source_refs:
 labels:
   capability: kafka
   evidence_classification: framework_provider_capability_only
-compatible_profiles: [local_kafka]
+compatible_profiles: [local_kafka, ci_kafka_external]
 targets:
   event_bus:
     provider_id: order-events

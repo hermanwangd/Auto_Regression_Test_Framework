@@ -30,12 +30,14 @@ class MessagingClientProviderCapabilityCommandTest {
                 "samples/provider_capability/kafka/test_case.yaml",
                 "samples/provider_capability/kafka/provider_instances/order_events.yaml",
                 "samples/provider_capability/kafka/env_profiles/local_kafka.yaml",
+                "samples/provider_capability/kafka/env_profiles/ci_kafka_external.yaml",
                 "samples/provider_capability/kafka/fixtures/order_event.json",
                 "samples/provider_capability/kafka/expected_results/order_event.json",
                 "samples/provider_capability/ibm_mq/suite_manifest.yaml",
                 "samples/provider_capability/ibm_mq/test_case.yaml",
                 "samples/provider_capability/ibm_mq/provider_instances/payment_mq.yaml",
                 "samples/provider_capability/ibm_mq/env_profiles/local_ibm_mq.yaml",
+                "samples/provider_capability/ibm_mq/env_profiles/ci_ibm_mq_external.yaml",
                 "samples/provider_capability/ibm_mq/fixtures/order_request.json",
                 "samples/provider_capability/ibm_mq/expected_results/order_request.json",
                 "samples/provider_capability/messaging_mixed/suite_manifest.yaml",
@@ -190,9 +192,9 @@ class MessagingClientProviderCapabilityCommandTest {
                         value: PT0.05S
                 """);
         Files.writeString(suiteRoot.resolve("kafka_test_case.yaml"), read(Path.of("samples/provider_capability/kafka/test_case.yaml"))
-                .replace("compatible_profiles: [local_kafka]", "compatible_profiles: [local_messaging]"));
+                .replace("compatible_profiles: [local_kafka, ci_kafka_external]", "compatible_profiles: [local_messaging]"));
         Files.writeString(suiteRoot.resolve("ibm_mq_test_case.yaml"), read(Path.of("samples/provider_capability/ibm_mq/test_case.yaml"))
-                .replace("compatible_profiles: [local_ibm_mq]", "compatible_profiles: [local_messaging]"));
+                .replace("compatible_profiles: [local_ibm_mq, ci_ibm_mq_external]", "compatible_profiles: [local_messaging]"));
         Files.writeString(suiteRoot.resolve("suite_manifest.yaml"), """
                 contract_version: v0.2
                 suite_id: MIXED-MESSAGING-CAPABILITY-v0.2
@@ -345,6 +347,8 @@ class MessagingClientProviderCapabilityCommandTest {
         assertThat(read(resultJson))
                 .contains("\"provider_type\": \"ibm_mq\"")
                 .contains("\"queue\": \"PAYMENT.REQUEST.LOCAL\"")
+                .contains("\"correlation_id\": \"CORR-")
+                .doesNotContain("CORR-MQ-001")
                 .contains("\"release_evidence_eligible\": false");
         assertThat(read(evidenceDir.resolve("evidence_index.yaml")))
                 .contains("evidence_type: ibm_mq_event")
@@ -435,25 +439,15 @@ class MessagingClientProviderCapabilityCommandTest {
     }
 
     @Test
-    void kafkaNativeRuntimeModeIsBlockedByExecutableRuntimeModesBeforeDispatch() throws Exception {
-        Path suiteRoot = tempDir.resolve("native_blocked_kafka");
-        copyDirectory(Path.of("samples/provider_capability/kafka"), suiteRoot);
-        Path envProfile = suiteRoot.resolve("env_profiles/local_kafka.yaml");
-        Path providerInstance = suiteRoot.resolve("provider_instances/order_events.yaml");
-        Files.writeString(envProfile, read(envProfile)
-                .replace("allowed_runtime_modes: [mock]", "allowed_runtime_modes: [native]")
-                .replace("runtime_mode: mock", "runtime_mode: native"));
-        Files.writeString(providerInstance, read(providerInstance)
-                .replace("runtime_modes: [mock]", "runtime_modes: [native]"));
+    void kafkaNativeExternalProfileValidatesWithoutRuntimeDispatch() {
+        CommandResult validate = execute("validate", "--suite", KAFKA_SUITE.toString(), "--profile", "ci_kafka_external");
 
-        CommandResult validate = execute("validate", "--suite", suiteRoot.resolve("suite_manifest.yaml").toString());
-
-        assertThat(validate.exit()).isEqualTo(1);
+        assertThat(validate.exit()).as(validate.stderr() + validate.stdout()).isZero();
         assertThat(validate.stdout())
-                .contains("validation_status: failed")
-                .contains("reason: unsupported_runtime_mode")
-                .contains("Provider Contract executable runtime support")
-                .contains("Unsupported runtime_mode: native");
+                .contains("validation_status: passed")
+                .contains("suite_id: KAFKA-CAPABILITY-v0.2")
+                .contains("provider_types_used:")
+                .contains("  - kafka");
     }
 
     private CommandResult execute(String... args) {

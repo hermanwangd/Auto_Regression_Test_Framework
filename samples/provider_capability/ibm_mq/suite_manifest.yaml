@@ -2,6 +2,7 @@ contract_version: v0.2
 suite_id: IBM-MQ-CAPABILITY-v0.2
 purpose: Framework-owned IBM MQ client provider capability verification sample.
 profile: local_ibm_mq
+profiles: [local_ibm_mq, ci_ibm_mq_external]
 selection:
   mode: suite
   suite: provider-capability-ibm-mq

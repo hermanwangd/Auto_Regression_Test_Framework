@@ -16,10 +16,10 @@ import java.util.Comparator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class V023PirunFrameworkFixCommandTest {
+class V023SuiteModeFrameworkFixCommandTest {
 
     private static final Path CONTRACT_BASELINE_SUITE = Path.of("samples/contract_baseline/suite_manifest.yaml");
-    private static final Path DUMMY_REST_SUITE = Path.of("pi_run_demo/dummy_rest/suite_manifest.yaml");
+    private static final Path DUMMY_REST_SUITE = Path.of("samples/provider_capability/dummy_rest/suite_manifest.yaml");
 
     @TempDir
     Path tempDir;

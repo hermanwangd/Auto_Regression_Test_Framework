@@ -224,7 +224,8 @@ public class MessagingClientProviderCapabilityService {
                     selection.suiteRoot(),
                     testStartedAt,
                     selection.providerType(),
-                    operationPrefix)) {
+                    operationPrefix,
+                    outputs)) {
                 OperationExecution execution = executeOperation(resolver, context, operation);
                 ProviderOperationResult result = execution.result();
                 providerRuntimeExecuted = providerRuntimeExecuted || execution.providerRuntimeInvoked();
@@ -447,7 +448,7 @@ public class MessagingClientProviderCapabilityService {
                         operationId,
                         new ProviderOperationRequest(
                                 stringValue(step.get("operation")),
-                                resolvedOperationInputs(testCase, suiteRoot, step),
+                                resolvedOperationInputs(testCase, suiteRoot, step, Map.of()),
                                 runtimeOutputs(operationId, mapValue(step.get("outputs")), testStartTime))));
             }
         }
@@ -460,7 +461,8 @@ public class MessagingClientProviderCapabilityService {
             Path suiteRoot,
             Instant testStartTime,
             String providerType,
-            String operationPrefix) {
+            String operationPrefix,
+            Map<String, Object> completedOutputs) {
         List<SelectedOperation> operations = new ArrayList<>();
         for (Object value : verifyValues(testCase)) {
             Map<String, Object> verify = mapValue(value);
@@ -474,7 +476,7 @@ public class MessagingClientProviderCapabilityService {
                     operationId,
                     new ProviderOperationRequest(
                             type,
-                            resolvedOperationInputs(testCase, suiteRoot, verify),
+                            resolvedOperationInputs(testCase, suiteRoot, verify, completedOutputs),
                             runtimeOutputs(operationId, Map.of(), testStartTime))));
         }
         return List.copyOf(operations);
@@ -496,9 +498,10 @@ public class MessagingClientProviderCapabilityService {
     private List<Map<String, Object>> resolvedOperationInputs(
             Map<String, Object> testCase,
             Path suiteRoot,
-            Map<String, Object> operation) {
+            Map<String, Object> operation,
+            Map<String, Object> completedOutputs) {
         if (!(operation.get("inputs") instanceof Map<?, ?> inputs)) {
-            return resolvedParameters(testCase, suiteRoot, listValue(operation.get("parameters")));
+            return resolvedParameters(testCase, suiteRoot, listValue(operation.get("parameters")), completedOutputs);
         }
         List<Object> parameters = new ArrayList<>();
         for (Map.Entry<?, ?> entry : inputs.entrySet()) {
@@ -507,17 +510,18 @@ public class MessagingClientProviderCapabilityService {
             parameter.put("bind_as", stringValue(entry.getKey()));
             parameters.add(parameter);
         }
-        return resolvedParameters(testCase, suiteRoot, parameters);
+        return resolvedParameters(testCase, suiteRoot, parameters, completedOutputs);
     }
 
     private List<Map<String, Object>> resolvedParameters(
             Map<String, Object> testCase,
             Path suiteRoot,
-            List<Object> parameters) {
+            List<Object> parameters,
+            Map<String, Object> completedOutputs) {
         List<Map<String, Object>> resolved = new ArrayList<>();
         for (Object value : parameters) {
             Map<String, Object> parameter = new LinkedHashMap<>(mapValue(value));
-            String ref = resolveDataRef(testCase,
+            String ref = resolveDataOrOutputRef(testCase, completedOutputs,
                     firstNonBlank(stringValue(parameter.get("ref")), stringValue(parameter.get("value"))));
             parameter.put("ref", resolveValue(suiteRoot, ref));
             resolved.add(parameter);
@@ -541,13 +545,47 @@ public class MessagingClientProviderCapabilityService {
         return listValue(verify);
     }
 
-    private String resolveDataRef(Map<String, Object> testCase, String ref) {
-        if (!ref.startsWith("${data.") || !ref.endsWith("}")) {
-            return ref;
+    private String resolveDataOrOutputRef(Map<String, Object> testCase, Map<String, Object> completedOutputs, String ref) {
+        if (ref.startsWith("${data.") && ref.endsWith("}")) {
+            String path = ref.substring("${data.".length(), ref.length() - 1);
+            String resolved = stringValue(mapValue(mapValue(testCase.get("data")).get(path)).get("ref"));
+            return resolved.isBlank() ? ref : resolved;
         }
-        String path = ref.substring("${data.".length(), ref.length() - 1);
-        String resolved = stringValue(mapValue(mapValue(testCase.get("data")).get(path)).get("ref"));
-        return resolved.isBlank() ? ref : resolved;
+        if (ref.startsWith("${execute.") && ref.endsWith("}")) {
+            String[] parts = ref.substring(2, ref.length() - 1).split("\\.");
+            if (parts.length == 4 && "outputs".equals(parts[2])) {
+                String operationId = parts[1];
+                String outputName = parts[3];
+                Object resolved = completedOutput(completedOutputs, operationId, outputName);
+                if (resolved != null) {
+                    return stringValue(resolved);
+                }
+            }
+        }
+        return ref;
+    }
+
+    private Object completedOutput(Map<String, Object> completedOutputs, String operationId, String outputName) {
+        Object direct = completedOutputFromOperation(completedOutputs.get(operationId), outputName);
+        if (direct != null) {
+            return direct;
+        }
+        String suffix = "__" + operationId;
+        for (Map.Entry<String, Object> entry : completedOutputs.entrySet()) {
+            if (entry.getKey().endsWith(suffix)) {
+                Object resolved = completedOutputFromOperation(entry.getValue(), outputName);
+                if (resolved != null) {
+                    return resolved;
+                }
+            }
+        }
+        return null;
+    }
+
+    private Object completedOutputFromOperation(Object operationOutput, String outputName) {
+        Map<String, Object> operation = mapValue(operationOutput);
+        Map<String, Object> outputs = mapValue(operation.get("outputs"));
+        return outputs.get(outputName);
     }
 
     private Object resolveValue(Path suiteRoot, String ref) {

@@ -1,8 +1,8 @@
 provider_contract_version: v0.2
 provider_type: ibm_mq
 runtime_modes: [native, mock, ephemeral]
-executable_runtime_modes: [mock]
-contract_only_runtime_modes: [native, ephemeral]
+executable_runtime_modes: [mock, native]
+contract_only_runtime_modes: [ephemeral]
 binding_keys:
   queue_manager:
     required: true
@@ -24,18 +24,6 @@ binding_keys:
     required: true
     value_type: secret_ref
     allowed_value_kinds: [secret_ref]
-  ccdt_ref:
-    required: false
-    value_type: string
-    allowed_value_kinds: [ref, secret_ref]
-  tls_config_ref:
-    required: false
-    value_type: string
-    allowed_value_kinds: [ref, secret_ref]
-  message_selector:
-    required: false
-    value_type: string
-    allowed_value_kinds: [value, ref]
   timeout:
     required: false
     value_type: duration
@@ -53,32 +41,32 @@ valid_provider_instance_shape:
   allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, defaults, operations, evidence, failure_mapping, safety, labels]
 operations:
   mq_put:
-    allowed_inputs: [payload_ref, payload, message_id, correlation_id, headers, properties, timeout]
+    allowed_inputs: [payload_ref, payload, correlation_id, timeout]
     required_inputs: [payload_ref]
     output_refs: [queue, message_id, correlation_id, put_at, mq_evidence_ref]
   mq_browse:
-    allowed_inputs: [message_selector, correlation_id, timeout, poll_interval, max_messages]
+    allowed_inputs: [correlation_id, timeout, poll_interval]
     required_inputs: []
     output_refs: [queue, browse_count, message_ids, last_observed_message_id, duration_ms, mq_evidence_ref]
   mq_message_exists:
-    allowed_inputs: [message_selector, correlation_id, timeout, poll_interval]
+    allowed_inputs: [correlation_id, timeout, poll_interval]
     required_inputs: []
     output_refs: [queue, browse_count, matched, last_observed_message_id, duration_ms, mq_evidence_ref]
   mq_payload_match:
-    allowed_inputs: [expected_ref, message_selector, correlation_id, timeout, poll_interval]
+    allowed_inputs: [expected_ref, correlation_id, timeout, poll_interval]
     required_inputs: [expected_ref]
     output_refs: [queue, browse_count, matched, matched_fields, duration_ms, mq_evidence_ref, assertion_evidence_ref]
 evidence:
   outputs: [mq_evidence, assertion_evidence]
   mq_evidence: [provider_type, provider_id, queue, message_id, correlation_id, masked_headers, payload_ref, masked_payload_sample, observation_start, observation_end, attempts, timeout_status, browse_only, status, failure_code]
-  redact: [credential, password, secret, token, authorization, ccdt, tls]
+  redact: [credential, password, secret, token, authorization]
 safety:
   destructive_operations:
     mq_get:
       supported: false
       reason: P1 client provider baseline is browse-only unless a later contract adds explicit destructive opt-in and cleanup policy.
   shared_queue_rules:
-    - prefer_message_selector_or_correlation_id
+    - prefer_correlation_id
     - default_browse_only
     - queue_purge_not_supported
 failure_mapping:

@@ -15,6 +15,13 @@ binding_keys:
     required: false
     value_type: integer
     allowed_value_kinds: [value]
+  base_url:
+    required: false
+    value_type: uri
+    allowed_value_kinds: [value, generated_ref]
+    allowed_schemes: [http, https]
+    prohibited_parts: [userinfo]
+    prohibited_query_keys: [password, token, access_token, authorization, api_key, secret]
 bindable_outputs:
   base_url:
     value_type: uri

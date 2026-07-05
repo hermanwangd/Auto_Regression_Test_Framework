@@ -1,0 +1,30 @@
+env_profile_id: ci_kafka_external
+execution_mode: ci
+isolation_scope: per_run
+dependency_policy:
+  require_readiness_evidence: true
+  allow_framework_managed_dependencies: false
+dependency_substitution_policy:
+  allowed_runtime_modes: [native]
+  mock_evidence_release_claim: prohibited
+dependency_provisioning_policy:
+  allowed_provisioners: [external_ci_pre_step]
+data_policy:
+  approved_expected_results_required: true
+  production_data_allowed: false
+  generated_data_allowed: true
+  secrets_must_use_refs: true
+providers:
+  order-events:
+    runtime_mode: native
+    binding_keys:
+      bootstrap_servers:
+        secret_ref: env://KAFKA_BOOTSTRAP_SERVERS
+      topic:
+        value: orders.created
+      consumer_group:
+        value: artf-ci-kafka
+      timeout:
+        value: PT10S
+      poll_interval:
+        value: PT0.5S

@@ -15,7 +15,7 @@ operations:
     outputs: [topic, observed_count, matched, matched_fields, duration_ms, event_evidence_ref, assertion_evidence_ref]
 evidence:
   capture: [topic, partition, offset, key, observation_window, attempts, observed_count, matched, matched_fields, masked_observed_payload, duration_ms, status, failure_code]
-  redact: [bootstrap_servers, security_config, password, secret, token, authorization, sasl, ssl]
+  redact: [bootstrap_servers, password, secret, token, authorization]
 failure_mapping:
   event_not_found: ASSERTION_FAILED
   payload_mismatch: ASSERTION_FAILED

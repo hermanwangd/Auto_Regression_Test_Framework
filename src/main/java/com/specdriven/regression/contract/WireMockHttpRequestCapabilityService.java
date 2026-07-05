@@ -237,9 +237,12 @@ public class WireMockHttpRequestCapabilityService {
         Map<String, Object> restBindingValues = new LinkedHashMap<>(selection.restBindingValues());
         ProviderExecutionContext wireContext = context(selection, selection.wireBindingValues(), selection.wireProviderId(),
                 WIREMOCK, selection.wireRuntimeMode(), selection.wireContract(), selection.wireInstance());
+        boolean externalWireMock = hasExternalBaseUrl(selection);
 
         try {
-            SelectedOperation setup = operation(selection.testCase(), "setup", selection.wireTarget(), "load_stubs");
+            SelectedOperation setup = externalWireMock
+                    ? connectOperation(selection)
+                    : operation(selection.testCase(), "setup", selection.wireTarget(), "load_stubs");
             ProviderRuntimeResolution setupResolution = resolver.resolve(wireContext, setup.request());
             if (!setupResolution.valid()) {
                 return blockedExecution(selection, requestedProfile, setupResolution.failure());
@@ -251,7 +254,8 @@ public class WireMockHttpRequestCapabilityService {
                 status = "failed";
                 failure = setupResult.failure();
             } else {
-                restBindingValues.put("base_url", stringValue(setupResult.outputs().get("base_url")));
+                String resolvedBaseUrl = stringValue(setupResult.outputs().get("base_url"));
+                restBindingValues.put("base_url", resolvedBaseUrl);
                 ProviderExecutionContext restContext = context(selection, restBindingValues, selection.restProviderId(),
                         REST_CLIENT, selection.restRuntimeMode(), selection.restContract(), selection.restInstance());
                 SelectedOperation execute = operation(selection.testCase(), "execute", selection.restTarget(), "http_request");
@@ -261,7 +265,7 @@ public class WireMockHttpRequestCapabilityService {
                 }
                 ProviderOperationResult executeResult = executeResolution.runtime().execute(restContext, execute.request());
                 capture(execute.id(), executeResult, capturedOutputs, outputs, stepResults, evidenceRefs);
-                writeWireMockRequestJournal(selection, stringValue(setupResult.outputs().get("base_url")));
+                writeWireMockRequestJournal(selection, resolvedBaseUrl);
                 evidenceRefs.add("provider-evidence/wiremock/request_journal.json");
                 if (!executeResult.passed()) {
                     status = "failed";
@@ -471,6 +475,23 @@ public class WireMockHttpRequestCapabilityService {
             }
         }
         return new SelectedOperation(operationName, new ProviderOperationRequest(operationName, List.of(), Map.of()));
+    }
+
+    private SelectedOperation connectOperation(RuntimeSelection selection) {
+        return new SelectedOperation(
+                "connect_wiremock",
+                new ProviderOperationRequest(
+                        "connect_mock",
+                        List.of(Map.of(
+                                "name", "mock.base_url",
+                                "bind_as", "mock.base_url",
+                                "ref", stringValue(selection.wireBindingValues().get("base_url")))),
+                        Map.of("base_url", "base_url")));
+    }
+
+    private boolean hasExternalBaseUrl(RuntimeSelection selection) {
+        String baseUrl = stringValue(selection.wireBindingValues().get("base_url"));
+        return !baseUrl.isBlank() && !baseUrl.startsWith("generated://");
     }
 
     private List<Map<String, Object>> resolvedOperationInputs(Map<String, Object> testCase, Map<String, Object> operation) {

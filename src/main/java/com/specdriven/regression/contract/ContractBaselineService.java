@@ -2,6 +2,8 @@ package com.specdriven.regression.contract;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -966,6 +968,14 @@ public class ContractBaselineService {
                 EnvironmentBindingDoc bindingDoc = graph.environmentBindingsByProfile().get(profile);
                 Path bindingPath = bindingDoc.path();
                 if (bindingDoc.envProfile()) {
+                    validateProjectProvidedWireMockBaseUrl(
+                            bindingPath,
+                            bindingDoc.document(),
+                            providerId,
+                            providerType,
+                            profile,
+                            mapValue(mapValue(bindingDoc.document().get("providers")).get(providerId)),
+                            findings);
                     validateEnvProfileProviderBinding(
                             graph,
                             bindingPath,
@@ -1015,6 +1025,38 @@ public class ContractBaselineService {
                 }
             }
         }
+    }
+
+    private void validateProjectProvidedWireMockBaseUrl(
+            Path bindingPath,
+            Map<String, Object> envProfile,
+            String providerId,
+            String providerType,
+            String profile,
+            Map<String, Object> provider,
+            List<ContractFinding> findings) {
+        if (!"wiremock_http_mock".equals(providerType) || !projectProvidedDependencyProvisioning(envProfile)) {
+            return;
+        }
+        Map<String, Object> bindingKeys = mapValue(provider.get("binding_keys"));
+        if (bindingKeys.containsKey("base_url")) {
+            return;
+        }
+        findings.add(new ContractFinding(
+                bindingPath.toString(),
+                "providers." + providerId + ".binding_keys.base_url",
+                "wiremock_external_base_url_missing",
+                providerId,
+                providerType,
+                profile,
+                "",
+                "Supply `base_url` for project-provisioned WireMock."));
+    }
+
+    private boolean projectProvidedDependencyProvisioning(Map<String, Object> envProfile) {
+        List<String> provisioners = stringList(mapValue(envProfile.get("dependency_provisioning_policy"))
+                .get("allowed_provisioners"));
+        return provisioners.contains("project_provided") || provisioners.contains("external_ci_pre_step");
     }
 
     private void validateEnvProfileProviderBinding(
@@ -1072,9 +1114,115 @@ public class ContractBaselineService {
                         "Use one of " + allowedKinds + " for Provider Contract `" + providerType
                                 + "` binding key `" + effectiveKey + "`."));
             }
+            Object value = bindingValue(entry.getValue(), kind);
+            validateBindingValueShape(
+                    bindingPath, providerId, providerType, profile, rawKey, kind, value, keySpec, findings);
             validateGeneratedRef(graph, bindingPath, providerId, providerType, profile, rawKey, kind,
-                    bindingValue(entry.getValue(), kind), findings);
+                    value, findings);
         }
+    }
+
+    private void validateBindingValueShape(
+            Path bindingPath,
+            String providerId,
+            String providerType,
+            String profile,
+            String rawKey,
+            String kind,
+            Object value,
+            Map<String, Object> keySpec,
+            List<ContractFinding> findings) {
+        if (!"value".equals(kind) || !"uri".equals(stringValue(keySpec.get("value_type")))) {
+            return;
+        }
+        String text = stringValue(value);
+        if (text.isBlank()) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    "providers." + providerId + ".binding_keys." + rawKey + ".value",
+                    uriInvalidReason(providerType, rawKey),
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Provide a non-empty " + rawKey + " URI value."));
+            return;
+        }
+        URI uri;
+        try {
+            uri = new URI(text);
+        } catch (URISyntaxException e) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    "providers." + providerId + ".binding_keys." + rawKey + ".value",
+                    uriInvalidReason(providerType, rawKey),
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Provide a valid URI for `" + rawKey + "`."));
+            return;
+        }
+        Set<String> allowedSchemes = new LinkedHashSet<>(stringList(keySpec.get("allowed_schemes")));
+        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+        if (!allowedSchemes.isEmpty() && (!allowedSchemes.contains(scheme) || stringValue(uri.getHost()).isBlank())) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    "providers." + providerId + ".binding_keys." + rawKey + ".value",
+                    uriInvalidReason(providerType, rawKey),
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Use one of " + allowedSchemes + " with a host for `" + rawKey + "`."));
+        }
+        Set<String> prohibitedParts = new LinkedHashSet<>(stringList(keySpec.get("prohibited_parts")));
+        if (prohibitedParts.contains("userinfo") && uri.getRawUserInfo() != null) {
+            findings.add(new ContractFinding(
+                    bindingPath.toString(),
+                    "providers." + providerId + ".binding_keys." + rawKey + ".value",
+                    uriSecretLeakReason(providerType, rawKey),
+                    providerId,
+                    providerType,
+                    profile,
+                    "",
+                    "Remove userinfo from `" + rawKey + "` and provide credentials through approved secret refs when a provider supports them."));
+        }
+        Set<String> prohibitedQueryKeys = new LinkedHashSet<>(stringList(keySpec.get("prohibited_query_keys"))).stream()
+                .map(valueKey -> valueKey.toLowerCase(Locale.ROOT))
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        String query = stringValue(uri.getRawQuery());
+        if (!query.isBlank()) {
+            for (String part : query.split("&")) {
+                String queryKey = part.split("=", 2)[0].toLowerCase(Locale.ROOT);
+                if (prohibitedQueryKeys.contains(queryKey)) {
+                    findings.add(new ContractFinding(
+                            bindingPath.toString(),
+                            "providers." + providerId + ".binding_keys." + rawKey + ".value",
+                            uriSecretLeakReason(providerType, rawKey),
+                            providerId,
+                            providerType,
+                            profile,
+                            "",
+                            "Remove secret-like query parameter `" + queryKey + "` from `" + rawKey + "`."));
+                    return;
+                }
+            }
+        }
+    }
+
+    private String uriInvalidReason(String providerType, String rawKey) {
+        if ("wiremock_http_mock".equals(providerType) && "base_url".equals(rawKey)) {
+            return "wiremock_external_base_url_invalid";
+        }
+        return "invalid_binding_key_uri";
+    }
+
+    private String uriSecretLeakReason(String providerType, String rawKey) {
+        if ("wiremock_http_mock".equals(providerType) && "base_url".equals(rawKey)) {
+            return "wiremock_external_base_url_secret_leak";
+        }
+        return "raw_secret";
     }
 
     private void validateRuntimeMode(
@@ -2430,6 +2578,15 @@ public class ContractBaselineService {
             if ("unresolved_generated_ref".equals(reason)) {
                 return "CONFIGURATION_UNRESOLVED_GENERATED_REF";
             }
+            if ("wiremock_external_base_url_missing".equals(reason)) {
+                return "WIREMOCK_EXTERNAL_BASE_URL_MISSING";
+            }
+            if ("wiremock_external_base_url_invalid".equals(reason)) {
+                return "WIREMOCK_EXTERNAL_BASE_URL_INVALID";
+            }
+            if ("wiremock_external_base_url_secret_leak".equals(reason)) {
+                return "WIREMOCK_EXTERNAL_BASE_URL_SECRET_LEAK";
+            }
             String normalized = reason == null || reason.isBlank()
                     ? "UNKNOWN"
                     : reason.toUpperCase().replaceAll("[^A-Z0-9]+", "_").replaceAll("(^_|_$)", "");
@@ -2438,7 +2595,7 @@ public class ContractBaselineService {
 
         private static String categoryFor(String reason) {
             return switch (reason == null ? "" : reason) {
-                case "raw_secret" -> "SECRET_GUARDRAIL_ERROR";
+                case "raw_secret", "wiremock_external_base_url_secret_leak" -> "SECRET_GUARDRAIL_ERROR";
                 case "missing_evidence_index", "missing_evidence_file", "unknown_evidence_ref",
                         "missing_required_evidence", "missing_failure_evidence",
                         "missing_polling_last_observed_evidence", "invalid_evidence_path",
@@ -2452,7 +2609,10 @@ public class ContractBaselineService {
                         "missing_required_binding_key", "unsupported_runtime_mode",
                         "invalid_target_ref", "unresolved_artifact_ref",
                         "unsupported_local_ref", "missing_jdbc_target", "missing_nats_target",
-                        "profile_mismatch", "invalid_generated_ref", "unresolved_generated_ref" -> "CONFIGURATION_ERROR";
+                        "profile_mismatch", "invalid_generated_ref", "unresolved_generated_ref",
+                        "invalid_binding_key_uri",
+                        "wiremock_external_base_url_missing",
+                        "wiremock_external_base_url_invalid" -> "CONFIGURATION_ERROR";
                 case "unknown_provider_type", "unsupported_operation", "unsupported_bind_as",
                         "unsupported_input",
                         "unsupported_dialect", "missing_output_ref", "missing_supported_dialect",

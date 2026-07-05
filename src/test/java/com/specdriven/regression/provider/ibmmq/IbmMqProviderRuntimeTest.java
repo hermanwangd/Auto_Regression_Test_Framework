@@ -72,6 +72,46 @@ class IbmMqProviderRuntimeTest {
     }
 
     @Test
+    void mqPutGeneratesCorrelationIdWhenMissingSoVerifyCanAvoidStaleMessages() throws Exception {
+        Path suiteRoot = tempDir.resolve("suite");
+        Files.createDirectories(suiteRoot.resolve("expected_results"));
+        Files.writeString(suiteRoot.resolve("expected_results/current_order.json"), """
+                {
+                  "orderId": "ORD-MQ-CURRENT",
+                  "status": "READY"
+                }
+                """);
+        IbmMqProviderRuntime runtime = new IbmMqProviderRuntime();
+        ProviderExecutionContext context = context(suiteRoot);
+
+        ProviderOperationResult stale = runtime.execute(context, new ProviderOperationRequest(
+                "mq_put",
+                List.of(
+                        Map.of("bind_as", "correlation_id", "ref", "CORR-MQ-001"),
+                        Map.of("bind_as", "payload", "value", "{\"orderId\":\"ORD-MQ-STALE\",\"status\":\"READY\"}")),
+                Map.of("_operation_id", "put_stale")));
+        ProviderOperationResult current = runtime.execute(context, new ProviderOperationRequest(
+                "mq_put",
+                List.of(Map.of("bind_as", "payload", "value", "{\"orderId\":\"ORD-MQ-CURRENT\",\"status\":\"READY\"}")),
+                Map.of("_operation_id", "put_current")));
+        String currentCorrelationId = String.valueOf(current.outputs().get("correlation_id"));
+        ProviderOperationResult matched = runtime.execute(context, new ProviderOperationRequest(
+                "mq_payload_match",
+                List.of(
+                        Map.of("bind_as", "expected_ref", "ref", "expected_results/current_order.json"),
+                        Map.of("bind_as", "correlation_id", "ref", currentCorrelationId)),
+                Map.of("_operation_id", "match_current", "_test_start_time", Instant.EPOCH.toString())));
+
+        assertThat(stale.passed()).isTrue();
+        assertThat(current.passed()).isTrue();
+        assertThat(currentCorrelationId)
+                .startsWith("CORR-")
+                .isNotEqualTo("CORR-MQ-001");
+        assertThat(matched.passed()).isTrue();
+        assertThat(matched.outputs()).containsEntry("browse_count", 1);
+    }
+
+    @Test
     void mqGetIsExplicitlyUnsupported() throws Exception {
         IbmMqProviderRuntime runtime = new IbmMqProviderRuntime();
 
@@ -92,8 +132,8 @@ class IbmMqProviderRuntimeTest {
     }
 
     @Test
-    void mqNativeModeFailsFastWithoutPretendingQueueManagerRuntimeExists() {
-        IbmMqProviderRuntime runtime = new IbmMqProviderRuntime();
+    void mqNativeModeFailsFastWithOwnerActionableConnectionFailure() {
+        IbmMqProviderRuntime runtime = new IbmMqProviderRuntime(new FailingIbmMqClientTransport("queue manager unavailable"));
         ProviderExecutionContext context = new ProviderExecutionContext(
                 "payment-mq",
                 "ibm_mq",
@@ -118,7 +158,77 @@ class IbmMqProviderRuntimeTest {
         assertThat(result.passed()).isFalse();
         assertThat(result.failure()).isNotNull();
         assertThat(result.failure().code()).isEqualTo("MQ_CONNECTION_FAILED");
+        assertThat(result.failure().reason())
+                .contains("IBM MQ client operation failed")
+                .doesNotContain("queue manager unavailable");
         assertThat(result.outputs()).containsKey("mq_evidence_ref");
+    }
+
+    @Test
+    void mqNativeModeUsesExternalClientTransportWithoutStartingQueueManager() throws Exception {
+        Path suiteRoot = tempDir.resolve("suite");
+        Files.createDirectories(suiteRoot.resolve("expected_results"));
+        Files.writeString(suiteRoot.resolve("expected_results/order_request.json"), """
+                {
+                  "orderId": "ORD-MQ-001",
+                  "status": "READY"
+                }
+                """);
+        System.setProperty("IBM_MQ_CONN_NAME", "mq.example.test(1414)");
+        System.setProperty("IBM_MQ_CREDENTIAL", "secret-ref-materialized-outside-framework");
+        try {
+            RecordingIbmMqClientTransport transport = new RecordingIbmMqClientTransport();
+            IbmMqProviderRuntime runtime = new IbmMqProviderRuntime(transport);
+            ProviderExecutionContext context = new ProviderExecutionContext(
+                    "payment-mq",
+                    "ibm_mq",
+                    "ci_ibm_mq_external",
+                    "native",
+                    suiteRoot,
+                    tempDir.resolve("run"),
+                    Map.of("provider_type", "ibm_mq"),
+                    Map.of("provider_id", "payment-mq", "provider_type", "ibm_mq"),
+                    Map.of(
+                            "queue_manager", "QM1",
+                            "channel", "DEV.APP.SVRCONN",
+                            "conn_name", Map.of("secret_ref", "env://IBM_MQ_CONN_NAME"),
+                            "queue", "PAYMENT.REQUEST.CI",
+                            "credential.secret_ref", Map.of("secret_ref", "env://IBM_MQ_CREDENTIAL")));
+
+            ProviderOperationResult put = runtime.execute(context, new ProviderOperationRequest(
+                    "mq_put",
+                    List.of(
+                            Map.of("bind_as", "correlation_id", "ref", "CORR-MQ-001"),
+                            Map.of("bind_as", "payload", "value", "{\"orderId\":\"ORD-MQ-001\",\"status\":\"READY\"}")),
+                    Map.of("_operation_id", "native_put")));
+            ProviderOperationResult matched = runtime.execute(context, new ProviderOperationRequest(
+                    "mq_payload_match",
+                    List.of(
+                            Map.of("bind_as", "expected_ref", "ref", "expected_results/order_request.json"),
+                            Map.of("bind_as", "correlation_id", "ref", "CORR-MQ-001")),
+                    Map.of("_operation_id", "native_match", "_test_start_time", Instant.EPOCH.toString())));
+
+            assertThat(put.passed()).isTrue();
+            assertThat(matched.passed()).isTrue();
+            assertThat(transport.queueManager()).isEqualTo("QM1");
+            assertThat(transport.channel()).isEqualTo("DEV.APP.SVRCONN");
+            assertThat(transport.connName()).isEqualTo("mq.example.test(1414)");
+            assertThat(transport.queue()).isEqualTo("PAYMENT.REQUEST.CI");
+            assertThat(matched.outputs())
+                    .containsEntry("queue", "PAYMENT.REQUEST.CI")
+                    .containsEntry("matched", true)
+                    .containsEntry("browse_count", 1);
+            assertThat(Files.readString(tempDir.resolve("run/provider-evidence/ibm_mq/native_match.yaml")))
+                    .contains("runtime_mode: native")
+                    .contains("provider_type: ibm_mq")
+                    .contains("provider_id: payment-mq")
+                    .contains("queue: PAYMENT.REQUEST.CI")
+                    .contains("status: passed")
+                    .contains("raw_secret_found: false");
+        } finally {
+            System.clearProperty("IBM_MQ_CONN_NAME");
+            System.clearProperty("IBM_MQ_CREDENTIAL");
+        }
     }
 
     private ProviderExecutionContext context(Path suiteRoot) {
@@ -151,5 +261,94 @@ class IbmMqProviderRuntimeTest {
                         "conn_name", "approved_local_mq_ref",
                         "queue", "PAYMENT.REQUEST.LOCAL",
                         "credential", Map.of("secret_ref", "env://LOCAL_MQ_CREDENTIAL")));
+    }
+
+    private static final class RecordingIbmMqClientTransport implements IbmMqProviderRuntime.IbmMqClientTransport {
+        private String queueManager = "";
+        private String channel = "";
+        private String connName = "";
+        private String queue = "";
+        private Object payload = Map.of();
+        private String correlationId = "";
+
+        @Override
+        public IbmMqProviderRuntime.MqPutResult put(
+                IbmMqProviderRuntime.MqConnection connection,
+                Object payload,
+                String messageId,
+                String correlationId,
+                java.time.Duration timeout) {
+            this.queueManager = connection.queueManager();
+            this.channel = connection.channel();
+            this.connName = connection.connName();
+            this.queue = connection.queue();
+            this.payload = payload;
+            this.correlationId = correlationId;
+            return new IbmMqProviderRuntime.MqPutResult(
+                    "ID:414d51204d5144455620202020202020",
+                    correlationId,
+                    Instant.parse("2026-07-05T00:00:00Z"));
+        }
+
+        @Override
+        public IbmMqProviderRuntime.MqBrowseResult browse(
+                IbmMqProviderRuntime.MqConnection connection,
+                String correlationId,
+                java.time.Duration timeout,
+                java.time.Duration pollInterval) {
+            this.queueManager = connection.queueManager();
+            this.channel = connection.channel();
+            this.connName = connection.connName();
+            this.queue = connection.queue();
+            return new IbmMqProviderRuntime.MqBrowseResult(List.of(new IbmMqProviderRuntime.MqMessage(
+                    connection.queue(),
+                    "ID:414d51204d5144455620202020202020",
+                    this.correlationId,
+                    payload,
+                    Instant.parse("2026-07-05T00:00:01Z"))), 1);
+        }
+
+        String queueManager() {
+            return queueManager;
+        }
+
+        String channel() {
+            return channel;
+        }
+
+        String connName() {
+            return connName;
+        }
+
+        String queue() {
+            return queue;
+        }
+    }
+
+    private static final class FailingIbmMqClientTransport implements IbmMqProviderRuntime.IbmMqClientTransport {
+        private final String message;
+
+        private FailingIbmMqClientTransport(String message) {
+            this.message = message;
+        }
+
+        @Override
+        public IbmMqProviderRuntime.MqPutResult put(
+                IbmMqProviderRuntime.MqConnection connection,
+                Object payload,
+                String messageId,
+                String correlationId,
+                java.time.Duration timeout) throws Exception {
+            throw new Exception(message);
+        }
+
+        @Override
+        public IbmMqProviderRuntime.MqBrowseResult browse(
+                IbmMqProviderRuntime.MqConnection connection,
+                String correlationId,
+                java.time.Duration timeout,
+                java.time.Duration pollInterval) throws Exception {
+            throw new Exception(message);
+        }
     }
 }

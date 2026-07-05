@@ -1,7 +1,7 @@
 provider_instance_version: v0.2
 provider_id: payment-mq
 provider_type: ibm_mq
-runtime_modes: [mock]
+runtime_modes: [mock, native]
 defaults:
   timeout: PT5S
   poll_interval: PT0.05S
@@ -17,7 +17,7 @@ operations:
     outputs: [queue, browse_count, matched, matched_fields, duration_ms, mq_evidence_ref, assertion_evidence_ref]
 evidence:
   capture: [queue, message_id, correlation_id, attempts, browse_count, matched, matched_fields, masked_observed_payload, duration_ms, status, failure_code]
-  redact: [credential, password, secret, token, authorization, ccdt, tls]
+  redact: [credential, password, secret, token, authorization]
 failure_mapping:
   message_not_found: ASSERTION_FAILED
   payload_mismatch: ASSERTION_FAILED

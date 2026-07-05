@@ -1,46 +1,48 @@
 # Provider Support Matrix
 
-This matrix defines Framework `0.2.3` production support by provider runtime mode. It does not decide downstream Product/RP release readiness; owners still provide AC, Env_Profile, deployment readiness, expected results, and release evidence.
+This matrix defines the Framework `0.2.4` public provider support claim. It does not decide downstream Product/RP release readiness; owners still provide AC, Env_Profile, deployment readiness, expected results, and release evidence.
 
 Status meanings:
 
-- `production-ready`: framework can execute this mode and publish standard result/evidence when the owner provides valid Env_Profile bindings.
-- `framework-verification-only`: executable for local/CI substitution or framework capability proof, but not downstream SIT/preprod release evidence.
-- `contract-only`: valid vocabulary and schema boundary, but blocked before provider dispatch in this release.
-- `escape-hatch`: executable only with explicit provider safety approval.
-- `deprecated`: compatibility only; new artifacts must use the canonical provider type.
+- `supported`: public contract exists, runtime exists, executable usage-kit sample exists, and release verification passes.
+- `contract_only`: public contract exists, but runtime execution is unavailable or not release-verified; validation blocks before unsupported dispatch.
+- `deprecated`: compatibility-only provider or alias; new artifacts and samples must not use it.
+- `unsupported`: not part of the public provider capability surface.
 
-| Provider Type | Native | Mock | Ephemeral | Production Boundary |
-| --- | --- | --- | --- | --- |
-| `rest_client` | production-ready | framework-verification-only | n/a | Native evidence requires owner-provided endpoint bindings and readiness context. |
-| `grpc_client` | production-ready for unary calls | framework-verification-only | n/a | Streaming is outside v0.2.3. |
-| `wiremock_http_mock` | n/a | framework-verification-only | n/a | Local/CI REST dependency substitute only. |
-| `soap_mock` | n/a | framework-verification-only | n/a | WireMock-backed SOAP mock; not a custom SOAP server. |
-| `grpc_mock` | n/a | framework-verification-only | n/a | WireMock gRPC extension, unary only. |
-| `jdbc` | production-ready with owner DB binding | n/a | production-ready for approved disposable DB/profile | Real Oracle/DB2 release confidence still requires owner-provided pilot/SIT evidence. |
-| `nats` | production-ready with owner broker binding | framework-verification-only | production-ready for approved local/CI provisioner | Mock/ephemeral evidence is not downstream release evidence. |
-| `kafka` | contract-only | framework-verification-only | contract-only | Native broker and Testcontainer execution are future runtime slices. |
-| `ibm_mq` | contract-only | framework-verification-only | contract-only | Native queue-manager and Testcontainer execution are future runtime slices. |
-| `kafka_messaging` | deprecated | deprecated | deprecated | Compatibility alias only; use `kafka`. |
-| `artifact_compare` | production-ready | n/a | n/a | Common verifier utility for JSON/schema/file artifacts. |
-| `polling_observer` | production-ready | n/a | n/a | Observation polling only; it must not retry mutating execute actions. |
-| `kubernetes_runtime` | production-ready for readiness/log probes | framework-verification-only | n/a | Requires owner-provided cluster context and non-secret refs. |
-| `vm_runtime` | production-ready for readiness/log probes | framework-verification-only | n/a | Requires owner-provided host/user refs and safety controls. |
-| `shell_command` | escape-hatch | framework-verification-only | n/a | Command-capable providers require explicit safety policy. |
-| `external_runner` | escape-hatch | framework-verification-only | n/a | Approval is provider safety approval, not release approval. |
-| `sample_fake_provider` | n/a | framework-verification-only | n/a | Golden E2E framework verification only. |
+Server or dependency lifecycle words such as native, mock, ephemeral, framework-managed, and external are execution-profile details. They are not public support statuses.
+
+| Provider Type | support_status | Release-verifiable sample | Runtime boundary |
+| --- | --- | --- | --- |
+| `artifact_compare` | `supported` | `samples/provider_capability/compare/` | Common artifact read/diff utility for checked-in samples. |
+| `common_verify` | `supported` | `samples/provider_capability/common_verify/` | JSON/schema/file and observation-style verifier provider. |
+| `external_runner` | `contract_only` | n/a | Contract is documented, but general command execution is not a supported public release path. |
+| `grpc_client` | `supported` | `samples/provider_capability/grpc_mock/` | Unary client stimulus for checked-in gRPC mock capability samples. |
+| `grpc_mock` | `supported` | `samples/provider_capability/grpc_mock/` | WireMock gRPC extension, unary only. |
+| `ibm_mq` | `supported` | `samples/provider_capability/ibm_mq/` | Client runtime consumes external queue-manager bindings; the framework does not start IBM MQ. |
+| `jdbc` | `supported` | `samples/provider_capability/jdbc/` | JDBC fixture/query/cleanup capability with owner-supplied or approved disposable DB bindings. |
+| `kafka` | `supported` | `samples/provider_capability/kafka/` | Client runtime consumes external broker bindings; the framework does not start Kafka. |
+| `kafka_messaging` | `deprecated` | n/a | Compatibility alias only; use `kafka` for new artifacts. |
+| `kubernetes_runtime` | `contract_only` | n/a | Contract vocabulary is documented; no release-verifiable runtime sample is published in v0.2.4. |
+| `nats` | `supported` | `samples/provider_capability/nats/` | Client runtime consumes owner/project-provided NATS bindings and emits masked event evidence. |
+| `polling_observer` | `supported` | `samples/provider_capability/polling/` | Observation polling only; it must not retry mutating execute actions. |
+| `rest_client` | `supported` | `samples/provider_capability/dummy_rest/` | HTTP request client provider with owner/project-supplied endpoint bindings. |
+| `sample_fake_provider` | `unsupported` | `samples/golden_e2e/` | Framework-owned Golden E2E fake provider, not a public provider capability. |
+| `shell_command` | `contract_only` | n/a | Contract vocabulary exists, but command execution requires a later safety-approved release path. |
+| `soap_mock` | `supported` | `samples/provider_capability/soap_mock/` | WireMock-backed SOAP HTTP/XML behavior, not a custom SOAP server. |
+| `vm_runtime` | `contract_only` | n/a | Contract vocabulary is documented; no release-verifiable runtime sample is published in v0.2.4. |
+| `wiremock_http_mock` | `supported` | `samples/provider_capability/wiremock/` | Framework-managed WireMock HTTP mock; external base URL support is tracked by the v0.2.4 release plan. |
 
 ## Supported Mixed Suites
 
-Framework `0.2.3` supports only explicit mixed-provider suite paths:
+Framework `0.2.4` supports only explicit mixed-provider suite paths:
 
 - `samples/contract_baseline/`: `wiremock_http_mock` + `jdbc` + `nats`, framework verification evidence only.
-- `samples/provider_capability/wiremock_http_request/`: `wiremock_http_mock` + `rest_client`, framework verification evidence only unless owner-provided release labels and native bindings are present.
-- `samples/provider_capability/mock_server_cross_verify/`: checked-in REST/SOAP/gRPC mock-client child suites, framework verification evidence only.
-- `samples/provider_capability/messaging_mixed/`: Kafka + IBM MQ client mock capability suites, framework verification evidence only.
+- `samples/provider_capability/wiremock_http_request/`: `wiremock_http_mock` + `rest_client`, framework verification evidence unless owner-provided release labels and bindings are present.
+- `samples/provider_capability/mock_server_cross_verify/`: checked-in REST/SOAP/gRPC mock-client child suites.
+- `samples/provider_capability/messaging_mixed/`: Kafka + IBM MQ client capability suite using one shared Env_Profile across multiple test cases.
 
 Other arbitrary provider combinations remain blocked before dispatch until an explicit runtime path is implemented and tested.
 
 ## Release Evidence Rule
 
-Only native or approved ephemeral modes marked `production-ready` can contribute framework runtime evidence that may be reviewed alongside downstream RP release evidence. A result may set `release_evidence_eligible: true` only when suite evidence policy, test labels, and Provider Instance labels all explicitly set `downstream_release_evidence: true` with `evidence_classification: product_release_evidence_candidate`. Any mock, fake, deprecated, contract-only, or framework-owned sample result must be labeled as framework verification or local/CI substitution evidence.
+A result may set `release_evidence_eligible: true` only when suite evidence policy, test labels, and Provider Instance labels all explicitly set `downstream_release_evidence: true` with `evidence_classification: product_release_evidence_candidate`. Any fake, deprecated, `contract_only`, `unsupported`, or framework-owned sample result must be labeled as framework verification or local/CI substitution evidence.

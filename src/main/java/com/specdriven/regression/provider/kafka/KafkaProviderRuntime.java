@@ -18,15 +18,35 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.yaml.snakeyaml.Yaml;
 
 public class KafkaProviderRuntime implements ProviderRuntime {
 
     private final Map<String, List<KafkaMessage>> messagesByBusTopic = new ConcurrentHashMap<>();
     private final AtomicLong offsetSequence = new AtomicLong();
+    private final KafkaClientTransport kafkaClientTransport;
     private final Yaml yaml = new Yaml();
+
+    public KafkaProviderRuntime() {
+        this(new DefaultKafkaClientTransport());
+    }
+
+    KafkaProviderRuntime(KafkaClientTransport kafkaClientTransport) {
+        this.kafkaClientTransport = kafkaClientTransport;
+    }
 
     @Override
     public ProviderOperationResult execute(ProviderExecutionContext context, ProviderOperationRequest request) {
@@ -64,6 +84,9 @@ public class KafkaProviderRuntime implements ProviderRuntime {
             return failed(context, request, Map.of("topic", connection.topic()), timeout.failure(), Observation.empty(connection.topic()));
         }
         String key = parameterValue(request, "key", "");
+        if ("native".equals(context.runtimeMode())) {
+            return nativePublish(context, request, connection, payload, timeout, key, startedAt);
+        }
         long offset = offsetSequence.incrementAndGet() - 1;
         Instant publishedAt = Instant.now();
         messagesByBusTopic.computeIfAbsent(connection.busKey() + "|" + connection.topic(), ignored -> new ArrayList<>())
@@ -120,6 +143,9 @@ public class KafkaProviderRuntime implements ProviderRuntime {
             return failed(context, request, Map.of("topic", connection.topic()), consumeFrom.failure(), Observation.empty(connection.topic()));
         }
         String key = parameterValue(request, "key", "");
+        if ("native".equals(context.runtimeMode())) {
+            return nativeObserve(context, request, connection, expected, timeout, pollInterval, consumeFrom, key, startedAt);
+        }
         Instant deadline = Instant.now().plus(timeout.value());
         int attempts = 0;
         List<KafkaMessage> observed = List.of();
@@ -178,6 +204,129 @@ public class KafkaProviderRuntime implements ProviderRuntime {
                 failure);
     }
 
+    private ProviderOperationResult nativePublish(
+            ProviderExecutionContext context,
+            ProviderOperationRequest request,
+            ConnectionSelection connection,
+            Payload payload,
+            ParsedDuration timeout,
+            String key,
+            Instant startedAt) {
+        try {
+            KafkaPublishResult publishResult = kafkaClientTransport.publish(
+                    connection.toKafkaConnection(),
+                    key,
+                    payload.value(),
+                    timeout.value());
+            long durationMs = Duration.between(startedAt, Instant.now()).toMillis();
+            String evidenceRef = writeEvidence(context, request, new Observation(
+                    connection.topic(),
+                    connection.consumerGroup(),
+                    "publish",
+                    startedAt,
+                    Instant.now(),
+                    timeout.value(),
+                    Duration.ZERO,
+                    1,
+                    1,
+                    true,
+                    List.of(),
+                    payload.value(),
+                    null,
+                    publishResult.offset(),
+                    durationMs,
+                    null));
+            Map<String, Object> outputs = new LinkedHashMap<>();
+            outputs.put("topic", connection.topic());
+            outputs.put("partition", publishResult.partition());
+            outputs.put("offset", publishResult.offset());
+            outputs.put("key", key);
+            outputs.put("published_at", publishResult.publishedAt().toString());
+            outputs.put("event_evidence_ref", evidenceRef);
+            return ProviderOperationResult.passed(
+                    outputs,
+                    List.of(new ProviderEvidence("event_evidence", evidenceRef, true)));
+        } catch (Exception e) {
+            return failed(
+                    context,
+                    request,
+                    Map.of("topic", connection.topic()),
+                    kafkaConnectionFailure(e),
+                    Observation.empty(connection.topic()));
+        }
+    }
+
+    private ProviderOperationResult nativeObserve(
+            ProviderExecutionContext context,
+            ProviderOperationRequest request,
+            ConnectionSelection connection,
+            ExpectedPayload expected,
+            ParsedDuration timeout,
+            ParsedDuration pollInterval,
+            ParsedInstant consumeFrom,
+            String key,
+            Instant startedAt) {
+        try {
+            KafkaObserveResult observedResult = kafkaClientTransport.observe(
+                    connection.toKafkaConnection(),
+                    key,
+                    consumeFrom.value(),
+                    timeout.value(),
+                    pollInterval.value());
+            List<KafkaMessage> observed = observedResult.messages();
+            Match match = match(request.operation(), observed, expected.value());
+            KafkaMessage lastObserved = observed.isEmpty() ? null : observed.get(observed.size() - 1);
+            ProviderFailure failure = match.matched()
+                    ? null
+                    : failureForObserve(request.operation(), timeout.value(), observed);
+            long durationMs = Duration.between(startedAt, Instant.now()).toMillis();
+            String evidenceRef = writeEvidence(context, request, new Observation(
+                    connection.topic(),
+                    connection.consumerGroup(),
+                    consumeFrom.label(),
+                    consumeFrom.value(),
+                    Instant.now(),
+                    timeout.value(),
+                    pollInterval.value(),
+                    observedResult.attempts(),
+                    observed.size(),
+                    match.matched(),
+                    match.matchedFields(),
+                    match.matchedPayload(),
+                    lastObserved == null ? null : lastObserved.payload(),
+                    lastObserved == null ? -1 : lastObserved.offset(),
+                    durationMs,
+                    failure));
+            Map<String, Object> outputs = new LinkedHashMap<>();
+            outputs.put("topic", connection.topic());
+            outputs.put("observed_count", observed.size());
+            outputs.put("last_observed_offset", lastObserved == null ? -1 : lastObserved.offset());
+            outputs.put("matched", match.matched());
+            outputs.put("matched_fields", match.matchedFields());
+            outputs.put("duration_ms", durationMs);
+            outputs.put("event_evidence_ref", evidenceRef);
+            if ("kafka_payload_match".equals(request.operation())) {
+                outputs.put("assertion_evidence_ref", evidenceRef);
+            }
+            if (failure == null) {
+                return ProviderOperationResult.passed(
+                        outputs,
+                        List.of(new ProviderEvidence("event_evidence", evidenceRef, true)));
+            }
+            return ProviderOperationResult.failed(
+                    outputs,
+                    List.of(new ProviderEvidence("event_evidence", evidenceRef, true)),
+                    failure);
+        } catch (Exception e) {
+            return failed(
+                    context,
+                    request,
+                    Map.of("topic", connection.topic()),
+                    kafkaConnectionFailure(e),
+                    Observation.empty(connection.topic()));
+        }
+    }
+
     private List<KafkaMessage> messagesAfter(String busKey, String topic, Instant consumeFrom, String key) {
         return messagesByBusTopic.getOrDefault(busKey + "|" + topic, List.of()).stream()
                 .filter(message -> !message.observedAt().isBefore(consumeFrom))
@@ -232,38 +381,65 @@ public class KafkaProviderRuntime implements ProviderRuntime {
     }
 
     private ConnectionSelection connection(ProviderExecutionContext context) {
-        if ("native".equals(context.runtimeMode())) {
-            return new ConnectionSelection("", "", "", failure(
-                    "KAFKA_CONNECTION_FAILED",
-                    "KAFKA_CONNECTION_FAILED",
-                    "Native Kafka broker execution is not wired into this framework-managed provider capability runtime.",
-                    "Use local/mock/ephemeral provider capability mode or add a profile-gated native Kafka runtime slice."));
-        }
         String bootstrapServers = bindingText(context, "bootstrap_servers");
         String topic = bindingText(context, "topic");
         String consumerGroup = bindingText(context, "consumer_group");
+        ResolvedBinding resolvedBootstrap = resolveEnvBinding(bootstrapServers, "bootstrap_servers");
+        if (resolvedBootstrap.failure() != null) {
+            return new ConnectionSelection("", "", topic, consumerGroup, resolvedBootstrap.failure());
+        }
+        bootstrapServers = resolvedBootstrap.value();
         if (bootstrapServers.isBlank()) {
-            return new ConnectionSelection("", topic, consumerGroup, failure(
+            return new ConnectionSelection("", "", topic, consumerGroup, failure(
                     "KAFKA_CONNECTION_FAILED",
                     "KAFKA_CONNECTION_FAILED",
                     "Kafka bootstrap_servers binding is missing.",
                     "Declare bootstrap_servers in Env_Profile for this provider_id."));
         }
         if (topic.isBlank()) {
-            return new ConnectionSelection("", "", consumerGroup, failure(
+            return new ConnectionSelection("", "", "", consumerGroup, failure(
                     "TOPIC_MISSING",
                     "TARGET_RESOLUTION_FAILED",
                     "Kafka topic binding is missing.",
                     "Declare topic in Env_Profile for this provider_id."));
         }
         if (consumerGroup.isBlank()) {
-            return new ConnectionSelection("", topic, "", failure(
+            return new ConnectionSelection("", "", topic, "", failure(
                     "KAFKA_CONNECTION_FAILED",
                     "TARGET_RESOLUTION_FAILED",
                     "Kafka consumer_group binding is missing.",
                     "Declare consumer_group in Env_Profile for this provider_id."));
         }
-        return new ConnectionSelection(context.runtimeMode() + ":" + bootstrapServers + ":" + consumerGroup, topic, consumerGroup, null);
+        return new ConnectionSelection(
+                bootstrapServers,
+                context.runtimeMode() + ":" + bootstrapServers + ":" + consumerGroup,
+                topic,
+                consumerGroup,
+                null);
+    }
+
+    private ResolvedBinding resolveEnvBinding(String value, String bindingName) {
+        if (!value.startsWith("env://")) {
+            return new ResolvedBinding(value, null);
+        }
+        String envName = value.substring("env://".length());
+        String resolved = firstNonBlank(System.getenv(envName), System.getProperty(envName));
+        if (resolved.isBlank()) {
+            return new ResolvedBinding("", failure(
+                    "KAFKA_CONNECTION_FAILED",
+                    "KAFKA_CONNECTION_FAILED",
+                    "Kafka " + bindingName + " env ref `" + value + "` is not set.",
+                    "Set environment variable `" + envName + "` before running this execution profile."));
+        }
+        return new ResolvedBinding(resolved, null);
+    }
+
+    private ProviderFailure kafkaConnectionFailure(Exception e) {
+        return failure(
+                "KAFKA_CONNECTION_FAILED",
+                "KAFKA_CONNECTION_FAILED",
+                "Kafka client operation failed. Cause type: " + e.getClass().getSimpleName() + ".",
+                "Verify the execution profile supplies a reachable external broker and valid Kafka bindings.");
     }
 
     private Payload payload(ProviderExecutionContext context, ProviderOperationRequest request) {
@@ -609,7 +785,131 @@ public class KafkaProviderRuntime implements ProviderRuntime {
         }
     }
 
-    private record ConnectionSelection(String busKey, String topic, String consumerGroup, ProviderFailure failure) {
+    interface KafkaClientTransport {
+
+        KafkaPublishResult publish(KafkaConnection connection, String key, Object payload, Duration timeout)
+                throws Exception;
+
+        KafkaObserveResult observe(
+                KafkaConnection connection,
+                String key,
+                Instant consumeFrom,
+                Duration timeout,
+                Duration pollInterval)
+                throws Exception;
+    }
+
+    record KafkaConnection(String bootstrapServers, String topic, String consumerGroup) {
+    }
+
+    record KafkaPublishResult(int partition, long offset, Instant publishedAt) {
+    }
+
+    record KafkaObserveResult(List<KafkaMessage> messages, int attempts) {
+    }
+
+    record KafkaMessage(String topic, String key, int partition, long offset, Object payload, Instant observedAt) {
+    }
+
+    private static final class DefaultKafkaClientTransport implements KafkaClientTransport {
+        private final Yaml yaml = new Yaml();
+
+        @Override
+        public KafkaPublishResult publish(KafkaConnection connection, String key, Object payload, Duration timeout)
+                throws Exception {
+            Properties properties = producerProperties(connection);
+            try (KafkaProducer<String, String> producer = new KafkaProducer<>(properties)) {
+                ProducerRecord<String, String> record = new ProducerRecord<>(
+                        connection.topic(),
+                        key,
+                        serialize(payload));
+                RecordMetadata metadata = producer.send(record).get(Math.max(timeout.toMillis(), 1), TimeUnit.MILLISECONDS);
+                return new KafkaPublishResult(metadata.partition(), metadata.offset(), Instant.now());
+            }
+        }
+
+        @Override
+        public KafkaObserveResult observe(
+                KafkaConnection connection,
+                String key,
+                Instant consumeFrom,
+                Duration timeout,
+                Duration pollInterval) {
+            Properties properties = consumerProperties(connection);
+            List<KafkaMessage> messages = new ArrayList<>();
+            int attempts = 0;
+            Instant deadline = Instant.now().plus(timeout);
+            try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(properties)) {
+                consumer.subscribe(List.of(connection.topic()));
+                do {
+                    attempts++;
+                    for (ConsumerRecord<String, String> record : consumer.poll(pollInterval)) {
+                        if (!key.isBlank() && !key.equals(record.key())) {
+                            continue;
+                        }
+                        Instant observedAt = Instant.ofEpochMilli(record.timestamp());
+                        if (observedAt.isBefore(consumeFrom)) {
+                            continue;
+                        }
+                        messages.add(new KafkaMessage(
+                                record.topic(),
+                                record.key(),
+                                record.partition(),
+                                record.offset(),
+                                parsePayload(record.value()),
+                                observedAt));
+                    }
+                } while (Instant.now().isBefore(deadline));
+            }
+            return new KafkaObserveResult(List.copyOf(messages), attempts);
+        }
+
+        private Properties producerProperties(KafkaConnection connection) {
+            Properties properties = new Properties();
+            properties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, connection.bootstrapServers());
+            properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+            properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+            properties.put(ProducerConfig.ACKS_CONFIG, "all");
+            return properties;
+        }
+
+        private Properties consumerProperties(KafkaConnection connection) {
+            Properties properties = new Properties();
+            properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, connection.bootstrapServers());
+            properties.put(ConsumerConfig.GROUP_ID_CONFIG, connection.consumerGroup());
+            properties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+            properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+            properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+            properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+            return properties;
+        }
+
+        private String serialize(Object payload) {
+            if (payload instanceof String text) {
+                return text;
+            }
+            return yaml.dump(payload);
+        }
+
+        private Object parsePayload(String payload) {
+            Object parsed = yaml.load(payload);
+            return parsed == null ? Map.of() : parsed;
+        }
+    }
+
+    private record ConnectionSelection(
+            String bootstrapServers,
+            String busKey,
+            String topic,
+            String consumerGroup,
+            ProviderFailure failure) {
+
+        KafkaConnection toKafkaConnection() {
+            return new KafkaConnection(bootstrapServers, topic, consumerGroup);
+        }
+    }
+
+    private record ResolvedBinding(String value, ProviderFailure failure) {
     }
 
     private record Payload(Object value, ProviderFailure failure) {
@@ -626,9 +926,6 @@ public class KafkaProviderRuntime implements ProviderRuntime {
     }
 
     private record ParsedInstant(Instant value, String label, ProviderFailure failure) {
-    }
-
-    private record KafkaMessage(String topic, String key, int partition, long offset, Object payload, Instant observedAt) {
     }
 
     private record Match(boolean matched, List<String> matchedFields, Object matchedPayload) {

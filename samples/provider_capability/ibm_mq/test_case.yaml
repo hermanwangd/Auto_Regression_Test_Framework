@@ -8,7 +8,7 @@ source_refs:
 labels:
   capability: ibm_mq
   evidence_classification: framework_provider_capability_only
-compatible_profiles: [local_ibm_mq]
+compatible_profiles: [local_ibm_mq, ci_ibm_mq_external]
 targets:
   request_queue:
     provider_id: payment-mq
@@ -23,8 +23,6 @@ execute:
       target: request_queue
       operation: mq_put
       inputs:
-        correlation_id:
-          value: CORR-MQ-001
         payload_ref:
           ref: ${data.order_request}
       outputs:
@@ -41,7 +39,7 @@ verify:
         expected_ref:
           ref: ${data.order_expected}
         correlation_id:
-          value: CORR-MQ-001
+          ref: ${execute.put_order_request.outputs.correlation_id}
         timeout:
           value: PT5S
         poll_interval:

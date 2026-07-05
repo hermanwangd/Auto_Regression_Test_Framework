@@ -70,7 +70,7 @@ For provider capability examples, start with:
 java -jar ../spec-driven-auto-regression-${VERSION}.jar validate --suite samples/provider_capability/suite_manifest.yaml
 \`\`\`
 
-Mock and framework-verification-only evidence must not be treated as downstream
+Mock or sample-only framework evidence must not be treated as downstream
 SIT/preprod release evidence. See \`docs/09-operations/provider_support_matrix.md\`.
 EOF_README
 
@@ -109,7 +109,18 @@ cat > "${KIT_ROOT}/release/verification_commands.md" <<EOF_COMMANDS
 java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/golden_e2e/suite_manifest.yaml
 java -jar spec-driven-auto-regression-${VERSION}.jar run --suite usage-kit/samples/golden_e2e/suite_manifest.yaml
 java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/provider_capability/suite_manifest.yaml
+java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/provider_capability/kafka/suite_manifest.yaml --profile ci_kafka_external
+java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/provider_capability/ibm_mq/suite_manifest.yaml --profile ci_ibm_mq_external
 \`\`\`
+
+Official release verification also runs:
+
+\`\`\`bash
+scripts/release/verify-supported-provider-samples.sh ${VERSION}
+\`\`\`
+
+Kafka and IBM MQ native runtime verification requires external broker or
+queue-manager bindings supplied before framework execution.
 EOF_COMMANDS
 
 (

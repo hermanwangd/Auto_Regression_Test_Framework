@@ -1,5 +1,5 @@
 {
-  "framework_version": "0.2.3",
+  "framework_version": "0.2.4",
   "dsl_version": "v0.2",
   "suite_id": "JDBC-CAPABILITY-v0.2",
   "batch_id": "BATCH-JDBC-001",

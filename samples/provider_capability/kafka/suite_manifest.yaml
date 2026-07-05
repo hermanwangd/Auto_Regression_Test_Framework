@@ -2,6 +2,7 @@ contract_version: v0.2
 suite_id: KAFKA-CAPABILITY-v0.2
 purpose: Framework-owned Kafka client provider capability verification sample.
 profile: local_kafka
+profiles: [local_kafka, ci_kafka_external]
 selection:
   mode: suite
   suite: provider-capability-kafka

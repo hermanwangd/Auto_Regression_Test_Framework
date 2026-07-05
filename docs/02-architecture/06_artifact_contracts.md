@@ -331,7 +331,7 @@ Framework-owned schemas and contract files:
 Framework-owned catalogs:
 
 - Provider type catalog: `shell_command`, `rest_client`, `grpc_client`, `wiremock_http_mock`, `jdbc`, `kafka`, `ibm_mq`, `nats`, `kubernetes_runtime`, `vm_runtime`, `external_runner`, `artifact_compare`, and `polling_observer`. `kafka_messaging` is a deprecated compatibility alias for older v0.2 artifacts.
-- Provider capability registry: supported `provider_type` values, required binding keys, supported operations, runtime support status, evidence outputs, and safety constraints.
+- Provider capability registry: supported `provider_type` values, required binding keys, supported operations, public `support_status`, evidence outputs, and safety constraints.
 - Operation catalog: Provider Contract-backed operations, including `run_batch`, `execute_command`, `http_request`, `unary_call`, `db_seed`, `db_cleanup`, `db_query`, `db_record_exists`, `kafka_publish`, `kafka_observe`, `kafka_payload_match`, `mq_put`, `mq_browse`, `mq_message_exists`, `mq_payload_match`, legacy `publish_message`, legacy `consume_message`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match`, `check_deployment_ready`, `check_pod_ready`, `get_logs`, `wait_rollout`, `exec_command`, `check_host_ready`, `run_command`, `collect_file`, `collect_logs`, `check_process`, `run`, `run_and_collect`, `check_status`, `start_mock`, `connect_mock`, `load_stubs`, `verify_requests`, `read_artifact`, and `observe_condition`.
 - Verify catalog: `equals`, `not_equals`, `exists`, `not_exists`, `contains`, `regex_match`, `json_match`, `schema_match`, `list_size_equals`, `unordered_list_equals`, `subset_match`, `partial_match`, `numeric_tolerance`, `greater_than`, `less_than`, `between`, `timestamp_tolerance`, `file_exists`, `file_not_empty`, `file_diff`, `json_diff`, `yaml_diff`, `csv_row_count_equals`, `csv_diff`, `db_record_exists`, `db_field_equals`, `db_row_count_equals`, `event_published`, `event_payload_match`, `event_not_published`, `http_mock_called`, `http_mock_request_body_match`, `http_mock_request_count`, `http_mock_not_called`, and `custom_verify`.
 - Fixture and setup catalog: DSL `data` catalog, operation `inputs`, `database_seed`, `database_cleanup`, `db_seed`, `db_cleanup`, `http_stub`, `event_seed`, `event_expectation`, `file_seed`, `file_cleanup`, `config_injection`, `env_injection`, `mock_config`, `message_seed`, `container_dependency`, `environment_variable`, and `test_data_namespace`.
@@ -419,7 +419,7 @@ Current provider contract minimums enforced by the framework verification build:
 | `shell_command` | `command` binding key, positive timeout, declared output refs |
 | `rest_client` | `base_url` binding key, allowed `http_request` operation, allowed request input names, positive timeout, declared output refs |
 | `grpc_client` | service/descriptor refs, allowed request input names, positive timeout, declared output refs |
-| `kafka` | bootstrap/topic/consumer-group binding keys, security refs, allowed publish/observe/payload-match operations, payload input names, non-mutating observation defaults, declared output refs |
+| `kafka` | bootstrap/topic/consumer-group binding keys, allowed publish/observe/payload-match operations, payload input names, non-mutating observation defaults, declared output refs |
 | `ibm_mq` | queue-manager/channel/connection/queue/credential binding keys, allowed put/browse/message-exists/payload-match operations, browse-first safety, declared output refs |
 | `kafka_messaging` | deprecated compatibility alias for legacy publish/consume artifacts; new provider work must use `kafka` |
 | `nats` | connection/subject binding keys, allowed publish/observe/event verification operations, payload input names, bounded observation, declared output refs |
@@ -428,7 +428,7 @@ Current provider contract minimums enforced by the framework verification build:
 | `vm_runtime` | host/health binding keys, command refs for SSH/WinRM when selected, deployed version ref, declared output refs |
 | `external_runner` | approval metadata, reason, command/container ref, inputs, outputs, positive timeout, evidence map, safe evidence paths |
 
-Examples in this document must use those fields when they describe current runtime-supported provider contracts. Native gRPC, Kafka, NATS, bounded K8s readiness, and bounded VM readiness examples are runtime-supported only within the verification boundaries stated in the architecture and validation plan.
+Examples in this document must use those fields when they describe current `supported` provider contracts. K8s, VM, external runner, broker provisioning, destructive message consumption, and unsupported messaging options remain `contract_only` or future work unless the provider support matrix marks them `supported` and a release-verifiable sample exists.
 
 Allowed generated `execution_mode` values are `local`, `ci`, `sit`, and `preprod`.
 
@@ -1047,7 +1047,7 @@ Provider runtime rules:
 
 - Resolution order is DSL target `provider_id` + selected Env_Profile, Provider Instance, Provider Contract by `provider_type`, then Env_Profile `providers.<provider_id>.binding_keys`. Suite manifests select tests and may select the active Env_Profile, but must not override provider fields.
 - Executable Provider Contracts must declare `provider_type`; heuristic inference is diagnostic only and must not silently choose a runtime.
-- Provider capability registry status must be checked before dispatch. Unsupported, ambiguous, unsafe, or unapproved escape-hatch providers fail before execution.
+- Provider capability registry status must be checked before dispatch. Unsupported, ambiguous, unsafe, or provider-safety-unapproved command-capable providers fail before execution.
 - Dispatch uses the next v0.2 DSL fields and generated artifact fields: `targets.<target_id>.provider_id`, selected Env_Profile, `setup.operations[].operation`, `execute.operations[].operation`, `verify.checks[].operation` when provider-backed, `cleanup.operations[].operation`, operation `inputs`, `data`, `verify.checks`, and `evidence.required[]`.
 - The framework supplies resolved input paths and run workspace paths.
 - Providers write actual outputs, observation results, and cleanup results under the run evidence directory.
@@ -1161,7 +1161,7 @@ Standard result JSON shape:
 
 ```yaml
 test_result:
-  framework_version: 0.2.3
+  framework_version: 0.2.4
   dsl_version: v0.2
   test_case_id: RP-AR-M1-data-pipeline-TC-001
   parameter_case_id: valid_order_001

@@ -30,10 +30,10 @@ New v0.2 documentation and generated artifacts must use Provider Contract, Provi
 
 | Interface Family | Stable Contract Files | Stable Surface |
 |---|---|---|
-| Invocation | This file | Runtime commands, required/optional options, exit codes, stable stdout keys, and support-command boundary. |
+| Invocation | This file | Runtime commands, required/optional options, exit codes, stable stdout keys, and non-runtime support boundary. |
 | Test Definition | `test_case_dsl.v0.2.schema.yaml`, `suite_manifest.v0.2.schema.yaml` | DSL identity/status/source refs, labels, compatible profiles, optional data catalog, operation inputs, targets, setup, execute, expected refs, verify, evidence, runtime policy, suite/test/tag selection. |
 | Env_Profile | `env_profile.v0.2.schema.yaml`; compatibility inputs: `execution_profile.v0.2.schema.yaml`, `environment_binding.v0.2.schema.yaml` | Environment selection, execution mode, provider runtime modes, target environment values, secret refs, readiness refs, dependency model, constraints, and provider binding keys. |
-| Provider Runtime Configuration | `provider_contract.v0.2.schema.yaml`, `provider_instance.v0.2.schema.yaml`, `provider_capability_registry.v0.2.yaml`, `provider_plugin_contract.md`, `verify_plugin_contract.md` | Provider type, provider ID, valid instance shape, runtime modes, executable runtime modes, allowed operations, allowed input keys, required inputs, required binding keys, defaults, output refs, evidence outputs, failure codes, and runtime status. |
+| Provider Runtime Configuration | `provider_contract.v0.2.schema.yaml`, `provider_instance.v0.2.schema.yaml`, `provider_capability_registry.v0.2.yaml`, `provider_plugin_contract.md`, `verify_plugin_contract.md` | Provider type, provider ID, valid instance shape, runtime modes, executable runtime modes, public `support_status`, allowed operations, allowed input keys, required inputs, required binding keys, defaults, output refs, evidence outputs, and failure codes. |
 | Result and Evidence Output | `result.v0.2.schema.yaml`, `evidence.v0.2.schema.yaml`, `evidence_folder_structure.v0.2.md`, `validation_error_taxonomy.v0.2.yaml`, `secret_guardrails.v0.2.yaml` | Standard result shape, deterministic validation errors, failure classification, batch/run evidence locations, assertion evidence, cleanup evidence, report evidence, and masking rules. |
 | P0/P1 Contract Catalog | `p0_provider_verify_catalog.v0.2.md` plus provider contract files | Contract and provider capability baseline for WireMock HTTP mock, `rest_client` HTTP request samples, PR-008 WireMock-backed SOAP/gRPC mock contracts, JDBC, NATS/event, P1 Kafka and IBM MQ client providers, polling, JSON/schema/file, fixture injection, reporting, and dry-run readiness. |
 
@@ -41,15 +41,17 @@ New v0.2 documentation and generated artifacts must use Provider Contract, Provi
 
 | Command | Required Options | Optional Options | Success | Blocking / Failure |
 |---|---|---|---|---|
-| `regress validate` | `--suite <suite_manifest_path>` | `--profile <env_profile_id>`, `--test-case <test-case-id>`, `--tag <tag>`, `--format yaml|json` default `yaml`, `--strict` | Validates DSL, suite manifest, Env_Profile, Provider Instance, framework Provider Contract catalog, secret guardrails, and evidence/result contract readiness without provider execution. | Returns non-zero and prints deterministic owner-actionable validation errors. |
+| `regress validate` | `--suite <suite_manifest_path>` | `--profile <env_profile_id>`, `--test-case <test-case-id>`, `--tag <tag>` | Validates DSL, suite manifest, Env_Profile, Provider Instance, framework Provider Contract catalog, secret guardrails, and evidence/result contract readiness without provider execution. | Returns non-zero and prints deterministic owner-actionable validation errors. |
 | `regress run` | `--suite <suite_manifest_path>` | `--profile <env_profile_id>`, `--dry-run`, `--test-case <test-case-id>`, `--tag <tag>` | Creates one batch ID and one run ID for the selected suite execution, records per-test outcomes in `test_results[]`, and writes run/batch evidence. | Blocks before unsafe provider dispatch when validation, binding, environment, provider contract, provider instance, expected-result, or secret checks fail. |
-| `regress report` | `--result <generated_result_json>` | `--format text|yaml|json` default `text` | Produces review-ready coverage/evidence summary from a standard result JSON and its evidence index. | Returns non-zero when evidence is incomplete, coverage is not review-ready, result JSON is missing, or result schema is invalid. |
+| `regress report` | `--result <generated_result_json>` | `--format text|yaml` default `text` | Produces review-ready coverage/evidence summary from a standard result JSON and its evidence index. | Returns non-zero when evidence is incomplete, coverage is not review-ready, result JSON is missing, or result schema is invalid. |
+| `regress validate-evidence` | `--result <generated_result_json>` | none | Validates result JSON, evidence index, evidence refs, required evidence, and masking guardrails. | Returns non-zero when evidence is missing, inconsistent, or contains raw secrets. |
 
-Debug-only compatibility:
+Non-runtime boundary:
 
-- `regress report --run-id <run-id>` may exist for local debugging, but it is not a release coverage interface and must not satisfy RP release evidence.
-- Compatibility option markers retained for older contract tests: `--strict-schema`, `--suite <suite-id>`, `--format text`.
-- Product Repo `run --root <product-repo> --rp-id <rp-id> --env <profile>` is blocked in the public v0.2.3 runtime path with `LEGACY_RP_MODE_DEPRECATED`. Any remaining direct Product Repo runner is internal compatibility only and must not be used as a release gate.
+- Product/RP orchestration wrappers, repo initialization, readiness checks, test generation, and expected-result drafting are outside the v0.2.4 framework runtime public interface.
+- Product/RP tooling may generate suite-mode artifacts, then invoke the canonical runtime commands above.
+- Any remaining compatibility command in implementation code is not a release gate and must not appear in usage-kit release verification.
+- `regress report --format json` is not a v0.2.4 public report contract and must return usage error exit `2`.
 
 ## Stable Exit Codes
 
@@ -66,8 +68,8 @@ Debug-only compatibility:
 Syntax:
 
 ```bash
-regress validate --suite samples/golden_e2e/suite_manifest.yaml [--profile <profile>] [--format yaml|json] [--strict]
-regress validate --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml [--profile <profile>] [--format yaml|json] [--strict]
+regress validate --suite samples/golden_e2e/suite_manifest.yaml [--profile <profile>]
+regress validate --suite samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml [--profile <profile>]
 ```
 
 Suite-mode requires `--suite <suite_manifest_path>` and resolves artifacts relative to the suite manifest. A standard suite may include multiple checked-in tests in `tests[]`; all selected tests share one suite-level profile from CLI `--profile` or `suite_manifest.profile`. Compatibility aggregation manifests may use `child_suites[]` to point at checked-in child suite manifests. The command validates selected checked-in approved DSL tests and generated framework artifacts only. It must not start providers, provision dependencies, mutate fixtures, write run evidence, or infer Product/RP/RU topology.
@@ -95,7 +97,7 @@ Syntax:
 
 ```bash
 regress validate-evidence --result <generated_result_json>
-regress report --result <generated_result_json> [--format text|yaml|json]
+regress report --result <generated_result_json> [--format text|yaml]
 ```
 
 Evidence validation and report read standard result JSON and evidence indexes only. They fail with exit code `1` when required evidence is missing, raw secret masking failed, result schema validation failed, the result JSON path is missing, the result JSON is invalid, declared `test_count` and `test_results[]` are inconsistent, or coverage is not review-ready.
@@ -208,17 +210,8 @@ Framework sample suite groups write aggregation artifacts under:
 
 These suite group artifacts summarize framework provider capability tests only. They are not downstream RP release evidence.
 
-## Next-Stage Support Commands
+## Non-Runtime Support Boundary
 
-These commands support Product Repo and Phase 2 Agent Skill workflows. They are not current-stage framework runtime gates:
+Product Repo and Phase 2 Agent Skill workflows may initialize folders, perform owner-readiness checks, draft tests, or draft expected results outside the framework runtime. Those workflows are not current-stage framework runtime gates and are not v0.2.4 release-verification commands.
 
-- `regress init-product-repo`
-- `regress check-readiness`
-- `regress init-rp`
-- `regress check-rp`
-- `regress check-rp --strict-schema`
-- `regress generate-tests`
-- `regress draft-expected-results`
-
-They may be tested as support behavior, but they do not prove framework runtime maturity.
-Phase 2 Product Repo translation must emit suite-mode artifacts and invoke `regress run --suite <suite_manifest_path> --profile <env_profile_id>`. Direct public RP-mode execution remains blocked in v0.2.3.
+Phase 2 Product Repo translation must emit suite-mode artifacts and invoke `regress validate --suite <suite_manifest_path>`, `regress run --suite <suite_manifest_path> --profile <env_profile_id>`, `regress report --result <generated_result_json>`, and `regress validate-evidence --result <generated_result_json>`.

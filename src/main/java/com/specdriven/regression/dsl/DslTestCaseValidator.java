@@ -95,6 +95,24 @@ public class DslTestCaseValidator {
             "nats_observe",
             "event_published",
             "event_payload_match",
+            "kafka_publish",
+            "kafka_observe",
+            "kafka_payload_match",
+            "mq_put",
+            "mq_browse",
+            "mq_message_exists",
+            "mq_payload_match",
+            "start_mock",
+            "connect_mock",
+            "verify_requests",
+            "start_soap_mock",
+            "connect_soap_mock",
+            "load_soap_stub",
+            "soap_request_received",
+            "start_grpc_mock",
+            "connect_grpc_mock",
+            "load_grpc_stub",
+            "grpc_request_received",
             "json_match",
             "schema_match",
             "file_diff");
@@ -126,6 +144,15 @@ public class DslTestCaseValidator {
             "numeric_tolerance");
     private static final Set<String> STATE_VERIFY_TYPES = Set.of("db_record_exists", "db_row_matches");
     private static final Set<String> EVENT_VERIFY_TYPES = Set.of("event_published");
+    private static final Set<String> PROVIDER_OPERATION_VERIFY_TYPES = Set.of(
+            "kafka_observe",
+            "kafka_payload_match",
+            "mq_browse",
+            "mq_message_exists",
+            "mq_payload_match",
+            "verify_requests",
+            "soap_request_received",
+            "grpc_request_received");
     private static final Set<String> STATE_MUTATING_FIXTURE_TYPES = Set.of(
             "database_seed",
             "db_seed",
@@ -640,6 +667,13 @@ public class DslTestCaseValidator {
             if (type.isBlank()) {
                 gaps.add(gap(testCaseId, acId, "verify", prefix + ".type", verifyId,
                         "Declare verify type."));
+                continue;
+            }
+            if (PROVIDER_OPERATION_VERIFY_TYPES.contains(type)) {
+                requireText(rule, "target", "verify", testCaseId, acId, gaps,
+                        "Declare target for provider verify operation `" + verifyId + "`.", prefix + ".target", verifyId);
+                validateTargetReference(rule.get("target"), targets, prefix + ".target", verifyId, testCaseId, acId, gaps);
+                validateOperationInputs(rule.get("inputs"), prefix + ".inputs", "verify", testCaseId, acId, gaps);
                 continue;
             }
             validateSelectorWhenRequired(rule, type, prefix, verifyId, testCaseId, acId, gaps);

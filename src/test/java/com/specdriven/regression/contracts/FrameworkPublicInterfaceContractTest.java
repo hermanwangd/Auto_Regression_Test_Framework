@@ -34,18 +34,17 @@ class FrameworkPublicInterfaceContractTest {
                 .contains("## Run, Environment, and Provider Configuration Interface")
                 .contains("## Stable Input Artifact Locations")
                 .contains("## Stable Output Artifact Locations")
-                .contains("## Next-Stage Support Commands")
-                .contains("`regress check-rp`")
+                .contains("## Non-Runtime Support Boundary")
                 .contains("`regress run`")
                 .contains("`regress report`")
-                .contains("`--strict-schema`")
                 .contains("`--dry-run`")
                 .contains("`--test-case <test-case-id>`")
                 .contains("`--suite <suite_manifest_path>`")
                 .contains("`--profile <env_profile_id>`")
                 .contains("`--tag <tag>`")
-                .contains("`--format text`")
-                .contains("`LEGACY_RP_MODE_DEPRECATED`")
+                .contains("`--format text|yaml`")
+                .contains("`regress validate-evidence`")
+                .contains("`regress report --format json` is not a v0.2.4 public report contract")
                 .contains("operation-level `inputs` maps")
                 .contains("`data.<name>.ref`")
                 .contains("`generated-framework/suite_manifest.yaml`")
@@ -54,34 +53,37 @@ class FrameworkPublicInterfaceContractTest {
                 .contains("`generated-framework/environment_bindings/`")
                 .contains("framework built-in Provider Contract catalog")
                 .contains("`generated-framework/traceability_map.yaml`")
-                .contains("`regress init-product-repo`")
-                .contains("`regress check-readiness`")
-                .contains("`regress init-rp`")
-                .contains("`regress generate-tests`")
-                .contains("`regress draft-expected-results`")
                 .contains("framework runtime consumes")
                 .contains("must not infer Product/RP/RU topology");
         assertThat(contract)
                 .doesNotContain("regress run --root <product-repo> --rp-id <rp-id> --env <profile> --dry-run")
-                .doesNotContain("regress report --root <product-repo> --rp-id <rp-id> --batch-id");
+                .doesNotContain("regress report --root <product-repo> --rp-id <rp-id> --batch-id")
+                .doesNotContain("LEGACY_RP_MODE_DEPRECATED")
+                .doesNotContain("`regress init-product-repo`")
+                .doesNotContain("`regress check-readiness`")
+                .doesNotContain("`regress init-rp`")
+                .doesNotContain("`regress check-rp`")
+                .doesNotContain("`regress generate-tests`")
+                .doesNotContain("`regress draft-expected-results`");
     }
 
     @Test
-    @DisplayName("FWK-013 | user docs keep v0.2.3 runtime release interface suite-mode only")
+    @DisplayName("FWK-013 | user docs keep v0.2.4 runtime release interface suite-mode only")
     void FWK_013_userDocsKeepRuntimeReleaseInterfaceSuiteModeOnly() throws Exception {
         String userGuide = Files.readString(USER_GUIDE);
         String testPlan = Files.readString(TEST_PLAN);
 
         assertThat(userGuide)
-                .contains("The v0.2.3 runtime public interface is suite-mode")
-                .contains("failure_code: LEGACY_RP_MODE_DEPRECATED")
-                .contains("It must not create `batch_id`, `run_id`, result JSON, evidence files, or suite summary artifacts")
-                .contains("translate owner-authored Product/RP artifacts into suite-mode artifacts first");
+                .contains("The v0.2.4 runtime public interface is suite-mode")
+                .contains("Product/RP tooling must translate owner-authored artifacts into suite-mode artifacts before invoking the framework runtime")
+                .contains("Direct Product/RP runtime orchestration is not part of the v0.2.4 framework public interface")
+                .contains("Product/RP-specific report forms are outside the v0.2.4 framework runtime public interface");
         assertThat(testPlan)
                 .contains("run --suite <suite_manifest>")
                 .contains("report --result <generated_result_json>")
-                .contains("Public `run --root <product-repo> --rp-id <rp-id> --env <profile>` must return `LEGACY_RP_MODE_DEPRECATED`")
+                .contains("Product/RP runtime orchestration is outside the v0.2.4 framework public interface")
                 .doesNotContain("report --batch-id")
+                .doesNotContain("LEGACY_RP_MODE_DEPRECATED")
                 .doesNotContain("requested `--env` Env_Profile")
                 .doesNotContain("`regress run` supports Product Repo mode")
                 .doesNotContain("`regress report` supports Product Repo mode");
@@ -185,19 +187,19 @@ class FrameworkPublicInterfaceContractTest {
     }
 
     @Test
-    @DisplayName("FWK-013 | provider registry runtime status values are cataloged")
-    void FWK_013_providerRegistryRuntimeStatusValuesAreCataloged() throws Exception {
+    @DisplayName("FWK-013 | provider registry support_status values are cataloged")
+    void FWK_013_providerRegistrySupportStatusValuesAreCataloged() throws Exception {
         Map<?, ?> registry = map(loadYaml(CONTRACT_ROOT.resolve("provider_capability_registry.v0.2.yaml")));
-        Set<String> catalog = Set.copyOf(map(registry.get("runtime_status_catalog")).keySet().stream()
+        Set<String> catalog = Set.copyOf(map(registry.get("support_status_catalog")).keySet().stream()
                 .map(String::valueOf)
                 .toList());
         List<String> uncataloged = new ArrayList<>();
 
         for (Map.Entry<?, ?> entry : map(registry.get("provider_types")).entrySet()) {
             String providerType = String.valueOf(entry.getKey());
-            String runtimeStatus = String.valueOf(map(entry.getValue()).get("runtime_status"));
-            if (!catalog.contains(runtimeStatus)) {
-                uncataloged.add(providerType + ": " + runtimeStatus);
+            String supportStatus = String.valueOf(map(entry.getValue()).get("support_status"));
+            if (!catalog.contains(supportStatus)) {
+                uncataloged.add(providerType + ": " + supportStatus);
             }
         }
 
@@ -238,9 +240,9 @@ class FrameworkPublicInterfaceContractTest {
         for (String providerType : List.of("kafka", "ibm_mq")) {
             Map<?, ?> registryEntry = map(providerTypes.get(providerType));
             Map<?, ?> contract = map(loadYaml(CONTRACT_ROOT.resolve(String.valueOf(registryEntry.get("contract_ref")))));
-            assertThat(strings(registryEntry.get("supported_runtime_modes"))).containsExactly("mock");
-            assertThat(strings(contract.get("executable_runtime_modes"))).containsExactly("mock");
-            assertThat(strings(contract.get("contract_only_runtime_modes"))).containsExactly("native", "ephemeral");
+            assertThat(strings(registryEntry.get("supported_runtime_modes"))).containsExactly("mock", "native");
+            assertThat(strings(contract.get("executable_runtime_modes"))).containsExactly("mock", "native");
+            assertThat(strings(contract.get("contract_only_runtime_modes"))).containsExactly("ephemeral");
         }
     }
 

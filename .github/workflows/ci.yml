@@ -45,6 +45,9 @@ jobs:
       - name: Contract and evidence consistency
         run: scripts/ci/verify-contracts.sh
 
+      - name: Public provider support contract
+        run: scripts/ci/check-public-support-contract.sh
+
       - name: Secret scan
         run: scripts/ci/secret-scan.sh
 

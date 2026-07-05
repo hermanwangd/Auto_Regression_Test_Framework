@@ -3,7 +3,7 @@ artifact: provider_capability_registry
 status: framework_owned_current_stage
 purpose: >
   Catalogs provider_type values supported by the framework runtime and maps
-  each provider_type to its contract schema, runtime status, evidence outputs,
+  each provider_type to its contract schema, public support status, evidence outputs,
   and standard failure classification.
 release_support_matrix_ref: docs/09-operations/provider_support_matrix.md
 version_compatibility:
@@ -12,28 +12,29 @@ version_compatibility:
 registry_entry_required_fields:
   - provider_type
   - contract_ref
-  - runtime_status
+  - support_status
   - supported_runtime_modes
   - required_binding_keys
   - supported_operations
   - evidence_outputs
   - failure_classification
-runtime_status_catalog:
+support_status_catalog:
   supported:
+    meaning: Public contract exists, runtime exists, executable usage-kit sample exists, and release verification passes.
     validation_behavior: validate_and_allow_dispatch_for_supported_operations
     execution_behavior: provider_runtime_may_execute_when_profile_allows
-  partial:
+  contract_only:
+    meaning: Public contract exists, but runtime execution is unavailable or not release-verified.
     validation_behavior: validate_contract_instance_env_profile_and_supported_runtime_operations
-    execution_behavior: only_supported_runtime_modes_may_execute_contract_only_modes_block_before_dispatch
-  planned_p1_client_provider:
-    validation_behavior: validate_contract_instance_env_profile_and_dry_run
     execution_behavior: block_before_provider_dispatch_until_runtime_slice_is_implemented
-  deprecated_alias:
+  deprecated:
+    meaning: Compatibility-only provider or alias; new artifacts and samples must not use it.
     validation_behavior: compatibility_only_for_existing_v0_2_artifacts
     execution_behavior: new_artifacts_must_use_canonical_provider_type
-  approved_escape_hatch_only:
-    validation_behavior: validate_contract_instance_env_profile_safety_and_explicit_approval
-    execution_behavior: block_before_provider_dispatch_without_provider_safety_approval
+  unsupported:
+    meaning: Not part of the public provider capability surface.
+    validation_behavior: block_before_provider_dispatch
+    execution_behavior: block_before_provider_dispatch
 runtime_mode_semantics:
   supported_runtime_modes: runtime modes accepted by this registry entry; partial providers may narrow this from the Provider Contract vocabulary
   contract_runtime_modes: optional runtime modes named by the Provider Contract vocabulary when broader than supported_runtime_modes
@@ -41,120 +42,134 @@ runtime_mode_semantics:
 provider_types:
   shell_command:
     contract_ref: provider-contracts/shell_command.yaml
-    runtime_status: supported
+    support_status: contract_only
     supported_runtime_modes: [native, mock, stub]
     required_binding_keys: [command]
     supported_operations: [run_batch, execute_command]
     evidence_outputs: [command, stdout, stderr, output_files, exit_code, timing, error]
   rest_client:
     contract_ref: provider-contracts/rest_client.yaml
-    runtime_status: supported
+    support_status: supported
     supported_runtime_modes: [native, mock, stub]
     required_binding_keys: [base_url]
     supported_operations: [http_request]
     evidence_outputs: [http_request_response, request, response, timing, error]
   grpc_client:
     contract_ref: provider-contracts/grpc_client.yaml
-    runtime_status: supported
+    support_status: supported
     supported_runtime_modes: [native, mock, stub]
     required_binding_keys: [target]
     supported_operations: [unary_call]
     evidence_outputs: [grpc_request_response, request, response, status, metadata, timing, error]
   wiremock_http_mock:
     contract_ref: provider-contracts/wiremock_http_mock.yaml
-    runtime_status: supported
+    support_status: supported
     supported_runtime_modes: [mock]
     required_binding_keys: []
     supported_operations: [start_mock, connect_mock, load_stubs, verify_requests]
     evidence_outputs: [base_url, request_journal, server_log, timing, error]
   soap_mock:
     contract_ref: provider-contracts/soap_mock.yaml
-    runtime_status: partial
+    support_status: supported
     supported_runtime_modes: [mock]
     required_binding_keys: []
     supported_operations: [start_soap_mock, connect_soap_mock, load_soap_stub, soap_request_received, reset_mock]
     evidence_outputs: [endpoint_url, request_journal, server_log, xml_diff, timing, error]
   grpc_mock:
     contract_ref: provider-contracts/grpc_mock.yaml
-    runtime_status: partial
+    support_status: supported
     supported_runtime_modes: [mock]
     required_binding_keys: [descriptor_ref, service_name]
     supported_operations: [start_grpc_mock, connect_grpc_mock, load_grpc_stub, grpc_request_received, reset_mock]
     evidence_outputs: [target_uri, request_journal, server_log, protobuf_json_diff, timing, error]
   kafka:
     contract_ref: provider-contracts/kafka.yaml
-    runtime_status: partial
-    supported_runtime_modes: [mock]
+    support_status: supported
+    supported_runtime_modes: [mock, native]
     contract_runtime_modes: [native, mock, ephemeral]
-    contract_only_runtime_modes: [native, ephemeral]
+    contract_only_runtime_modes: [ephemeral]
     required_binding_keys: [bootstrap_servers, topic, consumer_group]
     supported_operations: [kafka_publish, kafka_observe, kafka_payload_match]
     evidence_outputs: [event_evidence, assertion_evidence, topic, partition, offset, timing, error]
   ibm_mq:
     contract_ref: provider-contracts/ibm_mq.yaml
-    runtime_status: partial
-    supported_runtime_modes: [mock]
+    support_status: supported
+    supported_runtime_modes: [mock, native]
     contract_runtime_modes: [native, mock, ephemeral]
-    contract_only_runtime_modes: [native, ephemeral]
+    contract_only_runtime_modes: [ephemeral]
     required_binding_keys: [queue_manager, channel, conn_name, queue, credential.secret_ref]
     supported_operations: [mq_put, mq_browse, mq_message_exists, mq_payload_match]
     evidence_outputs: [mq_evidence, assertion_evidence, queue, message_id, correlation_id, timing, error]
   kafka_messaging:
     contract_ref: provider-contracts/kafka_messaging.yaml
-    runtime_status: deprecated_alias
+    support_status: deprecated
     supported_runtime_modes: [native, mock, ephemeral]
     required_binding_keys: [bootstrap_servers]
     supported_operations: [publish_message, consume_message]
     evidence_outputs: [produced_message, consumed_message, offset, timing, error]
   nats:
     contract_ref: provider-contracts/nats.yaml
-    runtime_status: supported
+    support_status: supported
     supported_runtime_modes: [native, mock, ephemeral]
     required_binding_keys: [connection, subject]
     supported_operations: [nats_publish, nats_observe, event_published, event_payload_match]
     evidence_outputs: [event_evidence, assertion_evidence, timing, error]
   jdbc:
     contract_ref: provider-contracts/jdbc.yaml
-    runtime_status: supported
+    support_status: supported
     supported_runtime_modes: [native, ephemeral]
     required_binding_keys: [dialect]
     supported_operations: [db_seed, db_cleanup, db_query, db_record_exists]
     evidence_outputs: [seed_evidence, cleanup_evidence, query_evidence, error]
   kubernetes_runtime:
     contract_ref: provider-contracts/kubernetes_runtime.yaml
-    runtime_status: supported
+    support_status: contract_only
     supported_runtime_modes: [native, mock]
     required_binding_keys: [context, namespace]
     supported_operations: [check_deployment_ready, check_pod_ready, get_logs, wait_rollout, exec_command]
     evidence_outputs: [deployment_status, pod_status, logs, events, command_output, error]
   vm_runtime:
     contract_ref: provider-contracts/vm_runtime.yaml
-    runtime_status: supported
+    support_status: contract_only
     supported_runtime_modes: [native, mock]
     required_binding_keys: [host, user]
     supported_operations: [check_host_ready, run_command, collect_file, collect_logs, check_process]
     evidence_outputs: [command_output, collected_file, process_status, logs, error]
   external_runner:
     contract_ref: provider-contracts/external_runner.yaml
-    runtime_status: approved_escape_hatch_only
+    support_status: contract_only
     supported_runtime_modes: [native, stub]
     required_binding_keys: [command]
     supported_operations: [run, run_and_collect, check_status]
     evidence_outputs: [command, stdout, stderr, output_files, result_json, error]
   artifact_compare:
     contract_ref: provider-contracts/artifact_compare.yaml
-    runtime_status: supported
+    support_status: supported
     supported_runtime_modes: [stub]
     required_binding_keys: []
     supported_operations: [read_artifact]
     evidence_outputs: [actual_payload, actual_file, diff, error]
   polling_observer:
     contract_ref: provider-contracts/polling_observer.yaml
-    runtime_status: supported
+    support_status: supported
     supported_runtime_modes: [stub, ephemeral]
     required_binding_keys: []
     supported_operations: [observe_condition]
     evidence_outputs: [last_observed, attempts, timeout_status, error]
+  common_verify:
+    contract_ref: provider-contracts/common_verify.yaml
+    support_status: supported
+    supported_runtime_modes: [stub]
+    required_binding_keys: [workspace_ref]
+    supported_operations: [json_match, schema_match, file_diff, event_published, db_record_exists]
+    evidence_outputs: [assertion_result, assertion_diff, polling_result, evidence_index, result_json]
+  sample_fake_provider:
+    contract_ref: provider-contracts/sample_fake_provider.yaml
+    support_status: unsupported
+    supported_runtime_modes: [stub]
+    required_binding_keys: [workspace_ref, clock_ref]
+    supported_operations: [setup_fixture, execute_sample, cleanup_fixture]
+    evidence_outputs: [setup_log, cleanup_log, actual_json, actual_text, execution_log, assertion_result, diff]
 failure_classifications:
   missing_contract: target_resolution_error
   unsupported_capability: target_resolution_error
@@ -166,7 +181,7 @@ validation_output_fields:
   - provider_id
   - provider_type
   - profile
-  - runtime_status
+  - support_status
   - runtime_mode
   - provider_contract_path
   - affected_logical_target
@@ -176,7 +191,7 @@ validation_output_fields:
   - owner_action
 unsupported_behavior:
   unknown_provider_type: block_before_provider_dispatch
-  disabled_runtime_status: block_before_provider_dispatch
+  disabled_support_status: block_before_provider_dispatch
   unsupported_runtime_mode: block_before_provider_dispatch
   ambiguous_registry_match: block_before_provider_dispatch
   unsafe_capability: block_before_provider_dispatch

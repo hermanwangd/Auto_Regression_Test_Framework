@@ -11,9 +11,9 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class V022PirunAcceptanceCommandTest {
+class V022SuiteModeAcceptanceCommandTest {
 
-    private static final Path DUMMY_REST_SUITE = Path.of("pi_run_demo/dummy_rest/suite_manifest.yaml");
+    private static final Path DUMMY_REST_SUITE = Path.of("samples/provider_capability/dummy_rest/suite_manifest.yaml");
     private static final Path COMPARE_SUITE = Path.of("samples/provider_capability/compare/suite_manifest.yaml");
     private static final Path CONTRACT_BASELINE_RESULT =
             Path.of("samples/contract_baseline/result/sample_result.json");
@@ -31,7 +31,7 @@ class V022PirunAcceptanceCommandTest {
         assertThat(validate.exit()).as(validate.stderr() + validate.stdout()).isZero();
         assertThat(validate.stdout())
                 .contains("validation_status: passed")
-                .contains("suite_id: PI-RUN-DUMMY-REST-v0.2")
+                .contains("suite_id: SUITE-MODE-DUMMY-REST-v0.2")
                 .contains("rest_client");
 
         CommandResult run = execute("run", "--suite", DUMMY_REST_SUITE.toString(), "--profile", "local_dummy");
@@ -55,13 +55,12 @@ class V022PirunAcceptanceCommandTest {
     }
 
     @Test
-    void cliHelpNoCommandAndPiRunAliasAreUserFriendly() {
+    void cliHelpNoCommandAndUnknownCommandsAreUserFriendly() {
         CommandResult topLevelHelp = execute("--help");
         assertThat(topLevelHelp.exit()).isZero();
         assertThat(topLevelHelp.stdout())
                 .contains("usage:")
                 .contains("validate --suite")
-                .contains("pi-run --suite")
                 .doesNotContain("Unknown command");
 
         CommandResult noCommand = execute();
@@ -89,9 +88,14 @@ class V022PirunAcceptanceCommandTest {
         assertThat(unknownHelp.exit()).isZero();
         assertThat(unknownHelp.stdout()).contains("usage: regress <command>");
 
-        CommandResult piRun = execute("pi-run", "--suite", DUMMY_REST_SUITE.toString(), "--profile", "local_dummy");
-        assertThat(piRun.exit()).as(piRun.stderr() + piRun.stdout()).isZero();
-        assertThat(piRun.stdout()).contains("run_status: passed");
+        CommandResult unknownCommand =
+                execute("project-run", "--suite", DUMMY_REST_SUITE.toString(), "--profile", "local_dummy");
+        assertThat(unknownCommand.exit()).as(unknownCommand.stderr() + unknownCommand.stdout()).isEqualTo(2);
+        assertThat(unknownCommand.stderr())
+                .contains("Unknown command: project-run")
+                .doesNotContain("LEGACY_RP_MODE_DEPRECATED")
+                .doesNotContain("run --suite");
+        assertThat(unknownCommand.stdout()).isBlank();
     }
 
     @Test

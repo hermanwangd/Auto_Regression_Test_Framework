@@ -102,7 +102,7 @@ class KafkaProviderRuntimeTest {
 
     @Test
     void kafkaNativeModeFailsFastWithoutPretendingBrokerRuntimeExists() {
-        KafkaProviderRuntime runtime = new KafkaProviderRuntime();
+        KafkaProviderRuntime runtime = new KafkaProviderRuntime(new FailingKafkaClientTransport("broker unavailable"));
         ProviderExecutionContext context = new ProviderExecutionContext(
                 "order-events",
                 "kafka",
@@ -125,7 +125,72 @@ class KafkaProviderRuntimeTest {
         assertThat(result.passed()).isFalse();
         assertThat(result.failure()).isNotNull();
         assertThat(result.failure().code()).isEqualTo("KAFKA_CONNECTION_FAILED");
+        assertThat(result.failure().reason())
+                .contains("Kafka client operation failed")
+                .doesNotContain("broker unavailable");
         assertThat(result.outputs()).containsKey("event_evidence_ref");
+    }
+
+    @Test
+    void kafkaNativeModeUsesExternalClientTransportWithoutStartingBroker() throws Exception {
+        Path suiteRoot = tempDir.resolve("suite");
+        Files.createDirectories(suiteRoot.resolve("expected_results"));
+        Files.writeString(suiteRoot.resolve("expected_results/order_event.json"), """
+                {
+                  "orderId": "ORD-K-001",
+                  "status": "CREATED"
+                }
+                """);
+        System.setProperty("KAFKA_BOOTSTRAP_SERVERS", "127.0.0.1:9092");
+        try {
+            RecordingKafkaClientTransport transport = new RecordingKafkaClientTransport();
+            KafkaProviderRuntime runtime = new KafkaProviderRuntime(transport);
+            ProviderExecutionContext context = new ProviderExecutionContext(
+                    "order-events",
+                    "kafka",
+                    "ci_kafka_external",
+                    "native",
+                    suiteRoot,
+                    tempDir.resolve("run"),
+                    Map.of("provider_type", "kafka"),
+                    Map.of("provider_id", "order-events", "provider_type", "kafka"),
+                    Map.of(
+                            "bootstrap_servers", Map.of("secret_ref", "env://KAFKA_BOOTSTRAP_SERVERS"),
+                            "topic", "orders.created",
+                            "consumer_group", "artf-ci"));
+
+            ProviderOperationResult published = runtime.execute(context, new ProviderOperationRequest(
+                    "kafka_publish",
+                    List.of(
+                            Map.of("bind_as", "key", "ref", "ORD-K-001"),
+                            Map.of("bind_as", "payload", "value", "{\"orderId\":\"ORD-K-001\",\"status\":\"CREATED\"}")),
+                    Map.of("_operation_id", "native_publish")));
+            ProviderOperationResult observed = runtime.execute(context, new ProviderOperationRequest(
+                    "kafka_payload_match",
+                    List.of(
+                            Map.of("bind_as", "expected_ref", "ref", "expected_results/order_event.json"),
+                            Map.of("bind_as", "consume_from", "ref", "earliest")),
+                    Map.of("_operation_id", "native_match", "_test_start_time", Instant.EPOCH.toString())));
+
+            assertThat(published.passed()).isTrue();
+            assertThat(observed.passed()).isTrue();
+            assertThat(transport.bootstrapServers()).isEqualTo("127.0.0.1:9092");
+            assertThat(transport.topic()).isEqualTo("orders.created");
+            assertThat(transport.consumerGroup()).isEqualTo("artf-ci");
+            assertThat(observed.outputs())
+                    .containsEntry("topic", "orders.created")
+                    .containsEntry("matched", true)
+                    .containsEntry("observed_count", 1);
+            assertThat(Files.readString(tempDir.resolve("run/provider-evidence/kafka/native_match.yaml")))
+                    .contains("runtime_mode: native")
+                    .contains("provider_type: kafka")
+                    .contains("provider_id: order-events")
+                    .contains("topic: orders.created")
+                    .contains("status: passed")
+                    .contains("raw_secret_found: false");
+        } finally {
+            System.clearProperty("KAFKA_BOOTSTRAP_SERVERS");
+        }
     }
 
     private ProviderExecutionContext context(Path suiteRoot) {
@@ -154,5 +219,83 @@ class KafkaProviderRuntimeTest {
                         "bootstrap_servers", "approved_local_kafka_ref",
                         "topic", "orders.created",
                         "consumer_group", "artf-local"));
+    }
+
+    private static final class RecordingKafkaClientTransport implements KafkaProviderRuntime.KafkaClientTransport {
+        private String bootstrapServers = "";
+        private String topic = "";
+        private String consumerGroup = "";
+        private Object payload = Map.of();
+
+        @Override
+        public KafkaProviderRuntime.KafkaPublishResult publish(
+                KafkaProviderRuntime.KafkaConnection connection,
+                String key,
+                Object payload,
+                java.time.Duration timeout) {
+            this.bootstrapServers = connection.bootstrapServers();
+            this.topic = connection.topic();
+            this.consumerGroup = connection.consumerGroup();
+            this.payload = payload;
+            return new KafkaProviderRuntime.KafkaPublishResult(0, 0, Instant.parse("2026-07-05T00:00:00Z"));
+        }
+
+        @Override
+        public KafkaProviderRuntime.KafkaObserveResult observe(
+                KafkaProviderRuntime.KafkaConnection connection,
+                String key,
+                Instant consumeFrom,
+                java.time.Duration timeout,
+                java.time.Duration pollInterval) {
+            this.bootstrapServers = connection.bootstrapServers();
+            this.topic = connection.topic();
+            this.consumerGroup = connection.consumerGroup();
+            return new KafkaProviderRuntime.KafkaObserveResult(List.of(new KafkaProviderRuntime.KafkaMessage(
+                    connection.topic(),
+                    key,
+                    0,
+                    0,
+                    payload,
+                    Instant.parse("2026-07-05T00:00:01Z"))), 1);
+        }
+
+        String bootstrapServers() {
+            return bootstrapServers;
+        }
+
+        String topic() {
+            return topic;
+        }
+
+        String consumerGroup() {
+            return consumerGroup;
+        }
+    }
+
+    private static final class FailingKafkaClientTransport implements KafkaProviderRuntime.KafkaClientTransport {
+        private final String message;
+
+        private FailingKafkaClientTransport(String message) {
+            this.message = message;
+        }
+
+        @Override
+        public KafkaProviderRuntime.KafkaPublishResult publish(
+                KafkaProviderRuntime.KafkaConnection connection,
+                String key,
+                Object payload,
+                java.time.Duration timeout) throws Exception {
+            throw new Exception(message);
+        }
+
+        @Override
+        public KafkaProviderRuntime.KafkaObserveResult observe(
+                KafkaProviderRuntime.KafkaConnection connection,
+                String key,
+                Instant consumeFrom,
+                java.time.Duration timeout,
+                java.time.Duration pollInterval) throws Exception {
+            throw new Exception(message);
+        }
     }
 }

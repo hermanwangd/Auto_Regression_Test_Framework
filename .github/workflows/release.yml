@@ -88,6 +88,9 @@ jobs:
       - name: Contract and evidence consistency
         run: scripts/ci/verify-contracts.sh
 
+      - name: Public provider support contract
+        run: scripts/ci/check-public-support-contract.sh
+
       - name: Secret scan
         run: scripts/ci/secret-scan.sh
 
@@ -123,6 +126,14 @@ jobs:
 
       - name: Verify usage kit
         run: scripts/release/verify-usage-kit.sh "target/spec-driven-auto-regression-${{ steps.version.outputs.version }}-usage-kit.zip" "${{ steps.version.outputs.version }}"
+
+      - name: Verify supported provider samples
+        env:
+          REQUIRE_EXTERNAL_MESSAGING: 'true'
+          KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}
+          IBM_MQ_CONN_NAME: ${{ secrets.IBM_MQ_CONN_NAME }}
+          IBM_MQ_CREDENTIAL: ${{ secrets.IBM_MQ_CREDENTIAL }}
+        run: scripts/release/verify-supported-provider-samples.sh "${{ steps.version.outputs.version }}"
 
       - name: Generate checksums
         run: scripts/release/write-checksums.sh "${{ steps.version.outputs.version }}"

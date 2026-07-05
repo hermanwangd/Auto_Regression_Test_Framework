@@ -249,7 +249,7 @@ public class RegressionCommand {
             case "draft-expected-results" -> draftExpectedResults(root, options, out, err);
             case "validate" -> validate(root, options, out, err);
             case "validate-evidence" -> validateEvidence(root, options, out, err);
-            case "run", "pi-run" -> runRegression(root, options, out, err);
+            case "run" -> runRegression(root, options, out, err);
             case "report" -> report(root, options, out, err);
             default -> {
                 err.println("Unknown command: " + command);
@@ -264,17 +264,15 @@ public class RegressionCommand {
         out.println("  validate --suite <suite_manifest> [--profile <profile>]");
         out.println("  run --suite <suite_manifest> --profile <profile>");
         out.println("  run --suite <suite_manifest> --dry-run [--profile <profile>]");
-        out.println("  pi-run --suite <suite_manifest> --profile <profile>");
         out.println("  report --result <result_json> [--format text|yaml]");
         out.println("  validate-evidence --result <result_json>");
     }
 
     private void printCommandUsage(String command, PrintStream out) {
         switch (command) {
-            case "run", "pi-run" -> {
+            case "run" -> {
                 out.println("usage: regress run --suite <suite_manifest> --profile <profile>");
                 out.println("       regress run --suite <suite_manifest> --dry-run [--profile <profile>]");
-                out.println("       regress pi-run --suite <suite_manifest> --profile <profile>");
             }
             case "validate" -> out.println("usage: regress validate --suite <suite_manifest> [--profile <profile>]");
             case "report" -> out.println("usage: regress report --result <result_json> [--format text|yaml]");
@@ -672,7 +670,7 @@ public class RegressionCommand {
             printLegacyRpModeBlocked(out);
             return 1;
         }
-        err.println("RP-mode is deprecated for v0.2.3 PI-run and is only available through compatibility tests.");
+        err.println("RP-mode is deprecated for the public suite-mode runtime and is only available through compatibility tests.");
         String rpId = requiredOption(options, "--rp-id", err);
         String requestedEnv = requiredOption(options, "--env", err);
         if (rpId == null || requestedEnv == null) {

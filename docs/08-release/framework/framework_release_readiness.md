@@ -4,10 +4,10 @@ This checklist governs releases of the Auto Regression Test Framework itself. It
 
 ## Release Identity
 
-- Maven artifact version must be immutable, for example `0.2.3`, and must not contain `SNAPSHOT`.
+- Maven artifact version must be immutable, for example `0.2.4`, and must not contain `SNAPSHOT`.
 - Standard result JSON `framework_version` must match the framework artifact release version.
 - DSL, Provider Contract, Provider Instance, Env_Profile, result schema, and evidence schema may remain on public contract version `v0.2`.
-- Git tags must use `v<artifact-version>`, for example `v0.2.3`.
+- Git tags must use `v<artifact-version>`, for example `v0.2.4`.
 
 ## Required Gates
 
@@ -20,6 +20,7 @@ scripts/ci/verify-contracts.sh
 scripts/ci/secret-scan.sh
 scripts/ci/generate-sbom.sh
 scripts/ci/security-scan.sh
+scripts/release/verify-supported-provider-samples.sh <version>
 ```
 
 `security-scan.sh` uses OWASP Dependency-Check. Production release CI must provide `NVD_API_KEY`; local bootstrap scans without a key must opt in with `ALLOW_SLOW_NVD_WITHOUT_API_KEY=true`.
@@ -50,10 +51,26 @@ Each published framework release must include:
 
 The usage kit must include the user guide, provider support matrix, framework release readiness guide, Provider Contract catalog, schemas, and checked-in sample suites. It must exclude machine-local files, caches, archived/draft docs, and generated local run outputs.
 
+## Integrity Metadata
+
+Release notes and artifacts must expose the following integrity decision fields:
+
+```yaml
+checksum_verification: passed
+raw_signature_verification: passed
+certificate_chain_trust: not_proven
+build_provenance: not_proven
+release_decision: accepted_with_integrity_limitation
+```
+
+Published notes must include jar and usage-kit checksums, the detached signature verification command, and the public key or certificate source. Raw signature verification proves that the artifact matches the published signature material; it does not prove certificate-chain trust or reproducible build provenance unless those gates are added later.
+
 ## Rollback
 
 Rollback means pinning CI/CD or user documentation back to the previous Git tag and jar artifact. Do not overwrite a published version. Publish a new patch version when the rollback needs a forward fix.
 
 ## Production Support Boundary
 
-Provider support is defined in `docs/09-operations/provider_support_matrix.md`. A provider mode is production-ready only when the matrix marks it as executable and release-capable for framework usage. Mock-only or contract-only modes must not be presented as downstream Product/RP release evidence.
+Provider support is defined in `docs/09-operations/provider_support_matrix.md`. A provider type is publicly supported only when the matrix marks `support_status: supported` and release verification runs the matching sample commands. Mock evidence, unsupported providers, and `contract_only` providers must not be presented as downstream Product/RP release evidence.
+
+For Kafka and IBM MQ, release promotion must run `scripts/release/verify-supported-provider-samples.sh <version>` with `REQUIRE_EXTERNAL_MESSAGING=true` and valid external broker/queue-manager bindings. `ALLOW_EXTERNAL_MESSAGING_SKIP=true` is local smoke-only; it returns `supported_provider_sample_verification_status: blocked_external_messaging_skipped` and is not a promotable release gate result.

@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public class RestClientProviderRuntime implements ProviderRuntime {
@@ -26,6 +27,7 @@ public class RestClientProviderRuntime implements ProviderRuntime {
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
+    private static final String MASK = "***MASKED***";
 
     @Override
     public ProviderOperationResult execute(ProviderExecutionContext context, ProviderOperationRequest request) {
@@ -63,7 +65,8 @@ public class RestClientProviderRuntime implements ProviderRuntime {
 
         long started = System.nanoTime();
         try {
-            HttpRequest.Builder builder = HttpRequest.newBuilder(uri(baseUrl, path))
+            URI requestUri = uri(baseUrl, path);
+            HttpRequest.Builder builder = HttpRequest.newBuilder(requestUri)
                     .timeout(requestTimeout(request));
             headers.forEach(builder::header);
             HttpRequest.BodyPublisher publisher = body.isEmpty()
@@ -73,13 +76,19 @@ public class RestClientProviderRuntime implements ProviderRuntime {
                     builder.method(method, publisher).build(),
                     HttpResponse.BodyHandlers.ofString());
             long durationMs = Duration.ofNanos(System.nanoTime() - started).toMillis();
+            String maskedRequestUrl = maskUrl(requestUri.toString());
+            Map<String, String> maskedRequestHeaders = maskHeaders(headers);
+            Map<String, List<String>> maskedResponseHeaders = maskHeaderLists(response.headers().map());
+            String maskedRequestBody = maskText(body);
+            String maskedResponseBody = maskText(response.body());
             Map<String, Object> outputs = new LinkedHashMap<>();
+            outputs.put("request_url", maskedRequestUrl);
             outputs.put("response.status", response.statusCode());
-            outputs.put("response.headers", response.headers().map());
-            outputs.put("response.body", response.body());
+            outputs.put("response.headers", maskedResponseHeaders);
+            outputs.put("response.body", maskedResponseBody);
             outputs.put("response.duration_ms", durationMs);
-            writeRequestEvidence(context, method, path, headers, body);
-            writeResponseEvidence(context, response.statusCode(), response.body(), response.headers().map(), durationMs, "passed", "");
+            writeRequestEvidence(context, maskedRequestUrl, method, maskUrl(path), maskedRequestHeaders, maskedRequestBody);
+            writeResponseEvidence(context, response.statusCode(), maskedResponseBody, maskedResponseHeaders, durationMs, "passed", "");
             return ProviderOperationResult.passed(
                     outputs,
                     evidence(
@@ -102,14 +111,15 @@ public class RestClientProviderRuntime implements ProviderRuntime {
             String code,
             String classification,
             String reason) {
-        writeResponseEvidence(context, 0, "", Map.of(), 0, "failed", reason);
+        String safeReason = maskText(stringValue(reason));
+        writeResponseEvidence(context, 0, "", Map.of(), 0, "failed", safeReason);
         return ProviderOperationResult.failed(
                 Map.of(),
                 evidence("http_request_response", "provider-evidence/http/response.json"),
                 ProviderFailure.of(
                         code,
                         classification,
-                        "rest_client operation failed: " + reason,
+                        "rest_client operation failed: " + safeReason,
                         "Review provider-evidence/http/response.json and Environment Binding base_url."));
     }
 
@@ -182,6 +192,7 @@ public class RestClientProviderRuntime implements ProviderRuntime {
 
     private void writeRequestEvidence(
             ProviderExecutionContext context,
+            String requestUrl,
             String method,
             String path,
             Map<String, String> headers,
@@ -191,6 +202,7 @@ public class RestClientProviderRuntime implements ProviderRuntime {
                   "evidence_type": "http_request_response",
                   "provider_type": "rest_client",
                   "provider_id": "%s",
+                  "request_url": "%s",
                   "method": "%s",
                   "path": "%s",
                   "headers": %s,
@@ -199,6 +211,7 @@ public class RestClientProviderRuntime implements ProviderRuntime {
                 }
                 """.formatted(
                         escape(context.providerId()),
+                        escape(requestUrl),
                         escape(method),
                         escape(path),
                         toJson(headers),
@@ -258,6 +271,58 @@ public class RestClientProviderRuntime implements ProviderRuntime {
 
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    private String maskUrl(String value) {
+        return value.replaceAll("(?i)([?&][^=]*(?:password|token|secret|credential|api[_-]?key|authorization|session)[^=]*=)[^&#]*", "$1" + MASK);
+    }
+
+    private Map<String, String> maskHeaders(Map<String, String> headers) {
+        Map<String, String> masked = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            masked.put(entry.getKey(), sensitiveName(entry.getKey()) ? MASK : maskText(entry.getValue()));
+        }
+        return masked;
+    }
+
+    private Map<String, List<String>> maskHeaderLists(Map<String, List<String>> headers) {
+        Map<String, List<String>> masked = new LinkedHashMap<>();
+        for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
+            if (sensitiveName(entry.getKey())) {
+                masked.put(entry.getKey(), List.of(MASK));
+            } else {
+                masked.put(entry.getKey(), entry.getValue().stream().map(this::maskText).toList());
+            }
+        }
+        return masked;
+    }
+
+    private boolean sensitiveName(String name) {
+        String normalized = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        return normalized.contains("authorization")
+                || normalized.contains("cookie")
+                || normalized.contains("password")
+                || normalized.contains("token")
+                || normalized.contains("secret")
+                || normalized.contains("credential")
+                || normalized.contains("api-key")
+                || normalized.contains("api_key");
+    }
+
+    private String maskText(String value) {
+        if (value == null || value.isBlank()) {
+            return value == null ? "" : value;
+        }
+        String masked = value
+                .replaceAll("(?i)(Bearer\\s+)[A-Za-z0-9._~+/=-]+", "$1" + MASK)
+                .replaceAll("(?i)(session=)[^;\\s]+", "$1" + MASK);
+        masked = masked.replaceAll(
+                "(?i)(\"(?:access_)?token\"\\s*:\\s*\")[^\"]*(\")",
+                "$1" + MASK + "$2");
+        masked = masked.replaceAll(
+                "(?i)(\"(?:password|secret|credential|api[_-]?key|authorization|session)\"\\s*:\\s*\")[^\"]*(\")",
+                "$1" + MASK + "$2");
+        return masked;
     }
 
     private String toJson(Object value) {

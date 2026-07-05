@@ -1,8 +1,8 @@
 provider_contract_version: v0.2
 provider_type: kafka
 runtime_modes: [native, mock, ephemeral]
-executable_runtime_modes: [mock]
-contract_only_runtime_modes: [native, ephemeral]
+executable_runtime_modes: [mock, native]
+contract_only_runtime_modes: [ephemeral]
 binding_keys:
   bootstrap_servers:
     required: true
@@ -16,33 +16,6 @@ binding_keys:
     required: true
     value_type: string
     allowed_value_kinds: [value]
-  security_config.secret_ref:
-    required: false
-    value_type: secret_ref
-    allowed_value_kinds: [secret_ref]
-  security_protocol:
-    required: false
-    value_type: enum
-    allowed_values: [PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL]
-    allowed_value_kinds: [value]
-  sasl_mechanism:
-    required: false
-    value_type: enum
-    allowed_values: [PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, GSSAPI, OAUTHBEARER]
-    allowed_value_kinds: [value]
-  ssl_config_ref:
-    required: false
-    value_type: string
-    allowed_value_kinds: [ref, secret_ref]
-  schema_registry_url:
-    required: false
-    value_type: uri
-    allowed_value_kinds: [value, secret_ref, generated_ref]
-  serialization:
-    required: false
-    value_type: enum
-    allowed_values: [json, string, bytes, avro]
-    allowed_value_kinds: [value]
   timeout:
     required: false
     value_type: duration
@@ -55,27 +28,26 @@ defaults:
   timeout: PT10S
   poll_interval: PT0.5S
   consume_from: test_start_time
-  serialization: json
 valid_provider_instance_shape:
   required_fields: [provider_id, provider_type, runtime_modes]
   allowed_fields: [provider_instance_version, provider_id, provider_type, runtime_modes, defaults, operations, evidence, failure_mapping, labels]
 operations:
   kafka_publish:
-    allowed_inputs: [key, headers, payload_ref, payload, partition, timestamp, timeout]
+    allowed_inputs: [key, payload_ref, payload, timeout]
     required_inputs: [payload_ref]
     output_refs: [topic, partition, offset, key, published_at, event_evidence_ref]
   kafka_observe:
-    allowed_inputs: [key, headers, consume_from, start_offset, timeout, poll_interval, max_records, correlation_key]
+    allowed_inputs: [key, consume_from, timeout, poll_interval]
     required_inputs: []
     output_refs: [topic, observed_count, last_observed_offset, matched, duration_ms, event_evidence_ref]
   kafka_payload_match:
-    allowed_inputs: [expected_ref, key, headers, consume_from, start_offset, timeout, poll_interval, max_records, correlation_key]
+    allowed_inputs: [expected_ref, key, consume_from, timeout, poll_interval]
     required_inputs: [expected_ref]
     output_refs: [topic, observed_count, matched, matched_fields, duration_ms, event_evidence_ref, assertion_evidence_ref]
 evidence:
   outputs: [event_evidence, assertion_evidence]
   event_evidence: [provider_type, provider_id, topic, partition, offset, key, masked_headers, payload_ref, masked_payload_sample, observation_start, observation_end, attempts, timeout_status, status, failure_code]
-  redact: [bootstrap_servers, security_config, password, secret, token, authorization, sasl, ssl]
+  redact: [bootstrap_servers, password, secret, token, authorization]
 safety:
   shared_broker_rules:
     - use_test_owned_consumer_group
@@ -92,7 +64,6 @@ failure_mapping:
     - EVENT_NOT_FOUND
     - PAYLOAD_MISMATCH
     - KAFKA_TIMEOUT
-    - UNSUPPORTED_SERIALIZATION
     - INVALID_DURATION
     - INVALID_INSTANT
     - REF_OUTSIDE_SUITE_ROOT
