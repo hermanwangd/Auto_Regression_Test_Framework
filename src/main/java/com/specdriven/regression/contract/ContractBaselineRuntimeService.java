@@ -187,6 +187,7 @@ public class ContractBaselineRuntimeService {
                 resultJson,
                 model.suiteRunDir(),
                 model.selections().size(),
+                first.evidenceClassification(),
                 providerRuntimeExecuted,
                 List.of());
     }
@@ -276,7 +277,8 @@ public class ContractBaselineRuntimeService {
                     providerType,
                     selection.runtimeMode(providerId),
                     providerStatuses.getOrDefault(providerId, status),
-                    outputs));
+                    outputs,
+                    selection.evidenceClassification()));
         }
         Map<String, Object> testResult = new LinkedHashMap<>();
         testResult.put("test_case_id", selection.testCase().get("test_case_id"));
@@ -416,6 +418,7 @@ public class ContractBaselineRuntimeService {
             Path runDir = multiTestSuite
                     ? suiteRunDir.resolve("tests").resolve(safe(stringValue(document.document().get("test_case_id"))))
                     : suiteRunDir;
+            String evidenceClassification = evidenceClassification(suite, document.document(), instancesById, providerTypesById.keySet());
             selections.add(new RuntimeSelection(
                     suiteRoot,
                     suite,
@@ -429,7 +432,8 @@ public class ContractBaselineRuntimeService {
                     runIds.batchId(),
                     runIds.runId(),
                     suiteRunDir,
-                    runDir));
+                    runDir,
+                    evidenceClassification));
         }
         return new RuntimeModel(suiteRunDir, List.copyOf(selections));
     }
@@ -477,6 +481,8 @@ public class ContractBaselineRuntimeService {
     private ProviderExecutionContext context(RuntimeSelection selection, String providerId) {
         String providerType = selection.providerType(providerId);
         Map<String, Object> binding = selection.bindingsByProviderId().getOrDefault(providerId, Map.of());
+        Map<String, Object> bindingValues = new LinkedHashMap<>(mapValue(binding.get("binding_values")));
+        bindingValues.put("_evidence_classification", selection.evidenceClassification());
         return new ProviderExecutionContext(
                 providerId,
                 providerType,
@@ -486,7 +492,7 @@ public class ContractBaselineRuntimeService {
                 selection.runDir(),
                 selection.contractsByType().getOrDefault(providerType, Map.of()),
                 selection.instancesById().getOrDefault(providerId, Map.of()),
-                mapValue(binding.get("binding_values")));
+                bindingValues);
     }
 
     private List<Map<String, Object>> resolvedOperationInputs(Map<String, Object> testCase, Map<String, Object> operation) {
@@ -552,17 +558,38 @@ public class ContractBaselineRuntimeService {
             String providerType,
             String runtimeMode,
             String status,
-            Map<String, Object> outputs) {
+            Map<String, Object> outputs,
+            String evidenceClassification) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("provider_id", providerId);
         result.put("provider_type", providerType);
         result.put("runtime_mode", runtimeMode);
         result.put("status", status);
+        result.put("evidence_classification", evidenceClassification);
         result.put("resolved_operation_result", Map.of(
                 "status", status,
                 "outputs", outputs));
         result.put("release_evidence_eligible", false);
         return result;
+    }
+
+    private String evidenceClassification(
+            Map<String, Object> suite,
+            Map<String, Object> testCase,
+            Map<String, Map<String, Object>> instancesById,
+            Collection<String> providerIds) {
+        List<String> instanceClassifications = providerIds.stream()
+                .map(providerId -> stringValue(mapValue(instancesById.getOrDefault(providerId, Map.of()).get("labels"))
+                        .get("evidence_classification")))
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .toList();
+        return firstNonBlank(
+                stringValue(mapValue(suite.get("evidence_policy")).get("evidence_classification")),
+                stringValue(mapValue(testCase.get("labels")).get("evidence_classification")),
+                instanceClassifications.size() == 1 ? instanceClassifications.get(0) : "",
+                stringValue(suite.get("evidence_classification")),
+                "framework_provider_capability_only");
     }
 
     private Map<String, Object> step(String id, String status, Map<String, Object> outputs) {
@@ -596,29 +623,29 @@ public class ContractBaselineRuntimeService {
     private void writeExecutionLog(Path runDir, RuntimeSelection selection, String status) {
         write(runDir.resolve("logs/execution.log"), """
                 evidence_type: execution_log
-                evidence_classification: framework_provider_capability_only
+                evidence_classification: %s
                 downstream_release_evidence: false
                 provider_types: [wiremock_http_mock, jdbc, nats]
                 provider_ids: %s
                 status: %s
-                """.formatted(selection.providerIdsByType().values(), status));
+                """.formatted(selection.evidenceClassification(), selection.providerIdsByType().values(), status));
     }
 
     private void writeTestExecutionLog(Path runDir, RuntimeSelection selection, String status) {
         write(runDir.resolve("logs/execution.log"), """
                 evidence_type: execution_log
-                evidence_classification: framework_provider_capability_only
+                evidence_classification: %s
                 downstream_release_evidence: false
                 test_case_id: %s
                 provider_types: [wiremock_http_mock, jdbc, nats]
                 status: %s
-                """.formatted(selection.testCase().get("test_case_id"), status));
+                """.formatted(selection.evidenceClassification(), selection.testCase().get("test_case_id"), status));
     }
 
     private void writeBatch(Path runDir, RuntimeSelection selection, String status, int testCount, String testCaseId) {
         write(runDir.resolve("batch/batch.yaml"), """
                 evidence_type: batch_summary
-                evidence_classification: framework_provider_capability_only
+                evidence_classification: %s
                 downstream_release_evidence: false
                 suite_id: %s
                 batch_id: %s
@@ -628,6 +655,7 @@ public class ContractBaselineRuntimeService {
                 provider_types: [wiremock_http_mock, jdbc, nats]
                 status: %s
                 """.formatted(
+                selection.evidenceClassification(),
                 selection.suite().get("suite_id"),
                 selection.batchId(),
                 selection.runId(),
@@ -639,7 +667,7 @@ public class ContractBaselineRuntimeService {
     private void writeTestBatch(Path runDir, RuntimeSelection selection, String status) {
         write(runDir.resolve("batch/batch.yaml"), """
                 evidence_type: batch_summary
-                evidence_classification: framework_provider_capability_only
+                evidence_classification: %s
                 downstream_release_evidence: false
                 suite_id: %s
                 batch_id: %s
@@ -649,6 +677,7 @@ public class ContractBaselineRuntimeService {
                 provider_types: [wiremock_http_mock, jdbc, nats]
                 status: %s
                 """.formatted(
+                selection.evidenceClassification(),
                 selection.suite().get("suite_id"),
                 selection.batchId(),
                 selection.runId(),
@@ -663,7 +692,7 @@ public class ContractBaselineRuntimeService {
                 : failure;
         write(runDir.resolve("provider-evidence/contract-baseline/failure_detail.yaml"), """
                 evidence_type: failure_detail
-                evidence_classification: framework_provider_capability_only
+                evidence_classification: %s
                 downstream_release_evidence: false
                 provider_types: [wiremock_http_mock, jdbc, nats]
                 provider_ids: %s
@@ -675,6 +704,7 @@ public class ContractBaselineRuntimeService {
                 masking:
                   raw_secret_found: false
                 """.formatted(
+                selection.evidenceClassification(),
                 selection.providerIdsByType().values(),
                 selection.profile(),
                 resolvedFailure.code(),
@@ -792,17 +822,7 @@ public class ContractBaselineRuntimeService {
     }
 
     private Path frameworkProviderContractsDirectory(Path suiteRoot) {
-        Path cwdCandidate = Path.of("").toAbsolutePath().normalize().resolve(FRAMEWORK_PROVIDER_CONTRACTS);
-        if (Files.isDirectory(cwdCandidate)) {
-            return cwdCandidate;
-        }
-        for (Path cursor = suiteRoot; cursor != null; cursor = cursor.getParent()) {
-            Path candidate = cursor.resolve(FRAMEWORK_PROVIDER_CONTRACTS).normalize();
-            if (Files.isDirectory(candidate)) {
-                return candidate;
-            }
-        }
-        return cwdCandidate;
+        return FrameworkProviderContractCatalog.resolveDirectory(suiteRoot, FRAMEWORK_PROVIDER_CONTRACTS);
     }
 
     private Map<String, Map<String, Object>> readDirectoryByField(Path directory, String field) {
@@ -946,6 +966,7 @@ public class ContractBaselineRuntimeService {
             Path resultJson,
             Path evidenceDir,
             int testCount,
+            String evidenceClassification,
             boolean providerRuntimeExecuted,
             List<ContractFinding> findings) {
 
@@ -963,6 +984,7 @@ public class ContractBaselineRuntimeService {
                     null,
                     null,
                     0,
+                    "framework_provider_capability_only",
                     false,
                     List.copyOf(findings));
         }
@@ -984,7 +1006,8 @@ public class ContractBaselineRuntimeService {
             String batchId,
             String runId,
             Path suiteRunDir,
-            Path runDir) {
+            Path runDir,
+            String evidenceClassification) {
 
         String providerType(String providerId) {
             return providerTypesById.getOrDefault(providerId, "");

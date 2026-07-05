@@ -74,14 +74,14 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
             postJson(baseUrl + "/__admin/mappings", stubJson);
             write(context.runDir().resolve("provider-evidence/wiremock/injected_stubs.yaml"), """
                     evidence_type: injected_stub
-                    evidence_classification: framework_provider_capability_only
+                    evidence_classification: %s
                     downstream_release_evidence: false
                     provider_id: %s
                     provider_type: wiremock_http_mock
                     stub_ref: %s
                     loaded_stub_count: 1
                     base_url: %s
-                    """.formatted(context.providerId(), stub, baseUrl));
+                    """.formatted(evidenceClassification(context), context.providerId(), stub, baseUrl));
             writeServerLog(context, "started WireMock at " + baseUrl + "\ninjected stub " + stub + "\n");
             return ProviderOperationResult.passed(
                     Map.of(
@@ -176,11 +176,11 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
             }
             write(context.runDir().resolve("provider-evidence/wiremock/cleanup.yaml"), """
                     evidence_type: cleanup
-                    evidence_classification: framework_provider_capability_only
+                    evidence_classification: %s
                     downstream_release_evidence: false
                     provider_id: %s
                     status: passed
-                    """.formatted(context.providerId()));
+                    """.formatted(evidenceClassification(context), context.providerId()));
             return ProviderOperationResult.passed(
                     Map.of("cleanup_log", "provider-evidence/wiremock/cleanup.yaml"),
                     evidence("cleanup", "provider-evidence/wiremock/cleanup.yaml"));
@@ -316,12 +316,12 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
     private void writeFailureDetail(ProviderExecutionContext context, String content) {
         write(context.runDir().resolve("provider-evidence/wiremock/failure_detail.yaml"), """
                 evidence_type: failure_detail
-                evidence_classification: framework_provider_capability_only
+                evidence_classification: %s
                 downstream_release_evidence: false
                 provider_id: %s
                 provider_type: wiremock_http_mock
                 detail: %s
-                """.formatted(context.providerId(), content));
+                """.formatted(evidenceClassification(context), context.providerId(), content));
     }
 
     private void write(Path path, String content) {
@@ -349,6 +349,11 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
 
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    private String evidenceClassification(ProviderExecutionContext context) {
+        String classification = stringValue(context.bindingValues().get("_evidence_classification"));
+        return classification.isBlank() ? "framework_provider_capability_only" : classification;
     }
 
     private String toJson(Object value) {

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.3
+
+Framework v0.2.3 is a PI-run framework fix patch for executable provider suites.
+
+- Supports external NATS runtime connections through `env://NATS_CONNECTION` without leaking raw connection values into stdout, result JSON, or evidence.
+- Makes packaged provider contract resolution independent of the current working directory by bundling a generated provider contract index.
+- Prints owner-actionable failure codes in CLI output when provider execution fails.
+- Applies materialized evidence classification policy consistently across result JSON and provider evidence.
+- Fixes the full contract-baseline mixed provider runtime path for WireMock HTTP mock, JDBC, and NATS.
+- Hardens external NATS protocol handling so TCP endpoints that do not speak NATS fail with `NATS_CONNECTION_FAILED`, and empty observations are not cached as matched events.
+
+Known boundaries:
+
+- DSL and contract artifacts remain at public contract version `v0.2`.
+- This release does not add new provider families; it fixes runtime execution, evidence classification, and packaged contract lookup for existing v0.2 provider suites.
+
 ## 0.2.2
 
 Framework v0.2.2 is a PI-run hardening patch for v0.2 suite-mode execution.

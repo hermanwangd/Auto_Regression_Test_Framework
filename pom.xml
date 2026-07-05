@@ -171,7 +171,51 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+            </resource>
+            <resource>
+                <directory>docs/02-architecture/contracts/provider-contracts</directory>
+                <targetPath>docs/02-architecture/contracts/provider-contracts</targetPath>
+                <filtering>false</filtering>
+                <includes>
+                    <include>*.yaml</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>${project.build.directory}/generated-resources/provider-contract-index</directory>
+                <filtering>false</filtering>
+            </resource>
+        </resources>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>generate-provider-contract-index</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.build.directory}/generated-resources/provider-contract-index/docs/02-architecture/contracts/provider-contracts"/>
+                                <pathconvert property="provider.contract.files" pathsep="${line.separator}">
+                                    <map from="${project.basedir}/docs/02-architecture/contracts/provider-contracts/" to=""/>
+                                    <fileset dir="${project.basedir}/docs/02-architecture/contracts/provider-contracts">
+                                        <include name="*.yaml"/>
+                                    </fileset>
+                                </pathconvert>
+                                <echo file="${project.build.directory}/generated-resources/provider-contract-index/docs/02-architecture/contracts/provider-contracts/provider-contracts.index">${provider.contract.files}${line.separator}</echo>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

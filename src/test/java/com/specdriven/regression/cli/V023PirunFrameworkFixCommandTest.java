@@ -7,6 +7,9 @@ import com.specdriven.regression.productrepo.ProductRepoService;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
@@ -48,6 +51,49 @@ class V023PirunFrameworkFixCommandTest {
                 .contains("report_status: review_ready")
                 .contains("provider_results_count: 3")
                 .contains("release_evidence_eligible: false");
+    }
+
+    @Test
+    void contractBaselineMixedProviderSuiteRunsWithEnvBackedNatsConnectionAndMaterializedClassification() throws Exception {
+        Path suite = mutableCopy(CONTRACT_BASELINE_SUITE.getParent(), "contract_baseline_env_nats")
+                .resolve("suite_manifest.yaml");
+        Files.writeString(suite, read(suite) + """
+
+                evidence_policy:
+                  evidence_classification: local_ci_ephemeral_only
+                  downstream_release_evidence: false
+                """);
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, read(testCase).replace("  tags: [contract, dry-run, p0-provider]",
+                """
+                  tags: [contract, dry-run, p0-provider]
+                  evidence_classification: local_ci_ephemeral_only"""));
+        Path envProfile = suite.getParent().resolve("env_profiles/ci.yaml");
+        Files.writeString(envProfile, read(envProfile)
+                .replace("local_ref: approved_local_nats_ref", "secret_ref: env://NATS_CONNECTION"));
+
+        try (FakeNatsServer server = new FakeNatsServer()) {
+            System.setProperty("NATS_CONNECTION", "nats://127.0.0.1:" + server.port());
+            CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "ci");
+
+            assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+            assertThat(run.stdout())
+                    .contains("run_status: passed")
+                    .contains("provider_types: wiremock_http_mock,jdbc,nats")
+                    .contains("evidence_classification: local_ci_ephemeral_only")
+                    .doesNotContain("nats://127.0.0.1");
+            Path resultJson = extractPath(run.stdout(), "result_json");
+            Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
+            assertThat(read(resultJson))
+                    .contains("\"provider_type\": \"nats\"")
+                    .contains("\"evidence_classification\": \"local_ci_ephemeral_only\"")
+                    .doesNotContain("nats://127.0.0.1");
+            assertThat(read(evidenceDir.resolve("provider-evidence/nats/publish_payment_event.yaml")))
+                    .contains("evidence_classification: local_ci_ephemeral_only")
+                    .doesNotContain("nats://127.0.0.1");
+        } finally {
+            System.clearProperty("NATS_CONNECTION");
+        }
     }
 
     @Test
@@ -179,5 +225,72 @@ class V023PirunFrameworkFixCommandTest {
     }
 
     private record CommandResult(int exit, String stdout, String stderr) {
+    }
+
+    private static final class FakeNatsServer implements AutoCloseable {
+        private final ServerSocket serverSocket;
+        private final Thread thread;
+
+        FakeNatsServer() throws IOException {
+            this.serverSocket = new ServerSocket(0);
+            this.thread = new Thread(this::serve, "fake-nats-server");
+            this.thread.setDaemon(true);
+            this.thread.start();
+        }
+
+        int port() {
+            return serverSocket.getLocalPort();
+        }
+
+        private void serve() {
+            try (Socket socket = serverSocket.accept()) {
+                socket.setSoTimeout(2_000);
+                socket.getOutputStream().write("INFO {}\r\n".getBytes(StandardCharsets.UTF_8));
+                String subject = "";
+                String sid = "1";
+                String line;
+                while ((line = readLine(socket)) != null) {
+                    if (line.startsWith("SUB ")) {
+                        String[] parts = line.split("\\s+");
+                        subject = parts.length > 1 ? parts[1] : subject;
+                        sid = parts.length > 2 ? parts[2] : sid;
+                    } else if (line.startsWith("PUB ")) {
+                        String[] parts = line.split("\\s+");
+                        String publishSubject = parts.length > 1 ? parts[1] : subject;
+                        int length = Integer.parseInt(parts[parts.length - 1]);
+                        byte[] payload = socket.getInputStream().readNBytes(length);
+                        readLine(socket);
+                        String response = "MSG " + publishSubject + " " + sid + " " + length + "\r\n"
+                                + new String(payload, StandardCharsets.UTF_8) + "\r\n";
+                        socket.getOutputStream().write(response.getBytes(StandardCharsets.UTF_8));
+                        socket.getOutputStream().flush();
+                    } else if (line.startsWith("PING")) {
+                        socket.getOutputStream().write("PONG\r\n".getBytes(StandardCharsets.UTF_8));
+                        socket.getOutputStream().flush();
+                    }
+                }
+            } catch (IOException ignored) {
+                // Test server is intentionally tiny; client assertions cover failures.
+            }
+        }
+
+        private String readLine(Socket socket) throws IOException {
+            StringBuilder line = new StringBuilder();
+            int next;
+            while ((next = socket.getInputStream().read()) >= 0) {
+                if (next == '\n') {
+                    return line.toString().strip();
+                }
+                if (next != '\r') {
+                    line.append((char) next);
+                }
+            }
+            return line.length() == 0 ? null : line.toString();
+        }
+
+        @Override
+        public void close() throws IOException {
+            serverSocket.close();
+        }
     }
 }

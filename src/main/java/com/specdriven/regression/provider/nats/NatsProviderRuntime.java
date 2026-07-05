@@ -6,10 +6,17 @@ import com.specdriven.regression.provider.runtime.ProviderFailure;
 import com.specdriven.regression.provider.runtime.ProviderOperationRequest;
 import com.specdriven.regression.provider.runtime.ProviderOperationResult;
 import com.specdriven.regression.provider.runtime.ProviderRuntime;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -33,8 +40,8 @@ public class NatsProviderRuntime implements ProviderRuntime {
             return failed(context, request, Map.of(), connection.failure(), Observation.empty());
         }
         return switch (request.operation()) {
-            case "nats_publish" -> publish(context, request, connection.busKey());
-            case "nats_observe", "event_published", "event_payload_match" -> observe(context, request, connection.busKey());
+            case "nats_publish" -> publish(context, request, connection);
+            case "nats_observe", "event_published", "event_payload_match" -> observe(context, request, connection);
             default -> failed(
                     context,
                     request,
@@ -51,7 +58,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
     private ProviderOperationResult publish(
             ProviderExecutionContext context,
             ProviderOperationRequest request,
-            String busKey) {
+            ConnectionSelection connection) {
         Instant startedAt = Instant.now();
         String subject = subject(context, request);
         if (subject.isBlank()) {
@@ -72,8 +79,24 @@ public class NatsProviderRuntime implements ProviderRuntime {
             return failed(context, request, Map.of("subject", subject), pollInterval.failure(), Observation.empty(subject));
         }
         Instant publishedAt = Instant.now();
-        eventsByBusSubject.computeIfAbsent(busKey + "|" + subject, ignored -> new ArrayList<>())
-                .add(new ObservedEvent(subject, payload.value(), payload.text(), publishedAt));
+        int observedCount = 1;
+        if (connection.externalUri() == null) {
+            eventsByBusSubject.computeIfAbsent(connection.busKey() + "|" + subject, ignored -> new ArrayList<>())
+                    .add(new ObservedEvent(subject, payload.value(), payload.text(), publishedAt));
+        } else {
+            ExternalObservation externalObservation =
+                    ExternalNatsClient.publishAndObserve(connection.externalUri(), subject, payload.text(), timeout.value());
+            if (externalObservation.failure() != null) {
+                return failed(context, request, Map.of("subject", subject), externalObservation.failure(), Observation.empty(subject));
+            }
+            if (externalObservation.payloadText().isBlank()) {
+                observedCount = 0;
+            } else {
+                Object observedPayload = parsePayload(externalObservation.payloadText());
+                eventsByBusSubject.computeIfAbsent(connection.busKey() + "|" + subject, ignored -> new ArrayList<>())
+                        .add(new ObservedEvent(subject, observedPayload, externalObservation.payloadText(), Instant.now()));
+            }
+        }
         long durationMs = Duration.between(startedAt, Instant.now()).toMillis();
         String evidenceRef = writeEvidence(
                 context,
@@ -86,7 +109,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
                         timeout.value(),
                         pollInterval.value(),
                         1,
-                        1,
+                        observedCount,
                         true,
                         List.of(),
                         payload.value(),
@@ -107,7 +130,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
     private ProviderOperationResult observe(
             ProviderExecutionContext context,
             ProviderOperationRequest request,
-            String busKey) {
+            ConnectionSelection connection) {
         Instant startedAt = Instant.now();
         String subject = subject(context, request);
         if (subject.isBlank()) {
@@ -137,7 +160,21 @@ public class NatsProviderRuntime implements ProviderRuntime {
         Match match = Match.notMatched();
         do {
             attempts++;
-            observed = eventsAfter(busKey, subject, consumeFrom.value());
+            observed = eventsAfter(connection.busKey(), subject, consumeFrom.value());
+            if (observed.isEmpty() && connection.externalUri() != null) {
+                ExternalObservation externalObservation =
+                        ExternalNatsClient.observe(connection.externalUri(), subject, pollInterval.value());
+                if (externalObservation.failure() != null) {
+                    return failed(context, request, Map.of("subject", subject), externalObservation.failure(),
+                            Observation.empty(subject));
+                }
+                if (!externalObservation.payloadText().isBlank()) {
+                    Object observedPayload = parsePayload(externalObservation.payloadText());
+                    eventsByBusSubject.computeIfAbsent(connection.busKey() + "|" + subject, ignored -> new ArrayList<>())
+                            .add(new ObservedEvent(subject, observedPayload, externalObservation.payloadText(), Instant.now()));
+                    observed = eventsAfter(connection.busKey(), subject, consumeFrom.value());
+                }
+            }
             match = match(request.operation(), observed, expected.value());
             if (match.matched()) {
                 break;
@@ -247,26 +284,58 @@ public class NatsProviderRuntime implements ProviderRuntime {
         String secretRef = stringValue(connection.get("secret_ref"));
         if (!localRef.isBlank()) {
             if (approvedLocalRef(localRef)) {
-                return new ConnectionSelection("local:" + localRef, null);
+                return new ConnectionSelection("local:" + localRef, null, null);
             }
-            return new ConnectionSelection("", failure(
+            return new ConnectionSelection("", null, failure(
                     "NATS_CONNECTION_FAILED",
                     "NATS_CONNECTION_FAILED",
                     "NATS local_ref is not approved for framework-managed local execution.",
                     "Use an approved local_ref or a secret_ref resolved by the execution environment."));
         }
         if (!secretRef.isBlank()) {
-            return new ConnectionSelection("", failure(
+            if (secretRef.startsWith("env://")) {
+                String envName = secretRef.substring("env://".length());
+                String value = firstNonBlank(System.getenv(envName), System.getProperty(envName));
+                if (value.isBlank()) {
+                    return new ConnectionSelection("", null, failure(
+                            "NATS_CONNECTION_FAILED",
+                            "NATS_CONNECTION_FAILED",
+                            "NATS env secret ref `" + secretRef + "` is not set.",
+                            "Set environment variable `" + envName + "` to a NATS connection URI before running."));
+                }
+                URI uri = natsUri(value);
+                if (uri == null) {
+                    return new ConnectionSelection("", null, failure(
+                            "NATS_CONNECTION_FAILED",
+                            "NATS_CONNECTION_FAILED",
+                            "NATS env secret ref `" + secretRef + "` did not resolve to a supported NATS URI.",
+                            "Set `" + envName + "` to `nats://host:port` for this execution profile."));
+                }
+                return new ConnectionSelection("env:" + envName, uri, null);
+            }
+            return new ConnectionSelection("", null, failure(
                     "NATS_CONNECTION_FAILED",
                     "NATS_CONNECTION_FAILED",
-                    "Secret-ref backed NATS connection is not available in local provider capability mode.",
-                    "Run this capability sample with an approved local_ref or provide an environment-specific NATS runtime."));
+                    "NATS secret_ref must use an environment-backed reference for framework runtime resolution.",
+                    "Use `env://VARIABLE_NAME`; do not put raw NATS connection strings in artifacts."));
         }
-        return new ConnectionSelection("", failure(
+        return new ConnectionSelection("", null, failure(
                 "NATS_CONNECTION_FAILED",
                 "NATS_CONNECTION_FAILED",
                 "NATS connection requires connection.secret_ref or approved connection.local_ref.",
                 "Supply connection.secret_ref or approved connection.local_ref in Environment Binding."));
+    }
+
+    private URI natsUri(String value) {
+        try {
+            URI uri = new URI(value);
+            if (!"nats".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null || uri.getPort() <= 0) {
+                return null;
+            }
+            return uri;
+        } catch (URISyntaxException e) {
+            return null;
+        }
     }
 
     private boolean approvedLocalRef(String localRef) {
@@ -317,6 +386,15 @@ public class NatsProviderRuntime implements ProviderRuntime {
                     "TARGET_RESOLUTION_FAILED",
                     "NATS payload JSON is invalid.",
                     "Fix the payload fixture before running."));
+        }
+    }
+
+    private Object parsePayload(String text) {
+        try {
+            Object value = yaml.load(text);
+            return value == null ? Map.of() : value;
+        } catch (RuntimeException e) {
+            return text;
         }
     }
 
@@ -460,7 +538,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
         Instant now = Instant.now();
         StringBuilder evidence = new StringBuilder();
         evidence.append("evidence_type: nats_event\n");
-        evidence.append("evidence_classification: framework_provider_capability_only\n");
+        evidence.append("evidence_classification: ").append(evidenceClassification(context)).append('\n');
         evidence.append("downstream_release_evidence: false\n");
         evidence.append("provider_type: ").append(context.providerType()).append('\n');
         evidence.append("provider_id: ").append(context.providerId()).append('\n');
@@ -509,6 +587,12 @@ public class NatsProviderRuntime implements ProviderRuntime {
             return collection.stream().map(this::maskPayload).toList();
         }
         return value == null ? "" : value;
+    }
+
+    private String evidenceClassification(ProviderExecutionContext context) {
+        return firstNonBlank(
+                stringValue(context.bindingValues().get("_evidence_classification")),
+                "framework_provider_capability_only");
     }
 
     private boolean secretKey(String key) {
@@ -643,7 +727,149 @@ public class NatsProviderRuntime implements ProviderRuntime {
         return toJson(String.valueOf(value));
     }
 
-    private record ConnectionSelection(String busKey, ProviderFailure failure) {
+    private record ConnectionSelection(String busKey, URI externalUri, ProviderFailure failure) {
+    }
+
+    private static final class ExternalNatsClient {
+
+        private ExternalNatsClient() {
+        }
+
+        static ExternalObservation publishAndObserve(URI uri, String subject, String payload, Duration timeout) {
+            long deadline = System.currentTimeMillis() + Math.max(timeout.toMillis(), 1);
+            try (Socket socket = connectedSocket(uri)) {
+                socket.setSoTimeout(250);
+                BufferedInputStream input = new BufferedInputStream(socket.getInputStream());
+                BufferedOutputStream output = new BufferedOutputStream(socket.getOutputStream());
+                if (!readServerInfo(input, deadline)) {
+                    return ExternalObservation.failed(connectionFailure());
+                }
+                writeAscii(output, connectCommand(uri));
+                writeAscii(output, "SUB " + subject + " 1\r\n");
+                byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+                writeAscii(output, "PUB " + subject + " " + payloadBytes.length + "\r\n");
+                output.write(payloadBytes);
+                writeAscii(output, "\r\nPING\r\n");
+                output.flush();
+                return readObservation(input, deadline);
+            } catch (IOException | RuntimeException e) {
+                return ExternalObservation.failed(connectionFailure());
+            }
+        }
+
+        static ExternalObservation observe(URI uri, String subject, Duration timeout) {
+            long deadline = System.currentTimeMillis() + Math.max(timeout.toMillis(), 1);
+            try (Socket socket = connectedSocket(uri)) {
+                socket.setSoTimeout(250);
+                BufferedInputStream input = new BufferedInputStream(socket.getInputStream());
+                BufferedOutputStream output = new BufferedOutputStream(socket.getOutputStream());
+                if (!readServerInfo(input, deadline)) {
+                    return ExternalObservation.failed(connectionFailure());
+                }
+                writeAscii(output, connectCommand(uri));
+                writeAscii(output, "SUB " + subject + " 1\r\nPING\r\n");
+                output.flush();
+                return readObservation(input, deadline);
+            } catch (IOException | RuntimeException e) {
+                return ExternalObservation.failed(connectionFailure());
+            }
+        }
+
+        private static boolean readServerInfo(BufferedInputStream input, long deadline) throws IOException {
+            String line = readLine(input, deadline);
+            return line != null && line.startsWith("INFO");
+        }
+
+        private static ExternalObservation readObservation(BufferedInputStream input, long deadline) throws IOException {
+            while (System.currentTimeMillis() <= deadline) {
+                String line = readLine(input, deadline);
+                if (line == null || line.isBlank()) {
+                    continue;
+                }
+                if (line.startsWith("PONG")) {
+                    return new ExternalObservation("", null);
+                }
+                if (line.startsWith("INFO") || line.startsWith("+OK")) {
+                    continue;
+                }
+                if (line.startsWith("-ERR")) {
+                    return ExternalObservation.failed(connectionFailure());
+                }
+                if (line.startsWith("MSG ")) {
+                    String[] parts = line.split("\\s+");
+                    int length = Integer.parseInt(parts[parts.length - 1]);
+                    byte[] payload = input.readNBytes(length);
+                    readLine(input, deadline);
+                    return new ExternalObservation(new String(payload, StandardCharsets.UTF_8), null);
+                }
+                return ExternalObservation.failed(connectionFailure());
+            }
+            return ExternalObservation.failed(connectionFailure());
+        }
+
+        private static String readLine(BufferedInputStream input, long deadline) throws IOException {
+            StringBuilder line = new StringBuilder();
+            while (System.currentTimeMillis() <= deadline) {
+                int next;
+                try {
+                    next = input.read();
+                } catch (java.net.SocketTimeoutException e) {
+                    continue;
+                }
+                if (next < 0) {
+                    return line.length() == 0 ? null : line.toString();
+                }
+                if (next == '\n') {
+                    return line.toString().strip();
+                }
+                if (next != '\r') {
+                    line.append((char) next);
+                }
+            }
+            return line.length() == 0 ? null : line.toString();
+        }
+
+        private static Socket connectedSocket(URI uri) throws IOException {
+            Socket socket = new Socket();
+            socket.connect(new InetSocketAddress(uri.getHost(), uri.getPort()), 2_000);
+            return socket;
+        }
+
+        private static void writeAscii(BufferedOutputStream output, String value) throws IOException {
+            output.write(value.getBytes(StandardCharsets.UTF_8));
+        }
+
+        private static String connectCommand(URI uri) {
+            StringBuilder json = new StringBuilder("{\"verbose\":false,\"pedantic\":false,\"lang\":\"java\",\"version\":\"0.2.3\"");
+            String userInfo = uri.getUserInfo();
+            if (userInfo != null && !userInfo.isBlank()) {
+                String[] parts = userInfo.split(":", 2);
+                json.append(",\"user\":\"").append(escape(parts[0])).append('"');
+                if (parts.length > 1) {
+                    json.append(",\"pass\":\"").append(escape(parts[1])).append('"');
+                }
+            }
+            return "CONNECT " + json.append("}\r\n");
+        }
+
+        private static String escape(String value) {
+            return value.replace("\\", "\\\\").replace("\"", "\\\"");
+        }
+
+        private static ProviderFailure connectionFailure() {
+            return ProviderFailure.of(
+                    "NATS_CONNECTION_FAILED",
+                    "NATS_CONNECTION_FAILED",
+                    "NATS connection could not be opened or did not return a valid protocol response.",
+                    "Verify the execution profile starts NATS and that env://NATS_CONNECTION points to it.");
+        }
+    }
+
+    private record ExternalObservation(String payloadText, ProviderFailure failure) {
+
+        static ExternalObservation failed(ProviderFailure failure) {
+            return new ExternalObservation("", failure);
+        }
     }
 
     private record Payload(Object value, String text, ProviderFailure failure) {

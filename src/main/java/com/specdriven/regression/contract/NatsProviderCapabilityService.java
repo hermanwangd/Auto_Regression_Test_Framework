@@ -159,6 +159,7 @@ public class NatsProviderCapabilityService {
                 firstSelection.subject(),
                 resultJson,
                 firstSelection.runDir(),
+                firstSelection.evidenceClassification(),
                 providerRuntimeExecuted,
                 List.of());
     }
@@ -208,7 +209,7 @@ public class NatsProviderCapabilityService {
                 recordOperationOutput(outputs, operation, result);
                 verifyResults.add(assertion(operation.id(), operation.request().operation(), result));
                 evidenceRefs.addAll(refs(result));
-                writeAssertion(selection.runDir(), operation.id(), operation.request().operation(), result);
+                writeAssertion(selection.runDir(), selection.evidenceClassification(), operation.id(), operation.request().operation(), result);
                 evidenceRefs.add("assertions/" + operation.id() + ".yaml");
                 if (!result.passed()) {
                     testStatus = "failed";
@@ -302,7 +303,9 @@ public class NatsProviderCapabilityService {
                 }
                 Map<String, Object> providerBinding =
                         runtimeBindingResolver.providerBinding(suiteRoot, requestedProfile, providerId);
-                Map<String, Object> bindingValues = mapValue(providerBinding.get("binding_values"));
+                Map<String, Object> bindingValues = new LinkedHashMap<>(mapValue(providerBinding.get("binding_values")));
+                String evidenceClassification = evidenceClassification(suite, testCase, providerInstance);
+                bindingValues.put("_evidence_classification", evidenceClassification);
                 selections.add(new RuntimeSelection(
                         suiteRoot,
                         suite,
@@ -316,6 +319,7 @@ public class NatsProviderCapabilityService {
                         providerContract,
                         providerInstance,
                         bindingValues,
+                        evidenceClassification,
                         runIds.batchId(),
                         runIds.runId(),
                         runDir));
@@ -336,17 +340,7 @@ public class NatsProviderCapabilityService {
     }
 
     private Path frameworkProviderContractsDirectory(Path suiteRoot) {
-        Path cwdCandidate = Path.of("").toAbsolutePath().normalize().resolve(FRAMEWORK_PROVIDER_CONTRACTS);
-        if (Files.isDirectory(cwdCandidate)) {
-            return cwdCandidate;
-        }
-        for (Path cursor = suiteRoot; cursor != null; cursor = cursor.getParent()) {
-            Path candidate = cursor.resolve(FRAMEWORK_PROVIDER_CONTRACTS).normalize();
-            if (Files.isDirectory(candidate)) {
-                return candidate;
-            }
-        }
-        return cwdCandidate;
+        return FrameworkProviderContractCatalog.resolveDirectory(suiteRoot, FRAMEWORK_PROVIDER_CONTRACTS);
     }
 
     private boolean targetReferencedByLifecycle(Map<String, Object> testCase, String targetName) {
@@ -554,10 +548,10 @@ public class NatsProviderCapabilityService {
                 .toList();
     }
 
-    private void writeAssertion(Path runDir, String id, String type, ProviderOperationResult result) {
+    private void writeAssertion(Path runDir, String evidenceClassification, String id, String type, ProviderOperationResult result) {
         write(runDir.resolve("assertions/" + id + ".yaml"), """
                 evidence_type: assertion_result
-                evidence_classification: framework_provider_capability_only
+                evidence_classification: %s
                 downstream_release_evidence: false
                 assertion_id: %s
                 type: %s
@@ -566,6 +560,7 @@ public class NatsProviderCapabilityService {
                 observed_count: %s
                 event_evidence_ref: %s
                 """.formatted(
+                evidenceClassification,
                 id,
                 type,
                 result.passed() ? "passed" : "failed",
@@ -577,7 +572,7 @@ public class NatsProviderCapabilityService {
     private void writeExecutionLog(Path runDir, RuntimeSelection selection, String status) {
         write(runDir.resolve("logs/execution.log"), """
                 evidence_type: execution_log
-                evidence_classification: framework_provider_capability_only
+                evidence_classification: %s
                 downstream_release_evidence: false
                 provider_type: %s
                 provider_id: %s
@@ -586,6 +581,7 @@ public class NatsProviderCapabilityService {
                 subject: %s
                 status: %s
                 """.formatted(
+                selection.evidenceClassification(),
                 selection.providerType(),
                 selection.providerId(),
                 selection.profile(),
@@ -597,7 +593,7 @@ public class NatsProviderCapabilityService {
     private void writeBatch(Path runDir, RuntimeSelection selection, String status, int testCount) {
         write(runDir.resolve("batch/batch.yaml"), """
                 evidence_type: batch_summary
-                evidence_classification: framework_provider_capability_only
+                evidence_classification: %s
                 downstream_release_evidence: false
                 suite_id: %s
                 batch_id: %s
@@ -611,6 +607,7 @@ public class NatsProviderCapabilityService {
                 subject: %s
                 status: %s
                 """.formatted(
+                selection.evidenceClassification(),
                 selection.suite().get("suite_id"),
                 selection.batchId(),
                 selection.runId(),
@@ -644,7 +641,7 @@ public class NatsProviderCapabilityService {
                 : failure;
         write(runDir.resolve("provider-evidence/nats/failure_detail.yaml"), """
                 evidence_type: failure_detail
-                evidence_classification: framework_provider_capability_only
+                evidence_classification: %s
                 downstream_release_evidence: false
                 provider_type: %s
                 provider_id: %s
@@ -658,6 +655,7 @@ public class NatsProviderCapabilityService {
                 masking:
                   raw_secret_found: false
                 """.formatted(
+                selection.evidenceClassification(),
                 selection.providerType(),
                 selection.providerId(),
                 selection.profile(),
@@ -721,12 +719,25 @@ public class NatsProviderCapabilityService {
         result.put("profile", profile);
         result.put("runtime_mode", selection.runtimeMode());
         result.put("subject", selection.subject());
+        result.put("evidence_classification", selection.evidenceClassification());
         result.put("resolved_operation_result", Map.of(
                 "operation", "nats_capability_flow",
                 "status", status,
                 "outputs", outputs));
         result.put("release_evidence_eligible", false);
         return result;
+    }
+
+    private String evidenceClassification(
+            Map<String, Object> suite,
+            Map<String, Object> testCase,
+            Map<String, Object> providerInstance) {
+        return firstNonBlank(
+                stringValue(mapValue(suite.get("evidence_policy")).get("evidence_classification")),
+                stringValue(mapValue(testCase.get("labels")).get("evidence_classification")),
+                stringValue(mapValue(providerInstance.get("labels")).get("evidence_classification")),
+                stringValue(suite.get("evidence_classification")),
+                "framework_provider_capability_only");
     }
 
     private String topLevelTestCaseId(RuntimeSelection selection, int testCount) {
@@ -862,6 +873,7 @@ public class NatsProviderCapabilityService {
             String subject,
             Path resultJson,
             Path evidenceDir,
+            String evidenceClassification,
             boolean providerRuntimeExecuted,
             List<ContractFinding> findings) {
 
@@ -881,6 +893,7 @@ public class NatsProviderCapabilityService {
                     "",
                     null,
                     null,
+                    "framework_provider_capability_only",
                     false,
                     List.copyOf(findings));
         }
@@ -899,6 +912,7 @@ public class NatsProviderCapabilityService {
             Map<String, Object> providerContract,
             Map<String, Object> providerInstance,
             Map<String, Object> bindingValues,
+            String evidenceClassification,
             String batchId,
             String runId,
             Path runDir) {

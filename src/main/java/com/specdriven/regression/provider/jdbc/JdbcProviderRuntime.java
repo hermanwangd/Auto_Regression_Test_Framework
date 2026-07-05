@@ -507,7 +507,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
     }
 
     private void appendEvidenceHeader(StringBuilder content, ProviderExecutionContext context) {
-        content.append("evidence_classification: framework_provider_capability_only\n");
+        content.append("evidence_classification: ").append(evidenceClassification(context)).append('\n');
         content.append("downstream_release_evidence: false\n");
         content.append("provider_type: ").append(context.providerType()).append('\n');
         content.append("provider_id: ").append(context.providerId()).append('\n');
@@ -560,6 +560,11 @@ public class JdbcProviderRuntime implements ProviderRuntime {
             return "***";
         }
         return value;
+    }
+
+    private String evidenceClassification(ProviderExecutionContext context) {
+        String classification = stringValue(context.bindingValues().get("_evidence_classification"));
+        return classification.isBlank() ? "framework_provider_capability_only" : classification;
     }
 
     private ProviderOperationResult failed(

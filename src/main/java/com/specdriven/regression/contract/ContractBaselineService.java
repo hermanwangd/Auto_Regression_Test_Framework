@@ -1474,17 +1474,7 @@ public class ContractBaselineService {
     }
 
     private Path frameworkProviderContractsDirectory(Path suiteRoot) {
-        Path cwdCandidate = Path.of("").toAbsolutePath().normalize().resolve(FRAMEWORK_PROVIDER_CONTRACTS);
-        if (Files.isDirectory(cwdCandidate)) {
-            return cwdCandidate;
-        }
-        for (Path cursor = suiteRoot; cursor != null; cursor = cursor.getParent()) {
-            Path candidate = cursor.resolve(FRAMEWORK_PROVIDER_CONTRACTS).normalize();
-            if (Files.isDirectory(candidate)) {
-                return candidate;
-            }
-        }
-        return cwdCandidate;
+        return FrameworkProviderContractCatalog.resolveDirectory(suiteRoot, FRAMEWORK_PROVIDER_CONTRACTS);
     }
 
     private Map<Path, Map<String, Object>> readSuiteLocalProviderContracts(
@@ -2277,6 +2267,7 @@ public class ContractBaselineService {
 
     private boolean safeSecretReference(String value) {
         return value.startsWith("vault://")
+                || value.startsWith("env://")
                 || value.startsWith("generated://")
                 || value.startsWith("local://")
                 || value.startsWith("approved_local_")

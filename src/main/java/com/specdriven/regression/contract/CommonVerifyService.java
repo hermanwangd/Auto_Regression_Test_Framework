@@ -1293,6 +1293,7 @@ public class CommonVerifyService {
     private boolean safeSecretReference(String value) {
         return value.startsWith("secret://")
                 || value.startsWith("vault://")
+                || value.startsWith("env://")
                 || value.startsWith("generated://")
                 || value.startsWith("${");
     }

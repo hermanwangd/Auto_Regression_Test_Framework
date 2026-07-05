@@ -906,17 +906,7 @@ public class WireMockHttpRequestCapabilityService {
     }
 
     private Path frameworkProviderContractsDirectory(Path suiteRoot) {
-        Path cwdCandidate = Path.of("").toAbsolutePath().normalize().resolve(FRAMEWORK_PROVIDER_CONTRACTS);
-        if (Files.isDirectory(cwdCandidate)) {
-            return cwdCandidate;
-        }
-        for (Path cursor = suiteRoot; cursor != null; cursor = cursor.getParent()) {
-            Path candidate = cursor.resolve(FRAMEWORK_PROVIDER_CONTRACTS).normalize();
-            if (Files.isDirectory(candidate)) {
-                return candidate;
-            }
-        }
-        return cwdCandidate;
+        return FrameworkProviderContractCatalog.resolveDirectory(suiteRoot, FRAMEWORK_PROVIDER_CONTRACTS);
     }
 
     private Map<String, Map<String, Object>> readDirectoryByField(Path directory, String field) {

@@ -7,6 +7,9 @@ import com.specdriven.regression.productrepo.ProductRepoService;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -103,6 +106,107 @@ class NatsProviderCapabilityCommandTest {
                 .contains("run_id: RUN-NATS-")
                 .contains("test_case_id: NATS-CAPABILITY-TC-001")
                 .contains("status: passed");
+    }
+
+    @Test
+    void natsSuiteRunsWithEnvSecretBackedExternalConnectionAndMaterializedClassification() throws Exception {
+        Path suite = mutableNats();
+        markEvidenceClassification(suite, "local_ci_ephemeral_only");
+        Path instance = suite.getParent().resolve("provider_instances/local_nats.yaml");
+        Files.writeString(instance, read(instance)
+                .replace("runtime_modes: [mock]", "runtime_modes: [mock, ephemeral]"));
+        Path envProfile = suite.getParent().resolve("env_profiles/local_nats.yaml");
+        Files.writeString(envProfile, read(envProfile)
+                .replace("allowed_runtime_modes: [mock]", "allowed_runtime_modes: [mock, ephemeral]")
+                .replace("runtime_mode: mock", "runtime_mode: ephemeral")
+                .replace("local_ref: approved_local_nats_ref", "secret_ref: env://NATS_CONNECTION"));
+
+        try (FakeNatsServer server = new FakeNatsServer()) {
+            System.setProperty("NATS_CONNECTION", "nats://127.0.0.1:" + server.port());
+            CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_nats");
+
+            assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+            assertThat(run.stdout())
+                    .contains("run_status: passed")
+                    .contains("runtime_mode: ephemeral")
+                    .contains("evidence_classification: local_ci_ephemeral_only")
+                    .doesNotContain("nats://127.0.0.1");
+            Path resultJson = extractPath(run.stdout(), "result_json");
+            Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
+            assertThat(read(resultJson))
+                    .contains("\"evidence_classification\": \"local_ci_ephemeral_only\"")
+                    .doesNotContain("nats://127.0.0.1");
+            assertThat(read(evidenceDir.resolve("provider-evidence/nats/publish_event.yaml")))
+                    .contains("evidence_classification: local_ci_ephemeral_only")
+                    .doesNotContain("nats://127.0.0.1");
+        } finally {
+            System.clearProperty("NATS_CONNECTION");
+        }
+    }
+
+    @Test
+    void natsExternalConnectionFailsWhenTcpEndpointDoesNotSpeakNatsProtocol() throws Exception {
+        Path suite = mutableNats();
+        Path instance = suite.getParent().resolve("provider_instances/local_nats.yaml");
+        Files.writeString(instance, read(instance)
+                .replace("runtime_modes: [mock]", "runtime_modes: [mock, ephemeral]"));
+        Path envProfile = suite.getParent().resolve("env_profiles/local_nats.yaml");
+        Files.writeString(envProfile, read(envProfile)
+                .replace("allowed_runtime_modes: [mock]", "allowed_runtime_modes: [mock, ephemeral]")
+                .replace("runtime_mode: mock", "runtime_mode: ephemeral")
+                .replace("local_ref: approved_local_nats_ref", "secret_ref: env://NATS_CONNECTION"));
+
+        try (NonNatsTcpServer server = new NonNatsTcpServer()) {
+            System.setProperty("NATS_CONNECTION", "nats://127.0.0.1:" + server.port());
+            CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_nats");
+
+            assertThat(run.exit()).isEqualTo(1);
+            assertThat(run.stdout())
+                    .contains("run_status: failed")
+                    .contains("failure_code: NATS_CONNECTION_FAILED")
+                    .contains("owner_action: Verify the execution profile starts NATS")
+                    .doesNotContain("nats://127.0.0.1");
+            Path resultJson = extractPath(run.stdout(), "result_json");
+            assertThat(read(resultJson))
+                    .contains("\"status\": \"failed\"")
+                    .contains("NATS_CONNECTION_FAILED")
+                    .doesNotContain("nats://127.0.0.1");
+        } finally {
+            System.clearProperty("NATS_CONNECTION");
+        }
+    }
+
+    @Test
+    void natsExternalPublishDoesNotCacheEmptyProtocolOnlyObservation() throws Exception {
+        Path suite = mutableNats();
+        Path instance = suite.getParent().resolve("provider_instances/local_nats.yaml");
+        Files.writeString(instance, read(instance)
+                .replace("runtime_modes: [mock]", "runtime_modes: [mock, ephemeral]"));
+        Path envProfile = suite.getParent().resolve("env_profiles/local_nats.yaml");
+        Files.writeString(envProfile, read(envProfile)
+                .replace("allowed_runtime_modes: [mock]", "allowed_runtime_modes: [mock, ephemeral]")
+                .replace("runtime_mode: mock", "runtime_mode: ephemeral")
+                .replace("local_ref: approved_local_nats_ref", "secret_ref: env://NATS_CONNECTION"));
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, read(testCase).replace("PT5S", "PT0.3S"));
+
+        try (ProtocolOnlyNatsServer server = new ProtocolOnlyNatsServer()) {
+            System.setProperty("NATS_CONNECTION", "nats://127.0.0.1:" + server.port());
+            CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_nats");
+
+            assertThat(run.exit()).isEqualTo(1);
+            assertThat(run.stdout())
+                    .contains("run_status: failed")
+                    .contains("failure_code: EVENT_NOT_FOUND")
+                    .doesNotContain("nats://127.0.0.1");
+            Path resultJson = extractPath(run.stdout(), "result_json");
+            assertThat(read(resultJson))
+                    .contains("\"status\": \"failed\"")
+                    .contains("EVENT_NOT_FOUND")
+                    .doesNotContain("\"matched\": true");
+        } finally {
+            System.clearProperty("NATS_CONNECTION");
+        }
     }
 
     @Test
@@ -264,6 +368,10 @@ class NatsProviderCapabilityCommandTest {
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_nats");
 
         assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("failure_code: PAYLOAD_MISMATCH")
+                .contains("failure_reason: Observed NATS event payload did not match expected JSON fields.")
+                .contains("owner_action: Review expected payload fields and event evidence.");
         Path resultJson = extractPath(result.stdout(), "result_json");
         assertThat(read(resultJson))
                 .contains("\"status\": \"failed\"")
@@ -347,6 +455,19 @@ class NatsProviderCapabilityCommandTest {
         return target.resolve("suite_manifest.yaml");
     }
 
+    private void markEvidenceClassification(Path suite, String classification) throws IOException {
+        Files.writeString(suite, read(suite)
+                .replace("evidence_classification: framework_provider_capability_only",
+                        "evidence_classification: " + classification));
+        Files.writeString(suite.getParent().resolve("test_case.yaml"), read(suite.getParent().resolve("test_case.yaml"))
+                .replace("evidence_classification: framework_provider_capability_only",
+                        "evidence_classification: " + classification));
+        Files.writeString(suite.getParent().resolve("provider_instances/local_nats.yaml"),
+                read(suite.getParent().resolve("provider_instances/local_nats.yaml"))
+                        .replace("evidence_classification: framework_provider_capability_only",
+                                "evidence_classification: " + classification));
+    }
+
     private void copyDirectory(Path source, Path target) throws IOException {
         try (var paths = Files.walk(source)) {
             for (Path path : paths.toList()) {
@@ -400,5 +521,160 @@ class NatsProviderCapabilityCommandTest {
     }
 
     private record CommandResult(int exit, String stdout, String stderr) {
+    }
+
+    private static final class NonNatsTcpServer implements AutoCloseable {
+        private final ServerSocket serverSocket;
+        private final Thread thread;
+
+        NonNatsTcpServer() throws IOException {
+            this.serverSocket = new ServerSocket(0);
+            this.thread = new Thread(this::serve, "non-nats-tcp-server");
+            this.thread.setDaemon(true);
+            this.thread.start();
+        }
+
+        int port() {
+            return serverSocket.getLocalPort();
+        }
+
+        private void serve() {
+            try (Socket socket = serverSocket.accept()) {
+                socket.getOutputStream().write("HELLO\r\n".getBytes(StandardCharsets.UTF_8));
+                socket.getOutputStream().flush();
+            } catch (IOException ignored) {
+                // Test server intentionally does not implement NATS.
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            serverSocket.close();
+        }
+    }
+
+    private static final class ProtocolOnlyNatsServer implements AutoCloseable {
+        private final ServerSocket serverSocket;
+        private final Thread thread;
+
+        ProtocolOnlyNatsServer() throws IOException {
+            this.serverSocket = new ServerSocket(0);
+            this.thread = new Thread(this::serve, "protocol-only-nats-server");
+            this.thread.setDaemon(true);
+            this.thread.start();
+        }
+
+        int port() {
+            return serverSocket.getLocalPort();
+        }
+
+        private void serve() {
+            while (!serverSocket.isClosed()) {
+                try (Socket socket = serverSocket.accept()) {
+                    socket.setSoTimeout(500);
+                    socket.getOutputStream().write("INFO {}\r\n".getBytes(StandardCharsets.UTF_8));
+                    socket.getOutputStream().flush();
+                    String line;
+                    while ((line = readLine(socket)) != null) {
+                        if (line.startsWith("PUB ")) {
+                            int length = Integer.parseInt(line.split("\\s+")[2]);
+                            socket.getInputStream().readNBytes(length);
+                            readLine(socket);
+                        } else if (line.startsWith("PING")) {
+                            socket.getOutputStream().write("PONG\r\n".getBytes(StandardCharsets.UTF_8));
+                            socket.getOutputStream().flush();
+                        }
+                    }
+                } catch (IOException ignored) {
+                    // Test server intentionally acknowledges protocol without delivering messages.
+                }
+            }
+        }
+
+        private String readLine(Socket socket) throws IOException {
+            StringBuilder line = new StringBuilder();
+            int next;
+            while ((next = socket.getInputStream().read()) >= 0) {
+                if (next == '\n') {
+                    return line.toString().strip();
+                }
+                if (next != '\r') {
+                    line.append((char) next);
+                }
+            }
+            return line.length() == 0 ? null : line.toString();
+        }
+
+        @Override
+        public void close() throws IOException {
+            serverSocket.close();
+        }
+    }
+
+    private static final class FakeNatsServer implements AutoCloseable {
+        private final ServerSocket serverSocket;
+        private final Thread thread;
+
+        FakeNatsServer() throws IOException {
+            this.serverSocket = new ServerSocket(0);
+            this.thread = new Thread(this::serve, "fake-nats-server");
+            this.thread.setDaemon(true);
+            this.thread.start();
+        }
+
+        int port() {
+            return serverSocket.getLocalPort();
+        }
+
+        private void serve() {
+            try (Socket socket = serverSocket.accept()) {
+                socket.setSoTimeout(2_000);
+                socket.getOutputStream().write("INFO {}\r\n".getBytes(StandardCharsets.UTF_8));
+                String subject = "";
+                String sid = "1";
+                String line;
+                while ((line = readLine(socket)) != null) {
+                    if (line.startsWith("SUB ")) {
+                        String[] parts = line.split("\\s+");
+                        subject = parts.length > 1 ? parts[1] : subject;
+                        sid = parts.length > 2 ? parts[2] : sid;
+                    } else if (line.startsWith("PUB ")) {
+                        String[] parts = line.split("\\s+");
+                        String publishSubject = parts.length > 1 ? parts[1] : subject;
+                        int length = Integer.parseInt(parts[parts.length - 1]);
+                        byte[] payload = socket.getInputStream().readNBytes(length);
+                        readLine(socket);
+                        String response = "MSG " + publishSubject + " " + sid + " " + length + "\r\n"
+                                + new String(payload, StandardCharsets.UTF_8) + "\r\n";
+                        socket.getOutputStream().write(response.getBytes(StandardCharsets.UTF_8));
+                        socket.getOutputStream().flush();
+                    } else if (line.startsWith("PING")) {
+                        socket.getOutputStream().write("PONG\r\n".getBytes(StandardCharsets.UTF_8));
+                        socket.getOutputStream().flush();
+                    }
+                }
+            } catch (IOException ignored) {
+                // Test server is intentionally tiny; client assertions cover failures.
+            }
+        }
+
+        private String readLine(Socket socket) throws IOException {
+            StringBuilder line = new StringBuilder();
+            int next;
+            while ((next = socket.getInputStream().read()) >= 0) {
+                if (next == '\n') {
+                    return line.toString().strip();
+                }
+                if (next != '\r') {
+                    line.append((char) next);
+                }
+            }
+            return line.length() == 0 ? null : line.toString();
+        }
+
+        @Override
+        public void close() throws IOException {
+            serverSocket.close();
+        }
     }
 }

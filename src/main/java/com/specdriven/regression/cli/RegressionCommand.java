@@ -964,10 +964,36 @@ public class RegressionCommand {
             out.println("evidence_classification: " + result.evidenceClassification());
             out.println("result_json: " + result.resultJson());
             out.println("evidence_dir: " + result.evidenceDir());
+            printRuntimeFailure(out, result);
         } else {
             out.println("provider_runtime_invoked: false");
         }
         printContractFindings(out, result.findings());
+    }
+
+    private void printRuntimeFailure(PrintStream out, SuiteRuntimeResult result) {
+        if (result.passed() || result.resultJson() == null || !Files.isRegularFile(result.resultJson())) {
+            return;
+        }
+        try {
+            Map<String, Object> resultDocument = readYamlMap(result.resultJson());
+            Map<String, Object> failure = mapValue(resultDocument.get("failure"));
+            String code = stringValue(failure.get("code"));
+            if (code.isBlank()) {
+                return;
+            }
+            out.println("failure_code: " + code);
+            String reason = stringValue(failure.get("reason"));
+            if (!reason.isBlank()) {
+                out.println("failure_reason: " + reason);
+            }
+            String ownerAction = stringValue(failure.get("owner_action"));
+            if (!ownerAction.isBlank()) {
+                out.println("owner_action: " + ownerAction);
+            }
+        } catch (RuntimeException ignored) {
+            // Validation/report commands provide detailed parsing errors; run summary stays printable.
+        }
     }
 
     private StatusCounts suiteRuntimeStatusCounts(SuiteRuntimeResult result) {
@@ -2639,6 +2665,14 @@ public class RegressionCommand {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> mapValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return Map.of();
+    }
+
     private String adapterName(Path testCasePath) {
         Object executionTarget = testCaseMap(testCasePath).get("execution_target");
         if (executionTarget instanceof Map<?, ?> target) {
@@ -2859,7 +2893,7 @@ public class RegressionCommand {
                     result.providerTypes(),
                     result.resultJson(),
                     result.evidenceDir(),
-                    "framework_provider_capability_only",
+                    result.evidenceClassification(),
                     List.of(
                             "provider_types: " + String.join(",", result.providerTypes()),
                             "provider_ids: " + String.join(",", result.providerIds())),
@@ -3017,7 +3051,7 @@ public class RegressionCommand {
                     blankListFiltered(result.providerType()),
                     result.resultJson(),
                     result.evidenceDir(),
-                    "framework_provider_capability_only",
+                    result.evidenceClassification(),
                     List.of(
                             "provider_type: " + result.providerType(),
                             "provider_id: " + result.providerId(),
