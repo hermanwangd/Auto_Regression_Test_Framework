@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,8 @@ class ProviderSupportMatrixConsistencyTest {
     private static final Path REGISTRY =
             Path.of("docs/02-architecture/contracts/provider_capability_registry.v0.2.yaml");
     private static final Path SUPPORT_MATRIX = Path.of("docs/09-operations/provider_support_matrix.md");
+    private static final Path PROVIDER_VERIFY_CATALOG =
+            Path.of("docs/02-architecture/contracts/p0_provider_verify_catalog.v0.2.md");
     private static final Set<String> SUPPORT_STATUS_VALUES =
             Set.of("supported", "contract_only", "deprecated", "unsupported");
 
@@ -39,6 +42,30 @@ class ProviderSupportMatrixConsistencyTest {
         assertThat(matrix).containsExactlyInAnyOrderEntriesOf(registry);
         assertThat(matrix.values()).allSatisfy(status -> assertThat(status).isIn(SUPPORT_STATUS_VALUES));
         assertThat(matrix.get("kafka_messaging")).isEqualTo("deprecated");
+    }
+
+    @Test
+    void providerVerifyCatalogAlignsMessagingNativeSupportClaim() throws Exception {
+        String catalog = Files.readString(PROVIDER_VERIFY_CATALOG);
+
+        for (String providerType : List.of("Kafka / Event", "IBM MQ / Queue")) {
+            String row = providerCatalogRow(catalog, providerType);
+            assertThat(row)
+                    .as(providerType)
+                    .contains("`executable_runtime_modes` is `[mock, native]`")
+                    .contains("`ephemeral` remains contract-only");
+        }
+        assertThat(catalog)
+                .doesNotContain("`executable_runtime_modes` is `[mock]` in this build")
+                .doesNotContain("Native broker execution")
+                .doesNotContain("Native queue-manager execution");
+    }
+
+    private String providerCatalogRow(String catalog, String providerType) {
+        return catalog.lines()
+                .filter(line -> line.startsWith("| " + providerType + " |"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing provider catalog row for " + providerType));
     }
 
     private Map<String, String> registrySupportStatuses() throws IOException {

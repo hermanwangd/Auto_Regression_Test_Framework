@@ -238,11 +238,13 @@ public class WireMockHttpRequestCapabilityService {
         ProviderExecutionContext wireContext = context(selection, selection.wireBindingValues(), selection.wireProviderId(),
                 WIREMOCK, selection.wireRuntimeMode(), selection.wireContract(), selection.wireInstance());
         boolean externalWireMock = hasExternalBaseUrl(selection);
+        String wireOperationName = externalWireMock ? "connect_mock" : "load_stubs";
 
         try {
             SelectedOperation setup = externalWireMock
                     ? connectOperation(selection)
                     : operation(selection.testCase(), "setup", selection.wireTarget(), "load_stubs");
+            wireOperationName = setup.request().operation();
             ProviderRuntimeResolution setupResolution = resolver.resolve(wireContext, setup.request());
             if (!setupResolution.valid()) {
                 return blockedExecution(selection, requestedProfile, setupResolution.failure());
@@ -299,8 +301,8 @@ public class WireMockHttpRequestCapabilityService {
         writeBatch(selection.runDir(), selection, status, 1);
         evidenceRefs.add("batch/batch.yaml");
         List<Map<String, Object>> providerResults = List.of(
-                providerResult(selection.wireProviderId(), WIREMOCK, selection.wireRuntimeMode(), status, outputs),
-                providerResult(selection.restProviderId(), REST_CLIENT, selection.restRuntimeMode(), status, outputs));
+                providerResult(selection.wireProviderId(), WIREMOCK, selection.wireRuntimeMode(), wireOperationName, status, outputs),
+                providerResult(selection.restProviderId(), REST_CLIENT, selection.restRuntimeMode(), "http_request", status, outputs));
         Map<String, Object> testResult = new LinkedHashMap<>();
         testResult.put("test_case_id", testCaseId);
         testResult.put("profile", requestedProfile);
@@ -884,6 +886,7 @@ public class WireMockHttpRequestCapabilityService {
             String providerId,
             String providerType,
             String runtimeMode,
+            String operationName,
             String status,
             Map<String, Object> outputs) {
         Map<String, Object> result = new LinkedHashMap<>();
@@ -891,7 +894,7 @@ public class WireMockHttpRequestCapabilityService {
         result.put("provider_type", providerType);
         result.put("runtime_mode", runtimeMode);
         result.put("resolved_operation_result", Map.of(
-                "operation", REST_CLIENT.equals(providerType) ? "http_request" : "load_stubs",
+                "operation", operationName,
                 "status", status,
                 "outputs", outputs));
         result.put("release_evidence_eligible", false);

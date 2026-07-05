@@ -62,4 +62,14 @@ evidence:
   outputs: [base_url, request_journal, server_log, injected_stub, assertion_result, timing, cleanup_log, failure_detail, error]
   redact: []
 failure_mapping:
-  allowed_codes: [PROVIDER_UNAVAILABLE, PROVIDER_TIMEOUT, PROVIDER_STUB_MISSING, OPERATION_FAILED, ASSERTION_FAILED, EVIDENCE_INVALID, SECRET_RESOLUTION_ERROR]
+  allowed_codes:
+    - PROVIDER_UNAVAILABLE
+    - PROVIDER_TIMEOUT
+    - PROVIDER_STUB_MISSING
+    - OPERATION_FAILED
+    - ASSERTION_FAILED
+    - EVIDENCE_INVALID
+    - SECRET_RESOLUTION_ERROR
+    - WIREMOCK_EXTERNAL_BASE_URL_MISSING
+    - WIREMOCK_EXTERNAL_BASE_URL_INVALID
+    - WIREMOCK_EXTERNAL_BASE_URL_SECRET_LEAK

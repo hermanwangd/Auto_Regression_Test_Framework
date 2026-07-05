@@ -7,6 +7,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.specdriven.regression.cli.RegressionCommand;
 import com.specdriven.regression.discovery.ReleasePackageService;
@@ -22,6 +24,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class WireMockExternalBaseUrlSupportTest {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Path REST_WIREMOCK_SUITE =
             Path.of("samples/provider_capability/mock_server_cross_verify/rest_wiremock_http");
 
@@ -51,6 +54,10 @@ class WireMockExternalBaseUrlSupportTest {
             externalWireMock.verify(1, postRequestedFor(urlEqualTo("/payments")));
             Path resultJson = extractPath(run.stdout(), "result_json");
             Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
+            JsonNode result = OBJECT_MAPPER.readTree(resultJson.toFile());
+            JsonNode wireMockProviderResult = providerResult(result, "wiremock-payment-api");
+            assertThat(wireMockProviderResult.at("/resolved_operation_result/operation").asText())
+                    .isEqualTo("connect_mock");
             assertThat(Files.readString(resultJson))
                     .contains("\"framework_started_wiremock\": false")
                     .contains("\"external_base_url_consumed\": true")
@@ -212,6 +219,15 @@ class WireMockExternalBaseUrlSupportTest {
                 .map(Path::of)
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Missing path line for " + key + " in:\n" + stdout));
+    }
+
+    private JsonNode providerResult(JsonNode result, String providerId) {
+        for (JsonNode providerResult : result.path("provider_results")) {
+            if (providerId.equals(providerResult.path("provider_id").asText())) {
+                return providerResult;
+            }
+        }
+        throw new AssertionError("Missing provider result for " + providerId + " in:\n" + result);
     }
 
     private CommandResult execute(String... args) {

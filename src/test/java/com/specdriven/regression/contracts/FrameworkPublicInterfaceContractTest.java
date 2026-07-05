@@ -247,6 +247,19 @@ class FrameworkPublicInterfaceContractTest {
     }
 
     @Test
+    @DisplayName("FWK-013 | WireMock external base URL failure codes are part of the provider contract")
+    void FWK_013_wireMockExternalBaseUrlFailureCodesAreContracted() throws Exception {
+        Map<?, ?> contract = map(loadYaml(CONTRACT_ROOT.resolve("provider-contracts/wiremock_http_mock.yaml")));
+        List<String> allowedCodes = strings(map(contract.get("failure_mapping")).get("allowed_codes"));
+
+        assertThat(allowedCodes)
+                .contains(
+                        "WIREMOCK_EXTERNAL_BASE_URL_MISSING",
+                        "WIREMOCK_EXTERNAL_BASE_URL_INVALID",
+                        "WIREMOCK_EXTERNAL_BASE_URL_SECRET_LEAK");
+    }
+
+    @Test
     @DisplayName("FWK-013 | suite manifest public docs expose tests and child suites, not suite type discriminators")
     void FWK_013_suiteManifestDocsDoNotExposeSuiteTypeDiscriminator() throws Exception {
         for (Path path : List.of(
