@@ -348,7 +348,7 @@ ibm_mq.report = pass
 ibm_mq.validate_evidence = pass
 ```
 
-Skipping external Kafka or IBM MQ verification is allowed only for local smoke diagnosis. A release promotion run must set `REQUIRE_EXTERNAL_MESSAGING=true`; `ALLOW_EXTERNAL_MESSAGING_SKIP=true` produces `blocked_external_messaging_skipped` and is not a promotable gate result.
+Kafka and IBM MQ external Env_Profile contracts must validate in every release promotion run. Native external execution is optional because the public GitHub CI release environment does not own broker or queue-manager endpoints. When `KAFKA_BOOTSTRAP_SERVERS`, `IBM_MQ_CONN_NAME`, and `IBM_MQ_CREDENTIAL` are all configured, the release gate runs native external messaging samples; when any one is configured, all are required. Set `REQUIRE_EXTERNAL_MESSAGING=true` only in a release environment that intentionally requires native external messaging evidence.
 
 ### Task 7: Add Executable Usage-kit Verification
 

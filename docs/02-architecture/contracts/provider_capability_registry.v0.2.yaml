@@ -20,7 +20,7 @@ registry_entry_required_fields:
   - failure_classification
 support_status_catalog:
   supported:
-    meaning: Public contract exists, runtime exists, executable usage-kit sample exists, and release verification passes.
+    meaning: Public contract exists, runtime exists, executable CI-verifiable usage-kit sample exists, and release verification passes for the available release environment.
     validation_behavior: validate_and_allow_dispatch_for_supported_operations
     execution_behavior: provider_runtime_may_execute_when_profile_allows
   contract_only:

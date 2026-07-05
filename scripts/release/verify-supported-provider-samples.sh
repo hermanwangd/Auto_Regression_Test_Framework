@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 VERSION="$("${ROOT_DIR}/scripts/release/verify-release-version.sh" "${1:-}")"
 JAR="${ROOT_DIR}/target/spec-driven-auto-regression-${VERSION}.jar"
 REQUIRE_EXTERNAL_MESSAGING="${REQUIRE_EXTERNAL_MESSAGING:-false}"
-ALLOW_EXTERNAL_MESSAGING_SKIP="${ALLOW_EXTERNAL_MESSAGING_SKIP:-false}"
+external_env_names=(KAFKA_BOOTSTRAP_SERVERS IBM_MQ_CONN_NAME IBM_MQ_CREDENTIAL)
 
 if [[ ! -s "$JAR" ]]; then
   echo "Missing release jar for provider sample verification: $JAR" >&2
@@ -49,6 +49,18 @@ require_env() {
   fi
 }
 
+external_env_state() {
+  missing_external_envs=()
+  present_external_envs=()
+  for name in "${external_env_names[@]}"; do
+    if [[ -z "${!name:-}" ]]; then
+      missing_external_envs+=("$name")
+    else
+      present_external_envs+=("$name")
+    fi
+  done
+}
+
 supported_local_suites=(
   "samples/provider_capability/compare/suite_manifest.yaml local_compare"
   "samples/provider_capability/common_verify/suite_manifest.yaml local_verify"
@@ -73,22 +85,26 @@ done
 run_cli validate --suite samples/provider_capability/kafka/suite_manifest.yaml --profile ci_kafka_external
 run_cli validate --suite samples/provider_capability/ibm_mq/suite_manifest.yaml --profile ci_ibm_mq_external
 
-if [[ "$REQUIRE_EXTERNAL_MESSAGING" == "true" ]]; then
+external_env_state
+
+if [[ "$REQUIRE_EXTERNAL_MESSAGING" == "true" || "${#present_external_envs[@]}" -gt 0 ]]; then
+  if [[ "${#missing_external_envs[@]}" -gt 0 ]]; then
+    echo "external_messaging_runtime_verification: blocked" >&2
+    echo "missing_external_messaging_env: ${missing_external_envs[*]}" >&2
+    echo "owner_action: Configure all Kafka and IBM MQ external messaging secrets, or leave all of them unset so CI runs only release-verifiable local/provider samples." >&2
+    exit 1
+  fi
   require_env KAFKA_BOOTSTRAP_SERVERS
   require_env IBM_MQ_CONN_NAME
   require_env IBM_MQ_CREDENTIAL
   run_suite samples/provider_capability/kafka/suite_manifest.yaml ci_kafka_external
   run_suite samples/provider_capability/ibm_mq/suite_manifest.yaml ci_ibm_mq_external
+  echo "external_messaging_runtime_verification: passed"
 else
-  if [[ "$ALLOW_EXTERNAL_MESSAGING_SKIP" != "true" ]]; then
-    echo "external_messaging_runtime_verification: blocked" >&2
-    echo "owner_action: Set REQUIRE_EXTERNAL_MESSAGING=true with external Kafka and IBM MQ bindings, or set ALLOW_EXTERNAL_MESSAGING_SKIP=true only for local non-release smoke." >&2
-    exit 1
-  fi
-  echo "external_messaging_runtime_verification: skipped"
-  echo "owner_action: Set REQUIRE_EXTERNAL_MESSAGING=true with external Kafka and IBM MQ bindings for release promotion."
-  echo "supported_provider_sample_verification_status: blocked_external_messaging_skipped"
-  exit 1
+  echo "external_messaging_runtime_verification: not_configured"
+  echo "owner_action: Configure Kafka and IBM MQ external messaging secrets and set REQUIRE_EXTERNAL_MESSAGING=true when native external runtime evidence is required."
+  echo "supported_provider_sample_verification_status: passed_ci_verifiable_external_messaging_not_configured"
+  exit 0
 fi
 
 echo "supported_provider_sample_verification_status: passed"

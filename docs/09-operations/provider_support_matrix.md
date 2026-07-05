@@ -4,7 +4,7 @@ This matrix defines the Framework `0.2.4` public provider support claim. It does
 
 Status meanings:
 
-- `supported`: public contract exists, runtime exists, executable usage-kit sample exists, and release verification passes.
+- `supported`: public contract exists, runtime exists, executable CI-verifiable usage-kit sample exists, and release verification passes for the available release environment.
 - `contract_only`: public contract exists, but runtime execution is unavailable or not release-verified; validation blocks before unsupported dispatch.
 - `deprecated`: compatibility-only provider or alias; new artifacts and samples must not use it.
 - `unsupported`: not part of the public provider capability surface.
@@ -18,9 +18,9 @@ Server or dependency lifecycle words such as native, mock, ephemeral, framework-
 | `external_runner` | `contract_only` | n/a | Contract is documented, but general command execution is not a supported public release path. |
 | `grpc_client` | `supported` | `samples/provider_capability/grpc_mock/` | Unary client stimulus for checked-in gRPC mock capability samples. |
 | `grpc_mock` | `supported` | `samples/provider_capability/grpc_mock/` | WireMock gRPC extension, unary only. |
-| `ibm_mq` | `supported` | `samples/provider_capability/ibm_mq/` | Client runtime consumes external queue-manager bindings; the framework does not start IBM MQ. |
+| `ibm_mq` | `supported` | `samples/provider_capability/ibm_mq/` | CI verifies contract, local provider sample, and external profile validation. Native external execution runs only when queue-manager bindings are configured; the framework does not start IBM MQ. |
 | `jdbc` | `supported` | `samples/provider_capability/jdbc/` | JDBC fixture/query/cleanup capability with owner-supplied or approved disposable DB bindings. |
-| `kafka` | `supported` | `samples/provider_capability/kafka/` | Client runtime consumes external broker bindings; the framework does not start Kafka. |
+| `kafka` | `supported` | `samples/provider_capability/kafka/` | CI verifies contract, local provider sample, and external profile validation. Native external execution runs only when broker bindings are configured; the framework does not start Kafka. |
 | `kafka_messaging` | `deprecated` | n/a | Compatibility alias only; use `kafka` for new artifacts. |
 | `kubernetes_runtime` | `contract_only` | n/a | Contract vocabulary is documented; no release-verifiable runtime sample is published in v0.2.4. |
 | `nats` | `supported` | `samples/provider_capability/nats/` | Client runtime consumes owner/project-provided NATS bindings and emits masked event evidence. |
