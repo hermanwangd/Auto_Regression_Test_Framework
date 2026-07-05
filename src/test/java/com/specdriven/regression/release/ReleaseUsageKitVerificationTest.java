@@ -2,9 +2,16 @@ package com.specdriven.regression.release;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.yaml.snakeyaml.Yaml;
 
 class ReleaseUsageKitVerificationTest {
 
@@ -47,4 +54,61 @@ class ReleaseUsageKitVerificationTest {
                 .doesNotContain("blocked_external_messaging_skipped")
                 .contains("supported_provider_sample_verification_status: passed");
     }
+
+    @Test
+    void usageKitSamplesCoverSupportedRuntimeModeRows() throws Exception {
+        Set<ProviderRuntimeSample> samples = providerRuntimeSamples(Path.of("samples/provider_capability"));
+
+        assertThat(samples)
+                .contains(
+                        new ProviderRuntimeSample("grpc_client", "mock"),
+                        new ProviderRuntimeSample("grpc_client", "stub"),
+                        new ProviderRuntimeSample("polling_observer", "ephemeral"),
+                        new ProviderRuntimeSample("rest_client", "mock"),
+                        new ProviderRuntimeSample("rest_client", "stub"));
+    }
+
+    private static Set<ProviderRuntimeSample> providerRuntimeSamples(Path sampleRoot) throws IOException {
+        Set<ProviderRuntimeSample> samples = new LinkedHashSet<>();
+        try (Stream<Path> files = Files.walk(sampleRoot)) {
+            files.filter(Files::isRegularFile)
+                    .filter(path -> path.toString().endsWith(".yaml"))
+                    .filter(path -> path.toString().contains("/provider_instances/"))
+                    .forEach(path -> samples.addAll(providerRuntimeSamplesFrom(path)));
+        }
+        return samples;
+    }
+
+    private static Set<ProviderRuntimeSample> providerRuntimeSamplesFrom(Path providerInstance) {
+        try {
+            Map<String, Object> document = yamlMap(providerInstance);
+            String providerType = String.valueOf(document.get("provider_type"));
+            List<String> runtimeModes = stringList(document.get("runtime_modes"));
+            Set<ProviderRuntimeSample> samples = new LinkedHashSet<>();
+            for (String runtimeMode : runtimeModes) {
+                samples.add(new ProviderRuntimeSample(providerType, runtimeMode));
+            }
+            return samples;
+        } catch (IOException exception) {
+            throw new IllegalStateException("Unable to read sample provider instance " + providerInstance, exception);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> yamlMap(Path path) throws IOException {
+        Object loaded = new Yaml().load(Files.readString(path));
+        if (loaded instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return Map.of();
+    }
+
+    private static List<String> stringList(Object value) {
+        if (value instanceof List<?> list) {
+            return list.stream().map(String::valueOf).toList();
+        }
+        return List.of();
+    }
+
+    private record ProviderRuntimeSample(String providerType, String runtimeMode) {}
 }

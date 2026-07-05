@@ -1,0 +1,19 @@
+provider_instance_version: v0.2
+provider_id: payment-api-client-mock-contract-sample
+provider_type: rest_client
+runtime_modes: [mock]
+defaults:
+  timeout_seconds: 10
+operations:
+  http_request:
+    outputs: [response.status, response.headers, response.body, response.duration_ms]
+evidence:
+  capture: [request, response, timing, error]
+failure_mapping:
+  provider_unavailable: PROVIDER_UNAVAILABLE
+  timeout: PROVIDER_TIMEOUT
+  operation_failed: OPERATION_FAILED
+labels:
+  sample_scope: usage_kit_runtime_mode_sample
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

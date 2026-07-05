@@ -1,0 +1,18 @@
+provider_instance_version: v0.2
+provider_id: local-polling-observer-ephemeral-contract-sample
+provider_type: polling_observer
+runtime_modes: [ephemeral]
+defaults:
+  timeout_seconds: 30
+operations:
+  observe_condition:
+    outputs: [last_observed, attempts]
+evidence:
+  capture: [last_observed, attempts, timeout_status, error]
+failure_mapping:
+  timeout: PROVIDER_TIMEOUT
+  condition_not_met: ASSERTION_FAILED
+labels:
+  sample_scope: usage_kit_runtime_mode_sample
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

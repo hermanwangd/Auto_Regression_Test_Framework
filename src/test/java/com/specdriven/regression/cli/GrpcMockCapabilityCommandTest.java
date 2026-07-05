@@ -32,6 +32,8 @@ class GrpcMockCapabilityCommandTest {
                 "samples/provider_capability/grpc_mock/test_case.yaml",
                 "samples/provider_capability/grpc_mock/provider_instances/customer_grpc_mock.yaml",
                 "samples/provider_capability/grpc_mock/provider_instances/customer_grpc_client.yaml",
+                "samples/provider_capability/grpc_mock/provider_instances/customer_grpc_client_mock.yaml",
+                "samples/provider_capability/grpc_mock/provider_instances/customer_grpc_client_stub.yaml",
                 "samples/provider_capability/grpc_mock/env_profiles/local_grpc_mock.yaml",
                 "samples/provider_capability/grpc_mock/environment_bindings/local_grpc_mock.yaml",
                 "samples/provider_capability/grpc_mock/execution_profiles/local_grpc_mock.yaml",

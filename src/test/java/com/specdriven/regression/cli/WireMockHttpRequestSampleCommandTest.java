@@ -32,6 +32,8 @@ class WireMockHttpRequestSampleCommandTest {
                 "samples/provider_capability/wiremock_http_request/test_case.yaml",
                 "samples/provider_capability/wiremock_http_request/provider_instances/wiremock_payment_api.yaml",
                 "samples/provider_capability/wiremock_http_request/provider_instances/payment_api_client.yaml",
+                "samples/provider_capability/wiremock_http_request/provider_instances/payment_api_client_mock.yaml",
+                "samples/provider_capability/wiremock_http_request/provider_instances/payment_api_client_stub.yaml",
                 "samples/provider_capability/wiremock_http_request/execution_profiles/local_wiremock_http.yaml",
                 "samples/provider_capability/wiremock_http_request/environment_bindings/local_wiremock_http.yaml",
                 "samples/provider_capability/wiremock_http_request/fixtures/wiremock/payment_success_stub.json",

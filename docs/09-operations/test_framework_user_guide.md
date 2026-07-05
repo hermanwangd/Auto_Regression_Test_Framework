@@ -1149,6 +1149,8 @@ The WireMock + HTTP request sample keeps happy and boundary cases in the canonic
 
 Provider Capability suite-path mode may execute only checked-in framework provider capability samples for WireMock HTTP mock, `rest_client` HTTP request, SOAP mock, gRPC unary mock, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and evidence/report behavior. It must not execute non-P0 providers, Product/RP/RU topology interpretation, release governance, SIT/preprod release evidence, or downstream product deployment.
 
+Usage-kit provider instance files labeled `sample_scope: usage_kit_runtime_mode_sample` are runtime-mode coverage artifacts. They prove the public Provider Instance shape is represented in the usage kit for that provider/runtime mode, but they are not executed unless a test case target references the `provider_id` and the selected Env_Profile supplies a matching `runtime_mode`.
+
 ### 13.1 Mock Server Usage
 
 Mock server providers replace external REST, SOAP, or gRPC dependencies with deterministic checked-in stubs for local/CI framework verification. They are provider capability evidence only and must not be treated as downstream SIT/preprod RP release evidence.

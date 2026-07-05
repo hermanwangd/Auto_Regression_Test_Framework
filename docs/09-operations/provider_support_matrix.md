@@ -25,7 +25,7 @@ Server or dependency lifecycle words such as native, mock, ephemeral, framework-
 | `kubernetes_runtime` | `contract_only` | n/a | Contract vocabulary is documented; no release-verifiable runtime sample is published in v0.2.4. |
 | `nats` | `supported` | `samples/provider_capability/nats/` | Client runtime consumes owner/project-provided NATS bindings and emits masked event evidence. |
 | `polling_observer` | `supported` | `samples/provider_capability/polling/` | Observation polling only; it must not retry mutating execute actions. |
-| `rest_client` | `supported` | `samples/provider_capability/dummy_rest/` | HTTP request client provider with owner/project-supplied endpoint bindings. |
+| `rest_client` | `supported` | `samples/provider_capability/wiremock_http_request/` | HTTP request client provider with owner/project-supplied endpoint bindings. |
 | `sample_fake_provider` | `unsupported` | `samples/golden_e2e/` | Framework-owned Golden E2E fake provider, not a public provider capability. |
 | `shell_command` | `contract_only` | n/a | Contract vocabulary exists, but command execution requires a later safety-approved release path. |
 | `soap_mock` | `supported` | `samples/provider_capability/soap_mock/` | WireMock-backed SOAP HTTP/XML behavior, not a custom SOAP server. |

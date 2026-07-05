@@ -39,6 +39,7 @@ class CommonVerifyCapabilityCommandTest {
                 "samples/provider_capability/polling/test_case.yaml",
                 "docs/02-architecture/contracts/provider-contracts/common_verify.yaml",
                 "samples/provider_capability/polling/provider_instances/local_polling.yaml",
+                "samples/provider_capability/polling/provider_instances/local_polling_observer_ephemeral.yaml",
                 "samples/provider_capability/polling/execution_profiles/local_polling.yaml",
                 "samples/provider_capability/polling/environment_bindings/local_polling.yaml",
                 "samples/provider_capability/polling/expected_results/expected_timeout_result.json",
