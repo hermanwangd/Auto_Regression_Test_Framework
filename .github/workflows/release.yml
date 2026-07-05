@@ -67,6 +67,18 @@ jobs:
             ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-
             ${{ runner.os }}-dependency-check-
 
+      - name: Check restored Dependency-Check data
+        id: dependency-check-data
+        shell: bash
+        run: |
+          if [[ -d "${DEPENDENCY_CHECK_DATA_DIR}" ]] && find "${DEPENDENCY_CHECK_DATA_DIR}" -type f -print -quit | grep -q .; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "dependency_check_cache_status: restored"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "dependency_check_cache_status: missing"
+          fi
+
       - name: Unit, integration, and packaged CLI verification
         run: ./mvnw -B -ntp verify
 
@@ -80,7 +92,7 @@ jobs:
         run: scripts/ci/secret-scan.sh
 
       - name: Require warmed Dependency-Check cache
-        if: steps.dependency-check-cache.outputs.cache-hit != 'true'
+        if: steps.dependency-check-data.outputs.available != 'true'
         shell: bash
         run: |
           echo "::error title=Dependency-Check cache unavailable::Release jobs do not download NVD data. Run the Dependency-Check Cache workflow on the default branch first, then rerun this release."

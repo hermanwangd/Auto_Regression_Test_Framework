@@ -10,6 +10,7 @@ Framework v0.2.3 is a PI-run framework fix patch for executable provider suites.
 - Applies materialized evidence classification policy consistently across result JSON and provider evidence.
 - Fixes the full contract-baseline mixed provider runtime path for WireMock HTTP mock, JDBC, and NATS.
 - Hardens external NATS protocol handling so TCP endpoints that do not speak NATS fail with `NATS_CONNECTION_FAILED`, and empty observations are not cached as matched events.
+- Allows the release workflow to use restored Dependency-Check data from fallback cache keys instead of requiring an exact daily cache key hit.
 
 Known boundaries:
 
