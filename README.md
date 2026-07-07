@@ -18,9 +18,15 @@ It consumes bindings to external systems; it does **not** provision brokers, que
 
 ### Supported providers
 
-REST client · WireMock HTTP mock · JDBC · NATS · Kafka · IBM MQ · gRPC mock · SOAP mock
+Per the [provider support matrix](docs/09-operations/provider_support_matrix.md), the `supported` provider types in 0.2.5 are:
 
-Each provider ships a contract under `docs/02-architecture/contracts/provider-contracts/` and is executed by a pluggable `ProviderRuntime`.
+- **HTTP** — `rest_client`, `wiremock_http_mock`
+- **Messaging** — `kafka`, `ibm_mq`, `nats`
+- **Data** — `jdbc`
+- **RPC** — `grpc_mock` (with `grpc_client` stimulus), `soap_mock`
+- **Verification** — `common_verify`, `artifact_compare`, `polling_observer`
+
+Additional types (`external_runner`, `shell_command`, `kubernetes_runtime`, `vm_runtime`) are `contract_only`: the contract is published but runtime execution is not yet a supported release path. Each provider ships a contract under `docs/02-architecture/contracts/provider-contracts/`.
 
 ## Requirements
 
