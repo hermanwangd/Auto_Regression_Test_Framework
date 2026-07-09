@@ -3257,6 +3257,8 @@ public class RegressionCommand {
                 i++;
             } else if (args[i].startsWith("--")) {
                 options.put(args[i], VALUE_OPTIONS.contains(args[i]) ? "" : "true");
+            } else if ("-h".equals(args[i])) {
+                options.put(args[i], "true");
             }
         }
         return options;

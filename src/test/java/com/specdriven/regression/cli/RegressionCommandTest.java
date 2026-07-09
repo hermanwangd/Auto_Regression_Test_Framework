@@ -3520,6 +3520,35 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runDryRunAcceptsCompatibleProfileAndIgnoresBlankCompatibleProfileEntries() throws Exception {
+        RegressionCommand command = command();
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", "RP-001", "--package-type", "data_pipeline"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria("RP-001", "RP-001-AC-001");
+        writeExecutableCiMapping("RP-001");
+        writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
+        writeApprovedExecutionFocusedTestCase("RP-001");
+        Path testCase = tempDir.resolve(
+                "docs/08-release/release-packages/RP-001/tests/approved/RP-001-TC-001.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("revision: 1\n", "revision: 1\ncompatible_profiles: [\"\", ci_ephemeral]\n"));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {
+                "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral", "--dry-run"},
+                print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).as(output.toString()).isZero();
+        assertThat(output.toString())
+                .contains("provider_runtime_started: false")
+                .contains("run_status: dry_run_ready")
+                .doesNotContain("field_path: compatible_profiles");
+    }
+
+    @Test
     void runDryRunBlocksWhenGeneratedEnvironmentBindingTargetOmitsEnvironmentRef() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},

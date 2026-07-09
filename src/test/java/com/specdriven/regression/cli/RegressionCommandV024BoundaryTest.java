@@ -31,6 +31,35 @@ class RegressionCommandV024BoundaryTest {
     }
 
     @Test
+    void shortGeneralHelpUsesCanonicalSuiteModeCommands() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {"-h"}, print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isZero();
+        assertThat(output.toString())
+                .contains("validate --suite <suite_manifest>")
+                .contains("run --suite <suite_manifest> --profile <profile>")
+                .doesNotContain("init-product-repo")
+                .doesNotContain("check-rp");
+    }
+
+    @Test
+    void explicitHelpCommandIgnoresTrailingPositionalText() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {"help", "ignored"}, print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isZero();
+        assertThat(output.toString())
+                .contains("usage:")
+                .contains("validate --suite <suite_manifest>")
+                .doesNotContain("Unknown command");
+    }
+
+    @Test
     void runHelpDocumentsDryRunWithoutNonCanonicalAliases() {
         RegressionCommand command = command();
         ByteArrayOutputStream output = new ByteArrayOutputStream();
@@ -41,6 +70,19 @@ class RegressionCommandV024BoundaryTest {
         assertThat(output.toString())
                 .contains("regress run --suite <suite_manifest> --profile <profile>")
                 .contains("regress run --suite <suite_manifest> --dry-run");
+    }
+
+    @Test
+    void shortCommandHelpDocumentsCanonicalValidateCommand() {
+        RegressionCommand command = command();
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        int exit = command.execute(new String[] {"validate", "-h"}, print(output), print(new ByteArrayOutputStream()));
+
+        assertThat(exit).isZero();
+        assertThat(output.toString())
+                .contains("regress validate --suite <suite_manifest>")
+                .doesNotContain("project-run");
     }
 
     @Test

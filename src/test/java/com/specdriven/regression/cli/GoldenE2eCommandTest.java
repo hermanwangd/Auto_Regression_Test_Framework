@@ -53,6 +53,16 @@ class GoldenE2eCommandTest {
     }
 
     @Test
+    void goldenSampleValidatesWithSelectedCliProfile() {
+        CommandResult result = execute("validate", "--suite", GOLDEN_SUITE.toString(), "--profile", "local_golden");
+
+        assertThat(result.exit()).as(result.stderr() + result.stdout()).isZero();
+        assertThat(result.stdout())
+                .contains("validation_status: passed")
+                .contains("suite_id: GOLDEN-E2E-v0.2");
+    }
+
+    @Test
     void goldenSampleRunsFakeProviderAndReportConsumesGeneratedResult() throws Exception {
         CommandResult run = execute("run", "--suite", GOLDEN_SUITE.toString(), "--profile", "local_golden");
 
@@ -177,6 +187,96 @@ class GoldenE2eCommandTest {
                 .contains("reason: conflicting_profile_selection")
                 .contains("field_path: targets.sample_runtime.profile")
                 .contains("category: CONFIGURATION_ERROR");
+    }
+
+    @Test
+    void goldenValidateWithCliProfileRejectsConflictingDeprecatedTargetProfile() throws Exception {
+        Path suite = mutableGolden();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("    provider_id: sample-fake-runtime\n",
+                        "    provider_id: sample-fake-runtime\n    profile: other_profile\n"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_golden");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("reason: conflicting_profile_selection")
+                .contains("field_path: targets.sample_runtime.profile")
+                .contains("Remove deprecated target profile or run with profile `other_profile`.");
+    }
+
+    @Test
+    void goldenValidateWithCliProfileAcceptsMatchingDeprecatedTargetProfile() throws Exception {
+        Path suite = mutableGolden();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("    provider_id: sample-fake-runtime\n",
+                        "    provider_id: sample-fake-runtime\n    profile: local_golden\n"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_golden");
+
+        assertThat(result.exit()).as(result.stderr() + result.stdout()).isZero();
+        assertThat(result.stdout()).contains("validation_status: passed");
+    }
+
+    @Test
+    void goldenValidateWithCliProfileRejectsSuiteProfileMismatch() throws Exception {
+        Path suite = mutableGolden();
+        Files.writeString(suite, Files.readString(suite)
+                .replace("profile: local_golden\n", "profile: other_profile\n"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_golden");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("reason: profile_mismatch")
+                .contains("Run with an allowed profile: [other_profile].");
+    }
+
+    @Test
+    void goldenValidateWithCliProfileRejectsCompatibleProfileMismatch() throws Exception {
+        Path suite = mutableGolden();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("compatible_profiles: [local_golden]", "compatible_profiles: [other_profile]"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_golden");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("reason: profile_mismatch")
+                .contains("field_path: compatible_profiles");
+    }
+
+    @Test
+    void goldenValidateWithCliProfileSkipsMissingTestRefDuringProfileScan() throws Exception {
+        Path suite = mutableGolden();
+        Files.writeString(suite, Files.readString(suite)
+                .replace("  - test_case.yaml", "  - test_case.yaml\n  - missing_test_case.yaml"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_golden");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("reason: missing_required_file");
+    }
+
+    @Test
+    void goldenValidateWithCliProfileSkipsMalformedTestCaseDuringProfileScan() throws Exception {
+        Path suite = mutableGolden();
+        Files.writeString(suite.getParent().resolve("test_case.yaml"), "test_case_id: [broken\n");
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_golden");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("reason: invalid_yaml");
     }
 
     @Test

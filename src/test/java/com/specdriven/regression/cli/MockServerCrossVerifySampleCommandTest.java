@@ -264,6 +264,70 @@ class MockServerCrossVerifySampleCommandTest {
     }
 
     @Test
+    void suiteGroupSummaryClassifiesExpectedFailureMissingWhenChildPasses() throws Exception {
+        Path manifest = writeSuiteGroupManifest(
+                "expected_failure_missing_suite_manifest.yaml",
+                """
+                contract_version: v0.2
+                suite_id: EXPECTED-FAILURE-MISSING-SUITE
+                profile: local_expected_failure_missing
+                child_suites:
+                  - id: REST-EXPECTED-FAILED
+                    ref: rest_wiremock_http/suite_manifest.yaml
+                    profile: local_wiremock_http
+                    expected_status: failed
+                """);
+        Path childDir = manifest.getParent().resolve("rest_wiremock_http");
+        copyDirectory(REST_SUITE.getParent(), childDir);
+
+        CommandResult run = execute("run", "--suite", manifest.toString(), "--profile", "local_expected_failure_missing");
+
+        assertThat(run.exit()).isEqualTo(1);
+        assertThat(run.stdout())
+                .contains("run_status: failed")
+                .contains("expected_failure_count: 1")
+                .contains("expected_failed_observed_count: 0");
+        Path suiteSummary = extractPath(run.stdout(), "suite_summary_json");
+        assertThat(Files.readString(suiteSummary))
+                .contains("\"status_taxonomy\": \"expected_failed_missing\"")
+                .contains("\"expected_failed_missing_count\": 1")
+                .contains("\"expected_status\": \"failed\"")
+                .contains("\"observed_status\": \"passed\"");
+    }
+
+    @Test
+    void suiteGroupSummaryClassifiesUnexpectedFailedChild() throws Exception {
+        Path manifest = writeSuiteGroupManifest(
+                "unexpected_failed_child_suite_manifest.yaml",
+                """
+                contract_version: v0.2
+                suite_id: UNEXPECTED-FAILED-CHILD-SUITE
+                profile: local_unexpected_failed_child
+                child_suites:
+                  - id: REST-UNEXPECTED-FAILED
+                    ref: rest_wiremock_http/suite_manifest_failure.yaml
+                    profile: local_wiremock_http
+                    expected_status: passed
+                """);
+        Path childDir = manifest.getParent().resolve("rest_wiremock_http");
+        copyDirectory(REST_SUITE.getParent(), childDir);
+
+        CommandResult run = execute("run", "--suite", manifest.toString(), "--profile", "local_unexpected_failed_child");
+
+        assertThat(run.exit()).isEqualTo(1);
+        assertThat(run.stdout())
+                .contains("run_status: failed")
+                .contains("expected_failure_count: 0")
+                .contains("failed_count: 1");
+        Path suiteSummary = extractPath(run.stdout(), "suite_summary_json");
+        assertThat(Files.readString(suiteSummary))
+                .contains("\"status_taxonomy\": \"failed\"")
+                .contains("\"expected_status\": \"passed\"")
+                .contains("\"observed_status\": \"failed\"")
+                .contains("\"expected_failed_missing_count\": 0");
+    }
+
+    @Test
     void suiteGroupDryRunValidatesChildrenWithoutExecutingProviderRuntime() {
         CommandResult dryRun = execute("run", "--suite", CROSS_VERIFY_SUITE.toString(), "--dry-run");
 
@@ -567,6 +631,20 @@ class MockServerCrossVerifySampleCommandTest {
         Path manifest = suiteDir.resolve(filename);
         Files.writeString(manifest, content);
         return manifest;
+    }
+
+    private void copyDirectory(Path source, Path target) throws Exception {
+        try (Stream<Path> paths = Files.walk(source)) {
+            for (Path path : paths.sorted().toList()) {
+                Path destination = target.resolve(source.relativize(path));
+                if (Files.isDirectory(path)) {
+                    Files.createDirectories(destination);
+                } else {
+                    Files.createDirectories(destination.getParent());
+                    Files.copy(path, destination);
+                }
+            }
+        }
     }
 
     private CommandResult execute(String... args) {
