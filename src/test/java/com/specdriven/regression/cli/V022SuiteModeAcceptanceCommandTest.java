@@ -116,10 +116,11 @@ class V022SuiteModeAcceptanceCommandTest {
         assertThat(missingSuiteResult.exit()).isEqualTo(2);
         assertThat(missingSuiteResult.stderr()).contains("Missing required option: --result");
 
-        CommandResult invalidReportFormat =
+        CommandResult jsonReport =
                 execute("report", "--result", CONTRACT_BASELINE_RESULT.toString(), "--format", "json");
-        assertThat(invalidReportFormat.exit()).isEqualTo(2);
-        assertThat(invalidReportFormat.stderr()).contains("Unsupported --format: json");
+        assertThat(jsonReport.exit()).as(jsonReport.stderr() + jsonReport.stdout()).isZero();
+        assertThat(jsonReport.stdout()).contains("\"report_status\":\"review_ready\"");
+        assertThat(jsonReport.stderr()).isBlank();
     }
 
     @Test

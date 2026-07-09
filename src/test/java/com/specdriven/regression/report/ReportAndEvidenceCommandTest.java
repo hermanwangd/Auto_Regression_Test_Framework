@@ -21,9 +21,10 @@ class ReportAndEvidenceCommandTest {
     Path tempDir;
 
     @Test
-    void validResultSupportsTextReportYamlReportAndEvidenceValidation() {
+    void validResultSupportsTextYamlJsonReportAndEvidenceValidation() {
         CommandResult textReport = execute("report", "--result", VALID_RESULT.toString(), "--format", "text");
         CommandResult yamlReport = execute("report", "--result", VALID_RESULT.toString(), "--format", "yaml");
+        CommandResult jsonReport = execute("report", "--result", VALID_RESULT.toString(), "--format", "json");
         CommandResult evidence = execute("validate-evidence", "--result", VALID_RESULT.toString());
 
         assertThat(textReport.exit()).as(textReport.stderr() + textReport.stdout()).isZero();
@@ -36,6 +37,11 @@ class ReportAndEvidenceCommandTest {
                 .contains("report_status: review_ready")
                 .contains("missing_evidence_count: 0")
                 .contains("masking_status: passed");
+        assertThat(jsonReport.exit()).as(jsonReport.stderr() + jsonReport.stdout()).isZero();
+        assertThat(jsonReport.stdout())
+                .contains("\"report_status\":\"review_ready\"")
+                .contains("\"missing_evidence_count\":0")
+                .contains("\"masking_status\":\"passed\"");
         assertThat(evidence.exit()).as(evidence.stderr() + evidence.stdout()).isZero();
         assertThat(evidence.stdout())
                 .contains("evidence_validation_status: passed")
@@ -44,11 +50,11 @@ class ReportAndEvidenceCommandTest {
     }
 
     @Test
-    void jsonReportFormatIsNotAPublicV024Contract() {
-        CommandResult result = execute("report", "--result", VALID_RESULT.toString(), "--format", "json");
+    void unsupportedReportFormatStillFailsAsUsageError() {
+        CommandResult result = execute("report", "--result", VALID_RESULT.toString(), "--format", "xml");
 
         assertThat(result.exit()).isEqualTo(2);
-        assertThat(result.stderr()).contains("Unsupported --format: json");
+        assertThat(result.stderr()).contains("Unsupported --format: xml");
         assertThat(result.stdout()).isBlank();
     }
 

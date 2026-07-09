@@ -1266,7 +1266,7 @@ Suite-mode output paths are deterministic:
 | --- | --- | --- |
 | Direct provider capability suite | `target/provider-capability/<provider-family>/<suite_id>/<batch_id>/<run_id>/` | `result.json` |
 | Suite group aggregation | `target/suite-groups/<suite_id>/<batch_id>/<run_id>/` | `suite_summary.json` |
-| Report | Reads the printed `result_json` or `suite_summary_json` path | Deterministic text or YAML summary |
+| Report | Reads the printed `result_json` or `suite_summary_json` path | Deterministic text, YAML, or JSON summary |
 
 Every direct suite result must reference an `evidence_index.yaml`; every suite group summary must include child suite status, `passed_count`, `failed_count`, `blocked_count`, and `status_taxonomy`. Expected-failure children are reported as `expected_failed_observed` only after execution. Preflight blockers remain `blocked` and do not produce run artifacts.
 

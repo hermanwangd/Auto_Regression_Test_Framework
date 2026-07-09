@@ -43,7 +43,7 @@ New v0.2 documentation and generated artifacts must use Provider Contract, Provi
 |---|---|---|---|---|
 | `regress validate` | `--suite <suite_manifest_path>` | `--profile <env_profile_id>`, `--test-case <test-case-id>`, `--tag <tag>` | Validates DSL, suite manifest, Env_Profile, Provider Instance, framework Provider Contract catalog, secret guardrails, and evidence/result contract readiness without provider execution. | Returns non-zero and prints deterministic owner-actionable validation errors. |
 | `regress run` | `--suite <suite_manifest_path>` | `--profile <env_profile_id>`, `--dry-run`, `--test-case <test-case-id>`, `--tag <tag>` | Creates one batch ID and one run ID for the selected suite execution, records per-test outcomes in `test_results[]`, and writes run/batch evidence. | Blocks before unsafe provider dispatch when validation, binding, environment, provider contract, provider instance, expected-result, or secret checks fail. |
-| `regress report` | `--result <generated_result_json>` | `--format text|yaml` default `text` | Produces review-ready coverage/evidence summary from a standard result JSON and its evidence index. | Returns non-zero when evidence is incomplete, coverage is not review-ready, result JSON is missing, or result schema is invalid. |
+| `regress report` | `--result <generated_result_json>` | `--format text|yaml|json` default `text` | Produces review-ready coverage/evidence summary from a standard result JSON and its evidence index. | Returns non-zero when evidence is incomplete, coverage is not review-ready, result JSON is missing, or result schema is invalid. |
 | `regress validate-evidence` | `--result <generated_result_json>` | none | Validates result JSON, evidence index, evidence refs, required evidence, and masking guardrails. | Returns non-zero when evidence is missing, inconsistent, or contains raw secrets. |
 
 Non-runtime boundary:
@@ -51,7 +51,7 @@ Non-runtime boundary:
 - Product/RP orchestration wrappers, repo initialization, readiness checks, test generation, and expected-result drafting are outside the v0.2.6 framework runtime public interface.
 - Product/RP tooling may generate suite-mode artifacts, then invoke the canonical runtime commands above.
 - Any remaining compatibility command in implementation code is not a release gate and must not appear in usage-kit release verification.
-- `regress report --format json` is not a v0.2.6 public report contract and must return usage error exit `2`.
+- `regress report --format json` is a v0.2.7 public report contract for suite-mode result JSON. It must validate result/evidence guardrails before returning success.
 
 ## Stable Exit Codes
 
@@ -97,7 +97,7 @@ Syntax:
 
 ```bash
 regress validate-evidence --result <generated_result_json>
-regress report --result <generated_result_json> [--format text|yaml]
+regress report --result <generated_result_json> [--format text|yaml|json]
 ```
 
 Evidence validation and report read standard result JSON and evidence indexes only. They fail with exit code `1` when required evidence is missing, raw secret masking failed, result schema validation failed, the result JSON path is missing, the result JSON is invalid, declared `test_count` and `test_results[]` are inconsistent, or coverage is not review-ready.

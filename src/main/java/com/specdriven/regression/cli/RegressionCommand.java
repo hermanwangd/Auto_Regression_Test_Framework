@@ -1,5 +1,7 @@
 package com.specdriven.regression.cli;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.specdriven.regression.binding.BindingGap;
 import com.specdriven.regression.binding.BindingResolutionReport;
 import com.specdriven.regression.binding.BindingResolver;
@@ -104,6 +106,7 @@ import org.yaml.snakeyaml.Yaml;
 @Component
 public class RegressionCommand {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final List<String> AP_GATE_NAMES = List.of(
             "Discovery and Context",
             "Definition and Validation",
@@ -264,7 +267,7 @@ public class RegressionCommand {
         out.println("  validate --suite <suite_manifest> [--profile <profile>]");
         out.println("  run --suite <suite_manifest> --profile <profile>");
         out.println("  run --suite <suite_manifest> --dry-run [--profile <profile>]");
-        out.println("  report --result <result_json> [--format text|yaml]");
+        out.println("  report --result <result_json> [--format text|yaml|json]");
         out.println("  validate-evidence --result <result_json>");
     }
 
@@ -275,7 +278,7 @@ public class RegressionCommand {
                 out.println("       regress run --suite <suite_manifest> --dry-run [--profile <profile>]");
             }
             case "validate" -> out.println("usage: regress validate --suite <suite_manifest> [--profile <profile>]");
-            case "report" -> out.println("usage: regress report --result <result_json> [--format text|yaml]");
+            case "report" -> out.println("usage: regress report --result <result_json> [--format text|yaml|json]");
             case "validate-evidence" -> out.println("usage: regress validate-evidence --result <result_json>");
             default -> printGeneralUsage(out);
         }
@@ -367,17 +370,33 @@ public class RegressionCommand {
             return 2;
         }
         String format = options.getOrDefault("--format", "text");
-        if (!List.of("text", "yaml").contains(format)) {
+        if (!List.of("text", "yaml", "json").contains(format)) {
             err.println("Unsupported --format: " + format);
             return 2;
         }
         Path resolvedResult = root.resolve(resultPath).normalize();
         ReportResult result = contractBaselineService.report(resolvedResult);
         if (!result.valid() && result.findings().stream().anyMatch(finding -> "missing_result_json".equals(finding.reason()))) {
+            if ("json".equals(format)) {
+                printReportJson(out, err, jsonFailure(
+                        "RESULT_JSON_MISSING",
+                        "CONFIGURATION_ERROR",
+                        "Missing result JSON: " + resolvedResult,
+                        result.findings()));
+                return 1;
+            }
             err.println("Missing result JSON: " + resolvedResult);
             return 1;
         }
         if (!result.valid()) {
+            if ("json".equals(format)) {
+                printReportJson(out, err, jsonFailure(
+                        firstFailureCode(result.findings(), "RESULT_VALIDATION_FAILED"),
+                        firstCategory(result.findings(), "VALIDATION_ERROR"),
+                        firstOwnerAction(result.findings(), "Fix result JSON before running report."),
+                        result.findings()));
+                return 1;
+            }
             out.println("report_status: invalid");
             printContractFindings(out, result.findings());
             return 1;
@@ -385,6 +404,10 @@ public class RegressionCommand {
         EvidenceValidationResult evidenceResult = evidenceHardeningService.hasEvidenceIndexReference(resolvedResult)
                 ? evidenceHardeningService.validateResult(resolvedResult)
                 : null;
+        if ("json".equals(format)) {
+            int exitCode = evidenceResult == null || evidenceResult.valid() ? 0 : 1;
+            return printReportJson(out, err, jsonReport(result, evidenceResult)) ? exitCode : 1;
+        }
         boolean evidenceInvalid = evidenceResult != null && !evidenceResult.valid();
         if (result.suiteId().isBlank()) {
             out.println("report_status: " + (evidenceInvalid ? "invalid" : result.status()));
@@ -417,6 +440,146 @@ public class RegressionCommand {
         }
         out.println("coverage_percent: " + ("passed".equals(result.status()) ? "100.0" : "0.0"));
         return 0;
+    }
+
+    private Map<String, Object> jsonReport(ReportResult result, EvidenceValidationResult evidenceResult) {
+        if (evidenceResult != null && !evidenceResult.valid()) {
+            return jsonEvidenceFailure(result, evidenceResult);
+        }
+        Map<String, Object> report = jsonReportBase(result, evidenceResult);
+        report.put("report_status", result.suiteId().isBlank()
+                ? result.status()
+                : ("passed".equals(result.status()) ? "review_ready" : "review_ready_with_failures"));
+        report.put("failure_codes", List.of());
+        return report;
+    }
+
+    private Map<String, Object> jsonEvidenceFailure(ReportResult result, EvidenceValidationResult evidenceResult) {
+        String category = evidenceResult.findings().stream()
+                .map(ContractFinding::category)
+                .filter(value -> value != null && !value.isBlank())
+                .filter("SECRET_GUARDRAIL_ERROR"::equals)
+                .findFirst()
+                .orElse("EVIDENCE_ERROR");
+        String failureCode = "SECRET_GUARDRAIL_ERROR".equals(category)
+                ? "SECRET_GUARDRAIL_ERROR"
+                : "EVIDENCE_VALIDATION_FAILED";
+        Map<String, Object> report = jsonReportBase(result, evidenceResult);
+        report.put("report_status", "failed");
+        report.put("failure_code", failureCode);
+        report.put("category", category);
+        report.put("message", "SECRET_GUARDRAIL_ERROR".equals(category)
+                ? "Remove or mask raw secret values before using this report."
+                : "Fix result evidence references before using this report.");
+        report.put("failure_codes", List.of(failureCode));
+        report.put("findings", jsonFindings(evidenceResult.findings()));
+        return report;
+    }
+
+    private Map<String, Object> jsonReportBase(ReportResult result, EvidenceValidationResult evidenceResult) {
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("suite_id", result.suiteId());
+        report.put("batch_id", result.batchId());
+        report.put("run_id", result.runId());
+        report.put("test_case_id", result.testCaseId());
+        report.put("status", result.status());
+        report.put("profile", result.profile());
+        report.put("test_count", evidenceResult == null ? (result.status().isBlank() ? 0 : 1) : evidenceResult.testCount());
+        report.put("passed_count", evidenceResult == null ? ("passed".equals(result.status()) ? 1 : 0) : evidenceResult.passCount());
+        report.put("failed_count", evidenceResult == null ? ("passed".equals(result.status()) ? 0 : 1) : evidenceResult.failCount());
+        report.put("provider_results_count", result.providerResultsCount());
+        report.put("verify_results_count", result.verifyResultsCount());
+        report.put("release_evidence_eligible", result.releaseEvidenceEligible());
+        report.put("evidence_dir", evidenceResult == null ? "" : stringValue(evidenceResult.evidenceDir()));
+        report.put("missing_evidence_count", evidenceResult == null ? 0 : evidenceResult.missingEvidenceCount());
+        report.put("failed_evidence_count", evidenceResult == null ? 0 : evidenceResult.failedEvidenceCount());
+        report.put("failed_evidence_summary", evidenceResult == null ? List.of() : evidenceResult.failedEvidenceSummary());
+        report.put("provider_evidence_summary", evidenceResult == null
+                ? List.of()
+                : jsonProviderEvidenceSummary(evidenceResult.providerEvidenceSummary()));
+        report.put("masking_status", evidenceResult == null || evidenceResult.maskingPassed() ? "passed" : "failed");
+        report.put("failed_verify_summary", result.failedVerifySummary());
+        return report;
+    }
+
+    private Map<String, Object> jsonFailure(
+            String failureCode,
+            String category,
+            String message,
+            List<ContractFinding> findings) {
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("report_status", "failed");
+        report.put("failure_code", failureCode);
+        report.put("category", category);
+        report.put("message", message);
+        report.put("findings", jsonFindings(findings));
+        return report;
+    }
+
+    private List<Map<String, Object>> jsonProviderEvidenceSummary(List<ProviderEvidenceSummary> summaries) {
+        List<Map<String, Object>> values = new ArrayList<>();
+        for (ProviderEvidenceSummary summary : summaries) {
+            Map<String, Object> value = new LinkedHashMap<>();
+            value.put("provider_type", summary.providerType());
+            value.put("provider_id", summary.providerId());
+            value.put("evidence_count", summary.evidenceCount());
+            values.add(value);
+        }
+        return values;
+    }
+
+    private List<Map<String, Object>> jsonFindings(List<ContractFinding> findings) {
+        List<Map<String, Object>> values = new ArrayList<>();
+        for (ContractFinding finding : findings) {
+            Map<String, Object> value = new LinkedHashMap<>();
+            value.put("file_path", finding.filePath());
+            value.put("field_path", finding.fieldPath());
+            value.put("reason", finding.reason());
+            value.put("provider_id", finding.providerId());
+            value.put("provider_type", finding.providerType());
+            value.put("profile", finding.profile());
+            value.put("operation", finding.operation());
+            value.put("owner_action", finding.ownerAction());
+            value.put("failure_code", finding.failureCode());
+            value.put("category", finding.category());
+            value.put("original_cause", finding.originalCause());
+            values.add(value);
+        }
+        return values;
+    }
+
+    private String firstFailureCode(List<ContractFinding> findings, String fallback) {
+        return findings.stream()
+                .map(ContractFinding::failureCode)
+                .filter(value -> value != null && !value.isBlank())
+                .findFirst()
+                .orElse(fallback);
+    }
+
+    private String firstCategory(List<ContractFinding> findings, String fallback) {
+        return findings.stream()
+                .map(ContractFinding::category)
+                .filter(value -> value != null && !value.isBlank())
+                .findFirst()
+                .orElse(fallback);
+    }
+
+    private String firstOwnerAction(List<ContractFinding> findings, String fallback) {
+        return findings.stream()
+                .map(ContractFinding::ownerAction)
+                .filter(value -> value != null && !value.isBlank())
+                .findFirst()
+                .orElse(fallback);
+    }
+
+    private boolean printReportJson(PrintStream out, PrintStream err, Map<String, Object> report) {
+        try {
+            out.println(OBJECT_MAPPER.writeValueAsString(report));
+            return true;
+        } catch (JsonProcessingException e) {
+            err.println("Failed to render JSON report: " + e.getMessage());
+            return false;
+        }
     }
 
     private String coveragePercent(EvidenceValidationResult result) {

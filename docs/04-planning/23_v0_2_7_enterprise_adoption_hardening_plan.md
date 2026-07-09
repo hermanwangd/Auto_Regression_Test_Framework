@@ -213,7 +213,7 @@ Tests:
 
 - No file changes expected if `35b712d` is already present.
 
-- [ ] Step 1: Create or switch to release branch.
+- [x] Step 1: Create or switch to release branch.
 
 ```bash
 git status --short --branch
@@ -222,7 +222,7 @@ git switch -c release/0.2.7
 
 Expected: branch is `release/0.2.7`; if branch already exists, use `git switch release/0.2.7`.
 
-- [ ] Step 2: Confirm compatibility evidence fix is present.
+- [x] Step 2: Confirm compatibility evidence fix is present.
 
 ```bash
 git log --oneline --all --grep "keep compatibility sample out of release evidence"
@@ -236,7 +236,7 @@ commit 35b712d or equivalent is reachable
 V023SuiteModeFrameworkFixCommandTest passes
 ```
 
-- [ ] Step 3: Commit only if branch setup required a merge or cherry-pick.
+- [x] Step 3: Commit only if branch setup required a merge or cherry-pick.
 
 ```bash
 git status --short
@@ -256,7 +256,7 @@ Expected: clean if no merge/cherry-pick was needed.
 - Modify `docs/07-validation-evidence/07_regression_test_plan.md`.
 - Modify `docs/09-operations/test_framework_user_guide.md`.
 
-- [ ] Step 1: Add failing test for valid JSON report.
+- [x] Step 1: Add failing test for valid JSON report.
 
 Test behavior:
 
@@ -279,7 +279,7 @@ MAVEN_OPTS="-Xmx1024m -XX:MaxMetaspaceSize=384m" ./mvnw -q -Dtest=ReportJsonForm
 
 Expected before implementation: fails because JSON format is unsupported.
 
-- [ ] Step 2: Implement JSON output in `RegressionCommand.reportResult`.
+- [x] Step 2: Implement JSON output in `RegressionCommand.reportResult`.
 
 Required behavior:
 
@@ -297,7 +297,7 @@ Implementation notes:
 - Do not build JSON by string concatenation.
 - Preserve deterministic key order with `LinkedHashMap`.
 
-- [ ] Step 3: Update public interface docs and tests.
+- [x] Step 3: Update public interface docs and tests.
 
 Change public docs from:
 
@@ -313,7 +313,7 @@ report --result <result_json> [--format text|yaml|json]
 
 Update the public interface contract test so it no longer asserts JSON is unsupported.
 
-- [ ] Step 4: Add negative JSON report tests.
+- [x] Step 4: Add negative JSON report tests.
 
 Cases:
 
@@ -324,7 +324,7 @@ secret leak result => exit 1, JSON report_status failed
 unknown format xml => exit 2, unsupported format
 ```
 
-- [ ] Step 5: Run focused verification.
+- [x] Step 5: Run focused verification.
 
 ```bash
 MAVEN_OPTS="-Xmx1024m -XX:MaxMetaspaceSize=384m" ./mvnw -q -Dtest=ReportJsonFormatCommandTest,V022SuiteModeAcceptanceCommandTest,FrameworkPublicInterfaceContractTest test
@@ -332,7 +332,7 @@ MAVEN_OPTS="-Xmx1024m -XX:MaxMetaspaceSize=384m" ./mvnw -q -Dtest=ReportJsonForm
 
 Expected: all pass.
 
-- [ ] Step 6: Commit.
+- [x] Step 6: Commit.
 
 ```bash
 git add src/main/java/com/specdriven/regression/cli/RegressionCommand.java \
