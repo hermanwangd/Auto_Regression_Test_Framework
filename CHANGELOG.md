@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.2.6
+
+Framework v0.2.6 simplifies the public environment configuration model for the v0.2 suite-mode interface.
+
+- Makes Env_Profile the canonical public runtime environment artifact for new samples; legacy split `execution_profiles/` and `environment_bindings/` remain compatibility inputs only.
+- Migrates checked-in samples and usage-kit samples to Suite Manifest + Test Cases + Provider Instances + Env_Profiles.
+- Adds Env_Profile `bindings` support while preserving deprecated `binding_keys` compatibility where older artifacts still need it.
+- Tightens selected-profile validation across `validate`, `run --dry-run`, and `run`, including deprecated `targets.*.profile` conflict detection.
+- Keeps external JDBC, Kafka, and IBM MQ native runtime evidence optional for public CI while validating their external Env_Profile contracts.
+- Hardens release verification for usage-kit sample shape, supported provider samples, suite group summaries, CLI help, and critical delivery coverage.
+
+Sample layout migration:
+
+| Generated legacy path | Canonical path |
+|---|---|
+| `samples/golden_e2e/` | `samples/00-getting-started/golden_e2e/` |
+| `samples/contract_baseline/` | `samples/10-contract-baseline/mixed_wiremock_jdbc_nats/` |
+| `samples/provider_capability/` | `samples/20-provider-capability-p0/` |
+| `samples/provider_capability/mock_server_cross_verify/` | `samples/30-cross-provider-groups/mock_server_cross_verify/` |
+| `samples/provider_capability/dummy_rest/` | `samples/90-compatibility/dummy_rest/` |
+| `samples/evidence_hardening/` | `samples/40-evidence-reporting/evidence_hardening/` |
+
+Known boundaries:
+
+- DSL and contract artifacts remain at public contract version `v0.2`.
+- Product/RP orchestration remains outside the framework runtime public interface; owners or Agent Skills must generate suite-mode artifacts before invoking the framework.
+- Kafka and IBM MQ native runtime execution still requires externally provisioned endpoints and release secrets; the framework consumes bindings and does not start brokers or queue managers.
+- Legacy sample aliases are generated only in the usage-kit release artifact and remain deprecated; new documentation points to canonical sample paths.
+
 ## 0.2.5
 
 Framework v0.2.5 is a usage-kit sample layout and compatibility patch for the v0.2 suite-mode interface.
