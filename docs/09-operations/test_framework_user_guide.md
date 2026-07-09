@@ -59,9 +59,9 @@ docs/08-release/release-packages/<RP-ID>/
   expected-results/
     draft/
     approved/
-  provider-instances/
-  env-profiles/
-  custom-provider-contracts/   # optional, only for approved custom providers or pinned contract snapshots
+  provider_instances/
+  env_profiles/
+  custom_provider_contracts/   # optional, only for approved custom providers or pinned contract snapshots
   traceability.md
   evidence_index.md
 ```
@@ -277,7 +277,7 @@ inputs:
 
 A DSL test case is invalid if it uses an `inputs` key that is not allowed by the Provider Contract resolved from the target Provider Instance `provider_type`.
 
-Runtime connection and authentication values belong to Env_Profile provider bindings, not test-case data. DSL test cases must not bind `secret.*` directly. Runtime endpoints, tokens, DB credentials, broker credentials, kubeconfig, SSH keys, and runner credentials must be supplied through `env-profiles/` or generated `generated-framework/env_profiles/`.
+Runtime connection and authentication values belong to Env_Profile provider bindings, not test-case data. DSL test cases must not bind `secret.*` directly. Runtime endpoints, tokens, DB credentials, broker credentials, kubeconfig, SSH keys, and runner credentials must be supplied through `env_profiles/` or generated `generated-framework/env_profiles/`.
 
 Authentication headers such as `Authorization` should be injected by provider configuration. Test cases may bind ordinary request headers, such as correlation IDs, only when the resolved Provider Contract allows `request.headers.*`.
 
@@ -710,7 +710,7 @@ RP/suite repositories do not need a `provider_contracts/` folder for built-in pr
 ```yaml
 provider_contract_resolution:
   mode: suite_override
-  custom_provider_contracts: custom-provider-contracts/
+  custom_provider_contracts: custom_provider_contracts/
   allowed_provider_types:
     - custom_runner
 ```

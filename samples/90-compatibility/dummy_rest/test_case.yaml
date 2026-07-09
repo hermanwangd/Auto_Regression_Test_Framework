@@ -5,8 +5,8 @@ status: active
 revision: 1
 labels:
   capability: suite_mode_dummy_rest
-  evidence_classification: product_release_evidence_candidate
-  downstream_release_evidence: true
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false
 compatible_profiles: [local_dummy]
 targets:
   dummy_api:

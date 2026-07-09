@@ -12,5 +12,5 @@ artifact_roots:
   env_profiles: env_profiles/
   expected_results: expected_results/
 evidence_policy:
-  evidence_classification: product_release_evidence_candidate
-  downstream_release_evidence: true
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

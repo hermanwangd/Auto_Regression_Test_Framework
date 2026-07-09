@@ -144,31 +144,65 @@ class V023SuiteModeFrameworkFixCommandTest {
     }
 
     @Test
-    void restClientReleaseEvidenceEligibilityFollowsExplicitLabels() throws Exception {
-        Path suite = mutableCopy(DUMMY_REST_SUITE.getParent(), "dummy_rest_framework_only")
+    void restClientReleaseEvidenceEligibilityCanBeEnabledByExplicitProductLabels() throws Exception {
+        Path suite = mutableCopy(DUMMY_REST_SUITE.getParent(), "dummy_rest_product_candidate")
                 .resolve("suite_manifest.yaml");
-        markAsFrameworkOnly(suite);
-        markAsFrameworkOnly(suite.getParent().resolve("test_case.yaml"));
-        markAsFrameworkOnly(suite.getParent().resolve("provider_instances/dummy_rest_client.yaml"));
+        markAsProductReleaseCandidate(suite);
+        markAsProductReleaseCandidate(suite.getParent().resolve("test_case.yaml"));
+        markAsProductReleaseCandidate(suite.getParent().resolve("provider_instances/dummy_rest_client.yaml"));
 
         CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_dummy");
 
         assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
         Path resultJson = extractPath(run.stdout(), "result_json");
-        assertThat(read(resultJson)).contains("\"release_evidence_eligible\": false");
+        assertThat(read(resultJson)).contains("\"release_evidence_eligible\": true");
 
         CommandResult report = execute("report", "--result", resultJson.toString());
         assertThat(report.exit()).as(report.stderr() + report.stdout()).isZero();
-        assertThat(report.stdout()).contains("release_evidence_eligible: false");
+        assertThat(report.stdout()).contains("release_evidence_eligible: true");
     }
 
     @Test
-    void restClientReleaseEvidenceEligibilityStaysTrueForExplicitCandidate() {
+    void restClientReleaseEvidenceEligibilityRequiresSuiteTestAndProviderLabels() throws Exception {
+        for (String missingLabelSource : new String[] { "suite", "test_case", "provider_instance" }) {
+            Path suite = mutableCopy(DUMMY_REST_SUITE.getParent(), "dummy_rest_partial_candidate_" + missingLabelSource)
+                    .resolve("suite_manifest.yaml");
+            Path testCase = suite.getParent().resolve("test_case.yaml");
+            Path providerInstance = suite.getParent().resolve("provider_instances/dummy_rest_client.yaml");
+            markAsProductReleaseCandidate(suite);
+            markAsProductReleaseCandidate(testCase);
+            markAsProductReleaseCandidate(providerInstance);
+            switch (missingLabelSource) {
+                case "suite" -> markAsFrameworkOnly(suite);
+                case "test_case" -> markAsFrameworkOnly(testCase);
+                case "provider_instance" -> markAsFrameworkOnly(providerInstance);
+                default -> throw new AssertionError("Unknown missing label source: " + missingLabelSource);
+            }
+
+            CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_dummy");
+
+            assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+            Path resultJson = extractPath(run.stdout(), "result_json");
+            assertThat(read(resultJson))
+                    .as("missing release evidence label source: " + missingLabelSource)
+                    .contains("\"release_evidence_eligible\": false");
+        }
+    }
+
+    @Test
+    void compatibilityRestClientSampleIsNotReleaseEvidenceEligible() {
         CommandResult run = execute("run", "--suite", DUMMY_REST_SUITE.toString(), "--profile", "local_dummy");
 
         assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
         Path resultJson = extractPath(run.stdout(), "result_json");
-        assertThat(read(resultJson)).contains("\"release_evidence_eligible\": true");
+        assertThat(read(resultJson)).contains("\"release_evidence_eligible\": false");
+    }
+
+    private void markAsProductReleaseCandidate(Path path) throws IOException {
+        Files.writeString(path, read(path)
+                .replace("evidence_classification: framework_provider_capability_only",
+                        "evidence_classification: product_release_evidence_candidate")
+                .replace("downstream_release_evidence: false", "downstream_release_evidence: true"));
     }
 
     private void markAsFrameworkOnly(Path path) throws IOException {

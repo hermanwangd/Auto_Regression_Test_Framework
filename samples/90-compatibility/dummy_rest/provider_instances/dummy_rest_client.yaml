@@ -14,5 +14,5 @@ failure_mapping:
   timeout: PROVIDER_TIMEOUT
   operation_failed: OPERATION_FAILED
 labels:
-  evidence_classification: product_release_evidence_candidate
-  downstream_release_evidence: true
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false
