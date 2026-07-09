@@ -83,6 +83,8 @@ for entry in "${supported_local_suites[@]}"; do
   run_suite $entry
 done
 
+scripts/release/verify-wiremock-external-base-url.sh "$VERSION"
+
 echo "compatibility_sample_verification: dummy_rest"
 run_suite samples/90-compatibility/dummy_rest/suite_manifest.yaml local_dummy
 

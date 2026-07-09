@@ -357,7 +357,7 @@ git commit -m "feat: support json report output"
 - Extend `src/test/java/com/specdriven/regression/provider/wiremock/WireMockExternalBaseUrlSupportTest.java`.
 - Modify `scripts/release/verify-supported-provider-samples.sh` if release verification misses the external base URL case.
 
-- [ ] Step 1: Add failing test that starts an external local WireMock and passes its `base_url` through Env_Profile.
+- [x] Step 1: Add failing test that starts an external local WireMock and passes its `base_url` through Env_Profile.
 
 Expected assertions:
 
@@ -377,7 +377,7 @@ MAVEN_OPTS="-Xmx1024m -XX:MaxMetaspaceSize=384m" ./mvnw -q -Dtest=WireMockExtern
 
 Expected before implementation: fails if external base URL is not consumed.
 
-- [ ] Step 2: Implement or fix external `base_url` resolution.
+- [x] Step 2: Implement or fix external `base_url` resolution.
 
 Rules:
 
@@ -389,7 +389,7 @@ base_url with token/password query => SECRET_GUARDRAIL_ERROR
 valid http/https base_url => runtime consumes external URL
 ```
 
-- [ ] Step 3: Add release sample or release verification path.
+- [x] Step 3: Add release sample or release verification path.
 
 The release verifier must be able to prove:
 
@@ -400,7 +400,7 @@ framework_consumption_status: consumed
 
 for the WireMock project-provisioned dependency.
 
-- [ ] Step 4: Run focused verification.
+- [x] Step 4: Run focused verification.
 
 ```bash
 MAVEN_OPTS="-Xmx1024m -XX:MaxMetaspaceSize=384m" ./mvnw -q -Dtest=WireMockExternalBaseUrlSupportTest,WireMockHttpRequestSampleCommandTest test
@@ -409,7 +409,7 @@ scripts/release/verify-supported-provider-samples.sh
 
 Expected: external base URL sample is verified or explicitly listed as supported release proof.
 
-- [ ] Step 5: Commit.
+- [x] Step 5: Commit.
 
 ```bash
 git add docs/02-architecture/contracts/provider-contracts/wiremock_http_mock.yaml \
