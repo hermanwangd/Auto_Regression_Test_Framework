@@ -6,6 +6,8 @@ import com.specdriven.regression.provider.runtime.ProviderFailure;
 import com.specdriven.regression.provider.runtime.ProviderOperationRequest;
 import com.specdriven.regression.provider.runtime.ProviderOperationResult;
 import com.specdriven.regression.provider.runtime.ProviderRuntime;
+import com.specdriven.regression.provider.runtime.SecretRefResolver;
+import com.specdriven.regression.provider.runtime.SecretRefResolver.ResolvedSecret;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -25,7 +27,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.yaml.snakeyaml.Yaml;
@@ -36,6 +40,15 @@ public class JdbcProviderRuntime implements ProviderRuntime {
     private static final Pattern NAMED_PARAM = Pattern.compile(":([A-Za-z][A-Za-z0-9_]*)");
 
     private final Yaml yaml = new Yaml();
+    private final Function<String, String> environment;
+
+    public JdbcProviderRuntime() {
+        this(System::getenv);
+    }
+
+    JdbcProviderRuntime(Function<String, String> environment) {
+        this.environment = Objects.requireNonNull(environment, "environment");
+    }
 
     @Override
     public ProviderOperationResult execute(ProviderExecutionContext context, ProviderOperationRequest request) {
@@ -280,14 +293,18 @@ public class JdbcProviderRuntime implements ProviderRuntime {
                     "Supply connection.secret_ref or an approved connection.local_ref in Environment Binding."));
         }
         String normalizedRef = secretRef.toLowerCase(Locale.ROOT);
-        if (!normalizedRef.startsWith("generated://provider-capability/")) {
-            return SecretConnection.failed(ProviderFailure.of(
-                    "SECRET_RESOLUTION_ERROR",
-                    "SECRET_RESOLUTION_ERROR",
-                    "JDBC secret_ref `" + secretRef + "` cannot be resolved by local provider capability runtime.",
-                    "Use a supported generated:// provider capability secret ref for local_jdbc or configure a secret resolver."));
+        if (normalizedRef.startsWith("generated://provider-capability/")) {
+            return localH2Connection(context, dialect);
         }
-        return localH2Connection(context, dialect);
+        ResolvedSecret resolvedSecret = SecretRefResolver.resolveEnvSecretRef(
+                secretRef,
+                "JDBC",
+                "connection.secret_ref",
+                environment);
+        if (resolvedSecret.failure() != null) {
+            return SecretConnection.failed(resolvedSecret.failure());
+        }
+        return new SecretConnection(resolvedSecret.value(), "", "", null);
     }
 
     private SecretConnection localH2Connection(ProviderExecutionContext context, String dialect) {

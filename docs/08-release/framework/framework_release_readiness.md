@@ -62,6 +62,8 @@ For v0.2.5, checked-in samples use the canonical sample layout documented in `sa
 | `samples/provider_capability/dummy_rest/` | `samples/90-compatibility/dummy_rest/` |
 | `samples/evidence_hardening/` | `samples/40-evidence-reporting/evidence_hardening/` |
 
+JDBC external native runtime evidence is optional in public CI. The release gate always validates `samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile external_jdbc_env_secret_ref`; it runs the native JDBC sample only when `JDBC_CONNECTION` is configured or `REQUIRE_EXTERNAL_JDBC=true`. Missing external JDBC configuration must not block CI-verifiable release samples.
+
 `dummy_rest` is compatibility-only and must not count as a supported provider capability sample. `scripts/release/verify-usage-kit.sh` must validate both canonical samples and generated legacy aliases while this compatibility window is active.
 
 ## Integrity Metadata

@@ -23,6 +23,8 @@ class ReleaseUsageKitVerificationTest {
                 .contains("Verify supported provider samples")
                 .contains("scripts/release/verify-supported-provider-samples.sh")
                 .contains("REQUIRE_EXTERNAL_MESSAGING: ${{ vars.REQUIRE_EXTERNAL_MESSAGING || 'false' }}")
+                .contains("REQUIRE_EXTERNAL_JDBC: ${{ vars.REQUIRE_EXTERNAL_JDBC || 'false' }}")
+                .contains("JDBC_CONNECTION: ${{ secrets.JDBC_CONNECTION }}")
                 .contains("KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}")
                 .contains("IBM_MQ_CONN_NAME: ${{ secrets.IBM_MQ_CONN_NAME }}")
                 .contains("IBM_MQ_CREDENTIAL: ${{ secrets.IBM_MQ_CREDENTIAL }}");
@@ -37,6 +39,7 @@ class ReleaseUsageKitVerificationTest {
                 .contains("run --suite")
                 .contains("report --result")
                 .contains("validate-evidence --result")
+                .contains("samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml external_jdbc_env_secret_ref")
                 .contains("samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml ci_kafka_external")
                 .contains("samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml ci_ibm_mq_external")
                 .doesNotContain("--rp-id");
@@ -48,6 +51,8 @@ class ReleaseUsageKitVerificationTest {
 
         assertThat(script)
                 .contains("external_messaging_runtime_verification: not_configured")
+                .contains("external_jdbc_runtime_verification: not_configured")
+                .contains("missing_external_jdbc_env: JDBC_CONNECTION")
                 .contains("supported_provider_sample_verification_status: passed_ci_verifiable_external_messaging_not_configured")
                 .contains("missing_external_messaging_env")
                 .doesNotContain("ALLOW_EXTERNAL_MESSAGING_SKIP")

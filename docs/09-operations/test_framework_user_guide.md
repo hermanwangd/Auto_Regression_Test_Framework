@@ -762,6 +762,8 @@ In v0.2 provider capability mode, `rest_client` is executable for checked-in Wir
 
 `kafka` and `ibm_mq` are P1 client provider contracts with framework-owned mock capability runtimes and native client runtimes for externally provisioned broker or queue-manager endpoints. Their Provider Contracts list `runtime_modes: [native, mock, ephemeral]` as vocabulary and declare `executable_runtime_modes: [mock, native]`; `ephemeral` remains `contract_only_runtime_modes`. They describe how the test runner consumes Env_Profile binding keys and writes framework evidence without starting brokers, queue managers, Testcontainers, or RUs. Public CI release gates validate external profiles and run native external messaging samples only when broker or queue-manager bindings are configured. A single messaging suite may include Kafka and IBM MQ test cases together when every test case uses the same selected Env_Profile and each test case has exactly one messaging runtime target. External broker or queue-manager values must be materialized into `value`, `secret_ref`, or approved `local_ref` before framework execution; client providers only consume resolved bindings.
 
+`jdbc` supports two release-verifiable profiles. `local_jdbc` uses approved framework-managed H2 bindings for deterministic local/CI evidence. `external_jdbc_env_secret_ref` uses native JDBC runtime with `connection.secret_ref: env://JDBC_CONNECTION`. The framework resolves `JDBC_CONNECTION` only at runtime, masks the resolved value from result/evidence/report output, and fails owner-actionably with `SECRET_RESOLUTION_ERROR` when the env var is missing. Release CI validates this external profile by default but runs it only when `JDBC_CONNECTION` is configured or `REQUIRE_EXTERNAL_JDBC=true`.
+
 ### 10.2 Provider Instance Examples
 
 REST Provider Instance:
@@ -1143,6 +1145,16 @@ regress run \
   --profile local_jdbc
 
 regress report --result <generated_result_json>
+
+regress validate \
+  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
+  --profile external_jdbc_env_secret_ref
+
+JDBC_CONNECTION='<jdbc-url>' regress run \
+  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
+  --profile external_jdbc_env_secret_ref
+
+regress validate-evidence --result <generated_result_json>
 ```
 
 The WireMock + HTTP request sample keeps happy and boundary cases in the canonical `suite_manifest.yaml` `tests[]` list so both run under one shared Env_Profile. It also includes `suite_manifest_failure.yaml` for deterministic assertion-failure evidence.

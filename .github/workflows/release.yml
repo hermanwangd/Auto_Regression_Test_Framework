@@ -130,6 +130,8 @@ jobs:
       - name: Verify supported provider samples
         env:
           REQUIRE_EXTERNAL_MESSAGING: ${{ vars.REQUIRE_EXTERNAL_MESSAGING || 'false' }}
+          REQUIRE_EXTERNAL_JDBC: ${{ vars.REQUIRE_EXTERNAL_JDBC || 'false' }}
+          JDBC_CONNECTION: ${{ secrets.JDBC_CONNECTION }}
           KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}
           IBM_MQ_CONN_NAME: ${{ secrets.IBM_MQ_CONN_NAME }}
           IBM_MQ_CREDENTIAL: ${{ secrets.IBM_MQ_CREDENTIAL }}

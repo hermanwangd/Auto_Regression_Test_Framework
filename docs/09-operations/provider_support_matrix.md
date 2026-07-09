@@ -19,7 +19,7 @@ Server or dependency lifecycle words such as native, mock, ephemeral, framework-
 | `grpc_client` | `supported` | `samples/20-provider-capability-p0/rpc/grpc_mock/` | Unary client stimulus for checked-in gRPC mock capability samples. |
 | `grpc_mock` | `supported` | `samples/20-provider-capability-p0/rpc/grpc_mock/` | WireMock gRPC extension, unary only. |
 | `ibm_mq` | `supported` | `samples/20-provider-capability-p0/messaging/ibm_mq/` | CI verifies contract, local provider sample, and external profile validation. Native external execution runs only when queue-manager bindings are configured; the framework does not start IBM MQ. |
-| `jdbc` | `supported` | `samples/20-provider-capability-p0/data/jdbc/` | JDBC fixture/query/cleanup capability with owner-supplied or approved disposable DB bindings. |
+| `jdbc` | `supported` | `samples/20-provider-capability-p0/data/jdbc/` | JDBC fixture/query/cleanup capability with approved local H2 bindings and optional native external `env://JDBC_CONNECTION` runtime evidence. |
 | `kafka` | `supported` | `samples/20-provider-capability-p0/messaging/kafka/` | CI verifies contract, local provider sample, and external profile validation. Native external execution runs only when broker bindings are configured; the framework does not start Kafka. |
 | `kafka_messaging` | `deprecated` | n/a | Compatibility alias only; use `kafka` for new artifacts. |
 | `kubernetes_runtime` | `contract_only` | n/a | Contract vocabulary is documented; no release-verifiable runtime sample is published in v0.2.5. |

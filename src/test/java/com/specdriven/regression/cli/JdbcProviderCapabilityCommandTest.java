@@ -29,6 +29,7 @@ class JdbcProviderCapabilityCommandTest {
                 "samples/20-provider-capability-p0/data/jdbc/provider_instances/oracle_like.yaml",
                 "samples/20-provider-capability-p0/data/jdbc/provider_instances/db2_like.yaml",
                 "samples/20-provider-capability-p0/data/jdbc/env_profiles/local_jdbc.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/env_profiles/external_jdbc_env_secret_ref.yaml",
                 "samples/20-provider-capability-p0/data/jdbc/execution_profiles/local_jdbc.yaml",
                 "samples/20-provider-capability-p0/data/jdbc/environment_bindings/local_jdbc.yaml",
                 "samples/20-provider-capability-p0/data/jdbc/fixtures/db_seed.sql",
@@ -52,6 +53,23 @@ class JdbcProviderCapabilityCommandTest {
         assertThat(result.stdout())
                 .contains("validation_status: passed")
                 .contains("suite_id: JDBC-CAPABILITY-v0.2")
+                .contains("oracle-like-db")
+                .contains("db2-like-db")
+                .contains("jdbc");
+    }
+
+    @Test
+    void jdbcSuiteValidatesExternalEnvSecretRefProfileThroughPublicCli() {
+        CommandResult result = execute(
+                "validate",
+                "--suite",
+                JDBC_SUITE.toString(),
+                "--profile",
+                "external_jdbc_env_secret_ref");
+
+        assertThat(result.exit()).as(result.stderr() + result.stdout()).isZero();
+        assertThat(result.stdout())
+                .contains("validation_status: passed")
                 .contains("oracle-like-db")
                 .contains("db2-like-db")
                 .contains("jdbc");
@@ -107,6 +125,24 @@ class JdbcProviderCapabilityCommandTest {
                 .contains("run_id: RUN-JDBC-")
                 .contains("test_case_id: JDBC-CAPABILITY-TC-001")
                 .contains("status: passed");
+    }
+
+    @Test
+    void jdbcSuiteFailsOwnerActionablyWhenExternalEnvSecretRefIsMissing() {
+        CommandResult run = execute(
+                "run",
+                "--suite",
+                JDBC_SUITE.toString(),
+                "--profile",
+                "external_jdbc_env_secret_ref");
+
+        assertThat(run.exit()).isEqualTo(1);
+        assertThat(run.stdout())
+                .contains("run_status: failed")
+                .contains("SECRET_RESOLUTION_ERROR")
+                .contains("JDBC connection.secret_ref env ref `env://JDBC_CONNECTION` is not set")
+                .contains("Set environment variable `JDBC_CONNECTION`")
+                .doesNotContain("jdbc:h2:");
     }
 
     @Test
