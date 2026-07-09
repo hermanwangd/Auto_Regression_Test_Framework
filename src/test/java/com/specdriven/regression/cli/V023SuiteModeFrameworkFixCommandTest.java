@@ -113,7 +113,7 @@ class V023SuiteModeFrameworkFixCommandTest {
                 .contains("provider_runtime_invoked: false")
                 .contains("reason: unresolved_generated_ref")
                 .contains("failure_code: CONFIGURATION_UNRESOLVED_GENERATED_REF")
-                .contains("field_path: providers.oracle-database.binding_keys.connection.secret_ref")
+                .contains("field_path: providers.oracle-database.bindings.connection.secret_ref")
                 .contains("provider_id: oracle-database")
                 .contains("owner_action:");
     }

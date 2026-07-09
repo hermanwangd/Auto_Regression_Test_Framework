@@ -5,10 +5,12 @@ dependency_policy:
   require_readiness_evidence: true
   allow_framework_managed_dependencies: false
 dependency_substitution_policy:
-  allowed_runtime_modes: [native]
+  allowed_runtime_modes:
+  - native
   mock_evidence_release_claim: prohibited
 dependency_provisioning_policy:
-  allowed_provisioners: [none]
+  allowed_provisioners:
+  - none
 data_policy:
   approved_expected_results_required: true
   production_data_allowed: false
@@ -17,20 +19,18 @@ data_policy:
 providers:
   wiremock-payment-api:
     runtime_mode: mock
-    binding_keys:
+    bindings:
       mappings_ref:
         ref: fixtures/wiremock/payment-api/
   oracle-database:
     runtime_mode: native
-    binding_keys:
-      connection.secret_ref:
+    bindings:
+      connection:
         secret_ref: vault://sit/oracle/connection
-      dialect:
-        value: oracle
+      dialect: oracle
   nats-event-bus:
     runtime_mode: native
-    binding_keys:
+    bindings:
       connection:
         secret_ref: vault://sit/nats/connection
-      subject:
-        value: payments.accepted
+      subject: payments.accepted

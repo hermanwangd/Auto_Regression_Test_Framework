@@ -131,6 +131,7 @@ jobs:
         env:
           REQUIRE_EXTERNAL_MESSAGING: ${{ vars.REQUIRE_EXTERNAL_MESSAGING || 'false' }}
           REQUIRE_EXTERNAL_JDBC: ${{ vars.REQUIRE_EXTERNAL_JDBC || 'false' }}
+          JDBC_EXTERNAL_DIALECT: ${{ vars.JDBC_EXTERNAL_DIALECT || 'oracle' }}
           JDBC_CONNECTION: ${{ secrets.JDBC_CONNECTION }}
           KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}
           IBM_MQ_CONN_NAME: ${{ secrets.IBM_MQ_CONN_NAME }}

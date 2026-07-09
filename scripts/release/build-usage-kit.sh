@@ -113,7 +113,7 @@ release jar:
 
 \`\`\`bash
 java -jar ../spec-driven-auto-regression-${VERSION}.jar validate --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml
-java -jar ../spec-driven-auto-regression-${VERSION}.jar run --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml
+java -jar ../spec-driven-auto-regression-${VERSION}.jar run --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml --profile local_golden
 java -jar ../spec-driven-auto-regression-${VERSION}.jar report --result <generated_result_json>
 \`\`\`
 
@@ -175,7 +175,7 @@ cat > "${KIT_ROOT}/release/verification_commands.md" <<EOF_COMMANDS
 
 \`\`\`bash
 java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/00-getting-started/golden_e2e/suite_manifest.yaml
-java -jar spec-driven-auto-regression-${VERSION}.jar run --suite usage-kit/samples/00-getting-started/golden_e2e/suite_manifest.yaml
+java -jar spec-driven-auto-regression-${VERSION}.jar run --suite usage-kit/samples/00-getting-started/golden_e2e/suite_manifest.yaml --profile local_golden
 java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/20-provider-capability-p0/suite_manifest.yaml
 java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml --profile ci_kafka_external
 java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml --profile ci_ibm_mq_external

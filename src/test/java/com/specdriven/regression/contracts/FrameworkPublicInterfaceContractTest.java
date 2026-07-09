@@ -44,7 +44,7 @@ class FrameworkPublicInterfaceContractTest {
                 .contains("`--tag <tag>`")
                 .contains("`--format text|yaml`")
                 .contains("`regress validate-evidence`")
-                .contains("`regress report --format json` is not a v0.2.5 public report contract")
+                .contains("`regress report --format json` is not a v0.2.6 public report contract")
                 .contains("operation-level `inputs` maps")
                 .contains("`data.<name>.ref`")
                 .contains("`generated-framework/suite_manifest.yaml`")
@@ -68,20 +68,20 @@ class FrameworkPublicInterfaceContractTest {
     }
 
     @Test
-    @DisplayName("FWK-013 | user docs keep v0.2.5 runtime release interface suite-mode only")
+    @DisplayName("FWK-013 | user docs keep v0.2.6 runtime release interface suite-mode only")
     void FWK_013_userDocsKeepRuntimeReleaseInterfaceSuiteModeOnly() throws Exception {
         String userGuide = Files.readString(USER_GUIDE);
         String testPlan = Files.readString(TEST_PLAN);
 
         assertThat(userGuide)
-                .contains("The v0.2.5 runtime public interface is suite-mode")
+                .contains("The v0.2.6 runtime public interface is suite-mode")
                 .contains("Product/RP tooling must translate owner-authored artifacts into suite-mode artifacts before invoking the framework runtime")
-                .contains("Direct Product/RP runtime orchestration is not part of the v0.2.5 framework public interface")
-                .contains("Product/RP-specific report forms are outside the v0.2.5 framework runtime public interface");
+                .contains("Direct Product/RP runtime orchestration is not part of the v0.2.6 framework public interface")
+                .contains("Product/RP-specific report forms are outside the v0.2.6 framework runtime public interface");
         assertThat(testPlan)
                 .contains("run --suite <suite_manifest>")
                 .contains("report --result <generated_result_json>")
-                .contains("Product/RP runtime orchestration is outside the v0.2.5 framework public interface")
+                .contains("Product/RP runtime orchestration is outside the v0.2.6 framework public interface")
                 .doesNotContain("report --batch-id")
                 .doesNotContain("LEGACY_RP_MODE_DEPRECATED")
                 .doesNotContain("requested `--env` Env_Profile")

@@ -9,8 +9,6 @@ tests:
   - test_case_failure.yaml
 artifact_roots:
   provider_instances: provider_instances/
-  execution_profiles: execution_profiles/
-  environment_bindings: environment_bindings/
   expected_results: expected_results/
   fixtures: fixtures/
 evidence_policy:

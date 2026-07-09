@@ -31,8 +31,6 @@ class NatsProviderCapabilityCommandTest {
                 "docs/02-architecture/contracts/provider-contracts/nats.yaml",
                 "samples/20-provider-capability-p0/messaging/nats/provider_instances/local_nats.yaml",
                 "samples/20-provider-capability-p0/messaging/nats/env_profiles/local_nats.yaml",
-                "samples/20-provider-capability-p0/messaging/nats/execution_profiles/local_nats.yaml",
-                "samples/20-provider-capability-p0/messaging/nats/environment_bindings/local_nats.yaml",
                 "samples/20-provider-capability-p0/messaging/nats/fixtures/event_input.json",
                 "samples/20-provider-capability-p0/messaging/nats/expected_results/event_expected.json",
                 "samples/20-provider-capability-p0/messaging/nats/result/expected_result_shape.json",
@@ -243,8 +241,7 @@ class NatsProviderCapabilityCommandTest {
         Path suite = mutableNats();
         Path binding = suite.getParent().resolve("env_profiles/local_nats.yaml");
         Files.writeString(binding, read(binding).replace("""
-              subject:
-                value: orders.ready
+              subject: orders.ready
         """, ""));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
@@ -252,7 +249,7 @@ class NatsProviderCapabilityCommandTest {
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("reason: missing_required_binding_key")
-                .contains("field_path: providers.local-nats-event-bus.binding_keys.subject")
+                .contains("field_path: providers.local-nats-event-bus.bindings.subject")
                 .contains("provider_type: nats");
     }
 
@@ -281,7 +278,7 @@ class NatsProviderCapabilityCommandTest {
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("reason: missing_required_binding_key")
-                .contains("field_path: providers.local-nats-event-bus.binding_keys.connection")
+                .contains("field_path: providers.local-nats-event-bus.bindings.connection")
                 .contains("provider_type: nats");
     }
 

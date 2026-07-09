@@ -28,8 +28,6 @@ class CommonVerifyCapabilityCommandTest {
                 "samples/20-provider-capability-p0/verification/common_verify/test_case.yaml",
                 "docs/02-architecture/contracts/provider-contracts/common_verify.yaml",
                 "samples/20-provider-capability-p0/verification/common_verify/provider_instances/local_verify.yaml",
-                "samples/20-provider-capability-p0/verification/common_verify/execution_profiles/local_verify.yaml",
-                "samples/20-provider-capability-p0/verification/common_verify/environment_bindings/local_verify.yaml",
                 "samples/20-provider-capability-p0/verification/common_verify/expected_results/expected_payload.json",
                 "samples/20-provider-capability-p0/verification/common_verify/expected_results/expected_schema.json",
                 "samples/20-provider-capability-p0/verification/common_verify/expected_results/expected_file.txt",
@@ -40,8 +38,6 @@ class CommonVerifyCapabilityCommandTest {
                 "docs/02-architecture/contracts/provider-contracts/common_verify.yaml",
                 "samples/20-provider-capability-p0/verification/polling_observer/provider_instances/local_polling.yaml",
                 "samples/20-provider-capability-p0/verification/polling_observer/provider_instances/runtime_mode_sample__local_polling_observer_ephemeral.yaml",
-                "samples/20-provider-capability-p0/verification/polling_observer/execution_profiles/local_polling.yaml",
-                "samples/20-provider-capability-p0/verification/polling_observer/environment_bindings/local_polling.yaml",
                 "samples/20-provider-capability-p0/verification/polling_observer/expected_results/expected_timeout_result.json",
                 "samples/20-provider-capability-p0/verification/polling_observer/actual_samples/observed_event.json");
 

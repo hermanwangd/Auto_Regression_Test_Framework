@@ -28,7 +28,7 @@ DSL target
   -> provider_type
   -> Framework built-in Provider Contract catalog
   -> selected Env_Profile
-  -> Env_Profile.providers.<provider_id>.binding_keys
+  -> Env_Profile.providers.<provider_id>.bindings
 ```
 
 There is no additional user-facing runtime interface beyond Provider Instances, Env_Profiles, DSL, CLI, evidence, and framework-owned Provider Contracts. RP/suite repositories do not copy built-in Provider Contracts by default.
@@ -72,7 +72,7 @@ Provider instance and Env_Profile authoring folders are owner/Agent Skill workin
 
 ## 5. End-to-End Workflow
 
-Owner or Agent Skill workflows prepare suite artifacts outside the framework runtime CLI. The v0.2.5 runtime public interface starts only after a suite manifest, test cases, Provider Instances, Env_Profiles, expected data, and evidence policy exist.
+Owner or Agent Skill workflows prepare suite artifacts outside the framework runtime CLI. The v0.2.6 runtime public interface starts only after a suite manifest, test cases, Provider Instances, Env_Profiles, expected data, and evidence policy exist.
 
 ```text
 prepare suite artifacts
@@ -83,9 +83,9 @@ prepare suite artifacts
   -> validate-evidence
 ```
 
-The v0.2.5 runtime public interface is suite-mode: `validate --suite`, `run --suite --dry-run`, `run --suite`, `report --result`, and `validate-evidence --result`.
+The v0.2.6 runtime public interface is suite-mode: `validate --suite`, `run --suite --dry-run`, `run --suite`, `report --result`, and `validate-evidence --result`.
 
-Typical v0.2.5 runtime commands:
+Typical v0.2.6 runtime commands:
 
 ```bash
 regress validate \
@@ -104,7 +104,7 @@ regress run \
 regress report --result <generated_result_json>
 ```
 
-Product/RP tooling must translate owner-authored artifacts into suite-mode artifacts before invoking the framework runtime. Direct Product/RP runtime orchestration is not part of the v0.2.5 framework public interface.
+Product/RP tooling must translate owner-authored artifacts into suite-mode artifacts before invoking the framework runtime. Direct Product/RP runtime orchestration is not part of the v0.2.6 framework public interface.
 
 During framework development, keep Maven memory bounded:
 
@@ -703,7 +703,7 @@ If a command-capable provider instance does not define required `safety.access_p
 
 The canonical built-in Provider Contracts are materialized under `docs/02-architecture/contracts/provider-contracts/` and indexed by `docs/02-architecture/contracts/provider_capability_registry.v0.2.yaml`. The user guide must not redefine a second provider contract catalog. Runtime suite manifests use this built-in catalog by default.
 
-Framework `0.2.5` public provider support is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is keyed by provider type and `support_status`; runtime lifecycle details such as native, mock, ephemeral, framework-managed, or external are Env_Profile details, not public support statuses.
+Framework `0.2.6` public provider support is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is keyed by provider type and `support_status`; runtime lifecycle details such as native, mock, ephemeral, framework-managed, or external are Env_Profile details, not public support statuses.
 
 RP/suite repositories do not need a `provider_contracts/` folder for built-in provider types such as `wiremock_http_mock`, `rest_client`, `jdbc`, `nats`, `kafka`, `ibm_mq`, `artifact_compare`, or `polling_observer`. Suite-local contracts are an explicit opt-in for custom provider plugins or contract snapshot pinning:
 
@@ -762,7 +762,7 @@ In v0.2 provider capability mode, `rest_client` is executable for checked-in Wir
 
 `kafka` and `ibm_mq` are P1 client provider contracts with framework-owned mock capability runtimes and native client runtimes for externally provisioned broker or queue-manager endpoints. Their Provider Contracts list `runtime_modes: [native, mock, ephemeral]` as vocabulary and declare `executable_runtime_modes: [mock, native]`; `ephemeral` remains `contract_only_runtime_modes`. They describe how the test runner consumes Env_Profile binding keys and writes framework evidence without starting brokers, queue managers, Testcontainers, or RUs. Public CI release gates validate external profiles and run native external messaging samples only when broker or queue-manager bindings are configured. A single messaging suite may include Kafka and IBM MQ test cases together when every test case uses the same selected Env_Profile and each test case has exactly one messaging runtime target. External broker or queue-manager values must be materialized into `value`, `secret_ref`, or approved `local_ref` before framework execution; client providers only consume resolved bindings.
 
-`jdbc` supports two release-verifiable profiles. `local_jdbc` uses approved framework-managed H2 bindings for deterministic local/CI evidence. `external_jdbc_env_secret_ref` uses native JDBC runtime with `connection.secret_ref: env://JDBC_CONNECTION`. The framework resolves `JDBC_CONNECTION` only at runtime, masks the resolved value from result/evidence/report output, and fails owner-actionably with `SECRET_RESOLUTION_ERROR` when the env var is missing. Release CI validates this external profile by default but runs it only when `JDBC_CONNECTION` is configured or `REQUIRE_EXTERNAL_JDBC=true`.
+`jdbc` supports deterministic local verification plus optional native external verification. `local_jdbc` uses approved framework-managed H2 Oracle/DB2 modes for deterministic local/CI evidence and runs the base fixture/query/cleanup case plus Oracle CRUD and DB2 CRUD cases together. Native external JDBC uses single-provider suites: `suite_manifest_external_oracle.yaml` with `external_jdbc_oracle_env_secret_ref`, or `suite_manifest_external_db2.yaml` with `external_jdbc_db2_env_secret_ref`. Each external Env_Profile uses `connection.secret_ref: env://JDBC_CONNECTION`. `env://JDBC_CONNECTION` is the canonical public secret-ref name and must be written in uppercase exactly; mixed-case variants are invalid. The runner process supplies the actual JDBC URL through the environment variable `JDBC_CONNECTION`, not through a literal `env://...` value. The framework resolves `JDBC_CONNECTION` only at runtime, masks the resolved value from result/evidence/report output, and fails owner-actionably with `SECRET_RESOLUTION_ERROR` when the env var is missing. External Oracle/DB2 suites assume the owner has pre-provisioned the target schema and `ORDERS` table. Release CI validates both external suite contracts by default and runs exactly one native external suite only when `REQUIRE_EXTERNAL_JDBC=true`; `JDBC_EXTERNAL_DIALECT=oracle|db2` selects which suite to execute.
 
 ### 10.2 Provider Instance Examples
 
@@ -860,7 +860,7 @@ Before dispatch, the framework validates:
 - When Provider Contract `executable_runtime_modes` is present, selected Env_Profile `runtime_mode` must be listed there.
 - Env_Profile exists for the selected `env_profile_id`.
 - Env_Profile has `providers.<provider_id>` for every DSL target.
-- Env_Profile `providers.<provider_id>.binding_keys` supplies all required Provider Contract binding keys.
+- Env_Profile `providers.<provider_id>.bindings` supplies all required Provider Contract binding keys.
 - Env_Profile binding value kinds are allowed by the Provider Contract `binding_keys`.
 - Env_Profile `generated_ref` values resolve to Provider Contract `bindable_outputs` or selected Env_Profile `dependency_provisioning_policy.generated_outputs`.
 - Selected `runtime_mode` is allowed by Env_Profile, Provider Contract, and Provider Instance.
@@ -883,49 +883,42 @@ providers:
   payment-api:
     runtime_mode: native
     readiness_ref: evidence/readiness/payment-api-sit.yaml
-    binding_keys:
-      base_url:
-        value: https://payment-api.sit.example.com
+    bindings:
+      base_url: https://payment-api.sit.example.com
 
   payment-db:
     runtime_mode: native
     readiness_ref: evidence/readiness/payment-db-sit.yaml
-    binding_keys:
-      connection.secret_ref:
+    bindings:
+      connection:
         secret_ref: vault://sit/payment/db-connection
-      dialect:
-        value: oracle
+      dialect: oracle
 
   payment-events:
     runtime_mode: native
     readiness_ref: evidence/readiness/payment-events-sit.yaml
-    binding_keys:
+    bindings:
       bootstrap_servers:
         secret_ref: vault://sit/payment/kafka-bootstrap
-      topic:
-        value: payment.events
-      consumer_group:
-        value: artf-payment-sit
+      topic: payment.events
+      consumer_group: artf-payment-sit
 
   payment-mq:
     runtime_mode: native
     readiness_ref: evidence/readiness/payment-mq-sit.yaml
-    binding_keys:
-      queue_manager:
-        value: QM.PAYMENT.SIT
-      channel:
-        value: APP.SVRCONN
+    bindings:
+      queue_manager: QM.PAYMENT.SIT
+      channel: APP.SVRCONN
       conn_name:
         secret_ref: vault://sit/payment/mq-conn-name
-      queue:
-        value: PAYMENT.REQUEST.SIT
-      credential.secret_ref:
+      queue: PAYMENT.REQUEST.SIT
+      credential:
         secret_ref: vault://sit/payment/mq-credential
 ```
 
 Each provider binding must declare the selected runtime mode. Local and CI Env_Profiles usually replace external services, databases, and messaging with mocks, stubs, fake topics, embedded brokers, ephemeral DBs, disposable schemas, or generated data.
 
-The `binding_keys` under each provider must match the keys defined by that provider's Provider Contract. Allowed value kinds are `value`, `ref`, `secret_ref`, `generated_ref`, and approved `local_ref`, but the Provider Contract decides which kinds are valid for each binding key. Use `local_ref` only for framework-controlled local/CI fixtures; it must not be used as SIT/preprod release evidence.
+The `bindings` under each provider must match the keys defined by that provider's Provider Contract `binding_keys`. Direct scalar values are treated as `value`; structured values may use `ref`, `secret_ref`, `generated_ref`, or approved `local_ref` only when the Provider Contract allows that value kind. Use `local_ref` only for framework-controlled local/CI fixtures; it must not be used as SIT/preprod release evidence.
 
 ```yaml
 env_profile_id: local_wiremock_http
@@ -933,21 +926,20 @@ execution_mode: local
 providers:
   wiremock-payment-api:
     runtime_mode: mock
-    binding_keys:
+    bindings:
       mappings_ref:
         ref: fixtures/wiremock/payment_mappings
-      port_strategy:
-        value: dynamic
+      port_strategy: dynamic
 
   payment-api-client:
     runtime_mode: native
-    binding_keys:
+    bindings:
       base_url:
         generated_ref: generated://wiremock-payment-api.base_url
 
   payment-soap-mock:
     runtime_mode: mock
-    binding_keys:
+    bindings:
       endpoint_url:
         generated_ref: generated://payment-soap-mock.endpoint_url
       wsdl_ref:
@@ -955,48 +947,39 @@ providers:
 
   customer-grpc-mock:
     runtime_mode: mock
-    binding_keys:
+    bindings:
       descriptor_ref:
         ref: proto/customer.desc
-      service_name:
-        value: CustomerService
+      service_name: CustomerService
 
   customer-grpc-client:
     runtime_mode: native
-    binding_keys:
+    bindings:
       target:
         generated_ref: generated://customer-grpc-mock.target_uri
 
   payment-db:
     runtime_mode: ephemeral
-    binding_keys:
+    bindings:
       connection:
         local_ref: approved_local_h2_oracle
-      dialect:
-        value: oracle
+      dialect: oracle
 
   payment-events:
     runtime_mode: mock
-    binding_keys:
-      bootstrap_servers:
-        value: localhost:19092
-      topic:
-        value: payment.events.test
-      consumer_group:
-        value: artf-payment-ci
+    bindings:
+      bootstrap_servers: localhost:19092
+      topic: payment.events.test
+      consumer_group: artf-payment-ci
 
   payment-mq:
     runtime_mode: mock
-    binding_keys:
-      queue_manager:
-        value: QM.PAYMENT.CI
-      channel:
-        value: APP.SVRCONN
-      conn_name:
-        value: localhost(1414)
-      queue:
-        value: PAYMENT.REQUEST.CI
-      credential.secret_ref:
+    bindings:
+      queue_manager: QM.PAYMENT.CI
+      channel: APP.SVRCONN
+      conn_name: localhost(1414)
+      queue: PAYMENT.REQUEST.CI
+      credential:
         secret_ref: env://PAYMENT_MQ_CREDENTIAL_REF
 ```
 
@@ -1006,7 +989,26 @@ providers:
 
 ## 12. Execution Mode and Dependency Policy
 
-Env_Profile defines what is allowed to run in an environment.
+Env_Profile defines what is allowed to run in an environment. For normal local/CI samples, the minimal public shape is enough:
+
+```yaml
+env_profile_id: local_wiremock_http
+execution_mode: local
+providers:
+  wiremock-payment-api:
+    runtime_mode: mock
+    bindings:
+      port_strategy: dynamic
+      mappings_ref:
+        ref: fixtures/wiremock/
+  payment-api-client:
+    runtime_mode: native
+    bindings:
+      base_url:
+        generated_ref: generated://wiremock-payment-api.base_url
+```
+
+When omitted, framework defaults apply for isolation scope, max duration, dependency policy, dependency substitution policy, dependency provisioning policy, data policy, and evidence policy. Add policy sections only when the profile needs stricter behavior than defaults, such as SIT/native-only execution or externally provisioned CI services.
 
 ```yaml
 env_profile_id: sit
@@ -1032,7 +1034,7 @@ data_policy:
   secrets_must_use_refs: true
 ```
 
-Local and CI Env_Profiles may reference ephemeral dependencies only after those dependencies have been provisioned outside the framework runtime and declared through standard artifacts. This is separate from client providers: Kafka and IBM MQ client providers consume resolved connection values but do not create brokers or queue managers. v0.2.5 accepts `generated://` refs only when they target Provider Contract `bindable_outputs` or selected Env_Profile `dependency_provisioning_policy.generated_outputs`; unresolved generated refs block validation before provider dispatch.
+Local and CI Env_Profiles may reference ephemeral dependencies only after those dependencies have been provisioned outside the framework runtime and declared through standard artifacts. This is separate from client providers: Kafka and IBM MQ client providers consume resolved connection values but do not create brokers or queue managers. v0.2.6 accepts `generated://` refs only when they target Provider Contract `bindable_outputs` or selected Env_Profile `dependency_provisioning_policy.generated_outputs`; unresolved generated refs block validation before provider dispatch.
 
 ```yaml
 env_profile_id: ci
@@ -1053,17 +1055,15 @@ dependency_provisioning_policy:
 providers:
   payment-db:
     runtime_mode: ephemeral
-    binding_keys:
+    bindings:
       connection:
         local_ref: approved_local_h2_oracle
-      dialect:
-        value: oracle
+      dialect: oracle
 
   payment-events:
     runtime_mode: mock
-    binding_keys:
-      bootstrap_servers:
-        value: localhost:9092
+    bindings:
+      bootstrap_servers: localhost:9092
 
 max_duration: PT15M
 
@@ -1113,7 +1113,7 @@ Golden E2E suite-path mode may execute only deterministic framework-owned fake p
 
 Provider Capability suite-path mode proves selected v0.2 P0 provider capabilities as framework evidence. A standard suite run creates one `batch_id`, one `run_id`, one result JSON, and per-test outcomes in `test_results[]`; all selected `tests[]` share the selected Env_Profile. Provider identity for suite-level reporting comes from `provider_summary[]` and `provider_results[]`. Multi-provider standard results, inferred from either `test_results[]` or `provider_results[]`, must include `provider_summary[]`. Top-level `provider_id`, `provider_type`, or destination fields are single-provider compatibility fields only and must not be used to summarize a multi-provider suite.
 
-The v0.2.5 contract baseline sample is an executable mixed-provider framework verification suite:
+The v0.2.6 contract baseline sample is an executable mixed-provider framework verification suite:
 
 ```bash
 regress validate --suite samples/10-contract-baseline/mixed_wiremock_jdbc_nats/suite_manifest.yaml --profile ci
@@ -1147,17 +1147,25 @@ regress run \
 regress report --result <generated_result_json>
 
 regress validate \
-  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
-  --profile external_jdbc_env_secret_ref
+  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml \
+  --profile external_jdbc_oracle_env_secret_ref
+
+regress validate \
+  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml \
+  --profile external_jdbc_db2_env_secret_ref
 
 JDBC_CONNECTION='<jdbc-url>' regress run \
-  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
-  --profile external_jdbc_env_secret_ref
+  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml \
+  --profile external_jdbc_oracle_env_secret_ref
 
 regress validate-evidence --result <generated_result_json>
 ```
 
 The WireMock + HTTP request sample keeps happy and boundary cases in the canonical `suite_manifest.yaml` `tests[]` list so both run under one shared Env_Profile. It also includes `suite_manifest_failure.yaml` for deterministic assertion-failure evidence.
+
+The JDBC provider capability sample keeps the base fixture/query/cleanup case plus Oracle CRUD and DB2 CRUD cases in the canonical local `suite_manifest.yaml` `tests[]` list. Running it with `--profile local_jdbc` executes all three test cases under one shared Env_Profile and produces a multi-test result summary with both `oracle-like-db` and `db2-like-db` provider evidence.
+
+For native external JDBC evidence, the checked-in external Env_Profiles keep `connection.secret_ref: env://JDBC_CONNECTION` but are split by dialect so one run targets exactly one external database. Owners must provide `JDBC_CONNECTION` in the runner environment, for example `JDBC_CONNECTION='<jdbc-url>' regress run ...`, and must select the matching external suite/profile. Do not write raw JDBC URLs into DSL, Provider Instance, or Env_Profile files.
 
 Provider Capability suite-path mode may execute only checked-in framework provider capability samples for WireMock HTTP mock, `rest_client` HTTP request, SOAP mock, gRPC unary mock, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and evidence/report behavior. It must not execute non-P0 providers, Product/RP/RU topology interpretation, release governance, SIT/preprod release evidence, or downstream product deployment.
 
@@ -1382,7 +1390,7 @@ regress report \
   --format text
 ```
 
-Use `--result` for v0.2.5 suite-mode release readiness. Product/RP-specific report forms are outside the v0.2.5 framework runtime public interface.
+Use `--result` for v0.2.6 suite-mode release readiness. Product/RP-specific report forms are outside the v0.2.6 framework runtime public interface.
 
 Evidence must answer:
 

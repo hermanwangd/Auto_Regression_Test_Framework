@@ -43,10 +43,6 @@ class ContractBaselineCommandTest {
                 "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/provider_instances/nats_event_bus.yaml",
                 "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/env_profiles/ci.yaml",
                 "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/env_profiles/sit.yaml",
-                "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/execution_profiles/ci_pr.yaml",
-                "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/execution_profiles/sit_regression.yaml",
-                "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/environment_bindings/ci.yaml",
-                "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/environment_bindings/sit.yaml",
                 "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/result/sample_result.json",
                 "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/evidence/evidence_index.yaml",
                 "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/evidence/runs/RUN-CONTRACT-001/logs/execution.txt");
@@ -153,7 +149,7 @@ class ContractBaselineCommandTest {
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
-                .contains("field_path: providers.wiremock-payment-api.binding_keys.unexpected_mappings_ref")
+                .contains("field_path: providers.wiremock-payment-api.bindings.unexpected_mappings_ref")
                 .contains("reason: unknown_binding_key")
                 .contains("category: CONTRACT_ERROR");
     }
@@ -175,7 +171,7 @@ class ContractBaselineCommandTest {
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
-                .contains("field_path: providers.wiremock-payment-api.binding_keys.port_strategy.ref")
+                .contains("field_path: providers.wiremock-payment-api.bindings.port_strategy.ref")
                 .contains("reason: invalid_binding_key_value_kind")
                 .contains("category: CONTRACT_ERROR");
     }
@@ -350,7 +346,7 @@ class ContractBaselineCommandTest {
         Path suite = mutableBaseline();
         Path binding = suite.getParent().resolve("env_profiles/ci.yaml");
         Files.writeString(binding, Files.readString(binding)
-                .replace("value: oracle", "value: jdbc:h2:mem:leaked_dialect;DB_CLOSE_DELAY=-1"));
+                .replace("dialect: oracle", "dialect: jdbc:h2:mem:leaked_dialect;DB_CLOSE_DELAY=-1"));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
@@ -378,11 +374,9 @@ class ContractBaselineCommandTest {
         Path sensitiveUsernameBinding = sensitiveUsernameSuite.getParent().resolve("env_profiles/ci.yaml");
         Files.writeString(sensitiveUsernameBinding, Files.readString(sensitiveUsernameBinding)
                 .replace("""
-                              dialect:
-                                value: oracle
+                              dialect: oracle
                         """, """
-                              dialect:
-                                value: oracle
+                              dialect: oracle
                               username:
                                 sensitive: true
                                 value: dbadmin
@@ -397,7 +391,7 @@ class ContractBaselineCommandTest {
                 .contains("category: SECRET_GUARDRAIL_ERROR");
         assertThat(sensitiveUsername.exit()).isEqualTo(1);
         assertThat(sensitiveUsername.stdout())
-                .contains("field_path: providers.oracle-database.binding_keys.username.value")
+                .contains("field_path: providers.oracle-database.bindings.username.value")
                 .contains("reason: raw_secret")
                 .contains("category: SECRET_GUARDRAIL_ERROR");
     }
@@ -869,19 +863,19 @@ class ContractBaselineCommandTest {
                 providers:
                   wiremock-payment-api:
                     runtime_mode: mock
-                    binding_keys:
+                    bindings:
                       mappings_ref:
                         ref: fixtures/wiremock/payment-api/
                   oracle-database:
                     runtime_mode: ephemeral
-                    binding_keys:
+                    bindings:
                       connection:
                         local_ref: approved_local_h2_oracle
                       dialect:
                         value: oracle
                   nats-event-bus:
                     runtime_mode: ephemeral
-                    binding_keys:
+                    bindings:
                       connection:
                         local_ref: approved_local_nats_ref
                       subject:
@@ -911,19 +905,19 @@ class ContractBaselineCommandTest {
                 providers:
                   wiremock-payment-api:
                     runtime_mode: mock
-                    binding_keys:
+                    bindings:
                       mappings_ref:
                         ref: fixtures/wiremock/payment-api/
                   oracle-database:
                     runtime_mode: native
-                    binding_keys:
+                    bindings:
                       connection.secret_ref:
                         secret_ref: vault://sit/oracle/connection
                       dialect:
                         value: oracle
                   nats-event-bus:
                     runtime_mode: native
-                    binding_keys:
+                    bindings:
                       connection:
                         secret_ref: vault://sit/nats/connection
                       subject:

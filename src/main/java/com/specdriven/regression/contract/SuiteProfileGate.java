@@ -43,6 +43,22 @@ final class SuiteProfileGate {
                         "",
                         "Run with a profile allowed by compatible_profiles: " + compatibleProfiles + "."));
             }
+            for (Map.Entry<String, Object> entry : mapValue(testCase.document().get("targets")).entrySet()) {
+                Map<String, Object> target = mapValue(entry.getValue());
+                String targetProfile = stringValue(target.get("profile"));
+                if (targetProfile.isBlank() || targetProfile.equals(requestedProfile)) {
+                    continue;
+                }
+                findings.add(new ContractFinding(
+                        testCase.path().toString(),
+                        "targets." + entry.getKey() + ".profile",
+                        "conflicting_profile_selection",
+                        stringValue(target.get("provider_id")),
+                        providerType,
+                        requestedProfile,
+                        "",
+                        "Remove deprecated target profile or run with profile `" + targetProfile + "`."));
+            }
         }
         return List.copyOf(findings);
     }

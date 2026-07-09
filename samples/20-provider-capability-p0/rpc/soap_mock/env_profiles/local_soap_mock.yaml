@@ -1,27 +1,12 @@
 env_profile_id: local_soap_mock
 execution_mode: local
-isolation_scope: per_run
-dependency_policy:
-  require_readiness_evidence: false
-  allow_framework_managed_dependencies: true
-dependency_substitution_policy:
-  allowed_runtime_modes: [mock, native]
-  mock_evidence_release_claim: prohibited
-dependency_provisioning_policy:
-  allowed_provisioners: [none]
-data_policy:
-  approved_expected_results_required: true
-  production_data_allowed: false
-  generated_data_allowed: true
-  secrets_must_use_refs: true
 providers:
   payment-soap-mock:
     runtime_mode: mock
-    binding_keys:
-      port_strategy:
-        value: dynamic
+    bindings:
+      port_strategy: dynamic
   payment-soap-client:
     runtime_mode: native
-    binding_keys:
+    bindings:
       base_url:
         generated_ref: generated://payment-soap-mock.endpoint_url

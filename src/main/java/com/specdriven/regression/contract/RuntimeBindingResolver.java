@@ -40,7 +40,7 @@ final class RuntimeBindingResolver {
         Map<String, Object> normalized = new LinkedHashMap<>();
         normalized.put("provider_id", providerId);
         normalized.put("runtime_mode", provider.get("runtime_mode"));
-        normalized.put("binding_values", normalizeBindingKeys(mapValue(provider.get("binding_keys"))));
+        normalized.put("binding_values", normalizeEnvProfileBindings(provider));
         return normalized;
     }
 
@@ -81,6 +81,22 @@ final class RuntimeBindingResolver {
         Map<String, Object> normalized = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : bindingKeys.entrySet()) {
             putPath(normalized, entry.getKey(), normalizeBindingValue(entry.getValue()));
+        }
+        return normalized;
+    }
+
+    private Map<String, Object> normalizeEnvProfileBindings(Map<String, Object> provider) {
+        Map<String, Object> bindings = mapValue(provider.get("bindings"));
+        if (!bindings.isEmpty() || provider.containsKey("bindings")) {
+            return normalizeBindingValues(bindings);
+        }
+        return normalizeBindingKeys(mapValue(provider.get("binding_keys")));
+    }
+
+    private Map<String, Object> normalizeBindingValues(Map<String, Object> bindings) {
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : bindings.entrySet()) {
+            normalized.put(entry.getKey(), normalizeBindingValue(entry.getValue()));
         }
         return normalized;
     }

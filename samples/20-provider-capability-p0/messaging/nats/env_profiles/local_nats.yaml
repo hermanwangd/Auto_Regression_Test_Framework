@@ -1,31 +1,18 @@
 env_profile_id: local_nats
 execution_mode: local
-isolation_scope: per_run
-dependency_policy:
-  require_readiness_evidence: false
-  allow_framework_managed_dependencies: true
-dependency_substitution_policy:
-  allowed_runtime_modes: [mock]
-  mock_evidence_release_claim: prohibited
-dependency_provisioning_policy:
-  allowed_provisioners: [in_memory]
-data_policy:
-  approved_expected_results_required: true
-  production_data_allowed: false
-  generated_data_allowed: true
-  secrets_must_use_refs: true
 providers:
   local-nats-event-bus:
     runtime_mode: mock
-    binding_keys:
+    bindings:
       connection:
         local_ref: approved_local_nats_ref
-      subject:
-        value: orders.ready
-      timeout:
-        value: PT5S
-      poll_interval:
-        value: PT0.05S
+      subject: orders.ready
+      timeout: PT5S
+      poll_interval: PT0.05S
       masking_policy:
-        value:
-          redact: [connection, password, secret, token, authorization]
+        redact:
+        - connection
+        - password
+        - secret
+        - token
+        - authorization

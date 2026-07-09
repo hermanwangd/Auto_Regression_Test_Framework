@@ -68,6 +68,20 @@ public class ContractBaselineService {
             "secret_ref",
             "generated_ref",
             "local_ref");
+    private static final Map<String, Object> DEFAULT_ENV_PROFILE_DEPENDENCY_POLICY = Map.of(
+            "require_readiness_evidence", false);
+    private static final Map<String, Object> DEFAULT_ENV_PROFILE_DEPENDENCY_SUBSTITUTION_POLICY = Map.of(
+            "mock_evidence_release_claim", "prohibited");
+    private static final Map<String, Object> DEFAULT_ENV_PROFILE_DEPENDENCY_PROVISIONING_POLICY = Map.of(
+            "allowed_provisioners", List.of());
+    private static final Map<String, Object> DEFAULT_ENV_PROFILE_DATA_POLICY = Map.of(
+            "approved_expected_results_required", true,
+            "production_data_allowed", false,
+            "generated_data_allowed", true,
+            "secrets_must_use_refs", true);
+    private static final Map<String, Object> DEFAULT_ENV_PROFILE_EVIDENCE_POLICY = Map.of(
+            "evidence_classification", "framework_provider_capability_only",
+            "downstream_release_evidence", false);
     private static final List<String> RESULT_REQUIRED_FIELDS = List.of(
             "framework_version",
             "dsl_version",
@@ -100,6 +114,7 @@ public class ContractBaselineService {
         validateProhibitedFields(graph, findings);
         validateDataBindingCategories(graph, findings);
         validateRawSecrets(graph, findings);
+        validateTargetProfileCompatibility(graph, findings);
         validateTargets(graph, findings);
         validateOperationTargets(graph, findings);
         validateProviderInstanceShapes(graph, findings);
@@ -297,10 +312,7 @@ public class ContractBaselineService {
         }
         for (Map.Entry<Path, Map<String, Object>> entry : graph.envProfiles().entrySet()) {
             Map<String, Object> profile = entry.getValue();
-            for (String field : List.of(
-                    "env_profile_id", "execution_mode", "providers",
-                    "dependency_policy", "dependency_substitution_policy",
-                    "dependency_provisioning_policy", "data_policy")) {
+            for (String field : List.of("env_profile_id", "execution_mode", "providers")) {
                 require(entry.getKey(), profile, field, findings);
             }
         }
@@ -454,6 +466,33 @@ public class ContractBaselineService {
                                 "Add provider binding for `" + providerId + "` in profile `" + usedProfile + "`."));
                     }
                 }
+            }
+        }
+    }
+
+    private void validateTargetProfileCompatibility(ContractGraph graph, List<ContractFinding> findings) {
+        Set<String> selectedProfiles = suiteSelectedProfiles(graph.suite());
+        if (selectedProfiles.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.testCases().entrySet()) {
+            Map<String, Object> targets = mapValue(entry.getValue().get("targets"));
+            for (Map.Entry<String, Object> targetEntry : targets.entrySet()) {
+                Map<String, Object> target = mapValue(targetEntry.getValue());
+                String targetProfile = stringValue(target.get("profile"));
+                if (targetProfile.isBlank() || selectedProfiles.contains(targetProfile)) {
+                    continue;
+                }
+                findings.add(new ContractFinding(
+                        entry.getKey().toString(),
+                        "targets." + targetEntry.getKey() + ".profile",
+                        "conflicting_profile_selection",
+                        stringValue(target.get("provider_id")),
+                        "",
+                        targetProfile,
+                        "",
+                        "Remove deprecated target profile or align it with the suite/CLI selected profile: "
+                                + selectedProfiles + "."));
             }
         }
     }
@@ -1038,13 +1077,13 @@ public class ContractBaselineService {
         if (!"wiremock_http_mock".equals(providerType) || !projectProvidedDependencyProvisioning(envProfile)) {
             return;
         }
-        Map<String, Object> bindingKeys = mapValue(provider.get("binding_keys"));
-        if (bindingKeys.containsKey("base_url")) {
+        Map<String, Object> bindingValues = normalizeEnvProfileBindings(provider);
+        if (!isMissing(valueAtPath(bindingValues, "base_url"))) {
             return;
         }
         findings.add(new ContractFinding(
                 bindingPath.toString(),
-                "providers." + providerId + ".binding_keys.base_url",
+                "providers." + providerId + "." + envProfileBindingField(provider) + ".base_url",
                 "wiremock_external_base_url_missing",
                 providerId,
                 providerType,
@@ -1068,7 +1107,8 @@ public class ContractBaselineService {
             Map<String, Object> provider,
             Map<String, Object> contract,
             List<ContractFinding> findings) {
-        Map<String, Object> bindingKeys = mapValue(provider.get("binding_keys"));
+        Map<String, Object> bindingKeys = envProfileAuthoringBindings(provider);
+        String bindingField = envProfileBindingField(provider);
         Map<String, Object> contractBindingKeys = mapValue(contract.get("binding_keys"));
         Set<String> allowedKeys = contractBindingKeys.keySet();
         for (Map.Entry<String, Object> entry : bindingKeys.entrySet()) {
@@ -1077,7 +1117,7 @@ public class ContractBaselineService {
             if (valueKinds.size() > 1) {
                 findings.add(new ContractFinding(
                         bindingPath.toString(),
-                        "providers." + providerId + ".binding_keys." + rawKey,
+                        "providers." + providerId + "." + bindingField + "." + rawKey,
                         "invalid_binding_key_value_kind",
                         providerId,
                         providerType,
@@ -1092,7 +1132,7 @@ public class ContractBaselineService {
             if (keySpec.isEmpty() && !contractBindingKeys.containsKey(effectiveKey)) {
                 findings.add(new ContractFinding(
                         bindingPath.toString(),
-                        "providers." + providerId + ".binding_keys." + rawKey,
+                        "providers." + providerId + "." + bindingField + "." + rawKey,
                         "unknown_binding_key",
                         providerId,
                         providerType,
@@ -1105,7 +1145,7 @@ public class ContractBaselineService {
             if (!allowedKinds.isEmpty() && !allowedKinds.contains(kind)) {
                 findings.add(new ContractFinding(
                         bindingPath.toString(),
-                        "providers." + providerId + ".binding_keys." + rawKey + "." + kind,
+                        "providers." + providerId + "." + bindingField + "." + rawKey + "." + kind,
                         "invalid_binding_key_value_kind",
                         providerId,
                         providerType,
@@ -1116,8 +1156,8 @@ public class ContractBaselineService {
             }
             Object value = bindingValue(entry.getValue(), kind);
             validateBindingValueShape(
-                    bindingPath, providerId, providerType, profile, rawKey, kind, value, keySpec, findings);
-            validateGeneratedRef(graph, bindingPath, providerId, providerType, profile, rawKey, kind,
+                    bindingPath, providerId, providerType, profile, bindingField, rawKey, kind, value, keySpec, findings);
+            validateGeneratedRef(graph, bindingPath, providerId, providerType, profile, bindingField, rawKey, kind,
                     value, findings);
         }
     }
@@ -1127,6 +1167,7 @@ public class ContractBaselineService {
             String providerId,
             String providerType,
             String profile,
+            String bindingField,
             String rawKey,
             String kind,
             Object value,
@@ -1139,7 +1180,7 @@ public class ContractBaselineService {
         if (text.isBlank()) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    "providers." + providerId + ".binding_keys." + rawKey + ".value",
+                    "providers." + providerId + "." + bindingField + "." + rawKey + ".value",
                     uriInvalidReason(providerType, rawKey),
                     providerId,
                     providerType,
@@ -1154,7 +1195,7 @@ public class ContractBaselineService {
         } catch (URISyntaxException e) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    "providers." + providerId + ".binding_keys." + rawKey + ".value",
+                    "providers." + providerId + "." + bindingField + "." + rawKey + ".value",
                     uriInvalidReason(providerType, rawKey),
                     providerId,
                     providerType,
@@ -1168,7 +1209,7 @@ public class ContractBaselineService {
         if (!allowedSchemes.isEmpty() && (!allowedSchemes.contains(scheme) || stringValue(uri.getHost()).isBlank())) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    "providers." + providerId + ".binding_keys." + rawKey + ".value",
+                    "providers." + providerId + "." + bindingField + "." + rawKey + ".value",
                     uriInvalidReason(providerType, rawKey),
                     providerId,
                     providerType,
@@ -1180,7 +1221,7 @@ public class ContractBaselineService {
         if (prohibitedParts.contains("userinfo") && uri.getRawUserInfo() != null) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    "providers." + providerId + ".binding_keys." + rawKey + ".value",
+                    "providers." + providerId + "." + bindingField + "." + rawKey + ".value",
                     uriSecretLeakReason(providerType, rawKey),
                     providerId,
                     providerType,
@@ -1198,7 +1239,7 @@ public class ContractBaselineService {
                 if (prohibitedQueryKeys.contains(queryKey)) {
                     findings.add(new ContractFinding(
                             bindingPath.toString(),
-                            "providers." + providerId + ".binding_keys." + rawKey + ".value",
+                            "providers." + providerId + "." + bindingField + "." + rawKey + ".value",
                             uriSecretLeakReason(providerType, rawKey),
                             providerId,
                             providerType,
@@ -1538,7 +1579,7 @@ public class ContractBaselineService {
 
     private String bindingValueFieldPath(boolean envProfile, String providerId, String bindingKey) {
         return envProfile
-                ? "providers." + providerId + ".binding_keys." + bindingKey
+                ? "providers." + providerId + ".bindings." + bindingKey
                 : "provider_bindings." + providerId + ".binding_values." + bindingKey;
     }
 
@@ -1562,7 +1603,7 @@ public class ContractBaselineService {
         contractsByPath.putAll(suiteLocalContractsByPath);
         Map<Path, Map<String, Object>> instancesByPath = readDirectory(root.resolve("provider_instances"), findings);
         Path envProfilesRoot = root.resolve("env_profiles");
-        Map<Path, Map<String, Object>> envProfiles = readOptionalDirectory(envProfilesRoot, findings);
+        Map<Path, Map<String, Object>> envProfiles = withEnvProfileDefaults(readOptionalDirectory(envProfilesRoot, findings));
         boolean envProfileMode = Files.isDirectory(envProfilesRoot);
         Map<Path, Map<String, Object>> profiles = envProfileMode
                 ? Map.of()
@@ -1667,12 +1708,7 @@ public class ContractBaselineService {
     }
 
     private Set<String> usedProfiles(Map<String, Object> suite, Map<Path, Map<String, Object>> testCases) {
-        Set<String> profiles = new LinkedHashSet<>();
-        addIfPresent(profiles, stringValue(suite.get("profile")));
-        for (Object profile : listValue(suite.get("profiles"))) {
-            addIfPresent(profiles, stringValue(profile));
-        }
-        addIfPresent(profiles, stringValue(mapValue(suite.get("selection")).get("profile")));
+        Set<String> profiles = suiteSelectedProfiles(suite);
         if (!profiles.isEmpty()) {
             return new LinkedHashSet<>(profiles);
         }
@@ -1682,6 +1718,16 @@ public class ContractBaselineService {
             }
         }
         return new LinkedHashSet<>(profiles);
+    }
+
+    private Set<String> suiteSelectedProfiles(Map<String, Object> suite) {
+        Set<String> profiles = new LinkedHashSet<>();
+        addIfPresent(profiles, stringValue(suite.get("profile")));
+        for (Object profile : listValue(suite.get("profiles"))) {
+            addIfPresent(profiles, stringValue(profile));
+        }
+        addIfPresent(profiles, stringValue(mapValue(suite.get("selection")).get("profile")));
+        return profiles;
     }
 
     private void addIfPresent(Set<String> values, String value) {
@@ -1721,6 +1767,38 @@ public class ContractBaselineService {
             return Map.of();
         }
         return readDirectory(directory, findings);
+    }
+
+    private Map<Path, Map<String, Object>> withEnvProfileDefaults(Map<Path, Map<String, Object>> envProfiles) {
+        Map<Path, Map<String, Object>> normalized = new LinkedHashMap<>();
+        for (Map.Entry<Path, Map<String, Object>> entry : envProfiles.entrySet()) {
+            normalized.put(entry.getKey(), withEnvProfileDocumentDefaults(entry.getValue()));
+        }
+        return normalized;
+    }
+
+    private Map<String, Object> withEnvProfileDocumentDefaults(Map<String, Object> envProfile) {
+        if (envProfile.isEmpty()) {
+            return envProfile;
+        }
+        Map<String, Object> normalized = new LinkedHashMap<>(envProfile);
+        normalized.putIfAbsent("isolation_scope", "per_run");
+        normalized.putIfAbsent("max_duration", "PT5M");
+        mergeMapDefaults(normalized, "dependency_policy", DEFAULT_ENV_PROFILE_DEPENDENCY_POLICY);
+        mergeMapDefaults(normalized, "dependency_substitution_policy", DEFAULT_ENV_PROFILE_DEPENDENCY_SUBSTITUTION_POLICY);
+        mergeMapDefaults(normalized, "dependency_provisioning_policy", DEFAULT_ENV_PROFILE_DEPENDENCY_PROVISIONING_POLICY);
+        mergeMapDefaults(normalized, "data_policy", DEFAULT_ENV_PROFILE_DATA_POLICY);
+        mergeMapDefaults(normalized, "evidence_policy", DEFAULT_ENV_PROFILE_EVIDENCE_POLICY);
+        return normalized;
+    }
+
+    private void mergeMapDefaults(Map<String, Object> document, String field, Map<String, Object> defaults) {
+        if (document.containsKey(field) && !(document.get(field) instanceof Map<?, ?>)) {
+            return;
+        }
+        Map<String, Object> merged = new LinkedHashMap<>(defaults);
+        merged.putAll(mapValue(document.get(field)));
+        document.put(field, merged);
     }
 
     @SuppressWarnings("unchecked")
@@ -1783,7 +1861,13 @@ public class ContractBaselineService {
 
     private Object bindingValue(Object value, String kind) {
         Map<String, Object> map = mapValue(value);
-        return map.isEmpty() ? value : map.get(kind);
+        if (map.isEmpty()) {
+            return value;
+        }
+        if (map.containsKey(kind)) {
+            return map.get(kind);
+        }
+        return "value".equals(kind) ? map : null;
     }
 
     private String effectiveContractBindingKey(String rawKey, String valueKind, Set<String> contractKeys) {
@@ -1821,6 +1905,7 @@ public class ContractBaselineService {
             String providerId,
             String providerType,
             String profile,
+            String bindingField,
             String rawKey,
             String kind,
             Object value,
@@ -1833,7 +1918,7 @@ public class ContractBaselineService {
         if (!generatedRef.startsWith(prefix)) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    "providers." + providerId + ".binding_keys." + rawKey + ".generated_ref",
+                    "providers." + providerId + "." + bindingField + "." + rawKey + ".generated_ref",
                     "invalid_generated_ref",
                     providerId,
                     providerType,
@@ -1847,7 +1932,7 @@ public class ContractBaselineService {
         if (separator < 1 || separator == target.length() - 1) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    "providers." + providerId + ".binding_keys." + rawKey + ".generated_ref",
+                    "providers." + providerId + "." + bindingField + "." + rawKey + ".generated_ref",
                     "invalid_generated_ref",
                     providerId,
                     providerType,
@@ -1865,7 +1950,7 @@ public class ContractBaselineService {
         if (generatedProvider == null) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    "providers." + providerId + ".binding_keys." + rawKey + ".generated_ref",
+                    "providers." + providerId + "." + bindingField + "." + rawKey + ".generated_ref",
                     "unresolved_generated_ref",
                     providerId,
                     providerType,
@@ -1883,7 +1968,7 @@ public class ContractBaselineService {
         if (!mapValue(generatedContract.get("bindable_outputs")).containsKey(output)) {
             findings.add(new ContractFinding(
                     bindingPath.toString(),
-                    "providers." + providerId + ".binding_keys." + rawKey + ".generated_ref",
+                    "providers." + providerId + "." + bindingField + "." + rawKey + ".generated_ref",
                     "unknown_bindable_output",
                     providerId,
                     providerType,
@@ -1965,7 +2050,7 @@ public class ContractBaselineService {
             Map<String, Object> normalized = new LinkedHashMap<>();
             normalized.put("provider_id", providerId);
             normalized.put("runtime_mode", provider.get("runtime_mode"));
-            normalized.put("binding_values", normalizeEnvProfileBindingKeys(mapValue(provider.get("binding_keys"))));
+            normalized.put("binding_values", normalizeEnvProfileBindings(provider));
             return normalized;
         }
         for (Object value : listValue(bindingDoc.document().get("provider_bindings"))) {
@@ -1985,6 +2070,34 @@ public class ContractBaselineService {
         return normalized;
     }
 
+    private Map<String, Object> normalizeEnvProfileBindings(Map<String, Object> provider) {
+        Map<String, Object> bindings = mapValue(provider.get("bindings"));
+        if (!bindings.isEmpty() || provider.containsKey("bindings")) {
+            return normalizeEnvProfileBindingValues(bindings);
+        }
+        return normalizeEnvProfileBindingKeys(mapValue(provider.get("binding_keys")));
+    }
+
+    private Map<String, Object> envProfileAuthoringBindings(Map<String, Object> provider) {
+        Map<String, Object> bindings = mapValue(provider.get("bindings"));
+        if (!bindings.isEmpty() || provider.containsKey("bindings")) {
+            return bindings;
+        }
+        return mapValue(provider.get("binding_keys"));
+    }
+
+    private String envProfileBindingField(Map<String, Object> provider) {
+        return provider.containsKey("bindings") ? "bindings" : "binding_keys";
+    }
+
+    private Map<String, Object> normalizeEnvProfileBindingValues(Map<String, Object> bindings) {
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : bindings.entrySet()) {
+            normalized.put(entry.getKey(), normalizeEnvProfileBindingValue(entry.getValue()));
+        }
+        return normalized;
+    }
+
     private Object normalizeEnvProfileBindingValue(Object value) {
         Map<String, Object> map = mapValue(value);
         if (map.isEmpty()) {
@@ -2000,6 +2113,9 @@ public class ContractBaselineService {
             return map.get("generated_ref");
         }
         if (map.containsKey("secret_ref") && map.size() == 1) {
+            return map;
+        }
+        if (map.containsKey("local_ref") && map.size() == 1) {
             return map;
         }
         return map;
@@ -2195,7 +2311,13 @@ public class ContractBaselineService {
     }
 
     private List<String> providerIds(ContractGraph graph) {
-        return graph.providerInstances().keySet().stream().sorted().toList();
+        Set<String> providerIds = new LinkedHashSet<>();
+        for (Map<String, Object> testCase : graph.testCases().values()) {
+            for (Object targetValue : mapValue(testCase.get("targets")).values()) {
+                addIfPresent(providerIds, stringValue(mapValue(targetValue).get("provider_id")));
+            }
+        }
+        return providerIds.stream().sorted().toList();
     }
 
     private List<String> providerTypes(ContractGraph graph) {
@@ -2609,7 +2731,8 @@ public class ContractBaselineService {
                         "missing_required_binding_key", "unsupported_runtime_mode",
                         "invalid_target_ref", "unresolved_artifact_ref",
                         "unsupported_local_ref", "missing_jdbc_target", "missing_nats_target",
-                        "profile_mismatch", "invalid_generated_ref", "unresolved_generated_ref",
+                        "profile_mismatch", "conflicting_profile_selection",
+                        "invalid_generated_ref", "unresolved_generated_ref",
                         "invalid_binding_key_uri",
                         "wiremock_external_base_url_missing",
                         "wiremock_external_base_url_invalid" -> "CONFIGURATION_ERROR";

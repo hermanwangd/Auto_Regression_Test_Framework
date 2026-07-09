@@ -1,0 +1,18 @@
+contract_version: v0.2
+suite_id: JDBC-EXTERNAL-DB2-CAPABILITY-v0.2
+purpose: Framework-owned JDBC native external DB2-style provider capability sample.
+profile: external_jdbc_db2_env_secret_ref
+selection:
+  mode: suite
+  suite: provider-capability-jdbc-external-db2
+tests:
+  - test_case_external_db2_crud.yaml
+artifact_roots:
+  provider_instances: provider_instances/
+  env_profiles: env_profiles/
+  expected_results: expected_results/
+  fixtures: fixtures/
+  queries: queries/
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

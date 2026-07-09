@@ -1,47 +1,22 @@
 env_profile_id: local_messaging
 execution_mode: local
-isolation_scope: per_run
-dependency_policy:
-  require_readiness_evidence: false
-  allow_framework_managed_dependencies: true
-dependency_substitution_policy:
-  allowed_runtime_modes: [mock]
-  mock_evidence_release_claim: prohibited
-dependency_provisioning_policy:
-  allowed_provisioners: [in_memory]
-data_policy:
-  approved_expected_results_required: true
-  production_data_allowed: false
-  generated_data_allowed: true
-  secrets_must_use_refs: true
 providers:
   order-events:
     runtime_mode: mock
-    binding_keys:
-      bootstrap_servers:
-        value: approved_local_kafka_ref
-      topic:
-        value: orders.created
-      consumer_group:
-        value: artf-local-kafka
-      timeout:
-        value: PT5S
-      poll_interval:
-        value: PT0.05S
+    bindings:
+      bootstrap_servers: approved_local_kafka_ref
+      topic: orders.created
+      consumer_group: artf-local-kafka
+      timeout: PT5S
+      poll_interval: PT0.05S
   payment-mq:
     runtime_mode: mock
-    binding_keys:
-      queue_manager:
-        value: QM1
-      channel:
-        value: DEV.APP.SVRCONN
-      conn_name:
-        value: localhost(1414)
-      queue:
-        value: PAYMENT.REQUEST.LOCAL
+    bindings:
+      queue_manager: QM1
+      channel: DEV.APP.SVRCONN
+      conn_name: localhost(1414)
+      queue: PAYMENT.REQUEST.LOCAL
       credential:
         secret_ref: secret://local/ibm-mq
-      timeout:
-        value: PT5S
-      poll_interval:
-        value: PT0.05S
+      timeout: PT5S
+      poll_interval: PT0.05S

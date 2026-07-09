@@ -33,8 +33,6 @@ class SoapMockCapabilityCommandTest {
                 "samples/20-provider-capability-p0/rpc/soap_mock/provider_instances/payment_soap_mock.yaml",
                 "samples/20-provider-capability-p0/rpc/soap_mock/provider_instances/payment_soap_client.yaml",
                 "samples/20-provider-capability-p0/rpc/soap_mock/env_profiles/local_soap_mock.yaml",
-                "samples/20-provider-capability-p0/rpc/soap_mock/environment_bindings/local_soap_mock.yaml",
-                "samples/20-provider-capability-p0/rpc/soap_mock/execution_profiles/local_soap_mock.yaml",
                 "samples/20-provider-capability-p0/rpc/soap_mock/fixtures/payment_submit_request.xml",
                 "samples/20-provider-capability-p0/rpc/soap_mock/fixtures/payment_submit_response.xml",
                 "samples/20-provider-capability-p0/rpc/soap_mock/fixtures/payment_boundary_request.xml",

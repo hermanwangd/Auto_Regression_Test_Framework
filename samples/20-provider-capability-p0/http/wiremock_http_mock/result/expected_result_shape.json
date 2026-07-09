@@ -1,5 +1,5 @@
 {
-  "framework_version": "0.2.5",
+  "framework_version": "0.2.6",
   "dsl_version": "v0.2",
   "suite_id": "WIREMOCK-CAPABILITY-v0.2",
   "batch_id": "BATCH-WIREMOCK-001",

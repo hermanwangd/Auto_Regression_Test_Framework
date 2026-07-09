@@ -1135,6 +1135,18 @@ public class RegressionCommand {
                         "profile_mismatch",
                         "Run with an allowed profile: " + compatibleProfiles + "."));
             }
+            for (Map.Entry<String, Object> entry : mapValue(testCase.get("targets")).entrySet()) {
+                Map<String, Object> target = mapValue(entry.getValue());
+                String targetProfile = stringValue(target.get("profile"));
+                if (targetProfile.isBlank() || targetProfile.equals(requestedProfile)) {
+                    continue;
+                }
+                findings.add(finding(
+                        testCasePath,
+                        "targets." + entry.getKey() + ".profile",
+                        "conflicting_profile_selection",
+                        "Remove deprecated target profile or run with profile `" + targetProfile + "`."));
+            }
         }
         return List.copyOf(findings);
     }

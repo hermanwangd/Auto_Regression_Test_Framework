@@ -145,7 +145,7 @@ For implementation clarity, each AP owns one primary question and one durable ha
 | Oracle and Assertion Engine | Do approved truth sources or deterministic decision rules prove pass/fail for the actual outputs? | `assertion_result` with expected-result refs, expected, actual, comparator, and failure reason. |
 | Evidence and Reporting | Is there enough durable evidence to support coverage and release review without manually reconstructing the RP execution? | `batch_summary`, `evidence_package`, `coverage_report`, `failure_summary`, and `release_review_summary`. |
 
-Provider Contracts, Provider Instances, and Env_Profiles are configuration artifacts consumed by APs; they are not DSL implementation sections. A Provider Contract declares one reusable `provider_type`, allowed operations, allowed input keys, required inputs, binding key schema, bindable outputs, output refs, evidence outputs, failure codes, and the valid Provider Instance shape. A Provider Instance declares one RP logical runtime target with `provider_id` and `provider_type` using the same top-level shape as the contract. An Env_Profile supplies environment-specific actual values for Provider Contract `binding_keys` under `providers.<provider_id>.binding_keys`.
+Provider Contracts, Provider Instances, and Env_Profiles are configuration artifacts consumed by APs; they are not DSL implementation sections. A Provider Contract declares one reusable `provider_type`, allowed operations, allowed input keys, required inputs, binding key schema, bindable outputs, output refs, evidence outputs, failure codes, and the valid Provider Instance shape. A Provider Instance declares one RP logical runtime target with `provider_id` and `provider_type` using the same top-level shape as the contract. An Env_Profile supplies environment-specific actual values for Provider Contract `binding_keys` under `providers.<provider_id>.bindings`.
 
 Execution-focused DSL v0.2 references runtime behavior through `targets.<target_id>.provider_id`, optional `data`, `setup.operations`, `execute.operations`, `verify.checks`, `cleanup.operations`, operation `inputs`, expected refs, and evidence rules. The active Env_Profile is selected by CLI or suite manifest, while `compatible_profiles` only restricts where the test may run. The DSL must not embed provider configuration, endpoint URLs, topics, namespaces, connection strings, credentials, shell scripts, SQL bodies, release gates, waivers, or approval workflow. New DSL artifacts must not use legacy fields such as `data_binding`, `execution_target`, `package_inputs`, `oracles`, `steps`, `assertions`, `evidence_required`, or `policy`.
 
@@ -162,7 +162,7 @@ DSL v0.2 parse and validation
 -> Provider Instance lookup
 -> framework Provider Contract catalog lookup by provider_type
 -> Provider Instance shape validation against Provider Contract
--> Env_Profile.providers.<provider_id>.binding_keys validation against Provider Contract binding_keys
+-> Env_Profile.providers.<provider_id>.bindings validation against Provider Contract binding_keys
 -> execution plan creation
 -> fixture setup and provider dispatch
 ```
@@ -173,9 +173,9 @@ Provider capability registry rules:
 - Each registry entry declares required binding keys, supported operations, allowed execution modes, public `support_status`, evidence outputs, and safety policy.
 - Public `support_status` values are `supported`, `contract_only`, `deprecated`, and `unsupported`.
 - Provider Contracts must explicitly declare `provider_type`; heuristic inference must not choose a runtime.
-- Resolution follows one explicit chain: DSL target `provider_id` + selected Env_Profile -> Provider Instance -> `provider_type` -> framework Provider Contract catalog -> Env_Profile `providers.<provider_id>.binding_keys`. Suite manifests select tests and may select the active Env_Profile, but must not override provider fields. Ambiguous logical target or provider matches block dry-run and execution.
+- Resolution follows one explicit chain: DSL target `provider_id` + selected Env_Profile -> Provider Instance -> `provider_type` -> framework Provider Contract catalog -> Env_Profile `providers.<provider_id>.bindings`. Suite manifests select tests and may select the active Env_Profile, but must not override provider fields. Ambiguous logical target or provider matches block dry-run and execution.
 - Execution dispatch must go through the registry. Adding a provider runtime should not require adding product-specific conditionals to the execution engine.
-- External runner entries are `contract_only` providers in v0.2.5. They require a later safety-approved runtime slice before release execution.
+- External runner entries are `contract_only` providers in v0.2.6. They require a later safety-approved runtime slice before release execution.
 
 Provider contract and runtime baseline status:
 
@@ -199,7 +199,7 @@ These statuses describe the current contract baseline and the implemented framew
 | `polling_observer` | Track C P0 | Track C implements observation polling for framework provider capability evidence | timeout, poll interval, expected state, last observed output ref | Contract validation, dry-run planning, and sample artifact syntax. |
 | `kubernetes_runtime` | Contract baseline | Full K8s readiness/runtime provider is beyond Track C P0 unless selected by decision log | namespace/context refs, deployment/service/selector refs, deployed version ref, positive timeout, bounded log tail refs, output refs | Contract validation and dry-run planning; pilot cluster evidence remains future. |
 | `vm_runtime` | Contract baseline | Full VM readiness/runtime provider is beyond Track C P0 unless selected by decision log | host/user refs, health or command refs, deployed version ref, positive timeout, output refs, safety policy | Contract validation and dry-run planning; pilot VM evidence remains future. |
-| `external_runner` | Contract baseline | General command execution is not a supported v0.2.5 public release path | provider safety approval ref, owner, reason, command/container ref, inputs, outputs, positive timeout, evidence map, no built-in-provider alternative | Contract validation, safety gating, dry-run planning, and sample artifact syntax. |
+| `external_runner` | Contract baseline | General command execution is not a supported v0.2.6 public release path | provider safety approval ref, owner, reason, command/container ref, inputs, outputs, positive timeout, evidence map, no built-in-provider alternative | Contract validation, safety gating, dry-run planning, and sample artifact syntax. |
 
 The architecture defines the intended verification scope for supported rows only. It does not mean v0.2 has already been implemented or accepted. Pilot acceptance still requires implemented slices, owner-provided RP artifacts, and real environment evidence for the selected Provider Contracts.
 
@@ -364,7 +364,7 @@ execution_mode: sit
 providers:
   order-api:
     runtime_mode: native
-    binding_keys:
+    bindings:
       base_url:
         secret_ref: vault://sit/order-api/base-url
 ```
@@ -528,7 +528,7 @@ DSL target
   -> provider_type
   -> Provider Contract
   -> Env_Profile
-  -> Env_Profile.providers.<provider_id>.binding_keys
+  -> Env_Profile.providers.<provider_id>.bindings
 ```
 
 Provider Contract rules:
@@ -550,7 +550,7 @@ Env_Profile rules:
 
 - An Env_Profile supplies environment-specific actual values for Provider Contract `binding_keys`, such as URLs, topics, DB connection refs, namespaces, host refs, and secret refs.
 - Env_Profile `providers` map keys are Provider Instance `provider_id` values.
-- Env_Profile `binding_keys` must match the referenced Provider Contract `binding_keys`.
+- Env_Profile `bindings` must match the referenced Provider Contract `binding_keys`.
 - Env_Profile value kinds must be allowed by the Provider Contract for that binding key.
 - Env_Profile `generated_ref` values must resolve to Provider Contract `bindable_outputs`.
 - DSL Test Cases must not contain endpoint/topic/DB credential values.

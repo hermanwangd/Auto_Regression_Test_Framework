@@ -16,6 +16,10 @@ import org.junit.jupiter.api.io.TempDir;
 class JdbcProviderCapabilityCommandTest {
 
     private static final Path JDBC_SUITE = Path.of("samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml");
+    private static final Path JDBC_EXTERNAL_ORACLE_SUITE =
+            Path.of("samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml");
+    private static final Path JDBC_EXTERNAL_DB2_SUITE =
+            Path.of("samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml");
 
     @TempDir
     Path tempDir;
@@ -24,19 +28,37 @@ class JdbcProviderCapabilityCommandTest {
     void jdbcSampleArtifactsAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
                 "samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml",
                 "samples/20-provider-capability-p0/data/jdbc/test_case.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/test_case_oracle_crud.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/test_case_db2_crud.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/test_case_external_oracle_crud.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/test_case_external_db2_crud.yaml",
                 "docs/02-architecture/contracts/provider-contracts/jdbc.yaml",
                 "samples/20-provider-capability-p0/data/jdbc/provider_instances/oracle_like.yaml",
                 "samples/20-provider-capability-p0/data/jdbc/provider_instances/db2_like.yaml",
                 "samples/20-provider-capability-p0/data/jdbc/env_profiles/local_jdbc.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/env_profiles/external_jdbc_env_secret_ref.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/execution_profiles/local_jdbc.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/environment_bindings/local_jdbc.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/env_profiles/external_jdbc_oracle_env_secret_ref.yaml",
+                "samples/20-provider-capability-p0/data/jdbc/env_profiles/external_jdbc_db2_env_secret_ref.yaml",
                 "samples/20-provider-capability-p0/data/jdbc/fixtures/db_seed.sql",
                 "samples/20-provider-capability-p0/data/jdbc/fixtures/db_cleanup.sql",
+                "samples/20-provider-capability-p0/data/jdbc/fixtures/crud_insert_order.sql",
+                "samples/20-provider-capability-p0/data/jdbc/fixtures/crud_update_order.sql",
+                "samples/20-provider-capability-p0/data/jdbc/fixtures/crud_delete_order.sql",
+                "samples/20-provider-capability-p0/data/jdbc/fixtures/oracle_crud_insert_order.sql",
+                "samples/20-provider-capability-p0/data/jdbc/fixtures/oracle_crud_update_order.sql",
+                "samples/20-provider-capability-p0/data/jdbc/fixtures/oracle_crud_delete_order.sql",
+                "samples/20-provider-capability-p0/data/jdbc/fixtures/db2_crud_insert_order.sql",
+                "samples/20-provider-capability-p0/data/jdbc/fixtures/db2_crud_update_order.sql",
+                "samples/20-provider-capability-p0/data/jdbc/fixtures/db2_crud_delete_order.sql",
                 "samples/20-provider-capability-p0/data/jdbc/queries/order_exists_oracle.sql",
                 "samples/20-provider-capability-p0/data/jdbc/queries/order_exists_db2.sql",
+                "samples/20-provider-capability-p0/data/jdbc/queries/crud_order_by_id_oracle.sql",
+                "samples/20-provider-capability-p0/data/jdbc/queries/crud_order_by_id_db2.sql",
                 "samples/20-provider-capability-p0/data/jdbc/expected_results/db_expected.json",
+                "samples/20-provider-capability-p0/data/jdbc/expected_results/crud_expected.json",
+                "samples/20-provider-capability-p0/data/jdbc/expected_results/crud_deleted_expected.json",
                 "samples/20-provider-capability-p0/data/jdbc/result/expected_result_shape.json",
                 "samples/20-provider-capability-p0/data/jdbc/evidence/expected_evidence_index.yaml");
 
@@ -59,19 +81,27 @@ class JdbcProviderCapabilityCommandTest {
     }
 
     @Test
-    void jdbcSuiteValidatesExternalEnvSecretRefProfileThroughPublicCli() {
-        CommandResult result = execute(
+    void jdbcExternalSuitesValidateThroughPublicCli() {
+        CommandResult oracle = execute(
                 "validate",
-                "--suite",
-                JDBC_SUITE.toString(),
-                "--profile",
-                "external_jdbc_env_secret_ref");
+                "--suite", JDBC_EXTERNAL_ORACLE_SUITE.toString(),
+                "--profile", "external_jdbc_oracle_env_secret_ref");
+        CommandResult db2 = execute(
+                "validate",
+                "--suite", JDBC_EXTERNAL_DB2_SUITE.toString(),
+                "--profile", "external_jdbc_db2_env_secret_ref");
 
-        assertThat(result.exit()).as(result.stderr() + result.stdout()).isZero();
-        assertThat(result.stdout())
+        assertThat(oracle.exit()).as(oracle.stderr() + oracle.stdout()).isZero();
+        assertThat(oracle.stdout())
                 .contains("validation_status: passed")
                 .contains("oracle-like-db")
+                .doesNotContain("db2-like-db")
+                .contains("jdbc");
+        assertThat(db2.exit()).as(db2.stderr() + db2.stdout()).isZero();
+        assertThat(db2.stdout())
+                .contains("validation_status: passed")
                 .contains("db2-like-db")
+                .doesNotContain("oracle-like-db")
                 .contains("jdbc");
     }
 
@@ -82,6 +112,7 @@ class JdbcProviderCapabilityCommandTest {
         assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
         assertThat(run.stdout())
                 .contains("run_status: passed")
+                .contains("test_count: 3")
                 .contains("provider_runtime_executed: true")
                 .contains("provider_type: jdbc")
                 .contains("provider_id: oracle-like-db")
@@ -98,11 +129,18 @@ class JdbcProviderCapabilityCommandTest {
         String resultText = read(resultJson);
         assertThat(resultText)
                 .contains("\"suite_id\": \"JDBC-CAPABILITY-v0.2\"")
+                .contains("\"test_case_id\": \"JDBC-CAPABILITY-v0.2-MULTI\"")
+                .contains("\"test_count\": 3")
                 .contains("\"provider_type\": \"jdbc\"")
                 .contains("\"provider_id\": \"oracle-like-db\"")
+                .contains("\"provider_id\": \"db2-like-db\"")
                 .contains("\"runtime_mode\": \"ephemeral\"")
                 .contains("\"dialect\": \"oracle\"")
+                .contains("\"dialect\": \"db2\"")
                 .contains("\"status\": \"passed\"")
+                .contains("\"test_case_id\": \"JDBC-ORACLE-CRUD-TC-001\"")
+                .contains("\"test_case_id\": \"JDBC-DB2-CRUD-TC-001\"")
+                .contains("ORD-CRUD-001")
                 .contains("\"seed_evidence_ref\"")
                 .contains("\"query_evidence_ref\"")
                 .contains("\"cleanup_evidence_ref\"")
@@ -123,18 +161,20 @@ class JdbcProviderCapabilityCommandTest {
                 .contains("suite_id: JDBC-CAPABILITY-v0.2")
                 .contains("batch_id: BATCH-JDBC-")
                 .contains("run_id: RUN-JDBC-")
-                .contains("test_case_id: JDBC-CAPABILITY-TC-001")
-                .contains("status: passed");
+                .contains("test_case_id: JDBC-CAPABILITY-v0.2-MULTI")
+                .contains("status: passed")
+                .contains("test_count: 3")
+                .contains("provider_results_count: 3")
+                .contains("provider_id: oracle-like-db")
+                .contains("provider_id: db2-like-db");
     }
 
     @Test
     void jdbcSuiteFailsOwnerActionablyWhenExternalEnvSecretRefIsMissing() {
         CommandResult run = execute(
                 "run",
-                "--suite",
-                JDBC_SUITE.toString(),
-                "--profile",
-                "external_jdbc_env_secret_ref");
+                "--suite", JDBC_EXTERNAL_ORACLE_SUITE.toString(),
+                "--profile", "external_jdbc_oracle_env_secret_ref");
 
         assertThat(run.exit()).isEqualTo(1);
         assertThat(run.stdout())
@@ -159,26 +199,30 @@ class JdbcProviderCapabilityCommandTest {
 
         assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
         assertThat(run.stdout())
-                .contains("test_count: 2")
+                .contains("test_count: 4")
                 .contains("profile: local_jdbc");
         Path resultJson = extractPath(run.stdout(), "result_json");
         String resultText = read(resultJson);
         assertThat(resultText)
                 .contains("\"test_case_id\": \"JDBC-CAPABILITY-v0.2-MULTI\"")
-                .contains("\"test_count\": 2")
+                .contains("\"test_count\": 4")
                 .contains("\"test_case_id\": \"JDBC-CAPABILITY-TC-001\"")
-                .contains("\"test_case_id\": \"JDBC-CAPABILITY-TC-002\"");
+                .contains("\"test_case_id\": \"JDBC-CAPABILITY-TC-002\"")
+                .contains("\"test_case_id\": \"JDBC-ORACLE-CRUD-TC-001\"")
+                .contains("\"test_case_id\": \"JDBC-DB2-CRUD-TC-001\"");
         Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
         assertThat(read(evidenceDir.resolve("evidence_index.yaml")))
                 .contains("test_case_id: JDBC-CAPABILITY-TC-001")
-                .contains("test_case_id: JDBC-CAPABILITY-TC-002");
+                .contains("test_case_id: JDBC-CAPABILITY-TC-002")
+                .contains("test_case_id: JDBC-ORACLE-CRUD-TC-001")
+                .contains("test_case_id: JDBC-DB2-CRUD-TC-001");
     }
 
     @Test
     void jdbcRunRejectsUnsupportedDialectBeforeExecution() throws Exception {
         Path suite = mutableJdbc();
         Path envProfile = suite.getParent().resolve("env_profiles/local_jdbc.yaml");
-        Files.writeString(envProfile, read(envProfile).replace("value: oracle", "value: mariadb"));
+        Files.writeString(envProfile, read(envProfile).replace("dialect: oracle", "dialect: mariadb"));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
 
@@ -206,7 +250,7 @@ class JdbcProviderCapabilityCommandTest {
                 .contains("provider_id: db2-like-db")
                 .contains("dialect: db2");
         Path evidenceDir = extractPath(result.stdout(), "evidence_dir");
-        assertThat(read(evidenceDir.resolve("provider-evidence/jdbc/query_query_order_db2.yaml")))
+        assertThat(read(evidenceDir.resolve("provider-evidence/jdbc/query_JDBC-CAPABILITY-TC-001__query_order_db2.yaml")))
                 .contains("dialect: db2")
                 .contains("query_ref: queries/order_exists_db2.sql")
                 .contains("status: passed");
@@ -216,7 +260,7 @@ class JdbcProviderCapabilityCommandTest {
     void jdbcValidateRejectsUnsupportedEnvProfileDialect() throws Exception {
         Path suite = mutableJdbc();
         Path envProfile = suite.getParent().resolve("env_profiles/local_jdbc.yaml");
-        Files.writeString(envProfile, read(envProfile).replace("value: oracle", "value: mariadb"));
+        Files.writeString(envProfile, read(envProfile).replace("dialect: oracle", "dialect: mariadb"));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
 
@@ -247,8 +291,7 @@ class JdbcProviderCapabilityCommandTest {
         Path suite = mutableJdbc();
         Path envProfile = suite.getParent().resolve("env_profiles/local_jdbc.yaml");
         Files.writeString(envProfile, read(envProfile).replace("""
-              dialect:
-                value: oracle
+              dialect: oracle
         """, ""));
 
         CommandResult result = execute("validate", "--suite", suite.toString());
@@ -256,7 +299,7 @@ class JdbcProviderCapabilityCommandTest {
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("reason: missing_required_binding_key")
-                .contains("field_path: providers.oracle-like-db.binding_keys.dialect")
+                .contains("field_path: providers.oracle-like-db.bindings.dialect")
                 .contains("provider_type: jdbc");
     }
 
@@ -357,7 +400,7 @@ class JdbcProviderCapabilityCommandTest {
                 .contains("\"classification\": \"ASSERTION_FAILED\"")
                 .contains("\"cleanup_failure\"")
                 .contains("DB_CLEANUP_FAILED");
-        assertThat(read(evidenceDir.resolve("provider-evidence/jdbc/cleanup_cleanup_order.yaml")))
+        assertThat(read(evidenceDir.resolve("provider-evidence/jdbc/cleanup_JDBC-CAPABILITY-TC-001__cleanup_order.yaml")))
                 .contains("status: failed")
                 .contains("failure_code: DB_CLEANUP_FAILED");
     }
@@ -367,7 +410,7 @@ class JdbcProviderCapabilityCommandTest {
         CommandResult run = execute("run", "--suite", JDBC_SUITE.toString(), "--profile", "local_jdbc");
         Path resultJson = extractPath(run.stdout(), "result_json");
         Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
-        delete(evidenceDir.resolve("provider-evidence/jdbc/query_query_order_oracle.yaml"));
+        delete(evidenceDir.resolve("provider-evidence/jdbc/query_JDBC-CAPABILITY-TC-001__query_order_oracle.yaml"));
 
         CommandResult report = execute("report", "--result", resultJson.toString());
 
@@ -375,17 +418,25 @@ class JdbcProviderCapabilityCommandTest {
         assertThat(report.stdout())
                 .contains("report_status: invalid")
                 .contains("reason: missing_evidence_ref")
-                .contains("provider-evidence/jdbc/query_query_order_oracle.yaml");
+                .contains("provider-evidence/jdbc/query_JDBC-CAPABILITY-TC-001__query_order_oracle.yaml");
     }
 
     private void assertEvidenceFilesExist(Path evidenceDir) {
         List<String> evidenceFiles = List.of(
                 "evidence_index.yaml",
-                "provider-evidence/jdbc/seed_seed_order.yaml",
-                "provider-evidence/jdbc/query_query_order_oracle.yaml",
-                "provider-evidence/jdbc/cleanup_cleanup_order.yaml",
+                "provider-evidence/jdbc/seed_JDBC-CAPABILITY-TC-001__seed_order.yaml",
+                "provider-evidence/jdbc/query_JDBC-CAPABILITY-TC-001__query_order_oracle.yaml",
+                "provider-evidence/jdbc/cleanup_JDBC-CAPABILITY-TC-001__cleanup_order.yaml",
+                "provider-evidence/jdbc/seed_JDBC-ORACLE-CRUD-TC-001__oracle_create_order.yaml",
+                "provider-evidence/jdbc/query_JDBC-ORACLE-CRUD-TC-001__oracle_read_updated_order.yaml",
+                "provider-evidence/jdbc/query_JDBC-ORACLE-CRUD-TC-001__oracle_deleted_order_record_absent.yaml",
+                "provider-evidence/jdbc/seed_JDBC-DB2-CRUD-TC-001__db2_create_order.yaml",
+                "provider-evidence/jdbc/query_JDBC-DB2-CRUD-TC-001__db2_read_updated_order.yaml",
+                "provider-evidence/jdbc/query_JDBC-DB2-CRUD-TC-001__db2_deleted_order_record_absent.yaml",
                 "logs/execution.log",
-                "assertions/order_record_exists.yaml",
+                "assertions/JDBC-CAPABILITY-TC-001__order_record_exists.yaml",
+                "assertions/JDBC-ORACLE-CRUD-TC-001__oracle_deleted_order_record_absent.yaml",
+                "assertions/JDBC-DB2-CRUD-TC-001__db2_deleted_order_record_absent.yaml",
                 "batch/batch.yaml");
 
         assertThat(evidenceFiles).allSatisfy(path -> assertThat(evidenceDir.resolve(path))

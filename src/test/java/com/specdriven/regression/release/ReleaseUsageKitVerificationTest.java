@@ -24,6 +24,7 @@ class ReleaseUsageKitVerificationTest {
                 .contains("scripts/release/verify-supported-provider-samples.sh")
                 .contains("REQUIRE_EXTERNAL_MESSAGING: ${{ vars.REQUIRE_EXTERNAL_MESSAGING || 'false' }}")
                 .contains("REQUIRE_EXTERNAL_JDBC: ${{ vars.REQUIRE_EXTERNAL_JDBC || 'false' }}")
+                .contains("JDBC_EXTERNAL_DIALECT: ${{ vars.JDBC_EXTERNAL_DIALECT || 'oracle' }}")
                 .contains("JDBC_CONNECTION: ${{ secrets.JDBC_CONNECTION }}")
                 .contains("KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}")
                 .contains("IBM_MQ_CONN_NAME: ${{ secrets.IBM_MQ_CONN_NAME }}")
@@ -39,7 +40,9 @@ class ReleaseUsageKitVerificationTest {
                 .contains("run --suite")
                 .contains("report --result")
                 .contains("validate-evidence --result")
-                .contains("samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml external_jdbc_env_secret_ref")
+                .contains("samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml")
+                .contains("samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml")
+                .contains("JDBC_EXTERNAL_DIALECT")
                 .contains("samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml ci_kafka_external")
                 .contains("samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml ci_ibm_mq_external")
                 .doesNotContain("--rp-id");
@@ -53,6 +56,7 @@ class ReleaseUsageKitVerificationTest {
                 .contains("external_messaging_runtime_verification: not_configured")
                 .contains("external_jdbc_runtime_verification: not_configured")
                 .contains("missing_external_jdbc_env: JDBC_CONNECTION")
+                .contains("invalid_external_jdbc_dialect")
                 .contains("supported_provider_sample_verification_status: passed_ci_verifiable_external_messaging_not_configured")
                 .contains("missing_external_messaging_env")
                 .doesNotContain("ALLOW_EXTERNAL_MESSAGING_SKIP")
@@ -71,6 +75,41 @@ class ReleaseUsageKitVerificationTest {
                         new ProviderRuntimeSample("polling_observer", "ephemeral"),
                         new ProviderRuntimeSample("rest_client", "mock"),
                         new ProviderRuntimeSample("rest_client", "stub"));
+    }
+
+    @Test
+    void committedSamplesUseEnvProfileOnlyRuntimeConfiguration() throws Exception {
+        try (Stream<Path> files = Files.walk(Path.of("samples"))) {
+            List<Path> splitConfigPaths = files
+                    .filter(path -> path.toString().contains("/execution_profiles/")
+                            || path.toString().contains("/environment_bindings/")
+                            || path.getFileName().toString().equals("environment_binding.yaml"))
+                    .toList();
+
+            assertThat(splitConfigPaths).isEmpty();
+        }
+
+        try (Stream<Path> files = Files.walk(Path.of("samples"))) {
+            List<Path> manifestsWithDeprecatedRoots = files
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().startsWith("suite_manifest"))
+                    .filter(path -> path.getFileName().toString().endsWith(".yaml"))
+                    .filter(path -> containsAny(path, "execution_profiles:", "environment_bindings:"))
+                    .toList();
+
+            assertThat(manifestsWithDeprecatedRoots).isEmpty();
+        }
+
+        try (Stream<Path> files = Files.walk(Path.of("samples"))) {
+            List<Path> envProfilesWithDeprecatedBindings = files
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.toString().contains("/env_profiles/"))
+                    .filter(path -> path.getFileName().toString().endsWith(".yaml"))
+                    .filter(path -> containsAny(path, "binding_keys:"))
+                    .toList();
+
+            assertThat(envProfilesWithDeprecatedBindings).isEmpty();
+        }
     }
 
     private static Set<ProviderRuntimeSample> providerRuntimeSamples(Path sampleRoot) throws IOException {
@@ -113,6 +152,20 @@ class ReleaseUsageKitVerificationTest {
             return list.stream().map(String::valueOf).toList();
         }
         return List.of();
+    }
+
+    private static boolean containsAny(Path path, String... needles) {
+        try {
+            String text = Files.readString(path);
+            for (String needle : needles) {
+                if (text.contains(needle)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (IOException exception) {
+            throw new IllegalStateException("Unable to read sample file " + path, exception);
+        }
     }
 
     private record ProviderRuntimeSample(String providerType, String runtimeMode) {}

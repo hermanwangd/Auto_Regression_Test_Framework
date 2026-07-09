@@ -28,8 +28,6 @@ class GoldenE2eCommandTest {
                 "docs/02-architecture/contracts/provider-contracts/sample_fake_provider.yaml",
                 "samples/00-getting-started/golden_e2e/provider_instances/sample_fake_instance.yaml",
                 "samples/00-getting-started/golden_e2e/env_profiles/local_golden.yaml",
-                "samples/00-getting-started/golden_e2e/execution_profiles/local_golden.yaml",
-                "samples/00-getting-started/golden_e2e/environment_bindings/local_golden.yaml",
                 "samples/00-getting-started/golden_e2e/fixtures/input.json",
                 "samples/00-getting-started/golden_e2e/fixtures/setup_fixture.yaml",
                 "samples/00-getting-started/golden_e2e/fixtures/cleanup_fixture.yaml",
@@ -74,7 +72,7 @@ class GoldenE2eCommandTest {
 
         String resultText = Files.readString(resultJson);
         assertThat(resultText)
-                .contains("\"framework_version\": \"0.2.5\"")
+                .contains("\"framework_version\": \"0.2.6\"")
                 .contains("\"suite_id\": \"GOLDEN-E2E-v0.2\"")
                 .contains("\"batch_id\": \"BATCH-GOLDEN-E2E-001\"")
                 .contains("\"run_id\": \"RUN-GOLDEN-E2E-001\"")
@@ -148,15 +146,58 @@ class GoldenE2eCommandTest {
     }
 
     @Test
+    void goldenRunAcceptsDeprecatedTargetProfileWhenItMatchesSelectedProfile() throws Exception {
+        Path suite = mutableGolden();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("    provider_id: sample-fake-runtime\n",
+                        "    provider_id: sample-fake-runtime\n    profile: local_golden\n"));
+
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_golden");
+
+        assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+        assertThat(run.stdout())
+                .contains("run_status: passed")
+                .contains("fake_provider_executed: true");
+    }
+
+    @Test
+    void goldenValidateRejectsConflictingDeprecatedTargetProfile() throws Exception {
+        Path suite = mutableGolden();
+        Path testCase = suite.getParent().resolve("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("    provider_id: sample-fake-runtime\n",
+                        "    provider_id: sample-fake-runtime\n    profile: other_profile\n"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("reason: conflicting_profile_selection")
+                .contains("field_path: targets.sample_runtime.profile")
+                .contains("category: CONFIGURATION_ERROR");
+    }
+
+    @Test
     void goldenRunResolvesRuntimeBindingFromEnvProfileBeforeLegacyEnvironmentBinding() throws Exception {
         Path suite = mutableGolden();
         Path suiteRoot = suite.getParent();
         Files.writeString(suiteRoot.resolve("env_profiles/local_golden.yaml"),
                 Files.readString(suiteRoot.resolve("env_profiles/local_golden.yaml"))
                         .replace("fixed://2026-06-29T00:00:00Z", "fixed://2030-01-02T03:04:05Z"));
+        Files.createDirectories(suiteRoot.resolve("environment_bindings"));
         Files.writeString(suiteRoot.resolve("environment_bindings/local_golden.yaml"),
-                Files.readString(suiteRoot.resolve("environment_bindings/local_golden.yaml"))
-                        .replace("fixed://2026-06-29T00:00:00Z", "fixed://1999-01-01T00:00:00Z"));
+                """
+                environment_id: local-golden-legacy
+                profile: local_golden
+                provider_bindings:
+                  - provider_id: sample-fake-runtime
+                    runtime_mode: stub
+                    binding_values:
+                      workspace_ref: local://legacy-workspace
+                      clock_ref: fixed://1999-01-01T00:00:00Z
+                """);
 
         CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_golden");
 
@@ -165,6 +206,34 @@ class GoldenE2eCommandTest {
         assertThat(Files.readString(evidenceDir.resolve("actual/actual_output.json")))
                 .contains("\"generatedAt\": \"2030-01-02T03:04:05Z\"")
                 .doesNotContain("1999-01-01T00:00:00Z");
+    }
+
+    @Test
+    void goldenRunAcceptsMinimalEnvProfileAndAppliesFrameworkDefaults() throws Exception {
+        Path suite = mutableGolden();
+        Files.writeString(suite.getParent().resolve("env_profiles/local_golden.yaml"),
+                """
+                env_profile_id: local_golden
+                execution_mode: local
+                providers:
+                  sample-fake-runtime:
+                    runtime_mode: stub
+                    bindings:
+                      workspace_ref: local://golden-e2e-workspace
+                      clock_ref: fixed://2026-06-29T00:00:00Z
+                """);
+
+        CommandResult validation = execute("validate", "--suite", suite.toString());
+        assertThat(validation.exit()).as(validation.stderr() + validation.stdout()).isZero();
+        assertThat(validation.stdout()).contains("validation_status: passed");
+
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_golden");
+        assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+        assertThat(run.stdout())
+                .contains("run_status: passed")
+                .contains("fake_provider_executed: true");
+        assertThat(Files.readString(extractPath(run.stdout(), "result_json")))
+                .contains("\"release_evidence_eligible\": false");
     }
 
     @Test
@@ -216,26 +285,26 @@ class GoldenE2eCommandTest {
     }
 
     @Test
-    void goldenRunRejectsMissingExecutionProfileBeforeExecution() throws Exception {
+    void goldenRunRejectsMissingEnvProfileBeforeExecution() throws Exception {
         Path suite = mutableGolden();
-        deleteDirectory(suite.getParent().resolve("env_profiles"));
-        Files.delete(suite.getParent().resolve("execution_profiles/local_golden.yaml"));
+        Files.delete(suite.getParent().resolve("env_profiles/local_golden.yaml"));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_golden");
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
                 .contains("run_status: blocked")
-                .contains("reason: missing_execution_profile")
+                .contains("reason: missing_env_profile")
                 .contains("profile: local_golden");
         assertThat(result.stdout()).doesNotContain("fake_provider_executed: true");
     }
 
     @Test
-    void goldenRunRejectsMissingEnvironmentBindingBeforeExecution() throws Exception {
+    void goldenRunRejectsMissingEnvProfileProviderBindingBeforeExecution() throws Exception {
         Path suite = mutableGolden();
-        deleteDirectory(suite.getParent().resolve("env_profiles"));
-        Files.delete(suite.getParent().resolve("environment_bindings/local_golden.yaml"));
+        Path envProfile = suite.getParent().resolve("env_profiles/local_golden.yaml");
+        Files.writeString(envProfile, Files.readString(envProfile)
+                .replace("sample-fake-runtime:", "missing-fake-runtime:"));
 
         CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_golden");
 

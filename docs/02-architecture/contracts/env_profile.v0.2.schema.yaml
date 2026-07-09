@@ -13,32 +13,42 @@ compatibility:
   replaces_public_artifacts:
     - execution_profile.v0.2.schema.yaml
     - environment_binding.v0.2.schema.yaml
-  old_artifacts_remain_runtime_compatibility_inputs_until_migration: true
+  old_artifacts_remain_runtime_compatibility_inputs: true
+  new_samples_must_use_env_profile_bindings: true
 required_fields:
   - env_profile_id
   - execution_mode
   - providers
+optional_fields_with_framework_defaults:
+  - isolation_scope
+  - max_duration
   - dependency_policy
   - dependency_substitution_policy
   - dependency_provisioning_policy
   - data_policy
+  - evidence_policy
 allowed_execution_modes: [local, ci, sit, preprod]
 provider_binding_shape:
   map_key: provider_id
   required_fields:
     - runtime_mode
+    - bindings
+  deprecated_compatibility_fields:
     - binding_keys
   forbidden_fields:
     - provider_instance_ref
     - provider_type
     - binding_values
   runtime_mode_values: [native, mock, stub, ephemeral]
-binding_key_rules:
-  env_profile_path: providers.<provider_id>.binding_keys.<binding_key>
+binding_rules:
+  env_profile_path: providers.<provider_id>.bindings.<binding_key>
+  deprecated_env_profile_path: providers.<provider_id>.binding_keys.<binding_key>
   contract_path: Provider Contract.binding_keys.<binding_key>
-  keys_must_match_provider_contract_binding_keys: true
+  bindings_must_match_provider_contract_binding_keys: true
   dsl_must_not_define_provider_binding_keys: true
   provider_instance_must_not_define_binding_key_schema: true
+  scalar_binding_values_normalize_to_runtime_binding_values: true
+  object_binding_values_preserve_nested_runtime_binding_values: true
   value_kinds:
     value: literal value allowed only when Provider Contract allows value
     ref: checked-in non-secret reference allowed only when Provider Contract allows ref
@@ -66,7 +76,24 @@ dependency_provisioning_policy:
     examples:
       - generated://oracle-ephemeral.connection
       - generated://dummy-rest-app.base_url
-  generated_values_may_be_referenced_by_binding_keys: true
+  generated_values_may_be_referenced_by_bindings: true
+framework_defaults:
+  isolation_scope: per_run
+  max_duration: PT5M
+  dependency_policy:
+    require_readiness_evidence: false
+  data_policy:
+    approved_expected_results_required: true
+    production_data_allowed: false
+    generated_data_allowed: true
+    secrets_must_use_refs: true
+  dependency_substitution_policy:
+    mock_evidence_release_claim: prohibited
+  dependency_provisioning_policy:
+    allowed_provisioners: []
+  evidence_policy:
+    evidence_classification: framework_provider_capability_only
+    downstream_release_evidence: false
 secret_policy:
   allow_secret_refs: true
   block_raw_secrets: true

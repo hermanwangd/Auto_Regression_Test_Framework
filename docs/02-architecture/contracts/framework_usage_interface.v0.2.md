@@ -13,10 +13,10 @@ DSL target
   -> provider_type
   -> Framework built-in Provider Contract catalog
   -> selected Env_Profile
-  -> Env_Profile.providers.<provider_id>.binding_keys
+  -> Env_Profile.providers.<provider_id>.bindings
 ```
 
-New v0.2 documentation and generated artifacts must use Provider Contract, Provider Instance, Env_Profile, DSL Test Case, CLI, and Evidence Contract terminology. Existing `execution_profile` and `environment_binding` artifacts remain compatibility inputs until the runtime migration is complete, but they are no longer the preferred public authoring model. Internal implementation packages may keep legacy names temporarily, but those names are not public runtime interfaces.
+New v0.2 documentation and generated artifacts must use Provider Contract, Provider Instance, Env_Profile, DSL Test Case, CLI, and Evidence Contract terminology. Existing `execution_profile` and `environment_binding` artifacts are compatibility inputs only; they are not the public authoring model for v0.2.6 samples or usage-kit examples. Internal implementation packages may keep legacy names temporarily, but those names are not public runtime interfaces.
 
 ## Controlled Interface Change Rules
 
@@ -48,10 +48,10 @@ New v0.2 documentation and generated artifacts must use Provider Contract, Provi
 
 Non-runtime boundary:
 
-- Product/RP orchestration wrappers, repo initialization, readiness checks, test generation, and expected-result drafting are outside the v0.2.5 framework runtime public interface.
+- Product/RP orchestration wrappers, repo initialization, readiness checks, test generation, and expected-result drafting are outside the v0.2.6 framework runtime public interface.
 - Product/RP tooling may generate suite-mode artifacts, then invoke the canonical runtime commands above.
 - Any remaining compatibility command in implementation code is not a release gate and must not appear in usage-kit release verification.
-- `regress report --format json` is not a v0.2.5 public report contract and must return usage error exit `2`.
+- `regress report --format json` is not a v0.2.6 public report contract and must return usage error exit `2`.
 
 ## Stable Exit Codes
 
@@ -74,7 +74,7 @@ regress validate --suite samples/30-cross-provider-groups/mock_server_cross_veri
 
 Suite-mode requires `--suite <suite_manifest_path>` and resolves artifacts relative to the suite manifest. A standard suite may include multiple checked-in tests in `tests[]`; all selected tests share one suite-level profile from CLI `--profile` or `suite_manifest.profile`. Compatibility aggregation manifests may use `child_suites[]` to point at checked-in child suite manifests. The command validates selected checked-in approved DSL tests and generated framework artifacts only. It must not start providers, provision dependencies, mutate fixtures, write run evidence, or infer Product/RP/RU topology.
 
-Machine-readable output must include `status`, `valid`, `errors`, `warnings`, `selected_tests`, `provider_instances_used`, `provider_contracts_used`, `env_profiles_used`, and `owner_action`. Compatibility output may also include `environment_bindings_used` until migration completes. Errors follow `validation_error_taxonomy.v0.2.yaml`.
+Machine-readable output must include `status`, `valid`, `errors`, `warnings`, `selected_tests`, `provider_instances_used`, `provider_contracts_used`, `env_profiles_used`, and `owner_action`. Compatibility output may also include `environment_bindings_used` only when legacy split configuration is read. Errors follow `validation_error_taxonomy.v0.2.yaml`.
 
 ### `regress run --dry-run`
 
@@ -158,7 +158,7 @@ The stable provider runtime configuration surface includes:
 - DSL target references `provider_id`; active profile comes from CLI or suite manifest.
 - Provider Instance declares one logical runtime target with `provider_id`, `provider_type`, allowed runtime modes, defaults, evidence capture choices, and failure mapping. It must not redefine Provider Contract binding key schema.
 - Provider Contract declares the provider type, runtime-mode vocabulary, executable runtime modes when only a subset is runnable by this framework build, allowed operations, allowed input keys, required inputs, binding key schema, bindable outputs, required fields, defaults, output refs, evidence outputs, failure codes, and valid Provider Instance shape. Built-in Provider Contracts are framework-owned and resolved by `provider_type`.
-- Env_Profile supplies environment-specific `runtime_mode` and actual values under `providers.<provider_id>.binding_keys`. The `providers` map keys are Provider Instance `provider_id` values. Each binding key must match the resolved Provider Contract `binding_keys`.
+- Env_Profile supplies environment-specific `runtime_mode` and actual values under `providers.<provider_id>.bindings`. The `providers` map keys are Provider Instance `provider_id` values. Each binding key must match the resolved Provider Contract `binding_keys`.
 - Env_Profile binding key values may use `value`, `ref`, `secret_ref`, `generated_ref`, or approved `local_ref` only when allowed by the Provider Contract binding key schema. `generated_ref` values must target a producing Provider Contract `bindable_outputs` entry, such as `generated://wiremock-payment-api.base_url`, or a selected Env_Profile `dependency_provisioning_policy.generated_outputs` entry; `local_ref` is limited to framework-controlled local/CI fixtures and must not be used as SIT/preprod release evidence.
 - WireMock-backed mock Provider Contracts may expose predefined generated endpoint refs, such as `generated://payment-soap-mock.endpoint_url` and `generated://customer-grpc-mock.target_uri`. These refs are suite/batch lifecycle outputs and must not be embedded in DSL test cases.
 - Local and CI Env_Profiles may use mock, stub, ephemeral, fake-topic, embedded-broker, disposable-schema, or generated-data replacements for external dependencies only when those dependencies are materialized before framework execution and allowed by Env_Profile policy, the framework built-in Provider Contract executable runtime modes, and Provider Instance runtime modes. SIT and preprod default to native dependencies and must not produce release evidence from mock substitution.
@@ -180,7 +180,7 @@ The framework runtime consumes these canonical generated locations under `docs/0
 - `parameter-sets/`
 - `expected-results/approved/`
 
-Compatibility readers may also accept these legacy locations until Env_Profile runtime migration completes:
+Compatibility readers may also accept these legacy locations for older generated artifacts:
 
 - `generated-framework/execution_profiles/`
 - `generated-framework/run_profiles/`
@@ -212,6 +212,6 @@ These suite group artifacts summarize framework provider capability tests only. 
 
 ## Non-Runtime Support Boundary
 
-Product Repo and Phase 2 Agent Skill workflows may initialize folders, perform owner-readiness checks, draft tests, or draft expected results outside the framework runtime. Those workflows are not current-stage framework runtime gates and are not v0.2.5 release-verification commands.
+Product Repo and Phase 2 Agent Skill workflows may initialize folders, perform owner-readiness checks, draft tests, or draft expected results outside the framework runtime. Those workflows are not current-stage framework runtime gates and are not v0.2.6 release-verification commands.
 
 Phase 2 Product Repo translation must emit suite-mode artifacts and invoke `regress validate --suite <suite_manifest_path>`, `regress run --suite <suite_manifest_path> --profile <env_profile_id>`, `regress report --result <generated_result_json>`, and `regress validate-evidence --result <generated_result_json>`.

@@ -8,6 +8,7 @@ VERSION="$("${ROOT_DIR}/scripts/release/verify-release-version.sh" "${1:-}")"
 JAR="${ROOT_DIR}/target/spec-driven-auto-regression-${VERSION}.jar"
 REQUIRE_EXTERNAL_MESSAGING="${REQUIRE_EXTERNAL_MESSAGING:-false}"
 REQUIRE_EXTERNAL_JDBC="${REQUIRE_EXTERNAL_JDBC:-false}"
+JDBC_EXTERNAL_DIALECT="${JDBC_EXTERNAL_DIALECT:-oracle}"
 external_env_names=(KAFKA_BOOTSTRAP_SERVERS IBM_MQ_CONN_NAME IBM_MQ_CREDENTIAL)
 
 if [[ ! -s "$JAR" ]]; then
@@ -87,20 +88,40 @@ run_suite samples/90-compatibility/dummy_rest/suite_manifest.yaml local_dummy
 
 run_cli validate --suite samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml --profile ci_kafka_external
 run_cli validate --suite samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml --profile ci_ibm_mq_external
-run_cli validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile external_jdbc_env_secret_ref
+run_cli validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml --profile external_jdbc_oracle_env_secret_ref
+run_cli validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml --profile external_jdbc_db2_env_secret_ref
 
-if [[ "$REQUIRE_EXTERNAL_JDBC" == "true" || -n "${JDBC_CONNECTION:-}" ]]; then
+jdbc_external_suite=""
+jdbc_external_profile=""
+case "$JDBC_EXTERNAL_DIALECT" in
+  oracle)
+    jdbc_external_suite="samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml"
+    jdbc_external_profile="external_jdbc_oracle_env_secret_ref"
+    ;;
+  db2)
+    jdbc_external_suite="samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml"
+    jdbc_external_profile="external_jdbc_db2_env_secret_ref"
+    ;;
+  *)
+    echo "external_jdbc_runtime_verification: blocked" >&2
+    echo "invalid_external_jdbc_dialect: ${JDBC_EXTERNAL_DIALECT}" >&2
+    echo "owner_action: Set JDBC_EXTERNAL_DIALECT to oracle or db2." >&2
+    exit 1
+    ;;
+esac
+
+if [[ "$REQUIRE_EXTERNAL_JDBC" == "true" ]]; then
   if [[ -z "${JDBC_CONNECTION:-}" ]]; then
     echo "external_jdbc_runtime_verification: blocked" >&2
     echo "missing_external_jdbc_env: JDBC_CONNECTION" >&2
-    echo "owner_action: Configure JDBC_CONNECTION, or leave REQUIRE_EXTERNAL_JDBC=false when native external JDBC runtime evidence is not required." >&2
+    echo "owner_action: Configure JDBC_CONNECTION and JDBC_EXTERNAL_DIALECT, or leave REQUIRE_EXTERNAL_JDBC=false when native external JDBC runtime evidence is not required." >&2
     exit 1
   fi
-  run_suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml external_jdbc_env_secret_ref
+  run_suite "$jdbc_external_suite" "$jdbc_external_profile"
   echo "external_jdbc_runtime_verification: passed"
 else
   echo "external_jdbc_runtime_verification: not_configured"
-  echo "owner_action: Configure JDBC_CONNECTION and set REQUIRE_EXTERNAL_JDBC=true when native external JDBC runtime evidence is required."
+  echo "owner_action: Configure JDBC_CONNECTION, set JDBC_EXTERNAL_DIALECT=oracle|db2, and set REQUIRE_EXTERNAL_JDBC=true when native external JDBC runtime evidence is required."
 fi
 
 external_env_state

@@ -1,0 +1,139 @@
+dsl_version: v0.2
+test_case_id: JDBC-EXTERNAL-DB2-CRUD-TC-001
+title: JDBC external DB2 CRUD provider capability
+status: active
+revision: 1
+source_refs:
+  acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#track-c-jdbc
+labels:
+  capability: jdbc
+  evidence_classification: framework_provider_capability_only
+  external_dependency_required: true
+compatible_profiles: [external_jdbc_db2_env_secret_ref]
+targets:
+  db2_like_db:
+    provider_id: db2-like-db
+data:
+  crud_insert:
+    ref: fixtures/db2_crud_insert_order.sql
+  crud_update:
+    ref: fixtures/db2_crud_update_order.sql
+  crud_delete:
+    ref: fixtures/db2_crud_delete_order.sql
+  crud_query:
+    ref: queries/crud_order_by_id_db2.sql
+  crud_expected:
+    ref: expected_results/crud_expected.json
+  crud_deleted_expected:
+    ref: expected_results/crud_deleted_expected.json
+execute:
+  operations:
+    - id: db2_external_create_order
+      target: db2_like_db
+      operation: db_seed
+      inputs:
+        sql_ref:
+          ref: ${data.crud_insert}
+        params.order_id:
+          ref: expected_results/crud_expected.json#/order_id
+      outputs:
+        affected_rows: affected_rows
+        duration_ms: duration_ms
+    - id: db2_external_read_created_order
+      target: db2_like_db
+      operation: db_query
+      inputs:
+        query_ref:
+          ref: ${data.crud_query}
+        params.order_id:
+          ref: expected_results/crud_expected.json#/order_id
+      outputs:
+        row_count: row_count
+        sample_rows: sample_rows
+        duration_ms: duration_ms
+        query_evidence_ref: query_evidence_ref
+    - id: db2_external_update_order
+      target: db2_like_db
+      operation: db_seed
+      inputs:
+        sql_ref:
+          ref: ${data.crud_update}
+        params.order_id:
+          ref: expected_results/crud_expected.json#/order_id
+      outputs:
+        affected_rows: affected_rows
+        duration_ms: duration_ms
+    - id: db2_external_read_updated_order
+      target: db2_like_db
+      operation: db_query
+      inputs:
+        query_ref:
+          ref: ${data.crud_query}
+        params.order_id:
+          ref: expected_results/crud_expected.json#/order_id
+      outputs:
+        row_count: row_count
+        sample_rows: sample_rows
+        duration_ms: duration_ms
+        query_evidence_ref: query_evidence_ref
+    - id: db2_external_delete_order
+      target: db2_like_db
+      operation: db_cleanup
+      inputs:
+        sql_ref:
+          ref: ${data.crud_delete}
+        params.order_id:
+          ref: expected_results/crud_expected.json#/order_id
+      outputs:
+        affected_rows: affected_rows
+        duration_ms: duration_ms
+    - id: db2_external_read_deleted_order
+      target: db2_like_db
+      operation: db_query
+      inputs:
+        query_ref:
+          ref: ${data.crud_query}
+        params.order_id:
+          ref: expected_results/crud_expected.json#/order_id
+      outputs:
+        row_count: row_count
+        sample_rows: sample_rows
+        duration_ms: duration_ms
+        query_evidence_ref: query_evidence_ref
+verify:
+  checks:
+    - id: db2_external_deleted_order_record_absent
+      type: db_record_exists
+      target: db2_like_db
+      query:
+        ref: queries/crud_order_by_id_db2.sql
+      expected_ref: expected_results/crud_deleted_expected.json
+      options:
+        timeout: PT20S
+        poll_interval: PT2S
+cleanup:
+  operations:
+    - id: db2_external_cleanup_order_safety
+      target: db2_like_db
+      operation: db_cleanup
+      inputs:
+        sql_ref:
+          ref: ${data.crud_delete}
+        params.order_id:
+          ref: expected_results/crud_expected.json#/order_id
+      outputs:
+        affected_rows: affected_rows
+        duration_ms: duration_ms
+evidence:
+  required:
+    - provider-evidence/jdbc/seed_db2_external_create_order.yaml
+    - provider-evidence/jdbc/query_db2_external_read_created_order.yaml
+    - provider-evidence/jdbc/seed_db2_external_update_order.yaml
+    - provider-evidence/jdbc/query_db2_external_read_updated_order.yaml
+    - provider-evidence/jdbc/cleanup_db2_external_delete_order.yaml
+    - provider-evidence/jdbc/query_db2_external_read_deleted_order.yaml
+    - provider-evidence/jdbc/cleanup_db2_external_cleanup_order_safety.yaml
+runtime:
+  timeout: PT1M
+  retry:
+    max_attempts: 1

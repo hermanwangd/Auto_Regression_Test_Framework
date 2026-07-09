@@ -2,7 +2,7 @@
 
 These contracts define the artifacts needed to design or implement Auto Regression Test Framework v0.2 as a feature-complete pre-release execution framework. They are specification contracts, not final stable v1.0 runtime API design.
 
-Core boundary: Product/RP/RU mapping is product knowledge consumed by Phase 2 Agent Skills. The framework core consumes generated framework-readable artifacts: DSL tests, suite manifest, run plan, Env_Profiles, Provider Instances, Provider Contracts, expected results, parameter sets, and traceability map. Legacy `execution_profiles/` and `environment_bindings/` remain compatibility inputs until the Env_Profile runtime migration is complete.
+Core boundary: Product/RP/RU mapping is product knowledge consumed by Phase 2 Agent Skills. The framework core consumes generated framework-readable artifacts: DSL tests, suite manifest, run plan, Env_Profiles, Provider Instances, Provider Contracts, expected results, parameter sets, and traceability map. Legacy `execution_profiles/` and `environment_bindings/` remain compatibility inputs for older generated artifacts only; new v0.2.6 samples author environment configuration through Env_Profile `bindings`.
 
 ## 6.1 Product Repo Layout
 
@@ -161,25 +161,15 @@ Minimal `env_profiles/ci.yaml`:
 ```yaml
 env_profile_id: ci
 execution_mode: ci
-isolation_scope: single_target
 providers:
   transform-job:
     runtime_mode: native
-    binding_keys:
+    bindings:
       command:
         value: command://run-transform-job
-dependency_policy:
-  isolated_dependencies: true
-dependency_substitution_policy:
-  allowed_runtime_modes: [native]
-  mock_evidence_release_claim: prohibited
-dependency_provisioning_policy:
-  allowed_provisioners: [none]
-data_policy:
-  test_data_namespace_required: true
-  cleanup_required: true
-max_duration: PT10M
 ```
+
+Optional Env_Profile policy sections such as `isolation_scope`, `max_duration`, dependency policy, provisioning policy, data policy, and evidence policy are defaults-backed. Sample authors add them only when the profile needs stricter behavior than the framework defaults.
 
 Minimal `provider_instances/providers.yaml`:
 
@@ -233,10 +223,10 @@ DSL target
   -> provider_type
   -> Provider Contract
   -> selected Env_Profile
-  -> Env_Profile.providers.<provider_id>.binding_keys
+  -> Env_Profile.providers.<provider_id>.bindings
 ```
 
-Executable Provider Contracts must declare `provider_type`, allowed runtime modes, allowed operations, allowed input names, binding key schema, bindable outputs, output refs, evidence outputs, failure codes, and the valid Provider Instance shape. Provider Instances define logical provider targets and cannot redefine binding key schema. Env_Profiles supply actual environment-specific values for required binding keys under `providers.<provider_id>.binding_keys` and select `runtime_mode` for each `provider_id`. Unsupported, missing, prohibited, or ambiguous resolution fails before execution and before non-dry-run provider dispatch.
+Executable Provider Contracts must declare `provider_type`, allowed runtime modes, allowed operations, allowed input names, binding key schema, bindable outputs, output refs, evidence outputs, failure codes, and the valid Provider Instance shape. Provider Instances define logical provider targets and cannot redefine binding key schema. Env_Profiles supply actual environment-specific values for required binding keys under `providers.<provider_id>.bindings` and select `runtime_mode` for each `provider_id`. Unsupported, missing, prohibited, or ambiguous resolution fails before execution and before non-dry-run provider dispatch.
 
 Local and CI Env_Profiles are expected to replace most external service, database, messaging, K8s, and VM dependencies with explicit mock, stub, ephemeral, fake-topic, embedded-broker, disposable-schema, generated-data, or externally pre-provisioned dependency bindings. Those replacements are still Provider Instances and Env_Profile dependency-provisioning policy; they are not a separate DSL feature and must not be inferred as a fallback. SIT and preprod default to `runtime_mode: native` and cannot use mock substitution for release evidence unless the run is explicitly classified as framework verification evidence.
 
@@ -693,7 +683,7 @@ Legacy v1 artifacts may still be read through an explicit compatibility path dur
 
 ### 6.7.2 Targets and Operations
 
-`targets` is a name-keyed map. Each target must declare `provider_id`. `provider_id` resolves to a Provider Instance. The Provider Instance declares `provider_type`, which selects a Provider Contract. The active Env_Profile selected by CLI or suite manifest supplies `providers.<provider_id>.binding_keys` values used at runtime. A DSL target must not contain URLs, topics, namespaces, DB connection strings, or credentials.
+`targets` is a name-keyed map. Each target must declare `provider_id`. `provider_id` resolves to a Provider Instance. The Provider Instance declares `provider_type`, which selects a Provider Contract. The active Env_Profile selected by CLI or suite manifest supplies `providers.<provider_id>.bindings` values used at runtime. A DSL target must not contain URLs, topics, namespaces, DB connection strings, or credentials.
 
 `setup.operations`, `execute.operations`, provider-backed `verify.checks`, and `cleanup.operations` must be allowed by the referenced Provider Contract. Core v0.2 operations include:
 
@@ -1038,14 +1028,13 @@ execution_mode: ci
 providers:
   transform-job:
     runtime_mode: native
-    binding_keys:
-      command:
-        value: command://run-transform-job
+    bindings:
+      command: command://run-transform-job
 ```
 
 Provider runtime rules:
 
-- Resolution order is DSL target `provider_id` + selected Env_Profile, Provider Instance, Provider Contract by `provider_type`, then Env_Profile `providers.<provider_id>.binding_keys`. Suite manifests select tests and may select the active Env_Profile, but must not override provider fields.
+- Resolution order is DSL target `provider_id` + selected Env_Profile, Provider Instance, Provider Contract by `provider_type`, then Env_Profile `providers.<provider_id>.bindings`. Suite manifests select tests and may select the active Env_Profile, but must not override provider fields.
 - Executable Provider Contracts must declare `provider_type`; heuristic inference is diagnostic only and must not silently choose a runtime.
 - Provider capability registry status must be checked before dispatch. Unsupported, ambiguous, unsafe, or provider-safety-unapproved command-capable providers fail before execution.
 - Dispatch uses the next v0.2 DSL fields and generated artifact fields: `targets.<target_id>.provider_id`, selected Env_Profile, `setup.operations[].operation`, `execute.operations[].operation`, `verify.checks[].operation` when provider-backed, `cleanup.operations[].operation`, operation `inputs`, `data`, `verify.checks`, and `evidence.required[]`.
@@ -1054,7 +1043,7 @@ Provider runtime rules:
 - Provider Instances cannot introduce fields, operations, input names, output refs, evidence outputs, or failure codes that are not allowed by the Provider Contract.
 - Env_Profiles must supply all required binding keys for the selected provider_id.
 - Env_Profile `providers` map keys must be Provider Instance `provider_id` values.
-- Env_Profile `binding_keys` must match Provider Contract `binding_keys`; invalid binding keys, value kinds, enum values, and generated refs block before provider dispatch.
+- Env_Profile `bindings` must match Provider Contract `binding_keys`; invalid binding keys, value kinds, enum values, and generated refs block before provider dispatch.
 - `generated_ref` values must target a producing Provider Contract `bindable_outputs` entry or a selected Env_Profile `dependency_provisioning_policy.generated_outputs` entry; undeclared project-side generated refs must be materialized before invoking the framework.
 - Messaging actions that declare `requires_correlation: true` must also declare `correlation_id`, `correlation_id_ref`, or `correlation_key` before publish, request/reply, consume, observe, or cleanup dispatch.
 - Messaging request/reply actions are not part of the P0 NATS runtime; they remain future reusable Provider Contract scope.
@@ -1161,7 +1150,7 @@ Standard result JSON shape:
 
 ```yaml
 test_result:
-  framework_version: 0.2.5
+  framework_version: 0.2.6
   dsl_version: v0.2
   test_case_id: RP-AR-M1-data-pipeline-TC-001
   parameter_case_id: valid_order_001

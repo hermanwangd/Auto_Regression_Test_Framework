@@ -373,16 +373,16 @@ Required behavior:
 
 Required sample:
 
-- Add or update `samples/20-provider-capability-p0/data/jdbc/env_profiles/external_jdbc_env_secret_ref.yaml`.
-- The sample uses `connection.secret_ref: env://JDBC_CONNECTION`.
-- The sample is executed only when `JDBC_CONNECTION` is configured by the release environment; otherwise external JDBC coverage is documented as not verified, not as framework failure.
+- Add or update split external JDBC Env_Profiles for Oracle and DB2 single-provider native samples.
+- Each external sample uses `connection.secret_ref: env://JDBC_CONNECTION`.
+- The external native sample is executed only when `REQUIRE_EXTERNAL_JDBC=true`; `JDBC_EXTERNAL_DIALECT=oracle|db2` selects which suite runs. Otherwise external JDBC coverage is documented as not verified, not as framework failure.
 
 Validation commands:
 
 ```bash
 MAVEN_OPTS="-Xmx2g" ./mvnw -q test -Dtest=JdbcExternalEnvSecretRefTest
 java -Xmx512m -jar target/spec-driven-auto-regression-0.2.4.jar validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml
-JDBC_CONNECTION='<masked externally supplied value>' java -Xmx512m -jar target/spec-driven-auto-regression-0.2.4.jar run --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile external_jdbc_env_secret_ref
+JDBC_EXTERNAL_DIALECT=oracle JDBC_CONNECTION='<masked externally supplied value>' java -Xmx512m -jar target/spec-driven-auto-regression-0.2.4.jar run --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml --profile external_jdbc_oracle_env_secret_ref
 ```
 
 Release gate:

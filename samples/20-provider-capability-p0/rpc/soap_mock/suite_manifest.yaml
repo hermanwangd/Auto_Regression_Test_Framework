@@ -10,8 +10,6 @@ tests:
 artifact_roots:
   provider_instances: provider_instances/
   env_profiles: env_profiles/
-  execution_profiles: execution_profiles/
-  environment_bindings: environment_bindings/
   expected_results: expected_results/
   fixtures: fixtures/
 evidence_policy:

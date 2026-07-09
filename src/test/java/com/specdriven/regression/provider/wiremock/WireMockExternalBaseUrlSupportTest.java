@@ -156,12 +156,11 @@ class WireMockExternalBaseUrlSupportTest {
                 providers:
                   wiremock-payment-api:
                     runtime_mode: mock
-                    binding_keys:
-                      base_url:
-                        value: %s
+                    bindings:
+                      base_url: %s
                   payment-api-client:
                     runtime_mode: native
-                    binding_keys:
+                    bindings:
                       base_url:
                         generated_ref: generated://wiremock-payment-api.base_url
                 """.formatted(baseUrl));
@@ -188,10 +187,10 @@ class WireMockExternalBaseUrlSupportTest {
                 providers:
                   wiremock-payment-api:
                     runtime_mode: mock
-                    binding_keys: {}
+                    bindings: {}
                   payment-api-client:
                     runtime_mode: native
-                    binding_keys:
+                    bindings:
                       base_url:
                         generated_ref: generated://wiremock-payment-api.base_url
                 """);

@@ -162,7 +162,7 @@ class MessagingClientProviderCapabilityCommandTest {
                 providers:
                   order-events:
                     runtime_mode: mock
-                    binding_keys:
+                    bindings:
                       bootstrap_servers:
                         value: approved_local_kafka_ref
                       topic:
@@ -175,7 +175,7 @@ class MessagingClientProviderCapabilityCommandTest {
                         value: PT0.05S
                   payment-mq:
                     runtime_mode: mock
-                    binding_keys:
+                    bindings:
                       queue_manager:
                         value: QM1
                       channel:

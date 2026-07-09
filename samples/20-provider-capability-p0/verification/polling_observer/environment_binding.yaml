@@ -1,9 +1,0 @@
-environment_id: local-provider-polling
-profile: local_provider
-provider_bindings:
-  - provider_id: polling-observer
-    runtime_mode: stub
-    binding_values: {}
-evidence_policy:
-  evidence_classification: framework_provider_capability_only
-  downstream_release_evidence: false

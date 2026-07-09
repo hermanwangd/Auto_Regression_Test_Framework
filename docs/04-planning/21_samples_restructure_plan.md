@@ -126,7 +126,6 @@ Scripts:
 - `scripts/release/verify-supported-provider-samples.sh`
 - `scripts/release/verify-usage-kit.sh`
 - `scripts/ci/secret-scan.sh` only if path allow/deny patterns assume old sample roots.
-- `/Users/herman_mbp2023/Documents/test_framework_pirun/pirun/inspect_usage_kit.py` only if its sample path classification depends on old directory names instead of recursive `suite_manifest.yaml` discovery.
 
 Docs and user-facing contracts:
 
@@ -308,38 +307,22 @@ bash scripts/ci/secret-scan.sh
 JAVA_TOOL_OPTIONS='-Xmx1024m' MAVEN_OPTS='-Xmx2g' bash scripts/release/verify-supported-provider-samples.sh 0.2.5
 ```
 
-- [x] Run usage-kit matrix verification with the external pi-run inspector against the generated usage kit.
+- [x] Run usage-kit verification against the generated usage kit.
 
-Refresh the external pi-run usage kit from the generated zip, then run the matrix:
+Refresh a temporary usage kit from the generated zip, then run the repo-owned verification script:
 
 ```bash
-rm -rf /Users/herman_mbp2023/Documents/test_framework_pirun/usage-kit-v0.2.5
-mkdir -p /Users/herman_mbp2023/Documents/test_framework_pirun/usage-kit-v0.2.5
-mkdir -p /Users/herman_mbp2023/Documents/test_framework_pirun/release-assets-v0.2.5
+rm -rf target/usage-kit-verify
+mkdir -p target/usage-kit-verify
 unzip -q target/spec-driven-auto-regression-0.2.5-usage-kit.zip \
-  -d /Users/herman_mbp2023/Documents/test_framework_pirun/usage-kit-v0.2.5
-cp target/spec-driven-auto-regression-0.2.5.jar \
-  /Users/herman_mbp2023/Documents/test_framework_pirun/release-assets-v0.2.5/spec-driven-auto-regression-0.2.5.jar
-cd /Users/herman_mbp2023/Documents/test_framework_pirun
-python3 -m pirun.inspect_usage_kit --framework-version 0.2.5
-python3 -m pirun.run_usage_kit_matrix --framework-version 0.2.5 --command-set validate
-python3 - <<'PY'
-import json
-from pathlib import Path
-
-matrix = json.loads(Path("reports/pi-run-v0.2.5-function-coverage-matrix.json").read_text())
-counts = {}
-for row in matrix["matrix_rows"]:
-    counts[row["expected_status"]] = counts.get(row["expected_status"], 0) + 1
-print("expected_status_counts:", counts)
-assert counts.get("BLOCKED_USAGE_KIT_SAMPLE_GAP", 0) == 0, counts
-PY
+  -d target/usage-kit-verify
+bash scripts/release/verify-usage-kit.sh target/spec-driven-auto-regression-0.2.5-usage-kit.zip 0.2.5
 ```
 
-Expected matrix result:
+Expected verification result:
 
 ```text
-BLOCKED_USAGE_KIT_SAMPLE_GAP: 0
+usage_kit_verification_status: passed
 ```
 
 - [x] Run full verification:

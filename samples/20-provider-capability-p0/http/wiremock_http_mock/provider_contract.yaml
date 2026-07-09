@@ -4,7 +4,7 @@ runtime_modes: [mock]
 binding_keys:
   mappings_ref:
     required: true
-    source: environment_binding
+    source: env_profile
   base_url_output_ref:
     required: false
     source: generated_binding_output

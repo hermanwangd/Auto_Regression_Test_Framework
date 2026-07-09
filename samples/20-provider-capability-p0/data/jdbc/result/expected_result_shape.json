@@ -1,11 +1,11 @@
 {
-  "framework_version": "0.2.5",
+  "framework_version": "0.2.6",
   "dsl_version": "v0.2",
   "suite_id": "JDBC-CAPABILITY-v0.2",
   "batch_id": "BATCH-JDBC-001",
   "run_id": "RUN-JDBC-001",
-  "test_case_id": "JDBC-CAPABILITY-TC-001",
-  "test_count": 1,
+  "test_case_id": "JDBC-CAPABILITY-v0.2-MULTI",
+  "test_count": 3,
   "profile": "local_jdbc",
   "environment": "local_jdbc",
   "provider_summary": [
@@ -14,12 +14,14 @@
       "provider_type": "jdbc",
       "runtime_mode": "ephemeral",
       "dialect": "oracle"
+    },
+    {
+      "provider_id": "db2-like-db",
+      "provider_type": "jdbc",
+      "runtime_mode": "ephemeral",
+      "dialect": "db2"
     }
   ],
-  "provider_type": "jdbc",
-  "provider_id": "oracle-like-db",
-  "runtime_mode": "ephemeral",
-  "dialect": "oracle",
   "status": "passed",
   "start_time": "2026-06-29T00:00:00Z",
   "end_time": "2026-06-29T00:00:01Z",
@@ -35,6 +37,20 @@
       "profile": "local_jdbc",
       "provider_id": "oracle-like-db",
       "provider_type": "jdbc"
+    },
+    {
+      "test_case_id": "JDBC-ORACLE-CRUD-TC-001",
+      "status": "passed",
+      "profile": "local_jdbc",
+      "provider_id": "oracle-like-db",
+      "provider_type": "jdbc"
+    },
+    {
+      "test_case_id": "JDBC-DB2-CRUD-TC-001",
+      "status": "passed",
+      "profile": "local_jdbc",
+      "provider_id": "db2-like-db",
+      "provider_type": "jdbc"
     }
   ],
   "provider_results": [
@@ -48,8 +64,46 @@
         "operation": "jdbc_capability_flow",
         "status": "passed",
         "outputs": {
-          "row_count": 1,
-          "dialect": "oracle"
+          "JDBC-CAPABILITY-TC-001__query_order_oracle": {
+            "operation": "db_query",
+            "status": "passed"
+          }
+        }
+      },
+      "release_evidence_eligible": false
+    },
+    {
+      "provider_id": "oracle-like-db",
+      "provider_type": "jdbc",
+      "profile": "local_jdbc",
+      "runtime_mode": "ephemeral",
+      "dialect": "oracle",
+      "resolved_operation_result": {
+        "operation": "jdbc_capability_flow",
+        "status": "passed",
+        "outputs": {
+          "JDBC-ORACLE-CRUD-TC-001__oracle_read_updated_order": {
+            "operation": "db_query",
+            "status": "passed"
+          }
+        }
+      },
+      "release_evidence_eligible": false
+    },
+    {
+      "provider_id": "db2-like-db",
+      "provider_type": "jdbc",
+      "profile": "local_jdbc",
+      "runtime_mode": "ephemeral",
+      "dialect": "db2",
+      "resolved_operation_result": {
+        "operation": "jdbc_capability_flow",
+        "status": "passed",
+        "outputs": {
+          "JDBC-DB2-CRUD-TC-001__db2_read_updated_order": {
+            "operation": "db_query",
+            "status": "passed"
+          }
         }
       },
       "release_evidence_eligible": false
@@ -57,46 +111,78 @@
   ],
   "step_results": [
     {
-      "id": "seed_order",
+      "id": "JDBC-CAPABILITY-TC-001__seed_order",
       "operation": "db_seed",
       "status": "passed"
     },
     {
-      "id": "cleanup_order",
-      "operation": "db_cleanup",
+      "id": "JDBC-ORACLE-CRUD-TC-001__oracle_create_order",
+      "operation": "db_seed",
+      "status": "passed"
+    },
+    {
+      "id": "JDBC-DB2-CRUD-TC-001__db2_create_order",
+      "operation": "db_seed",
       "status": "passed"
     }
   ],
   "steps": [
     {
-      "id": "seed_order",
+      "id": "JDBC-CAPABILITY-TC-001__seed_order",
       "operation": "db_seed",
       "status": "passed"
     },
     {
-      "id": "cleanup_order",
-      "operation": "db_cleanup",
+      "id": "JDBC-ORACLE-CRUD-TC-001__oracle_create_order",
+      "operation": "db_seed",
+      "status": "passed"
+    },
+    {
+      "id": "JDBC-DB2-CRUD-TC-001__db2_create_order",
+      "operation": "db_seed",
       "status": "passed"
     }
   ],
   "verify_results": [
     {
-      "id": "query_order_oracle",
+      "id": "JDBC-CAPABILITY-TC-001__order_record_exists",
+      "type": "db_record_exists",
+      "status": "passed"
+    },
+    {
+      "id": "JDBC-ORACLE-CRUD-TC-001__oracle_deleted_order_record_absent",
+      "type": "db_record_exists",
+      "status": "passed"
+    },
+    {
+      "id": "JDBC-DB2-CRUD-TC-001__db2_deleted_order_record_absent",
       "type": "db_record_exists",
       "status": "passed"
     }
   ],
   "evidence_index_ref": "evidence_index.yaml",
   "provider_evidence_refs": [
-    "provider-evidence/jdbc/seed_seed_order.yaml",
-    "provider-evidence/jdbc/query_query_order_oracle.yaml",
-    "provider-evidence/jdbc/cleanup_cleanup_order.yaml"
+    "provider-evidence/jdbc/seed_JDBC-CAPABILITY-TC-001__seed_order.yaml",
+    "provider-evidence/jdbc/query_JDBC-CAPABILITY-TC-001__query_order_oracle.yaml",
+    "provider-evidence/jdbc/cleanup_JDBC-CAPABILITY-TC-001__cleanup_order.yaml",
+    "provider-evidence/jdbc/seed_JDBC-ORACLE-CRUD-TC-001__oracle_create_order.yaml",
+    "provider-evidence/jdbc/query_JDBC-ORACLE-CRUD-TC-001__oracle_read_updated_order.yaml",
+    "provider-evidence/jdbc/cleanup_JDBC-ORACLE-CRUD-TC-001__oracle_cleanup_prepare_row.yaml",
+    "provider-evidence/jdbc/seed_JDBC-DB2-CRUD-TC-001__db2_create_order.yaml",
+    "provider-evidence/jdbc/query_JDBC-DB2-CRUD-TC-001__db2_read_updated_order.yaml",
+    "provider-evidence/jdbc/cleanup_JDBC-DB2-CRUD-TC-001__db2_cleanup_prepare_row.yaml"
   ],
   "evidence_refs": [
     "evidence_index.yaml",
-    "provider-evidence/jdbc/seed_seed_order.yaml",
-    "provider-evidence/jdbc/query_query_order_oracle.yaml",
-    "provider-evidence/jdbc/cleanup_cleanup_order.yaml",
+    "provider-evidence/jdbc/seed_JDBC-CAPABILITY-TC-001__seed_order.yaml",
+    "provider-evidence/jdbc/query_JDBC-CAPABILITY-TC-001__query_order_oracle.yaml",
+    "provider-evidence/jdbc/cleanup_JDBC-CAPABILITY-TC-001__cleanup_order.yaml",
+    "provider-evidence/jdbc/seed_JDBC-ORACLE-CRUD-TC-001__oracle_create_order.yaml",
+    "provider-evidence/jdbc/query_JDBC-ORACLE-CRUD-TC-001__oracle_read_updated_order.yaml",
+    "provider-evidence/jdbc/cleanup_JDBC-ORACLE-CRUD-TC-001__oracle_cleanup_prepare_row.yaml",
+    "provider-evidence/jdbc/seed_JDBC-DB2-CRUD-TC-001__db2_create_order.yaml",
+    "provider-evidence/jdbc/query_JDBC-DB2-CRUD-TC-001__db2_read_updated_order.yaml",
+    "provider-evidence/jdbc/cleanup_JDBC-DB2-CRUD-TC-001__db2_cleanup_prepare_row.yaml",
     "logs/execution.log",
     "batch/batch.yaml"
   ],

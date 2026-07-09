@@ -35,8 +35,6 @@ class GrpcMockCapabilityCommandTest {
                 "samples/20-provider-capability-p0/rpc/grpc_mock/provider_instances/runtime_mode_sample__customer_grpc_client_mock.yaml",
                 "samples/20-provider-capability-p0/rpc/grpc_mock/provider_instances/runtime_mode_sample__customer_grpc_client_stub.yaml",
                 "samples/20-provider-capability-p0/rpc/grpc_mock/env_profiles/local_grpc_mock.yaml",
-                "samples/20-provider-capability-p0/rpc/grpc_mock/environment_bindings/local_grpc_mock.yaml",
-                "samples/20-provider-capability-p0/rpc/grpc_mock/execution_profiles/local_grpc_mock.yaml",
                 "samples/20-provider-capability-p0/rpc/grpc_mock/proto/customer.proto",
                 "samples/20-provider-capability-p0/rpc/grpc_mock/proto/customer.desc.b64",
                 "samples/20-provider-capability-p0/rpc/grpc_mock/fixtures/get_customer_request.json",

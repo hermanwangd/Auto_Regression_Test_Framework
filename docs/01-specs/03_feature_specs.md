@@ -172,7 +172,7 @@ Mock substitution rules:
 
 - Provider Contracts must declare which runtime modes are supported, such as `native`, `mock`, `stub`, or `ephemeral`.
 - Provider Instances may select only runtime modes allowed by the referenced Provider Contract.
-- Env_Profiles choose the actual `runtime_mode` for each `provider_id` and supply `providers.<provider_id>.binding_keys` values for mock endpoints, stub servers, fake topics, embedded brokers, ephemeral DBs, disposable schemas, or native dependency references.
+- Env_Profiles choose the actual `runtime_mode` for each `provider_id` and supply `providers.<provider_id>.bindings` values for mock endpoints, stub servers, fake topics, embedded brokers, ephemeral DBs, disposable schemas, or native dependency references.
 - Env_Profiles for `local` and `ci` must define the allowed dependency provisioning policy, including whether Testcontainers or an equivalent ephemeral provisioner may start DB, broker, mock-service, or other dependency containers before provider execution. Concrete generated values from provisioned dependencies may be referenced by Env_Profile binding keys through `generated_ref`; they do not belong in the DSL.
 - `sit` and `preprod` must not use mock substitution for release evidence. Any exception must be explicitly marked as framework verification evidence and blocked from downstream RP release-readiness claims.
 
@@ -263,7 +263,7 @@ New execution-focused DSL artifacts must:
 - Use optional `data.<name>.ref` or `data.<name>.value` only as a reusable data source catalog. Do not categorize data by setup/execute/cleanup/expected lifecycle.
 - Reference reviewed artifacts or safe literals from operation input values using `ref` or `value`. New DSL artifacts must not use `parameters.strategy`, inline `parameters.cases`, or `${parameters.<name>}` references.
 - Keep provider implementation details in framework-owned Provider Contracts, Provider Instances, or Env_Profiles, not inside the test case body.
-- Do not define provider `binding_keys` in DSL. Provider binding keys can be supplied only by Env_Profile `providers.<provider_id>.binding_keys`.
+- Do not define provider `binding_keys` in DSL. Provider binding keys can be supplied only by Env_Profile `providers.<provider_id>.bindings`.
 - Fail validation when any operation input key is not allowed by the referenced Provider Contract.
 - Fail validation when any setup/execute/cleanup operation is not allowed by the referenced Provider Contract.
 - Fail validation when a referenced output ref is not declared by the referenced Provider Contract.
@@ -663,7 +663,7 @@ The Agent Skill shall check that product mapping is complete enough to generate 
 - Check that product mapping entries have enough information to choose logical targets, provider types, Provider Instance IDs, Env_Profiles, evidence responsibility, and target dependencies.
 - Generate `suite_manifest.yaml` with selected DSL tests, source refs, trace labels, and coverage source refs.
 - Generate `run_plan.yaml` with logical target dependency graph, selected Env_Profile ref, execution mode, and suite-level runtime constraints.
-- Generate Env_Profile artifacts with trigger, isolation/dependency model, constraints, data policy, max duration, runtime modes, and `providers.<provider_id>.binding_keys`.
+- Generate Env_Profile artifacts with trigger, isolation/dependency model, constraints, data policy, max duration, runtime modes, and `providers.<provider_id>.bindings`.
 - Generate Provider Instances that declare `provider_id`, `provider_type`, operation selections, defaults, evidence choices, and failure mappings without redefining binding key schema.
 - Generate Env_Profile provider bindings that supply environment-specific actual values for Provider Contract binding keys.
 - Reference existing framework-owned Provider Contracts through each Provider Instance `provider_type`. Generate suite-local Provider Contracts only when an approved custom provider or explicit contract snapshot pinning mode is selected.
@@ -864,6 +864,6 @@ The framework shall expose contract metadata for provider IDs, provider types, v
 
 - Define framework-owned schemas/catalogs for Provider Contracts, Provider Instances, Env_Profiles, provider plugin contracts, verify plugin contracts, and `provider_capability_registry.v0.2.yaml`.
 - Require Provider Contracts to declare `provider_type`, valid Provider Instance shape, required binding keys, binding key value kinds, bindable outputs, allowed operations, allowed input keys, required inputs, output refs, evidence outputs, public `support_status`, failure codes, and safety policy.
-- Resolve contracts through one explicit chain: DSL target `provider_id` plus selected Env_Profile, Provider Instance, framework Provider Contract by `provider_type`, and Env_Profile `providers.<provider_id>.binding_keys`; suite manifests select tests and may select the active Env_Profile but must not override provider fields.
+- Resolve contracts through one explicit chain: DSL target `provider_id` plus selected Env_Profile, Provider Instance, framework Provider Contract by `provider_type`, and Env_Profile `providers.<provider_id>.bindings`; suite manifests select tests and may select the active Env_Profile but must not override provider fields.
 - Block unsupported, ambiguous, unsafe, missing, or provider-safety-unapproved `external_runner` Provider Contracts before provider dispatch, with logical target, Provider Instance ID, provider type, profile, contract path, AP gate, and owner action.
 - Keep product strategy selection outside the framework. The Phase 2 Agent Skill may decide which generated contract to reference; the framework only validates and executes declared generic contracts.

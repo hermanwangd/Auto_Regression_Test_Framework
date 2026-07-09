@@ -30,8 +30,6 @@ class WireMockProviderCapabilityCommandTest {
                 "docs/02-architecture/contracts/provider-contracts/wiremock_http_mock.yaml",
                 "samples/20-provider-capability-p0/http/wiremock_http_mock/provider_instances/wiremock_payment_api.yaml",
                 "samples/20-provider-capability-p0/http/wiremock_http_mock/env_profiles/local_wiremock.yaml",
-                "samples/20-provider-capability-p0/http/wiremock_http_mock/execution_profiles/local_wiremock.yaml",
-                "samples/20-provider-capability-p0/http/wiremock_http_mock/environment_bindings/local_wiremock.yaml",
                 "samples/20-provider-capability-p0/http/wiremock_http_mock/fixtures/payment_success_stub.json",
                 "samples/20-provider-capability-p0/http/wiremock_http_mock/fixtures/payment_failure_stub.json",
                 "samples/20-provider-capability-p0/http/wiremock_http_mock/fixtures/request_input.json",
@@ -349,13 +347,10 @@ class WireMockProviderCapabilityCommandTest {
             Path binding = suite.getParent().resolve("env_profiles/local_wiremock.yaml");
             Files.writeString(binding, read(binding)
                     .replace("""
-                              port_strategy:
-                                value: dynamic
+                              port_strategy: dynamic
                         """, """
-                              port_strategy:
-                                value: fixed
-                              fixed_port:
-                                value: %d
+                              port_strategy: fixed
+                              fixed_port: %d
                         """.formatted(occupied.getLocalPort())));
 
             CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_wiremock");

@@ -234,7 +234,7 @@ class MockServerCrossVerifySampleCommandTest {
                 providers:
                   unsupported-provider:
                     runtime_mode: external
-                    binding_keys: {}
+                    bindings: {}
                 dependency_policy:
                   require_readiness_evidence: false
                   allow_framework_managed_dependencies: false

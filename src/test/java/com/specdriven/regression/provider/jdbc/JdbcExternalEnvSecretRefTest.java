@@ -93,7 +93,7 @@ class JdbcExternalEnvSecretRefTest {
         return new ProviderExecutionContext(
                 "oracle-like-db",
                 "jdbc",
-                "external_jdbc_env_secret_ref",
+                "external_jdbc_oracle_env_secret_ref",
                 "native",
                 suiteRoot,
                 tempDir.resolve("run"),

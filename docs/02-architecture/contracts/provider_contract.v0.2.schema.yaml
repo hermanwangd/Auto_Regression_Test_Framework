@@ -28,7 +28,7 @@ provider_contract_required_sections:
     purpose: Optional. Documents runtime_modes reserved for later implementation and blocked before dispatch today.
   binding_keys:
     purpose: >
-      Defines binding keys that must be supplied by Env_Profile.providers.<provider_id>.binding_keys.
+      Defines binding keys whose values must be supplied by Env_Profile.providers.<provider_id>.bindings.
       Each binding key schema must declare required, value_type, and allowed_value_kinds.
     required_key_fields: [required, value_type, allowed_value_kinds]
     allowed_value_kinds: [value, ref, secret_ref, generated_ref]
