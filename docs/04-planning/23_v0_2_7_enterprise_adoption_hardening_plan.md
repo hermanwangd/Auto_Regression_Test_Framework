@@ -617,7 +617,7 @@ git commit -m "fix: enforce schema contract drift gate"
 - Create `LICENSE` and `NOTICE` if license decision is available.
 - Modify `AGENTS.md`.
 
-- [ ] Step 1: Add root README.
+- [x] Step 1: Add root README.
 
 Required sections:
 
@@ -633,7 +633,7 @@ How to extend providers
 Release verification summary
 ```
 
-- [ ] Step 2: Add governance docs.
+- [x] Step 2: Add governance docs.
 
 Minimum:
 
@@ -644,7 +644,7 @@ RELEASE.md: release steps and release artifact acceptance
 SUPPORT.md: supported provider/status policy
 ```
 
-- [ ] Step 3: Update `AGENTS.md`.
+- [x] Step 3: Update `AGENTS.md`.
 
 Remove:
 
@@ -664,7 +664,7 @@ java -jar target/spec-driven-auto-regression-0.2.7.jar run --suite samples/00-ge
 java -jar target/spec-driven-auto-regression-0.2.7.jar report --result <generated_result_json>
 ```
 
-- [ ] Step 4: Run docs hygiene.
+- [x] Step 4: Run docs hygiene.
 
 ```bash
 rg -n "starter workspace|0\\.2\\.0|specs/" README.md AGENTS.md SECURITY.md CONTRIBUTING.md RELEASE.md SUPPORT.md
@@ -672,7 +672,7 @@ rg -n "starter workspace|0\\.2\\.0|specs/" README.md AGENTS.md SECURITY.md CONTR
 
 Expected: no stale matches.
 
-- [ ] Step 5: Commit.
+- [x] Step 5: Commit.
 
 ```bash
 git add README.md SECURITY.md CONTRIBUTING.md RELEASE.md SUPPORT.md AGENTS.md LICENSE NOTICE
