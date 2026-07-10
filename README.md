@@ -36,6 +36,8 @@ Framework mock/local samples produce framework provider capability evidence only
 
 External JDBC, Kafka, IBM MQ, and similar dependencies are supplied by the runner environment. JDBC vendor drivers are never bundled; use `--driver-path`, `--driver-dir`, `REGRESS_DRIVER_PATH`, or `usage-kit/drivers/`.
 
+Dependency bundling rules are documented in [provider_dependency_policy.md](docs/09-operations/provider_dependency_policy.md).
+
 ## Extending Providers
 
 Start with a Provider Contract, Provider Instance shape, Env_Profile binding keys, runtime implementation, evidence contract, sample suite, and release verification coverage.

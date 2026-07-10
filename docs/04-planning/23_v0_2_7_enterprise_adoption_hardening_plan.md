@@ -777,7 +777,7 @@ git commit -m "docs: improve usage kit adoption path"
 - Modify `README.md` to link to it.
 - Modify release notes source if dependency policy is summarized there.
 
-- [ ] Step 1: Add provider dependency policy.
+- [x] Step 1: Add provider dependency policy.
 
 Required policy points:
 
@@ -789,7 +789,7 @@ Dependency-Check suppressions require owner, reason, affected provider surface, 
 Future v0.3 may split provider packs, but v0.2.7 remains a single jar.
 ```
 
-- [ ] Step 2: Add dependency inventory table.
+- [x] Step 2: Add dependency inventory table.
 
 Minimum columns:
 
@@ -802,7 +802,7 @@ security review owner
 upgrade cadence
 ```
 
-- [ ] Step 3: Commit.
+- [x] Step 3: Commit.
 
 ```bash
 git add docs/09-operations/provider_dependency_policy.md README.md
