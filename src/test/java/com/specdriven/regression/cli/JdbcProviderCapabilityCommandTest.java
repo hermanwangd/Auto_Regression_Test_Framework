@@ -186,6 +186,34 @@ class JdbcProviderCapabilityCommandTest {
     }
 
     @Test
+    void doctorDriversReportsMissingDriversWithoutConnectingToDatabase() {
+        CommandResult result = execute(
+                "doctor",
+                "drivers",
+                "--driver-dir", tempDir.resolve("missing-drivers").toString());
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stderr()).isBlank();
+        assertThat(result.stdout())
+                .contains("driver_diagnostics_status: failed")
+                .contains("driver_source: cli_driver_dir")
+                .contains("driver_status: missing")
+                .contains("oracle_driver_loadable: false")
+                .contains("db2_driver_loadable: false")
+                .contains("owner_action: Restore JDBC driver jar files");
+    }
+
+    @Test
+    void unknownDoctorSubcommandExitsUsageError() {
+        CommandResult result = execute("doctor", "database");
+
+        assertThat(result.exit()).isEqualTo(2);
+        assertThat(result.stderr())
+                .contains("Unknown doctor subcommand: database")
+                .contains("usage: regress doctor drivers");
+    }
+
+    @Test
     void jdbcSuiteRunsAllTestsWithSharedProfile() throws Exception {
         Path suite = mutableJdbc();
         Path secondTestCase = suite.getParent().resolve("second_test_case.yaml");

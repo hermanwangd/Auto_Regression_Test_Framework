@@ -434,7 +434,7 @@ git commit -m "fix: prove external wiremock base url consumption"
 - Modify `scripts/release/build-usage-kit.sh`.
 - Add usage-kit driver placeholders through source-controlled release inputs.
 
-- [ ] Step 1: Add driver discovery unit tests.
+- [x] Step 1: Add driver discovery unit tests.
 
 Cases:
 
@@ -456,7 +456,7 @@ MAVEN_OPTS="-Xmx1024m -XX:MaxMetaspaceSize=384m" ./mvnw -q -Dtest=JdbcDriverDisc
 
 Expected before implementation: fails because discovery classes do not exist.
 
-- [ ] Step 2: Implement `JdbcDriverDiscovery`.
+- [x] Step 2: Implement `JdbcDriverDiscovery`.
 
 Required public behavior:
 
@@ -467,7 +467,7 @@ driver_paths: [absolute-or-normalized-paths]
 owner_action: provided when missing or invalid
 ```
 
-- [ ] Step 3: Implement driver class loading.
+- [x] Step 3: Implement driver class loading.
 
 Rules:
 
@@ -479,7 +479,7 @@ doctor drivers does not connect to database
 run uses driver loader before opening JDBC connection
 ```
 
-- [ ] Step 4: Add CLI parsing.
+- [x] Step 4: Add CLI parsing.
 
 Supported forms:
 
@@ -492,7 +492,7 @@ regress doctor drivers --driver-dir ./drivers
 
 Unknown `doctor` subcommand exits `2`.
 
-- [ ] Step 5: Add driver placeholders to usage kit.
+- [x] Step 5: Add driver placeholders to usage kit.
 
 Generated usage-kit paths:
 
@@ -504,7 +504,7 @@ drivers/db2/put-db2-jcc-here.txt
 
 Placeholder files must not include vendor driver binaries.
 
-- [ ] Step 6: Run focused verification.
+- [x] Step 6: Run focused verification.
 
 ```bash
 MAVEN_OPTS="-Xmx1024m -XX:MaxMetaspaceSize=384m" ./mvnw -q -Dtest=JdbcDriverDiscoveryTest,JdbcProviderCapabilityCommandTest test
@@ -513,7 +513,9 @@ scripts/release/build-usage-kit.sh 0.2.7
 
 Expected: tests pass and usage kit contains driver placeholders.
 
-- [ ] Step 7: Commit.
+Note: Task 4 verification used the current `pom.xml` version (`0.2.6`) for `build-usage-kit.sh` because the `0.2.7` version bump is intentionally deferred to Task 8. Task 8 must rerun the release guard with `0.2.7`.
+
+- [x] Step 7: Commit.
 
 ```bash
 git add src/main/java/com/specdriven/regression/cli/RegressionCommand.java \

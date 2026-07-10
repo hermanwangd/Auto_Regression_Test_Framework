@@ -3,6 +3,7 @@ package com.specdriven.regression.contract;
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.evidence.EvidenceIndexFormatter;
+import com.specdriven.regression.provider.jdbc.JdbcDriverDiscovery;
 import com.specdriven.regression.provider.jdbc.JdbcProviderRuntime;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderFailure;
@@ -40,6 +41,14 @@ public class JdbcProviderCapabilityService {
     private final Yaml yaml = new Yaml();
 
     public JdbcRunResult run(Path suiteManifest, String requestedProfile, Path outputBase) {
+        return run(suiteManifest, requestedProfile, outputBase, JdbcDriverDiscovery.missing(Path.of(".")));
+    }
+
+    public JdbcRunResult run(
+            Path suiteManifest,
+            String requestedProfile,
+            Path outputBase,
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {
             return JdbcRunResult.blocked(validation.suiteId(), requestedProfile, validation.findings());
@@ -86,7 +95,7 @@ public class JdbcProviderCapabilityService {
         RuntimeSelection firstSelection = selections.get(0);
         recreateDirectory(firstSelection.runDir());
 
-        JdbcProviderRuntime jdbcRuntime = new JdbcProviderRuntime();
+        JdbcProviderRuntime jdbcRuntime = new JdbcProviderRuntime(driverDiscovery);
         ProviderRuntimeResolver resolver = new ProviderRuntimeResolver(
                 new ProviderRuntimeRegistry(Map.of(PROVIDER_TYPE, jdbcRuntime)));
 

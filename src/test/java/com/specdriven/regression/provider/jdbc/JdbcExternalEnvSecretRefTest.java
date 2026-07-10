@@ -89,6 +89,27 @@ class JdbcExternalEnvSecretRefTest {
         assertThat(result.failure().ownerAction()).contains("Use env://");
     }
 
+    @Test
+    void nativeJdbcRuntimeRequiresExternalDriverForNonH2ConnectionBeforeOpeningConnection() {
+        JdbcProviderRuntime runtime = new JdbcProviderRuntime(
+                Map.of("JDBC_CONNECTION", "jdbc:oracle:thin:@//db.example.test:1521/ORCLPDB1")::get,
+                JdbcDriverDiscovery.missing(tempDir));
+
+        ProviderOperationResult result = runtime.execute(
+                nativeContext(tempDir.resolve("suite"), Map.of("connection", Map.of("secret_ref", "env://JDBC_CONNECTION"))),
+                new ProviderOperationRequest(
+                        "db_query",
+                        List.of(Map.of("bind_as", "query_ref", "ref", "queries/order_exists.sql")),
+                        Map.of("_operation_id", "missing_driver_query")));
+
+        assertThat(result.passed()).isFalse();
+        assertThat(result.failure()).isNotNull();
+        assertThat(result.failure().code()).isEqualTo("JDBC_DRIVER_NOT_FOUND");
+        assertThat(result.failure().classification()).isEqualTo("CONFIGURATION_ERROR");
+        assertThat(result.failure().reason()).contains("No JDBC driver jar is available");
+        assertThat(result.failure().ownerAction()).contains("--driver-path");
+    }
+
     private ProviderExecutionContext nativeContext(Path suiteRoot, Map<String, Object> bindingValues) {
         return new ProviderExecutionContext(
                 "oracle-like-db",

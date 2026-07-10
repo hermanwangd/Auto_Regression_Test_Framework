@@ -75,6 +75,8 @@ import com.specdriven.regression.provider.ProviderContractGap;
 import com.specdriven.regression.provider.ProviderContractResolutionReport;
 import com.specdriven.regression.provider.ProviderContractResolver;
 import com.specdriven.regression.provider.ResolvedProviderContract;
+import com.specdriven.regression.provider.jdbc.JdbcDriverDiscovery;
+import com.specdriven.regression.provider.jdbc.JdbcDriverLoader;
 import com.specdriven.regression.report.CoverageReportResult;
 import com.specdriven.regression.report.CoverageReportService;
 import com.specdriven.regression.readiness.AcIntakeReport;
@@ -117,6 +119,8 @@ public class RegressionCommand {
             "Evidence and Reporting");
     private static final Set<String> VALUE_OPTIONS = Set.of(
             "--batch-id",
+            "--driver-dir",
+            "--driver-path",
             "--env",
             "--format",
             "--mode",
@@ -254,6 +258,7 @@ public class RegressionCommand {
             case "validate-evidence" -> validateEvidence(root, options, out, err);
             case "run" -> runRegression(root, options, out, err);
             case "report" -> report(root, options, out, err);
+            case "doctor" -> doctor(args, root, options, out, err);
             default -> {
                 err.println("Unknown command: " + command);
                 yield 2;
@@ -269,6 +274,7 @@ public class RegressionCommand {
         out.println("  run --suite <suite_manifest> --dry-run [--profile <profile>]");
         out.println("  report --result <result_json> [--format text|yaml|json]");
         out.println("  validate-evidence --result <result_json>");
+        out.println("  doctor drivers [--driver-path <jar>] [--driver-dir <dir>]");
     }
 
     private void printCommandUsage(String command, PrintStream out) {
@@ -280,8 +286,55 @@ public class RegressionCommand {
             case "validate" -> out.println("usage: regress validate --suite <suite_manifest> [--profile <profile>]");
             case "report" -> out.println("usage: regress report --result <result_json> [--format text|yaml|json]");
             case "validate-evidence" -> out.println("usage: regress validate-evidence --result <result_json>");
+            case "doctor" -> out.println("usage: regress doctor drivers [--driver-path <jar>] [--driver-dir <dir>]");
             default -> printGeneralUsage(out);
         }
+    }
+
+    private int doctor(String[] args, Path root, Map<String, String> options, PrintStream out, PrintStream err) {
+        if (args.length < 2) {
+            err.println("Missing doctor subcommand.");
+            printCommandUsage("doctor", err);
+            return 2;
+        }
+        if (!"drivers".equals(args[1])) {
+            err.println("Unknown doctor subcommand: " + args[1]);
+            printCommandUsage("doctor", err);
+            return 2;
+        }
+        return doctorDrivers(root, options, out);
+    }
+
+    private int doctorDrivers(Path root, Map<String, String> options, PrintStream out) {
+        JdbcDriverDiscovery.DiscoveryResult discovery = jdbcDriverDiscovery(root, options);
+        JdbcDriverLoader loader = new JdbcDriverLoader();
+        JdbcDriverLoader.LoadResult oracle = discovery.found()
+                ? loader.load("oracle", discovery)
+                : new JdbcDriverLoader.LoadResult(false, "JDBC_DRIVER_NOT_FOUND", "No JDBC driver jars found.", discovery.ownerAction());
+        JdbcDriverLoader.LoadResult db2 = discovery.found()
+                ? loader.load("db2", discovery)
+                : new JdbcDriverLoader.LoadResult(false, "JDBC_DRIVER_NOT_FOUND", "No JDBC driver jars found.", discovery.ownerAction());
+        boolean passed = discovery.found() && (oracle.loaded() || db2.loaded());
+        out.println("driver_diagnostics_status: " + (passed ? "passed" : "failed"));
+        out.println("driver_source: " + discovery.driverSource());
+        out.println("driver_status: " + discovery.driverStatus());
+        out.println("driver_paths:");
+        for (Path path : discovery.driverPaths()) {
+            out.println("  - " + path);
+        }
+        out.println("oracle_driver_loadable: " + oracle.loaded());
+        out.println("db2_driver_loadable: " + db2.loaded());
+        if (!oracle.loaded()) {
+            out.println("oracle_failure_code: " + oracle.failureCode());
+        }
+        if (!db2.loaded()) {
+            out.println("db2_failure_code: " + db2.failureCode());
+        }
+        String ownerAction = firstNonBlank(discovery.ownerAction(), oracle.ownerAction(), db2.ownerAction());
+        if (!ownerAction.isBlank()) {
+            out.println("owner_action: " + ownerAction);
+        }
+        return passed ? 0 : 1;
     }
 
     private int validate(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
@@ -980,18 +1033,21 @@ public class RegressionCommand {
             if (profile == null) {
                 return 2;
             }
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery = jdbcDriverDiscovery(root, options);
             if (isSuiteGroupManifest(suiteManifest)) {
                 return runSuiteGroup(
                         suiteManifest,
                         profile,
                         root.resolve("target/suite-groups").normalize(),
+                        driverDiscovery,
                         out);
             }
             SuiteRuntimeResult result = suiteRuntimeDispatcher.dispatch(
                     suiteManifest,
                     suite,
                     profile,
-                    root.resolve("target/provider-capability").normalize());
+                    root.resolve("target/provider-capability").normalize(),
+                    driverDiscovery);
             printSuiteRuntimeResult(out, result);
             return result.passed() ? 0 : 1;
         }
@@ -1023,7 +1079,8 @@ public class RegressionCommand {
             Path suiteManifest,
             String suiteRef,
             String profile,
-            Path outputRoot) {
+            Path outputRoot,
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {
             return SuiteRuntimeResult.blocked(validation.suiteId(), profile, validation.findings());
@@ -1039,7 +1096,8 @@ public class RegressionCommand {
             return SuiteRuntimeResult.fromContractBaseline(contractBaselineRuntimeService.run(
                     suiteManifest,
                     profile,
-                    outputRoot.resolve("contract_baseline").normalize()));
+                    outputRoot.resolve("contract_baseline").normalize(),
+                    driverDiscovery));
         }
         if (supportsSoapMockSample(providerTypes)) {
             return SuiteRuntimeResult.fromSoap(soapMockCapabilityService.run(
@@ -1069,7 +1127,8 @@ public class RegressionCommand {
             return SuiteRuntimeResult.fromJdbc(jdbcProviderCapabilityService.run(
                     suiteManifest,
                     profile,
-                    outputRoot.resolve("jdbc").normalize()));
+                    outputRoot.resolve("jdbc").normalize(),
+                    driverDiscovery));
         }
         if (supportsMessagingClientSample(providerTypes, suiteRef)) {
             return SuiteRuntimeResult.fromMessaging(messagingClientProviderCapabilityService.run(
@@ -1371,6 +1430,7 @@ public class RegressionCommand {
             Path suiteManifest,
             String requestedProfile,
             Path outputRoot,
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery,
             PrintStream out) {
         SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest);
         SuiteGroupDefinition definition = validation.definition();
@@ -1401,7 +1461,7 @@ public class RegressionCommand {
         Path childOutputRoot = runDir.resolve("children");
         List<SuiteGroupChildResult> childResults = new ArrayList<>();
         for (SuiteGroupChild child : definition.children()) {
-            childResults.add(runSuiteGroupChild(child, childOutputRoot));
+            childResults.add(runSuiteGroupChild(child, childOutputRoot, driverDiscovery));
         }
         for (SuiteGroupChildResult childResult : childResults) {
             findings.addAll(childResult.findings());
@@ -1446,7 +1506,10 @@ public class RegressionCommand {
         return failedCount == 0 ? 0 : 1;
     }
 
-    private SuiteGroupChildResult runSuiteGroupChild(SuiteGroupChild child, Path childOutputRoot) {
+    private SuiteGroupChildResult runSuiteGroupChild(
+            SuiteGroupChild child,
+            Path childOutputRoot,
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
         ValidationResult validation = contractBaselineService.validateSuite(child.suiteManifest());
         if (!validation.valid()) {
             return SuiteGroupChildResult.fromBlocked(child, validation.suiteId(), validation.findings());
@@ -1455,7 +1518,8 @@ public class RegressionCommand {
                 child.suiteManifest(),
                 child.ref(),
                 child.profile(),
-                childOutputRoot);
+                childOutputRoot,
+                driverDiscovery);
         return SuiteGroupChildResult.fromSuiteRuntime(child, result);
     }
 
@@ -1465,8 +1529,9 @@ public class RegressionCommand {
                 Path suiteManifest,
                 String suiteRef,
                 String profile,
-                Path outputRoot) {
-            return dispatchSuiteRuntimeInternal(suiteManifest, suiteRef, profile, outputRoot);
+                Path outputRoot,
+                JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
+            return dispatchSuiteRuntimeInternal(suiteManifest, suiteRef, profile, outputRoot, driverDiscovery);
         }
     }
 
@@ -3416,15 +3481,39 @@ public class RegressionCommand {
         Map<String, String> options = new LinkedHashMap<>();
         for (int i = 1; i < args.length; i++) {
             if (args[i].startsWith("--") && i + 1 < args.length && !args[i + 1].startsWith("--")) {
-                options.put(args[i], args[i + 1]);
+                putOption(options, args[i], args[i + 1]);
                 i++;
             } else if (args[i].startsWith("--")) {
-                options.put(args[i], VALUE_OPTIONS.contains(args[i]) ? "" : "true");
+                putOption(options, args[i], VALUE_OPTIONS.contains(args[i]) ? "" : "true");
             } else if ("-h".equals(args[i])) {
                 options.put(args[i], "true");
             }
         }
         return options;
+    }
+
+    private JdbcDriverDiscovery.DiscoveryResult jdbcDriverDiscovery(Path root, Map<String, String> options) {
+        String driverPath = options.getOrDefault("--driver-path", "");
+        List<String> driverPaths = driverPath.isBlank() ? List.of() : List.of(driverPath);
+        return new JdbcDriverDiscovery(root, System::getenv)
+                .discover(driverPaths, options.getOrDefault("--driver-dir", ""));
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private void putOption(Map<String, String> options, String name, String value) {
+        if ("--driver-path".equals(name) && options.containsKey(name) && !options.get(name).isBlank()) {
+            options.put(name, options.get(name) + System.getProperty("path.separator") + value);
+            return;
+        }
+        options.put(name, value);
     }
 
     private String requiredOption(Map<String, String> options, String name, PrintStream err) {

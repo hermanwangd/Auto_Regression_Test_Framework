@@ -49,6 +49,22 @@ class ReleaseUsageKitVerificationTest {
     }
 
     @Test
+    void buildUsageKitCreatesJdbcDriverPlaceholdersWithoutBundlingVendorDrivers() throws Exception {
+        String script = Files.readString(Path.of("scripts/release/build-usage-kit.sh"));
+
+        assertThat(script)
+                .contains("drivers/README.md")
+                .contains("drivers/oracle/put-ojdbc-here.txt")
+                .contains("drivers/db2/put-db2-jcc-here.txt")
+                .contains("Oracle and DB2 vendor JDBC drivers are not bundled")
+                .contains("--driver-path")
+                .contains("--driver-dir")
+                .contains("REGRESS_DRIVER_PATH")
+                .doesNotContain("ojdbc11.jar\" \"${KIT_ROOT}")
+                .doesNotContain("jcc.jar\" \"${KIT_ROOT}");
+    }
+
+    @Test
     void supportedProviderSampleGatePassesCiVerifiableSamplesWhenExternalMessagingIsNotConfigured() throws Exception {
         String script = Files.readString(Path.of("scripts/release/verify-supported-provider-samples.sh"));
 

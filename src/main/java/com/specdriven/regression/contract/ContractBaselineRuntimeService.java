@@ -2,6 +2,7 @@ package com.specdriven.regression.contract;
 
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
+import com.specdriven.regression.provider.jdbc.JdbcDriverDiscovery;
 import com.specdriven.regression.provider.jdbc.JdbcProviderRuntime;
 import com.specdriven.regression.provider.nats.NatsProviderRuntime;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
@@ -47,6 +48,14 @@ public class ContractBaselineRuntimeService {
     private final Yaml yaml = new Yaml();
 
     public ContractBaselineRunResult run(Path suiteManifest, String requestedProfile, Path outputBase) {
+        return run(suiteManifest, requestedProfile, outputBase, JdbcDriverDiscovery.missing(Path.of(".")));
+    }
+
+    public ContractBaselineRunResult run(
+            Path suiteManifest,
+            String requestedProfile,
+            Path outputBase,
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {
             return ContractBaselineRunResult.blocked(validation.suiteId(), requestedProfile, validation.findings());
@@ -99,7 +108,7 @@ public class ContractBaselineRuntimeService {
 
         recreateDirectory(model.suiteRunDir());
         WireMockHttpMockProviderRuntime wireMockRuntime = new WireMockHttpMockProviderRuntime();
-        JdbcProviderRuntime jdbcRuntime = new JdbcProviderRuntime();
+        JdbcProviderRuntime jdbcRuntime = new JdbcProviderRuntime(driverDiscovery);
         NatsProviderRuntime natsRuntime = new NatsProviderRuntime();
         ProviderRuntimeResolver resolver = new ProviderRuntimeResolver(new ProviderRuntimeRegistry(Map.of(
                 WIREMOCK, wireMockRuntime,

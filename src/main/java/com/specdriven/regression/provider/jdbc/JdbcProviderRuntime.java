@@ -41,13 +41,34 @@ public class JdbcProviderRuntime implements ProviderRuntime {
 
     private final Yaml yaml = new Yaml();
     private final Function<String, String> environment;
+    private final JdbcDriverDiscovery.DiscoveryResult driverDiscovery;
+    private final JdbcDriverLoader driverLoader;
 
     public JdbcProviderRuntime() {
         this(System::getenv);
     }
 
     JdbcProviderRuntime(Function<String, String> environment) {
+        this(environment, JdbcDriverDiscovery.missing(Path.of(".")));
+    }
+
+    JdbcProviderRuntime(
+            Function<String, String> environment,
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
+        this(environment, driverDiscovery, new JdbcDriverLoader());
+    }
+
+    public JdbcProviderRuntime(JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
+        this(System::getenv, driverDiscovery, new JdbcDriverLoader());
+    }
+
+    JdbcProviderRuntime(
+            Function<String, String> environment,
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery,
+            JdbcDriverLoader driverLoader) {
         this.environment = Objects.requireNonNull(environment, "environment");
+        this.driverDiscovery = Objects.requireNonNull(driverDiscovery, "driverDiscovery");
+        this.driverLoader = Objects.requireNonNull(driverLoader, "driverLoader");
     }
 
     @Override
@@ -304,7 +325,30 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         if (resolvedSecret.failure() != null) {
             return SecretConnection.failed(resolvedSecret.failure());
         }
+        ProviderFailure driverFailure = externalDriverFailure(dialect, resolvedSecret.value());
+        if (driverFailure != null) {
+            return SecretConnection.failed(driverFailure);
+        }
         return new SecretConnection(resolvedSecret.value(), "", "", null);
+    }
+
+    private ProviderFailure externalDriverFailure(String dialect, String jdbcUrl) {
+        if (isLocalH2CompatibilityConnection(jdbcUrl)) {
+            return null;
+        }
+        JdbcDriverLoader.LoadResult loadResult = driverLoader.load(dialect, driverDiscovery);
+        if (loadResult.loaded()) {
+            return null;
+        }
+        return ProviderFailure.of(
+                loadResult.failureCode(),
+                "CONFIGURATION_ERROR",
+                loadResult.message(),
+                loadResult.ownerAction());
+    }
+
+    private boolean isLocalH2CompatibilityConnection(String jdbcUrl) {
+        return jdbcUrl.toLowerCase(Locale.ROOT).startsWith("jdbc:h2:");
     }
 
     private SecretConnection localH2Connection(ProviderExecutionContext context, String dialect) {
