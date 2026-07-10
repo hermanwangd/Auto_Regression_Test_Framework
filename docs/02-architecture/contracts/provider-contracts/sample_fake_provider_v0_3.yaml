@@ -1,0 +1,39 @@
+contract_version: v0.3
+provider_contract: sample_fake_provider.v0.3
+provider_type: sample_fake_provider
+purpose: Framework-owned deterministic fake provider for DSL v0.3 golden lifecycle verification only.
+runtime_modes: [stub]
+binding_keys:
+  workspace_ref:
+    required: true
+    source: env_profile
+  clock_ref:
+    required: true
+    source: env_profile
+defaults:
+  timeout_seconds: 30
+  retry: 0
+operations:
+  setup_fixture:
+    allowed_inputs: [fixture.setup_ref, fixture.input_ref, fixture.workspace_ref]
+    required_inputs: [fixture.setup_ref, fixture.input_ref]
+    output_refs: [setup_log, workspace_ref]
+  execute_sample:
+    allowed_inputs: [sample.input_ref, sample.expected_ref, sample.output_ref]
+    required_inputs: [sample.input_ref]
+    output_refs: [actual_json, actual_text, execution_log]
+  cleanup_fixture:
+    allowed_inputs: [fixture.cleanup_ref, fixture.workspace_ref]
+    required_inputs: [fixture.cleanup_ref]
+    output_refs: [cleanup_log]
+evidence:
+  outputs: [setup_log, cleanup_log, actual_json, actual_text, execution_log, assertion_result, diff]
+  redact: []
+failure_mapping:
+  allowed_codes:
+    - SCHEMA_INVALID
+    - TARGET_RESOLUTION_FAILED
+    - EXPECTED_RESULT_MISSING
+    - ASSERTION_FAILED
+    - EVIDENCE_INVALID
+    - FRAMEWORK_ERROR

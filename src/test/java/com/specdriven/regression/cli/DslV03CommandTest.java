@@ -22,13 +22,14 @@ class DslV03CommandTest {
     Path tempDir;
 
     @Test
-    void v03ContractArtifactsAreCheckedInAtRequiredPaths() {
+    void v03ContractArtifactsAreCheckedInAtRequiredPaths() throws IOException {
         List<String> requiredPaths = List.of(
                 "schemas/test_case_dsl.v0.3.schema.yaml",
                 "schemas/provider_contract.v0.3.schema.yaml",
                 "schemas/env_profile.v0.3.schema.yaml",
                 "schemas/suite_manifest.v0.3.schema.yaml",
                 "samples/v0_3_dsl/golden/suite_manifest.yaml",
+                "docs/02-architecture/contracts/provider-contracts/sample_fake_provider_v0_3.yaml",
                 "samples/v0_3_dsl/golden/env_profiles/local_v03.yaml",
                 "samples/v0_3_dsl/golden/test_cases/golden_success.yaml",
                 "samples/v0_3_dsl/golden/fixtures/input.json",
@@ -39,6 +40,9 @@ class DslV03CommandTest {
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
                 .isTrue());
+        assertThat(Files.readString(Path.of("docs/02-architecture/contracts/provider-contracts/sample_fake_provider_v0_3.yaml")))
+                .contains("contract_version: v0.3")
+                .contains("provider_contract: sample_fake_provider.v0.3");
     }
 
     @Test
@@ -208,6 +212,61 @@ class DslV03CommandTest {
                 .contains("validation_status: failed")
                 .contains("field_path: cleanup.produce_sample_output.id")
                 .contains("reason: duplicate_step_id");
+    }
+
+    @Test
+    void validateV03SuiteRejectsSyntheticProviderContractAlias() throws Exception {
+        Path suite = mutableV03Golden();
+        String manifest = Files.readString(suite)
+                .replace("provider_contract: sample_fake_provider.v0.3", "provider_contract: jdbc.v0.3");
+        Files.writeString(suite, manifest);
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("field_path: targets.sample_runtime.provider_contract")
+                .contains("reason: missing_provider_contract");
+    }
+
+    @Test
+    void validateV03SuiteRejectsInvalidArtifactJsonPointer() throws Exception {
+        Path suite = mutableV03Golden();
+        Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
+        String yaml = Files.readString(testCase)
+                .replace("artifact://expected_results/expected_output.json",
+                        "artifact://expected_results/expected_output.json#status");
+        Files.writeString(testCase, yaml);
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("field_path: execute.produce_sample_output.with.sample.expected_ref")
+                .contains("reason: invalid_json_pointer");
+    }
+
+    @Test
+    void validateV03SuiteRejectsArtifactSymlinkEscape() throws Exception {
+        Path suite = mutableV03Golden();
+        Path outside = tempDir.resolve("outside.json");
+        Files.writeString(outside, "{\"status\":\"OK\"}");
+        Path link = suite.getParent().resolve("fixtures/outside_link.json");
+        Files.createSymbolicLink(link, outside);
+        Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
+        String yaml = Files.readString(testCase)
+                .replace("artifact://fixtures/input.json", "artifact://fixtures/outside_link.json");
+        Files.writeString(testCase, yaml);
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("field_path: setup.prepare_sample_workspace.with.fixture.input_ref")
+                .contains("reason: ref_outside_suite_root");
     }
 
     private Path mutableV03Golden() throws IOException {

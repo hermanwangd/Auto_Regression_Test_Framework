@@ -60,6 +60,7 @@ required_paths=(
   "usage-kit/docs/02-architecture/contracts/provider-contracts/nats.yaml"
   "usage-kit/docs/02-architecture/contracts/provider-contracts/kafka.yaml"
   "usage-kit/docs/02-architecture/contracts/provider-contracts/ibm_mq.yaml"
+  "usage-kit/docs/02-architecture/contracts/provider-contracts/sample_fake_provider_v0_3.yaml"
   "usage-kit/schemas/test_case_dsl.v0.2.schema.yaml"
   "usage-kit/schemas/suite_manifest.v0.2.schema.yaml"
   "usage-kit/schemas/test_case_dsl.v0.3.schema.yaml"

@@ -1,6 +1,6 @@
 # DSL v0.3 No Provider Instance Implementation Plan
 
-**Status:** Local release gates passed for release/0.3.0 golden baseline; ready for branch CI/release asset verification
+**Status:** Release/0.3.0 golden baseline implemented; full v0.3 hardening matrix remains tracked in the test plan
 **Spec:** `docs/01-specs/05_dsl_v0_3_no_provider_instance_spec.md`
 **Architecture:** `docs/02-architecture/08_dsl_v0_3_no_provider_instance_architecture.md`
 **AC:** `docs/03-acceptance/05_dsl_v0_3_acceptance_criteria.md`

@@ -5,6 +5,8 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -114,6 +116,8 @@ public class ContractBaselineService {
     private static final Pattern BEARER_TOKEN = Pattern.compile("(?i)\\bbearer\\s+[a-z0-9._~+/=-]{8,}");
     private static final Pattern CONNECTION_URI =
             Pattern.compile("(?i)\\b[a-z][a-z0-9+.-]*://[^\\s/@:]+:[^\\s/@]+@[^\\s\"']+");
+    private static final Pattern WINDOWS_DRIVE_PATH = Pattern.compile("^[A-Za-z]:.*$");
+    private static final int MAX_JSON_POINTER_DEPTH = 32;
 
     private final Yaml yaml = new Yaml();
 
@@ -311,9 +315,14 @@ public class ContractBaselineService {
         }
         for (Map.Entry<Path, Map<String, Object>> entry : graph.providerContractsByPath().entrySet()) {
             Map<String, Object> contract = entry.getValue();
-            for (String field : List.of(
-                    "provider_contract_version", "provider_type", "runtime_modes", "binding_keys",
-                    "operations", "evidence", "failure_mapping")) {
+            List<String> requiredContractFields = "v0.3".equals(contractVersion(contract))
+                    ? List.of(
+                            "contract_version", "provider_contract", "provider_type", "runtime_modes",
+                            "binding_keys", "operations", "evidence", "failure_mapping")
+                    : List.of(
+                            "provider_contract_version", "provider_type", "runtime_modes", "binding_keys",
+                            "operations", "evidence", "failure_mapping");
+            for (String field : requiredContractFields) {
                 require(entry.getKey(), contract, field, findings);
             }
         }
@@ -478,6 +487,19 @@ public class ContractBaselineService {
                         "",
                         "",
                         "Use a Provider Contract from the framework catalog or --contract-root. Missing `" + providerContract + "`."));
+                continue;
+            }
+            Map<String, Object> contract = providerContract(graph, providerContract);
+            if (!isExplicitV03ProviderContract(providerContract, contract)) {
+                findings.add(new ContractFinding(
+                        graph.suitePath().toString(),
+                        "targets." + targetEntry.getKey() + ".provider_contract",
+                        "invalid_provider_contract_version",
+                        "",
+                        stringValue(contract.get("provider_type")),
+                        selectedProfile(graph, target),
+                        "",
+                        "Use an explicit DSL v0.3 Provider Contract id. Synthetic provider_type aliases are not valid v0.3 contracts."));
             }
         }
     }
@@ -724,61 +746,214 @@ public class ContractBaselineService {
             return;
         }
         String refBody = ref.substring("artifact://".length());
-        String filePart = refBody.split("#", 2)[0];
+        String[] refParts = refBody.split("#", 2);
+        String filePart = refParts[0];
+        if (refParts.length == 2 && !validJsonPointer(refParts[1])) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "invalid_json_pointer",
+                    "Use RFC 6901 JSON pointer syntax after `#`, for example `#/status`.");
+            return;
+        }
         int separator = filePart.indexOf('/');
         if (separator < 1) {
-            findings.add(new ContractFinding(
-                    testCasePath.toString(),
-                    operationRef.fieldPath() + ".with." + inputName,
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
                     "invalid_artifact_ref",
-                    "",
-                    targetResolution.providerType(),
-                    targetResolution.profile(),
-                    operationRef.operation(),
-                    "Use artifact refs as `artifact://<root>/<path>`."));
+                    "Use artifact refs as `artifact://<root>/<path>`.");
             return;
         }
         String rootName = filePart.substring(0, separator);
         String relativePath = filePart.substring(separator + 1);
+        if (invalidV03ArtifactPath(relativePath)) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "invalid_artifact_ref",
+                    "Use a relative artifact path under the declared artifact root; absolute, home, encoded traversal, and `..` paths are blocked.");
+            return;
+        }
         String rootDir = stringValue(mapValue(graph.suite().get("artifact_roots")).get(rootName));
         if (rootDir.isBlank()) {
-            findings.add(new ContractFinding(
-                    testCasePath.toString(),
-                    operationRef.fieldPath() + ".with." + inputName,
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
                     "unknown_artifact_root",
-                    "",
-                    targetResolution.providerType(),
-                    targetResolution.profile(),
-                    operationRef.operation(),
-                    "Declare artifact root `" + rootName + "` in suite_manifest.artifact_roots."));
+                    "Declare artifact root `" + rootName + "` in suite_manifest.artifact_roots.");
             return;
         }
         Path suiteRoot = graph.suitePath().toAbsolutePath().normalize().getParent();
         Path root = suiteRoot.resolve(rootDir).normalize();
-        Path resolved = root.resolve(relativePath).normalize();
-        if (!root.startsWith(suiteRoot) || !resolved.startsWith(root)) {
-            findings.add(new ContractFinding(
-                    testCasePath.toString(),
-                    operationRef.fieldPath() + ".with." + inputName,
+        if (!root.startsWith(suiteRoot)) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
                     "ref_outside_suite_root",
-                    "",
-                    targetResolution.providerType(),
-                    targetResolution.profile(),
-                    operationRef.operation(),
-                    "Keep artifact refs under the declared suite artifact root."));
+                    "Keep artifact refs under the declared suite artifact root.");
             return;
         }
-        if (!Files.isRegularFile(resolved)) {
-            findings.add(new ContractFinding(
-                    testCasePath.toString(),
-                    operationRef.fieldPath() + ".with." + inputName,
-                    "unresolved_artifact_ref",
-                    "",
-                    targetResolution.providerType(),
-                    targetResolution.profile(),
-                    operationRef.operation(),
-                    "Restore runtime-critical artifact ref `" + ref + "`."));
+        Path resolved;
+        try {
+            resolved = root.resolve(Path.of(relativePath)).normalize();
+        } catch (InvalidPathException e) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "invalid_artifact_ref",
+                    "Use a valid relative artifact path under the declared artifact root.");
+            return;
         }
+        if (!resolved.startsWith(root)) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "ref_outside_suite_root",
+                    "Keep artifact refs under the declared suite artifact root.");
+            return;
+        }
+        if (!Files.exists(resolved, LinkOption.NOFOLLOW_LINKS)) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "unresolved_artifact_ref",
+                    "Restore runtime-critical artifact ref `" + ref + "`.");
+            return;
+        }
+        try {
+            Path realSuiteRoot = suiteRoot.toRealPath();
+            Path realRoot = root.toRealPath();
+            Path realResolved = resolved.toRealPath();
+            if (!realRoot.startsWith(realSuiteRoot) || !realResolved.startsWith(realRoot)) {
+                addV03ArtifactFinding(
+                        testCasePath,
+                        operationRef,
+                        inputName,
+                        findings,
+                        targetResolution,
+                        "ref_outside_suite_root",
+                        "Keep artifact refs under the declared suite artifact root; symlinks must not escape it.");
+                return;
+            }
+            if (!Files.isRegularFile(realResolved)) {
+                addV03ArtifactFinding(
+                        testCasePath,
+                        operationRef,
+                        inputName,
+                        findings,
+                        targetResolution,
+                        "unresolved_artifact_ref",
+                        "Restore runtime-critical artifact ref `" + ref + "`.");
+            }
+        } catch (IOException e) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "unresolved_artifact_ref",
+                    "Restore runtime-critical artifact ref `" + ref + "`.");
+        }
+    }
+
+    private void addV03ArtifactFinding(
+            Path testCasePath,
+            V03OperationRef operationRef,
+            String inputName,
+            List<ContractFinding> findings,
+            TargetResolution targetResolution,
+            String reason,
+            String ownerAction) {
+        findings.add(new ContractFinding(
+                testCasePath.toString(),
+                operationRef.fieldPath() + ".with." + inputName,
+                reason,
+                "",
+                targetResolution.providerType(),
+                targetResolution.profile(),
+                operationRef.operation(),
+                ownerAction));
+    }
+
+    private boolean validJsonPointer(String pointer) {
+        if (pointer.isEmpty()) {
+            return true;
+        }
+        if (!pointer.startsWith("/")) {
+            return false;
+        }
+        int depth = pointer.split("/", -1).length - 1;
+        if (depth > MAX_JSON_POINTER_DEPTH) {
+            return false;
+        }
+        for (int i = 0; i < pointer.length(); i++) {
+            if (pointer.charAt(i) == '~') {
+                if (i + 1 >= pointer.length()) {
+                    return false;
+                }
+                char escaped = pointer.charAt(i + 1);
+                if (escaped != '0' && escaped != '1') {
+                    return false;
+                }
+                i++;
+            }
+        }
+        return true;
+    }
+
+    private boolean invalidV03ArtifactPath(String relativePath) {
+        if (relativePath.isBlank()
+                || relativePath.startsWith("~")
+                || relativePath.contains("\\")
+                || WINDOWS_DRIVE_PATH.matcher(relativePath).matches()
+                || containsEncodedPathControl(relativePath)) {
+            return true;
+        }
+        try {
+            Path path = Path.of(relativePath);
+            if (path.isAbsolute()) {
+                return true;
+            }
+            for (Path segment : path) {
+                if ("..".equals(segment.toString())) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (InvalidPathException e) {
+            return true;
+        }
+    }
+
+    private boolean containsEncodedPathControl(String path) {
+        String lower = path.toLowerCase(Locale.ROOT);
+        return lower.contains("%2e") || lower.contains("%2f") || lower.contains("%5c");
     }
 
     private void validateV03AssertionRefs(
@@ -2051,11 +2226,17 @@ public class ContractBaselineService {
         Map<String, Map<String, Object>> contractsById = new LinkedHashMap<>();
         for (Map<String, Object> contract : contractsByPath.values()) {
             String providerType = stringValue(contract.get("provider_type"));
+            String contractVersion = contractVersion(contract);
             if (!providerType.isBlank()) {
-                contracts.put(providerType, contract);
-                contractsById.put(providerType, contract);
-                contractsById.put(providerType + ".v0.2", contract);
-                contractsById.put(providerType + ".v0.3", contract);
+                if (!contracts.containsKey(providerType) || "v0.2".equals(contractVersion)) {
+                    contracts.put(providerType, contract);
+                }
+                if (!contractsById.containsKey(providerType) || "v0.2".equals(contractVersion)) {
+                    contractsById.put(providerType, contract);
+                }
+                if ("v0.2".equals(contractVersion)) {
+                    contractsById.put(providerType + ".v0.2", contract);
+                }
             }
             String providerContract = stringValue(contract.get("provider_contract"));
             if (!providerContract.isBlank()) {
@@ -2809,7 +2990,7 @@ public class ContractBaselineService {
         Map<String, Object> suiteTarget = mapValue(mapValue(graph.suite().get("targets")).get(targetName));
         String providerContract = stringValue(suiteTarget.get("provider_contract"));
         Map<String, Object> contract = providerContract(graph, providerContract);
-        if (contract.isEmpty()) {
+        if (contract.isEmpty() || !isExplicitV03ProviderContract(providerContract, contract)) {
             return TargetResolution.unresolved("", selectedProfile(graph, Map.of()));
         }
         return new TargetResolution(targetName, selectedProfile(graph, Map.of()), stringValue(contract.get("provider_type")), contract);
@@ -2818,6 +2999,17 @@ public class ContractBaselineService {
     private Map<String, Object> providerContract(ContractGraph graph, String providerContract) {
         Map<String, Object> contract = graph.providerContractsById().get(providerContract);
         return contract == null ? Map.of() : contract;
+    }
+
+    private boolean isExplicitV03ProviderContract(String requestedId, Map<String, Object> contract) {
+        return "v0.3".equals(contractVersion(contract))
+                && requestedId.equals(stringValue(contract.get("provider_contract")));
+    }
+
+    private String contractVersion(Map<String, Object> contract) {
+        return firstNonBlank(
+                stringValue(contract.get("contract_version")),
+                stringValue(contract.get("provider_contract_version")));
     }
 
     private ValidationResult validationResult(ContractGraph graph, List<ContractFinding> findings) {

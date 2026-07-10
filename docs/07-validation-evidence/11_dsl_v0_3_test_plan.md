@@ -1,6 +1,6 @@
 # DSL v0.3 Test Plan
 
-**Status:** Implemented for release/0.3.0 golden baseline; local release gates passed
+**Status:** Release/0.3.0 golden baseline implemented; full v0.3 hardening matrix remains planned
 **Scope:** Verification plan for DSL v0.3 no-Provider-Instance implementation.
 
 ## 1. Objective
@@ -30,7 +30,8 @@ MAVEN_OPTS='-Xmx1024m -XX:MaxMetaspaceSize=384m' ./mvnw test
 
 ## 3. Sample Corpus
 
-Create samples under:
+Release/0.3.0 includes the checked-in golden baseline under `samples/v0_3_dsl/golden/`.
+The full hardening sample corpus remains the target structure for post-baseline coverage:
 
 ```text
 samples/v0_3_dsl/
@@ -117,7 +118,21 @@ Required sample groups:
 
 ## 7. Release Gates
 
-The implementation is not complete until:
+### 7.1 Release/0.3.0 Golden Baseline Gate
+
+The release/0.3.0 gate is limited to the checked-in golden baseline and selected
+contract/security regressions:
+
+- `validate` resolves suite targets through explicit v0.3 Provider Contracts.
+- `run --dry-run` proves `provider_runtime_invoked: false`.
+- `run` and `report` pass for `samples/v0_3_dsl/golden/`.
+- v0.3 validation rejects Provider Instance fields, synthetic `.v0.3` provider-type aliases, unsupported operations/inputs, invalid step refs, duplicate step IDs, artifact traversal, symlink escape, and invalid JSON pointers.
+- selected v0.2 smoke tests remain green.
+- usage-kit verification includes v0.3 schemas, docs, golden sample, and the explicit `sample_fake_provider.v0.3` contract.
+
+### 7.2 Full v0.3 Hardening Gate
+
+The full v0.3 matrix is not complete until:
 
 - all v0.3 positive and negative tests pass,
 - dry-run proves `provider_runtime_invoked: false`,
