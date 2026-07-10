@@ -42,6 +42,9 @@ jobs:
       - name: Critical delivery coverage gate
         run: ./mvnw -B -ntp -Pv02-delivery-coverage -DskipTests jacoco:check@v02-delivery-critical-class-check
 
+      - name: Schema contract drift
+        run: scripts/ci/check-schema-drift.sh
+
       - name: Contract and evidence consistency
         run: scripts/ci/verify-contracts.sh
 

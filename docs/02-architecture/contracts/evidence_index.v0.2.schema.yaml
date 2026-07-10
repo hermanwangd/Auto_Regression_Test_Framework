@@ -1,0 +1,43 @@
+schema_version: v0.2
+artifact: evidence_index
+required_fields:
+  - evidence_index_version
+  - suite_id
+  - batch_id
+  - run_id
+  - test_case_id
+  - entries
+entry_required_fields:
+  - evidence_id
+  - evidence_type
+  - produced_by
+  - test_case_id
+  - run_id
+  - batch_id
+  - file_path
+  - content_type
+  - status
+  - created_at
+  - masking_applied
+  - linked_result_field
+provider_entry_required_fields:
+  - provider_type
+  - provider_id
+approved_evidence_types:
+  - execution_log
+  - batch_summary
+  - fixture_setup
+  - fixture_cleanup
+  - wiremock_request_journal
+  - wiremock_server_log
+  - jdbc_seed
+  - jdbc_query
+  - jdbc_cleanup
+  - nats_event
+  - assertion_diff
+  - polling_observation
+masking:
+  raw_secret_allowed: false
+  allowed_secret_reference_fields:
+    - secret_ref
+  deterministic_placeholder: "***MASKED***"

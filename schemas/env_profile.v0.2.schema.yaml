@@ -55,8 +55,8 @@ binding_rules:
     secret_ref: secret reference allowed only when Provider Contract allows secret_ref
     generated_ref: runtime generated reference allowed only when Provider Contract allows generated_ref
     local_ref: approved local reference allowed only when Provider Contract allows local_ref
-  generated_ref_format: generated://<provider_id>.<bindable_output>
-  generated_refs_must_target_provider_contract_bindable_outputs: true
+  generated_ref_format: generated://<provider_or_dependency_id>.<output>
+  generated_refs_must_target_provider_contract_bindable_outputs_or_declared_dependency_outputs: true
 dependency_substitution_policy:
   local_allowed_runtime_modes: [mock, stub, ephemeral, native]
   ci_allowed_runtime_modes: [mock, stub, ephemeral, native]
@@ -71,6 +71,11 @@ dependency_provisioning_policy:
     - local_process
     - in_memory
     - none
+  generated_outputs:
+    description: Optional validation allow-list for externally provisioned dependency outputs.
+    examples:
+      - generated://oracle-ephemeral.connection
+      - generated://dummy-rest-app.base_url
   generated_values_may_be_referenced_by_bindings: true
 framework_defaults:
   isolation_scope: per_run

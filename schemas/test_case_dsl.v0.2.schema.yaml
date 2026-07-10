@@ -85,7 +85,7 @@ validation_output_fields:
   - test_case_id
   - provider_id
   - provider_type
-  - selected_profile
+  - profile
   - source_refs
   - severity
   - blocking_scope

@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+scripts/ci/check-schema-drift.sh
+
 VERSION="${FRAMEWORK_VERSION:-$(awk '
   /<artifactId>spec-driven-auto-regression<\/artifactId>/ { in_project=1; next }
   in_project && /<version>/ {

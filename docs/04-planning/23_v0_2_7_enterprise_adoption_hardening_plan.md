@@ -538,7 +538,7 @@ git commit -m "feat: add jdbc driver discovery diagnostics"
 - Modify `.github/workflows/release.yml`.
 - Add or modify schema drift tests if shell-only verification is insufficient.
 
-- [ ] Step 1: Decide canonical source.
+- [x] Step 1: Decide canonical source.
 
 Use this policy:
 
@@ -548,7 +548,7 @@ schemas/*.schema.yaml is the runtime/packaged copy.
 usage-kit schemas are copied from the same canonical content.
 ```
 
-- [ ] Step 2: Align schema filenames.
+- [x] Step 2: Align schema filenames.
 
 Required set:
 
@@ -566,7 +566,7 @@ test_case_dsl.v0.2.schema.yaml
 
 If `evidence.v0.2.schema.yaml` and `run_profile.v0.2.schema.yaml` remain, mark them as legacy/derived or remove them from the drift gate with an explicit allowlist.
 
-- [ ] Step 3: Align schema content.
+- [x] Step 3: Align schema content.
 
 Start with known drift files:
 
@@ -577,7 +577,7 @@ test_case_dsl.v0.2.schema.yaml
 evidence_index.v0.2.schema.yaml
 ```
 
-- [ ] Step 4: Add `scripts/ci/check-schema-drift.sh`.
+- [x] Step 4: Add `scripts/ci/check-schema-drift.sh`.
 
 Behavior:
 
@@ -587,7 +587,7 @@ exit 1 with owner-actionable file list when drift exists
 does not require rg to be installed; fallback to grep/find/diff
 ```
 
-- [ ] Step 5: Add CI wiring.
+- [x] Step 5: Add CI wiring.
 
 Commands:
 
@@ -598,7 +598,7 @@ scripts/ci/verify-contracts.sh
 
 Expected: both pass locally and in CI.
 
-- [ ] Step 6: Commit.
+- [x] Step 6: Commit.
 
 ```bash
 git add docs/02-architecture/contracts schemas scripts/ci/check-schema-drift.sh scripts/ci/verify-contracts.sh .github/workflows
