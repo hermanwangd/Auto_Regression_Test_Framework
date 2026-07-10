@@ -89,6 +89,7 @@ class DslV03CommandTest {
         assertThat(resultJson).isRegularFile();
         String result = Files.readString(resultJson);
         assertThat(result)
+                .contains("\"framework_version\": \"0.3.0\"")
                 .contains("\"dsl_version\": \"v0.3\"")
                 .contains("\"target\": \"sample_runtime\"")
                 .contains("\"provider_contract\": \"sample_fake_provider.v0.3\"")

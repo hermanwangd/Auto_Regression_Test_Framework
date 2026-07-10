@@ -159,7 +159,7 @@ class ReportJsonFormatCommandTest {
         Path resultJson = tempDir.resolve(status + "-result.json");
         Files.writeString(resultJson, """
                 {
-                  "framework_version": "0.2.7",
+                  "framework_version": "0.3.0",
                   "dsl_version": "v0.2",
                   "suite_id": "JSON-REPORT-NO-EVIDENCE-v0.2",
                   "batch_id": "BATCH-JSON-REPORT",
