@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -231,6 +232,22 @@ class DslV03CommandTest {
     }
 
     @Test
+    void validateV03SuiteRejectsInvalidProviderContractVersion() throws Exception {
+        Path suite = mutableV03Golden();
+        String manifest = Files.readString(suite)
+                .replace("provider_contract: sample_fake_provider.v0.3", "provider_contract: sample_fake_provider.v0.2");
+        Files.writeString(suite, manifest);
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("field_path: targets.sample_runtime.provider_contract")
+                .contains("reason: invalid_provider_contract_version");
+    }
+
+    @Test
     void validateV03SuiteRejectsInvalidArtifactJsonPointer() throws Exception {
         Path suite = mutableV03Golden();
         Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
@@ -249,12 +266,54 @@ class DslV03CommandTest {
     }
 
     @Test
+    void validateV03SuiteRejectsMissingArtifactJsonPointerFragment() throws Exception {
+        Path suite = mutableV03Golden();
+        Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
+        String yaml = Files.readString(testCase)
+                .replace("artifact://expected_results/expected_output.json",
+                        "artifact://expected_results/expected_output.json#/missing");
+        Files.writeString(testCase, yaml);
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("field_path: execute.produce_sample_output.with.sample.expected_ref")
+                .contains("reason: missing_json_pointer_fragment");
+    }
+
+    @Test
+    void validateV03SuiteRejectsUnsafeArtifactRefs() throws Exception {
+        for (InvalidArtifactRefCase invalid : invalidArtifactRefs()) {
+            Path suite = mutableV03Golden();
+            Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
+            String yaml = Files.readString(testCase)
+                    .replace("artifact://fixtures/input.json", invalid.ref());
+            Files.writeString(testCase, yaml);
+
+            CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+
+            assertThat(result.exit()).as(invalid.ref() + "\n" + result.stdout() + result.stderr()).isEqualTo(1);
+            assertThat(result.stdout())
+                    .as(invalid.ref())
+                    .contains("validation_status: failed")
+                    .contains("field_path: setup.prepare_sample_workspace.with.fixture.input_ref")
+                    .contains("reason: " + invalid.reason());
+        }
+    }
+
+    @Test
     void validateV03SuiteRejectsArtifactSymlinkEscape() throws Exception {
         Path suite = mutableV03Golden();
         Path outside = tempDir.resolve("outside.json");
         Files.writeString(outside, "{\"status\":\"OK\"}");
         Path link = suite.getParent().resolve("fixtures/outside_link.json");
-        Files.createSymbolicLink(link, outside);
+        try {
+            Files.createSymbolicLink(link, outside);
+        } catch (UnsupportedOperationException | IOException e) {
+            Assumptions.abort("Symbolic links are not supported on this filesystem: " + e.getMessage());
+        }
         Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
         String yaml = Files.readString(testCase)
                 .replace("artifact://fixtures/input.json", "artifact://fixtures/outside_link.json");
@@ -271,9 +330,21 @@ class DslV03CommandTest {
 
     private Path mutableV03Golden() throws IOException {
         Path source = Path.of("samples/v0_3_dsl/golden");
-        Path target = tempDir.resolve("golden_v03");
+        Path target = Files.createTempDirectory(tempDir, "golden_v03_");
         copyDirectory(source, target);
         return target.resolve("suite_manifest.yaml");
+    }
+
+    private List<InvalidArtifactRefCase> invalidArtifactRefs() {
+        return List.of(
+                new InvalidArtifactRefCase("artifact://fixtures/../expected_results/expected_output.json",
+                        "invalid_artifact_ref"),
+                new InvalidArtifactRefCase("artifact://fixtures//tmp/secret.json", "invalid_artifact_ref"),
+                new InvalidArtifactRefCase("artifact://fixtures/~/secret.json", "invalid_artifact_ref"),
+                new InvalidArtifactRefCase("artifact://fixtures/C:secret.json", "invalid_artifact_ref"),
+                new InvalidArtifactRefCase("artifact://fixtures/sub\\secret.json", "invalid_artifact_ref"),
+                new InvalidArtifactRefCase("artifact://fixtures/%2e%2e/secret.json", "invalid_artifact_ref"),
+                new InvalidArtifactRefCase("artifact://fixtures/missing.json", "unresolved_artifact_ref"));
     }
 
     private void copyDirectory(Path source, Path target) throws IOException {
@@ -308,5 +379,8 @@ class DslV03CommandTest {
     }
 
     private record CommandResult(int exit, String stdout, String stderr) {
+    }
+
+    private record InvalidArtifactRefCase(String ref, String reason) {
     }
 }

@@ -118,6 +118,7 @@ public class ContractBaselineService {
             Pattern.compile("(?i)\\b[a-z][a-z0-9+.-]*://[^\\s/@:]+:[^\\s/@]+@[^\\s\"']+");
     private static final Pattern WINDOWS_DRIVE_PATH = Pattern.compile("^[A-Za-z]:.*$");
     private static final int MAX_JSON_POINTER_DEPTH = 32;
+    private static final Object MISSING_JSON_POINTER_FRAGMENT = new Object();
 
     private final Yaml yaml = new Yaml();
 
@@ -869,6 +870,17 @@ public class ContractBaselineService {
                         targetResolution,
                         "unresolved_artifact_ref",
                         "Restore runtime-critical artifact ref `" + ref + "`.");
+                return;
+            }
+            if (refParts.length == 2 && !jsonPointerFragmentExists(realResolved, refParts[1])) {
+                addV03ArtifactFinding(
+                        testCasePath,
+                        operationRef,
+                        inputName,
+                        findings,
+                        targetResolution,
+                        "missing_json_pointer_fragment",
+                        "Use a JSON Pointer fragment that exists in artifact ref `" + ref + "`.");
             }
         } catch (IOException e) {
             addV03ArtifactFinding(
@@ -922,6 +934,60 @@ public class ContractBaselineService {
                     return false;
                 }
                 i++;
+            }
+        }
+        return true;
+    }
+
+    private boolean jsonPointerFragmentExists(Path artifact, String pointer) {
+        if (pointer.isEmpty()) {
+            return true;
+        }
+        try {
+            Object loaded = yaml.load(Files.readString(artifact));
+            return resolveJsonPointerFragment(loaded, pointer) != MISSING_JSON_POINTER_FRAGMENT;
+        } catch (IOException | RuntimeException e) {
+            return false;
+        }
+    }
+
+    private Object resolveJsonPointerFragment(Object value, String pointer) {
+        Object current = value;
+        String[] segments = pointer.substring(1).split("/", -1);
+        for (String rawSegment : segments) {
+            String segment = rawSegment.replace("~1", "/").replace("~0", "~");
+            if (current instanceof Map<?, ?> map) {
+                if (!map.containsKey(segment)) {
+                    return MISSING_JSON_POINTER_FRAGMENT;
+                }
+                current = map.get(segment);
+            } else if (current instanceof List<?> list) {
+                if (!isArrayIndex(segment)) {
+                    return MISSING_JSON_POINTER_FRAGMENT;
+                }
+                try {
+                    int index = Integer.parseInt(segment);
+                    if (index < 0 || index >= list.size()) {
+                        return MISSING_JSON_POINTER_FRAGMENT;
+                    }
+                    current = list.get(index);
+                } catch (NumberFormatException e) {
+                    return MISSING_JSON_POINTER_FRAGMENT;
+                }
+            } else {
+                return MISSING_JSON_POINTER_FRAGMENT;
+            }
+        }
+        return current;
+    }
+
+    private boolean isArrayIndex(String value) {
+        if (value.isBlank()) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            if (!Character.isDigit(value.charAt(i))) {
+                return false;
             }
         }
         return true;
@@ -3528,7 +3594,8 @@ public class ContractBaselineService {
                         "unsupported_suite_runtime", "unsupported_suite_shape",
                         "unsupported_provider_instance_field",
                         "unsupported_provider_instance_binding_key", "unknown_binding_key",
-                        "invalid_binding_key_value_kind", "unknown_bindable_output" -> "CONTRACT_ERROR";
+                        "invalid_binding_key_value_kind", "unknown_bindable_output",
+                        "invalid_provider_contract_version" -> "CONTRACT_ERROR";
                 case "invalid_result_json", "missing_result_json", "invalid_yaml",
                         "missing_required_file", "missing_required_directory",
                         "missing_required_field", "prohibited_legacy_field",
@@ -3536,7 +3603,9 @@ public class ContractBaselineService {
                         "prohibited_governance_field", "prohibited_deprecated_field",
                         "prohibited_data_binding_category", "prohibited_source_ref", "invalid_source_refs",
                         "invalid_duration", "invalid_status", "invalid_test_count", "invalid_test_results",
-                        "invalid_instant", "invalid_polling_config" -> "VALIDATION_ERROR";
+                        "invalid_instant", "invalid_polling_config",
+                        "invalid_artifact_ref", "invalid_json_pointer",
+                        "missing_json_pointer_fragment", "ref_outside_suite_root" -> "VALIDATION_ERROR";
                 default -> "VALIDATION_ERROR";
             };
         }

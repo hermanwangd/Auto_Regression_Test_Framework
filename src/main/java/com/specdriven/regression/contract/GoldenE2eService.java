@@ -676,7 +676,21 @@ public class GoldenE2eService {
         String rootName = filePart.substring(0, separator);
         String relativePath = filePart.substring(separator + 1);
         String rootDir = stringValue(mapValue(suite.get("artifact_roots")).get(rootName));
-        return suiteRoot.resolve(rootDir).resolve(relativePath).normalize();
+        Path root = suiteRoot.resolve(rootDir).normalize();
+        Path resolved = root.resolve(relativePath).normalize();
+        try {
+            Path realSuiteRoot = suiteRoot.toRealPath();
+            Path realRoot = root.toRealPath();
+            Path realResolved = resolved.toRealPath();
+            if (realRoot.startsWith(realSuiteRoot)
+                    && realResolved.startsWith(realRoot)
+                    && Files.isRegularFile(realResolved)) {
+                return realResolved;
+            }
+        } catch (IOException e) {
+            // Validation reports missing or unsafe artifact refs before runtime execution.
+        }
+        return suiteRoot.resolve(".blocked-artifact-ref").resolve(Integer.toHexString(ref.hashCode())).normalize();
     }
 
     private String resolveV03GeneratedAt(Path suiteRoot, Map<String, Object> suite, String profile, String target) {
