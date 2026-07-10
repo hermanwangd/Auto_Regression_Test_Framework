@@ -76,6 +76,53 @@ class DslV03CommandTest {
     }
 
     @Test
+    void runV03GoldenSuiteProducesReportableResultWithoutProviderInstance() throws Exception {
+        CommandResult run = execute("run", "--suite", V03_SUITE.toString(), "--profile", "local_v03");
+
+        assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+        assertThat(run.stdout())
+                .contains("run_status: passed")
+                .contains("suite_id: GOLDEN-E2E-v0.3")
+                .contains("provider_runtime_executed: true")
+                .doesNotContain("sample-fake-runtime");
+        Path resultJson = extractPath(run.stdout(), "result_json");
+        assertThat(resultJson).isRegularFile();
+        String result = Files.readString(resultJson);
+        assertThat(result)
+                .contains("\"dsl_version\": \"v0.3\"")
+                .contains("\"target\": \"sample_runtime\"")
+                .contains("\"provider_contract\": \"sample_fake_provider.v0.3\"")
+                .doesNotContain("sample-fake-runtime");
+
+        CommandResult report = execute("report", "--result", resultJson.toString());
+
+        assertThat(report.exit()).as(report.stderr() + report.stdout()).isZero();
+        assertThat(report.stdout())
+                .contains("suite_id: GOLDEN-E2E-v0.3")
+                .contains("status: passed")
+                .doesNotContain("sample-fake-runtime");
+    }
+
+    @Test
+    void runV03GoldenSuiteResolvesAssertionActualByDeclaredStepId() throws Exception {
+        Path suite = mutableV03Golden();
+        Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
+        String yaml = Files.readString(testCase)
+                .replace("id: produce_sample_output", "id: make_sample_output")
+                .replace("step://produce_sample_output/actual_json.status", "step://make_sample_output/actual_json.status");
+        Files.writeString(testCase, yaml);
+
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+        assertThat(run.stdout()).contains("run_status: passed");
+        String result = Files.readString(extractPath(run.stdout(), "result_json"));
+        assertThat(result)
+                .contains("\"id\": \"make_sample_output\"")
+                .contains("\"status\": \"passed\"");
+    }
+
+    @Test
     void validateV03SuiteRejectsLegacyProviderIdField() throws Exception {
         Path suite = mutableV03Golden();
         Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
@@ -190,6 +237,14 @@ class DslV03CommandTest {
         ByteArrayOutputStream stderr = new ByteArrayOutputStream();
         int exit = command.execute(args, new PrintStream(stdout), new PrintStream(stderr));
         return new CommandResult(exit, stdout.toString(), stderr.toString());
+    }
+
+    private Path extractPath(String stdout, String key) {
+        return stdout.lines()
+                .filter(line -> line.startsWith(key + ": "))
+                .map(line -> Path.of(line.substring((key + ": ").length()).trim()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing path for " + key + " in:\n" + stdout));
     }
 
     private record CommandResult(int exit, String stdout, String stderr) {

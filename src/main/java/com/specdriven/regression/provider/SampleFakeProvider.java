@@ -13,18 +13,22 @@ public class SampleFakeProvider {
     private final Yaml yaml = new Yaml();
 
     public SetupResult setup(Path setupFixture, Path inputFile, Path evidenceDir) {
+        return setup(setupFixture, inputFile, evidenceDir, "sample-fake-runtime");
+    }
+
+    public SetupResult setup(Path setupFixture, Path inputFile, Path evidenceDir, String providerId) {
         createDirectories(evidenceDir.resolve("fixture"));
         String status = Files.isRegularFile(setupFixture) && Files.isRegularFile(inputFile) ? "passed" : "failed";
         write(evidenceDir.resolve("fixture/setup.yaml"), """
                 evidence_type: fixture_setup
                 evidence_classification: framework_verification_only
                 downstream_release_evidence: false
-                provider_id: sample-fake-runtime
+                %s
                 operation: setup_fixture
                 status: %s
                 setup_fixture_ref: %s
                 input_ref: %s
-                """.formatted(status, setupFixture, inputFile));
+                """.formatted(providerIdLine(providerId), status, setupFixture, inputFile));
         return new SetupResult("passed".equals(status), evidenceDir.resolve("fixture/setup.yaml"));
     }
 
@@ -57,17 +61,21 @@ public class SampleFakeProvider {
     }
 
     public CleanupResult cleanup(Path cleanupFixture, Path evidenceDir) {
+        return cleanup(cleanupFixture, evidenceDir, "sample-fake-runtime");
+    }
+
+    public CleanupResult cleanup(Path cleanupFixture, Path evidenceDir, String providerId) {
         createDirectories(evidenceDir.resolve("fixture"));
         String status = Files.isRegularFile(cleanupFixture) ? "passed" : "failed";
         write(evidenceDir.resolve("fixture/cleanup.yaml"), """
                 evidence_type: fixture_cleanup
                 evidence_classification: framework_verification_only
                 downstream_release_evidence: false
-                provider_id: sample-fake-runtime
+                %s
                 operation: cleanup_fixture
                 status: %s
                 cleanup_fixture_ref: %s
-                """.formatted(status, cleanupFixture));
+                """.formatted(providerIdLine(providerId), status, cleanupFixture));
         return new CleanupResult("passed".equals(status), evidenceDir.resolve("fixture/cleanup.yaml"));
     }
 
@@ -103,6 +111,10 @@ public class SampleFakeProvider {
 
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    private String providerIdLine(String providerId) {
+        return providerId == null || providerId.isBlank() ? "" : "provider_id: " + providerId;
     }
 
     private String toJson(Object value) {

@@ -172,10 +172,19 @@ public final class ResultContractValidator {
 
     private static void addProviderKey(Set<String> providerKeys, Map<?, ?> providerLike) {
         String providerKey = stringValue(providerLike.get("provider_type")) + "\n"
-                + stringValue(providerLike.get("provider_id"));
+                + firstNonBlank(stringValue(providerLike.get("provider_id")), stringValue(providerLike.get("target")));
         if (!providerKey.trim().isBlank()) {
             providerKeys.add(providerKey);
         }
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private static List<Map<?, ?>> listOfMaps(Object value) {

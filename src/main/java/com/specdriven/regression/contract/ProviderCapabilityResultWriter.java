@@ -50,6 +50,8 @@ final class ProviderCapabilityResultWriter {
         }
         Map<String, Object> provider = providerResults.get(0);
         Map<String, Object> rootFields = new LinkedHashMap<>();
+        putIfPresent(rootFields, "target", provider.get("target"));
+        putIfPresent(rootFields, "provider_contract", provider.get("provider_contract"));
         putIfPresent(rootFields, "provider_type", provider.get("provider_type"));
         putIfPresent(rootFields, "provider_id", provider.get("provider_id"));
         putIfPresent(rootFields, "runtime_mode", provider.get("runtime_mode"));
@@ -84,6 +86,8 @@ final class ProviderCapabilityResultWriter {
 
     private static Map<String, Object> providerSummaryEntry(Map<String, Object> provider) {
         Map<String, Object> summary = new LinkedHashMap<>();
+        putIfPresent(summary, "target", provider.get("target"));
+        putIfPresent(summary, "provider_contract", provider.get("provider_contract"));
         putIfPresent(summary, "provider_id", provider.get("provider_id"));
         putIfPresent(summary, "provider_type", provider.get("provider_type"));
         putIfPresent(summary, "runtime_mode", provider.get("runtime_mode"));

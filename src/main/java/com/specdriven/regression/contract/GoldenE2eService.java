@@ -77,7 +77,7 @@ public class GoldenE2eService {
         List<TestCaseDocument> testCases = new ArrayList<>();
         List<ContractFinding> profileFindings = new ArrayList<>();
         for (Object testRef : listValue(suite.get("tests"))) {
-            Path testCasePath = suiteRoot.resolve(stringValue(testRef)).normalize();
+            Path testCasePath = suiteRoot.resolve(suiteTestRef(testRef)).normalize();
             Map<String, Object> testCase = readMap(testCasePath);
             testCases.add(new TestCaseDocument(testCasePath, testCase));
             if (!profileAllowed(suite, testCase, requestedProfile)) {
@@ -116,12 +116,12 @@ public class GoldenE2eService {
             Path testRunDir = multiTestSuite
                     ? runDir.resolve("tests").resolve(safe(stringValue(document.testCase().get("test_case_id"))))
                     : runDir;
-            GoldenTestExecution execution = executeTestCase(suiteRoot, document.testCase(), requestedProfile, testRunDir, generatedAt);
+            GoldenTestExecution execution = executeTestCase(suiteRoot, suite, document.testCase(), requestedProfile, testRunDir, generatedAt);
             fakeProviderExecuted = fakeProviderExecuted || execution.fakeProviderExecuted();
             stepResults.addAll(execution.stepResults());
             verifyResults.addAll(execution.verifyResults());
             testResults.add(execution.testResult());
-            providerResults.add(providerResult(requestedProfile, execution.status()));
+            providerResults.add(execution.providerResult());
             evidenceRefs.addAll(prefixEvidenceRefs(document.testCase(), execution.evidenceRefs(), multiTestSuite));
             if (!execution.passed() && "passed".equals(status)) {
                 status = "failed";
@@ -180,10 +180,14 @@ public class GoldenE2eService {
 
     private GoldenTestExecution executeTestCase(
             Path suiteRoot,
+            Map<String, Object> suite,
             Map<String, Object> testCase,
             String requestedProfile,
             Path runDir,
             String generatedAt) {
+        if (isV03(testCase)) {
+            return executeV03TestCase(suiteRoot, suite, testCase, requestedProfile, runDir);
+        }
         createDirectories(runDir);
         Path inputFile = suiteRoot.resolve(resolveDataRef(testCase, "${data.input}")).normalize();
         Path setupFixture = suiteRoot.resolve(resolveDataRef(testCase, "${data.setup_fixture}")).normalize();
@@ -261,7 +265,104 @@ public class GoldenE2eService {
                 stepResults,
                 verifyResults,
                 testResult,
+                providerResult(requestedProfile, status),
                 EVIDENCE_REFS,
+                failureClassification,
+                failureReason,
+                ownerAction);
+    }
+
+    private GoldenTestExecution executeV03TestCase(
+            Path suiteRoot,
+            Map<String, Object> suite,
+            Map<String, Object> testCase,
+            String requestedProfile,
+            Path runDir) {
+        createDirectories(runDir);
+        String target = firstV03Target(testCase);
+        String providerContract = stringValue(mapValue(mapValue(suite.get("targets")).get(target)).get("provider_contract"));
+        String generatedAt = resolveV03GeneratedAt(suiteRoot, suite, requestedProfile, target);
+        Map<String, Object> setupOperation = v03Operation(testCase, "setup", "setup_fixture");
+        Map<String, Object> executeOperation = v03Operation(testCase, "execute", "execute_sample");
+        Map<String, Object> cleanupOperation = v03Operation(testCase, "cleanup", "cleanup_fixture");
+        Path inputFile = artifactPath(suiteRoot, suite, stringValue(mapValue(executeOperation.get("with")).get("sample.input_ref")));
+        Path setupFixture = artifactPath(suiteRoot, suite, stringValue(mapValue(setupOperation.get("with")).get("fixture.setup_ref")));
+        Path cleanupFixture = artifactPath(suiteRoot, suite, stringValue(mapValue(cleanupOperation.get("with")).get("fixture.cleanup_ref")));
+        Path expectedResult = artifactPath(suiteRoot, suite, stringValue(mapValue(executeOperation.get("with")).get("sample.expected_ref")));
+
+        String status = "passed";
+        String failureClassification = null;
+        String failureReason = null;
+        String ownerAction = null;
+        boolean fakeProviderExecuted = false;
+        List<Map<String, Object>> stepResults = new ArrayList<>();
+        List<Map<String, Object>> verifyResults = new ArrayList<>();
+        List<String> evidenceRefs = new ArrayList<>();
+
+        SetupResult setup = fakeProvider.setup(setupFixture, inputFile, runDir, target);
+        stepResults.add(step(stringValue(setupOperation.get("id")), "setup_fixture", setup.passed() ? "passed" : "failed"));
+        evidenceRefs.add("fixture/setup.yaml");
+        CleanupResult cleanup;
+        try {
+            if (!setup.passed()) {
+                status = "failed";
+                failureClassification = "FRAMEWORK_ERROR";
+                failureReason = "Fixture setup failed.";
+                ownerAction = "Check setup fixture and input refs.";
+            } else {
+                ExecutionResult execution = fakeProvider.execute(inputFile, generatedAt, runDir);
+                fakeProviderExecuted = true;
+                stepResults.add(v03ExecuteStep(executeOperation, execution));
+                evidenceRefs.add("actual/actual_output.json");
+                evidenceRefs.add("actual/actual_output.txt");
+                evidenceRefs.add("logs/execution.log");
+                writeExpectedRef(runDir, expectedResult);
+                evidenceRefs.add("expected/expected_output.ref");
+                VerificationOutcome outcome = verifyV03Assertions(testCase, execution.actual(), runDir);
+                verifyResults.addAll(outcome.verifyResults());
+                evidenceRefs.addAll(outcome.verifyResults().stream()
+                        .map(result -> "assertions/" + safe(stringValue(result.get("id"))) + ".yaml")
+                        .toList());
+                if (!outcome.passed()) {
+                    status = "failed";
+                    failureClassification = "ASSERTION_FAILED";
+                    failureReason = "One or more v0.3 verification checks failed.";
+                    ownerAction = "Review assertion evidence and operation outputs.";
+                }
+            }
+        } finally {
+            cleanup = fakeProvider.cleanup(cleanupFixture, runDir, target);
+        }
+        stepResults.add(step(stringValue(cleanupOperation.get("id")), "cleanup_fixture", cleanup.passed() ? "passed" : "failed"));
+        evidenceRefs.add("fixture/cleanup.yaml");
+        if (!cleanup.passed()) {
+            status = "failed";
+            failureClassification = "FRAMEWORK_ERROR";
+            failureReason = "Fixture cleanup failed.";
+            ownerAction = "Check cleanup fixture and cleanup evidence.";
+        }
+
+        Map<String, Object> testResult = new LinkedHashMap<>();
+        testResult.put("test_case_id", testCase.get("test_case_id"));
+        testResult.put("profile", requestedProfile);
+        testResult.put("target", target);
+        testResult.put("provider_contract", providerContract);
+        testResult.put("provider_type", "sample_fake_provider");
+        testResult.put("status", status);
+        testResult.put("step_count", stepResults.size());
+        testResult.put("verify_count", verifyResults.size());
+        if (failureClassification != null) {
+            testResult.put("failure_classification", failureClassification);
+        }
+        return new GoldenTestExecution(
+                "passed".equals(status),
+                status,
+                fakeProviderExecuted,
+                stepResults,
+                verifyResults,
+                testResult,
+                providerResultV03(requestedProfile, target, providerContract, status),
+                List.copyOf(evidenceRefs),
                 failureClassification,
                 failureReason,
                 ownerAction);
@@ -466,6 +567,130 @@ public class GoldenE2eService {
                         "execution_log", "logs/execution.log")));
         result.put("release_evidence_eligible", false);
         return result;
+    }
+
+    private Map<String, Object> providerResultV03(String profile, String target, String providerContract, String status) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("target", target);
+        result.put("provider_contract", providerContract);
+        result.put("provider_id", target);
+        result.put("provider_type", "sample_fake_provider");
+        result.put("profile", profile);
+        result.put("runtime_mode", "stub");
+        result.put("resolved_operation_result", Map.of(
+                "operation", "execute_sample",
+                "status", status,
+                "outputs", Map.of(
+                        "actual_json", "actual/actual_output.json",
+                        "actual_text", "actual/actual_output.txt",
+                        "execution_log", "logs/execution.log")));
+        result.put("release_evidence_eligible", false);
+        return result;
+    }
+
+    private Map<String, Object> v03ExecuteStep(Map<String, Object> operation, ExecutionResult execution) {
+        Map<String, Object> step = step(stringValue(operation.get("id")), "execute_sample", "passed");
+        step.put("outputs", Map.of(
+                "actual_json", "actual/actual_output.json",
+                "actual_text", "actual/actual_output.txt",
+                "execution_log", "logs/execution.log"));
+        return step;
+    }
+
+    private VerificationOutcome verifyV03Assertions(
+            Map<String, Object> testCase,
+            Map<String, Object> actual,
+            Path runDir) {
+        List<Map<String, Object>> results = new ArrayList<>();
+        boolean passed = true;
+        for (Object verifyValue : listValue(testCase.get("verify"))) {
+            Map<String, Object> verify = mapValue(verifyValue);
+            if (!"assertion".equals(stringValue(verify.get("type")))) {
+                continue;
+            }
+            Map<String, Object> assertion = mapValue(verify.get("assert"));
+            Object actualValue = resolveV03Actual(actual, stringValue(assertion.get("actual")));
+            Object expected = assertion.get("expected");
+            boolean checkPassed = "equals".equals(stringValue(assertion.get("operator")))
+                    && String.valueOf(expected).equals(String.valueOf(actualValue));
+            results.add(assertion(stringValue(verify.get("id")), "assertion", checkPassed ? "passed" : "failed", null));
+            passed = passed && checkPassed;
+        }
+        writeAssertionEvidence(runDir, results);
+        return new VerificationOutcome(passed, List.copyOf(results));
+    }
+
+    private Object resolveV03Actual(Map<String, Object> actual, String ref) {
+        String prefix = "step://";
+        String marker = "/actual_json.";
+        if (!ref.startsWith(prefix) || !ref.contains(marker)) {
+            return "";
+        }
+        return actual.getOrDefault(ref.substring(ref.indexOf(marker) + marker.length()), "");
+    }
+
+    private String suiteTestRef(Object testRef) {
+        Map<String, Object> map = mapValue(testRef);
+        if (!map.isEmpty() || testRef instanceof Map<?, ?>) {
+            return stringValue(map.get("ref"));
+        }
+        return stringValue(testRef);
+    }
+
+    private boolean isV03(Map<String, Object> testCase) {
+        return "v0.3".equals(stringValue(testCase.get("dsl_version")));
+    }
+
+    private Map<String, Object> v03Operation(Map<String, Object> testCase, String phase, String operationName) {
+        for (Object value : listValue(testCase.get(phase))) {
+            Map<String, Object> operation = mapValue(value);
+            if (operationName.equals(stringValue(operation.get("op")))) {
+                return operation;
+            }
+        }
+        return Map.of();
+    }
+
+    private String firstV03Target(Map<String, Object> testCase) {
+        for (String phase : List.of("setup", "execute", "cleanup")) {
+            for (Object value : listValue(testCase.get(phase))) {
+                String target = stringValue(mapValue(value).get("target"));
+                if (!target.isBlank()) {
+                    return target;
+                }
+            }
+        }
+        return "";
+    }
+
+    private Path artifactPath(Path suiteRoot, Map<String, Object> suite, String ref) {
+        if (!ref.startsWith("artifact://")) {
+            return suiteRoot.resolve(ref).normalize();
+        }
+        String body = ref.substring("artifact://".length());
+        String filePart = body.split("#", 2)[0];
+        int separator = filePart.indexOf('/');
+        if (separator < 1) {
+            return suiteRoot.resolve(filePart).normalize();
+        }
+        String rootName = filePart.substring(0, separator);
+        String relativePath = filePart.substring(separator + 1);
+        String rootDir = stringValue(mapValue(suite.get("artifact_roots")).get(rootName));
+        return suiteRoot.resolve(rootDir).resolve(relativePath).normalize();
+    }
+
+    private String resolveV03GeneratedAt(Path suiteRoot, Map<String, Object> suite, String profile, String target) {
+        String envProfileRef = stringValue(mapValue(mapValue(suite.get("env_profiles")).get(profile)).get("ref"));
+        if (envProfileRef.isBlank()) {
+            return "2026-06-29T00:00:00Z";
+        }
+        Map<String, Object> envProfile = readMap(suiteRoot.resolve(envProfileRef).normalize());
+        String clockRef = stringValue(mapValue(mapValue(mapValue(envProfile.get("targets")).get(target)).get("bindings"))
+                .get("clock_ref"));
+        if (clockRef.startsWith("fixed://")) {
+            return clockRef.substring("fixed://".length());
+        }
+        return clockRef.isBlank() ? "2026-06-29T00:00:00Z" : clockRef;
     }
 
     private List<String> prefixEvidenceRefs(Map<String, Object> testCase, List<String> refs, boolean multiTestSuite) {
@@ -714,6 +939,7 @@ public class GoldenE2eService {
             List<Map<String, Object>> stepResults,
             List<Map<String, Object>> verifyResults,
             Map<String, Object> testResult,
+            Map<String, Object> providerResult,
             List<String> evidenceRefs,
             String failureClassification,
             String failureReason,
