@@ -41,6 +41,20 @@ public class ContractBaselineService {
             "db_seed",
             "db_cleanup",
             "mock_stubs");
+    private static final Set<String> PROHIBITED_V03_TEST_FIELDS = Set.of(
+            "uses",
+            "targets",
+            "provider_id",
+            "provider_instance",
+            "data_binding",
+            "datasets",
+            "fixtures",
+            "expected_results",
+            "db_seed",
+            "db_cleanup",
+            "mock_stubs",
+            "parameters",
+            "bind_as");
     private static final Set<String> PROHIBITED_SOURCE_REF_KEYS = Set.of(
             "expected_result",
             "expected_results",
@@ -108,7 +122,15 @@ public class ContractBaselineService {
         List<ContractFinding> findings = new ArrayList<>(graph.loadFindings());
         validateProhibitedSuiteFields(graph, findings);
         if (graph.loadBlocked()) {
-            return new ValidationResult(false, graph.suiteId(), List.of(), List.of(), List.of(), List.copyOf(findings));
+            return new ValidationResult(false, graph.suiteId(), List.of(), List.of(), List.of(), List.of(), List.of(), List.copyOf(findings));
+        }
+        if (graph.v03()) {
+            validateV03RequiredFields(graph, findings);
+            validateV03ProhibitedFields(graph, findings);
+            validateRawSecrets(graph, findings);
+            validateV03SuiteTargets(graph, findings);
+            validateV03TargetRefsAndOperations(graph, findings);
+            return validationResult(graph, findings);
         }
         validateRequiredFields(graph, findings);
         validateProhibitedFields(graph, findings);
@@ -324,6 +346,30 @@ public class ContractBaselineService {
         }
     }
 
+    private void validateV03RequiredFields(ContractGraph graph, List<ContractFinding> findings) {
+        require(graph.suitePath(), graph.suite(), "manifest_version", findings);
+        require(graph.suitePath(), graph.suite(), "suite_id", findings);
+        require(graph.suitePath(), graph.suite(), "targets", findings);
+        require(graph.suitePath(), graph.suite(), "env_profiles", findings);
+        require(graph.suitePath(), graph.suite(), "tests", findings);
+        if (graph.usedProfiles().isEmpty()) {
+            findings.add(finding(graph.suitePath(), "default_profile", "missing_selected_profile",
+                    "Select a profile through `default_profile`, `profile`, or CLI --profile before execution."));
+        }
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.testCases().entrySet()) {
+            Map<String, Object> testCase = entry.getValue();
+            for (String field : List.of("dsl_version", "test_case_id", "title", "execute", "verify")) {
+                require(entry.getKey(), testCase, field, findings);
+            }
+        }
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.envProfiles().entrySet()) {
+            Map<String, Object> profile = entry.getValue();
+            for (String field : List.of("profile_id", "execution_mode", "targets")) {
+                require(entry.getKey(), profile, field, findings);
+            }
+        }
+    }
+
     private void validateProhibitedSuiteFields(ContractGraph graph, List<ContractFinding> findings) {
         for (String field : PROHIBITED_SUITE_FIELDS) {
             if (graph.suite().containsKey(field)) {
@@ -372,6 +418,390 @@ public class ContractBaselineService {
                     }
                 }
             }
+        }
+    }
+
+    private void validateV03ProhibitedFields(ContractGraph graph, List<ContractFinding> findings) {
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.testCases().entrySet()) {
+            validateV03ProhibitedKeys(entry.getKey(), "", entry.getValue(), findings);
+            for (String field : GOVERNANCE_FIELDS) {
+                if (entry.getValue().containsKey(field)) {
+                    findings.add(finding(entry.getKey(), field, "prohibited_governance_field",
+                            "Remove governance field `" + field + "` from framework runtime DSL."));
+                }
+            }
+        }
+    }
+
+    private void validateV03ProhibitedKeys(
+            Path testCasePath,
+            String fieldPath,
+            Object value,
+            List<ContractFinding> findings) {
+        if (value instanceof Map<?, ?> map) {
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String key = stringValue(entry.getKey());
+                String childPath = fieldPath.isBlank() ? key : fieldPath + "." + key;
+                if (PROHIBITED_V03_TEST_FIELDS.contains(key)) {
+                    findings.add(finding(testCasePath, childPath, "prohibited_legacy_field",
+                            "Remove `" + key + "` from DSL v0.3; use suite manifest targets, Env_Profile targets, `with`, and typed refs."));
+                }
+                validateV03ProhibitedKeys(testCasePath, childPath, entry.getValue(), findings);
+            }
+            return;
+        }
+        if (value instanceof List<?> list) {
+            for (int i = 0; i < list.size(); i++) {
+                validateV03ProhibitedKeys(testCasePath, fieldPath + "[" + i + "]", list.get(i), findings);
+            }
+        }
+    }
+
+    private void validateV03SuiteTargets(ContractGraph graph, List<ContractFinding> findings) {
+        Map<String, Object> suiteTargets = mapValue(graph.suite().get("targets"));
+        for (Map.Entry<String, Object> targetEntry : suiteTargets.entrySet()) {
+            Map<String, Object> target = mapValue(targetEntry.getValue());
+            String providerContract = stringValue(target.get("provider_contract"));
+            if (providerContract.isBlank()) {
+                findings.add(finding(graph.suitePath(), "targets." + targetEntry.getKey() + ".provider_contract",
+                        "missing_required_field",
+                        "Declare provider_contract for suite target `" + targetEntry.getKey() + "`."));
+                continue;
+            }
+            if (providerContract(graph, providerContract).isEmpty()) {
+                findings.add(new ContractFinding(
+                        graph.suitePath().toString(),
+                        "targets." + targetEntry.getKey() + ".provider_contract",
+                        "missing_provider_contract",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "Use a Provider Contract from the framework catalog or --contract-root. Missing `" + providerContract + "`."));
+            }
+        }
+    }
+
+    private void validateV03TargetRefsAndOperations(ContractGraph graph, List<ContractFinding> findings) {
+        Map<String, Object> suiteTargets = mapValue(graph.suite().get("targets"));
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.testCases().entrySet()) {
+            Map<String, Object> testCase = entry.getValue();
+            validateV03StepShape(entry.getKey(), testCase, findings);
+            Set<String> priorSteps = new LinkedHashSet<>();
+            for (V03OperationRef operationRef : v03OperationRefs(testCase)) {
+                if ("assertion".equals(operationRef.kind())) {
+                    validateV03AssertionRefs(entry.getKey(), operationRef, priorSteps, findings);
+                    rememberV03PriorStep(priorSteps, operationRef);
+                    continue;
+                }
+                String targetName = operationRef.target();
+                if (targetName.isBlank() || !suiteTargets.containsKey(targetName)) {
+                    findings.add(new ContractFinding(
+                            entry.getKey().toString(),
+                            operationRef.fieldPath() + ".target",
+                            "invalid_target_ref",
+                            "",
+                            "",
+                            "",
+                            operationRef.operation(),
+                            "Use a target declared in suite_manifest.targets. Unknown target `" + targetName + "`."));
+                    rememberV03PriorStep(priorSteps, operationRef);
+                    continue;
+                }
+                TargetResolution targetResolution = resolveV03Target(graph, targetName);
+                if (!targetResolution.resolved()) {
+                    findings.add(new ContractFinding(
+                            entry.getKey().toString(),
+                            operationRef.fieldPath() + ".target",
+                            "missing_provider_contract",
+                            "",
+                            "",
+                            selectedProfile(graph, Map.of()),
+                            operationRef.operation(),
+                            "Fix suite target `" + targetName + "` provider_contract before validating operations."));
+                    rememberV03PriorStep(priorSteps, operationRef);
+                    continue;
+                }
+                validateV03EnvProfileTarget(graph, entry.getKey(), operationRef, targetName, targetResolution, findings);
+                Map<String, Object> operation = targetResolution.operation(operationRef.operation());
+                if (operation.isEmpty()) {
+                    findings.add(new ContractFinding(
+                            entry.getKey().toString(),
+                            operationRef.fieldPath() + ".op",
+                            "unsupported_operation",
+                            "",
+                            targetResolution.providerType(),
+                            targetResolution.profile(),
+                            operationRef.operation(),
+                            "Use an operation declared by Provider Contract `" + targetResolution.providerType() + "`."));
+                    rememberV03PriorStep(priorSteps, operationRef);
+                    continue;
+                }
+                validateV03Inputs(graph, entry.getKey(), operationRef, targetResolution, operation, findings);
+                rememberV03PriorStep(priorSteps, operationRef);
+            }
+        }
+    }
+
+    private void validateV03StepShape(Path testCasePath, Map<String, Object> testCase, List<ContractFinding> findings) {
+        Set<String> seenIds = new LinkedHashSet<>();
+        validateV03StepIds(testCasePath, "setup", listValue(testCase.get("setup")), seenIds, findings);
+        validateV03StepIds(testCasePath, "execute", listValue(testCase.get("execute")), seenIds, findings);
+        int verifyIndex = 0;
+        for (Object value : listValue(testCase.get("verify"))) {
+            Map<String, Object> verify = mapValue(value);
+            String id = stringValue(verify.get("id"));
+            String fieldPath = id.isBlank() ? "verify[" + verifyIndex + "]" : "verify." + id;
+            validateV03StepId(testCasePath, fieldPath, id, seenIds, findings);
+            String type = stringValue(verify.get("type"));
+            if (!type.isBlank() && !Set.of("assertion", "provider_check").contains(type)) {
+                findings.add(finding(testCasePath, fieldPath + ".type", "unsupported_verify_type",
+                        "Use `assertion` or `provider_check` for DSL v0.3 verify steps."));
+            }
+            verifyIndex++;
+        }
+        validateV03StepIds(testCasePath, "cleanup", listValue(testCase.get("cleanup")), seenIds, findings);
+    }
+
+    private void validateV03StepIds(
+            Path testCasePath,
+            String phase,
+            List<Object> steps,
+            Set<String> seenIds,
+            List<ContractFinding> findings) {
+        int index = 0;
+        for (Object value : steps) {
+            Map<String, Object> step = mapValue(value);
+            String id = stringValue(step.get("id"));
+            String fieldPath = id.isBlank() ? phase + "[" + index + "]" : phase + "." + id;
+            validateV03StepId(testCasePath, fieldPath, id, seenIds, findings);
+            index++;
+        }
+    }
+
+    private void validateV03StepId(
+            Path testCasePath,
+            String fieldPath,
+            String id,
+            Set<String> seenIds,
+            List<ContractFinding> findings) {
+        if (id.isBlank()) {
+            return;
+        }
+        if (!seenIds.add(id)) {
+            findings.add(finding(testCasePath, fieldPath + ".id", "duplicate_step_id",
+                    "Use unique step ids within one DSL v0.3 test case."));
+        }
+    }
+
+    private void rememberV03PriorStep(Set<String> priorSteps, V03OperationRef operationRef) {
+        if (!operationRef.id().isBlank()) {
+            priorSteps.add(operationRef.id());
+        }
+    }
+
+    private void validateV03EnvProfileTarget(
+            ContractGraph graph,
+            Path testCasePath,
+            V03OperationRef operationRef,
+            String targetName,
+            TargetResolution targetResolution,
+            List<ContractFinding> findings) {
+        for (String profile : graph.usedProfiles()) {
+            EnvironmentBindingDoc bindingDoc = graph.environmentBindingsByProfile().get(profile);
+            if (bindingDoc == null) {
+                findings.add(new ContractFinding(
+                        testCasePath.toString(),
+                        "env_profiles." + profile,
+                        "missing_env_profile",
+                        "",
+                        targetResolution.providerType(),
+                        profile,
+                        operationRef.operation(),
+                        "Add Env_Profile for profile `" + profile + "`."));
+                continue;
+            }
+            Map<String, Object> envTarget = mapValue(mapValue(bindingDoc.document().get("targets")).get(targetName));
+            if (envTarget.isEmpty()) {
+                findings.add(new ContractFinding(
+                        bindingDoc.path().toString(),
+                        "targets." + targetName,
+                        "missing_env_profile_provider_binding",
+                        "",
+                        targetResolution.providerType(),
+                        profile,
+                        operationRef.operation(),
+                        "Add Env_Profile target binding for suite target `" + targetName + "`."));
+                continue;
+            }
+            String runtimeMode = stringValue(envTarget.get("runtime_mode"));
+            validateRuntimeModeAllowed(bindingDoc.path(), "targets." + targetName + ".runtime_mode",
+                    "", targetResolution.providerType(), profile, runtimeMode,
+                    stringList(targetResolution.contract().get("runtime_modes")), "Provider Contract", findings);
+            Map<String, Object> bindingValues = mapValue(envTarget.get("bindings"));
+            Map<String, Object> contractBindingKeys = mapValue(targetResolution.contract().get("binding_keys"));
+            for (String bindingKey : bindingValues.keySet()) {
+                if (!contractBindingKeys.containsKey(bindingKey)) {
+                    findings.add(new ContractFinding(
+                            bindingDoc.path().toString(),
+                            "targets." + targetName + ".bindings." + bindingKey,
+                            "unknown_binding_key",
+                            "",
+                            targetResolution.providerType(),
+                            profile,
+                            operationRef.operation(),
+                            "Use a binding key declared by Provider Contract `" + targetResolution.providerType()
+                                    + "`. Unknown key `" + bindingKey + "`."));
+                }
+            }
+            for (String requiredKey : requiredBindingKeys(targetResolution.contract())) {
+                if (isMissing(valueAtPath(bindingValues, requiredKey))) {
+                    findings.add(new ContractFinding(
+                            bindingDoc.path().toString(),
+                            "targets." + targetName + ".bindings." + requiredKey,
+                            "missing_required_binding_key",
+                            "",
+                            targetResolution.providerType(),
+                            profile,
+                            operationRef.operation(),
+                            "Supply binding key `" + requiredKey + "` for target `" + targetName + "`."));
+                }
+            }
+        }
+    }
+
+    private void validateV03Inputs(
+            ContractGraph graph,
+            Path testCasePath,
+            V03OperationRef operationRef,
+            TargetResolution targetResolution,
+            Map<String, Object> operation,
+            List<ContractFinding> findings) {
+        List<String> allowedInputs = operationInputs(operation, "allowed_inputs", "allowed_bind_as");
+        for (String inputName : operationRef.inputs().keySet()) {
+            if (!allowedBindAs(allowedInputs, inputName)) {
+                findings.add(new ContractFinding(
+                        testCasePath.toString(),
+                        operationRef.fieldPath() + ".with." + inputName,
+                        "unsupported_input",
+                        "",
+                        targetResolution.providerType(),
+                        targetResolution.profile(),
+                        operationRef.operation(),
+                        "Use an input name allowed by Provider Contract `" + targetResolution.providerType()
+                                + "` for operation `" + operationRef.operation() + "`. input: " + inputName));
+                continue;
+            }
+            validateV03ArtifactRef(graph, testCasePath, operationRef, inputName, operationRef.inputs().get(inputName),
+                    targetResolution, findings);
+        }
+        for (String requiredInput : operationInputs(operation, "required_inputs", "required_parameters")) {
+            if (!providedInput(new ArrayList<>(operationRef.inputs().keySet()), requiredInput)) {
+                findings.add(new ContractFinding(
+                        testCasePath.toString(),
+                        operationRef.fieldPath() + ".with",
+                        "missing_required_input",
+                        "",
+                        targetResolution.providerType(),
+                        targetResolution.profile(),
+                        operationRef.operation(),
+                        "Add required input `" + requiredInput + "` for operation `"
+                                + operationRef.operation() + "`."));
+            }
+        }
+    }
+
+    private void validateV03ArtifactRef(
+            ContractGraph graph,
+            Path testCasePath,
+            V03OperationRef operationRef,
+            String inputName,
+            Object value,
+            TargetResolution targetResolution,
+            List<ContractFinding> findings) {
+        String ref = stringValue(value);
+        if (!ref.startsWith("artifact://")) {
+            return;
+        }
+        String refBody = ref.substring("artifact://".length());
+        String filePart = refBody.split("#", 2)[0];
+        int separator = filePart.indexOf('/');
+        if (separator < 1) {
+            findings.add(new ContractFinding(
+                    testCasePath.toString(),
+                    operationRef.fieldPath() + ".with." + inputName,
+                    "invalid_artifact_ref",
+                    "",
+                    targetResolution.providerType(),
+                    targetResolution.profile(),
+                    operationRef.operation(),
+                    "Use artifact refs as `artifact://<root>/<path>`."));
+            return;
+        }
+        String rootName = filePart.substring(0, separator);
+        String relativePath = filePart.substring(separator + 1);
+        String rootDir = stringValue(mapValue(graph.suite().get("artifact_roots")).get(rootName));
+        if (rootDir.isBlank()) {
+            findings.add(new ContractFinding(
+                    testCasePath.toString(),
+                    operationRef.fieldPath() + ".with." + inputName,
+                    "unknown_artifact_root",
+                    "",
+                    targetResolution.providerType(),
+                    targetResolution.profile(),
+                    operationRef.operation(),
+                    "Declare artifact root `" + rootName + "` in suite_manifest.artifact_roots."));
+            return;
+        }
+        Path suiteRoot = graph.suitePath().toAbsolutePath().normalize().getParent();
+        Path root = suiteRoot.resolve(rootDir).normalize();
+        Path resolved = root.resolve(relativePath).normalize();
+        if (!root.startsWith(suiteRoot) || !resolved.startsWith(root)) {
+            findings.add(new ContractFinding(
+                    testCasePath.toString(),
+                    operationRef.fieldPath() + ".with." + inputName,
+                    "ref_outside_suite_root",
+                    "",
+                    targetResolution.providerType(),
+                    targetResolution.profile(),
+                    operationRef.operation(),
+                    "Keep artifact refs under the declared suite artifact root."));
+            return;
+        }
+        if (!Files.isRegularFile(resolved)) {
+            findings.add(new ContractFinding(
+                    testCasePath.toString(),
+                    operationRef.fieldPath() + ".with." + inputName,
+                    "unresolved_artifact_ref",
+                    "",
+                    targetResolution.providerType(),
+                    targetResolution.profile(),
+                    operationRef.operation(),
+                    "Restore runtime-critical artifact ref `" + ref + "`."));
+        }
+    }
+
+    private void validateV03AssertionRefs(
+            Path testCasePath,
+            V03OperationRef operationRef,
+            Set<String> priorSteps,
+            List<ContractFinding> findings) {
+        String actual = stringValue(operationRef.inputs().get("actual"));
+        if (!actual.startsWith("step://")) {
+            return;
+        }
+        String refBody = actual.substring("step://".length());
+        String stepId = refBody.split("/", 2)[0];
+        if (!priorSteps.contains(stepId)) {
+            findings.add(new ContractFinding(
+                    testCasePath.toString(),
+                    operationRef.fieldPath() + ".assert.actual",
+                    "invalid_step_ref",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "Reference only prior steps in the same v0.3 test case. Unknown or forward step `" + stepId + "`."));
         }
     }
 
@@ -1590,10 +2020,13 @@ public class ContractBaselineService {
             return ContractGraph.blocked(suiteManifest, suite, findings);
         }
         Path root = suiteManifest.toAbsolutePath().normalize().getParent();
+        boolean manifestV03 = "v0.3".equals(stringValue(suite.get("manifest_version")));
         List<Path> testPaths = listValue(suite.get("tests")).stream()
-                .map(value -> root.resolve(stringValue(value)).normalize())
+                .map(value -> root.resolve(suiteTestRef(value)).normalize())
                 .toList();
         Map<Path, Map<String, Object>> testCases = readAll(testPaths, findings);
+        boolean v03 = manifestV03 || testCases.values().stream()
+                .anyMatch(testCase -> "v0.3".equals(stringValue(testCase.get("dsl_version"))));
         Map<Path, Map<String, Object>> frameworkContractsByPath =
                 readDirectory(frameworkProviderContractsDirectory(root), findings);
         Map<Path, Map<String, Object>> suiteLocalContractsByPath =
@@ -1601,7 +2034,9 @@ public class ContractBaselineService {
         Map<Path, Map<String, Object>> contractsByPath = new LinkedHashMap<>();
         contractsByPath.putAll(frameworkContractsByPath);
         contractsByPath.putAll(suiteLocalContractsByPath);
-        Map<Path, Map<String, Object>> instancesByPath = readDirectory(root.resolve("provider_instances"), findings);
+        Map<Path, Map<String, Object>> instancesByPath = v03
+                ? Map.of()
+                : readDirectory(root.resolve("provider_instances"), findings);
         Path envProfilesRoot = root.resolve("env_profiles");
         Map<Path, Map<String, Object>> envProfiles = withEnvProfileDefaults(readOptionalDirectory(envProfilesRoot, findings));
         boolean envProfileMode = Files.isDirectory(envProfilesRoot);
@@ -1613,10 +2048,18 @@ public class ContractBaselineService {
                 : readDirectory(root.resolve("environment_bindings"), findings);
 
         Map<String, Map<String, Object>> contracts = new LinkedHashMap<>();
+        Map<String, Map<String, Object>> contractsById = new LinkedHashMap<>();
         for (Map<String, Object> contract : contractsByPath.values()) {
             String providerType = stringValue(contract.get("provider_type"));
             if (!providerType.isBlank()) {
                 contracts.put(providerType, contract);
+                contractsById.put(providerType, contract);
+                contractsById.put(providerType + ".v0.2", contract);
+                contractsById.put(providerType + ".v0.3", contract);
+            }
+            String providerContract = stringValue(contract.get("provider_contract"));
+            if (!providerContract.isBlank()) {
+                contractsById.put(providerContract, contract);
             }
         }
         Map<String, Map<String, Object>> instances = new LinkedHashMap<>();
@@ -1629,7 +2072,9 @@ public class ContractBaselineService {
         Map<String, EnvironmentBindingDoc> bindingsByProfile = new LinkedHashMap<>();
         if (envProfileMode) {
             for (Map.Entry<Path, Map<String, Object>> entry : envProfiles.entrySet()) {
-                String profile = stringValue(entry.getValue().get("env_profile_id"));
+                String profile = firstNonBlank(
+                        stringValue(entry.getValue().get("env_profile_id")),
+                        stringValue(entry.getValue().get("profile_id")));
                 if (!profile.isBlank()) {
                     bindingsByProfile.put(profile, new EnvironmentBindingDoc(entry.getKey(), entry.getValue(), true));
                 }
@@ -1650,6 +2095,7 @@ public class ContractBaselineService {
                 testCases,
                 contractsByPath,
                 contracts,
+                contractsById,
                 instancesByPath,
                 instances,
                 profiles,
@@ -1659,7 +2105,16 @@ public class ContractBaselineService {
                 bindingsByProfile,
                 new LinkedHashSet<>(usedProfiles),
                 allowedProviderTypes(suite, frameworkContractsByPath),
+                v03,
                 List.copyOf(findings));
+    }
+
+    private String suiteTestRef(Object value) {
+        Map<String, Object> map = mapValue(value);
+        if (!map.isEmpty() || value instanceof Map<?, ?>) {
+            return stringValue(map.get("ref"));
+        }
+        return stringValue(value);
     }
 
     private Path frameworkProviderContractsDirectory(Path suiteRoot) {
@@ -1722,6 +2177,7 @@ public class ContractBaselineService {
 
     private Set<String> suiteSelectedProfiles(Map<String, Object> suite) {
         Set<String> profiles = new LinkedHashSet<>();
+        addIfPresent(profiles, stringValue(suite.get("default_profile")));
         addIfPresent(profiles, stringValue(suite.get("profile")));
         for (Object profile : listValue(suite.get("profiles"))) {
             addIfPresent(profiles, stringValue(profile));
@@ -2251,6 +2707,56 @@ public class ContractBaselineService {
         return operations;
     }
 
+    private List<V03OperationRef> v03OperationRefs(Map<String, Object> testCase) {
+        List<V03OperationRef> operations = new ArrayList<>();
+        addV03ProviderOperations(operations, "setup", listValue(testCase.get("setup")));
+        addV03ProviderOperations(operations, "execute", listValue(testCase.get("execute")));
+        int verifyIndex = 0;
+        for (Object value : listValue(testCase.get("verify"))) {
+            Map<String, Object> verify = mapValue(value);
+            String id = stringValue(verify.get("id"));
+            String path = id.isBlank() ? "verify[" + verifyIndex + "]" : "verify." + id;
+            String type = stringValue(verify.get("type"));
+            if ("assertion".equals(type)) {
+                operations.add(new V03OperationRef(
+                        path,
+                        id,
+                        "assertion",
+                        "",
+                        "",
+                        mapValue(verify.get("assert"))));
+            } else if ("provider_check".equals(type)) {
+                operations.add(new V03OperationRef(
+                        path,
+                        id,
+                        "provider_check",
+                        stringValue(verify.get("target")),
+                        stringValue(verify.get("op")),
+                        mapValue(verify.get("with"))));
+            }
+            verifyIndex++;
+        }
+        addV03ProviderOperations(operations, "cleanup", listValue(testCase.get("cleanup")));
+        return List.copyOf(operations);
+    }
+
+    private void addV03ProviderOperations(List<V03OperationRef> operations, String phase, List<Object> values) {
+        int index = 0;
+        for (Object value : values) {
+            Map<String, Object> operation = mapValue(value);
+            String id = stringValue(operation.get("id"));
+            String path = id.isBlank() ? phase + "[" + index + "]" : phase + "." + id;
+            operations.add(new V03OperationRef(
+                    path,
+                    id,
+                    phase,
+                    stringValue(operation.get("target")),
+                    stringValue(operation.get("op")),
+                    mapValue(operation.get("with"))));
+            index++;
+        }
+    }
+
     private List<Object> executeOperations(Map<String, Object> testCase) {
         Object execute = testCase.get("execute");
         if (execute instanceof Map<?, ?> executeMap) {
@@ -2299,6 +2805,21 @@ public class ContractBaselineService {
         return new TargetResolution(providerId, profile, providerType, contract);
     }
 
+    private TargetResolution resolveV03Target(ContractGraph graph, String targetName) {
+        Map<String, Object> suiteTarget = mapValue(mapValue(graph.suite().get("targets")).get(targetName));
+        String providerContract = stringValue(suiteTarget.get("provider_contract"));
+        Map<String, Object> contract = providerContract(graph, providerContract);
+        if (contract.isEmpty()) {
+            return TargetResolution.unresolved("", selectedProfile(graph, Map.of()));
+        }
+        return new TargetResolution(targetName, selectedProfile(graph, Map.of()), stringValue(contract.get("provider_type")), contract);
+    }
+
+    private Map<String, Object> providerContract(ContractGraph graph, String providerContract) {
+        Map<String, Object> contract = graph.providerContractsById().get(providerContract);
+        return contract == null ? Map.of() : contract;
+    }
+
     private ValidationResult validationResult(ContractGraph graph, List<ContractFinding> findings) {
         List<ResolvedTarget> plan = findings.isEmpty() ? resolvedPlan(graph) : List.of();
         return new ValidationResult(
@@ -2306,11 +2827,16 @@ public class ContractBaselineService {
                 graph.suiteId(),
                 providerIds(graph),
                 providerTypes(graph),
+                targetNames(graph),
+                providerContractIds(graph),
                 plan,
                 List.copyOf(findings));
     }
 
     private List<String> providerIds(ContractGraph graph) {
+        if (graph.v03()) {
+            return List.of();
+        }
         Set<String> providerIds = new LinkedHashSet<>();
         for (Map<String, Object> testCase : graph.testCases().values()) {
             for (Object targetValue : mapValue(testCase.get("targets")).values()) {
@@ -2322,6 +2848,13 @@ public class ContractBaselineService {
 
     private List<String> providerTypes(ContractGraph graph) {
         Set<String> providerTypes = new LinkedHashSet<>();
+        if (graph.v03()) {
+            for (Object targetValue : mapValue(graph.suite().get("targets")).values()) {
+                Map<String, Object> contract = providerContract(graph, stringValue(mapValue(targetValue).get("provider_contract")));
+                addIfPresent(providerTypes, stringValue(contract.get("provider_type")));
+            }
+            return providerTypes.stream().sorted().toList();
+        }
         for (Map<String, Object> testCase : graph.testCases().values()) {
             for (Object targetValue : mapValue(testCase.get("targets")).values()) {
                 String providerId = stringValue(mapValue(targetValue).get("provider_id"));
@@ -2334,8 +2867,55 @@ public class ContractBaselineService {
         return providerTypes.stream().sorted().toList();
     }
 
+    private List<String> targetNames(ContractGraph graph) {
+        if (graph.v03()) {
+            return mapValue(graph.suite().get("targets")).keySet().stream().sorted().toList();
+        }
+        Set<String> targets = new LinkedHashSet<>();
+        for (Map<String, Object> testCase : graph.testCases().values()) {
+            targets.addAll(mapValue(testCase.get("targets")).keySet());
+        }
+        return targets.stream().sorted().toList();
+    }
+
+    private List<String> providerContractIds(ContractGraph graph) {
+        if (!graph.v03()) {
+            return List.of();
+        }
+        Set<String> ids = new LinkedHashSet<>();
+        for (Object targetValue : mapValue(graph.suite().get("targets")).values()) {
+            addIfPresent(ids, stringValue(mapValue(targetValue).get("provider_contract")));
+        }
+        return ids.stream().sorted().toList();
+    }
+
     private List<ResolvedTarget> resolvedPlan(ContractGraph graph) {
         List<ResolvedTarget> plan = new ArrayList<>();
+        if (graph.v03()) {
+            for (Map<String, Object> testCase : graph.testCases().values()) {
+                String testCaseId = stringValue(testCase.get("test_case_id"));
+                Set<String> seenTargets = new LinkedHashSet<>();
+                for (V03OperationRef operationRef : v03OperationRefs(testCase)) {
+                    if ("assertion".equals(operationRef.kind()) || operationRef.target().isBlank()
+                            || !seenTargets.add(operationRef.target())) {
+                        continue;
+                    }
+                    TargetResolution targetResolution = resolveV03Target(graph, operationRef.target());
+                    Map<String, Object> envTarget = v03EnvTarget(graph, targetResolution.profile(), operationRef.target());
+                    String providerContract = stringValue(mapValue(mapValue(graph.suite().get("targets"))
+                            .get(operationRef.target())).get("provider_contract"));
+                    plan.add(new ResolvedTarget(
+                            testCaseId,
+                            operationRef.target(),
+                            "",
+                            targetResolution.providerType(),
+                            targetResolution.profile(),
+                            stringValue(envTarget.get("runtime_mode")),
+                            providerContract));
+                }
+            }
+            return List.copyOf(plan);
+        }
         for (Map<String, Object> testCase : graph.testCases().values()) {
             String testCaseId = stringValue(testCase.get("test_case_id"));
             for (Map.Entry<String, Object> entry : mapValue(testCase.get("targets")).entrySet()) {
@@ -2354,11 +2934,20 @@ public class ContractBaselineService {
                             providerId,
                             providerType,
                             profile,
-                            stringValue(providerBinding.get("runtime_mode"))));
+                            stringValue(providerBinding.get("runtime_mode")),
+                            ""));
                 }
             }
         }
         return List.copyOf(plan);
+    }
+
+    private Map<String, Object> v03EnvTarget(ContractGraph graph, String profile, String targetName) {
+        EnvironmentBindingDoc bindingDoc = graph.environmentBindingsByProfile().get(profile);
+        if (bindingDoc == null) {
+            return Map.of();
+        }
+        return mapValue(mapValue(bindingDoc.document().get("targets")).get(targetName));
     }
 
     private String selectedProfile(ContractGraph graph, Map<String, Object> target) {
@@ -2625,6 +3214,8 @@ public class ContractBaselineService {
             String suiteId,
             List<String> providerInstancesUsed,
             List<String> providerTypesUsed,
+            List<String> targetsUsed,
+            List<String> providerContractsUsed,
             List<ResolvedTarget> plan,
             List<ContractFinding> findings) {
     }
@@ -2657,7 +3248,8 @@ public class ContractBaselineService {
             String providerId,
             String providerType,
             String profile,
-            String runtimeMode) {
+            String runtimeMode,
+            String providerContract) {
     }
 
     public record ContractFinding(
@@ -2765,6 +3357,7 @@ public class ContractBaselineService {
             Map<Path, Map<String, Object>> testCases,
             Map<Path, Map<String, Object>> providerContractsByPath,
             Map<String, Map<String, Object>> providerContracts,
+            Map<String, Map<String, Object>> providerContractsById,
             Map<Path, Map<String, Object>> providerInstancesByPath,
             Map<String, Map<String, Object>> providerInstances,
             Map<Path, Map<String, Object>> executionProfiles,
@@ -2774,6 +3367,7 @@ public class ContractBaselineService {
             Map<String, EnvironmentBindingDoc> environmentBindingsByProfile,
             Set<String> usedProfiles,
             Set<String> allowedProviderTypes,
+            boolean v03,
             List<ContractFinding> loadFindings) {
 
         static ContractGraph blocked(Path suitePath, Map<String, Object> suite, List<ContractFinding> findings) {
@@ -2788,11 +3382,13 @@ public class ContractBaselineService {
                     Map.of(),
                     Map.of(),
                     Map.of(),
+                    Map.of(),
                     false,
                     Map.of(),
                     Map.of(),
                     Set.of(),
                     Set.of(),
+                    false,
                     List.copyOf(findings));
         }
 
@@ -2811,6 +3407,15 @@ public class ContractBaselineService {
             List<Map<String, Object>> parameters,
             Map<String, Object> outputs,
             boolean modernInputs) {
+    }
+
+    private record V03OperationRef(
+            String fieldPath,
+            String id,
+            String kind,
+            String target,
+            String operation,
+            Map<String, Object> inputs) {
     }
 
     private record TargetResolution(

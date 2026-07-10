@@ -359,6 +359,14 @@ public class RegressionCommand {
         for (String providerType : result.providerTypesUsed()) {
             out.println("  - " + providerType);
         }
+        out.println("targets_used:");
+        for (String target : result.targetsUsed()) {
+            out.println("  - " + target);
+        }
+        out.println("provider_contracts_used:");
+        for (String providerContract : result.providerContractsUsed()) {
+            out.println("  - " + providerContract);
+        }
         List<ContractFinding> findings = new ArrayList<>(result.findings());
         findings.addAll(profileFindings);
         printContractFindings(out, findings);
@@ -1064,7 +1072,12 @@ public class RegressionCommand {
         for (ResolvedTarget target : result.plan()) {
             out.println("  - test_case_id: " + target.testCaseId());
             out.println("    target: " + target.target());
-            out.println("    provider_id: " + target.providerId());
+            if (!target.providerId().isBlank()) {
+                out.println("    provider_id: " + target.providerId());
+            }
+            if (!target.providerContract().isBlank()) {
+                out.println("    provider_contract: " + target.providerContract());
+            }
             out.println("    provider_type: " + target.providerType());
             out.println("    profile: " + target.profile());
             out.println("    runtime_mode: " + target.runtimeMode());

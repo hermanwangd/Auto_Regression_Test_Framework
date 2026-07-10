@@ -25,3 +25,8 @@
 | SPEC-020 | `docs/04-planning/17_track_a_framework_contract_plan.md` | Track A Framework Contract Plan | Platform | v0.2 Track A Draft | F007-F008 / F011 |
 | SPEC-021 | `docs/04-planning/18_track_b_golden_e2e_implementation_plan.md` | Track B Golden E2E Implementation Plan | Platform | v0.2 Track B Draft | F007-F008 / F011 |
 | SPEC-022 | `docs/04-planning/19_track_c_provider_capability_implementation_plan.md` | Track C Provider Capability Implementation Plan | Platform | v0.2 Track C Draft | F007-F008 / F011 |
+| SPEC-023 | `docs/01-specs/05_dsl_v0_3_no_provider_instance_spec.md` | DSL v0.3 No Provider Instance Specification | Platform | Implementation-Ready Draft | Future DSL v0.3 |
+| SPEC-024 | `docs/02-architecture/08_dsl_v0_3_no_provider_instance_architecture.md` | DSL v0.3 No Provider Instance Architecture | Platform | Implementation-Ready Draft | Future DSL v0.3 |
+| SPEC-025 | `docs/03-acceptance/05_dsl_v0_3_acceptance_criteria.md` | DSL v0.3 Acceptance Criteria | QA | Implementation-Ready Draft | Future DSL v0.3 |
+| SPEC-026 | `docs/07-validation-evidence/11_dsl_v0_3_test_plan.md` | DSL v0.3 Test Plan | QA | Implementation-Ready Draft | Future DSL v0.3 |
+| SPEC-027 | `docs/04-planning/25_dsl_v0_3_no_provider_instance_implementation_plan.md` | DSL v0.3 No Provider Instance Implementation Plan | Platform | Implementation-Ready Draft | Future DSL v0.3 |

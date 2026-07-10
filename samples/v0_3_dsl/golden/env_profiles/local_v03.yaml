@@ -1,0 +1,11 @@
+profile_id: local_v03
+execution_mode: local
+isolation: per_run
+evidence_classification: framework_verification_only
+
+targets:
+  sample_runtime:
+    runtime_mode: stub
+    bindings:
+      workspace_ref: local://golden-v03-workspace
+      clock_ref: fixed://2026-07-10T00:00:00Z

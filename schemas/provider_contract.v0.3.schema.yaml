@@ -1,0 +1,19 @@
+contract_version: v0.3
+artifact: provider_contract
+status: framework_owned_current_stage
+required_fields:
+  - provider_contract
+  - provider_type
+  - runtime_modes
+  - operations
+provider_contract_rules:
+  declares_allowed_runtime_modes: true
+  declares_binding_keys_by_runtime_mode: true
+  declares_operation_inputs: true
+  declares_output_refs: true
+  declares_evidence_outputs: true
+  declares_failure_codes: true
+unsupported_behavior:
+  unknown_operation: block_before_execution
+  unsupported_input: block_before_execution
+  missing_output_ref: block_before_execution

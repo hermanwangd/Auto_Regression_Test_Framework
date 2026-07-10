@@ -1,0 +1,34 @@
+dsl_version: v0.3
+test_case_id: GOLDEN-E2E-V03-TC-001
+title: Framework v0.3 golden sample resolves without Provider Instance
+
+setup:
+  - id: prepare_sample_workspace
+    target: sample_runtime
+    op: setup_fixture
+    with:
+      fixture.setup_ref: artifact://fixtures/setup_fixture.yaml
+      fixture.input_ref: artifact://fixtures/input.json
+
+execute:
+  - id: produce_sample_output
+    target: sample_runtime
+    op: execute_sample
+    with:
+      sample.input_ref: artifact://fixtures/input.json
+      sample.expected_ref: artifact://expected_results/expected_output.json
+
+verify:
+  - id: status_is_ok
+    type: assertion
+    assert:
+      actual: step://produce_sample_output/actual_json.status
+      operator: equals
+      expected: OK
+
+cleanup:
+  - id: cleanup_sample_workspace
+    target: sample_runtime
+    op: cleanup_fixture
+    with:
+      fixture.cleanup_ref: artifact://fixtures/cleanup_fixture.yaml

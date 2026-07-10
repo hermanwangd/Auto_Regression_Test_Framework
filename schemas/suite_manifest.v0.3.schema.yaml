@@ -1,0 +1,30 @@
+contract_version: v0.3
+artifact: suite_manifest
+status: framework_owned_current_stage
+required_fields:
+  - manifest_version
+  - suite_id
+  - targets
+  - env_profiles
+  - tests
+target_model:
+  map_key: target
+  required_fields:
+    - provider_contract
+tests:
+  allowed_entry_shapes:
+    - ref
+artifact_roots:
+  required_when_artifact_refs_are_used: true
+must_not_contain:
+  - provider runtime values
+  - endpoint URLs
+  - topics
+  - queue names
+  - JDBC strings
+  - credentials
+  - provider instance refs
+unsupported_behavior:
+  missing_provider_contract: block_before_execution
+  unknown_target: block_before_execution
+  raw_secret: block_before_execution

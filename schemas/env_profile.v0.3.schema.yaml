@@ -1,0 +1,23 @@
+contract_version: v0.3
+artifact: env_profile
+status: framework_owned_current_stage
+required_fields:
+  - profile_id
+  - execution_mode
+  - targets
+target_binding_shape:
+  map_key: suite_manifest.targets
+  required_fields:
+    - runtime_mode
+    - bindings
+binding_rules:
+  contract_path: Provider Contract.binding_keys
+  raw_secrets: prohibited
+  allowed_ref_prefixes:
+    - env://
+    - generated://
+    - local://
+unsupported_behavior:
+  missing_required_binding_key: block_before_execution
+  unsupported_runtime_mode: block_before_execution
+  invalid_generated_ref: block_before_execution
