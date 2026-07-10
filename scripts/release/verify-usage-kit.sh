@@ -62,6 +62,22 @@ required_paths=(
   "usage-kit/docs/02-architecture/contracts/provider-contracts/ibm_mq.yaml"
   "usage-kit/schemas/test_case_dsl.v0.2.schema.yaml"
   "usage-kit/schemas/suite_manifest.v0.2.schema.yaml"
+  "usage-kit/schemas/test_case_dsl.v0.3.schema.yaml"
+  "usage-kit/schemas/suite_manifest.v0.3.schema.yaml"
+  "usage-kit/schemas/env_profile.v0.3.schema.yaml"
+  "usage-kit/schemas/provider_contract.v0.3.schema.yaml"
+  "usage-kit/docs/02-architecture/contracts/test_case_dsl.v0.3.schema.yaml"
+  "usage-kit/docs/02-architecture/contracts/suite_manifest.v0.3.schema.yaml"
+  "usage-kit/docs/02-architecture/contracts/env_profile.v0.3.schema.yaml"
+  "usage-kit/docs/02-architecture/contracts/provider_contract.v0.3.schema.yaml"
+  "usage-kit/docs/v0.3/05_dsl_v0_3_no_provider_instance_spec.md"
+  "usage-kit/docs/v0.3/08_dsl_v0_3_no_provider_instance_architecture.md"
+  "usage-kit/docs/v0.3/05_dsl_v0_3_acceptance_criteria.md"
+  "usage-kit/docs/v0.3/11_dsl_v0_3_test_plan.md"
+  "usage-kit/samples/v0_3_dsl/README.md"
+  "usage-kit/samples/v0_3_dsl/golden/suite_manifest.yaml"
+  "usage-kit/samples/v0_3_dsl/golden/test_cases/golden_success.yaml"
+  "usage-kit/samples/v0_3_dsl/golden/env_profiles/local_v03.yaml"
   "usage-kit/samples/00-getting-started/golden_e2e/suite_manifest.yaml"
   "usage-kit/samples/10-contract-baseline/mixed_wiremock_jdbc_nats/suite_manifest.yaml"
   "usage-kit/samples/20-provider-capability-p0/suite_manifest.yaml"
@@ -129,6 +145,11 @@ if ! grep -q "^sample_layout_version: v2$" "${WORK_DIR}/usage-kit/usage-kit-mani
   exit 1
 fi
 
+if ! grep -q "^contract_versions: \\[v0.2, v0.3\\]$" "${WORK_DIR}/usage-kit/usage-kit-manifest.yaml"; then
+  echo "Usage kit manifest is missing contract_versions: [v0.2, v0.3]." >&2
+  exit 1
+fi
+
 if grep -R "{{VERSION}}" \
   "${WORK_DIR}/usage-kit/QUICKSTART.md" \
   "${WORK_DIR}/usage-kit/TROUBLESHOOTING.md" \
@@ -151,6 +172,10 @@ run_cli() {
   run_cli validate --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml
   run_cli run --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml --dry-run
   run_cli validate --suite samples/20-provider-capability-p0/suite_manifest.yaml
+  run_cli validate --suite samples/v0_3_dsl/golden/suite_manifest.yaml --profile local_v03
+  run_cli run --suite samples/v0_3_dsl/golden/suite_manifest.yaml --profile local_v03 --dry-run
+  run_cli run --suite samples/v0_3_dsl/golden/suite_manifest.yaml --profile local_v03
+  run_cli report --result target/provider-capability/golden-e2e/GOLDEN-E2E-v0.3/BATCH-GOLDEN-E2E-001/RUN-GOLDEN-E2E-001/result.json
   run_cli validate-evidence --result samples/40-evidence-reporting/evidence_hardening/valid_result.json
   run_cli validate --suite samples/golden_e2e/suite_manifest.yaml
   run_cli validate --suite samples/provider_capability/suite_manifest.yaml

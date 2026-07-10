@@ -1,6 +1,6 @@
 # DSL v0.3 No Provider Instance Implementation Plan
 
-**Status:** In progress for release/0.3.0; validation and dry-run baseline is the current implementation slice
+**Status:** Local release gates passed for release/0.3.0 golden baseline; ready for branch CI/release asset verification
 **Spec:** `docs/01-specs/05_dsl_v0_3_no_provider_instance_spec.md`
 **Architecture:** `docs/02-architecture/08_dsl_v0_3_no_provider_instance_architecture.md`
 **AC:** `docs/03-acceptance/05_dsl_v0_3_acceptance_criteria.md`
@@ -262,7 +262,26 @@ schemas
 
 Do not start runtime execution work until dry-run resolution is green.
 
-## 5. Risks and Mitigations
+## 5. Local Release Verification Evidence
+
+Validated on release/0.3.0 with bounded memory:
+
+```bash
+scripts/release/verify-release-version.sh 0.3.0
+scripts/ci/check-public-support-contract.sh
+scripts/ci/check-schema-drift.sh
+scripts/ci/secret-scan.sh
+MAVEN_OPTS='-Xmx1024m -XX:MaxMetaspaceSize=384m' ./mvnw -q -Dtest=DslV03CommandTest,GoldenE2eCommandTest,ContractBaselineCommandTest,ReportJsonFormatCommandTest test
+MAVEN_OPTS='-Xmx1024m -XX:MaxMetaspaceSize=384m' ./mvnw -q verify
+scripts/release/build-usage-kit.sh 0.3.0
+scripts/release/verify-usage-kit.sh target/spec-driven-auto-regression-0.3.0-usage-kit.zip 0.3.0
+scripts/ci/verify-contracts.sh
+REQUIRE_EXTERNAL_MESSAGING=false REQUIRE_EXTERNAL_JDBC=false scripts/release/verify-supported-provider-samples.sh 0.3.0
+```
+
+All commands passed locally. External JDBC, Kafka, and IBM MQ native runtime evidence remains opt-in and was reported as `not_configured`; checked-in contract validation and local/mock provider capability gates passed.
+
+## 6. Risks and Mitigations
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
@@ -272,7 +291,7 @@ Do not start runtime execution work until dry-run resolution is green.
 | Path refs become unsafe | High | Central path guard with traversal, symlink, and root overlap tests. |
 | Dry-run leaks secrets | High | Dry-run prints binding status only; secret scan covers dry-run output fixtures. |
 
-## 6. Implementation Readiness Checklist
+## 7. Implementation Readiness Checklist
 
 - [x] Formal spec exists.
 - [x] Architecture/design update exists.

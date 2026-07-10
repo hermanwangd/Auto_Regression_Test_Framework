@@ -106,6 +106,43 @@ regress report --result <generated_result_json>
 
 Product/RP tooling must translate owner-authored artifacts into suite-mode artifacts before invoking the framework runtime. Direct Product/RP runtime orchestration is not part of the v0.2.7 framework public interface.
 
+### 5.1 DSL v0.3 Preview Runtime Interface
+
+Framework `0.3.0` also includes the versioned DSL v0.3 preview path. v0.3 keeps v0.2 compatibility intact but removes user-authored Provider Instance artifacts from the v0.3 authoring model.
+
+v0.3 resolution flow:
+
+```text
+test_case.target
+  -> suite_manifest.targets.<target>.provider_contract
+  -> framework Provider Contract
+  -> selected env_profile.targets.<target>
+  -> resolved execution plan
+```
+
+v0.3 test cases reference suite target names directly. They use `op`, `with`, `verify`, and typed refs such as `artifact://...` and `step://...`. They must not contain v0.2-only fields such as `provider_id`, `provider_instance`, `parameters`, `bind_as`, `data_binding`, `datasets`, `fixtures`, or `expected_results`.
+
+Typical v0.3 commands:
+
+```bash
+regress validate \
+  --suite samples/v0_3_dsl/golden/suite_manifest.yaml \
+  --profile local_v03
+
+regress run \
+  --suite samples/v0_3_dsl/golden/suite_manifest.yaml \
+  --profile local_v03 \
+  --dry-run
+
+regress run \
+  --suite samples/v0_3_dsl/golden/suite_manifest.yaml \
+  --profile local_v03
+
+regress report --result <generated_result_json>
+```
+
+Use `docs/v0.3/` in the usage kit for the formal v0.3 spec, architecture, AC, and test plan. Use `docs/09-operations/` for the stable v0.2 suite-mode guide and shared operations topics.
+
 During framework development, keep Maven memory bounded:
 
 ```bash
@@ -1112,6 +1149,20 @@ regress report --result <generated_result_json>
 Golden E2E suite-path mode may execute only deterministic framework-owned fake providers. It must not start WireMock, JDBC, NATS, Kafka, REST/gRPC, K8s, VM, external runner, SIT, or downstream product deployment.
 
 Provider Capability suite-path mode proves selected v0.2 P0 provider capabilities as framework evidence. A standard suite run creates one `batch_id`, one `run_id`, one result JSON, and per-test outcomes in `test_results[]`; all selected `tests[]` share the selected Env_Profile. Provider identity for suite-level reporting comes from `provider_summary[]` and `provider_results[]`. Multi-provider standard results, inferred from either `test_results[]` or `provider_results[]`, must include `provider_summary[]`. Top-level `provider_id`, `provider_type`, or destination fields are single-provider compatibility fields only and must not be used to summarize a multi-provider suite.
+
+The v0.3 golden sample proves the simplified no-Provider-Instance lifecycle with the deterministic fake provider:
+
+```bash
+regress validate --suite samples/v0_3_dsl/golden/suite_manifest.yaml --profile local_v03
+
+regress run \
+  --suite samples/v0_3_dsl/golden/suite_manifest.yaml \
+  --profile local_v03
+
+regress report --result <generated_result_json>
+```
+
+This sample is framework verification evidence only. It proves v0.3 suite target resolution, Env_Profile target binding validation, runtime execution, evidence writing, and report consumption without external providers.
 
 The v0.2.7 contract baseline sample is an executable mixed-provider framework verification suite:
 

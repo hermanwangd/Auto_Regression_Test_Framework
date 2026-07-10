@@ -17,6 +17,10 @@ required=(
   result.v0.2.schema.yaml
   suite_manifest.v0.2.schema.yaml
   test_case_dsl.v0.2.schema.yaml
+  env_profile.v0.3.schema.yaml
+  provider_contract.v0.3.schema.yaml
+  suite_manifest.v0.3.schema.yaml
+  test_case_dsl.v0.3.schema.yaml
 )
 
 legacy_docs=(

@@ -1,8 +1,8 @@
 # DSL v0.3 No Provider Instance Specification
 
-**Status:** Accepted for release/0.3.0 implementation; validation and dry-run baseline in progress
-**Version:** v0.3 proposed public interface
-**Scope:** Future DSL and runtime contract track. This document does not change the v0.2 or v0.2.7 public interface.
+**Status:** Implemented for release/0.3.0 golden baseline; local release gates passed
+**Version:** v0.3 public preview interface
+**Scope:** Versioned DSL and runtime contract track. This document does not change the v0.2 or v0.2.7 public interface.
 
 ## 1. Objective
 

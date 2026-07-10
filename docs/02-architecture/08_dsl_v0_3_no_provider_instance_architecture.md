@@ -1,7 +1,7 @@
 # DSL v0.3 No Provider Instance Architecture
 
-**Status:** Accepted for release/0.3.0 implementation; validation and dry-run baseline in progress
-**Scope:** Future DSL v0.3 runtime model. v0.2 and v0.2.7 Provider Instance behavior remains unchanged until a versioned implementation is accepted.
+**Status:** Implemented for release/0.3.0 golden baseline; local release gates passed
+**Scope:** Versioned DSL v0.3 runtime model. v0.2 and v0.2.7 Provider Instance behavior remains unchanged.
 
 ## 1. Architecture Decision
 

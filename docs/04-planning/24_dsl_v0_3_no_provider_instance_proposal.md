@@ -1,6 +1,6 @@
 # DSL v0.3 No Provider Instance Proposal
 
-**Status:** Proposal, superseded for implementation planning by:
+**Status:** Proposal adopted into the release/0.3.0 golden baseline and superseded for implementation tracking by:
 
 - `docs/01-specs/05_dsl_v0_3_no_provider_instance_spec.md`
 - `docs/02-architecture/08_dsl_v0_3_no_provider_instance_architecture.md`
@@ -10,7 +10,7 @@
 
 **Goal:** Define a simpler DSL v0.3 public interface that removes Provider Instance as a user-authored artifact while preserving strict Provider Contract validation, Env_Profile runtime policy, evidence governance, and dry-run safety.
 
-This proposal is for a future DSL v0.3 track. It does not change the v0.2 public interface or v0.2.7 release scope.
+This proposal records the design rationale. Current release status is tracked in the formal spec, architecture, AC, test plan, and implementation plan. DSL v0.3 does not change the v0.2 suite-mode public interface.
 
 ---
 
@@ -462,7 +462,7 @@ parameters:
 bind_as:
 ```
 
-v0.2 remains readable as legacy input. New samples, generated test cases, and QA agent output should use v0.3 only after the formal v0.3 implementation is accepted.
+v0.2 remains readable as legacy input. New v0.3 samples, generated test cases, and QA agent output should use this shape only for the versioned v0.3 path after the corresponding release gate accepts it.
 
 ---
 
@@ -495,7 +495,7 @@ v0.2 remains readable as legacy input. New samples, generated test cases, and QA
 
 ## 14. Test Corpus Proposal
 
-Create v0.3 samples under a dedicated future path such as:
+Create v0.3 samples under:
 
 ```text
 samples/v0_3_dsl/
@@ -535,6 +535,6 @@ Required sample groups:
 
 ## 16. Verdict
 
-This proposal is ready for formal v0.3 spec, architecture, acceptance criteria, and test-plan drafting.
+This proposal has been converted into formal v0.3 spec, architecture, acceptance criteria, test plan, and implementation plan documents.
 
-It is not implementation-ready until those documents are reviewed and accepted.
+Use the implementation plan for release tracking and the user guide for release-facing commands.

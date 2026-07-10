@@ -53,8 +53,14 @@ EOF_WARNING
 copy_dir docs/09-operations "${KIT_ROOT}/docs/09-operations"
 copy_dir docs/08-release/framework "${KIT_ROOT}/docs/08-release/framework"
 copy_dir docs/02-architecture/contracts "${KIT_ROOT}/docs/02-architecture/contracts"
+mkdir -p "${KIT_ROOT}/docs/v0.3"
+copy_dir docs/01-specs/05_dsl_v0_3_no_provider_instance_spec.md "${KIT_ROOT}/docs/v0.3/05_dsl_v0_3_no_provider_instance_spec.md"
+copy_dir docs/02-architecture/08_dsl_v0_3_no_provider_instance_architecture.md "${KIT_ROOT}/docs/v0.3/08_dsl_v0_3_no_provider_instance_architecture.md"
+copy_dir docs/03-acceptance/05_dsl_v0_3_acceptance_criteria.md "${KIT_ROOT}/docs/v0.3/05_dsl_v0_3_acceptance_criteria.md"
+copy_dir docs/07-validation-evidence/11_dsl_v0_3_test_plan.md "${KIT_ROOT}/docs/v0.3/11_dsl_v0_3_test_plan.md"
 copy_dir schemas "${KIT_ROOT}/schemas"
 copy_dir samples/README.md "${KIT_ROOT}/samples/README.md"
+copy_dir samples/v0_3_dsl "${KIT_ROOT}/samples/v0_3_dsl"
 copy_dir samples/00-getting-started "${KIT_ROOT}/samples/00-getting-started"
 copy_dir samples/10-contract-baseline "${KIT_ROOT}/samples/10-contract-baseline"
 copy_dir samples/20-provider-capability-p0 "${KIT_ROOT}/samples/20-provider-capability-p0"
@@ -131,9 +137,9 @@ render_doc docs/09-operations/external_runtime_setup.md "${KIT_ROOT}/docs/09-ope
 cat > "${KIT_ROOT}/README.md" <<EOF_README
 # Spec Driven Auto Regression ${VERSION} Usage Kit
 
-This kit contains the user-facing v0.2 documentation, Provider Contract catalog,
-schemas, and checked-in sample suites for the Auto Regression Test Framework
-release ${VERSION}.
+This kit contains the user-facing v0.2 suite-mode interface plus the v0.3 DSL
+preview interface, Provider Contract catalog, schemas, and checked-in sample
+suites for the Auto Regression Test Framework release ${VERSION}.
 
 The executable jar is published as a separate release asset:
 
@@ -156,6 +162,13 @@ For provider capability examples, start with:
 
 \`\`\`bash
 java -jar ../spec-driven-auto-regression-${VERSION}.jar validate --suite samples/20-provider-capability-p0/suite_manifest.yaml
+\`\`\`
+
+For the v0.3 no-Provider-Instance DSL preview, start with:
+
+\`\`\`bash
+java -jar ../spec-driven-auto-regression-${VERSION}.jar validate --suite samples/v0_3_dsl/golden/suite_manifest.yaml --profile local_v03
+java -jar ../spec-driven-auto-regression-${VERSION}.jar run --suite samples/v0_3_dsl/golden/suite_manifest.yaml --profile local_v03
 \`\`\`
 
 Mock or sample-only framework evidence must not be treated as downstream
@@ -195,6 +208,7 @@ usage_kit_version: ${VERSION}
 framework_artifact: spec-driven-auto-regression-${VERSION}.jar
 git_sha: ${GIT_SHA}
 contract_version: v0.2
+contract_versions: [v0.2, v0.3]
 sample_layout_version: v2
 included:
   root_docs:
@@ -206,9 +220,11 @@ included:
     - docs/09-operations
     - docs/08-release/framework
     - docs/02-architecture/contracts
+    - docs/v0.3
   schemas:
     - schemas
   samples:
+    - samples/v0_3_dsl
     - samples/00-getting-started
     - samples/10-contract-baseline
     - samples/20-provider-capability-p0
@@ -216,6 +232,7 @@ included:
     - samples/40-evidence-reporting
     - samples/90-compatibility
 canonical_sample_roots:
+  - samples/v0_3_dsl
   - samples/00-getting-started
   - samples/10-contract-baseline
   - samples/20-provider-capability-p0
@@ -245,6 +262,8 @@ java -jar spec-driven-auto-regression-${VERSION}.jar run --suite usage-kit/sampl
 java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/20-provider-capability-p0/suite_manifest.yaml
 java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml --profile ci_kafka_external
 java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml --profile ci_ibm_mq_external
+java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/v0_3_dsl/golden/suite_manifest.yaml --profile local_v03
+java -jar spec-driven-auto-regression-${VERSION}.jar run --suite usage-kit/samples/v0_3_dsl/golden/suite_manifest.yaml --profile local_v03
 \`\`\`
 
 Official release verification also runs:

@@ -1,10 +1,11 @@
 # Sample Suites
 
-The sample tree is the public usage-kit surface for framework v0.2. A leaf suite is a directory whose `suite_manifest.yaml` contains `tests[]`. A suite group is a directory whose `suite_manifest.yaml` contains `child_suites[]`.
+The sample tree is the public usage-kit surface for framework v0.2 suite-mode and the framework v0.3 DSL preview. A leaf suite is a directory whose `suite_manifest.yaml` contains `tests[]`. A suite group is a directory whose `suite_manifest.yaml` contains `child_suites[]`.
 
 ## Layout
 
-- `00-getting-started/golden_e2e/`: smallest executable framework lifecycle sample.
+- `v0_3_dsl/golden/`: smallest executable v0.3 no-Provider-Instance DSL sample.
+- `00-getting-started/golden_e2e/`: smallest executable v0.2 framework lifecycle sample.
 - `10-contract-baseline/mixed_wiremock_jdbc_nats/`: mixed contract baseline sample.
 - `20-provider-capability-p0/`: executable P0 provider capability suites grouped by capability family.
 - `30-cross-provider-groups/mock_server_cross_verify/`: suite group for cross-provider mock server verification.
@@ -19,3 +20,4 @@ The sample tree is the public usage-kit surface for framework v0.2. A leaf suite
 - Suite group child refs must stay inside the suite group directory.
 - Runtime-mode provider instance samples labeled `sample_scope: usage_kit_runtime_mode_sample` are coverage artifacts and are not executable targets.
 - New documentation should point to the canonical paths above. Legacy release-asset paths are generated only inside the usage-kit zip for v0.2.x compatibility and include `DEPRECATED_PATH.md` warnings.
+- v0.3 samples must not include Provider Instance files. Test cases reference suite targets directly, suite targets resolve Provider Contracts, and Env_Profile targets provide runtime bindings.

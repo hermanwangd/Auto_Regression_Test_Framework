@@ -1,6 +1,6 @@
 # DSL v0.3 Test Plan
 
-**Status:** Accepted for release/0.3.0 implementation; validation and dry-run baseline in progress
+**Status:** Implemented for release/0.3.0 golden baseline; local release gates passed
 **Scope:** Verification plan for DSL v0.3 no-Provider-Instance implementation.
 
 ## 1. Objective

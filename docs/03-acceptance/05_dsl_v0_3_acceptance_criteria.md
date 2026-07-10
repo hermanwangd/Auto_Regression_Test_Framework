@@ -1,7 +1,7 @@
 # DSL v0.3 Acceptance Criteria
 
-**Status:** Accepted for release/0.3.0 implementation; validation and dry-run baseline in progress
-**Scope:** Future v0.3 DSL and runtime interface. These AC do not replace v0.2 acceptance criteria.
+**Status:** Implemented for release/0.3.0 golden baseline; local release gates passed
+**Scope:** Versioned v0.3 DSL and runtime interface. These AC do not replace v0.2 acceptance criteria.
 
 ## AC-V03-001 Validate Suite Manifest Target Model
 
