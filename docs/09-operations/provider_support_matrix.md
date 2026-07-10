@@ -1,6 +1,6 @@
 # Provider Support Matrix
 
-This matrix defines the Framework `0.2.6` public provider support claim. It does not decide downstream Product/RP release readiness; owners still provide AC, Env_Profile, deployment readiness, expected results, and release evidence.
+This matrix defines the Framework `0.2.7` public provider support claim. It does not decide downstream Product/RP release readiness; owners still provide AC, Env_Profile, deployment readiness, expected results, and release evidence.
 
 Status meanings:
 
@@ -22,19 +22,19 @@ Server or dependency lifecycle words such as native, mock, ephemeral, framework-
 | `jdbc` | `supported` | `samples/20-provider-capability-p0/data/jdbc/` | JDBC fixture/query/cleanup plus Oracle/DB2 CRUD capability samples. `local_jdbc` uses approved local H2 Oracle/DB2 modes; native external execution is split into single-provider Oracle or DB2 suites selected by `JDBC_EXTERNAL_DIALECT`, using `connection.secret_ref: env://JDBC_CONNECTION` and runner env var `JDBC_CONNECTION`. |
 | `kafka` | `supported` | `samples/20-provider-capability-p0/messaging/kafka/` | CI verifies contract, local provider sample, and external profile validation. Native external execution runs only when broker bindings are configured; the framework does not start Kafka. |
 | `kafka_messaging` | `deprecated` | n/a | Compatibility alias only; use `kafka` for new artifacts. |
-| `kubernetes_runtime` | `contract_only` | n/a | Contract vocabulary is documented; no release-verifiable runtime sample is published in v0.2.6. |
+| `kubernetes_runtime` | `contract_only` | n/a | Contract vocabulary is documented; no release-verifiable runtime sample is published in v0.2.7. |
 | `nats` | `supported` | `samples/20-provider-capability-p0/messaging/nats/` | Client runtime consumes owner/project-provided NATS bindings and emits masked event evidence. |
 | `polling_observer` | `supported` | `samples/20-provider-capability-p0/verification/polling_observer/` | Observation polling only; it must not retry mutating execute actions. |
 | `rest_client` | `supported` | `samples/20-provider-capability-p0/http/rest_client_with_wiremock/` | HTTP request client provider with owner/project-supplied endpoint bindings. |
 | `sample_fake_provider` | `unsupported` | `samples/00-getting-started/golden_e2e/` | Framework-owned Golden E2E fake provider, not a public provider capability. |
 | `shell_command` | `contract_only` | n/a | Contract vocabulary exists, but command execution requires a later safety-approved release path. |
 | `soap_mock` | `supported` | `samples/20-provider-capability-p0/rpc/soap_mock/` | WireMock-backed SOAP HTTP/XML behavior, not a custom SOAP server. |
-| `vm_runtime` | `contract_only` | n/a | Contract vocabulary is documented; no release-verifiable runtime sample is published in v0.2.6. |
+| `vm_runtime` | `contract_only` | n/a | Contract vocabulary is documented; no release-verifiable runtime sample is published in v0.2.7. |
 | `wiremock_http_mock` | `supported` | `samples/20-provider-capability-p0/http/wiremock_http_mock/` | Framework-managed WireMock HTTP mock; project-provisioned external base URL support is validated by release tests. |
 
 ## Supported Mixed Suites
 
-Framework `0.2.6` supports only explicit mixed-provider suite paths:
+Framework `0.2.7` supports only explicit mixed-provider suite paths:
 
 - `samples/10-contract-baseline/mixed_wiremock_jdbc_nats/`: `wiremock_http_mock` + `jdbc` + `nats`, framework verification evidence only.
 - `samples/20-provider-capability-p0/http/rest_client_with_wiremock/`: `wiremock_http_mock` + `rest_client`, framework verification evidence unless owner-provided release labels and bindings are present.

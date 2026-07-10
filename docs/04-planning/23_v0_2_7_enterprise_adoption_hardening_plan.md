@@ -692,7 +692,7 @@ git commit -m "docs: add framework onboarding and contribution guide"
   - `docs/09-operations/external_runtime_setup.md`
 - Modify `samples/README.md` if legacy warning policy is documented there.
 
-- [ ] Step 1: Add usage-kit `QUICKSTART.md`.
+- [x] Step 1: Add usage-kit `QUICKSTART.md`.
 
 Must include:
 
@@ -703,7 +703,7 @@ java -jar ../spec-driven-auto-regression-0.2.7.jar report --result <generated_re
 java -jar ../spec-driven-auto-regression-0.2.7.jar report --result <generated_result_json> --format json
 ```
 
-- [ ] Step 2: Add `DRIVER_SETUP.md`.
+- [x] Step 2: Add `DRIVER_SETUP.md`.
 
 Must include Oracle and DB2 examples:
 
@@ -719,7 +719,7 @@ JDBC_CONNECTION='<db2-jdbc-url>' java -jar ../spec-driven-auto-regression-0.2.7.
   --driver-path ./drivers/db2/jcc.jar
 ```
 
-- [ ] Step 3: Add `EXTERNAL_RUNTIME_SETUP.md`.
+- [x] Step 3: Add `EXTERNAL_RUNTIME_SETUP.md`.
 
 Provider sections:
 
@@ -735,7 +735,7 @@ gRPC endpoint
 
 Each section must include required env vars, external dependency, validation command, run command, evidence boundary, and common failure codes.
 
-- [ ] Step 4: Add legacy sample warnings.
+- [x] Step 4: Add legacy sample warnings.
 
 Generated usage-kit warning files:
 
@@ -753,7 +753,7 @@ Warning text:
 This path is retained for v0.2.x compatibility. New suites should use canonical samples under samples/00-getting-started, samples/10-contract-baseline, samples/20-provider-capability-p0, samples/30-cross-provider-groups, or samples/40-evidence-reporting.
 ```
 
-- [ ] Step 5: Verify usage kit.
+- [x] Step 5: Verify usage kit.
 
 ```bash
 scripts/release/build-usage-kit.sh 0.2.7
@@ -762,7 +762,7 @@ scripts/release/verify-usage-kit.sh target/spec-driven-auto-regression-0.2.7-usa
 
 Expected: quickstart docs, driver placeholders, and warning files exist in the usage kit.
 
-- [ ] Step 6: Commit.
+- [x] Step 6: Commit.
 
 ```bash
 git add scripts/release/build-usage-kit.sh scripts/release/verify-usage-kit.sh docs samples/README.md
@@ -817,7 +817,7 @@ git commit -m "docs: define provider dependency policy"
 - Modify release notes source.
 - Modify scripts only if verification finds gaps.
 
-- [ ] Step 1: Bump version and hardcoded runtime metadata.
+- [x] Step 1: Bump version and hardcoded runtime metadata.
 
 Commands:
 
@@ -827,7 +827,7 @@ rg -n "0\\.2\\.6|v0\\.2\\.6" pom.xml src docs scripts samples .github AGENTS.md 
 
 Update intentional release metadata to `0.2.7` / `v0.2.7`. Do not change historical docs unless they describe current public behavior incorrectly.
 
-- [ ] Step 2: Run local Maven verification.
+- [x] Step 2: Run local Maven verification.
 
 ```bash
 MAVEN_OPTS="-Xmx1024m -XX:MaxMetaspaceSize=384m" ./mvnw verify
@@ -835,7 +835,7 @@ MAVEN_OPTS="-Xmx1024m -XX:MaxMetaspaceSize=384m" ./mvnw verify
 
 Expected: exit 0.
 
-- [ ] Step 3: Run release guard scripts.
+- [x] Step 3: Run release guard scripts.
 
 ```bash
 scripts/release/verify-release-version.sh 0.2.7
@@ -912,12 +912,12 @@ v0.2.7 is ready only when all P0 items meet these criteria:
 
 ## 7. Review Checklist
 
-- [ ] Does every v0.2.6 release finding have a v0.2.7 task or explicit deferral?
-- [ ] Does every new CLI option appear in help, user guide, and tests?
-- [ ] Does every usage-kit path use canonical `env_profiles/`, `provider_instances/`, and `custom_provider_contracts/` naming?
-- [ ] Are Oracle/DB2 drivers excluded from release assets?
-- [ ] Does driver diagnostics avoid DB connections and raw secret output?
-- [ ] Does report JSON preserve evidence validation and secret guardrails?
-- [ ] Does schema drift CI work without requiring `rg`?
-- [ ] Are legacy sample paths visibly deprecated?
-- [ ] Are all release commands bounded to avoid excessive memory use?
+- [x] Does every v0.2.6 release finding have a v0.2.7 task or explicit deferral?
+- [x] Does every new CLI option appear in help, user guide, and tests?
+- [x] Does every usage-kit path use canonical `env_profiles/`, `provider_instances/`, and `custom_provider_contracts/` naming?
+- [x] Are Oracle/DB2 drivers excluded from release assets?
+- [x] Does driver diagnostics avoid DB connections and raw secret output?
+- [x] Does report JSON preserve evidence validation and secret guardrails?
+- [x] Does schema drift CI work without requiring `rg`?
+- [x] Are legacy sample paths visibly deprecated?
+- [x] Are all release commands bounded to avoid excessive memory use?

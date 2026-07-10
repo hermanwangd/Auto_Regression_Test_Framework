@@ -2,7 +2,7 @@
 
 These contracts define the artifacts needed to design or implement Auto Regression Test Framework v0.2 as a feature-complete pre-release execution framework. They are specification contracts, not final stable v1.0 runtime API design.
 
-Core boundary: Product/RP/RU mapping is product knowledge consumed by Phase 2 Agent Skills. The framework core consumes generated framework-readable artifacts: DSL tests, suite manifest, run plan, Env_Profiles, Provider Instances, Provider Contracts, expected results, parameter sets, and traceability map. Legacy `execution_profiles/` and `environment_bindings/` remain compatibility inputs for older generated artifacts only; new v0.2.6 samples author environment configuration through Env_Profile `bindings`.
+Core boundary: Product/RP/RU mapping is product knowledge consumed by Phase 2 Agent Skills. The framework core consumes generated framework-readable artifacts: DSL tests, suite manifest, run plan, Env_Profiles, Provider Instances, Provider Contracts, expected results, parameter sets, and traceability map. Legacy `execution_profiles/` and `environment_bindings/` remain compatibility inputs for older generated artifacts only; new v0.2.7 samples author environment configuration through Env_Profile `bindings`.
 
 ## 6.1 Product Repo Layout
 
@@ -1150,7 +1150,7 @@ Standard result JSON shape:
 
 ```yaml
 test_result:
-  framework_version: 0.2.6
+  framework_version: 0.2.7
   dsl_version: v0.2
   test_case_id: RP-AR-M1-data-pipeline-TC-001
   parameter_case_id: valid_order_001

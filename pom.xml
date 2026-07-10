@@ -13,7 +13,7 @@
 
     <groupId>com.specdriven</groupId>
     <artifactId>spec-driven-auto-regression</artifactId>
-    <version>0.2.6</version>
+    <version>0.2.7</version>
     <name>Spec Driven Auto Regression</name>
     <description>Spec-driven auto regression test framework for suite-mode provider execution.</description>
     <url>https://github.com/hermanwangd/Auto_Regression_Test_Framework</url>

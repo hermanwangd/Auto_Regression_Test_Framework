@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.7
+
+Framework v0.2.7 is an enterprise adoption hardening release for the v0.2 suite-mode interface.
+
+- Adds `report --format json` as a public report output for standard result JSON, with result/evidence validation before success.
+- Proves project-provisioned WireMock external `base_url` consumption in the release provider sample guard.
+- Adds JDBC Oracle/DB2 driver discovery diagnostics through `--driver-path`, `--driver-dir`, `REGRESS_DRIVER_PATH`, `usage-kit/drivers/`, and `doctor drivers`.
+- Adds usage-kit JDBC driver placeholders without bundling vendor JDBC driver binaries.
+- Adds usage-kit `QUICKSTART`, `TROUBLESHOOTING`, `DRIVER_SETUP`, `EXTERNAL_RUNTIME_SETUP`, and explicit deprecated legacy sample path warnings.
+- Adds schema drift validation between canonical docs contracts and packaged `schemas/`.
+- Adds root onboarding docs, security/contribution/release/support guides, and provider dependency policy.
+
+Known boundaries:
+
+- DSL and contract artifacts remain at public contract version `v0.2`.
+- Product/RP orchestration remains outside the framework runtime public interface.
+- Native external JDBC, Kafka, and IBM MQ execution still requires owner-provisioned endpoints, credentials, and driver/runtime dependencies where applicable.
+
 ## 0.2.6
 
 Framework v0.2.6 simplifies the public environment configuration model for the v0.2 suite-mode interface.

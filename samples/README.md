@@ -18,4 +18,4 @@ The sample tree is the public usage-kit surface for framework v0.2. A leaf suite
 - New samples must not include `execution_profiles/`, `environment_bindings/`, or suite `artifact_roots.execution_profiles` / `artifact_roots.environment_bindings`.
 - Suite group child refs must stay inside the suite group directory.
 - Runtime-mode provider instance samples labeled `sample_scope: usage_kit_runtime_mode_sample` are coverage artifacts and are not executable targets.
-- New documentation should point to the canonical paths above. Legacy release-asset paths are generated only inside the usage-kit zip for one compatibility release.
+- New documentation should point to the canonical paths above. Legacy release-asset paths are generated only inside the usage-kit zip for v0.2.x compatibility and include `DEPRECATED_PATH.md` warnings.

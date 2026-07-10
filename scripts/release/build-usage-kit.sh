@@ -29,6 +29,27 @@ copy_dir() {
   cp -R "$src" "$dst"
 }
 
+render_doc() {
+  local src="$1"
+  local dst="$2"
+  mkdir -p "$(dirname "$dst")"
+  python3 - "$VERSION" "$src" "$dst" <<'PY'
+from pathlib import Path
+import sys
+
+version, src, dst = sys.argv[1:4]
+text = Path(src).read_text(encoding="utf-8").replace("{{VERSION}}", version)
+Path(dst).write_text(text, encoding="utf-8")
+PY
+}
+
+write_legacy_warning() {
+  local dst="$1"
+  cat > "$dst" <<'EOF_WARNING'
+This path is retained for v0.2.x compatibility. New suites should use canonical samples under samples/00-getting-started, samples/10-contract-baseline, samples/20-provider-capability-p0, samples/30-cross-provider-groups, or samples/40-evidence-reporting.
+EOF_WARNING
+}
+
 copy_dir docs/09-operations "${KIT_ROOT}/docs/09-operations"
 copy_dir docs/08-release/framework "${KIT_ROOT}/docs/08-release/framework"
 copy_dir docs/02-architecture/contracts "${KIT_ROOT}/docs/02-architecture/contracts"
@@ -87,11 +108,25 @@ PY
   copy_dir "${KIT_ROOT}/samples/20-provider-capability-p0/verification/polling_observer" "${KIT_ROOT}/samples/provider_capability/polling"
   copy_dir "${KIT_ROOT}/samples/30-cross-provider-groups/mock_server_cross_verify" "${KIT_ROOT}/samples/provider_capability/mock_server_cross_verify"
   copy_dir "${KIT_ROOT}/samples/90-compatibility/dummy_rest" "${KIT_ROOT}/samples/provider_capability/dummy_rest"
+
+  write_legacy_warning "${KIT_ROOT}/samples/LEGACY_COMPATIBILITY_README.md"
+  write_legacy_warning "${KIT_ROOT}/samples/golden_e2e/DEPRECATED_PATH.md"
+  write_legacy_warning "${KIT_ROOT}/samples/provider_capability/DEPRECATED_PATH.md"
+  write_legacy_warning "${KIT_ROOT}/samples/contract_baseline/DEPRECATED_PATH.md"
+  write_legacy_warning "${KIT_ROOT}/samples/evidence_hardening/DEPRECATED_PATH.md"
 }
 
 generate_legacy_samples
 
 cp CHANGELOG.md "${KIT_ROOT}/CHANGELOG.md"
+render_doc docs/09-operations/quickstart.md "${KIT_ROOT}/QUICKSTART.md"
+render_doc docs/09-operations/troubleshooting.md "${KIT_ROOT}/TROUBLESHOOTING.md"
+render_doc docs/09-operations/driver_setup.md "${KIT_ROOT}/DRIVER_SETUP.md"
+render_doc docs/09-operations/external_runtime_setup.md "${KIT_ROOT}/EXTERNAL_RUNTIME_SETUP.md"
+render_doc docs/09-operations/quickstart.md "${KIT_ROOT}/docs/09-operations/quickstart.md"
+render_doc docs/09-operations/troubleshooting.md "${KIT_ROOT}/docs/09-operations/troubleshooting.md"
+render_doc docs/09-operations/driver_setup.md "${KIT_ROOT}/docs/09-operations/driver_setup.md"
+render_doc docs/09-operations/external_runtime_setup.md "${KIT_ROOT}/docs/09-operations/external_runtime_setup.md"
 
 cat > "${KIT_ROOT}/README.md" <<EOF_README
 # Spec Driven Auto Regression ${VERSION} Usage Kit
@@ -162,6 +197,11 @@ git_sha: ${GIT_SHA}
 contract_version: v0.2
 sample_layout_version: v2
 included:
+  root_docs:
+    - QUICKSTART.md
+    - TROUBLESHOOTING.md
+    - DRIVER_SETUP.md
+    - EXTERNAL_RUNTIME_SETUP.md
   docs:
     - docs/09-operations
     - docs/08-release/framework

@@ -4,10 +4,10 @@ This checklist governs releases of the Auto Regression Test Framework itself. It
 
 ## Release Identity
 
-- Maven artifact version must be immutable, for example `0.2.6`, and must not contain `SNAPSHOT`.
+- Maven artifact version must be immutable, for example `0.2.7`, and must not contain `SNAPSHOT`.
 - Standard result JSON `framework_version` must match the framework artifact release version.
 - DSL, Provider Contract, Provider Instance, Env_Profile, result schema, and evidence schema may remain on public contract version `v0.2`.
-- Git tags must use `v<artifact-version>`, for example `v0.2.6`.
+- Git tags must use `v<artifact-version>`, for example `v0.2.7`.
 
 ## Required Gates
 
@@ -51,7 +51,7 @@ Each published framework release must include:
 
 The usage kit must include the user guide, provider support matrix, framework release readiness guide, Provider Contract catalog, schemas, and checked-in sample suites. It must exclude machine-local files, caches, archived/draft docs, and generated local run outputs.
 
-For v0.2.6, checked-in samples use the canonical sample layout documented in `samples/README.md`. The usage kit also generates one-release legacy aliases for compatibility. Release notes must include this deprecation table:
+For v0.2.7, checked-in samples use the canonical sample layout documented in `samples/README.md`. The usage kit also generates one-release legacy aliases for compatibility. Release notes must include this deprecation table:
 
 | Generated legacy path | Canonical path |
 |---|---|

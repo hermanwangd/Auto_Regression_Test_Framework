@@ -72,7 +72,7 @@ Provider instance and Env_Profile authoring folders are owner/Agent Skill workin
 
 ## 5. End-to-End Workflow
 
-Owner or Agent Skill workflows prepare suite artifacts outside the framework runtime CLI. The v0.2.6 runtime public interface starts only after a suite manifest, test cases, Provider Instances, Env_Profiles, expected data, and evidence policy exist.
+Owner or Agent Skill workflows prepare suite artifacts outside the framework runtime CLI. The v0.2.7 runtime public interface starts only after a suite manifest, test cases, Provider Instances, Env_Profiles, expected data, and evidence policy exist.
 
 ```text
 prepare suite artifacts
@@ -83,9 +83,9 @@ prepare suite artifacts
   -> validate-evidence
 ```
 
-The v0.2.6 runtime public interface is suite-mode: `validate --suite`, `run --suite --dry-run`, `run --suite`, `report --result`, and `validate-evidence --result`.
+The v0.2.7 runtime public interface is suite-mode: `validate --suite`, `run --suite --dry-run`, `run --suite`, `report --result`, and `validate-evidence --result`.
 
-Typical v0.2.6 runtime commands:
+Typical v0.2.7 runtime commands:
 
 ```bash
 regress validate \
@@ -104,7 +104,7 @@ regress run \
 regress report --result <generated_result_json>
 ```
 
-Product/RP tooling must translate owner-authored artifacts into suite-mode artifacts before invoking the framework runtime. Direct Product/RP runtime orchestration is not part of the v0.2.6 framework public interface.
+Product/RP tooling must translate owner-authored artifacts into suite-mode artifacts before invoking the framework runtime. Direct Product/RP runtime orchestration is not part of the v0.2.7 framework public interface.
 
 During framework development, keep Maven memory bounded:
 
@@ -703,7 +703,7 @@ If a command-capable provider instance does not define required `safety.access_p
 
 The canonical built-in Provider Contracts are materialized under `docs/02-architecture/contracts/provider-contracts/` and indexed by `docs/02-architecture/contracts/provider_capability_registry.v0.2.yaml`. The user guide must not redefine a second provider contract catalog. Runtime suite manifests use this built-in catalog by default.
 
-Framework `0.2.6` public provider support is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is keyed by provider type and `support_status`; runtime lifecycle details such as native, mock, ephemeral, framework-managed, or external are Env_Profile details, not public support statuses.
+Framework `0.2.7` public provider support is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is keyed by provider type and `support_status`; runtime lifecycle details such as native, mock, ephemeral, framework-managed, or external are Env_Profile details, not public support statuses.
 
 RP/suite repositories do not need a `provider_contracts/` folder for built-in provider types such as `wiremock_http_mock`, `rest_client`, `jdbc`, `nats`, `kafka`, `ibm_mq`, `artifact_compare`, or `polling_observer`. Suite-local contracts are an explicit opt-in for custom provider plugins or contract snapshot pinning:
 
@@ -1034,7 +1034,7 @@ data_policy:
   secrets_must_use_refs: true
 ```
 
-Local and CI Env_Profiles may reference ephemeral dependencies only after those dependencies have been provisioned outside the framework runtime and declared through standard artifacts. This is separate from client providers: Kafka and IBM MQ client providers consume resolved connection values but do not create brokers or queue managers. v0.2.6 accepts `generated://` refs only when they target Provider Contract `bindable_outputs` or selected Env_Profile `dependency_provisioning_policy.generated_outputs`; unresolved generated refs block validation before provider dispatch.
+Local and CI Env_Profiles may reference ephemeral dependencies only after those dependencies have been provisioned outside the framework runtime and declared through standard artifacts. This is separate from client providers: Kafka and IBM MQ client providers consume resolved connection values but do not create brokers or queue managers. v0.2.7 accepts `generated://` refs only when they target Provider Contract `bindable_outputs` or selected Env_Profile `dependency_provisioning_policy.generated_outputs`; unresolved generated refs block validation before provider dispatch.
 
 ```yaml
 env_profile_id: ci
@@ -1113,7 +1113,7 @@ Golden E2E suite-path mode may execute only deterministic framework-owned fake p
 
 Provider Capability suite-path mode proves selected v0.2 P0 provider capabilities as framework evidence. A standard suite run creates one `batch_id`, one `run_id`, one result JSON, and per-test outcomes in `test_results[]`; all selected `tests[]` share the selected Env_Profile. Provider identity for suite-level reporting comes from `provider_summary[]` and `provider_results[]`. Multi-provider standard results, inferred from either `test_results[]` or `provider_results[]`, must include `provider_summary[]`. Top-level `provider_id`, `provider_type`, or destination fields are single-provider compatibility fields only and must not be used to summarize a multi-provider suite.
 
-The v0.2.6 contract baseline sample is an executable mixed-provider framework verification suite:
+The v0.2.7 contract baseline sample is an executable mixed-provider framework verification suite:
 
 ```bash
 regress validate --suite samples/10-contract-baseline/mixed_wiremock_jdbc_nats/suite_manifest.yaml --profile ci
@@ -1391,7 +1391,7 @@ regress report \
   --format text
 ```
 
-Use `--result` for v0.2.6 suite-mode release readiness. Product/RP-specific report forms are outside the v0.2.6 framework runtime public interface.
+Use `--result` for v0.2.7 suite-mode release readiness. Product/RP-specific report forms are outside the v0.2.7 framework runtime public interface.
 
 Evidence must answer:
 

@@ -16,7 +16,7 @@ DSL target
   -> Env_Profile.providers.<provider_id>.bindings
 ```
 
-New v0.2 documentation and generated artifacts must use Provider Contract, Provider Instance, Env_Profile, DSL Test Case, CLI, and Evidence Contract terminology. Existing `execution_profile` and `environment_binding` artifacts are compatibility inputs only; they are not the public authoring model for v0.2.6 samples or usage-kit examples. Internal implementation packages may keep legacy names temporarily, but those names are not public runtime interfaces.
+New v0.2 documentation and generated artifacts must use Provider Contract, Provider Instance, Env_Profile, DSL Test Case, CLI, and Evidence Contract terminology. Existing `execution_profile` and `environment_binding` artifacts are compatibility inputs only; they are not the public authoring model for v0.2.7 samples or usage-kit examples. Internal implementation packages may keep legacy names temporarily, but those names are not public runtime interfaces.
 
 ## Controlled Interface Change Rules
 
@@ -48,7 +48,7 @@ New v0.2 documentation and generated artifacts must use Provider Contract, Provi
 
 Non-runtime boundary:
 
-- Product/RP orchestration wrappers, repo initialization, readiness checks, test generation, and expected-result drafting are outside the v0.2.6 framework runtime public interface.
+- Product/RP orchestration wrappers, repo initialization, readiness checks, test generation, and expected-result drafting are outside the v0.2.7 framework runtime public interface.
 - Product/RP tooling may generate suite-mode artifacts, then invoke the canonical runtime commands above.
 - Any remaining compatibility command in implementation code is not a release gate and must not appear in usage-kit release verification.
 - `regress report --format json` is a v0.2.7 public report contract for suite-mode result JSON. It must validate result/evidence guardrails before returning success.
@@ -212,6 +212,6 @@ These suite group artifacts summarize framework provider capability tests only. 
 
 ## Non-Runtime Support Boundary
 
-Product Repo and Phase 2 Agent Skill workflows may initialize folders, perform owner-readiness checks, draft tests, or draft expected results outside the framework runtime. Those workflows are not current-stage framework runtime gates and are not v0.2.6 release-verification commands.
+Product Repo and Phase 2 Agent Skill workflows may initialize folders, perform owner-readiness checks, draft tests, or draft expected results outside the framework runtime. Those workflows are not current-stage framework runtime gates and are not v0.2.7 release-verification commands.
 
 Phase 2 Product Repo translation must emit suite-mode artifacts and invoke `regress validate --suite <suite_manifest_path>`, `regress run --suite <suite_manifest_path> --profile <env_profile_id>`, `regress report --result <generated_result_json>`, and `regress validate-evidence --result <generated_result_json>`.

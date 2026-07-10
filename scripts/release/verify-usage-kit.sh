@@ -40,6 +40,10 @@ trap cleanup EXIT
 
 required_paths=(
   "usage-kit/README.md"
+  "usage-kit/QUICKSTART.md"
+  "usage-kit/TROUBLESHOOTING.md"
+  "usage-kit/DRIVER_SETUP.md"
+  "usage-kit/EXTERNAL_RUNTIME_SETUP.md"
   "usage-kit/CHANGELOG.md"
   "usage-kit/usage-kit-manifest.yaml"
   "usage-kit/drivers/README.md"
@@ -70,9 +74,13 @@ required_paths=(
   "usage-kit/samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml"
   "usage-kit/samples/40-evidence-reporting/evidence_hardening/valid_result.json"
   "usage-kit/samples/90-compatibility/dummy_rest/suite_manifest.yaml"
+  "usage-kit/samples/LEGACY_COMPATIBILITY_README.md"
   "usage-kit/samples/golden_e2e/suite_manifest.yaml"
+  "usage-kit/samples/golden_e2e/DEPRECATED_PATH.md"
   "usage-kit/samples/contract_baseline/suite_manifest.yaml"
+  "usage-kit/samples/contract_baseline/DEPRECATED_PATH.md"
   "usage-kit/samples/provider_capability/suite_manifest.yaml"
+  "usage-kit/samples/provider_capability/DEPRECATED_PATH.md"
   "usage-kit/samples/provider_capability/jdbc/suite_manifest_external_oracle.yaml"
   "usage-kit/samples/provider_capability/jdbc/suite_manifest_external_db2.yaml"
   "usage-kit/samples/provider_capability/jdbc/env_profiles/external_jdbc_oracle_env_secret_ref.yaml"
@@ -82,6 +90,7 @@ required_paths=(
   "usage-kit/samples/provider_capability/mock_server_cross_verify/suite_manifest.yaml"
   "usage-kit/samples/provider_capability/dummy_rest/suite_manifest.yaml"
   "usage-kit/samples/evidence_hardening/valid_result.json"
+  "usage-kit/samples/evidence_hardening/DEPRECATED_PATH.md"
 )
 
 for path in "${required_paths[@]}"; do
@@ -117,6 +126,19 @@ fi
 
 if ! grep -q "^sample_layout_version: v2$" "${WORK_DIR}/usage-kit/usage-kit-manifest.yaml"; then
   echo "Usage kit manifest is missing sample_layout_version: v2." >&2
+  exit 1
+fi
+
+if grep -R "{{VERSION}}" \
+  "${WORK_DIR}/usage-kit/QUICKSTART.md" \
+  "${WORK_DIR}/usage-kit/TROUBLESHOOTING.md" \
+  "${WORK_DIR}/usage-kit/DRIVER_SETUP.md" \
+  "${WORK_DIR}/usage-kit/EXTERNAL_RUNTIME_SETUP.md" \
+  "${WORK_DIR}/usage-kit/docs/09-operations/quickstart.md" \
+  "${WORK_DIR}/usage-kit/docs/09-operations/troubleshooting.md" \
+  "${WORK_DIR}/usage-kit/docs/09-operations/driver_setup.md" \
+  "${WORK_DIR}/usage-kit/docs/09-operations/external_runtime_setup.md" >/dev/null; then
+  echo "Usage kit contains unrendered version placeholder." >&2
   exit 1
 fi
 
