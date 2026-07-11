@@ -153,7 +153,7 @@ The full v0.3 matrix is not complete until:
 - selected v0.2 smoke tests still pass,
 - checked-in v0.3 samples are included in usage documentation only after the versioned feature is accepted.
 
-## 8. v0.3.1 Semantic Contract Matrix
+## 8. v0.3.0 Semantic Contract Completion Matrix
 
 | Area | Happy path | Failure/boundary path |
 | --- | --- | --- |

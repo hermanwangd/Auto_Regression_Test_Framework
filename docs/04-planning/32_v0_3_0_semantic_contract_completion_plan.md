@@ -1,8 +1,8 @@
-# v0.3.1 Semantic Contract Completion Plan
+# v0.3.0 Semantic Contract Completion Plan
 
 ## Goal
 
-Complete the six remaining v0.3 semantic-contract capabilities after P0 assertion/reference hardening. Do not add providers, change the v0.2 path, or add product/RP/RU interpretation.
+Complete the six remaining v0.3 semantic-contract capabilities before v0.3.0 release completion. Do not add providers, change the v0.2 path, or add product/RP/RU interpretation.
 
 ## Order
 

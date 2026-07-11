@@ -1,6 +1,6 @@
 # DSL v0.3 Acceptance Criteria
 
-**Status:** v0.3.0 golden baseline and P0 assertion/reference hardening implemented; AC-V03-015 through AC-V03-017 are planned for v0.3.1.
+**Status:** v0.3.0 golden baseline and P0 assertion/reference hardening implemented; AC-V03-015 through AC-V03-017 remain required before v0.3.0 release completion.
 **Scope:** Versioned v0.3 DSL and runtime interface. These AC do not replace v0.2 acceptance criteria.
 
 ## AC-V03-001 Validate Suite Manifest Target Model
