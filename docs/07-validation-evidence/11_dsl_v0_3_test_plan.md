@@ -1,6 +1,6 @@
 # DSL v0.3 Test Plan
 
-**Status:** Release/0.3.0 golden baseline implemented; full v0.3 hardening matrix remains planned
+**Status:** Release/0.3.0 P0 runtime sample matrix, symlink-negative hardening, and cleanup-failure preservation implemented
 **Scope:** Verification plan for DSL v0.3 no-Provider-Instance implementation.
 
 ## 1. Objective
@@ -30,31 +30,43 @@ MAVEN_OPTS='-Xmx1024m -XX:MaxMetaspaceSize=384m' ./mvnw test
 
 ## 3. Sample Corpus
 
-Release/0.3.0 includes the checked-in golden baseline under `samples/v0_3_dsl/golden/`.
-The full hardening sample corpus remains the target structure for post-baseline coverage:
+Release/0.3.0 includes checked-in executable samples under the inherited canonical `samples/` layout.
+The current corpus is:
 
 ```text
-samples/v0_3_dsl/
-  golden/
-  multi_test/
-  negative/
-  evidence_report/
+samples/
+  00-getting-started/golden_e2e/
+  10-contract-baseline/mixed_wiremock_jdbc_nats/
+  20-provider-capability-p0/
+    http/rest_client_with_wiremock/
+    data/jdbc/
+    messaging/{nats,kafka,ibm_mq,kafka_ibm_mq_mixed}/
+    rpc/{soap_mock,grpc_mock}/
+    verification/{common_verify,artifact_compare,polling_observer,multi_test_shared_env}/
+  30-cross-provider-groups/mock_server_cross_verify/
+  40-evidence-reporting/evidence_hardening/
+  80-negative/
 ```
 
 Required sample groups:
 
 | Group | Required Cases |
 | --- | --- |
-| `golden/` | One happy-path suite using REST/WireMock or sample provider plus one provider check. |
-| `multi_test/` | Multiple test cases share one Env_Profile and suite-scoped framework-managed target. |
-| `negative/target_resolution/` | Unknown target, missing Env_Profile target, missing Provider Contract. |
-| `negative/bindings/` | Missing required binding, unknown binding key, invalid runtime mode, blank env var. |
-| `negative/operations/` | Unknown operation, missing required input, unsupported input field, unsupported expectation path/operator. |
-| `negative/refs/` | Unknown artifact root, path traversal, symlink escape, invalid JSON pointer, forward `step://` ref. |
-| `negative/legacy_fields/` | Each prohibited v0.3 field fails validation. |
-| `negative/secrets/` | Raw secret in DSL, Env_Profile, result, and evidence fails guardrail checks. |
-| `negative/cleanup/` | Original failure plus cleanup failure keeps both failures. |
-| `evidence_report/` | Valid evidence index, missing evidence file, unknown evidence ref, raw secret leak. |
+| `00-getting-started/golden_e2e/` | One happy-path suite using the sample provider plus one assertion. |
+| `20-provider-capability-p0/verification/multi_test_shared_env/` | Multiple test cases share one Env_Profile and suite-scoped framework target. |
+| `80-negative/target-resolution/` | Unknown target, missing Env_Profile target, missing Provider Contract. |
+| `80-negative/bindings/` | Missing required binding, unknown binding key, invalid runtime mode, blank env var. |
+| `80-negative/operations/` | Unknown operation, missing required input, unsupported input field, prohibited `provider_check.expect`. |
+| `80-negative/refs/` | Unknown artifact root, path traversal, symlink escape, invalid JSON pointer, forward `step://` ref. |
+| `80-negative/legacy-fields/` | Each prohibited v0.3 field fails validation. |
+| `80-negative/secrets/` | Raw secret in DSL, Env_Profile, result, and evidence fails guardrail checks. |
+| `80-negative/runtime/` | Original failure plus cleanup failure keeps both failures. |
+| `40-evidence-reporting/evidence_hardening/` | Valid evidence index, missing evidence file, unknown evidence ref, raw secret leak. |
+
+The checked-in negative corpus currently covers target resolution, missing Env_Profile
+target, missing contract, binding keys, runtime mode, operation/input validation,
+artifact traversal, symlink escape, forward `step://` refs, prohibited `data_binding`,
+raw secret guardrails, and cleanup failure preservation.
 
 ## 4. Positive Test Matrix
 
@@ -64,7 +76,7 @@ Required sample groups:
 | V03-POS-002 | AC-V03-002 | DSL target resolves without Provider Instance. | Dry-run shows target, Provider Contract, runtime mode, masked bindings. |
 | V03-POS-003 | AC-V03-003 | Env_Profile supplies required bindings. | Binding validation passes. |
 | V03-POS-004 | AC-V03-004 | Setup/execute/cleanup operations match Provider Contract inputs. | Execution plan contains all steps. |
-| V03-POS-005 | AC-V03-005 | Provider check expectation path/operator is allowed. | Verification passes. |
+| V03-POS-005 | AC-V03-005 | Provider check produces contract-declared output for a following assertion. | Verification passes. |
 | V03-POS-006 | AC-V03-006 | Assertion reads prior `step://` public output. | Assertion passes. |
 | V03-POS-007 | AC-V03-007 | Artifact refs and JSON pointers resolve safely. | Materialized input values are available in plan/runtime. |
 | V03-POS-008 | AC-V03-008 | Dry-run valid suite. | `provider_runtime_invoked: false`. |
@@ -86,7 +98,7 @@ Required sample groups:
 | V03-NEG-005 | AC-V03-003 | Blank `env://` value. | `CONFIGURATION_ERROR`, value masked. |
 | V03-NEG-006 | AC-V03-004 | Unsupported operation. | `CONTRACT_ERROR`. |
 | V03-NEG-007 | AC-V03-004 | Unsupported `with` field. | `CONTRACT_ERROR`. |
-| V03-NEG-008 | AC-V03-005 | Unsupported expectation path. | `CONTRACT_ERROR`. |
+| V03-NEG-008 | AC-V03-005 | Generic `provider_check.expect`. | `prohibited_provider_check_expect` before dispatch. |
 | V03-NEG-009 | AC-V03-006 | Forward `step://` ref. | `VALIDATION_ERROR`. |
 | V03-NEG-010 | AC-V03-007 | `artifact://fixtures/../secret.txt`. | Path security validation failure. |
 | V03-NEG-011 | AC-V03-007 | Invalid JSON pointer. | Owner-actionable pointer error. |
@@ -118,17 +130,17 @@ Required sample groups:
 
 ## 7. Release Gates
 
-### 7.1 Release/0.3.0 Golden Baseline Gate
+### 7.1 Release/0.3.0 P0 Runtime Sample Gate
 
-The release/0.3.0 gate is limited to the checked-in golden baseline and selected
+The release/0.3.0 gate covers checked-in v0.3 P0 runtime samples and selected
 contract/security regressions:
 
 - `validate` resolves suite targets through explicit v0.3 Provider Contracts.
 - `run --dry-run` proves `provider_runtime_invoked: false`.
-- `run` and `report` pass for `samples/v0_3_dsl/golden/`.
+- `run`, `report`, and `validate-evidence` pass for the v0.3 P0 sample matrix.
 - v0.3 validation rejects Provider Instance fields, synthetic `.v0.3` provider-type aliases, unsupported operations/inputs, invalid step refs, duplicate step IDs, artifact traversal, symlink escape, and invalid JSON pointers.
 - selected v0.2 smoke tests remain green.
-- usage-kit verification includes v0.3 schemas, docs, golden sample, and the explicit `sample_fake_provider.v0.3` contract.
+- usage-kit verification includes v0.3 schemas, docs, Provider Contracts, executable samples, and the explicit `verify-v0-3-runtime-samples.sh` release gate.
 
 ### 7.2 Full v0.3 Hardening Gate
 

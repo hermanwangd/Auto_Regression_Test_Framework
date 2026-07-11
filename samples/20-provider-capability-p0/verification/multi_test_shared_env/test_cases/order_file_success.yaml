@@ -1,0 +1,17 @@
+dsl_version: v0.3
+test_case_id: MULTI-TEST-V03-TC-002
+title: Second multi-test assertion validates text artifact
+
+setup: []
+execute: []
+
+verify:
+  - id: multi_file_matches
+    type: assertion
+    assert:
+      operator: file_diff
+      expected_ref: artifact://expected_results/order_status.txt
+      actual_ref: artifact://actual_samples/order_status.txt
+      normalize: trim_lines
+
+cleanup: []

@@ -1,0 +1,27 @@
+contract_version: v0.3
+provider_contract: rest_client.v0.3
+provider_type: rest_client
+provider_role: client
+protocol: http
+purpose: Protocol-level HTTP client contract for DSL v0.3 authoring.
+runtime_modes: [native, mock, stub]
+binding_keys:
+  base_url:
+    required: true
+    source: env_profile
+operations:
+  http_request:
+    allowed_inputs: [request.method, request.path, request.body_ref, request.body, request.headers.*, request.timeout]
+    required_inputs: [request.method, request.path]
+    output_refs: [request_url, response.status, response.headers, response.body, response.duration_ms]
+evidence:
+  outputs: [http_request_response, request, response, timing, error]
+  redact: [request.headers.authorization]
+failure_mapping:
+  allowed_codes:
+    - PROVIDER_UNAVAILABLE
+    - PROVIDER_TIMEOUT
+    - HTTP_REQUEST_FAILED
+    - ASSERTION_FAILED
+    - EVIDENCE_INVALID
+    - SECRET_RESOLUTION_ERROR

@@ -1,0 +1,213 @@
+contract_version: v0.3
+artifact: suite_summary
+status: framework_owned_current_stage
+required_fields:
+  - suite_summary_version
+  - suite_id
+  - batch_id
+  - run_id
+  - profile
+  - status
+  - completion_status
+  - termination_reason
+  - start_time
+  - end_time
+  - duration_ms
+  - generated_at
+  - framework_version
+  - dsl_version
+  - suite_manifest_ref
+  - suite_manifest_digest
+  - self_summary
+  - child_aggregate_summary
+  - total_summary
+  - failure_summary
+  - evidence_summary
+  - aggregation_errors
+  - children
+nullable_fields: [termination_reason]
+allowed_statuses: [passed, failed, blocked, skipped]
+allowed_completion_statuses: [complete, partial]
+allowed_count_completeness: [complete, partial]
+allowed_partial_termination_reasons: [timeout, cancelled, framework_error, aggregation_error]
+field_contracts:
+  suite_summary_version:
+    constant: v0.3
+  suite_manifest_digest:
+    pattern: '^sha256:[0-9a-f]{64}$'
+  duration_ms:
+    type: integer
+    minimum: 0
+timing_contract:
+  timestamp_fields: [start_time, end_time, generated_at]
+  format: utc_rfc3339
+  invariants:
+    - end_time >= start_time
+    - generated_at >= end_time
+summary_shapes:
+  test_summary:
+    used_by: [self_summary, total_summary, children.total_summary]
+    required_fields:
+      - count_completeness
+      - unknown_test_case_count
+      - test_case_count
+      - executed_count
+      - pass_count
+      - fail_count
+      - blocked_count
+      - skipped_count
+      - pass_rate_percent
+      - completion_rate_percent
+    nullable_fields: [pass_rate_percent, completion_rate_percent]
+    count_fields_type: non_negative_integer
+    rate_fields:
+      type: number
+      minimum: 0.0
+      maximum: 100.0
+      scale: 1
+      rounding: half_up
+  child_aggregate_summary:
+    includes: test_summary
+    required_fields:
+      - count_completeness
+      - unknown_test_case_count
+      - child_suite_count
+      - completed_child_suite_count
+      - blocked_child_suite_count
+      - skipped_child_suite_count
+      - errored_child_suite_count
+      - test_case_count
+      - executed_count
+      - pass_count
+      - fail_count
+      - blocked_count
+      - skipped_count
+      - pass_rate_percent
+      - completion_rate_percent
+    count_fields_type: non_negative_integer
+  failure_summary:
+    required_fields:
+      - test_failure_count
+      - test_blocked_count
+      - aggregation_error_count
+      - total_issue_count
+      - by_category
+      - failed_test_refs
+      - failed_child_refs
+    count_fields_type: non_negative_integer
+    by_category:
+      type: map
+      value_type: non_negative_integer
+  failed_test_ref:
+    required_fields: [test_case_id, final_status, failure_code, category, result_ref, evidence_refs]
+    final_status_allowed: [failed, blocked]
+  failed_child_ref:
+    required_fields: [child_suite_id, final_status, summary_ref]
+    final_status_allowed: [failed, blocked]
+  evidence_summary:
+    required_fields: [evidence_count, masking_applied, evidence_index_ref]
+    evidence_count_type: non_negative_integer
+    masking_applied_type: boolean
+  child_snapshot:
+    required_fields:
+      - child_suite_id
+      - ref
+      - batch_id
+      - run_id
+      - status
+      - start_time
+      - end_time
+      - duration_ms
+      - summary_ref
+      - total_summary
+    status_allowed: [passed, failed, blocked, skipped]
+    total_summary_shape: test_summary
+    identity_rules:
+      - batch_id equals parent batch_id
+      - run_id is unique among children
+      - identity and total_summary equal the referenced authoritative child summary
+  aggregation_error:
+    required_fields: [child_suite_id, artifact_ref, failure_code, owner_action]
+    description: Post-execution missing, malformed, identity-mismatched, or snapshot-mismatched child artifact.
+collection_contracts:
+  aggregation_errors:
+    type: array
+    item_shape: aggregation_error
+  children:
+    type: array
+    item_shape: child_snapshot
+  failed_test_refs:
+    type: array
+    item_shape: failed_test_ref
+  failed_child_refs:
+    type: array
+    item_shape: failed_child_ref
+artifact_reference_rules:
+  normalized_relative_path_required: true
+  absolute_path_allowed: false
+  parent_traversal_allowed: false
+  home_expansion_allowed: false
+  prohibited_segments: ['..', '~']
+  real_path_containment_required: true
+  existing_schema_valid_target_required: true
+  bases:
+    suite_manifest_ref: summary_directory
+    evidence_index_ref: summary_directory
+    children.summary_ref: parent_summary_directory
+    failed_test_refs.result_ref: summary_directory
+    failed_child_refs.summary_ref: parent_summary_directory
+invariants:
+  - test_case_count == pass_count + fail_count + blocked_count + skipped_count
+  - executed_count == pass_count + fail_count
+  - child_suite_count == completed_child_suite_count + blocked_child_suite_count + skipped_child_suite_count + errored_child_suite_count
+  - total_summary counts == self_summary counts + child_aggregate_summary counts field-by-field
+  - child_aggregate_summary suite and test counts == sums of immediate children total_summary values
+  - errored_child_suite_count > 0 requires child_aggregate_summary.count_completeness partial, unknown_test_case_count true, completion_status partial, and status blocked
+  - test_failure_count == total_summary.fail_count
+  - test_blocked_count == total_summary.blocked_count
+  - aggregation_error_count == aggregation_errors.length
+  - total_issue_count == test_failure_count + test_blocked_count + aggregation_error_count
+  - sum(failure_summary.by_category.values) == total_issue_count
+  - evidence_summary.evidence_count == referenced_evidence_index.entries.length
+rate_contract:
+  pass_rate_percent: pass_count / executed_count * 100
+  completion_rate_percent: executed_count / test_case_count * 100
+  zero_denominator_result: null
+  partial_count_completeness_result: null
+count_completeness_contract:
+  complete:
+    unknown_test_case_count: false
+  partial:
+    unknown_test_case_count: true
+    pass_rate_percent: null
+    completion_rate_percent: null
+completion_contract:
+  complete:
+    termination_reason: null
+  partial:
+    status: blocked
+    termination_reason_allowed: [timeout, cancelled, framework_error, aggregation_error]
+    retain_materialized_results_and_evidence: true
+suite_kind_contract:
+  leaf:
+    children: []
+    child_aggregate_counts: zero
+    child_aggregate_rates: null
+  aggregation:
+    self_counts: zero
+    self_rates: null
+    aggregate_only_immediate_child_total_summary: true
+failure_navigation_contract:
+  leaf:
+    failed_child_refs: []
+    failed_test_refs_source: directly_owned_failed_or_blocked_tests
+  aggregation:
+    failed_test_refs: []
+    failed_child_refs_source: immediate_failed_or_blocked_children
+evidence_contract:
+  embeds_evidence_payloads: false
+  no_evidence_representation:
+    evidence_count: 0
+    masking_applied: true
+    evidence_index_ref_required: true
+  masking_applied_true_requires_all_index_entries_masked: true

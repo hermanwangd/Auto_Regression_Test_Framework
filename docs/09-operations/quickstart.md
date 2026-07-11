@@ -7,7 +7,7 @@ Run commands from the extracted `usage-kit/` directory.
 
 ```bash
 java -jar ../spec-driven-auto-regression-{{VERSION}}.jar validate --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml
-java -jar ../spec-driven-auto-regression-{{VERSION}}.jar run --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml --profile local_golden
+java -jar ../spec-driven-auto-regression-{{VERSION}}.jar run --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml --profile local_v03
 java -jar ../spec-driven-auto-regression-{{VERSION}}.jar report --result <generated_result_json> --format text
 java -jar ../spec-driven-auto-regression-{{VERSION}}.jar report --result <generated_result_json> --format json
 ```

@@ -1,0 +1,34 @@
+contract_version: v0.2
+suite_id: MOCK-SERVER-CROSS-VERIFY-v0.2
+purpose: Aggregate mock server cross-provider capability suites and publish suite-level summary plus Allure raw results.
+profile: local_mock_server_cross_verify
+child_suites:
+  - id: REST-001
+    ref: rest_wiremock_http/suite_manifest.yaml
+    profile: local_wiremock_http
+    expected_status: passed
+  - id: REST-002
+    ref: rest_wiremock_http/suite_manifest_failure.yaml
+    profile: local_wiremock_http
+    expected_status: failed
+  - id: SOAP-001
+    ref: soap_mock_http_client/suite_manifest.yaml
+    profile: local_soap_mock
+    expected_status: passed
+  - id: SOAP-002
+    ref: soap_mock_http_client/suite_manifest_failure.yaml
+    profile: local_soap_mock
+    expected_status: failed
+  - id: GRPC-001
+    ref: grpc_mock_grpc_client/suite_manifest.yaml
+    profile: local_grpc_mock
+    expected_status: passed
+  - id: GRPC-002
+    ref: grpc_mock_grpc_client/suite_manifest_failure.yaml
+    profile: local_grpc_mock
+    expected_status: failed
+reporting:
+  suite_summary: true
+  allure:
+    enabled: true
+    output_dir: allure-results

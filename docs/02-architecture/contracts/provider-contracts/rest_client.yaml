@@ -6,6 +6,9 @@ binding_keys:
     required: true
     value_type: uri
     allowed_value_kinds: [value, secret_ref, generated_ref]
+    allowed_schemes: [http, https, local]
+    prohibited_parts: [userinfo]
+    prohibited_query_keys: [password, token, access_token, authorization, api_key, secret]
 defaults:
   timeout_seconds: 30
   retry: 0

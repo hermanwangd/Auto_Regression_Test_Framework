@@ -1,0 +1,44 @@
+contract_version: v0.3
+provider_contract: soap_mock.v0.3
+provider_type: soap_mock
+provider_role: mock_server
+protocol: soap
+purpose: WireMock-backed SOAP mock provider contract for DSL v0.3.
+runtime_modes: [mock]
+binding_keys:
+  port_strategy:
+    required: false
+    source: env_profile
+  fixed_port:
+    required: false
+    source: env_profile
+operations:
+  start_soap_mock:
+    allowed_inputs: [mock.port, soap.wsdl_ref]
+    required_inputs: []
+    output_refs: [endpoint_url, server_log]
+  load_soap_stub:
+    allowed_inputs: [soap.path, soap.operation, soap.action, soap.request_xpath, soap.request_xml_ref, soap.response_ref, soap.status, soap.headers.*, mock.reset_before_load]
+    required_inputs: [soap.operation, soap.response_ref]
+    output_refs: [endpoint_url, loaded_stub_count, injected_stub, server_log]
+  soap_request_received:
+    allowed_inputs: [soap.path, soap.operation, soap.action, soap.request_xpath, soap.expected_count]
+    required_inputs: [soap.operation]
+    output_refs: [request_journal, matched_count, server_log]
+  reset_mock:
+    allowed_inputs: []
+    required_inputs: []
+    output_refs: [cleanup_log, server_log]
+evidence:
+  outputs: [endpoint_url, request_journal, server_log, injected_stub, cleanup_log, failure_detail]
+  redact: [soap.headers.authorization]
+failure_mapping:
+  allowed_codes:
+    - PROVIDER_UNAVAILABLE
+    - PROVIDER_TIMEOUT
+    - PROVIDER_STUB_MISSING
+    - OPERATION_FAILED
+    - ASSERTION_FAILED
+    - XML_MISMATCH
+    - EVIDENCE_INVALID
+    - SECRET_RESOLUTION_ERROR

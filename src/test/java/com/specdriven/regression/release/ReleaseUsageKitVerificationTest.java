@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -26,9 +27,20 @@ class ReleaseUsageKitVerificationTest {
                 .contains("REQUIRE_EXTERNAL_JDBC: ${{ vars.REQUIRE_EXTERNAL_JDBC || 'false' }}")
                 .contains("JDBC_EXTERNAL_DIALECT: ${{ vars.JDBC_EXTERNAL_DIALECT || 'oracle' }}")
                 .contains("JDBC_CONNECTION: ${{ secrets.JDBC_CONNECTION }}")
+                .contains("NATS_CONNECTION: ${{ secrets.NATS_CONNECTION }}")
                 .contains("KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}")
                 .contains("IBM_MQ_CONN_NAME: ${{ secrets.IBM_MQ_CONN_NAME }}")
                 .contains("IBM_MQ_CREDENTIAL: ${{ secrets.IBM_MQ_CREDENTIAL }}");
+    }
+
+    @Test
+    void releaseWorkflowRunsV03RuntimeSampleGate() throws Exception {
+        String workflow = Files.readString(Path.of(".github/workflows/release.yml"));
+
+        assertThat(workflow)
+                .contains("Verify v0.3 runtime samples")
+                .contains("REGRESS_JAR: target/spec-driven-auto-regression-${{ steps.version.outputs.version }}.jar")
+                .contains("scripts/release/verify-v0-3-runtime-samples.sh");
     }
 
     @Test
@@ -40,11 +52,13 @@ class ReleaseUsageKitVerificationTest {
                 .contains("run --suite")
                 .contains("report --result")
                 .contains("validate-evidence --result")
-                .contains("samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml")
-                .contains("samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml")
+                .contains("samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml")
                 .contains("JDBC_EXTERNAL_DIALECT")
-                .contains("samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml ci_kafka_external")
-                .contains("samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml ci_ibm_mq_external")
+                .contains("samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml --profile external_nats")
+                .contains("samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml external_nats")
+                .contains("NATS_CONNECTION")
+                .contains("samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml external_kafka")
+                .contains("samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml external_ibm_mq")
                 .doesNotContain("--rp-id");
     }
 
@@ -60,8 +74,48 @@ class ReleaseUsageKitVerificationTest {
                 .contains("--driver-path")
                 .contains("--driver-dir")
                 .contains("REGRESS_DRIVER_PATH")
+                .contains("default_sample_roots:")
+                .contains("old_path: samples/v0_3_dsl/negative/target_resolution/unknown_target")
                 .doesNotContain("ojdbc11.jar\" \"${KIT_ROOT}")
                 .doesNotContain("jcc.jar\" \"${KIT_ROOT}");
+    }
+
+    @Test
+    void usageKitVerifierChecksDefaultRootsAndNegativePathRewrites() throws Exception {
+        String script = Files.readString(Path.of("scripts/release/verify-usage-kit.sh"));
+
+        assertThat(script)
+                .contains("default_sample_roots")
+                .contains("old_path: samples/v0_3_dsl/negative/target_resolution/unknown_target")
+                .contains("Usage kit manifest is missing negative sample path rewrites")
+                .contains("Usage kit deprecated path guide is missing negative sample rewrites");
+    }
+
+    @Test
+    void usageKitDocumentsProviderContractCatalogEntryPoint() throws Exception {
+        String buildScript = Files.readString(Path.of("scripts/release/build-usage-kit.sh"));
+        String verifyScript = Files.readString(Path.of("scripts/release/verify-usage-kit.sh"));
+
+        assertThat(buildScript)
+                .contains("Provider Contract Catalog")
+                .contains("docs/02-architecture/contracts/provider-contracts/README.md")
+                .contains("jdbc.v0.3")
+                .contains("rest_client.v0.3");
+        assertThat(verifyScript)
+                .contains("usage-kit/docs/02-architecture/contracts/provider-contracts/README.md")
+                .contains("Usage kit README is missing Provider Contract catalog guidance")
+                .contains("Usage kit samples README is missing Provider Contract catalog guidance")
+                .contains("Usage kit Provider Contract catalog is missing v0.3 contract examples");
+    }
+
+    @Test
+    void wireMockExternalBaseUrlVerifierUsesCompatibilityFixture() throws Exception {
+        String script = Files.readString(Path.of("scripts/release/verify-wiremock-external-base-url.sh"));
+
+        assertThat(script)
+                .contains("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/http/wiremock_http_mock")
+                .contains("wiremock_admin_api_external_base_url_compatibility_verification")
+                .doesNotContain("samples/20-provider-capability-p0/http/wiremock_http_mock");
     }
 
     @Test
@@ -86,11 +140,9 @@ class ReleaseUsageKitVerificationTest {
 
         assertThat(samples)
                 .contains(
-                        new ProviderRuntimeSample("grpc_client", "mock"),
-                        new ProviderRuntimeSample("grpc_client", "stub"),
-                        new ProviderRuntimeSample("polling_observer", "ephemeral"),
-                        new ProviderRuntimeSample("rest_client", "mock"),
-                        new ProviderRuntimeSample("rest_client", "stub"));
+                        new ProviderRuntimeSample("grpc_client", "native"),
+                        new ProviderRuntimeSample("polling_observer", "framework"),
+                        new ProviderRuntimeSample("rest_client", "mock"));
     }
 
     @Test
@@ -132,25 +184,48 @@ class ReleaseUsageKitVerificationTest {
         Set<ProviderRuntimeSample> samples = new LinkedHashSet<>();
         try (Stream<Path> files = Files.walk(sampleRoot)) {
             files.filter(Files::isRegularFile)
-                    .filter(path -> path.toString().endsWith(".yaml"))
-                    .filter(path -> path.toString().contains("/provider_instances/"))
-                    .forEach(path -> samples.addAll(providerRuntimeSamplesFrom(path)));
+                    .filter(path -> path.getFileName().toString().equals("suite_manifest.yaml"))
+                    .forEach(path -> samples.addAll(providerRuntimeSamplesFromSuite(path)));
         }
         return samples;
     }
 
-    private static Set<ProviderRuntimeSample> providerRuntimeSamplesFrom(Path providerInstance) {
+    private static Set<ProviderRuntimeSample> providerRuntimeSamplesFromSuite(Path suiteManifest) {
         try {
-            Map<String, Object> document = yamlMap(providerInstance);
-            String providerType = String.valueOf(document.get("provider_type"));
-            List<String> runtimeModes = stringList(document.get("runtime_modes"));
             Set<ProviderRuntimeSample> samples = new LinkedHashSet<>();
-            for (String runtimeMode : runtimeModes) {
-                samples.add(new ProviderRuntimeSample(providerType, runtimeMode));
+            Map<String, Object> suite = yamlMap(suiteManifest);
+            if (!"v0.3".equals(String.valueOf(suite.get("manifest_version")))) {
+                return samples;
+            }
+
+            Map<String, String> targetContracts = new LinkedHashMap<>();
+            for (Map.Entry<String, Object> entry : objectMap(suite.get("targets")).entrySet()) {
+                String providerContract = String.valueOf(objectMap(entry.getValue()).get("provider_contract"));
+                if (!providerContract.isBlank() && providerContract.endsWith(".v0.3")) {
+                    targetContracts.put(entry.getKey(), providerContract.substring(0, providerContract.length() - ".v0.3".length()));
+                }
+            }
+
+            Path suiteRoot = suiteManifest.getParent();
+            for (Map<String, Object> profileRef : objectMap(suite.get("env_profiles")).values().stream()
+                    .map(ReleaseUsageKitVerificationTest::objectMap)
+                    .toList()) {
+                String ref = String.valueOf(profileRef.get("ref"));
+                if (ref.isBlank()) {
+                    continue;
+                }
+                Map<String, Object> envProfile = yamlMap(suiteRoot.resolve(ref).normalize());
+                for (Map.Entry<String, Object> entry : objectMap(envProfile.get("targets")).entrySet()) {
+                    String providerType = targetContracts.get(entry.getKey());
+                    String runtimeMode = String.valueOf(objectMap(entry.getValue()).get("runtime_mode"));
+                    if (providerType != null && !runtimeMode.isBlank()) {
+                        samples.add(new ProviderRuntimeSample(providerType, runtimeMode));
+                    }
+                }
             }
             return samples;
         } catch (IOException exception) {
-            throw new IllegalStateException("Unable to read sample provider instance " + providerInstance, exception);
+            throw new IllegalStateException("Unable to read v0.3 sample suite " + suiteManifest, exception);
         }
     }
 
@@ -168,6 +243,14 @@ class ReleaseUsageKitVerificationTest {
             return list.stream().map(String::valueOf).toList();
         }
         return List.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> objectMap(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return Map.of();
     }
 
     private static boolean containsAny(Path path, String... needles) {

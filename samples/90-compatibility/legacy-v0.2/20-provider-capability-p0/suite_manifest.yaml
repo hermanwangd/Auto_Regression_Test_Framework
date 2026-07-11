@@ -1,0 +1,56 @@
+contract_version: v0.2
+suite_id: PROVIDER-CAPABILITY-P0-v0.2
+purpose: Framework provider capability verification suite for Track C P0.
+profile: local_provider
+child_suites:
+  - id: wiremock
+    ref: http/wiremock_http_mock/suite_manifest.yaml
+    profile: local_wiremock
+    expected_status: passed
+  - id: wiremock_http_request
+    ref: http/rest_client_with_wiremock/suite_manifest.yaml
+    profile: local_wiremock_http
+    expected_status: passed
+  - id: jdbc
+    ref: data/jdbc/suite_manifest.yaml
+    profile: local_jdbc
+    expected_status: passed
+  - id: nats
+    ref: messaging/nats/suite_manifest.yaml
+    profile: local_nats
+    expected_status: passed
+  - id: common_verify
+    ref: verification/common_verify/suite_manifest.yaml
+    profile: local_verify
+    expected_status: passed
+  - id: compare
+    ref: verification/artifact_compare/suite_manifest.yaml
+    profile: local_compare
+    expected_status: passed
+  - id: polling
+    ref: verification/polling_observer/suite_manifest.yaml
+    profile: local_polling
+    expected_status: passed
+  - id: soap_mock
+    ref: rpc/soap_mock/suite_manifest.yaml
+    profile: local_soap_mock
+    expected_status: passed
+  - id: grpc_mock
+    ref: rpc/grpc_mock/suite_manifest.yaml
+    profile: local_grpc_mock
+    expected_status: passed
+  - id: kafka
+    ref: messaging/kafka/suite_manifest.yaml
+    profile: local_kafka
+    expected_status: passed
+  - id: ibm_mq
+    ref: messaging/ibm_mq/suite_manifest.yaml
+    profile: local_ibm_mq
+    expected_status: passed
+  - id: messaging_mixed
+    ref: messaging/kafka_ibm_mq_mixed/suite_manifest.yaml
+    profile: local_messaging
+    expected_status: passed
+evidence_policy:
+  evidence_classification: framework_provider_capability_only
+  downstream_release_evidence: false

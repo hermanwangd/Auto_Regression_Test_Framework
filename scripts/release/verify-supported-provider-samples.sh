@@ -9,7 +9,7 @@ JAR="${ROOT_DIR}/target/spec-driven-auto-regression-${VERSION}.jar"
 REQUIRE_EXTERNAL_MESSAGING="${REQUIRE_EXTERNAL_MESSAGING:-false}"
 REQUIRE_EXTERNAL_JDBC="${REQUIRE_EXTERNAL_JDBC:-false}"
 JDBC_EXTERNAL_DIALECT="${JDBC_EXTERNAL_DIALECT:-oracle}"
-external_env_names=(KAFKA_BOOTSTRAP_SERVERS IBM_MQ_CONN_NAME IBM_MQ_CREDENTIAL)
+external_env_names=(NATS_CONNECTION KAFKA_BOOTSTRAP_SERVERS IBM_MQ_CONN_NAME IBM_MQ_CREDENTIAL)
 
 if [[ ! -s "$JAR" ]]; then
   echo "Missing release jar for provider sample verification: $JAR" >&2
@@ -64,18 +64,17 @@ external_env_state() {
 }
 
 supported_local_suites=(
-  "samples/20-provider-capability-p0/verification/artifact_compare/suite_manifest.yaml local_compare"
-  "samples/20-provider-capability-p0/verification/common_verify/suite_manifest.yaml local_verify"
-  "samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest.yaml local_grpc_mock"
-  "samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml local_ibm_mq"
-  "samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml local_jdbc"
-  "samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml local_kafka"
-  "samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/suite_manifest.yaml local_messaging"
-  "samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml local_nats"
-  "samples/20-provider-capability-p0/verification/polling_observer/suite_manifest.yaml local_polling"
-  "samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest.yaml local_soap_mock"
-  "samples/20-provider-capability-p0/http/wiremock_http_mock/suite_manifest.yaml local_wiremock"
-  "samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml local_wiremock_http"
+  "samples/20-provider-capability-p0/verification/artifact_compare/suite_manifest.yaml local_v03"
+  "samples/20-provider-capability-p0/verification/common_verify/suite_manifest.yaml local_v03"
+  "samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest.yaml local_v03"
+  "samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml local_v03"
+  "samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml local_v03"
+  "samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml local_v03"
+  "samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/suite_manifest.yaml local_v03"
+  "samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml local_v03"
+  "samples/20-provider-capability-p0/verification/polling_observer/suite_manifest.yaml local_v03"
+  "samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest.yaml local_v03"
+  "samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml local_v03"
 )
 
 for entry in "${supported_local_suites[@]}"; do
@@ -83,26 +82,25 @@ for entry in "${supported_local_suites[@]}"; do
   run_suite $entry
 done
 
-scripts/release/verify-wiremock-external-base-url.sh "$VERSION"
-
 echo "compatibility_sample_verification: dummy_rest"
 run_suite samples/90-compatibility/dummy_rest/suite_manifest.yaml local_dummy
 
-run_cli validate --suite samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml --profile ci_kafka_external
-run_cli validate --suite samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml --profile ci_ibm_mq_external
-run_cli validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml --profile external_jdbc_oracle_env_secret_ref
-run_cli validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml --profile external_jdbc_db2_env_secret_ref
+run_cli validate --suite samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml --profile external_kafka
+run_cli validate --suite samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml --profile external_ibm_mq
+run_cli validate --suite samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml --profile external_nats
+run_cli validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile external_oracle
+run_cli validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile external_db2
 
 jdbc_external_suite=""
 jdbc_external_profile=""
 case "$JDBC_EXTERNAL_DIALECT" in
   oracle)
-    jdbc_external_suite="samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml"
-    jdbc_external_profile="external_jdbc_oracle_env_secret_ref"
+    jdbc_external_suite="samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml"
+    jdbc_external_profile="external_oracle"
     ;;
   db2)
-    jdbc_external_suite="samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml"
-    jdbc_external_profile="external_jdbc_db2_env_secret_ref"
+    jdbc_external_suite="samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml"
+    jdbc_external_profile="external_db2"
     ;;
   *)
     echo "external_jdbc_runtime_verification: blocked" >&2
@@ -132,18 +130,20 @@ if [[ "$REQUIRE_EXTERNAL_MESSAGING" == "true" || "${#present_external_envs[@]}" 
   if [[ "${#missing_external_envs[@]}" -gt 0 ]]; then
     echo "external_messaging_runtime_verification: blocked" >&2
     echo "missing_external_messaging_env: ${missing_external_envs[*]}" >&2
-    echo "owner_action: Configure all Kafka and IBM MQ external messaging secrets, or leave all of them unset so CI runs only release-verifiable local/provider samples." >&2
+    echo "owner_action: Configure all NATS, Kafka, and IBM MQ external messaging secrets, or leave all of them unset so CI runs only release-verifiable local/provider samples." >&2
     exit 1
   fi
+  require_env NATS_CONNECTION
   require_env KAFKA_BOOTSTRAP_SERVERS
   require_env IBM_MQ_CONN_NAME
   require_env IBM_MQ_CREDENTIAL
-  run_suite samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml ci_kafka_external
-  run_suite samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml ci_ibm_mq_external
+  run_suite samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml external_nats
+  run_suite samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml external_kafka
+  run_suite samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml external_ibm_mq
   echo "external_messaging_runtime_verification: passed"
 else
   echo "external_messaging_runtime_verification: not_configured"
-  echo "owner_action: Configure Kafka and IBM MQ external messaging secrets and set REQUIRE_EXTERNAL_MESSAGING=true when native external runtime evidence is required."
+  echo "owner_action: Configure NATS, Kafka, and IBM MQ external messaging secrets and set REQUIRE_EXTERNAL_MESSAGING=true when native external runtime evidence is required."
   echo "supported_provider_sample_verification_status: passed_ci_verifiable_external_messaging_not_configured"
   exit 0
 fi

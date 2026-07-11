@@ -1,0 +1,7 @@
+{
+  "suite_id": "EVIDENCE-HARDENING-v0.2",
+  "batch_id": "BATCH-EVIDENCE-001",
+  "run_id": "RUN-EVIDENCE-001",
+  "status": "passed",
+  "masking_applied": true
+}

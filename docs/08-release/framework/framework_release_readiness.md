@@ -4,10 +4,10 @@ This checklist governs releases of the Auto Regression Test Framework itself. It
 
 ## Release Identity
 
-- Maven artifact version must be immutable, for example `0.2.7`, and must not contain `SNAPSHOT`.
+- Maven artifact version must be immutable, for example `0.3.0`, and must not contain `SNAPSHOT`.
 - Standard result JSON `framework_version` must match the framework artifact release version.
-- DSL, Provider Contract, Provider Instance, Env_Profile, result schema, and evidence schema may remain on public contract version `v0.2`.
-- Git tags must use `v<artifact-version>`, for example `v0.2.7`.
+- v0.3 release artifacts expose DSL v0.3, Provider Contract v0.3, suite targets, Env_Profile, result schema, and evidence schema as the public runtime surface. Provider Instance artifacts are v0.2 compatibility only.
+- Git tags must use `v<artifact-version>`, for example `v0.3.0`.
 
 ## Required Gates
 
@@ -51,9 +51,9 @@ Each published framework release must include:
 
 The usage kit must include the user guide, provider support matrix, framework release readiness guide, Provider Contract catalog, schemas, and checked-in sample suites. It must exclude machine-local files, caches, archived/draft docs, and generated local run outputs.
 
-For v0.2.7, checked-in samples use the canonical sample layout documented in `samples/README.md`. The usage kit also generates one-release legacy aliases for compatibility. Release notes must include this deprecation table:
+For v0.3.0, checked-in samples use the canonical sample layout documented in `samples/README.md`. The usage kit must not generate legacy alias directories. It ships machine-readable `path_rewrites[]` in `usage-kit-manifest.yaml` and a human-readable `samples/90-compatibility/DEPRECATED_PATHS.md` migration table:
 
-| Generated legacy path | Canonical path |
+| Deprecated path | Canonical path |
 |---|---|
 | `samples/golden_e2e/` | `samples/00-getting-started/golden_e2e/` |
 | `samples/contract_baseline/` | `samples/10-contract-baseline/mixed_wiremock_jdbc_nats/` |
@@ -62,9 +62,9 @@ For v0.2.7, checked-in samples use the canonical sample layout documented in `sa
 | `samples/provider_capability/dummy_rest/` | `samples/90-compatibility/dummy_rest/` |
 | `samples/evidence_hardening/` | `samples/40-evidence-reporting/evidence_hardening/` |
 
-JDBC external native runtime evidence is optional in public CI. The release gate always validates both external JDBC suite contracts: `suite_manifest_external_oracle.yaml --profile external_jdbc_oracle_env_secret_ref` and `suite_manifest_external_db2.yaml --profile external_jdbc_db2_env_secret_ref`. It runs exactly one native JDBC sample only when `REQUIRE_EXTERNAL_JDBC=true`; `JDBC_EXTERNAL_DIALECT=oracle|db2` selects the suite and `JDBC_CONNECTION` supplies the actual URL. The canonical Env_Profile secret ref is `connection.secret_ref: env://JDBC_CONNECTION`. Mixed-case secret-ref names and raw JDBC URLs in checked-in artifacts are invalid. Missing external JDBC configuration must not block CI-verifiable release samples when `REQUIRE_EXTERNAL_JDBC=false`.
+JDBC external native runtime evidence is optional in public CI. The release gate always validates both external JDBC suite profiles: `samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile external_oracle` and `--profile external_db2`. It runs exactly one native JDBC sample only when `REQUIRE_EXTERNAL_JDBC=true`; `JDBC_EXTERNAL_DIALECT=oracle|db2` selects the profile and `JDBC_CONNECTION` supplies the actual URL. The canonical Env_Profile secret ref is `connection.secret_ref: env://JDBC_CONNECTION`. Mixed-case secret-ref names and raw JDBC URLs in checked-in artifacts are invalid. Missing external JDBC configuration must not block CI-verifiable release samples when `REQUIRE_EXTERNAL_JDBC=false`.
 
-`dummy_rest` is compatibility-only and must not count as a supported provider capability sample. `scripts/release/verify-usage-kit.sh` must validate both canonical samples and generated legacy aliases while this compatibility window is active.
+`dummy_rest` is compatibility-only and must not count as a supported provider capability sample. `scripts/release/verify-usage-kit.sh` must validate canonical v0.3 samples and confirm deprecated alias directories are absent from the usage kit.
 
 ## Integrity Metadata
 

@@ -1,5 +1,7 @@
 package com.specdriven.regression.contract;
 
+import com.specdriven.regression.summary.SuiteExecutionContext;
+
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.evidence.EvidenceIndexFormatter;
@@ -40,6 +42,11 @@ public class NatsProviderCapabilityService {
     private final Yaml yaml = new Yaml();
 
     public NatsRunResult run(Path suiteManifest, String requestedProfile, Path outputBase) {
+        return run(suiteManifest, requestedProfile, SuiteExecutionContext.standalone(requestedProfile, outputBase, "NATS"));
+    }
+
+    public NatsRunResult run(Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
+        requireMatchingProfile(requestedProfile, executionContext);
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {
             return NatsRunResult.blocked(validation.suiteId(), requestedProfile, validation.findings());
@@ -71,7 +78,7 @@ public class NatsProviderCapabilityService {
             return NatsRunResult.blocked(validation.suiteId(), requestedProfile, profileFindings);
         }
 
-        List<RuntimeSelection> selections = selectNatsRuntimes(suiteManifest, requestedProfile, outputBase);
+        List<RuntimeSelection> selections = selectNatsRuntimes(suiteManifest, requestedProfile, executionContext);
         if (selections.isEmpty()) {
             return NatsRunResult.blocked(validation.suiteId(), requestedProfile, List.of(new ContractFinding(
                     suiteManifest.toString(),
@@ -268,18 +275,16 @@ public class NatsProviderCapabilityService {
         aggregateOutputs.put(operation.id(), output);
     }
 
-    private List<RuntimeSelection> selectNatsRuntimes(Path suiteManifest, String requestedProfile, Path outputBase) {
+    private List<RuntimeSelection> selectNatsRuntimes(
+            Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
         Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
         Map<String, Object> suite = readMap(suiteManifest);
         Map<String, Map<String, Object>> instancesById =
                 readDirectoryByField(suiteRoot.resolve("provider_instances"), "provider_id");
         Map<String, Map<String, Object>> contractsByType =
                 readDirectoryByField(frameworkProviderContractsDirectory(suiteRoot), "provider_type");
-        RunIds runIds = newRunIds();
-        Path runDir = outputBase
-                .resolve(safe(stringValue(suite.get("suite_id"))))
-                .resolve(runIds.batchId())
-                .resolve(runIds.runId());
+        RunIds runIds = new RunIds(executionContext.parentBatchId(), executionContext.newRunId("NATS"));
+        Path runDir = executionContext.childRunRoot(stringValue(suite.get("suite_id")), runIds.runId());
         List<RuntimeSelection> selections = new ArrayList<>();
         for (Object testRef : listValue(suite.get("tests"))) {
             Map<String, Object> testCase = readMap(suiteRoot.resolve(stringValue(testRef)).normalize());
@@ -355,6 +360,12 @@ public class NatsProviderCapabilityService {
             }
         }
         return false;
+    }
+
+    private void requireMatchingProfile(String profile, SuiteExecutionContext context) {
+        if (!context.matchesRequestedProfile(profile)) throw new IllegalArgumentException(
+                "Execution context profile mismatch: context=" + context.profile() + ", requested=" + profile
+                        + ". Use the parent suite profile for all child runtimes.");
     }
 
     private RunIds newRunIds() {

@@ -1,0 +1,143 @@
+contract_version: v0.3
+artifact: result
+status: framework_owned_current_stage
+version_compatibility:
+  supported_versions: [v0.3]
+  unsupported_version_behavior: run_not_complete
+required_fields:
+  - result_contract_version
+  - framework_version
+  - dsl_version
+  - suite_id
+  - batch_id
+  - run_id
+  - test_case_id
+  - test_count
+  - status
+  - profile
+  - environment
+  - start_time
+  - end_time
+  - duration_ms
+  - timestamps
+  - test_results
+  - provider_results
+  - steps
+  - verify_results
+  - evidence_refs
+  - failure
+  - completion_status
+  - termination_reason
+  - suite_summary_ref
+optional_fields:
+  - labels
+  - source_refs
+  - parameter_case_id
+  - provider_summary
+  - step_results
+  - evidence_index_ref
+  - provider_evidence_refs
+  - masking
+  - provider_id
+  - provider_type
+  - runtime_mode
+  - base_url
+  - dialect
+  - subject
+  - topic
+  - queue
+allowed_result_statuses: [passed, failed, blocked, skipped]
+allowed_test_statuses: [passed, failed, blocked, skipped]
+allowed_completion_statuses: [complete, partial]
+nullable_fields:
+  - failure
+  - termination_reason
+result_model:
+  version_identity:
+    result_contract_version: v0.3
+    independent_from_dsl_version: true
+    description: >
+      result_contract_version identifies this result wire contract. framework_version identifies
+      the immutable framework release and dsl_version identifies the input DSL contract.
+  standard_suite_run:
+    description: Complete v0.3 runtime output for every execution-started leaf or aggregation suite.
+    required_when_execution_started:
+      - suite_id
+      - batch_id
+      - run_id
+      - test_count
+      - test_results
+      - suite_summary_ref
+      - completion_status
+      - termination_reason
+    semantics:
+      - test_count equals test_results.length and counts materialized test cases only.
+      - Each test_results entry requires test_case_id, status, and profile.
+      - suite_summary_ref is relative to the result directory and identifies a schema-valid v0.3 summary.
+      - A complete result uses termination_reason null.
+      - A partial result uses status blocked and a non-null partial termination reason.
+      - Existing provider, step, verify, failure, and evidence fields remain mandatory and are not replaced by summary fields.
+  aggregation_result:
+    aggregate_test_case_id: <suite_id>-AGGREGATE
+    test_result_required_identity_fields: [suite_path, test_result_id, test_case_id]
+    provider_result_required_identity_fields: [suite_path]
+    step_required_identity_fields: [suite_path]
+    verify_result_required_identity_fields: [suite_path]
+    semantics:
+      - Immediate-child test_results, provider_results, steps, and verify_results are copied exactly once.
+      - Nested aggregation results are consumed as immediate-child materialized lists without reading grandchildren.
+      - test_result_id is globally unique and is formed from the full suite_path plus test_case_id.
+      - provider_summary is rebuilt from copied provider_results.
+      - Evidence identities and references are suite-path-prefixed for the merged parent evidence index.
+      - Complete summary coverage requires test_count to equal total_summary.test_case_count and matching status counts.
+test_result_required_fields:
+  - test_case_id
+  - status
+  - profile
+provider_result_required_fields:
+  - provider_id
+  - provider_type
+  - profile
+  - runtime_mode
+  - resolved_operation_result
+  - release_evidence_eligible
+completion_contract:
+  complete:
+    status_allowed: [passed, failed, blocked, skipped]
+    termination_reason: null
+  partial:
+    status: blocked
+    termination_reason_allowed: [timeout, cancelled, framework_error, aggregation_error]
+reference_rules:
+  suite_summary_ref_base: result_directory
+  normalized_relative_path_required: true
+  absolute_path_allowed: false
+  parent_traversal_allowed: false
+  home_expansion_allowed: false
+  real_path_containment_required: true
+validation_output_fields:
+  - ap
+  - file_path
+  - field_path
+  - test_case_id
+  - run_id
+  - status
+  - provider_id
+  - provider_type
+  - profile
+  - runtime_mode
+  - failure_classification
+  - severity
+  - reason
+  - owner_action
+evidence_outputs:
+  - result_json
+  - result_schema_validation_report
+unsupported_behavior:
+  missing_required_field: run_not_complete
+  unclassified_failure: run_not_complete
+  raw_secret: block_result_publication
+  invalid_status: run_not_complete
+  missing_runtime_mode: run_not_complete
+  mock_release_evidence_claim: block_result_publication
+failure_classification: framework_error

@@ -130,12 +130,18 @@ jobs:
       - name: Verify usage kit
         run: scripts/release/verify-usage-kit.sh "target/spec-driven-auto-regression-${{ steps.version.outputs.version }}-usage-kit.zip" "${{ steps.version.outputs.version }}"
 
+      - name: Verify v0.3 runtime samples
+        env:
+          REGRESS_JAR: target/spec-driven-auto-regression-${{ steps.version.outputs.version }}.jar
+        run: scripts/release/verify-v0-3-runtime-samples.sh "${{ steps.version.outputs.version }}"
+
       - name: Verify supported provider samples
         env:
           REQUIRE_EXTERNAL_MESSAGING: ${{ vars.REQUIRE_EXTERNAL_MESSAGING || 'false' }}
           REQUIRE_EXTERNAL_JDBC: ${{ vars.REQUIRE_EXTERNAL_JDBC || 'false' }}
           JDBC_EXTERNAL_DIALECT: ${{ vars.JDBC_EXTERNAL_DIALECT || 'oracle' }}
           JDBC_CONNECTION: ${{ secrets.JDBC_CONNECTION }}
+          NATS_CONNECTION: ${{ secrets.NATS_CONNECTION }}
           KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}
           IBM_MQ_CONN_NAME: ${{ secrets.IBM_MQ_CONN_NAME }}
           IBM_MQ_CREDENTIAL: ${{ secrets.IBM_MQ_CREDENTIAL }}

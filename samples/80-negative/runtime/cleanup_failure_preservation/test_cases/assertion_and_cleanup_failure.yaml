@@ -1,0 +1,36 @@
+dsl_version: v0.3
+test_case_id: CLEANUP-FAILURE-V03-TC-001
+title: Preserve assertion failure when cleanup also fails
+
+setup:
+  - id: seed_order
+    target: order_db
+    op: db_seed
+    with:
+      sql_ref: artifact://fixtures/seed_order.sql
+      params.order_id: ORD-V03-CLEANUP-FAIL
+      params.status: CREATED
+
+execute:
+  - id: query_order
+    target: order_db
+    op: db_query
+    with:
+      query_ref: artifact://queries/find_order_by_id.sql
+      params.order_id: ORD-V03-CLEANUP-FAIL
+
+verify:
+  - id: wrong_row_count_preserves_primary_failure
+    type: assertion
+    assert:
+      actual: step://query_order/row_count
+      operator: equals
+      expected: 2
+
+cleanup:
+  - id: cleanup_order_fails
+    target: order_db
+    op: db_cleanup
+    with:
+      sql_ref: artifact://fixtures/cleanup_order_invalid.sql
+      params.order_id: ORD-V03-CLEANUP-FAIL

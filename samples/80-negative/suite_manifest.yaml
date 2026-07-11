@@ -1,0 +1,65 @@
+manifest_version: v0.3
+suite_id: NEGATIVE-v0.3
+purpose: Aggregate v0.3 negative validation and runtime samples. Expected failures are explicit child outcomes, not preflight blockers.
+profile: local_v03
+child_suites:
+  - id: BINDING-001
+    ref: bindings/invalid_runtime_mode/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: BINDING-002
+    ref: bindings/missing_required_binding/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: BINDING-003
+    ref: bindings/unknown_binding_key/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: LEGACY-001
+    ref: legacy-fields/data_binding/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: OPERATION-001
+    ref: operations/unsupported_input/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: OPERATION-002
+    ref: operations/unsupported_operation/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: REF-001
+    ref: refs/forward_step_ref/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: REF-002
+    ref: refs/invalid_artifact_ref/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: REF-003
+    ref: refs/symlink_escape/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: RUNTIME-001
+    ref: runtime/cleanup_failure_preservation/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: SECRET-001
+    ref: secrets/raw_secret_dsl/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: SECRET-002
+    ref: secrets/raw_secret_env/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: TARGET-001
+    ref: target-resolution/missing_env_profile_target/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: TARGET-002
+    ref: target-resolution/missing_provider_contract/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: TARGET-003
+    ref: target-resolution/unknown_target/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed

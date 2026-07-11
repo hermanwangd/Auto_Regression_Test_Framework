@@ -1,0 +1,12 @@
+dsl_version: v0.3
+test_case_id: NEG-MISSING-ENV-PROFILE-TARGET-TC-001
+setup:
+  - id: missing_env_profile_target
+    target: common_verifier
+    op: json_match
+    with:
+      expected_ref: artifact://expected/expected.json
+      actual_ref: artifact://actual/actual.json
+execute: []
+verify: []
+cleanup: []

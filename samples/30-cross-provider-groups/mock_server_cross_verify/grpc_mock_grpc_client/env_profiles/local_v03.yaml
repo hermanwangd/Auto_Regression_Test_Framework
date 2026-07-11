@@ -1,0 +1,17 @@
+profile_id: local_v03
+execution_mode: local
+isolation: per_run
+evidence_classification: framework_verification_only
+
+targets:
+  customer_grpc_mock:
+    runtime_mode: mock
+    bindings:
+      port_strategy: dynamic
+      descriptor_ref: proto/customer.desc.b64
+      service_name: com.example.customer.CustomerService
+  customer_grpc_client:
+    runtime_mode: native
+    bindings:
+      target: generated://customer_grpc_mock/target_uri
+      descriptor_ref: proto/customer.desc.b64

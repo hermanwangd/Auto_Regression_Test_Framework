@@ -1,0 +1,50 @@
+contract_version: v0.3
+provider_contract: grpc_mock.v0.3
+provider_type: grpc_mock
+provider_role: mock_server
+protocol: grpc
+purpose: WireMock gRPC extension-backed mock provider contract for DSL v0.3 unary requests.
+runtime_modes: [mock]
+binding_keys:
+  descriptor_ref:
+    required: true
+    source: env_profile
+  service_name:
+    required: true
+    source: env_profile
+  port_strategy:
+    required: false
+    source: env_profile
+  fixed_port:
+    required: false
+    source: env_profile
+operations:
+  start_grpc_mock:
+    allowed_inputs: [mock.port, grpc.proto_ref, grpc.descriptor_ref, grpc.service]
+    required_inputs: [grpc.descriptor_ref, grpc.service]
+    output_refs: [target_uri, server_log]
+  load_grpc_stub:
+    allowed_inputs: [grpc.service, grpc.method, grpc.request_json, grpc.response_ref, grpc.status_code, grpc.metadata.*, mock.reset_before_load]
+    required_inputs: [grpc.service, grpc.method, grpc.response_ref]
+    output_refs: [target_uri, loaded_stub_count, injected_stub, server_log]
+  grpc_request_received:
+    allowed_inputs: [grpc.service, grpc.method, grpc.request_json, grpc.expected_count]
+    required_inputs: [grpc.service, grpc.method]
+    output_refs: [request_journal, matched_count, server_log]
+  reset_mock:
+    allowed_inputs: []
+    required_inputs: []
+    output_refs: [cleanup_log, server_log]
+evidence:
+  outputs: [target_uri, request_journal, server_log, injected_stub, cleanup_log, failure_detail]
+  redact: [grpc.metadata.authorization]
+failure_mapping:
+  allowed_codes:
+    - PROVIDER_UNAVAILABLE
+    - PROVIDER_TIMEOUT
+    - PROVIDER_STUB_MISSING
+    - OPERATION_FAILED
+    - ASSERTION_FAILED
+    - PROTO_DESCRIPTOR_INVALID
+    - EVIDENCE_INVALID
+    - SECRET_RESOLUTION_ERROR

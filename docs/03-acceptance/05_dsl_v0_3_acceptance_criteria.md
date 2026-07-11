@@ -35,11 +35,11 @@ Failure path: Unknown operation, missing required input, unsupported input field
 
 Boundary path: If a Provider Contract does not restrict operation phases, the operation may be used in any DSL phase subject to input, safety, and runtime-mode validation.
 
-## AC-V03-005 Validate Provider Check Expectations
+## AC-V03-005 Validate Provider Check Boundary
 
-Happy path: A `verify` item with `type: provider_check` validates its `expect` paths and operators against the Provider Contract expectation model.
+Happy path: A `verify` item with `type: provider_check` validates its target, operation, and contract-declared `with` inputs, then exposes only contract-declared outputs for later assertions.
 
-Failure path: Unsupported expectation path, unsupported operator, missing `expect`, invalid expected literal/ref, or mismatched expected value type fails before or during verification with owner-actionable detail.
+Failure path: A generic `provider_check.expect`, unsupported input, or undeclared output ref fails validation before provider dispatch with owner-actionable detail.
 
 Boundary path: Provider-specific semantic business comparison remains out of scope unless the Provider Contract explicitly defines the comparator.
 

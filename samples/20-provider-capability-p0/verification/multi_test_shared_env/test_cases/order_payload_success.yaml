@@ -1,0 +1,19 @@
+dsl_version: v0.3
+test_case_id: MULTI-TEST-V03-TC-001
+title: First multi-test assertion validates JSON payload
+
+setup: []
+execute: []
+
+verify:
+  - id: multi_payload_matches
+    type: assertion
+    assert:
+      operator: json_match
+      expected_ref: artifact://expected_results/order_payload.json
+      actual_ref: artifact://actual_samples/order_payload.json
+      ignore_paths: [metadata.generated_at]
+      normalize: canonical_json
+      ignore_order: true
+
+cleanup: []

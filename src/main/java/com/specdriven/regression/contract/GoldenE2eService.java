@@ -1,5 +1,7 @@
 package com.specdriven.regression.contract;
 
+import com.specdriven.regression.summary.SuiteExecutionContext;
+
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.evidence.EvidenceIndexFormatter;
@@ -45,6 +47,13 @@ public class GoldenE2eService {
     private final Yaml yaml = new Yaml();
 
     public GoldenRunResult run(Path suiteManifest, String requestedProfile, Path outputBase) {
+        return run(suiteManifest, requestedProfile,
+                SuiteExecutionContext.standaloneWithBatchId(requestedProfile, outputBase, BATCH_ID));
+    }
+
+    public GoldenRunResult run(Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
+        requireMatchingProfile(requestedProfile, executionContext);
+        Instant startedAt = Instant.now();
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {
             return GoldenRunResult.blocked(validation.suiteId(), requestedProfile, validation.findings());
@@ -96,7 +105,11 @@ public class GoldenE2eService {
             return GoldenRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, profileFindings);
         }
 
-        Path runDir = outputBase.resolve(safe(stringValue(suite.get("suite_id")))).resolve(BATCH_ID).resolve(RUN_ID);
+        String batchId = executionContext.parentBatchId();
+        String runId = executionContext.standaloneInvocation()
+                ? RUN_ID
+                : executionContext.newRunId("GOLDEN");
+        Path runDir = executionContext.childRunRoot(stringValue(suite.get("suite_id")), runId);
         recreateDirectory(runDir);
 
         String generatedAt = resolveGeneratedAt(suiteRoot, requestedProfile);
@@ -145,12 +158,14 @@ public class GoldenE2eService {
             evidenceRefs.add("logs/execution.log");
         }
         evidenceRefs.add("batch/batch.yaml");
-        writeBatch(runDir, suite, topLevelTestCaseId, status, testCases.size());
-        writeEvidenceIndex(runDir, suite, topLevelTestCaseId, requestedProfile, distinctWithIndex(evidenceRefs));
+        writeBatch(runDir, suite, batchId, runId, topLevelTestCaseId, status, testCases.size());
+        writeEvidenceIndex(runDir, suite, batchId, runId, topLevelTestCaseId, requestedProfile, providerResults, distinctWithIndex(evidenceRefs));
         Path resultJson = writeResult(
                 runDir,
                 suite,
                 firstTestCase.testCase(),
+                batchId,
+                runId,
                 requestedProfile,
                 topLevelTestCaseId,
                 testCases.size(),
@@ -162,13 +177,15 @@ public class GoldenE2eService {
                 distinctWithIndex(evidenceRefs),
                 failureClassification,
                 failureReason,
-                ownerAction);
+                ownerAction,
+                startedAt,
+                Instant.now());
         return new GoldenRunResult(
                 "passed".equals(status),
                 status,
                 stringValue(suite.get("suite_id")),
-                BATCH_ID,
-                RUN_ID,
+                batchId,
+                runId,
                 topLevelTestCaseId,
                 testCases.size(),
                 requestedProfile,
@@ -176,6 +193,12 @@ public class GoldenE2eService {
                 runDir,
                 fakeProviderExecuted,
                 List.of());
+    }
+
+    private void requireMatchingProfile(String profile, SuiteExecutionContext context) {
+        if (!context.matchesRequestedProfile(profile)) {
+            throw new IllegalArgumentException("Execution context profile does not match requested profile: " + profile);
+        }
     }
 
     private GoldenTestExecution executeTestCase(
@@ -479,7 +502,8 @@ public class GoldenE2eService {
                 """.formatted(suite.get("suite_id"), testCaseId, profile, fakeProviderExecuted, verifyCount, status));
     }
 
-    private void writeBatch(Path runDir, Map<String, Object> suite, String testCaseId, String status, int testCount) {
+    private void writeBatch(Path runDir, Map<String, Object> suite, String batchId, String runId,
+            String testCaseId, String status, int testCount) {
         write(runDir.resolve("batch/batch.yaml"), """
                 evidence_type: batch_summary
                 evidence_classification: framework_verification_only
@@ -490,19 +514,28 @@ public class GoldenE2eService {
                 test_case_id: %s
                 test_count: %s
                 status: %s
-                """.formatted(suite.get("suite_id"), BATCH_ID, RUN_ID, testCaseId, testCount, status));
+                """.formatted(suite.get("suite_id"), batchId, runId, testCaseId, testCount, status));
     }
 
-    private void writeEvidenceIndex(Path runDir, Map<String, Object> suite, String testCaseId, String profile, List<String> evidenceRefs) {
+    private void writeEvidenceIndex(
+            Path runDir,
+            Map<String, Object> suite,
+            String batchId,
+            String runId,
+            String testCaseId,
+            String profile,
+            List<Map<String, Object>> providerResults,
+            List<String> evidenceRefs) {
+        Map<String, Object> provider = providerResults.isEmpty() ? Map.of() : providerResults.get(0);
         write(runDir.resolve("evidence_index.yaml"), EvidenceIndexFormatter.format(
                 new EvidenceIndexFormatter.Context(
                         stringValue(suite.get("suite_id")),
-                        BATCH_ID,
-                        RUN_ID,
+                        batchId,
+                        runId,
                         testCaseId,
                         profile,
-                        "sample_fake_provider",
-                        "sample-fake-runtime"),
+                        firstNonBlank(stringValue(provider.get("provider_type")), "sample_fake_provider"),
+                        firstNonBlank(stringValue(provider.get("provider_id")), stringValue(provider.get("target")))),
                 runDir,
                 evidenceRefs));
     }
@@ -511,6 +544,8 @@ public class GoldenE2eService {
             Path runDir,
             Map<String, Object> suite,
             Map<String, Object> testCase,
+            String batchId,
+            String runId,
             String profile,
             String testCaseId,
             int testCount,
@@ -522,22 +557,24 @@ public class GoldenE2eService {
             List<String> evidenceRefs,
             String failureClassification,
             String failureReason,
-            String ownerAction) {
+            String ownerAction,
+            Instant startedAt,
+            Instant finishedAt) {
         ProviderFailure failure = failureClassification == null
                 ? null
                 : ProviderFailure.of(failureClassification, failureClassification, failureReason, ownerAction);
         return ProviderCapabilityResultWriter.write(runDir, new ProviderCapabilityResultWriter.ResultDocument(
                 testCase.get("dsl_version"),
                 suite.get("suite_id"),
-                BATCH_ID,
-                RUN_ID,
+                batchId,
+                runId,
                 testCaseId,
                 testCount,
                 profile,
                 "local_golden",
                 status,
-                Instant.parse("2026-06-29T00:00:00Z"),
-                Instant.parse("2026-06-29T00:00:01Z"),
+                startedAt,
+                finishedAt,
                 testCase.get("labels"),
                 testCase.get("source_refs"),
                 stepResults,
@@ -573,10 +610,16 @@ public class GoldenE2eService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("target", target);
         result.put("provider_contract", providerContract);
-        result.put("provider_id", target);
         result.put("provider_type", "sample_fake_provider");
         result.put("profile", profile);
         result.put("runtime_mode", "stub");
+        result.put("operation", "execute_sample");
+        result.put("status", status);
+        result.put("evidence_refs", List.of(
+                "fixture/setup.yaml",
+                "actual/actual_output.json",
+                "actual/actual_output.txt",
+                "fixture/cleanup.yaml"));
         result.put("resolved_operation_result", Map.of(
                 "operation", "execute_sample",
                 "status", status,
@@ -584,6 +627,7 @@ public class GoldenE2eService {
                         "actual_json", "actual/actual_output.json",
                         "actual_text", "actual/actual_output.txt",
                         "execution_log", "logs/execution.log")));
+        result.put("resolved_operation_results", List.of(result.get("resolved_operation_result")));
         result.put("release_evidence_eligible", false);
         return result;
     }
@@ -835,6 +879,10 @@ public class GoldenE2eService {
 
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    private String firstNonBlank(String first, String second) {
+        return first == null || first.isBlank() ? second : first;
     }
 
     private String safe(String value) {

@@ -1,0 +1,12 @@
+dsl_version: v0.3
+test_case_id: NEG-INVALID-RUNTIME-MODE-TC-001
+setup:
+  - id: bad_runtime_mode_target_use
+    target: common_verifier
+    op: json_match
+    with:
+      expected_ref: artifact://expected/missing.json
+      actual_ref: artifact://actual/missing.json
+execute: []
+verify: []
+cleanup: []

@@ -12,10 +12,11 @@ The user-facing public interfaces are:
 
 | Interface | Purpose |
 | --- | --- |
-| DSL Test Case | Defines executable regression behavior. |
-| Provider Contract | Framework-owned contract for a provider type, allowed operations, bindings, outputs, evidence, failure codes, and valid provider instance shape. |
-| Provider Instance | Defines an RP logical runtime target using a built-in or explicitly declared custom provider contract. |
-| Env_Profile | Supplies environment-specific provider binding values and defines what may run in `local`, `ci`, `sit`, or `preprod`. |
+| DSL Test Case | Defines executable regression behavior with direct suite target references. |
+| Provider Contract | Framework-owned contract for a provider type, allowed operations, bindings, outputs, evidence, failure codes, and valid target shape. |
+| Suite Manifest | Defines suite metadata, artifact roots, targets, Env_Profile refs, and test-case refs. |
+| Suite Target | Suite-level logical runtime target that selects a Provider Contract. |
+| Env_Profile | Supplies profile-specific target runtime mode and binding values. |
 | CLI | Initializes, validates, executes, and reports. |
 | Evidence Contract | Defines reviewable outputs for release readiness. |
 
@@ -23,56 +24,52 @@ Resolution flow:
 
 ```text
 DSL target
-  -> provider_id
-  -> Provider Instance
-  -> provider_type
+  -> suite_manifest.targets.<target>.provider_contract
   -> Framework built-in Provider Contract catalog
   -> selected Env_Profile
-  -> Env_Profile.providers.<provider_id>.bindings
+  -> Env_Profile.targets.<target>.bindings
 ```
 
-There is no additional user-facing runtime interface beyond Provider Instances, Env_Profiles, DSL, CLI, evidence, and framework-owned Provider Contracts. RP/suite repositories do not copy built-in Provider Contracts by default.
+There is no additional user-facing runtime interface beyond suite targets,
+Env_Profiles, DSL, CLI, evidence, and framework-owned Provider Contracts.
+RP/suite repositories do not copy built-in Provider Contracts by default.
+Provider Instance files are v0.2 compatibility artifacts only.
 
 ## 3. Role Responsibilities
 
 | Role | Responsibility |
 | --- | --- |
 | Product Owner / Product Developer | Defines product release scope, product-level E2E AC, and product-to-RP mapping. |
-| RP Owner / RP Developer | Defines RP feature spec, RP AC, RP/RU mapping, approved tests, expected results, Provider Instances, and Env_Profiles. |
+| RP Owner / RP Developer | Defines RP feature spec, RP AC, RP/RU mapping, approved tests, expected results, suite targets, and Env_Profiles. |
 | RU Developer | Provides APIs, events, jobs, readiness signals, fixtures, cleanup support, and implementation fixes. |
 | Agent | Initializes structure, drafts tests, validates readiness, runs tests, and reports gaps/evidence. |
 
 Agents must not invent AC, expected results, RP/RU mapping, or release decisions.
 
-## 4. RP Package Structure
+## 4. Suite Package Structure
 
 ```text
-docs/08-release/release-packages/<RP-ID>/
-  package.yaml
-  rp_feature_spec.md
-  rp_ru_mapping.yaml
-  architecture.md
-  acceptance_criteria.md
-  tests/
-    draft/
-    approved/
-  expected-results/
-    draft/
-    approved/
-  provider_instances/
+samples/<suite>/
+  suite_manifest.yaml
+  test_cases/
   env_profiles/
+  fixtures/
+  expected_results/
+  queries/
   custom_provider_contracts/   # optional, only for approved custom providers or pinned contract snapshots
-  traceability.md
-  evidence_index.md
 ```
 
 Approved tests and expected results are versioned assets. Do not regenerate or overwrite them on every run.
 
-Provider instance and Env_Profile authoring folders are owner/Agent Skill working areas. Runtime execution consumes canonical generated artifacts under `generated-framework/provider_instances/` and `generated-framework/env_profiles/`. Built-in Provider Contracts are resolved from the framework catalog by `provider_type`. Suite-local Provider Contracts are optional and only valid for approved custom providers or explicit contract snapshot pinning.
+Built-in Provider Contracts are resolved from the framework catalog by
+`provider_contract`. Suite-local Provider Contracts are optional and only valid
+for approved custom providers or explicit contract snapshot pinning.
 
 ## 5. End-to-End Workflow
 
-Owner or Agent Skill workflows prepare suite artifacts outside the framework runtime CLI. The v0.2.7 runtime public interface starts only after a suite manifest, test cases, Provider Instances, Env_Profiles, expected data, and evidence policy exist.
+Owner or Agent Skill workflows prepare suite artifacts outside the framework
+runtime CLI. The stable runtime public interface starts after a suite manifest,
+test cases, Env_Profiles, expected artifacts, and evidence policy exist.
 
 ```text
 prepare suite artifacts
@@ -83,34 +80,34 @@ prepare suite artifacts
   -> validate-evidence
 ```
 
-The v0.2.7 runtime public interface is suite-mode: `validate --suite`, `run --suite --dry-run`, `run --suite`, `report --result`, and `validate-evidence --result`.
+The runtime public interface is suite-mode: `validate --suite`,
+`run --suite --dry-run`, `run --suite`, `report --result`, and
+`validate-evidence --result`.
 
-Typical v0.2.7 runtime commands:
+Typical v0.3 runtime commands:
 
 ```bash
 regress validate \
-  --suite samples/20-provider-capability-p0/suite_manifest.yaml \
-  --profile local_provider
+  --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml \
+  --profile local_v03
 
 regress run \
-  --suite samples/20-provider-capability-p0/suite_manifest.yaml \
-  --profile local_provider \
+  --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml \
+  --profile local_v03 \
   --dry-run
 
 regress run \
-  --suite samples/20-provider-capability-p0/suite_manifest.yaml \
-  --profile local_provider
+  --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml \
+  --profile local_v03
 
 regress report --result <generated_result_json>
 ```
 
-Product/RP tooling must translate owner-authored artifacts into suite-mode artifacts before invoking the framework runtime. Direct Product/RP runtime orchestration is not part of the v0.2.7 framework public interface.
+Product/RP tooling must translate owner-authored artifacts into suite-mode
+artifacts before invoking the framework runtime. Direct Product/RP runtime
+orchestration is not part of the framework public interface.
 
-### 5.1 DSL v0.3 Preview Runtime Interface
-
-Framework `0.3.0` also includes the versioned DSL v0.3 preview path. v0.3 keeps v0.2 compatibility intact but removes user-authored Provider Instance artifacts from the v0.3 authoring model.
-
-v0.3 resolution flow:
+Resolution flow:
 
 ```text
 test_case.target
@@ -126,22 +123,37 @@ Typical v0.3 commands:
 
 ```bash
 regress validate \
-  --suite samples/v0_3_dsl/golden/suite_manifest.yaml \
+  --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml \
   --profile local_v03
 
 regress run \
-  --suite samples/v0_3_dsl/golden/suite_manifest.yaml \
+  --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml \
   --profile local_v03 \
   --dry-run
 
 regress run \
-  --suite samples/v0_3_dsl/golden/suite_manifest.yaml \
+  --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml \
+  --profile local_v03
+
+regress validate \
+  --suite samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml \
+  --profile local_v03
+
+regress run \
+  --suite samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml \
+  --profile local_v03 \
+  --dry-run
+
+regress run \
+  --suite samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml \
   --profile local_v03
 
 regress report --result <generated_result_json>
 ```
 
-Use `docs/v0.3/` in the usage kit for the formal v0.3 spec, architecture, AC, and test plan. Use `docs/09-operations/` for the stable v0.2 suite-mode guide and shared operations topics.
+Use `docs/v0.3/` in the usage kit for the formal v0.3 spec, architecture, AC,
+and test plan. Use `docs/09-operations/` for the stable v0.3 user guide and
+shared operations topics. v0.2 materials are compatibility references only.
 
 During framework development, keep Maven memory bounded:
 
@@ -154,167 +166,124 @@ MAVEN_OPTS='-Xmx1024m' ./mvnw verify
 The DSL defines:
 
 - Optional traceability metadata: feature spec, AC, defect, ADR, or other source links.
-- Runtime target: provider instance. The active profile is selected by CLI or suite manifest.
-- Test data: optional `data` catalog plus operation `inputs`.
+- Runtime target: suite target name. The target's Provider Contract is declared in the suite manifest.
+- Test data: artifact refs and safe literals supplied directly through operation `with`.
 - Setup and cleanup operations.
 - Execution operations.
 - Verification/oracle.
 - Required evidence.
 
-`source_refs` is metadata only. Runtime execution must not resolve it, and execution artifacts such as expected results, fixtures, SQL, payloads, mock mappings, and test data belong in `data`, operation `inputs`, or verify expected refs.
+`source_refs` is metadata only. Runtime execution must not resolve it, and execution artifacts such as expected results, fixtures, SQL, payloads, mock mappings, and test data belong in `artifact://` refs, operation `with`, or verify expected refs.
 
 Example:
 
 ```yaml
-dsl_version: v0.2
-test_case_id: RP-PAYMENT-001-TC-001
-title: Submit valid payment request
-status: active
-revision: 1
-
-source_refs:
-  acceptance_criteria: acceptance_criteria.md#AC001
-
-labels:
-  rp_id: RP-PAYMENT-001
-  feature_id: F001
-  tags: [smoke, happy-path]
-
-compatible_profiles: [ci, sit]
-
-targets:
-  payment_api:
-    provider_id: payment-api
-  payment_db:
-    provider_id: payment-db
-
-data:
-  request_payload:
-    ref: fixtures/payment/valid_request.json
-  submit_payment_method:
-    value: POST
-  submit_payment_path:
-    value: /payments
-  seed_customer_sql:
-    ref: fixtures/payment/seed_customer.sql
-  cleanup_customer_sql:
-    ref: fixtures/payment/cleanup_customer.sql
+dsl_version: v0.3
+test_case_id: HTTP-MOCK-REST-CLIENT-V03-TC-001
+title: HTTP mock target is consumed by REST client target without Provider Instance
 
 setup:
-  operations:
-    - id: seed_customer
-      target: payment_db
-      operation: db_seed
-      inputs:
-        sql_ref:
-          ref: ${data.seed_customer_sql}
-      cleanup:
-        target: payment_db
-        operation: db_cleanup
-        inputs:
-          sql_ref:
-            ref: ${data.cleanup_customer_sql}
+  - id: load_payment_stub
+    target: payment_mock
+    op: load_stubs
+    with:
+      mock.mappings_ref: artifact://fixtures/wiremock/payment_success_stub.json
+      mock.reset_before_load: true
 
 execute:
-  operations:
-    - id: submit_payment
-      target: payment_api
-      operation: http_request
-      inputs:
-        request.method:
-          ref: ${data.submit_payment_method}
-        request.path:
-          ref: ${data.submit_payment_path}
-        request.body:
-          ref: ${data.request_payload}
-      outputs:
-        status: response.status
-        headers: response.headers
-        body: response.body
-        duration_ms: response.duration_ms
+  - id: call_payment_api
+    target: payment_api
+    op: http_request
+    with:
+      request.method: POST
+      request.path: /payments
+      request.body_ref: artifact://fixtures/payment_request.json
 
 verify:
-  checks:
-    - id: payment_status_is_accepted
-      type: json_path_equals
-      actual:
-        ref: ${execute.submit_payment.outputs.body}
-      selector: $.status
-      expected: ACCEPTED
+  - id: payment_response_status
+    type: assertion
+    assert:
+      actual: step://call_payment_api/response.status
+      operator: equals
+      expected: 200
+  - id: payment_response_body
+    type: assertion
+    assert:
+      actual: step://call_payment_api/response.body
+      operator: json_match
+      expected_ref: artifact://expected_results/payment_response.json
 
 cleanup:
-  operations:
-    - id: cleanup_customer
-      target: payment_db
-      operation: db_cleanup
-      inputs:
-        sql_ref:
-          ref: ${data.cleanup_customer_sql}
-
-evidence:
-  required:
-    - ${execute.submit_payment.outputs.status}
-    - ${execute.submit_payment.outputs.body}
-    - ${verify.payment_status_is_accepted.result}
-
-runtime:
-  timeout: PT5M
-  retry:
-    max_attempts: 0
+  - id: reset_payment_mock
+    target: payment_mock
+    op: reset_mock
+    with: {}
 ```
 
-## 7. Data Catalog and Inputs
-
-Use `data` only when a test needs reusable reviewed artifacts or small safe literals. `data` is lifecycle-neutral; it does not split values into setup, execute, cleanup, or expected-result categories.
-
-The framework resolves `${data.<name>}` to the matching entry's `ref` or `value`. Legacy `data_binding` and lifecycle category keys such as `input_data`, `setup_data`, `cleanup_data`, `expect_data`, `datasets`, `fixtures`, `expected_results`, `db_seed`, `db_cleanup`, and `mock_stubs` are prohibited in new v0.2 DSL artifacts.
+The matching suite manifest declares the Provider Contracts:
 
 ```yaml
-data:
-  request_payload:
-    ref: fixtures/payment/valid_request.json
-  seed_customer_sql:
-    ref: fixtures/payment/seed_customer.sql
-  cleanup_customer_sql:
-    ref: fixtures/payment/cleanup_customer.sql
-  expected_payment_response:
-    ref: expected-results/approved/ER001.yaml
-  customer_id:
-    value: CUST-001
+manifest_version: v0.3
+targets:
+  payment_mock:
+    provider_contract: http_mock.v0.3
+  payment_api:
+    provider_contract: rest_client.v0.3
 ```
 
-`data` is not an Env_Profile substitute. It must not contain endpoint URLs, JDBC URLs, broker URLs, namespaces, credentials, or raw secrets.
-
-Use operation `inputs` for where the provider receives data. Each input key must be allowed by the resolved Provider Contract operation.
-
-Common `ref` values:
+The matching Env_Profile supplies runtime mode and bindings:
 
 ```yaml
-ref: fixtures/payment/valid_request.json
-ref: expected-results/approved/ER001.yaml
-ref: ${data.request_payload}
-ref: ${data.seed_customer_sql}
-ref: ${execute.submit_payment.outputs.body}
+profile_id: local_v03
+targets:
+  payment_mock:
+    runtime_mode: mock
+    bindings:
+      port_strategy: dynamic
+  payment_api:
+    runtime_mode: mock
+    bindings:
+      base_url: generated://payment_mock/base_url
 ```
 
-Common `inputs` values:
+## 7. Artifact Refs and Operation Inputs
+
+Use `artifact://...` when a test needs reviewed fixtures, SQL, mock mappings, schemas, or expected results. Artifact refs resolve under the suite manifest `artifact_roots` and must not escape the suite directory. Use safe inline literals only for small technical values such as `POST`, `/payments`, or `true`.
+
+v0.3 test cases do not require a predeclared data catalog. Legacy `data_binding`, `data`, `input_data`, `setup_data`, `cleanup_data`, `expect_data`, `datasets`, `fixtures`, `expected_results`, `db_seed`, `db_cleanup`, `mock_stubs`, `parameters`, and `bind_as` are prohibited in v0.3 DSL artifacts.
+
+Artifact root example:
 
 ```yaml
-inputs:
-  request.body:
-    ref: ${data.request_payload}
-  request.headers.X-Correlation-ID:
-    value: RP-PAYMENT-001-TC-001
+artifact_roots:
+  fixtures: fixtures/
+  expected_results: expected_results/
+  queries: queries/
+```
+
+Common `artifact://` values:
+
+```yaml
+artifact://fixtures/payment_request.json
+artifact://fixtures/wiremock/payment_success_stub.json
+artifact://queries/find_order_by_id.sql
+artifact://expected_results/payment_response.json
+```
+
+Use operation `with` for where the provider receives data. Each `with` key must be allowed by the Provider Contract operation resolved from the suite target.
+
+```yaml
+with:
+  request.body_ref: artifact://fixtures/payment_request.json
   query_ref:
-    ref: queries/payment/find_by_id.sql
+    ref: artifact://queries/find_order_by_id.sql
   bind_variables:
-    payment_id:
-      ref: ${execute.submit_payment.outputs.body}
+    order_id: ORD-1001
 ```
 
-A DSL test case is invalid if it uses an `inputs` key that is not allowed by the Provider Contract resolved from the target Provider Instance `provider_type`.
+A DSL test case is invalid if it uses an `op`, `with` key, output ref, or verify `actual` ref that is not allowed by the Provider Contract resolved from the suite target.
 
-Runtime connection and authentication values belong to Env_Profile provider bindings, not test-case data. DSL test cases must not bind `secret.*` directly. Runtime endpoints, tokens, DB credentials, broker credentials, kubeconfig, SSH keys, and runner credentials must be supplied through `env_profiles/` or generated `generated-framework/env_profiles/`.
+Runtime connection and authentication values belong to Env_Profile target bindings, not test-case data. DSL test cases must not bind `secret.*` directly. Runtime endpoints, tokens, DB credentials, broker credentials, kubeconfig, SSH keys, and runner credentials must be supplied through `env_profiles/` or generated `generated-framework/env_profiles/`.
 
 Authentication headers such as `Authorization` should be injected by provider configuration. Test cases may bind ordinary request headers, such as correlation IDs, only when the resolved Provider Contract allows `request.headers.*`.
 
@@ -397,7 +366,7 @@ expected: 200
 Business expected behavior should use approved expected-result artifacts:
 
 ```yaml
-expected_ref: expected-results/approved/payment_accepted_event.yaml
+expected_ref: artifact://expected_results/payment_response.json
 ```
 
 Rules:
@@ -405,22 +374,18 @@ Rules:
 - Use `expected` for small technical constants such as status code, count, or boolean readiness.
 - Use `expected_ref` for owner-approved business output, event payloads, DB state, files, or complex JSON.
 - `expected_ref` must point to an approved artifact for release-readiness tests.
-- `actual.ref` must resolve to an output ref allowed by the resolved Provider Contract or to a framework-generated evidence ref.
+- `actual` must resolve to a `step://...` output ref allowed by the resolved Provider Contract or to a framework-generated evidence ref.
 
 ### 8.3 Verify Contract Catalog
 
-The following verify types define the minimum v0.2 oracle surface. Additional verify types may be added as additive public-interface changes. Canonical v0.2 feature/spec names such as `response_status_equals`, `json_match`, `schema_match`, `event_published`, and `db_record_exists` should be preferred in new DSL artifacts; older names remain compatibility aliases only when explicitly implemented.
+For v0.3, `verify` accepts only `type: assertion` and `type: provider_check`. The first four rows below are the framework-owned v0.3 assertion catalog. The remaining named verifier rows document v0.2 compatibility syntax only; a v0.3 leaf test must express the same observation through a Provider Contract `provider_check`, then a following assertion. `provider_check.expect` is prohibited.
 
 | Verify Type | Required Fields | Optional Fields | Expected Source | Common Failure Codes |
 | --- | --- | --- | --- | --- |
-| `response_status_equals` | `expected` | `actual.ref`, `selector`, `severity`, `evidence` | Provider HTTP status metadata or captured status field | `ASSERTION_FAILED`, `ASSERTION_INPUT_NOT_FOUND` |
-| `equals` | `actual.ref`, `expected` | `selector`, `severity`, `evidence` | Inline value or approved expected result | `ASSERTION_FAILED`, `ASSERTION_INPUT_NOT_FOUND`, `SELECTOR_NOT_FOUND` |
-| `json_path_equals` | `actual.ref`, `selector`, `expected` or `expected_ref` | `severity`, `evidence` | Inline value or approved expected result | `ASSERTION_FAILED`, `SELECTOR_NOT_FOUND` |
-| `json_match` | `actual.ref`, `expected` or `expected_ref` | `selector`, `ignore_paths`, `partial_match`, `severity`, `evidence` | Inline value or approved expected result | `ASSERTION_FAILED`, `SELECTOR_NOT_FOUND` |
-| `schema_match` | `actual.ref`, `schema_ref` | `ignore_paths`, `severity`, `evidence` | Committed schema file | `SCHEMA_MISMATCH`, `ASSERTION_INPUT_NOT_FOUND` |
-| `file_diff` | `actual.ref`, `expected_ref` | `format`, `normalize`, `ignore_order`, `ignore_paths`, `severity`, `evidence` | Approved expected file | `ASSERTION_FAILED`, `ASSERTION_INPUT_NOT_FOUND` |
-| `list_size_equals` | `actual.ref`, `expected` | `selector`, `severity`, `evidence` | Inline count | `ASSERTION_FAILED`, `ASSERTION_INPUT_NOT_FOUND` |
-| `numeric_tolerance` | `actual.ref`, `expected`, `tolerance` | `selector`, `severity`, `evidence` | Inline value or approved expected result | `ASSERTION_FAILED`, `SELECTOR_NOT_FOUND` |
+| `assertion` with `operator: equals` | `assert.actual`, `assert.expected` | `selector`, `severity`, `evidence` | Inline value or approved expected result | `ASSERTION_FAILED`, `ASSERTION_INPUT_NOT_FOUND`, `SELECTOR_NOT_FOUND` |
+| `assertion` with `operator: json_match` | `assert.actual`, `assert.expected_ref` | `ignore_paths`, `normalize`, `ignore_order`, `severity`, `evidence` | Approved JSON expected artifact | `ASSERTION_FAILED`, `ASSERTION_INPUT_NOT_FOUND` |
+| `assertion` with `operator: schema_match` | `assert.actual`, `assert.schema_ref` | `ignore_paths`, `severity`, `evidence` | Committed schema artifact | `SCHEMA_MISMATCH`, `ASSERTION_INPUT_NOT_FOUND` |
+| `assertion` with `operator: file_diff` | `assert.actual`, `assert.expected_ref` | `normalize`, `ignore_order`, `ignore_paths`, `severity`, `evidence` | Approved expected file | `ASSERTION_FAILED`, `ASSERTION_INPUT_NOT_FOUND` |
 | `db_record_exists` | `target`, `query.ref`, `expected.min_rows` or `expected_ref` | `query.dialect`, `query.params`, `options.timeout`, `options.poll_interval`, `severity`, `evidence` | Inline row condition or approved expected DB state | `ASSERTION_FAILED`, `ASSERTION_INPUT_NOT_FOUND`, `TIMEOUT` |
 | `event_published` | `target`, `event.topic` / `event.subject` / `event.subject_ref`, `expected.match` or `expected_ref` | `event.key`, `options.timeout`, `options.poll_interval`, `options.consume_from`, `severity`, `evidence` | Inline match rule or approved event payload | `ASSERTION_FAILED`, `ASSERTION_INPUT_NOT_FOUND`, `TIMEOUT` |
 | `event_payload_match` | `actual.ref` or `target/event`, `expected.match` or `expected_ref` | `selector`, `ignore_paths`, `severity`, `evidence` | Inline match rule or approved event payload | `ASSERTION_FAILED`, `ASSERTION_INPUT_NOT_FOUND` |
@@ -438,137 +403,79 @@ Each verify implementation must produce the verify result contract described bel
 
 ```yaml
 verify:
-  checks:
-    - id: http_status_is_200
-      type: response_status_equals
+  - id: http_status_is_200
+    type: assertion
+    assert:
+      actual: step://call_payment_api/response.status
+      operator: equals
       expected: 200
 ```
 
-#### JSON Path Equals
+#### JSON Match
 
 ```yaml
 verify:
-  checks:
-    - id: payment_status_is_accepted
-      type: json_path_equals
-      actual:
-        ref: ${execute.submit_payment.outputs.body}
-      selector: $.paymentStatus
-      expected: ACCEPTED
+  - id: payment_response_body
+    type: assertion
+    assert:
+      actual: step://call_payment_api/response.body
+      operator: json_match
+      expected_ref: artifact://expected_results/payment_response.json
 ```
 
 #### JSON Schema Matches
 
 ```yaml
 verify:
-  checks:
-    - id: response_matches_schema
-      type: schema_match
-      actual:
-        ref: ${execute.submit_payment.outputs.body}
-      schema_ref: schemas/payment_response.schema.json
+  - id: response_matches_schema
+    type: assertion
+    assert:
+      actual: step://call_payment_api/response.body
+      operator: schema_match
+      schema_ref: artifact://expected_results/payment_response.schema.json
 ```
 
 #### Event Payload Match
 
 ```yaml
 verify:
-  checks:
-    - id: payment_event_received
-      type: event_payload_match
-      actual:
-        ref: ${execute.consume_payment_event.outputs.consumed_message}
-      expected_ref: expected-results/approved/payment_accepted_event.yaml
-      expected:
-        match:
-          correlation_id:
-            ref: ${execute.submit_payment.outputs.body}
+  - id: payment_event_received
+    type: assertion
+    assert:
+      actual: step://publish_order_event/message
+      operator: json_match
+      expected_ref: artifact://expected_results/order_event.json
 ```
 
 #### Event Not Published
 
 ```yaml
 verify:
-  checks:
-    - id: no_rejection_event
-      type: event_not_published
-      target: payment_events
-      event:
-        topic: payment.events
-      expected:
-        match:
-          eventType: PAYMENT_REJECTED
-      options:
-        timeout: PT10S
+  - id: no_rejection_event
+    type: event_not_published
+    target: order_events
+    event:
+      subject: orders.rejected
+    expected:
+      match:
+        eventType: ORDER_REJECTED
+    options:
+      timeout: PT10S
 ```
 
 #### DB Record Exists
 
 ```yaml
 verify:
-  checks:
-    - id: payment_db_state_is_accepted
-      type: db_record_exists
-      target: payment_db
-      query:
-        ref: queries/payment/find_by_id.sql
-        params:
-          payment_id: ${execute.submit_payment.outputs.body}
-      expected:
-        min_rows: 1
-```
-
-#### List Size Equals
-
-```yaml
-verify:
-  checks:
-    - id: exactly_one_payment_record
-      type: list_size_equals
-      actual:
-        ref: ${execute.query_payment.outputs.query_result}
-      expected: 1
-```
-
-#### Numeric Tolerance
-
-```yaml
-verify:
-  checks:
-    - id: amount_matches
-      type: numeric_tolerance
-      actual:
-        ref: ${execute.query_payment.outputs.query_result}
-      selector: $[0].amount
-      expected: 100.00
-      tolerance:
-        absolute: 0.01
-```
-
-#### Runtime Ready Output
-
-```yaml
-verify:
-  checks:
-    - id: payment_deployment_ready
-      type: equals
-      actual:
-        ref: ${execute.check_payment_deployment.outputs.deployment_status}
-      selector: $.ready
-      expected: true
-```
-
-#### External Runner Result
-
-```yaml
-verify:
-  checks:
-    - id: legacy_runner_passed
-      type: equals
-      actual:
-        ref: ${execute.run_legacy_regression.outputs.result_json}
-      selector: $.status
-      expected: PASSED
+  - id: order_db_state_exists
+    type: db_record_exists
+    target: order_db
+    query:
+      ref: artifact://queries/find_order_by_id.sql
+      params:
+        order_id: ORD-1001
+    expected:
+      min_rows: 1
 ```
 
 ### 8.4 Eventual Verification
@@ -577,15 +484,15 @@ Use explicit `options.timeout` and `options.poll_interval` when behavior is asyn
 
 ```yaml
 verify:
-  checks:
-    - id: settlement_event_eventually_received
-      type: event_payload_match
-      actual:
-        ref: ${execute.consume_settlement_event.outputs.consumed_message}
-      expected_ref: expected-results/approved/settlement_event.yaml
-      options:
-        timeout: PT60S
-        poll_interval: PT5S
+  - id: settlement_event_eventually_received
+    type: event_published
+    target: settlement_events
+    event:
+      subject: settlement.completed
+    expected_ref: artifact://expected_results/settlement_event.json
+    options:
+      timeout: PT60S
+      poll_interval: PT5S
 ```
 
 Rules:
@@ -601,7 +508,8 @@ Each verify item should produce a structured assertion result.
 
 ```yaml
 verify_id: payment_status_is_accepted
-type: json_path_equals
+type: assertion
+operator: equals
 status: failed
 actual: PENDING
 expected: ACCEPTED
@@ -648,7 +556,7 @@ Evidence should include:
 - selected actual value
 - comparison result
 - failure code, if failed
-- provider instance and profile
+- suite target, Provider Contract, runtime mode, and profile
 - related AC or expected-result reference
 
 The report must be able to trace:
@@ -662,7 +570,7 @@ AC -> test case -> execute step -> verify item -> evidence -> result
 - `verify` must check observable output only.
 - `verify` must not call hidden product logic.
 - `verify` must not infer expected business behavior from actual runtime behavior.
-- `actual.ref` must resolve to a valid provider output ref or framework evidence ref.
+- `assert.actual` must resolve to a valid provider output ref or framework evidence ref.
 - `expected_ref` must point to approved expected-result artifacts for business assertions.
 - Async verification must use explicit timeout and polling policy.
 - Failed cleanup is not a passed test; it should be reported separately as cleanup evidence.
@@ -672,28 +580,24 @@ AC -> test case -> execute step -> verify item -> evidence -> result
 
 Built-in Provider Contracts are owned by the framework. RP/suite repositories should not copy them into each suite. A suite-local Provider Contract is allowed only when the suite explicitly declares a custom provider or contract snapshot pinning mode.
 
-A provider contract and provider instance should use the same top-level domains.
+A Provider Contract defines the public executable surface for one provider capability. In v0.3, suite authors do not copy or author Provider Instance files for built-in providers.
 
-The contract defines allowed fields, allowed operations, allowed values, required fields, defaults, output refs, evidence outputs, access policy shape, and failure codes. The instance fills concrete RP-level selections using those contract-defined domains.
-
-A provider instance is invalid if it contains a field, operation input key, output ref, evidence output, or failure code not allowed by its provider contract.
-
-Contract and instance shapes are aligned by domain, not byte-for-byte identical. For example, a contract declares allowed readiness operations under `readiness.operations`; an instance selects one operation under `readiness.operation`.
-
-| Domain | Contract Defines | Instance Selects |
+| Domain | Provider Contract Defines | Suite / Env_Profile Supplies |
 | --- | --- | --- |
-| `binding_keys` | Required and optional binding keys, value types, allowed value kinds, defaults, and generated-ref rules. | Not selected by Provider Instance. Env_Profile supplies values for these keys. |
-| `bindable_outputs` | Runtime outputs that may be referenced by Env_Profile `generated_ref`, such as `generated://wiremock-payment-api.base_url`. | Not selected by Provider Instance. Provider runtime produces the output at execution time. |
-| `defaults` | Allowed default fields and default values. | RP-level timeout, retry, or provider defaults. |
-| `readiness` | Allowed readiness operations and fields. | Selected readiness operation and concrete inputs. |
-| `operations` | Allowed executable operations, input keys, and output refs. | Operations are referenced by DSL `setup`, `execute`, or `cleanup`. |
-| `evidence` | Allowed evidence capture and redaction options. | RP-level evidence capture and redaction selections. |
-| `safety` | Required safety rules and approval shape for command-capable providers, such as `safety.rules.required_fields`. | Explicit RP-level `safety.access_policy` and `safety.approval` selections. |
-| `failure_mapping` | Allowed failure codes. | Mapping from provider-specific failure cases to allowed failure codes. |
+| `provider_contract` | Stable contract id, such as `jdbc.v0.3` or `rest_client.v0.3`. | Suite manifest `targets.<target>.provider_contract`. |
+| `runtime_modes` | Allowed runtime modes and which modes are executable by this framework build. | Env_Profile `targets.<target>.runtime_mode`. |
+| `binding_keys` | Required and optional binding keys, value types, allowed value kinds, defaults, and generated-ref rules. | Env_Profile `targets.<target>.bindings`. |
+| `operations.<op>.output_refs` | Runtime outputs that may be referenced by generated refs, such as `generated://payment_mock/base_url`. | Provider runtime produces the value; another Env_Profile target may consume it. |
+| `operations` | Allowed `op` names, allowed `with` keys, output refs, and supported phases. | DSL `setup`, `execute`, `verify`, and `cleanup` reference the operation. |
+| `evidence` | Allowed evidence outputs and masking requirements. | Runtime writes evidence and result refs. |
+| `safety` | Required safety rules for command-capable providers. | Env_Profile and approved owner policy supply the allowed runtime access values. |
+| `failure_mapping` | Allowed failure codes and categories. | Runtime maps failures to those codes. |
+
+A v0.3 suite is invalid if a target references an unknown Provider Contract, an Env_Profile omits a required binding key, a binding value kind is not allowed, a DSL `op` is unsupported, a `with` key is unsupported, or a `step://...` output ref is not declared by the Provider Contract operation.
 
 ### 9.1 Command-Capable Provider Access Policy
 
-Providers that can execute commands or collect host/runtime data must define contract-owned safety requirements under `safety.rules` when required by the Provider Contract or Env_Profile execution mode. Provider instances must explicitly select the matching `safety.access_policy` and, where required, `safety.approval`.
+Providers that can execute commands or collect host/runtime data must define contract-owned safety requirements under `safety.rules` when required by the Provider Contract or Env_Profile execution mode. The selected Env_Profile must explicitly supply the matching `safety.access_policy` and, where required, `safety.approval`.
 
 External runner approval is provider safety approval, not release approval.
 
@@ -703,7 +607,7 @@ This applies at minimum to:
 - `vm_runtime` with `run_command`, `collect_file`, or `collect_logs`.
 - `external_runner` with `run` or `run_and_collect`.
 
-Command-capable provider instances should declare:
+Command-capable Env_Profile target bindings should declare:
 
 - Whether command execution is allowed.
 - Allowed commands or runner IDs.
@@ -734,15 +638,20 @@ safety:
     ref: approvals/provider-safety/settlement-runner.yaml
 ```
 
-If a command-capable provider instance does not define required `safety.access_policy`, readiness validation must fail.
+If a command-capable Env_Profile target does not define required `safety.access_policy`, readiness validation must fail.
 
-## 10. Provider Contracts and Provider Instances
+## 10. Provider Contracts and Suite Targets
 
-The canonical built-in Provider Contracts are materialized under `docs/02-architecture/contracts/provider-contracts/` and indexed by `docs/02-architecture/contracts/provider_capability_registry.v0.2.yaml`. The user guide must not redefine a second provider contract catalog. Runtime suite manifests use this built-in catalog by default.
+The canonical built-in Provider Contracts are materialized under `docs/02-architecture/contracts/provider-contracts/` and indexed by `docs/02-architecture/contracts/provider_capability_registry.v0.2.yaml`. Start with the [Provider Contract Catalog](../02-architecture/contracts/provider-contracts/README.md) to map `provider_contract` ids such as `jdbc.v0.3` to contract YAML files and sample suites. The user guide must not redefine a second provider contract catalog. Runtime suite manifests use this built-in catalog by default.
 
-Framework `0.2.7` public provider support is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is keyed by provider type and `support_status`; runtime lifecycle details such as native, mock, ephemeral, framework-managed, or external are Env_Profile details, not public support statuses.
+Framework `0.3.0` has two public surfaces:
 
-RP/suite repositories do not need a `provider_contracts/` folder for built-in provider types such as `wiremock_http_mock`, `rest_client`, `jdbc`, `nats`, `kafka`, `ibm_mq`, `artifact_compare`, or `polling_observer`. Suite-local contracts are an explicit opt-in for custom provider plugins or contract snapshot pinning:
+- v0.2 compatibility suites use Provider Instances, Env_Profiles, and the v0.2 provider capability registry.
+- v0.3 suites do not use Provider Instance files. They declare suite targets with `provider_contract`, and Env_Profile `targets.<target>` supplies `runtime_mode` and `bindings`.
+
+Framework `0.3.0` public provider support is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is keyed by provider type and `support_status`; runtime lifecycle details such as native, mock, stub, ephemeral, or framework are Env_Profile details, not public support statuses.
+
+RP/suite repositories do not need a `provider_contracts/` folder for built-in v0.3 Provider Contracts such as `http_mock.v0.3`, `rest_client.v0.3`, `jdbc.v0.3`, `nats.v0.3`, `kafka.v0.3`, `ibm_mq.v0.3`, `artifact_compare.v0.3`, `common_verify.v0.3`, or `polling_observer.v0.3`. Suite-local contracts are an explicit opt-in for custom provider plugins or contract snapshot pinning:
 
 ```yaml
 provider_contract_resolution:
@@ -754,6 +663,32 @@ provider_contract_resolution:
 
 When this section is absent, the resolution mode is `framework_builtin`.
 
+For v0.3 suites, the target contract catalog is keyed by `provider_contract` ids such as `http_mock.v0.3`, `rest_client.v0.3`, `jdbc.v0.3`, `nats.v0.3`, `kafka.v0.3`, `ibm_mq.v0.3`, `artifact_compare.v0.3`, `common_verify.v0.3`, and `polling_observer.v0.3`. A v0.3 suite target example:
+
+```yaml
+targets:
+  payment_mock:
+    provider_contract: http_mock.v0.3
+  payment_api:
+    provider_contract: rest_client.v0.3
+```
+
+The matching Env_Profile uses the same target names:
+
+```yaml
+targets:
+  payment_mock:
+    runtime_mode: mock
+    bindings:
+      port_strategy: dynamic
+  payment_api:
+    runtime_mode: mock
+    bindings:
+      base_url: generated://payment_mock/base_url
+```
+
+Do not add Provider Instance files for v0.3 suites.
+
 A Provider Contract defines reusable rules for one `provider_type`:
 
 - `provider_contract_version`
@@ -762,46 +697,51 @@ A Provider Contract defines reusable rules for one `provider_type`:
 - `executable_runtime_modes` when only a subset is runnable by the current framework build
 - `contract_only_runtime_modes` when remaining modes are vocabulary for future implementation
 - `binding_keys`
-- `bindable_outputs`
+- `operations.<op>.output_refs`
 - `defaults`
-- `valid_provider_instance_shape`
+- `valid_env_profile_target_shape`
 - `safety`
 - `operations`
 - `evidence`
 - `failure_mapping`
 
-A Provider Instance defines one logical runtime target for an RP. It must use the top-level shape allowed by its Provider Contract and must not contain physical endpoint, topic, DB credential, namespace, host, or secret values. It declares `runtime_modes` as the subset it may use; the selected `runtime_mode` and all Provider Contract `binding_keys` are supplied by Env_Profile for the active environment. For messaging client providers, destination keys such as Kafka `topic`, Kafka `consumer_group`, and IBM MQ `queue` are Env_Profile bindings. Model different destinations as different Provider Instances instead of overriding them from operation inputs.
+A v0.2 compatibility Provider Instance defines one logical runtime target for an RP. It must use the top-level shape allowed by its Provider Contract and must not contain physical endpoint, topic, DB credential, namespace, host, or secret values. It declares `runtime_modes` as the subset it may use; the selected `runtime_mode` and all Provider Contract `binding_keys` are supplied by Env_Profile for the active environment. For messaging client providers, destination keys such as Kafka `topic`, Kafka `consumer_group`, and IBM MQ `queue` are Env_Profile bindings. v0.3 suites model those choices as suite targets plus Env_Profile target bindings instead of Provider Instance files.
 
 ### 10.1 Built-In Provider Contract Catalog
 
-| Provider Type | Canonical Contract File | Required Binding Keys | Operations |
-| --- | --- | --- | --- |
-| `shell_command` | `provider-contracts/shell_command.yaml` | `command` | `run_batch`, `execute_command` |
-| `rest_client` | `provider-contracts/rest_client.yaml` | `base_url` | `http_request` |
-| `grpc_client` | `provider-contracts/grpc_client.yaml` | `target` | `unary_call` |
-| `wiremock_http_mock` | `provider-contracts/wiremock_http_mock.yaml` | none required; local/CI usually uses `mappings_ref` and `port_strategy` | `start_mock`, `connect_mock`, `load_stubs`, `verify_requests` |
-| `soap_mock` | `provider-contracts/soap_mock.yaml` | none required; local/CI usually uses `port_strategy` and generated `endpoint_url` output | `start_soap_mock`, `connect_soap_mock`, `load_soap_stub`, `soap_request_received`, `reset_mock` |
-| `grpc_mock` | `provider-contracts/grpc_mock.yaml` | `descriptor_ref`, `service_name`; `target_uri` is a generated bindable output for clients | `start_grpc_mock`, `connect_grpc_mock`, `load_grpc_stub`, `grpc_request_received`, `reset_mock` |
-| `kafka` | `provider-contracts/kafka.yaml` | `bootstrap_servers`, `topic`, `consumer_group` | `kafka_publish`, `kafka_observe`, `kafka_payload_match` |
-| `ibm_mq` | `provider-contracts/ibm_mq.yaml` | `queue_manager`, `channel`, `conn_name`, `queue`, `credential.secret_ref` | `mq_put`, `mq_browse`, `mq_message_exists`, `mq_payload_match` |
-| `kafka_messaging` | `provider-contracts/kafka_messaging.yaml` | `bootstrap_servers` | deprecated alias for legacy `publish_message`, `consume_message` artifacts |
-| `nats` | `provider-contracts/nats.yaml` | `connection`, `subject` | `nats_publish`, `nats_observe`, `event_published`, `event_payload_match` |
-| `jdbc` | `provider-contracts/jdbc.yaml` | `connection.secret_ref` or approved `connection.local_ref`, `dialect` | `db_seed`, `db_cleanup`, `db_query`, `db_record_exists` |
-| `kubernetes_runtime` | `provider-contracts/kubernetes_runtime.yaml` | `context`, `namespace` | `check_deployment_ready`, `check_pod_ready`, `get_logs`, `wait_rollout`, `exec_command` |
-| `vm_runtime` | `provider-contracts/vm_runtime.yaml` | `host`, `user` | `check_host_ready`, `run_command`, `collect_file`, `collect_logs`, `check_process` |
-| `external_runner` | `provider-contracts/external_runner.yaml` | `command` | `run`, `run_and_collect`, `check_status` |
-| `artifact_compare` | `provider-contracts/artifact_compare.yaml` | none | `read_artifact` |
-| `polling_observer` | `provider-contracts/polling_observer.yaml` | none | `observe_condition` |
+The built-in catalog is documented in
+[`docs/02-architecture/contracts/provider-contracts/README.md`](../02-architecture/contracts/provider-contracts/README.md).
+Use it to map v0.3 contract ids to YAML files and samples, for example:
 
-In v0.2 provider capability mode, `rest_client` is executable for checked-in WireMock + HTTP request samples. It resolves `base_url` from Env_Profile, including generated WireMock outputs such as `generated://wiremock-payment-api.base_url`, executes `http_request`, exposes `response.status`, `response.headers`, `response.body`, and `response.duration_ms`, and writes `http_request_response` evidence. Downstream SIT/preprod endpoint validation still requires owner-provided RP artifacts and real Env_Profiles.
+- `jdbc.v0.3` -> `docs/02-architecture/contracts/provider-contracts/jdbc_v0_3.yaml`
+- `rest_client.v0.3` -> `docs/02-architecture/contracts/provider-contracts/rest_client_v0_3.yaml`
+- `http_mock.v0.3` -> `docs/02-architecture/contracts/provider-contracts/http_mock_v0_3.yaml`
+
+The contract YAML is the source of truth for required `binding_keys`, allowed
+`runtime_mode` values, operation `op` names, allowed `with` keys, output refs,
+evidence rules, and failure codes.
+
+In v0.3 provider capability mode, `rest_client.v0.3` is executable for checked-in HTTP mock + HTTP request samples. It resolves `base_url` from Env_Profile, including generated mock outputs such as `generated://payment_mock/base_url`, executes `http_request`, exposes `response.status`, `response.headers`, `response.body`, and `response.duration_ms`, and writes HTTP request/response evidence. Downstream SIT/preprod endpoint validation still requires owner-provided RP artifacts and real Env_Profiles.
+
+#### `wiremock_http_mock` External `base_url`
+
+`wiremock_http_mock.base_url` has one narrow meaning: connect to an owner-provisioned WireMock-compatible mock server that exposes the WireMock Admin API. It is not a generic external REST endpoint binding.
+
+| Case | Provider | Binding | Framework Responsibility |
+| --- | --- | --- | --- |
+| Framework starts local WireMock | `wiremock_http_mock` | `port_strategy`, optional `mappings_ref` | Start/stop mock process, load stubs, verify request journal, emit generated `base_url`. |
+| Owner already started WireMock-compatible mock | `wiremock_http_mock` | `base_url` | Connect to Admin API, load/reset stubs, verify request journal, record `framework_started_wiremock: false`. |
+| Owner provides SUT or external HTTP API | `rest_client` | `base_url` | Send HTTP request and capture request/response evidence. |
+
+External `wiremock_http_mock.base_url` must be an HTTP(S) root URL for a WireMock-compatible server, must not include userinfo or secret-like query parameters, and must support Admin API calls such as `/__admin/mappings`, `/__admin/reset`, and request journal access. In this mode the framework must not allocate ports, start a process, or claim ownership of server lifecycle. `connect_mock` is the preferred operation name for external mode; existing v0.2 flows that call `load_stubs` may connect first when `base_url` is supplied. Generic project-provisioned HTTP endpoints, even if implemented by WireMock behind the scenes, must be modeled as `rest_client.base_url` unless the framework needs WireMock Admin API behavior.
 
 `soap_mock` and `grpc_mock` are PR-008 WireMock-backed mock capabilities. `soap_mock` is executable in PR-008A through WireMock HTTP/XML/SOAP behavior for SOAPAction/header and XPath matching. `grpc_mock` is executable in PR-008B through the WireMock gRPC extension and descriptor refs for unary calls. They are mock providers for local/CI framework evidence; they do not prove downstream SIT/preprod release readiness and do not imply custom SOAP/gRPC server ownership by the framework.
 
-`kafka` and `ibm_mq` are P1 client provider contracts with framework-owned mock capability runtimes and native client runtimes for externally provisioned broker or queue-manager endpoints. Their Provider Contracts list `runtime_modes: [native, mock, ephemeral]` as vocabulary and declare `executable_runtime_modes: [mock, native]`; `ephemeral` remains `contract_only_runtime_modes`. They describe how the test runner consumes Env_Profile binding keys and writes framework evidence without starting brokers, queue managers, Testcontainers, or RUs. Public CI release gates validate external profiles and run native external messaging samples only when broker or queue-manager bindings are configured. A single messaging suite may include Kafka and IBM MQ test cases together when every test case uses the same selected Env_Profile and each test case has exactly one messaging runtime target. External broker or queue-manager values must be materialized into `value`, `secret_ref`, or approved `local_ref` before framework execution; client providers only consume resolved bindings.
+`kafka`, `ibm_mq`, and `nats` are client provider contracts with framework-owned mock/local capability runtimes and native client runtimes for externally provisioned broker or queue-manager endpoints. Their Provider Contracts describe how the test runner consumes Env_Profile binding keys and writes framework evidence without starting brokers, queue managers, Testcontainers, or RUs. Public CI release gates validate external profiles and run native external messaging samples only when broker or queue-manager bindings are configured. A single messaging suite may include Kafka and IBM MQ test cases together when every test case uses the same selected Env_Profile and each test case has exactly one messaging runtime target. External broker or queue-manager values must be materialized into `value`, `secret_ref`, or approved `local_ref` before framework execution; client providers only consume resolved bindings.
 
-`jdbc` supports deterministic local verification plus optional native external verification. `local_jdbc` uses approved framework-managed H2 Oracle/DB2 modes for deterministic local/CI evidence and runs the base fixture/query/cleanup case plus Oracle CRUD and DB2 CRUD cases together. Native external JDBC uses single-provider suites: `suite_manifest_external_oracle.yaml` with `external_jdbc_oracle_env_secret_ref`, or `suite_manifest_external_db2.yaml` with `external_jdbc_db2_env_secret_ref`. Each external Env_Profile uses `connection.secret_ref: env://JDBC_CONNECTION`. `env://JDBC_CONNECTION` is the canonical public secret-ref name and must be written in uppercase exactly; mixed-case variants are invalid. The runner process supplies the actual JDBC URL through the environment variable `JDBC_CONNECTION`, not through a literal `env://...` value. The framework resolves `JDBC_CONNECTION` only at runtime, masks the resolved value from result/evidence/report output, and fails owner-actionably with `SECRET_RESOLUTION_ERROR` when the env var is missing. External Oracle/DB2 suites assume the owner has pre-provisioned the target schema and `ORDERS` table. Release CI validates both external suite contracts by default and runs exactly one native external suite only when `REQUIRE_EXTERNAL_JDBC=true`; `JDBC_EXTERNAL_DIALECT=oracle|db2` selects which suite to execute.
+`jdbc` supports deterministic local verification plus optional native external verification. `local_v03` uses approved framework-owned local database bindings for deterministic local/CI evidence. Native external JDBC uses the same v0.3 suite with `external_oracle` or `external_db2` Env_Profile selection. Each external Env_Profile uses `connection.secret_ref: env://JDBC_CONNECTION`. `env://JDBC_CONNECTION` is the canonical public secret-ref name and must be written in uppercase exactly; mixed-case variants are invalid. The runner process supplies the actual JDBC URL through the environment variable `JDBC_CONNECTION`, not through a literal `env://...` value. The framework resolves `JDBC_CONNECTION` only at runtime, masks the resolved value from result/evidence/report output, and fails owner-actionably with `SECRET_RESOLUTION_ERROR` when the env var is missing. External Oracle/DB2 suites assume the owner has pre-provisioned the target schema and `ORDERS` table. Release CI validates both external profiles by default and runs exactly one native external profile only when `REQUIRE_EXTERNAL_JDBC=true`; `JDBC_EXTERNAL_DIALECT=oracle|db2` selects which profile to execute.
 
-### 10.2 Provider Instance Examples
+### 10.2 v0.2 Provider Instance Examples
 
 REST Provider Instance:
 
@@ -888,35 +828,34 @@ safety:
 
 ### 10.3 Contract Validation Rules
 
-Before dispatch, the framework validates:
+Before dispatch, the framework validates the selected authoring model.
 
-- Provider Instance exists for the DSL `provider_id`.
-- Provider Contract exists in the framework built-in catalog for the Provider Instance `provider_type`, unless an explicit custom/snapshot resolution mode is declared.
-- Provider Instance fields are allowed by `valid_provider_instance_shape`.
-- Provider Instance `runtime_modes` are a subset of Provider Contract `runtime_modes`.
-- When Provider Contract `executable_runtime_modes` is present, selected Env_Profile `runtime_mode` must be listed there.
-- Env_Profile exists for the selected `env_profile_id`.
-- Env_Profile has `providers.<provider_id>` for every DSL target.
-- Env_Profile `providers.<provider_id>.bindings` supplies all required Provider Contract binding keys.
+For v0.3 suites:
+
+- `suite_manifest.targets.<target>.provider_contract` exists in the framework catalog or an approved contract root.
+- Env_Profile exists for the selected profile.
+- Env_Profile has `targets.<target>` for every suite target referenced by selected test cases.
+- Env_Profile `targets.<target>.bindings` supplies every required Provider Contract `binding_key`.
 - Env_Profile binding value kinds are allowed by the Provider Contract `binding_keys`.
-- Env_Profile `generated_ref` values resolve to Provider Contract `bindable_outputs` or selected Env_Profile `dependency_provisioning_policy.generated_outputs`.
-- Selected `runtime_mode` is allowed by Env_Profile, Provider Contract, and Provider Instance.
-- Operation exists in the Provider Contract.
-- Every operation `inputs` key is allowed by the Provider Contract operation.
+- Env_Profile `generated://<target>/<output>` refs resolve to Provider Contract `operations.<op>.output_refs` from another target in the same suite.
+- Selected `runtime_mode` is allowed by the Provider Contract and the active Env_Profile.
+- Each `op` exists in the Provider Contract.
+- Every `with` key is allowed by that Provider Contract operation.
 - Every output ref used by DSL, evidence, or verify exists in the Provider Contract operation.
-- Command-capable providers that execute shell, VM, K8s, or external commands include `safety.access_policy` when required by their Provider Contract or Env_Profile execution mode.
+
+For v0.2 compatibility suites, the framework also validates Provider Instance existence, Provider Instance shape, and `providers.<provider_id>.bindings` against the Provider Contract.
 
 
 ## 11. Env_Profile
 
-Env_Profile supplies actual environment values for Provider Contract `binding_keys` and defines the execution mode. The `providers` map is keyed by Provider Instance `provider_id`. Provider Instance files do not define binding key schema or physical endpoints.
+Env_Profile supplies actual environment values for Provider Contract `binding_keys` and defines the execution mode. In v0.3, the `targets` map is keyed by suite target name. In v0.2 compatibility mode, the `providers` map is keyed by Provider Instance `provider_id`.
 
 Secrets must be referenced, not committed.
 
 ```yaml
 env_profile_id: sit_payment
 execution_mode: sit
-providers:
+targets:
   payment-api:
     runtime_mode: native
     readiness_ref: evidence/readiness/payment-api-sit.yaml
@@ -953,14 +892,14 @@ providers:
         secret_ref: vault://sit/payment/mq-credential
 ```
 
-Each provider binding must declare the selected runtime mode. Local and CI Env_Profiles usually replace external services, databases, and messaging with mocks, stubs, fake topics, embedded brokers, ephemeral DBs, disposable schemas, or generated data.
+Each target binding must declare the selected runtime mode. Local and CI Env_Profiles usually replace external services, databases, and messaging with mocks, stubs, fake topics, embedded brokers, ephemeral DBs, disposable schemas, or generated data.
 
-The `bindings` under each provider must match the keys defined by that provider's Provider Contract `binding_keys`. Direct scalar values are treated as `value`; structured values may use `ref`, `secret_ref`, `generated_ref`, or approved `local_ref` only when the Provider Contract allows that value kind. Use `local_ref` only for framework-controlled local/CI fixtures; it must not be used as SIT/preprod release evidence.
+The `bindings` under each target must match the keys defined by that target's Provider Contract `binding_keys`. Direct scalar values are treated as `value`; structured values may use `ref`, `secret_ref`, `generated_ref`, or approved `local_ref` only when the Provider Contract allows that value kind. Use `local_ref` only for framework-controlled local/CI fixtures; it must not be used as SIT/preprod release evidence.
 
 ```yaml
-env_profile_id: local_wiremock_http
+env_profile_id: local_v03
 execution_mode: local
-providers:
+targets:
   wiremock-payment-api:
     runtime_mode: mock
     bindings:
@@ -972,13 +911,13 @@ providers:
     runtime_mode: native
     bindings:
       base_url:
-        generated_ref: generated://wiremock-payment-api.base_url
+        generated_ref: generated://wiremock-payment-api/base_url
 
   payment-soap-mock:
     runtime_mode: mock
     bindings:
       endpoint_url:
-        generated_ref: generated://payment-soap-mock.endpoint_url
+        generated_ref: generated://payment-soap-mock/endpoint_url
       wsdl_ref:
         ref: contracts/payment.wsdl
 
@@ -993,7 +932,7 @@ providers:
     runtime_mode: native
     bindings:
       target:
-        generated_ref: generated://customer-grpc-mock.target_uri
+        generated_ref: generated://customer-grpc-mock/target_uri
 
   payment-db:
     runtime_mode: ephemeral
@@ -1020,7 +959,7 @@ providers:
         secret_ref: env://PAYMENT_MQ_CREDENTIAL_REF
 ```
 
-`generated_ref` can reference outputs declared in a producing Provider Contract `bindable_outputs`, such as `generated://wiremock-payment-api.base_url` from a framework-owned mock provider in the same suite. It may also reference externally provisioned dependency outputs explicitly listed in the selected Env_Profile `dependency_provisioning_policy.generated_outputs`. Undeclared project-specific generated refs are blocked before provider dispatch. Use a literal `value`, `secret_ref`, or approved local/CI-only `local_ref` when the dependency value has already been materialized.
+`generated_ref` can reference outputs declared in a producing Provider Contract `operations.<op>.output_refs`, such as `generated://payment_mock/base_url` from a framework-owned mock target in the same suite. Undeclared project-specific generated refs are blocked before provider dispatch. Use a literal `value`, `secret_ref`, or approved local/CI-only `local_ref` when the dependency value has already been materialized.
 
 `sit` and `preprod` Env_Profiles default to `runtime_mode: native`. Mock substitution in those execution modes must not be used as downstream RP release evidence.
 
@@ -1029,9 +968,9 @@ providers:
 Env_Profile defines what is allowed to run in an environment. For normal local/CI samples, the minimal public shape is enough:
 
 ```yaml
-env_profile_id: local_wiremock_http
+env_profile_id: local_v03
 execution_mode: local
-providers:
+targets:
   wiremock-payment-api:
     runtime_mode: mock
     bindings:
@@ -1042,7 +981,7 @@ providers:
     runtime_mode: native
     bindings:
       base_url:
-        generated_ref: generated://wiremock-payment-api.base_url
+        generated_ref: generated://wiremock-payment-api/base_url
 ```
 
 When omitted, framework defaults apply for isolation scope, max duration, dependency policy, dependency substitution policy, dependency provisioning policy, data policy, and evidence policy. Add policy sections only when the profile needs stricter behavior than defaults, such as SIT/native-only execution or externally provisioned CI services.
@@ -1071,7 +1010,7 @@ data_policy:
   secrets_must_use_refs: true
 ```
 
-Local and CI Env_Profiles may reference ephemeral dependencies only after those dependencies have been provisioned outside the framework runtime and declared through standard artifacts. This is separate from client providers: Kafka and IBM MQ client providers consume resolved connection values but do not create brokers or queue managers. v0.2.7 accepts `generated://` refs only when they target Provider Contract `bindable_outputs` or selected Env_Profile `dependency_provisioning_policy.generated_outputs`; unresolved generated refs block validation before provider dispatch.
+Local and CI Env_Profiles may reference ephemeral dependencies only after those dependencies have been provisioned outside the framework runtime and declared through standard artifacts. This is separate from client providers: Kafka and IBM MQ client providers consume resolved connection values but do not create brokers or queue managers. v0.3 accepts `generated://<target>/<output>` refs only when they target Provider Contract `operations.<op>.output_refs`; unresolved generated refs block validation before provider dispatch.
 
 ```yaml
 env_profile_id: ci
@@ -1089,7 +1028,7 @@ dependency_substitution_policy:
 dependency_provisioning_policy:
   allowed_provisioners: [external_ci_pre_step]
 
-providers:
+targets:
   payment-db:
     runtime_mode: ephemeral
     bindings:
@@ -1122,14 +1061,14 @@ Typical execution modes:
 
 ## 13. Running Tests
 
-Validate checks the DSL, suite manifest, Env_Profile, Provider Instance, framework built-in Provider Contract catalog, secret guardrails, result schema, and evidence contract without provider execution.
+Validate checks the DSL, suite manifest, suite targets, Env_Profile, framework built-in Provider Contract catalog, secret guardrails, result schema, and evidence contract without provider execution. v0.2 compatibility suites additionally validate Provider Instance artifacts.
 
 Malformed suite YAML is a validation failure. The command returns `validation_status: failed` with `reason: invalid_yaml`, does not enter provider runtime, and requires the owner to fix the YAML or referenced contract artifact before retrying.
 
 ```bash
 regress validate \
-  --suite samples/20-provider-capability-p0/suite_manifest.yaml \
-  --profile local_provider
+  --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml \
+  --profile local_v03
 ```
 
 Framework-owned samples may use suite-path mode. This mode is for framework verification only and must not be treated as downstream RP release evidence.
@@ -1141,22 +1080,22 @@ regress validate --suite samples/00-getting-started/golden_e2e/suite_manifest.ya
 
 regress run \
   --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml \
-  --profile local_golden
+  --profile local_v03
 
 regress report --result <generated_result_json>
 ```
 
 Golden E2E suite-path mode may execute only deterministic framework-owned fake providers. It must not start WireMock, JDBC, NATS, Kafka, REST/gRPC, K8s, VM, external runner, SIT, or downstream product deployment.
 
-Provider Capability suite-path mode proves selected v0.2 P0 provider capabilities as framework evidence. A standard suite run creates one `batch_id`, one `run_id`, one result JSON, and per-test outcomes in `test_results[]`; all selected `tests[]` share the selected Env_Profile. Provider identity for suite-level reporting comes from `provider_summary[]` and `provider_results[]`. Multi-provider standard results, inferred from either `test_results[]` or `provider_results[]`, must include `provider_summary[]`. Top-level `provider_id`, `provider_type`, or destination fields are single-provider compatibility fields only and must not be used to summarize a multi-provider suite.
+Provider Capability suite-path mode proves selected v0.3 provider capabilities as framework evidence. A standard suite run creates one `batch_id`, one `run_id`, one result JSON, and per-test outcomes in `test_results[]`; all selected `tests[]` share the selected Env_Profile. Provider identity for suite-level reporting comes from `provider_summary[]` and `provider_results[]`. Multi-provider standard results, inferred from either `test_results[]` or `provider_results[]`, must include `provider_summary[]`. Top-level `provider_id`, `provider_type`, or destination fields are single-provider compatibility fields only and must not be used to summarize a multi-provider suite.
 
 The v0.3 golden sample proves the simplified no-Provider-Instance lifecycle with the deterministic fake provider:
 
 ```bash
-regress validate --suite samples/v0_3_dsl/golden/suite_manifest.yaml --profile local_v03
+regress validate --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml --profile local_v03
 
 regress run \
-  --suite samples/v0_3_dsl/golden/suite_manifest.yaml \
+  --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml \
   --profile local_v03
 
 regress report --result <generated_result_json>
@@ -1164,28 +1103,60 @@ regress report --result <generated_result_json>
 
 This sample is framework verification evidence only. It proves v0.3 suite target resolution, Env_Profile target binding validation, runtime execution, evidence writing, and report consumption without external providers.
 
-The v0.2.7 contract baseline sample is an executable mixed-provider framework verification suite:
+The v0.3 HTTP mock plus REST client sample proves protocol-level authoring without Provider Instance files:
 
 ```bash
-regress validate --suite samples/10-contract-baseline/mixed_wiremock_jdbc_nats/suite_manifest.yaml --profile ci
+regress validate --suite samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml --profile local_v03
+
+regress run \
+  --suite samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml \
+  --profile local_v03 \
+  --dry-run
+```
+
+This sample resolves `http_mock.v0.3` and `rest_client.v0.3` targets and executes provider runtime without Provider Instance files.
+
+The v0.3 local runtime sample matrix includes:
+
+| Path | Provider Contracts |
+| --- | --- |
+| `samples/20-provider-capability-p0/http/rest_client_with_wiremock/` | `http_mock.v0.3`, `rest_client.v0.3` |
+| `samples/20-provider-capability-p0/data/jdbc/` | `jdbc.v0.3` |
+| `samples/20-provider-capability-p0/verification/artifact_compare/` | `artifact_compare.v0.3` assertion-only |
+| `samples/20-provider-capability-p0/verification/common_verify/` | `common_verify.v0.3` assertion-only |
+| `samples/20-provider-capability-p0/verification/polling_observer/` | `polling_observer.v0.3` provider-check observation |
+| `samples/20-provider-capability-p0/messaging/nats/` | `nats.v0.3` |
+| `samples/20-provider-capability-p0/messaging/kafka/` | `kafka.v0.3` |
+| `samples/20-provider-capability-p0/messaging/ibm_mq/` | `ibm_mq.v0.3` |
+| `samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/` | `kafka.v0.3`, `ibm_mq.v0.3` |
+| `samples/20-provider-capability-p0/rpc/soap_mock/` | `soap_mock.v0.3`, `rest_client.v0.3` |
+| `samples/20-provider-capability-p0/rpc/grpc_mock/` | `grpc_mock.v0.3`, `grpc_client.v0.3` |
+| `samples/20-provider-capability-p0/verification/multi_test_shared_env/` | shared Env_Profile multi-test assertion suite |
+
+Release verification runs each listed v0.3 suite through validate, dry-run, run, report, and validate-evidence.
+
+The v0.3 contract baseline sample is an executable mixed-provider framework verification suite:
+
+```bash
+regress validate --suite samples/10-contract-baseline/mixed_wiremock_jdbc_nats/suite_manifest.yaml --profile local_v03
 
 regress run \
   --suite samples/10-contract-baseline/mixed_wiremock_jdbc_nats/suite_manifest.yaml \
-  --profile ci
+  --profile local_v03
 
 regress report --result <generated_result_json>
 ```
 
-This sample dispatches only the checked-in `wiremock_http_mock` + `jdbc` + `nats` combination. It uses local/CI deterministic bindings and always reports `release_evidence_eligible: false`.
+This sample dispatches only the checked-in `http_mock.v0.3` + `rest_client.v0.3` + `jdbc.v0.3` + `nats.v0.3` combination. It uses local/CI deterministic bindings and always reports `release_evidence_eligible: false`.
 
-`regress validate-evidence --result <generated_result_json>` and `regress report --result <generated_result_json>` validate the standard result JSON before publishing or reporting. Any result with non-empty `provider_results`, `batch_id`, `run_id`, `test_count`, or `test_results` is treated as a standard suite run and must include `suite_id`, `batch_id`, `run_id`, `test_count`, `test_results`, `start_time`, `end_time`, and `duration_ms`. `test_count` must be a positive JSON integer value that equals `test_results.length`, and every `test_results[]` entry must be an object containing `test_case_id`, `status`, and `profile`. Allowed per-test status values are `passed`, `failed`, and `blocked`. Quoted numeric strings such as `"1"` are invalid. Invalid suite summaries return a non-zero exit and must be fixed before the result can be published.
+`regress validate-evidence --result <generated_result_json>` and `regress report --result <generated_result_json>` validate the standard result JSON before publishing or reporting. A v0.3 result must include `result_contract_version`, suite/run identity, `test_count`, `test_results`, timestamps, `completion_status`, nullable `termination_reason`, and `suite_summary_ref`. `test_count` is a JSON integer equal to `test_results.length`; allowed v0.3 test statuses are `passed`, `failed`, `blocked`, and `skipped`. Quoted numeric strings such as `"1"` are invalid. Invalid suite summaries return a non-zero exit and must be fixed before publication.
 
 ```bash
 regress validate --suite samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml
 
 regress run \
   --suite samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml \
-  --profile local_wiremock_http
+  --profile local_v03
 
 regress report --result <generated_result_json>
 
@@ -1193,34 +1164,34 @@ regress validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manif
 
 regress run \
   --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
-  --profile local_jdbc
+  --profile local_v03
 
 regress report --result <generated_result_json>
 
 regress validate \
-  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml \
-  --profile external_jdbc_oracle_env_secret_ref
+  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
+  --profile external_oracle
 
 regress validate \
-  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml \
-  --profile external_jdbc_db2_env_secret_ref
+  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
+  --profile external_db2
 
 JDBC_CONNECTION='<jdbc-url>' regress run \
-  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml \
-  --profile external_jdbc_oracle_env_secret_ref
+  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
+  --profile external_oracle
 
 regress validate-evidence --result <generated_result_json>
 ```
 
-The WireMock + HTTP request sample keeps happy and boundary cases in the canonical `suite_manifest.yaml` `tests[]` list so both run under one shared Env_Profile. It also includes `suite_manifest_failure.yaml` for deterministic assertion-failure evidence.
+The HTTP mock + REST client sample keeps the canonical happy path in `suite_manifest.yaml` under one shared Env_Profile. Deterministic failure fixtures belong under `samples/80-negative/`; v0.2 WireMock failure/boundary fixtures are compatibility material under `samples/90-compatibility/legacy-v0.2/`.
 
-The JDBC provider capability sample keeps the base fixture/query/cleanup case plus Oracle CRUD and DB2 CRUD cases in the canonical local `suite_manifest.yaml` `tests[]` list. Running it with `--profile local_jdbc` executes all three test cases under one shared Env_Profile and produces a multi-test result summary with both `oracle-like-db` and `db2-like-db` provider evidence.
+The JDBC provider capability sample keeps fixture/query/cleanup behavior in the canonical local `suite_manifest.yaml` `tests[]` list. Running it with `--profile local_v03` executes the checked-in sample under one shared Env_Profile.
 
-For native external JDBC evidence, the checked-in external Env_Profiles keep `connection.secret_ref: env://JDBC_CONNECTION` but are split by dialect so one run targets exactly one external database. Owners must provide `JDBC_CONNECTION` in the runner environment, for example `JDBC_CONNECTION='<jdbc-url>' regress run ...`, and must select the matching external suite/profile. Do not write raw JDBC URLs into DSL, Provider Instance, or Env_Profile files.
+For native external JDBC evidence, the checked-in external Env_Profiles keep `connection.secret_ref: env://JDBC_CONNECTION` but are split by dialect so one run targets exactly one external database. Owners must provide `JDBC_CONNECTION` in the runner environment, for example `JDBC_CONNECTION='<jdbc-url>' regress run ...`, and must select the matching external profile. Do not write raw JDBC URLs into DSL or Env_Profile files.
 
 Provider Capability suite-path mode may execute only checked-in framework provider capability samples for WireMock HTTP mock, `rest_client` HTTP request, SOAP mock, gRPC unary mock, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and evidence/report behavior. It must not execute non-P0 providers, Product/RP/RU topology interpretation, release governance, SIT/preprod release evidence, or downstream product deployment.
 
-Usage-kit provider instance files labeled `sample_scope: usage_kit_runtime_mode_sample` are runtime-mode coverage artifacts. They prove the public Provider Instance shape is represented in the usage kit for that provider/runtime mode, but they are not executed unless a test case target references the `provider_id` and the selected Env_Profile supplies a matching `runtime_mode`.
+Usage-kit runtime-mode coverage is represented by v0.3 suite targets and Env_Profile examples. Provider Instance files are v0.2 compatibility artifacts only and are not part of the v0.3 public sample surface.
 
 ### 13.1 Sample Layout
 
@@ -1234,6 +1205,7 @@ Checked-in samples use a canonical usage-kit layout:
 | `samples/30-cross-provider-groups/mock_server_cross_verify/` | Cross-provider mock server suite group. |
 | `samples/40-evidence-reporting/evidence_hardening/` | Result/evidence validation fixtures. |
 | `samples/90-compatibility/dummy_rest/` | Compatibility-only fixture, not a supported provider gate. |
+| `samples/80-negative/` | v0.3 expected-failure validation and runtime samples. |
 
 A leaf suite owns `tests[]` in its `suite_manifest.yaml`. A suite group owns `child_suites[]` and no `tests[]`; every child `ref` must remain inside the suite group directory after path normalization. Runtime-mode contract samples labeled `sample_scope: usage_kit_runtime_mode_sample` are coverage artifacts and are not executable targets.
 
@@ -1243,13 +1215,13 @@ Mock server providers replace external REST, SOAP, or gRPC dependencies with det
 
 | Provider Type | Purpose | Typical Client | Generated Binding Output |
 | --- | --- | --- | --- |
-| `wiremock_http_mock` | REST/HTTP stubs and request journal verification | `rest_client` | `base_url` |
+| `http_mock` | REST/HTTP stubs and request journal verification | `rest_client` | `base_url` |
 | `soap_mock` | SOAP-over-HTTP XML/SOAPAction stubs and request verification | HTTP/SOAP request flow | `endpoint_url` |
 | `grpc_mock` | Unary gRPC mock behavior through WireMock gRPC extension | `grpc_client` | `target_uri` |
 
 Mock server lifecycle:
 
-1. `validate` checks suite, test case DSL, Provider Instances, Env_Profile bindings, stubs, descriptors, and expected refs.
+1. `validate` checks suite targets, test case DSL, Env_Profile target bindings, stubs, descriptors, and expected refs.
 2. `run --dry-run` resolves mock server and client targets without starting runtime.
 3. `run` executes every selected test in the suite with one selected Env_Profile.
 4. Test case `setup` loads checked-in stubs or mappings.
@@ -1259,18 +1231,20 @@ Mock server lifecycle:
 
 DSL rules:
 
-- Test cases reference `provider_id` only. The active profile is selected once for the suite by CLI `--profile` or suite manifest `profile`; test cases must not embed generated endpoint URLs or select a different runtime profile.
+- Test cases reference suite target names only. The active profile is selected once for the suite by CLI `--profile` or suite manifest `profile`; test cases must not embed generated endpoint URLs or select a different runtime profile.
 - Mock stubs, mappings, descriptors, and expected results must be checked-in artifacts referenced by `ref`.
 - Env_Profile supplies or resolves binding keys.
-- Generated mock outputs, such as `generated://wiremock-payment-api.base_url`, are bound through Env_Profile and consumed by client providers.
-- `wiremock_http_mock` supports two local/CI patterns. Framework-managed mode uses `port_strategy: dynamic` plus checked-in mappings and produces `generated://wiremock-payment-api.base_url`. Project-provided mode supplies `base_url` directly in Env_Profile; the framework consumes that URL, records `external_base_url_consumed: true`, and must not start another WireMock server for that provider.
-- `grpc_mock` v0.2 supports unary calls only.
+- Generated mock outputs, such as `generated://payment_mock/base_url`, are bound through Env_Profile and consumed by client providers.
+- WireMock-backed mock server providers are protocol-specific: `http_mock` is the v0.3 HTTP mock surface, `soap_mock` is the SOAP/XML mock surface, and `grpc_mock` is the unary gRPC mock surface. All three may use WireMock runtime internals, but their Provider Contracts stay protocol-specific.
+- `http_mock` uses `port_strategy: dynamic` plus checked-in HTTP mappings and produces `generated://payment_mock/base_url` for HTTP client providers. Keep `wiremock_http_mock` only as a v0.2 compatibility provider type.
+- External HTTP endpoints, including a project-provisioned WireMock server used only as a generic REST endpoint, must be modeled as `rest_client` with an Env_Profile `base_url`. The test framework does not need to know that the external endpoint is WireMock unless it is managing mock lifecycle, stubs, or request journal evidence.
+- `grpc_mock` supports unary calls only in the current v0.3 sample set.
 
 Evidence generated by mock server samples includes request journals, server logs, client request/response evidence, assertion diffs, suite summaries, and raw Allure result files when running a child-suite aggregation manifest.
 
 ### 13.3 Provider Capability Multi-Test Suites
 
-The primary multi-test runner model is a standard suite manifest with `tests[]`, where every selected test case shares the same suite profile and Env_Profile. Single-suite provider capability runs may mix supported executable provider types, such as Kafka and IBM MQ client-provider test cases, when the selected Env_Profile contains provider bindings for each referenced `provider_id`.
+The primary multi-test runner model is a standard suite manifest with `tests[]`, where every selected test case shares the same suite profile and Env_Profile. Single-suite provider capability runs may mix supported executable provider types, such as Kafka and IBM MQ client-provider test cases, when the selected Env_Profile contains target bindings for each referenced suite target.
 
 `child_suites[]` aggregation manifests are a compatibility model for checked-in child suite manifests and summarize provider-pair suites plus expected-failure suites. Child refs must stay under the aggregation manifest directory and child ids must be unique. Boundary paths should live inside the canonical child suite `tests[]` when they share the same Env_Profile.
 
@@ -1289,7 +1263,7 @@ regress run \
 
 regress run \
   --suite samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml \
-  --profile local_mock_server_cross_verify
+  --profile local_v03
 ```
 
 The following child-suite aggregation problems are preflight blockers:
@@ -1310,7 +1284,11 @@ Blocked aggregation runs return `run_status: blocked` and must not produce `batc
 | `run --dry-run` | `run_status: dry_run_ready`, `provider_runtime_invoked: false` | `run_status: blocked`, no runtime |
 | `run` | `batch_id`, `run_id`, `suite_summary_json`, `allure_results_dir` | `run_status: blocked`, no run artifacts |
 
-A successful aggregation run writes `suite_summary.json`, `suite_summary.yaml`, and raw Allure result files under `target/suite-groups/<suite_id>/<batch_id>/<run_id>/`.
+A successful v0.3 aggregation run writes canonical `result.json`, `suite_summary.json`, `suite_summary.yaml`, merged `evidence_index.yaml`, compatibility summary files, and raw Allure result files under `target/suite-groups/<suite_id>/<batch_id>/<run_id>/`. Every child uses the parent `batch_id`, a unique child `run_id`, and an isolated child directory.
+
+The canonical summary exposes `self_summary`, `child_aggregate_summary`, `total_summary`, `failure_summary`, `evidence_summary`, ordered `children`, and `aggregation_errors`. Parent counts come from each immediate child's validated `total_summary`; parents do not inspect grandchildren. A post-execution invalid child produces a partial blocked parent with `termination_reason: aggregation_error`. Structural preflight blockers still produce no run artifacts.
+
+Use `regress report --result <result_json>` for canonical reporting. Text and JSON reports add completion, timing, self/child/total counts, child status, and aggregation errors while preserving existing report keys. Reporting an unversioned legacy summary is compatibility-only and does not claim canonical evidence validation.
 
 Suite-mode output paths are deterministic:
 
@@ -1329,7 +1307,7 @@ regress validate --suite samples/20-provider-capability-p0/rpc/soap_mock/suite_m
 
 regress run \
   --suite samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest.yaml \
-  --profile local_soap_mock
+  --profile local_v03
 ```
 
 PR-008B gRPC provider capability samples use the same pattern:
@@ -1339,19 +1317,19 @@ regress validate --suite samples/20-provider-capability-p0/rpc/grpc_mock/suite_m
 
 regress run \
   --suite samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest.yaml \
-  --profile local_grpc_mock
+  --profile local_v03
 
 regress report --result <generated_result_json>
 ```
 
-SOAP/gRPC mock samples may start WireMock-backed mock services at suite/batch scope. Test case `setup` loads stubs; it must not start RU, restart RU, or embed generated endpoint values in the DSL. gRPC v0.2 mock scope is unary only.
+SOAP/gRPC mock samples may start WireMock-backed mock services at suite/batch scope. Test case `setup` loads stubs; it must not start RU, restart RU, or embed generated endpoint values in the DSL. gRPC mock scope is unary only in the current v0.3 sample set.
 
 Dry run validates the same contract graph and produces a resolved execution plan. It should not perform real test execution.
 
 ```bash
 regress run \
   --suite samples/20-provider-capability-p0/suite_manifest.yaml \
-  --profile local_provider \
+  --profile local_v03 \
   --dry-run
 ```
 
@@ -1360,7 +1338,7 @@ Run approved tests in the suite:
 ```bash
 regress run \
   --suite samples/20-provider-capability-p0/suite_manifest.yaml \
-  --profile local_provider
+  --profile local_v03
 ```
 
 Run by tag:
@@ -1368,7 +1346,7 @@ Run by tag:
 ```bash
 regress run \
   --suite samples/20-provider-capability-p0/suite_manifest.yaml \
-  --profile local_provider \
+  --profile local_v03 \
   --tag happy-path
 ```
 
@@ -1442,13 +1420,13 @@ regress report \
   --format text
 ```
 
-Use `--result` for v0.2.7 suite-mode release readiness. Product/RP-specific report forms are outside the v0.2.7 framework runtime public interface.
+Use `--result` for v0.3 suite-mode release readiness. Product/RP-specific report forms are outside the v0.3 framework runtime public interface.
 
 Evidence must answer:
 
 - Which AC was tested?
 - Which test case ran?
-- Which provider instance and profile were used?
+- Which suite target and profile were used?
 - Which Provider Contract, provider_type, runtime_mode, and resolved operation result were used?
 - Which execution log, actual artifact, expected artifact reference, assertion diff, query evidence, event evidence, mock request journal, and cleanup evidence were retained?
 - What input data was used?
@@ -1465,11 +1443,11 @@ Agents must:
 3. Never overwrite approved tests or expected results without explicit instruction.
 4. Run the Product/RP readiness checks supplied by the owner or Agent Skill before generation work.
 5. Run `validate` and `run --dry-run` before real execution.
-6. Report missing AC, expected result, unknown provider type or custom provider contract, Provider Instance, Env_Profile, fixture, or evidence as gaps.
+6. Report missing AC, expected result, unknown provider contract, suite target, Env_Profile, fixture, or evidence as gaps.
 7. Preserve owner-authored truth.
 8. Produce evidence and report paths after execution.
 9. Never place runtime secrets or credentials in DSL test cases.
-10. Do not execute command-capable providers unless their provider instance defines required `safety.access_policy`.
+10. Do not execute command-capable providers unless the selected Env_Profile target defines required `safety.access_policy`.
 
 ## 16. Compatibility Rules
 

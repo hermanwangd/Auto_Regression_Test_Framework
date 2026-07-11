@@ -1,0 +1,14 @@
+profile_id: local_v03
+execution_mode: local
+isolation: per_run
+evidence_classification: framework_verification_only
+
+targets:
+  order_events:
+    runtime_mode: mock
+    bindings:
+      bootstrap_servers: mock://local-kafka
+      topic: orders.v03
+      consumer_group: regress-v03-local
+      timeout: PT2S
+      poll_interval: PT0.01S

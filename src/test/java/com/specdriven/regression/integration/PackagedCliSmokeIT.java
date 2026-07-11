@@ -75,8 +75,9 @@ class PackagedCliSmokeIT {
         assertThat(process.exitValue()).as(output).isZero();
         assertThat(output)
                 .contains("validation_status: passed")
-                .contains("suite_id: NATS-CAPABILITY-v0.2")
-                .contains("nats");
+                .contains("suite_id: NATS-v0.3")
+                .contains("provider_contracts_used:")
+                .contains("nats.v0.3");
     }
 
     private String javaBinary() {

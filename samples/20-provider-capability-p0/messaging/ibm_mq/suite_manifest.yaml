@@ -1,18 +1,20 @@
-contract_version: v0.2
-suite_id: IBM-MQ-CAPABILITY-v0.2
-purpose: Framework-owned IBM MQ client provider capability verification sample.
-profile: local_ibm_mq
-profiles: [local_ibm_mq, ci_ibm_mq_external]
-selection:
-  mode: suite
-  suite: provider-capability-ibm-mq
-tests:
-  - test_case.yaml
+manifest_version: v0.3
+suite_id: IBM-MQ-v0.3
+default_profile: local_v03
+
 artifact_roots:
-  provider_instances: provider_instances/
-  env_profiles: env_profiles/
-  expected_results: expected_results/
   fixtures: fixtures/
-evidence_policy:
-  evidence_classification: framework_provider_capability_only
-  downstream_release_evidence: false
+  expected_results: expected_results/
+
+targets:
+  payment_queue:
+    provider_contract: ibm_mq.v0.3
+
+env_profiles:
+  local_v03:
+    ref: env_profiles/local_v03.yaml
+  external_ibm_mq:
+    ref: env_profiles/external_ibm_mq.yaml
+
+tests:
+  - ref: test_cases/message_payload_success.yaml

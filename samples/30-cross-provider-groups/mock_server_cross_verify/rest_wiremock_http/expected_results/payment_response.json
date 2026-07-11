@@ -1,5 +1,4 @@
 {
-  "status": "APPROVED",
-  "paymentId": "PAY-HTTP-001",
-  "provider": "wiremock"
+  "payment_id": "PAY-V03-001",
+  "status": "APPROVED"
 }

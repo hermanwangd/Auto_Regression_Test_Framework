@@ -1,5 +1,7 @@
 package com.specdriven.regression.contract;
 
+import com.specdriven.regression.summary.SuiteExecutionContext;
+
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.evidence.EvidenceIndexFormatter;
@@ -41,7 +43,7 @@ public class JdbcProviderCapabilityService {
     private final Yaml yaml = new Yaml();
 
     public JdbcRunResult run(Path suiteManifest, String requestedProfile, Path outputBase) {
-        return run(suiteManifest, requestedProfile, outputBase, JdbcDriverDiscovery.missing(Path.of(".")));
+        return run(suiteManifest, requestedProfile, SuiteExecutionContext.standalone(requestedProfile, outputBase, "JDBC"));
     }
 
     public JdbcRunResult run(
@@ -49,6 +51,21 @@ public class JdbcProviderCapabilityService {
             String requestedProfile,
             Path outputBase,
             JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
+        return run(suiteManifest, requestedProfile,
+                SuiteExecutionContext.standalone(requestedProfile, outputBase, "JDBC"), driverDiscovery);
+    }
+
+    public JdbcRunResult run(
+            Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
+        return run(suiteManifest, requestedProfile, executionContext, JdbcDriverDiscovery.missing(Path.of(".")));
+    }
+
+    public JdbcRunResult run(
+            Path suiteManifest,
+            String requestedProfile,
+            SuiteExecutionContext executionContext,
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
+        requireMatchingProfile(requestedProfile, executionContext);
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {
             return JdbcRunResult.blocked(validation.suiteId(), requestedProfile, validation.findings());
@@ -80,7 +97,7 @@ public class JdbcProviderCapabilityService {
             return JdbcRunResult.blocked(validation.suiteId(), requestedProfile, profileFindings);
         }
 
-        List<RuntimeSelection> selections = selectJdbcRuntimes(suiteManifest, requestedProfile, outputBase);
+        List<RuntimeSelection> selections = selectJdbcRuntimes(suiteManifest, requestedProfile, executionContext);
         if (selections.isEmpty()) {
             return JdbcRunResult.blocked(validation.suiteId(), requestedProfile, List.of(new ContractFinding(
                     suiteManifest.toString(),
@@ -317,18 +334,16 @@ public class JdbcProviderCapabilityService {
         aggregateOutputs.put(operation.id(), output);
     }
 
-    private List<RuntimeSelection> selectJdbcRuntimes(Path suiteManifest, String requestedProfile, Path outputBase) {
+    private List<RuntimeSelection> selectJdbcRuntimes(
+            Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
         Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
         Map<String, Object> suite = readMap(suiteManifest);
         Map<String, Map<String, Object>> instancesById =
                 readDirectoryByField(suiteRoot.resolve("provider_instances"), "provider_id");
         Map<String, Map<String, Object>> contractsByType =
                 readDirectoryByField(frameworkProviderContractsDirectory(suiteRoot), "provider_type");
-        RunIds runIds = newRunIds();
-        Path runDir = outputBase
-                .resolve(safe(stringValue(suite.get("suite_id"))))
-                .resolve(runIds.batchId())
-                .resolve(runIds.runId());
+        RunIds runIds = new RunIds(executionContext.parentBatchId(), executionContext.newRunId("JDBC"));
+        Path runDir = executionContext.childRunRoot(stringValue(suite.get("suite_id")), runIds.runId());
         List<RuntimeSelection> selections = new ArrayList<>();
         for (Object testRef : listValue(suite.get("tests"))) {
             Map<String, Object> testCase = readMap(suiteRoot.resolve(stringValue(testRef)).normalize());
@@ -421,6 +436,12 @@ public class JdbcProviderCapabilityService {
             }
         }
         return false;
+    }
+
+    private void requireMatchingProfile(String profile, SuiteExecutionContext context) {
+        if (!context.matchesRequestedProfile(profile)) throw new IllegalArgumentException(
+                "Execution context profile mismatch: context=" + context.profile() + ", requested=" + profile
+                        + ". Use the parent suite profile for all child runtimes.");
     }
 
     private RunIds newRunIds() {

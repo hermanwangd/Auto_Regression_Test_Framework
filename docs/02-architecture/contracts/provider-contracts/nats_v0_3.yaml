@@ -1,0 +1,53 @@
+contract_version: v0.3
+provider_contract: nats.v0.3
+provider_type: nats
+provider_role: messaging_client
+protocol: nats
+purpose: NATS messaging provider contract for DSL v0.3 publish and observation checks.
+runtime_modes: [mock, native, ephemeral]
+binding_keys:
+  connection.local_ref:
+    required: false
+    source: env_profile
+  connection.secret_ref:
+    required: false
+    source: env_profile_secret_ref
+  subject:
+    required: true
+    source: env_profile
+  timeout:
+    required: false
+    source: env_profile
+  poll_interval:
+    required: false
+    source: env_profile
+operations:
+  nats_publish:
+    allowed_inputs: [subject, payload_ref, payload, correlation_key, timeout, poll_interval]
+    required_inputs: [payload_ref]
+    output_refs: [subject, published, published_at, duration_ms, event_evidence_ref]
+  event_published:
+    allowed_inputs: [subject, consume_from, timeout, poll_interval, correlation_key]
+    required_inputs: []
+    output_refs: [subject, observed_count, matched, duration_ms, event_evidence_ref]
+  event_payload_match:
+    allowed_inputs: [subject, expected_ref, consume_from, timeout, poll_interval, correlation_key]
+    required_inputs: [expected_ref]
+    output_refs: [subject, observed_count, matched, matched_fields, duration_ms, event_evidence_ref]
+evidence:
+  outputs: [event_evidence, assertion_evidence]
+  redact: [connection, password, secret, token, authorization]
+failure_mapping:
+  allowed_codes:
+    - SUBJECT_MISSING
+    - PAYLOAD_REF_MISSING
+    - PAYLOAD_PARAM_MISSING
+    - NATS_CONNECTION_FAILED
+    - NATS_PUBLISH_FAILED
+    - NATS_OBSERVE_FAILED
+    - EVENT_NOT_FOUND
+    - PAYLOAD_MISMATCH
+    - NATS_TIMEOUT
+    - INVALID_DURATION
+    - INVALID_INSTANT
+    - REF_OUTSIDE_SUITE_ROOT

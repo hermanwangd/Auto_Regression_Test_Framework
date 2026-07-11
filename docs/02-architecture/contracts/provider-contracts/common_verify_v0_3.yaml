@@ -1,0 +1,31 @@
+contract_version: v0.3
+provider_contract: common_verify.v0.3
+provider_type: common_verify
+provider_role: framework_verifier
+protocol: file
+purpose: Framework-owned common verifier contract for DSL v0.3 assertion-only verification.
+runtime_modes: [framework]
+binding_keys: {}
+operations:
+  json_match:
+    allowed_inputs: [expected_ref, actual_ref, ignore_paths, normalize, ignore_order]
+    required_inputs: [expected_ref, actual_ref]
+    output_refs: [assertion_evidence_ref, diff_ref]
+  schema_match:
+    allowed_inputs: [schema_ref, actual_ref, normalize]
+    required_inputs: [schema_ref, actual_ref]
+    output_refs: [assertion_evidence_ref, diff_ref]
+  file_diff:
+    allowed_inputs: [expected_ref, actual_ref, normalize, ignore_order]
+    required_inputs: [expected_ref, actual_ref]
+    output_refs: [assertion_evidence_ref, diff_ref]
+evidence:
+  outputs: [assertion_diff]
+  redact: [masked_actual_sample]
+failure_mapping:
+  allowed_codes:
+    - ASSERTION_FAILED
+    - ASSERTION_INPUT_NOT_FOUND
+    - SCHEMA_MISMATCH
+    - FILE_DIFF_MISMATCH
+    - EVIDENCE_INVALID

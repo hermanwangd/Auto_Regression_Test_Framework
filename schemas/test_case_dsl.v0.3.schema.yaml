@@ -21,6 +21,8 @@ verify_rules:
   variants:
     - assertion
     - provider_check
+  provider_check_prohibited_fields:
+    - expect
 prohibited_sections:
   - uses
   - targets

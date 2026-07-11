@@ -1,0 +1,34 @@
+contract_version: v0.3
+provider_contract: polling_observer.v0.3
+provider_type: polling_observer
+provider_role: framework_observer
+protocol: file
+purpose: Framework-owned polling observation contract for DSL v0.3 provider_check verification.
+runtime_modes: [framework]
+binding_keys:
+  workspace_ref:
+    required: false
+    source: env_profile
+operations:
+  observe_condition:
+    allowed_inputs: [expected_ref, actual_ref, timeout, poll_interval]
+    required_inputs: [expected_ref, actual_ref]
+    output_refs: [matched, attempts, last_observed_ref, polling_evidence_ref]
+  event_published:
+    allowed_inputs: [expected_ref, actual_ref, timeout, poll_interval, consume_from]
+    required_inputs: [expected_ref, actual_ref]
+    output_refs: [matched, attempts, last_observed_ref, polling_evidence_ref]
+  db_record_exists:
+    allowed_inputs: [expected_ref, actual_ref, timeout, poll_interval]
+    required_inputs: [expected_ref, actual_ref]
+    output_refs: [matched, attempts, last_observed_ref, polling_evidence_ref]
+evidence:
+  outputs: [polling_observation]
+  redact: [last_observed_value]
+failure_mapping:
+  allowed_codes:
+    - POLLING_TIMEOUT
+    - INVALID_POLLING_CONFIG
+    - EXPECTED_ARTIFACT_MISSING
+    - ACTUAL_ARTIFACT_MISSING
+    - EVIDENCE_INVALID

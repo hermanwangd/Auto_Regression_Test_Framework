@@ -1,0 +1,27 @@
+dsl_version: v0.3
+test_case_id: KAFKA-V03-TC-001
+title: Kafka publish and payload observation through v0.3 target contract
+
+setup: []
+
+execute:
+  - id: publish_order_event
+    target: order_events
+    op: kafka_publish
+    with:
+      key: ORD-KAFKA-V03-001
+      payload_ref: artifact://fixtures/order_event.json
+
+verify:
+  - id: kafka_payload_matches
+    type: provider_check
+    target: order_events
+    op: kafka_payload_match
+    with:
+      key: ORD-KAFKA-V03-001
+      expected_ref: artifact://expected_results/order_event.json
+      consume_from: earliest
+      timeout: PT2S
+      poll_interval: PT0.01S
+
+cleanup: []

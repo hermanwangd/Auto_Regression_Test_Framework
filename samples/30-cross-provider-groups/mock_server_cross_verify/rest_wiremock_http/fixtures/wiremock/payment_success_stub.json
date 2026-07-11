@@ -1,22 +1,16 @@
 {
   "request": {
     "method": "POST",
-    "url": "/payments",
-    "bodyPatterns": [
-      {
-        "matchesJsonPath": "$.paymentId"
-      }
-    ]
+    "url": "/payments"
   },
   "response": {
-    "status": 201,
-    "jsonBody": {
-      "status": "APPROVED",
-      "paymentId": "PAY-HTTP-001",
-      "provider": "wiremock"
-    },
+    "status": 200,
     "headers": {
       "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "payment_id": "PAY-V03-001",
+      "status": "APPROVED"
     }
   }
 }

@@ -16,15 +16,15 @@ import org.junit.jupiter.api.io.TempDir;
 class MockServerCrossVerifySampleCommandTest {
 
     private static final Path CROSS_VERIFY_SUITE =
-            Path.of("samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml");
+            Path.of("samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml");
     private static final Path REST_SUITE =
-            Path.of("samples/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/suite_manifest.yaml");
+            Path.of("samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/suite_manifest.yaml");
     private static final Path SOAP_SUITE =
-            Path.of("samples/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/suite_manifest.yaml");
+            Path.of("samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/suite_manifest.yaml");
     private static final Path GRPC_SUITE =
-            Path.of("samples/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/suite_manifest.yaml");
+            Path.of("samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/suite_manifest.yaml");
     private static final Path PROVIDER_CAPABILITY_SUITE =
-            Path.of("samples/20-provider-capability-p0/suite_manifest.yaml");
+            Path.of("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/suite_manifest.yaml");
 
     @TempDir
     Path tempDir;
@@ -32,22 +32,22 @@ class MockServerCrossVerifySampleCommandTest {
     @Test
     void mockServerCrossVerifySampleArtifactsAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
-                "samples/30-cross-provider-groups/mock_server_cross_verify/README.md",
+                "samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/README.md",
                 REST_SUITE.toString(),
-                "samples/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/suite_manifest_failure.yaml",
+                "samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/suite_manifest_failure.yaml",
                 SOAP_SUITE.toString(),
-                "samples/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/suite_manifest_failure.yaml",
+                "samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/suite_manifest_failure.yaml",
                 GRPC_SUITE.toString(),
-                "samples/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/suite_manifest_failure.yaml",
-                "samples/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/test_case.yaml",
-                "samples/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/test_case_failure.yaml",
-                "samples/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/test_case_boundary.yaml",
-                "samples/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/test_case.yaml",
-                "samples/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/test_case_failure.yaml",
-                "samples/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/test_case_boundary.yaml",
-                "samples/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/test_case.yaml",
-                "samples/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/test_case_failure.yaml",
-                "samples/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/test_case_boundary.yaml");
+                "samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/suite_manifest_failure.yaml",
+                "samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/test_case.yaml",
+                "samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/test_case_failure.yaml",
+                "samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/rest_wiremock_http/test_case_boundary.yaml",
+                "samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/test_case.yaml",
+                "samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/test_case_failure.yaml",
+                "samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/soap_mock_http_client/test_case_boundary.yaml",
+                "samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/test_case.yaml",
+                "samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/test_case_failure.yaml",
+                "samples/90-compatibility/legacy-v0.2/30-cross-provider-groups/mock_server_cross_verify/grpc_mock_grpc_client/test_case_boundary.yaml");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -82,10 +82,12 @@ class MockServerCrossVerifySampleCommandTest {
 
         Path suiteSummary = extractPath(run.stdout(), "suite_summary_json");
         Path allureResults = extractPath(run.stdout(), "allure_results_dir");
+        String parentBatchId = extractValue(run.stdout(), "batch_id");
         assertThat(suiteSummary.toString())
                 .contains("target/suite-groups")
                 .doesNotContain("target/provider-capability/mock_server_cross_verify");
-        assertThat(Files.readString(suiteSummary))
+        String summaryDocument = Files.readString(suiteSummary);
+        assertThat(summaryDocument)
                 .contains("\"suite_id\": \"MOCK-SERVER-CROSS-VERIFY-v0.2\"")
                 .contains("\"test_count\": 6")
                 .contains("\"passed_count\": 6")
@@ -98,6 +100,9 @@ class MockServerCrossVerifySampleCommandTest {
                 .contains("\"child_suite_id\": \"MOCK-SERVER-CROSS-VERIFY-REST-v0.2\"")
                 .contains("\"child_suite_id\": \"MOCK-SERVER-CROSS-VERIFY-SOAP-v0.2\"")
                 .contains("\"child_suite_id\": \"MOCK-SERVER-CROSS-VERIFY-GRPC-v0.2\"");
+        assertThat(summaryDocument.split("\"batch_id\": \"" + parentBatchId + "\"", -1).length - 1)
+                .as("parent and every executed child must share the suite-group batch ID")
+                .isEqualTo(7);
         assertThat(countFiles(allureResults, "-result.json")).isEqualTo(6);
         assertThat(countFiles(allureResults, "-container.json")).isEqualTo(1);
         assertThat(Files.readString(firstFile(allureResults, "-result.json")))
@@ -609,6 +614,14 @@ class MockServerCrossVerifySampleCommandTest {
                 .map(Path::of)
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Missing path line for " + key + " in:\n" + stdout));
+    }
+
+    private String extractValue(String stdout, String key) {
+        return stdout.lines()
+                .filter(line -> line.startsWith(key + ": "))
+                .map(line -> line.substring((key + ": ").length()).trim())
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing value line for " + key + " in:\n" + stdout));
     }
 
     private long countFiles(Path dir, String suffix) throws Exception {

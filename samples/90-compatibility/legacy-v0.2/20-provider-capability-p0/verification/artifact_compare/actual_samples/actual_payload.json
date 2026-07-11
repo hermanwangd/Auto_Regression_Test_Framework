@@ -1,0 +1,15 @@
+{
+  "status": "OK",
+  "id": "CMP-001",
+  "generatedAt": "2026-06-29T00:00:00Z",
+  "items": [
+    {
+      "value": 2,
+      "name": "beta"
+    },
+    {
+      "value": 1,
+      "name": "alpha"
+    }
+  ]
+}

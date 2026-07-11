@@ -45,7 +45,7 @@ flowchart TD
 | Planning and Binding | Resolve each DSL target to suite target, Provider Contract, Env_Profile target entry, runtime mode, bindings, generated outputs, and operation contract. |
 | Fixture and State Manager | Use execution plan setup/cleanup steps and Env_Profile provisioning policy to manage lifecycle. |
 | Execution Engine | Dispatch provider operations from normalized execution plan. Runtime modules must not read Provider Instance files for v0.3. |
-| Oracle and Assertion Engine | Evaluate `assertion` and `provider_check` verify steps using contract-declared outputs, expectation paths, and operators. |
+| Oracle and Assertion Engine | Execute `provider_check` operations through their Provider Contract, then evaluate framework-owned `assertion` steps over contract-declared outputs. `provider_check.expect` is not a v0.3 interface. |
 | Evidence and Reporting | Validate result/evidence references and preserve target, Provider Contract, profile, operation, output, and cleanup status. |
 
 ## 4. Resolution Algorithm
@@ -62,9 +62,9 @@ For each selected test case:
 8. Resolve and mask `env://` refs without exposing values.
 9. Validate `op` exists in the Provider Contract.
 10. Validate `with` fields, required inputs, ref types, literal types, and artifact roots.
-11. Validate `expect` paths and operators for provider checks.
+11. Reject generic `provider_check.expect`; validate provider-check `with` fields and later assertion operators against their respective contracts.
 12. Validate `step://` refs only point to prior steps and contract-declared output refs.
-13. Build a normalized execution plan.
+13. Build one normalized compiled suite. Validation reports compiler findings, dry-run renders the compiled steps, and runtime executes the same object without re-reading suite/test/env YAML.
 
 Any failure before step 13 blocks runtime dispatch.
 

@@ -15,7 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class GoldenE2eCommandTest {
 
-    private static final Path GOLDEN_SUITE = Path.of("samples/00-getting-started/golden_e2e/suite_manifest.yaml");
+    private static final Path GOLDEN_SUITE = Path.of("samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e/suite_manifest.yaml");
 
     @TempDir
     Path tempDir;
@@ -23,17 +23,17 @@ class GoldenE2eCommandTest {
     @Test
     void goldenSampleArtifactsAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
-                "samples/00-getting-started/golden_e2e/suite_manifest.yaml",
-                "samples/00-getting-started/golden_e2e/test_case.yaml",
+                "samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e/suite_manifest.yaml",
+                "samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e/test_case.yaml",
                 "docs/02-architecture/contracts/provider-contracts/sample_fake_provider.yaml",
-                "samples/00-getting-started/golden_e2e/provider_instances/sample_fake_instance.yaml",
-                "samples/00-getting-started/golden_e2e/env_profiles/local_golden.yaml",
-                "samples/00-getting-started/golden_e2e/fixtures/input.json",
-                "samples/00-getting-started/golden_e2e/fixtures/setup_fixture.yaml",
-                "samples/00-getting-started/golden_e2e/fixtures/cleanup_fixture.yaml",
-                "samples/00-getting-started/golden_e2e/expected_results/expected_output.json",
-                "samples/00-getting-started/golden_e2e/result/expected_result_shape.json",
-                "samples/00-getting-started/golden_e2e/evidence/expected_evidence_index.yaml");
+                "samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e/provider_instances/sample_fake_instance.yaml",
+                "samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e/env_profiles/local_golden.yaml",
+                "samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e/fixtures/input.json",
+                "samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e/fixtures/setup_fixture.yaml",
+                "samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e/fixtures/cleanup_fixture.yaml",
+                "samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e/expected_results/expected_output.json",
+                "samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e/result/expected_result_shape.json",
+                "samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e/evidence/expected_evidence_index.yaml");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -543,7 +543,7 @@ class GoldenE2eCommandTest {
 
     private Path mutableGolden() throws IOException {
         Path target = tempDir.resolve("golden_e2e_" + System.nanoTime());
-        copyDirectory(Path.of("samples/00-getting-started/golden_e2e"), target);
+        copyDirectory(Path.of("samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e"), target);
         return target.resolve("suite_manifest.yaml");
     }
 

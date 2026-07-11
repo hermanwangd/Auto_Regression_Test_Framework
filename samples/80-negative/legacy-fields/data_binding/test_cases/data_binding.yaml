@@ -1,0 +1,10 @@
+dsl_version: v0.3
+test_case_id: NEG-LEGACY-DATA-BINDING-TC-001
+data_binding:
+  datasets:
+    input:
+      ref: fixtures/input.json
+setup: []
+execute: []
+verify: []
+cleanup: []

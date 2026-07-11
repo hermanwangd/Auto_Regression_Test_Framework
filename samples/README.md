@@ -1,23 +1,31 @@
 # Sample Suites
 
-The sample tree is the public usage-kit surface for framework v0.2 suite-mode and the framework v0.3 DSL preview. A leaf suite is a directory whose `suite_manifest.yaml` contains `tests[]`. A suite group is a directory whose `suite_manifest.yaml` contains `child_suites[]`.
+The sample tree is the public Framework v0.3 usage-kit surface. A leaf suite is a directory whose `suite_manifest.yaml` contains `tests[]`. A suite group is a directory whose `suite_manifest.yaml` contains `child_suites[]`.
 
 ## Layout
 
-- `v0_3_dsl/golden/`: smallest executable v0.3 no-Provider-Instance DSL sample.
-- `00-getting-started/golden_e2e/`: smallest executable v0.2 framework lifecycle sample.
-- `10-contract-baseline/mixed_wiremock_jdbc_nats/`: mixed contract baseline sample.
+- `00-getting-started/golden_e2e/`: smallest executable v0.3 DSL sample.
+- `10-contract-baseline/mixed_wiremock_jdbc_nats/`: mixed HTTP mock/client, JDBC, and NATS v0.3 baseline.
 - `20-provider-capability-p0/`: executable P0 provider capability suites grouped by capability family.
-- `30-cross-provider-groups/mock_server_cross_verify/`: suite group for cross-provider mock server verification.
+- `30-cross-provider-groups/mock_server_cross_verify/`: suite group for REST/SOAP/gRPC mock server verification.
 - `40-evidence-reporting/evidence_hardening/`: result and evidence validation fixtures.
-- `90-compatibility/dummy_rest/`: compatibility-only fixture, not a supported provider capability gate.
+- `80-negative/`: expected-failure v0.3 validation and runtime samples.
+- `90-compatibility/`: deprecation notes and source-tree-only v0.2 backup material.
+
+## Provider Contract Lookup
+
+Each v0.3 suite manifest declares targets with `provider_contract` ids, such as
+`jdbc.v0.3` or `rest_client.v0.3`. Look up the matching YAML, supported
+operations, required Env_Profile bindings, and reference samples in
+`docs/02-architecture/contracts/provider-contracts/README.md`.
 
 ## Rules
 
-- Leaf suites use one `env_profiles/<profile>.yaml` file per runtime profile. Provider values go under `providers.<provider_id>.bindings`.
-- Env_Profile policy sections are optional and defaults-backed; samples include them only for external, SIT, or intentionally stricter behavior.
-- New samples must not include `execution_profiles/`, `environment_bindings/`, or suite `artifact_roots.execution_profiles` / `artifact_roots.environment_bindings`.
+- v0.3 leaf suites use `manifest_version: v0.3`, suite-level `targets`, `env_profiles/<profile>.yaml`, and test cases with `dsl_version: v0.3`.
+- Test cases reference suite target names directly. They do not use Provider Instance files, `provider_id`, `parameters`, `bind_as`, or legacy `data_binding`.
+- Env_Profile files provide runtime bindings for the selected profile. Provider values go under `targets.<target>.bindings`.
 - Suite group child refs must stay inside the suite group directory.
-- Runtime-mode provider instance samples labeled `sample_scope: usage_kit_runtime_mode_sample` are coverage artifacts and are not executable targets.
-- New documentation should point to the canonical paths above. Legacy release-asset paths are generated only inside the usage-kit zip for v0.2.x compatibility and include `DEPRECATED_PATH.md` warnings.
-- v0.3 samples must not include Provider Instance files. Test cases reference suite targets directly, suite targets resolve Provider Contracts, and Env_Profile targets provide runtime bindings.
+- New public docs and scripts must point to the canonical paths above.
+- Deprecated v0.2 executable artifacts are source-tree backups under `90-compatibility/legacy-v0.2/` and do not ship as current v0.3 usage-kit samples.
+
+See `90-compatibility/DEPRECATED_PATHS.md` for migration hints from removed staging and v0.2 alias paths.

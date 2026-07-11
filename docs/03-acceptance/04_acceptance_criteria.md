@@ -4,6 +4,16 @@ These criteria validate Auto Regression Test Framework v0.2 as a feature-complet
 
 Current-stage maturity is measured by framework AC-001 through AC-018 only. Phase 2 Agent Skill support acceptance is intentionally next-stage and must not lower or block the framework maturity score unless a missing framework contract prevents generic validation, execution, evidence, or reporting.
 
+## AC-019 - Canonical Suite Summary and Recursive Aggregation
+
+Happy path: Every executed v0.3 leaf writes matching `result.json` and `suite_summary.json`. A v0.3 aggregation run reuses one parent `batch_id`, assigns unique child `run_id` values, copies each immediate child's materialized results once, merges evidence metadata with suite-path identities, and reports exact self, child, and total counts and rates.
+
+Failure path: A structurally invalid aggregation manifest blocks before run IDs or output artifacts exist. If an entered child later has a missing, malformed, escaped, or identity-mismatched result/summary, the parent preserves valid children and writes a partial blocked result/summary with `termination_reason: aggregation_error` and owner-actionable `aggregation_errors`.
+
+Boundary path: Passed plus skipped resolves to passed; all skipped resolves to skipped; any blocked child or partial completion resolves to blocked. Empty denominators produce null rates. Nested parents consume only the immediate child's summary and materialized result lists, never grandchildren directly.
+
+Report acceptance: canonical report input is `result.json`; report validates summary/evidence references and returns only `review_ready`, `review_ready_with_failures`, `failed`, or `invalid`. Legacy unversioned summaries remain compatibility input and cannot claim canonical evidence validation.
+
 v0.2 acceptance follows this boundary:
 
 ```text

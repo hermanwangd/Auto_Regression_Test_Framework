@@ -1,0 +1,13 @@
+profile_id: external_nats
+execution_mode: external
+isolation: shared
+evidence_classification: project_environment_evidence
+
+targets:
+  event_bus:
+    runtime_mode: native
+    bindings:
+      connection.secret_ref: env://NATS_CONNECTION
+      subject: orders.ready.v03
+      timeout: PT5S
+      poll_interval: PT0.05S

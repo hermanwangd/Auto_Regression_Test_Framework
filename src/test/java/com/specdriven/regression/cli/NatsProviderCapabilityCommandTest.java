@@ -18,7 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class NatsProviderCapabilityCommandTest {
 
-    private static final Path NATS_SUITE = Path.of("samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml");
+    private static final Path NATS_SUITE = Path.of("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/messaging/nats/suite_manifest.yaml");
 
     @TempDir
     Path tempDir;
@@ -26,15 +26,15 @@ class NatsProviderCapabilityCommandTest {
     @Test
     void natsSampleArtifactsAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
-                "samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml",
-                "samples/20-provider-capability-p0/messaging/nats/test_case.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/messaging/nats/suite_manifest.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/messaging/nats/test_case.yaml",
                 "docs/02-architecture/contracts/provider-contracts/nats.yaml",
-                "samples/20-provider-capability-p0/messaging/nats/provider_instances/local_nats.yaml",
-                "samples/20-provider-capability-p0/messaging/nats/env_profiles/local_nats.yaml",
-                "samples/20-provider-capability-p0/messaging/nats/fixtures/event_input.json",
-                "samples/20-provider-capability-p0/messaging/nats/expected_results/event_expected.json",
-                "samples/20-provider-capability-p0/messaging/nats/result/expected_result_shape.json",
-                "samples/20-provider-capability-p0/messaging/nats/evidence/expected_evidence_index.yaml");
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/messaging/nats/provider_instances/local_nats.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/messaging/nats/env_profiles/local_nats.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/messaging/nats/fixtures/event_input.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/messaging/nats/expected_results/event_expected.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/messaging/nats/result/expected_result_shape.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/messaging/nats/evidence/expected_evidence_index.yaml");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -448,7 +448,7 @@ class NatsProviderCapabilityCommandTest {
 
     private Path mutableNats() throws IOException {
         Path target = tempDir.resolve("nats_" + System.nanoTime());
-        copyDirectory(Path.of("samples/20-provider-capability-p0/messaging/nats"), target);
+        copyDirectory(Path.of("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/messaging/nats"), target);
         return target.resolve("suite_manifest.yaml");
     }
 

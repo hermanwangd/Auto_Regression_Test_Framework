@@ -19,7 +19,7 @@ P0 scope:
 - Carry forward `35b712d` compatibility evidence fix: `dummy_rest` must not become downstream release evidence.
 - Close or explicitly document the two v0.2.6 pi-run P2 findings:
   - `FW-V026-001`: `report --format json` unsupported.
-  - `FW-V026-002`: project-provisioned WireMock external `base_url` consumption not proven.
+  - `FW-V026-002`: project-provisioned external HTTP `base_url` consumption must be proven through `rest_client`, not `wiremock_http_mock`.
 - Add JDBC Oracle/DB2 driver loading mechanism:
   - `--driver-path`
   - `--driver-dir`
@@ -109,14 +109,14 @@ Failure JSON shape:
 }
 ```
 
-### 3.2 WireMock External Base URL
+### 3.2 External HTTP Base URL
 
-Project-provisioned WireMock is not a framework-managed server. The framework must consume an Env_Profile binding:
+Project-provisioned generic HTTP endpoints are not framework-managed mock servers. The framework must consume those endpoints through `rest_client`:
 
 ```yaml
 providers:
-  wiremock-payment-api:
-    runtime_mode: external
+  payment-api-client:
+    runtime_mode: native
     bindings:
       base_url:
         value: http://127.0.0.1:18080
@@ -126,9 +126,10 @@ Rules:
 
 - `base_url` may use `value` or approved `generated_ref`.
 - `base_url` must use `http` or `https`.
-- `base_url` must not contain userinfo, token query params, password query params, or `secret_ref`.
-- Runtime must not start a framework-managed WireMock server when external `base_url` is supplied.
-- Evidence must include provider ID, provider type, consumed base URL, request URL, and HTTP status.
+- `base_url` must not contain userinfo, token query params, password query params, or raw secret-like values.
+- `wiremock_http_mock` must not consume generic external `base_url`; generic HTTP/SUT endpoints remain `rest_client`.
+- `wiremock_http_mock.base_url` is allowed only for an owner-provisioned WireMock-compatible mock server exposing WireMock Admin API, where the framework connects to load/reset stubs and inspect request journal evidence without starting or stopping the process.
+- Evidence must include `rest_client` provider ID, provider type, consumed request URL, and HTTP status.
 
 ### 3.3 JDBC Driver Loading
 
@@ -900,7 +901,7 @@ v0.2.7 is ready only when all P0 items meet these criteria:
 
 - `dummy_rest` compatibility sample remains framework-only and cannot claim downstream release evidence.
 - `regress report --format json` works for valid result JSON and returns owner-actionable JSON failures for invalid evidence/secret leakage.
-- Project-provisioned WireMock external `base_url` consumption is proven by framework evidence and pi-run project report.
+- Project-provisioned external HTTP `base_url` consumption is proven by `rest_client` framework evidence and pi-run project report.
 - Oracle/DB2 JDBC driver loading works through `--driver-path`, `--driver-dir`, `REGRESS_DRIVER_PATH`, and usage-kit `drivers/` fallback.
 - `regress doctor drivers` reports driver presence/loadability without connecting to DB.
 - Schema drift gate blocks mismatched public/runtime schemas.

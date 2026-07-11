@@ -2,6 +2,9 @@ package com.specdriven.regression.cli;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
+
+import com.github.tomakehurst.wiremock.WireMockServer;
 import com.specdriven.regression.discovery.ReleasePackageService;
 import com.specdriven.regression.productrepo.ProductRepoService;
 import java.io.ByteArrayOutputStream;
@@ -17,7 +20,7 @@ import org.junit.jupiter.api.io.TempDir;
 class WireMockProviderCapabilityCommandTest {
 
     private static final Path WIREMOCK_SUITE =
-            Path.of("samples/20-provider-capability-p0/http/wiremock_http_mock/suite_manifest.yaml");
+            Path.of("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/http/wiremock_http_mock/suite_manifest.yaml");
 
     @TempDir
     Path tempDir;
@@ -25,17 +28,17 @@ class WireMockProviderCapabilityCommandTest {
     @Test
     void wireMockSampleArtifactsAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
-                "samples/20-provider-capability-p0/http/wiremock_http_mock/suite_manifest.yaml",
-                "samples/20-provider-capability-p0/http/wiremock_http_mock/test_case.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/http/wiremock_http_mock/suite_manifest.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/http/wiremock_http_mock/test_case.yaml",
                 "docs/02-architecture/contracts/provider-contracts/wiremock_http_mock.yaml",
-                "samples/20-provider-capability-p0/http/wiremock_http_mock/provider_instances/wiremock_payment_api.yaml",
-                "samples/20-provider-capability-p0/http/wiremock_http_mock/env_profiles/local_wiremock.yaml",
-                "samples/20-provider-capability-p0/http/wiremock_http_mock/fixtures/payment_success_stub.json",
-                "samples/20-provider-capability-p0/http/wiremock_http_mock/fixtures/payment_failure_stub.json",
-                "samples/20-provider-capability-p0/http/wiremock_http_mock/fixtures/request_input.json",
-                "samples/20-provider-capability-p0/http/wiremock_http_mock/expected_results/expected_request.json",
-                "samples/20-provider-capability-p0/http/wiremock_http_mock/result/expected_result_shape.json",
-                "samples/20-provider-capability-p0/http/wiremock_http_mock/evidence/expected_evidence_index.yaml");
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/http/wiremock_http_mock/provider_instances/wiremock_payment_api.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/http/wiremock_http_mock/env_profiles/local_wiremock.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/http/wiremock_http_mock/fixtures/payment_success_stub.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/http/wiremock_http_mock/fixtures/payment_failure_stub.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/http/wiremock_http_mock/fixtures/request_input.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/http/wiremock_http_mock/expected_results/expected_request.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/http/wiremock_http_mock/result/expected_result_shape.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/http/wiremock_http_mock/evidence/expected_evidence_index.yaml");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -93,6 +96,55 @@ class WireMockProviderCapabilityCommandTest {
                 .contains("run_id: RUN-WIREMOCK-")
                 .contains("test_case_id: WIREMOCK-CAPABILITY-TC-001")
                 .contains("status: passed");
+    }
+
+    @Test
+    void wireMockSuiteConsumesExternalBaseUrlBinding() throws Exception {
+        Path suite = mutableWireMock();
+        Path envProfile = suite.getParent().resolve("env_profiles/local_wiremock.yaml");
+        WireMockServer externalWireMock = new WireMockServer(options().dynamicPort());
+        externalWireMock.start();
+        try {
+            String originalEnvProfile = read(envProfile);
+            String updatedEnvProfile = originalEnvProfile.replace(
+                    """
+                        runtime_mode: mock
+                        bindings:
+                          port_strategy: dynamic
+                          mappings_ref:
+                            ref: fixtures/
+                    """,
+                    """
+                        runtime_mode: external
+                        bindings:
+                          base_url:
+                            value: %s
+                          mappings_ref:
+                            ref: fixtures/
+                    """.formatted(externalWireMock.baseUrl()));
+            assertThat(updatedEnvProfile).isNotEqualTo(originalEnvProfile);
+            Files.writeString(envProfile, updatedEnvProfile);
+
+            CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_wiremock");
+
+            assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
+            assertThat(run.stdout())
+                    .contains("run_status: passed")
+                    .contains("provider_runtime_executed: true")
+                    .contains("provider_id: wiremock-payment-api")
+                    .contains("provider_type: wiremock_http_mock");
+            Path resultJson = extractPath(run.stdout(), "result_json");
+            Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
+            assertThat(read(resultJson))
+                    .contains("\"runtime_mode\": \"external\"")
+                    .contains("\"base_url\": \"" + externalWireMock.baseUrl() + "\"")
+                    .contains("\"framework_started_wiremock\": false");
+            assertThat(read(evidenceDir.resolve("provider-evidence/wiremock/server_log.txt")))
+                    .contains("framework_started_wiremock: false")
+                    .contains("base_url: " + externalWireMock.baseUrl());
+        } finally {
+            externalWireMock.stop();
+        }
     }
 
     @Test
@@ -411,7 +463,7 @@ class WireMockProviderCapabilityCommandTest {
 
     private Path mutableWireMock() throws IOException {
         Path target = tempDir.resolve("wiremock_" + System.nanoTime());
-        copyDirectory(Path.of("samples/20-provider-capability-p0/http/wiremock_http_mock"), target);
+        copyDirectory(Path.of("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/http/wiremock_http_mock"), target);
         return target.resolve("suite_manifest.yaml");
     }
 

@@ -15,11 +15,11 @@ import org.junit.jupiter.api.io.TempDir;
 
 class JdbcProviderCapabilityCommandTest {
 
-    private static final Path JDBC_SUITE = Path.of("samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml");
+    private static final Path JDBC_SUITE = Path.of("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/suite_manifest.yaml");
     private static final Path JDBC_EXTERNAL_ORACLE_SUITE =
-            Path.of("samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml");
+            Path.of("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml");
     private static final Path JDBC_EXTERNAL_DB2_SUITE =
-            Path.of("samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml");
+            Path.of("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml");
 
     @TempDir
     Path tempDir;
@@ -27,40 +27,40 @@ class JdbcProviderCapabilityCommandTest {
     @Test
     void jdbcSampleArtifactsAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
-                "samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/test_case.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/test_case_oracle_crud.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/test_case_db2_crud.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/test_case_external_oracle_crud.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/test_case_external_db2_crud.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/suite_manifest.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/test_case.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/test_case_oracle_crud.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/test_case_db2_crud.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/test_case_external_oracle_crud.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/test_case_external_db2_crud.yaml",
                 "docs/02-architecture/contracts/provider-contracts/jdbc.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/provider_instances/oracle_like.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/provider_instances/db2_like.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/env_profiles/local_jdbc.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/env_profiles/external_jdbc_oracle_env_secret_ref.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/env_profiles/external_jdbc_db2_env_secret_ref.yaml",
-                "samples/20-provider-capability-p0/data/jdbc/fixtures/db_seed.sql",
-                "samples/20-provider-capability-p0/data/jdbc/fixtures/db_cleanup.sql",
-                "samples/20-provider-capability-p0/data/jdbc/fixtures/crud_insert_order.sql",
-                "samples/20-provider-capability-p0/data/jdbc/fixtures/crud_update_order.sql",
-                "samples/20-provider-capability-p0/data/jdbc/fixtures/crud_delete_order.sql",
-                "samples/20-provider-capability-p0/data/jdbc/fixtures/oracle_crud_insert_order.sql",
-                "samples/20-provider-capability-p0/data/jdbc/fixtures/oracle_crud_update_order.sql",
-                "samples/20-provider-capability-p0/data/jdbc/fixtures/oracle_crud_delete_order.sql",
-                "samples/20-provider-capability-p0/data/jdbc/fixtures/db2_crud_insert_order.sql",
-                "samples/20-provider-capability-p0/data/jdbc/fixtures/db2_crud_update_order.sql",
-                "samples/20-provider-capability-p0/data/jdbc/fixtures/db2_crud_delete_order.sql",
-                "samples/20-provider-capability-p0/data/jdbc/queries/order_exists_oracle.sql",
-                "samples/20-provider-capability-p0/data/jdbc/queries/order_exists_db2.sql",
-                "samples/20-provider-capability-p0/data/jdbc/queries/crud_order_by_id_oracle.sql",
-                "samples/20-provider-capability-p0/data/jdbc/queries/crud_order_by_id_db2.sql",
-                "samples/20-provider-capability-p0/data/jdbc/expected_results/db_expected.json",
-                "samples/20-provider-capability-p0/data/jdbc/expected_results/crud_expected.json",
-                "samples/20-provider-capability-p0/data/jdbc/expected_results/crud_deleted_expected.json",
-                "samples/20-provider-capability-p0/data/jdbc/result/expected_result_shape.json",
-                "samples/20-provider-capability-p0/data/jdbc/evidence/expected_evidence_index.yaml");
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/provider_instances/oracle_like.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/provider_instances/db2_like.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/env_profiles/local_jdbc.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/env_profiles/external_jdbc_oracle_env_secret_ref.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/env_profiles/external_jdbc_db2_env_secret_ref.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/fixtures/db_seed.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/fixtures/db_cleanup.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/fixtures/crud_insert_order.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/fixtures/crud_update_order.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/fixtures/crud_delete_order.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/fixtures/oracle_crud_insert_order.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/fixtures/oracle_crud_update_order.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/fixtures/oracle_crud_delete_order.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/fixtures/db2_crud_insert_order.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/fixtures/db2_crud_update_order.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/fixtures/db2_crud_delete_order.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/queries/order_exists_oracle.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/queries/order_exists_db2.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/queries/crud_order_by_id_oracle.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/queries/crud_order_by_id_db2.sql",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/expected_results/db_expected.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/expected_results/crud_expected.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/expected_results/crud_deleted_expected.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/result/expected_result_shape.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/evidence/expected_evidence_index.yaml");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -474,7 +474,7 @@ class JdbcProviderCapabilityCommandTest {
 
     private Path mutableJdbc() throws IOException {
         Path target = tempDir.resolve("jdbc_" + System.nanoTime());
-        copyDirectory(Path.of("samples/20-provider-capability-p0/data/jdbc"), target);
+        copyDirectory(Path.of("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc"), target);
         return target.resolve("suite_manifest.yaml");
     }
 

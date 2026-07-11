@@ -1,5 +1,4 @@
 {
-  "requestId": "GOLDEN-E2E-001",
-  "input": "hello framework",
-  "mode": "deterministic"
+  "requestId": "golden-v03-001",
+  "amount": 100
 }

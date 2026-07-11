@@ -1,5 +1,4 @@
 {
-  "orderId": "ORD-K-001",
-  "status": "CREATED",
-  "amount": 125
+  "order_id": "ORD-MIXED-V03-001",
+  "status": "READY"
 }

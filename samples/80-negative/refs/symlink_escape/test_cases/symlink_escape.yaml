@@ -1,0 +1,12 @@
+dsl_version: v0.3
+test_case_id: NEG-SYMLINK-ESCAPE-TC-001
+setup:
+  - id: escaped_symlink
+    target: common_verifier
+    op: json_match
+    with:
+      expected_ref: artifact://expected/escaped.json
+      actual_ref: artifact://actual/actual.json
+execute: []
+verify: []
+cleanup: []

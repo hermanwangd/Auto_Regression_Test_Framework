@@ -1,11 +1,18 @@
-contract_version: v0.2
-suite_id: POLLING-CAPABILITY-v0.2
-selection:
-  mode: suite
-  suite: polling-p0
+manifest_version: v0.3
+suite_id: POLLING-OBSERVER-v0.3
+default_profile: local_v03
+
+artifact_roots:
+  expected_results: expected_results/
+  actual_samples: actual_samples/
+
+targets:
+  polling_observer:
+    provider_contract: polling_observer.v0.3
+
+env_profiles:
+  local_v03:
+    ref: env_profiles/local_v03.yaml
+
 tests:
-  - test_case.yaml
-profiles:
-  - local_polling
-coverage_source_ref: docs/03-acceptance/polling.md
-traceability_map_ref: generated-framework/traceability_map.yaml
+  - ref: test_cases/event_published_success.yaml

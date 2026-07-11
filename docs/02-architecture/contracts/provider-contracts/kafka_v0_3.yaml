@@ -1,0 +1,52 @@
+contract_version: v0.3
+provider_contract: kafka.v0.3
+provider_type: kafka
+provider_role: messaging_client
+protocol: kafka
+purpose: Kafka messaging provider contract for DSL v0.3 publish and observation checks.
+runtime_modes: [mock, native]
+binding_keys:
+  bootstrap_servers:
+    required: true
+    source: env_profile
+  topic:
+    required: true
+    source: env_profile
+  consumer_group:
+    required: true
+    source: env_profile
+  timeout:
+    required: false
+    source: env_profile
+  poll_interval:
+    required: false
+    source: env_profile
+operations:
+  kafka_publish:
+    allowed_inputs: [key, payload_ref, payload, timeout]
+    required_inputs: [payload_ref]
+    output_refs: [topic, partition, offset, key, published_at, event_evidence_ref]
+  kafka_observe:
+    allowed_inputs: [key, consume_from, timeout, poll_interval]
+    required_inputs: []
+    output_refs: [topic, observed_count, last_observed_offset, matched, duration_ms, event_evidence_ref]
+  kafka_payload_match:
+    allowed_inputs: [expected_ref, key, consume_from, timeout, poll_interval]
+    required_inputs: [expected_ref]
+    output_refs: [topic, observed_count, matched, matched_fields, duration_ms, event_evidence_ref, assertion_evidence_ref]
+evidence:
+  outputs: [event_evidence, assertion_evidence]
+  redact: [bootstrap_servers, password, secret, token, authorization]
+failure_mapping:
+  allowed_codes:
+    - TOPIC_MISSING
+    - PAYLOAD_REF_MISSING
+    - KAFKA_CONNECTION_FAILED
+    - KAFKA_PUBLISH_FAILED
+    - KAFKA_OBSERVE_FAILED
+    - EVENT_NOT_FOUND
+    - PAYLOAD_MISMATCH
+    - KAFKA_TIMEOUT
+    - INVALID_DURATION
+    - INVALID_INSTANT
+    - REF_OUTSIDE_SUITE_ROOT

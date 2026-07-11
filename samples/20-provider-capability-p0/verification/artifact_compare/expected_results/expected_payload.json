@@ -1,15 +1,8 @@
 {
-  "id": "CMP-001",
-  "status": "OK",
+  "order_id": "ORD-V03-001",
+  "status": "CREATED",
   "items": [
-    {
-      "name": "alpha",
-      "value": 1
-    },
-    {
-      "name": "beta",
-      "value": 2
-    }
-  ],
-  "generatedAt": "ignored"
+    "B",
+    "A"
+  ]
 }

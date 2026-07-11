@@ -1,0 +1,40 @@
+contract_version: v0.3
+provider_contract: http_mock.v0.3
+provider_type: http_mock
+provider_role: mock_server
+protocol: http
+runtime_implementation: wiremock
+purpose: Protocol-level HTTP mock contract for DSL v0.3 authoring. WireMock is the default runtime implementation.
+runtime_modes: [mock]
+binding_keys:
+  port_strategy:
+    required: false
+    source: env_profile
+  fixed_port:
+    required: false
+    source: env_profile
+operations:
+  load_stubs:
+    allowed_inputs: [mock.mappings_ref, mock.reset_before_load]
+    required_inputs: [mock.mappings_ref]
+    output_refs: [base_url, loaded_stub_count, request_journal, server_log]
+  verify_requests:
+    allowed_inputs: [mock.request_filter_ref, mock.expected_count, mock.body_pattern_ref]
+    required_inputs: [mock.request_filter_ref]
+    output_refs: [request_journal, matched_count, server_log]
+  reset_mock:
+    allowed_inputs: []
+    required_inputs: []
+    output_refs: [cleanup_log, server_log]
+evidence:
+  outputs: [base_url, request_journal, server_log, injected_stub, assertion_result, timing, cleanup_log, failure_detail, error]
+  redact: []
+failure_mapping:
+  allowed_codes:
+    - PROVIDER_UNAVAILABLE
+    - PROVIDER_TIMEOUT
+    - PROVIDER_STUB_MISSING
+    - OPERATION_FAILED
+    - ASSERTION_FAILED
+    - EVIDENCE_INVALID
+    - SECRET_RESOLUTION_ERROR

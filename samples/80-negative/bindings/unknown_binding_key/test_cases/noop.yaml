@@ -1,0 +1,12 @@
+dsl_version: v0.3
+test_case_id: NEG-UNKNOWN-BINDING-TC-001
+setup:
+  - id: bad_binding_target_use
+    target: common_verifier
+    op: json_match
+    with:
+      expected_ref: artifact://expected/missing.json
+      actual_ref: artifact://actual/missing.json
+execute: []
+verify: []
+cleanup: []

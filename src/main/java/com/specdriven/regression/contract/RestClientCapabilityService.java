@@ -1,5 +1,7 @@
 package com.specdriven.regression.contract;
 
+import com.specdriven.regression.summary.SuiteExecutionContext;
+
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.provider.http.RestClientProviderRuntime;
@@ -43,6 +45,11 @@ public class RestClientCapabilityService {
     private final Yaml yaml = new Yaml();
 
     public RestClientRunResult run(Path suiteManifest, String requestedProfile, Path outputBase) {
+        return run(suiteManifest, requestedProfile, SuiteExecutionContext.standalone(requestedProfile, outputBase, "REST"));
+    }
+
+    public RestClientRunResult run(Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
+        requireMatchingProfile(requestedProfile, executionContext);
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {
             return RestClientRunResult.blocked(validation.suiteId(), requestedProfile, validation.findings());
@@ -83,7 +90,7 @@ public class RestClientCapabilityService {
             return RestClientRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, profileFindings);
         }
 
-        List<RuntimeSelection> selections = selectRuntimes(suiteManifest, requestedProfile, outputBase, testDocuments);
+        List<RuntimeSelection> selections = selectRuntimes(suiteManifest, requestedProfile, executionContext, testDocuments);
         if (selections.isEmpty()) {
             return RestClientRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, List.of(new ContractFinding(
                     suiteManifest.toString(),
@@ -256,7 +263,7 @@ public class RestClientCapabilityService {
     private List<RuntimeSelection> selectRuntimes(
             Path suiteManifest,
             String requestedProfile,
-            Path outputBase,
+            SuiteExecutionContext executionContext,
             List<SuiteProfileGate.TestCaseDocument> testDocuments) {
         Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
         Map<String, Object> suite = readMap(suiteManifest);
@@ -264,11 +271,8 @@ public class RestClientCapabilityService {
                 readDirectoryByField(suiteRoot.resolve("provider_instances"), "provider_id");
         Map<String, Map<String, Object>> contractsByType =
                 readDirectoryByField(frameworkProviderContractsDirectory(suiteRoot), "provider_type");
-        RunIds runIds = newRunIds();
-        Path suiteRunDir = outputBase
-                .resolve(safe(stringValue(suite.get("suite_id"))))
-                .resolve(runIds.batchId())
-                .resolve(runIds.runId());
+        RunIds runIds = new RunIds(executionContext.parentBatchId(), executionContext.newRunId("REST"));
+        Path suiteRunDir = executionContext.childRunRoot(stringValue(suite.get("suite_id")), runIds.runId());
         boolean multiTestSuite = testDocuments.size() > 1;
         List<RuntimeSelection> selections = new ArrayList<>();
         for (SuiteProfileGate.TestCaseDocument document : testDocuments) {
@@ -633,6 +637,12 @@ public class RestClientCapabilityService {
                 .filter(ref -> ref != null && !ref.isBlank())
                 .map(ref -> prefix + ref)
                 .toList();
+    }
+
+    private void requireMatchingProfile(String profile, SuiteExecutionContext context) {
+        if (!context.matchesRequestedProfile(profile)) throw new IllegalArgumentException(
+                "Execution context profile mismatch: context=" + context.profile() + ", requested=" + profile
+                        + ". Use the parent suite profile for all child runtimes.");
     }
 
     private RunIds newRunIds() {

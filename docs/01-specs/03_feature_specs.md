@@ -329,7 +329,7 @@ P0 is required for v0.2 core and pilot execution. P1 is strongly recommended for
 
 | Area | P0 - v0.2 Core | P1 - Strongly Recommended | P2 - Later / Optional |
 |---|---|---|---|
-| HTTP / AP Mock | WireMock, `rest_client` `http_request` against framework-owned WireMock samples, `http_stub`, `http_mock_called`, `http_mock_request_body_match` | `http_mock_request_count`, `http_mock_not_called` | MockServer |
+| Mock Server | WireMock-backed HTTP/SOAP/gRPC mock providers, `rest_client` / `grpc_client` calls against framework-owned mock samples, `http_stub`, `http_mock_called`, `http_mock_request_body_match`, `soap_request_received`, `grpc_request_received` | `http_mock_request_count`, `http_mock_not_called`, broader SOAP/gRPC matching | MockServer or other mock-server implementations |
 | DB / Oracle / DB2 | JDBC Provider, `secret_ref` connection, SQL params binding, Oracle / DB2 dialect, `db_record_exists`, query evidence | `db_field_equals`, `db_row_count_equals`, cleanup by marker | Oracle / DB2 Testcontainers |
 | Messaging / Event | NATS Provider, `event_published`, `event_payload_match`, `consume_from: test_start_time`, subject handling, event evidence | Kafka client Provider with `kafka_publish`, `kafka_observe`, `kafka_payload_match`; IBM MQ client Provider with `mq_put`, `mq_browse`, `mq_message_exists`, `mq_payload_match`; NATS `event_not_published`, stream handling, consumer handling | Broker/server provisioning, Kafka request/reply, IBM MQ destructive get, advanced broker purge / persistent stream cleanup |
 | Polling | `polling_observer`, poll until condition, timeout, `poll_interval`, last observed evidence | Fail-fast on connection error | Advanced retry policy |
@@ -340,23 +340,29 @@ P0 is required for v0.2 core and pilot execution. P1 is strongly recommended for
 
 v0.2 may list a provider or verify enum only when the framework can validate its contract and either execute it or block it with a precise unsupported-capability finding.
 
-## 3.11 WireMock HTTP Mock Provider
+## 3.11 WireMock-backed Mock Provider Family
 
-WireMock is the default HTTP mock provider for local and CI RU-isolated tests.
+WireMock is the default framework-managed mock-server implementation for local and CI isolated dependency tests. It is not limited to REST/HTTP: the framework also uses WireMock-backed SOAP/XML behavior for `soap_mock` and the WireMock gRPC extension for unary `grpc_mock`.
 
-The framework shall support a `wiremock_http_mock` Provider Contract that can:
+Provider type names describe protocol capability first. `soap_mock` and `grpc_mock` are canonical mock-server Provider Contracts. `wiremock_http_mock` remains the v0.2 HTTP mock surface and compatibility name; v0.3 should prefer the protocol name `http_mock` while keeping `wiremock_http_mock` as an alias for existing v0.2 artifacts.
 
-- Start or connect to a WireMock instance.
-- Load checked-in stub mappings.
-- Expose a runtime `base_url`.
-- Expose that `base_url` through Provider Contract `bindable_outputs` so another provider can reference it with Env_Profile `generated_ref`.
+The framework shall support WireMock-backed mock Provider Contracts that can:
+
+- Start or connect to the protocol-specific WireMock-backed mock runtime.
+- Load checked-in HTTP mappings, SOAP XML stubs, or gRPC descriptor-backed unary stubs.
+- Expose protocol runtime outputs such as HTTP `base_url`, SOAP `endpoint_url`, or gRPC `target_uri`.
+- Expose generated outputs through Provider Contract `bindable_outputs` so client providers can reference them with Env_Profile `generated_ref`.
 - Retain request journal and server logs as evidence.
-- Support verification such as `http_mock_called`, `http_mock_request_body_match`, `http_mock_request_count`, and `http_mock_not_called`.
+- Support verification such as `http_mock_called`, `http_mock_request_body_match`, `soap_request_received`, and `grpc_request_received`.
 
 WireMock is for local and CI isolated dependency replacement. WireMock shall not replace internal RP/RU dependencies in SIT release evidence. SIT shall use deployed runtime targets unless an approved external simulator is explicitly declared and blocked from downstream release-readiness claims.
 
 ```yaml
 provider_type: wiremock_http_mock
+canonical_provider_type: http_mock
+provider_role: mock_server
+protocol: http
+runtime_implementation: wiremock
 runtime_modes:
   - mock
 required_bindings:

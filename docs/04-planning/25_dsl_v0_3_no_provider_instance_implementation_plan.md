@@ -1,6 +1,6 @@
 # DSL v0.3 No Provider Instance Implementation Plan
 
-**Status:** Release/0.3.0 golden baseline implemented; full v0.3 hardening matrix remains tracked in the test plan
+**Status:** Release/0.3.0 golden baseline implemented; provider runtime execution migration is tracked by `docs/04-planning/26_dsl_v0_3_0_provider_runtime_execution_implementation_plan.md`
 **Spec:** `docs/01-specs/05_dsl_v0_3_no_provider_instance_spec.md`
 **Architecture:** `docs/02-architecture/08_dsl_v0_3_no_provider_instance_architecture.md`
 **AC:** `docs/03-acceptance/05_dsl_v0_3_acceptance_criteria.md`
@@ -8,7 +8,11 @@
 
 ## 1. Goal
 
-Implement DSL v0.3 as a versioned public interface that removes user-authored Provider Instance artifacts. The framework must validate, dry-run, execute, produce evidence, and report using:
+Implement DSL v0.3 as a versioned public interface that removes user-authored Provider Instance artifacts. This plan covers the baseline loader, validation, dry-run, golden fake-provider execution, result, and usage-kit preview. Full execution of existing provider runtimes through the v0.3 target model is a separate implementation plan:
+
+- `docs/04-planning/26_dsl_v0_3_0_provider_runtime_execution_implementation_plan.md`
+
+The baseline flow is:
 
 ```text
 DSL target -> Suite Manifest target -> Provider Contract -> Env_Profile target -> Execution Plan

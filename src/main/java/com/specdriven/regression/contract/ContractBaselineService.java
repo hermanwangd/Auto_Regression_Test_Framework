@@ -1,5 +1,12 @@
 package com.specdriven.regression.contract;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.specdriven.regression.contract.v03.V03ExecutionPlan;
+import com.specdriven.regression.contract.v03.V03ExecutionPlanBuilder;
+import com.specdriven.regression.report.LegacySuiteSummaryReportAdapter;
+import com.specdriven.regression.summary.SuiteSummaryDocument;
+import com.specdriven.regression.summary.SuiteSummaryValidator;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
@@ -23,6 +30,10 @@ import java.util.regex.Pattern;
 import org.yaml.snakeyaml.Yaml;
 
 public class ContractBaselineService {
+    private final LegacySuiteSummaryReportAdapter legacySummaryAdapter = new LegacySuiteSummaryReportAdapter();
+    private final SuiteSummaryValidator suiteSummaryValidator = new SuiteSummaryValidator();
+    private final ObjectMapper summaryMapper = new ObjectMapper().findAndRegisterModules()
+            .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
 
     private static final Path FRAMEWORK_PROVIDER_CONTRACTS =
             Path.of("docs/02-architecture/contracts/provider-contracts");
@@ -135,6 +146,7 @@ public class ContractBaselineService {
             validateRawSecrets(graph, findings);
             validateV03SuiteTargets(graph, findings);
             validateV03TargetRefsAndOperations(graph, findings);
+            validateV03ReferenceSyntax(graph, findings);
             return validationResult(graph, findings);
         }
         validateRequiredFields(graph, findings);
@@ -158,6 +170,10 @@ public class ContractBaselineService {
     public DryRunResult dryRun(Path suiteManifest) {
         ValidationResult validation = validateSuite(suiteManifest);
         return new DryRunResult(validation.valid(), validation, validation.valid() ? validation.plan() : List.of());
+    }
+
+    public V03ExecutionPlan buildV03ExecutionPlan(Path suiteManifest, String profile) {
+        return new V03ExecutionPlanBuilder(this).build(suiteManifest, profile);
     }
 
     public ReportResult report(Path resultJson) {
@@ -201,9 +217,27 @@ public class ContractBaselineService {
                             "",
                             "Use a JSON object as the standard result.")));
         }
+        boolean legacySummary = legacySummaryAdapter.supports(result);
+        if (legacySummary) {
+            try {
+                result = legacySummaryAdapter.adapt(result);
+            } catch (IllegalArgumentException error) {
+                return new ReportResult(false, true, "", "", "", "", "", "", 0, 0, false, List.of(), List.of(
+                        new ContractFinding(
+                                resultJson.toString(), "result", "invalid_legacy_suite_summary", "", "", "", "",
+                                "Repair the legacy summary or report from a canonical v0.3 result.json.")));
+            }
+        }
         List<ContractFinding> findings = new ArrayList<>();
         for (String field : RESULT_REQUIRED_FIELDS) {
-            if (isMissingResultField(result.get(field))) {
+            if ("failure".equals(field)
+                    && !"v0.3".equals(stringValue(result.get("result_contract_version")))) {
+                continue;
+            }
+            boolean missing = "failure".equals(field)
+                    ? !result.containsKey(field)
+                    : isMissingResultField(result.get(field));
+            if (missing) {
                 findings.add(new ContractFinding(
                         resultJson.toString(),
                         field,
@@ -252,6 +286,9 @@ public class ContractBaselineService {
             }
         }
         findings.addAll(ResultContractValidator.validate(resultJson, result));
+        if (!legacySummary && "v0.3".equals(stringValue(result.get("result_contract_version")))) {
+            findings.addAll(validateSuiteSummaryForReport(resultJson, result));
+        }
         detectRawSecrets(resultJson.toString(), result, findings);
         List<Map<String, Object>> providerResults = mapList(result.get("provider_results"));
         List<String> failedVerifySummary = mapList(result.get("verify_results")).stream()
@@ -293,8 +330,47 @@ public class ContractBaselineService {
                 List.copyOf(findings));
     }
 
+    private List<ContractFinding> validateSuiteSummaryForReport(Path resultJson, Map<String, Object> result) {
+        String ref = stringValue(result.get("suite_summary_ref"));
+        if (ref.isBlank()) return List.of();
+        try {
+            Path summaryPath = resultJson.toRealPath().getParent().resolve(ref).normalize().toRealPath();
+            SuiteSummaryDocument summary = summaryMapper.readValue(summaryPath.toFile(), SuiteSummaryDocument.class);
+            List<ContractFinding> findings = new ArrayList<>(suiteSummaryValidator.validate(summary, summaryPath.getParent()));
+            for (String field : List.of("suite_id", "batch_id", "run_id")) {
+                String resultValue = stringValue(result.get(field));
+                String summaryValue = switch (field) {
+                    case "suite_id" -> summary.suiteId();
+                    case "batch_id" -> summary.batchId();
+                    default -> summary.runId();
+                };
+                if (!resultValue.equals(summaryValue)) {
+                    findings.add(new ContractFinding(
+                            summaryPath.toString(), field, "result_summary_identity_mismatch", "", "",
+                            stringValue(result.get("profile")), "",
+                            "Regenerate result.json and suite_summary.json from the same suite run."));
+                }
+            }
+            if (!stringValue(result.get("status")).equals(summary.status())) {
+                findings.add(new ContractFinding(
+                        summaryPath.toString(), "status", "result_summary_status_mismatch", "", "",
+                        stringValue(result.get("profile")), "",
+                        "Regenerate result.json and suite_summary.json from the same final status."));
+            }
+            return List.copyOf(findings);
+        } catch (IOException | RuntimeException error) {
+            return List.of(new ContractFinding(
+                    resultJson.toString(), "suite_summary_ref", "invalid_suite_summary", "", "",
+                    stringValue(result.get("profile")), "",
+                    "Restore a schema-valid contained suite summary and rerun report."));
+        }
+    }
+
     private boolean looksLikeFileRef(String ref) {
         if (ref == null || ref.isBlank()) {
+            return false;
+        }
+        if (ref.startsWith("evidence://")) {
             return false;
         }
         return ref.contains("/") || ref.endsWith(".yaml") || ref.endsWith(".yml") || ref.endsWith(".json")
@@ -566,6 +642,41 @@ public class ContractBaselineService {
         }
     }
 
+    private void validateV03ReferenceSyntax(ContractGraph graph, List<ContractFinding> findings) {
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.testCases().entrySet()) {
+            validateV03ReferenceSyntax(entry.getKey(), "", entry.getValue(), findings);
+        }
+    }
+
+    private void validateV03ReferenceSyntax(
+            Path path, String fieldPath, Object value, List<ContractFinding> findings) {
+        if (value instanceof Map<?, ?> map) {
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String key = stringValue(entry.getKey());
+                validateV03ReferenceSyntax(path, fieldPath.isBlank() ? key : fieldPath + "." + key,
+                        entry.getValue(), findings);
+            }
+            return;
+        }
+        if (value instanceof List<?> list) {
+            for (int index = 0; index < list.size(); index++) {
+                validateV03ReferenceSyntax(path, fieldPath + "[" + index + "]", list.get(index), findings);
+            }
+            return;
+        }
+        String reference = stringValue(value);
+        if (reference.startsWith("generated://")) {
+            String body = reference.substring("generated://".length());
+            if (body.indexOf('/') < 1 || body.indexOf('/', body.indexOf('/') + 1) >= 0 || body.contains(".")) {
+                findings.add(finding(path, fieldPath, "invalid_generated_ref",
+                        "Use `generated://<target>/<output>` in DSL v0.3."));
+            }
+        } else if (reference.startsWith("env://")) {
+            findings.add(finding(path, fieldPath, "invalid_reference_scope",
+                    "Use env:// values only in Env_Profile bindings, not in DSL test cases."));
+        }
+    }
+
     private void validateV03StepShape(Path testCasePath, Map<String, Object> testCase, List<ContractFinding> findings) {
         Set<String> seenIds = new LinkedHashSet<>();
         validateV03StepIds(testCasePath, "setup", listValue(testCase.get("setup")), seenIds, findings);
@@ -580,6 +691,10 @@ public class ContractBaselineService {
             if (!type.isBlank() && !Set.of("assertion", "provider_check").contains(type)) {
                 findings.add(finding(testCasePath, fieldPath + ".type", "unsupported_verify_type",
                         "Use `assertion` or `provider_check` for DSL v0.3 verify steps."));
+            }
+            if ("provider_check".equals(type) && verify.containsKey("expect")) {
+                findings.add(finding(testCasePath, fieldPath + ".expect", "prohibited_provider_check_expect",
+                        "Put provider-specific expected input in contract-declared `with` fields and compare provider output in a subsequent `type: assertion` step."));
             }
             verifyIndex++;
         }
@@ -1678,14 +1793,6 @@ public class ContractBaselineService {
                 EnvironmentBindingDoc bindingDoc = graph.environmentBindingsByProfile().get(profile);
                 Path bindingPath = bindingDoc.path();
                 if (bindingDoc.envProfile()) {
-                    validateProjectProvidedWireMockBaseUrl(
-                            bindingPath,
-                            bindingDoc.document(),
-                            providerId,
-                            providerType,
-                            profile,
-                            mapValue(mapValue(bindingDoc.document().get("providers")).get(providerId)),
-                            findings);
                     validateEnvProfileProviderBinding(
                             graph,
                             bindingPath,
@@ -1735,38 +1842,6 @@ public class ContractBaselineService {
                 }
             }
         }
-    }
-
-    private void validateProjectProvidedWireMockBaseUrl(
-            Path bindingPath,
-            Map<String, Object> envProfile,
-            String providerId,
-            String providerType,
-            String profile,
-            Map<String, Object> provider,
-            List<ContractFinding> findings) {
-        if (!"wiremock_http_mock".equals(providerType) || !projectProvidedDependencyProvisioning(envProfile)) {
-            return;
-        }
-        Map<String, Object> bindingValues = normalizeEnvProfileBindings(provider);
-        if (!isMissing(valueAtPath(bindingValues, "base_url"))) {
-            return;
-        }
-        findings.add(new ContractFinding(
-                bindingPath.toString(),
-                "providers." + providerId + "." + envProfileBindingField(provider) + ".base_url",
-                "wiremock_external_base_url_missing",
-                providerId,
-                providerType,
-                profile,
-                "",
-                "Supply `base_url` for project-provisioned WireMock."));
-    }
-
-    private boolean projectProvidedDependencyProvisioning(Map<String, Object> envProfile) {
-        List<String> provisioners = stringList(mapValue(envProfile.get("dependency_provisioning_policy"))
-                .get("allowed_provisioners"));
-        return provisioners.contains("project_provided") || provisioners.contains("external_ci_pre_step");
     }
 
     private void validateEnvProfileProviderBinding(
@@ -1924,16 +1999,10 @@ public class ContractBaselineService {
     }
 
     private String uriInvalidReason(String providerType, String rawKey) {
-        if ("wiremock_http_mock".equals(providerType) && "base_url".equals(rawKey)) {
-            return "wiremock_external_base_url_invalid";
-        }
         return "invalid_binding_key_uri";
     }
 
     private String uriSecretLeakReason(String providerType, String rawKey) {
-        if ("wiremock_http_mock".equals(providerType) && "base_url".equals(rawKey)) {
-            return "wiremock_external_base_url_secret_leak";
-        }
         return "raw_secret";
     }
 
@@ -2266,8 +2335,18 @@ public class ContractBaselineService {
                 .map(value -> root.resolve(suiteTestRef(value)).normalize())
                 .toList();
         Map<Path, Map<String, Object>> testCases = readAll(testPaths, findings);
-        boolean v03 = manifestV03 || testCases.values().stream()
+        boolean anyV03Test = testCases.values().stream()
                 .anyMatch(testCase -> "v0.3".equals(stringValue(testCase.get("dsl_version"))));
+        boolean anyNonV03Test = testCases.values().stream()
+                .anyMatch(testCase -> !"v0.3".equals(stringValue(testCase.get("dsl_version"))));
+        if ((manifestV03 && anyNonV03Test) || (!manifestV03 && anyV03Test)) {
+            findings.add(finding(
+                    suiteManifest,
+                    "manifest_version",
+                    "mixed_dsl_versions",
+                    "A leaf suite must use one DSL version: align manifest_version and every referenced test case dsl_version."));
+        }
+        boolean v03 = manifestV03 || anyV03Test;
         Map<Path, Map<String, Object>> frameworkContractsByPath =
                 readDirectory(frameworkProviderContractsDirectory(root), findings);
         Map<Path, Map<String, Object>> suiteLocalContractsByPath =
@@ -2290,7 +2369,9 @@ public class ContractBaselineService {
 
         Map<String, Map<String, Object>> contracts = new LinkedHashMap<>();
         Map<String, Map<String, Object>> contractsById = new LinkedHashMap<>();
-        for (Map<String, Object> contract : contractsByPath.values()) {
+        Map<String, Path> providerContractPathsById = new LinkedHashMap<>();
+        for (Map.Entry<Path, Map<String, Object>> entry : contractsByPath.entrySet()) {
+            Map<String, Object> contract = entry.getValue();
             String providerType = stringValue(contract.get("provider_type"));
             String contractVersion = contractVersion(contract);
             if (!providerType.isBlank()) {
@@ -2306,6 +2387,20 @@ public class ContractBaselineService {
             }
             String providerContract = stringValue(contract.get("provider_contract"));
             if (!providerContract.isBlank()) {
+                Path existingPath = providerContractPathsById.putIfAbsent(providerContract, entry.getKey());
+                if (existingPath != null) {
+                    findings.add(new ContractFinding(
+                            entry.getKey().toString(),
+                            "provider_contract",
+                            "duplicate_provider_contract",
+                            "",
+                            providerType,
+                            "",
+                            "",
+                            "Provider Contract id `" + providerContract + "` is already declared by `"
+                                    + existingPath + "`. Use a unique v0.3 provider_contract id."));
+                    continue;
+                }
                 contractsById.put(providerContract, contract);
             }
         }
@@ -3550,15 +3645,6 @@ public class ContractBaselineService {
             if ("unresolved_generated_ref".equals(reason)) {
                 return "CONFIGURATION_UNRESOLVED_GENERATED_REF";
             }
-            if ("wiremock_external_base_url_missing".equals(reason)) {
-                return "WIREMOCK_EXTERNAL_BASE_URL_MISSING";
-            }
-            if ("wiremock_external_base_url_invalid".equals(reason)) {
-                return "WIREMOCK_EXTERNAL_BASE_URL_INVALID";
-            }
-            if ("wiremock_external_base_url_secret_leak".equals(reason)) {
-                return "WIREMOCK_EXTERNAL_BASE_URL_SECRET_LEAK";
-            }
             String normalized = reason == null || reason.isBlank()
                     ? "UNKNOWN"
                     : reason.toUpperCase().replaceAll("[^A-Z0-9]+", "_").replaceAll("(^_|_$)", "");
@@ -3567,7 +3653,7 @@ public class ContractBaselineService {
 
         private static String categoryFor(String reason) {
             return switch (reason == null ? "" : reason) {
-                case "raw_secret", "wiremock_external_base_url_secret_leak" -> "SECRET_GUARDRAIL_ERROR";
+                case "raw_secret" -> "SECRET_GUARDRAIL_ERROR";
                 case "missing_evidence_index", "missing_evidence_file", "unknown_evidence_ref",
                         "missing_required_evidence", "missing_failure_evidence",
                         "missing_polling_last_observed_evidence", "invalid_evidence_path",
@@ -3583,9 +3669,7 @@ public class ContractBaselineService {
                         "unsupported_local_ref", "missing_jdbc_target", "missing_nats_target",
                         "profile_mismatch", "conflicting_profile_selection",
                         "invalid_generated_ref", "unresolved_generated_ref",
-                        "invalid_binding_key_uri",
-                        "wiremock_external_base_url_missing",
-                        "wiremock_external_base_url_invalid" -> "CONFIGURATION_ERROR";
+                        "invalid_binding_key_uri" -> "CONFIGURATION_ERROR";
                 case "unknown_provider_type", "unsupported_operation", "unsupported_bind_as",
                         "unsupported_input",
                         "unsupported_dialect", "missing_output_ref", "missing_supported_dialect",
@@ -3595,7 +3679,7 @@ public class ContractBaselineService {
                         "unsupported_provider_instance_field",
                         "unsupported_provider_instance_binding_key", "unknown_binding_key",
                         "invalid_binding_key_value_kind", "unknown_bindable_output",
-                        "invalid_provider_contract_version" -> "CONTRACT_ERROR";
+                        "invalid_provider_contract_version", "duplicate_provider_contract" -> "CONTRACT_ERROR";
                 case "invalid_result_json", "missing_result_json", "invalid_yaml",
                         "missing_required_file", "missing_required_directory",
                         "missing_required_field", "prohibited_legacy_field",

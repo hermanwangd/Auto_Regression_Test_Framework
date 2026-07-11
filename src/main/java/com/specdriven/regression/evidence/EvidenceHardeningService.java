@@ -232,6 +232,7 @@ public class EvidenceHardeningService {
         }
         for (EvidenceEntry entry : entries) {
             knownRefs.add(entry.evidenceId());
+            knownRefs.add("evidence://" + entry.evidenceId());
             knownRefs.add(entry.filePath());
             Path evidencePath = resolveEvidencePath(indexPath, entry.filePath());
             knownRefs.add(evidencePath.toString());
@@ -466,8 +467,14 @@ public class EvidenceHardeningService {
                         .filter(testResult -> "passed".equals(stringValue(testResult.get("status"))))
                         .count();
         int failCount = testResults.isEmpty()
-                ? (result.isEmpty() || "passed".equals(stringValue(result.get("status"))) ? 0 : 1)
-                : testCount - passCount;
+                ? ("failed".equals(stringValue(result.get("status"))) ? 1 : 0)
+                : countStatus(testResults, "failed");
+        int blockedCount = testResults.isEmpty()
+                ? ("blocked".equals(stringValue(result.get("status"))) ? 1 : 0)
+                : countStatus(testResults, "blocked");
+        int skippedCount = testResults.isEmpty()
+                ? ("skipped".equals(stringValue(result.get("status"))) ? 1 : 0)
+                : countStatus(testResults, "skipped");
         return new EvidenceValidationResult(
                 findings.isEmpty(),
                 stringValue(result.get("suite_id")),
@@ -476,6 +483,8 @@ public class EvidenceHardeningService {
                 testCount,
                 passCount,
                 failCount,
+                blockedCount,
+                skippedCount,
                 indexPath == null ? resultJson.getParent() : indexPath.getParent(),
                 missingEvidenceCount,
                 failedEvidenceSummary.size(),
@@ -491,6 +500,8 @@ public class EvidenceHardeningService {
                 "",
                 "",
                 "",
+                0,
+                0,
                 0,
                 0,
                 0,
@@ -684,6 +695,12 @@ public class EvidenceHardeningService {
         return value == null ? "" : String.valueOf(value);
     }
 
+    private int countStatus(List<Map<String, Object>> testResults, String status) {
+        return (int) testResults.stream()
+                .filter(testResult -> status.equals(stringValue(testResult.get("status"))))
+                .count();
+    }
+
     private boolean boolValue(Object value) {
         if (value instanceof Boolean bool) {
             return bool;
@@ -699,6 +716,8 @@ public class EvidenceHardeningService {
             int testCount,
             int passCount,
             int failCount,
+            int blockedCount,
+            int skippedCount,
             Path evidenceDir,
             int missingEvidenceCount,
             int failedEvidenceCount,

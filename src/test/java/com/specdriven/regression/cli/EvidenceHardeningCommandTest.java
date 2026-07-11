@@ -3,6 +3,7 @@ package com.specdriven.regression.cli;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.specdriven.regression.discovery.ReleasePackageService;
+import com.specdriven.regression.evidence.EvidenceHardeningService;
 import com.specdriven.regression.productrepo.ProductRepoService;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -438,6 +439,46 @@ class EvidenceHardeningCommandTest {
                 .contains("reason: invalid_status")
                 .contains("field_path: test_results[0].status")
                 .contains("owner_action:");
+    }
+
+    @Test
+    void evidenceResultCountsEachTestStatusExplicitly() throws Exception {
+        Path resultJson = mutableEvidenceHardening("explicit_status_counts");
+        String result = addMultiTestResultFields(read(resultJson), 4, """
+                    {
+                      "test_case_id": "TC-PASS",
+                      "status": "passed",
+                      "profile": "local_evidence"
+                    },
+                    {
+                      "test_case_id": "TC-FAIL",
+                      "status": "failed",
+                      "profile": "local_evidence"
+                    },
+                    {
+                      "test_case_id": "TC-BLOCKED",
+                      "status": "blocked",
+                      "profile": "local_evidence"
+                    },
+                    {
+                      "test_case_id": "TC-SKIPPED",
+                      "status": "skipped",
+                      "profile": "local_evidence"
+                    }
+                """);
+        result = result.replaceFirst("\\{\\n", "{\n  \"result_contract_version\": \"v0.3\",\n"
+                + "  \"completion_status\": \"complete\",\n"
+                + "  \"termination_reason\": null,\n"
+                + "  \"suite_summary_ref\": \"suite_summary.json\",\n");
+        Files.writeString(resultJson, result);
+
+        var validation = new EvidenceHardeningService().validateResult(resultJson);
+
+        assertThat(validation.testCount()).isEqualTo(4);
+        assertThat(validation.passCount()).isEqualTo(1);
+        assertThat(validation.failCount()).isEqualTo(1);
+        assertThat(validation.blockedCount()).isEqualTo(1);
+        assertThat(validation.skippedCount()).isEqualTo(1);
     }
 
     @Test

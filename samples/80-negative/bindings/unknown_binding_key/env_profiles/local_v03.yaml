@@ -1,0 +1,7 @@
+profile_id: local_v03
+execution_mode: local
+targets:
+  common_verifier:
+    runtime_mode: framework
+    bindings:
+      unexpected_key: value

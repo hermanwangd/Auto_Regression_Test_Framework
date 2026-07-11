@@ -1,0 +1,33 @@
+dsl_version: v0.3
+test_case_id: NATS-V03-TC-001
+title: NATS publish and payload observation through v0.3 target contract
+
+setup: []
+
+execute:
+  - id: publish_order_event
+    target: event_bus
+    op: nats_publish
+    with:
+      payload_ref: artifact://fixtures/order_event.json
+
+verify:
+  - id: event_was_published
+    type: provider_check
+    target: event_bus
+    op: event_published
+    with:
+      consume_from: earliest
+      timeout: PT2S
+      poll_interval: PT0.01S
+  - id: event_payload_matches
+    type: provider_check
+    target: event_bus
+    op: event_payload_match
+    with:
+      expected_ref: artifact://expected_results/order_event.json
+      consume_from: earliest
+      timeout: PT2S
+      poll_interval: PT0.01S
+
+cleanup: []

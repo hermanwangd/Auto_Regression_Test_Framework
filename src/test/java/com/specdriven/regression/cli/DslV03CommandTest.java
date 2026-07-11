@@ -17,7 +17,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 class DslV03CommandTest {
 
-    private static final Path V03_SUITE = Path.of("samples/v0_3_dsl/golden/suite_manifest.yaml");
+    private static final Path V03_SUITE = Path.of("samples/00-getting-started/golden_e2e/suite_manifest.yaml");
+    private static final Path V03_HTTP_MOCK_SUITE =
+            Path.of("samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml");
 
     @TempDir
     Path tempDir;
@@ -29,14 +31,22 @@ class DslV03CommandTest {
                 "schemas/provider_contract.v0.3.schema.yaml",
                 "schemas/env_profile.v0.3.schema.yaml",
                 "schemas/suite_manifest.v0.3.schema.yaml",
-                "samples/v0_3_dsl/golden/suite_manifest.yaml",
+                "samples/00-getting-started/golden_e2e/suite_manifest.yaml",
                 "docs/02-architecture/contracts/provider-contracts/sample_fake_provider_v0_3.yaml",
-                "samples/v0_3_dsl/golden/env_profiles/local_v03.yaml",
-                "samples/v0_3_dsl/golden/test_cases/golden_success.yaml",
-                "samples/v0_3_dsl/golden/fixtures/input.json",
-                "samples/v0_3_dsl/golden/fixtures/setup_fixture.yaml",
-                "samples/v0_3_dsl/golden/fixtures/cleanup_fixture.yaml",
-                "samples/v0_3_dsl/golden/expected_results/expected_output.json");
+                "docs/02-architecture/contracts/provider-contracts/http_mock_v0_3.yaml",
+                "docs/02-architecture/contracts/provider-contracts/rest_client_v0_3.yaml",
+                "samples/00-getting-started/golden_e2e/env_profiles/local_v03.yaml",
+                "samples/00-getting-started/golden_e2e/test_cases/golden_success.yaml",
+                "samples/00-getting-started/golden_e2e/fixtures/input.json",
+                "samples/00-getting-started/golden_e2e/fixtures/setup_fixture.yaml",
+                "samples/00-getting-started/golden_e2e/fixtures/cleanup_fixture.yaml",
+                "samples/00-getting-started/golden_e2e/expected_results/expected_output.json",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/env_profiles/local_v03.yaml",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/test_cases/payment_success.yaml",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/fixtures/wiremock/payment_success_stub.json",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/fixtures/payment_request.json",
+                "samples/20-provider-capability-p0/http/rest_client_with_wiremock/expected_results/payment_response.json");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -44,6 +54,13 @@ class DslV03CommandTest {
         assertThat(Files.readString(Path.of("docs/02-architecture/contracts/provider-contracts/sample_fake_provider_v0_3.yaml")))
                 .contains("contract_version: v0.3")
                 .contains("provider_contract: sample_fake_provider.v0.3");
+        assertThat(Files.readString(Path.of("docs/02-architecture/contracts/provider-contracts/http_mock_v0_3.yaml")))
+                .contains("contract_version: v0.3")
+                .contains("provider_contract: http_mock.v0.3")
+                .contains("runtime_implementation: wiremock");
+        assertThat(Files.readString(Path.of("docs/02-architecture/contracts/provider-contracts/rest_client_v0_3.yaml")))
+                .contains("contract_version: v0.3")
+                .contains("provider_contract: rest_client.v0.3");
     }
 
     @Test
@@ -77,6 +94,48 @@ class DslV03CommandTest {
                 .contains("provider_type: sample_fake_provider")
                 .contains("profile: local_v03")
                 .contains("runtime_mode: stub")
+                .contains("phase: execute")
+                .contains("operation: execute_sample")
+                .doesNotContain("provider_id:");
+    }
+
+    @Test
+    void validateV03HttpMockRestClientSampleResolvesProtocolTargetsWithoutProviderInstances() {
+        CommandResult result = execute("validate", "--suite", V03_HTTP_MOCK_SUITE.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).as(result.stderr() + result.stdout()).isZero();
+        assertThat(result.stdout())
+                .contains("validation_status: passed")
+                .contains("suite_id: HTTP-MOCK-REST-CLIENT-v0.3")
+                .contains("targets_used:")
+                .contains("payment_mock")
+                .contains("payment_api")
+                .contains("provider_contracts_used:")
+                .contains("http_mock.v0.3")
+                .contains("rest_client.v0.3")
+                .contains("provider_types_used:")
+                .contains("http_mock")
+                .contains("rest_client")
+                .doesNotContain("payment-mock")
+                .doesNotContain("payment-api-client");
+    }
+
+    @Test
+    void dryRunV03HttpMockRestClientSampleEmitsProtocolTargetPlan() {
+        CommandResult result = execute(
+                "run", "--suite", V03_HTTP_MOCK_SUITE.toString(), "--profile", "local_v03", "--dry-run");
+
+        assertThat(result.exit()).as(result.stderr() + result.stdout()).isZero();
+        assertThat(result.stdout())
+                .contains("provider_runtime_invoked: false")
+                .contains("run_status: dry_run_ready")
+                .contains("suite_id: HTTP-MOCK-REST-CLIENT-v0.3")
+                .contains("target: payment_mock")
+                .contains("provider_contract: http_mock.v0.3")
+                .contains("provider_type: http_mock")
+                .contains("target: payment_api")
+                .contains("provider_contract: rest_client.v0.3")
+                .contains("provider_type: rest_client")
                 .doesNotContain("provider_id:");
     }
 
@@ -199,6 +258,50 @@ class DslV03CommandTest {
     }
 
     @Test
+    void validateV03LeafSuiteRejectsManifestAndTestCaseVersionMismatch() throws Exception {
+        Path suite = mutableV03Golden();
+        Files.writeString(suite, Files.readString(suite).replace("manifest_version: v0.3", "manifest_version: v0.2"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("reason: mixed_dsl_versions")
+                .contains("field_path: manifest_version");
+    }
+
+    @Test
+    void validateV03SuiteRejectsGenericProviderCheckExpect() throws Exception {
+        Path suite = mutableV03Golden();
+        Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
+        String yaml = Files.readString(testCase).replace(
+                "  - id: status_is_ok\n    type: assertion",
+                "  - id: status_is_ok\n    type: provider_check\n    target: sample_runtime\n    op: execute_sample\n    with:\n      sample.input_ref: artifact://fixtures/input.json\n    expect:\n      - actual: status\n        operator: equals\n        expected: OK\n\n  - id: status_assertion\n    type: assertion");
+        Files.writeString(testCase, yaml);
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("field_path: verify.status_is_ok.expect")
+                .contains("reason: prohibited_provider_check_expect");
+    }
+
+    @Test
+    void validateV03SuiteRejectsLegacyDotGeneratedReference() throws Exception {
+        Path suite = mutableV03Golden();
+        Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("artifact://fixtures/input.json", "generated://sample_runtime.actual_json"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout()).contains("reason: invalid_generated_ref");
+    }
+
+    @Test
     void validateV03SuiteRejectsDuplicateStepIds() throws Exception {
         Path suite = mutableV03Golden();
         Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
@@ -219,7 +322,7 @@ class DslV03CommandTest {
     void validateV03SuiteRejectsSyntheticProviderContractAlias() throws Exception {
         Path suite = mutableV03Golden();
         String manifest = Files.readString(suite)
-                .replace("provider_contract: sample_fake_provider.v0.3", "provider_contract: jdbc.v0.3");
+                .replace("provider_contract: sample_fake_provider.v0.3", "provider_contract: sample_fake_provider");
         Files.writeString(suite, manifest);
 
         CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
@@ -229,6 +332,33 @@ class DslV03CommandTest {
                 .contains("validation_status: failed")
                 .contains("field_path: targets.sample_runtime.provider_contract")
                 .contains("reason: missing_provider_contract");
+    }
+
+    @Test
+    void validateV03SuiteRejectsDuplicateProviderContractIdsBeforeRuntime() throws Exception {
+        Path suite = mutableV03Golden();
+        Path root = suite.getParent();
+        Files.createDirectories(root.resolve("custom-provider-contracts"));
+        Files.writeString(root.resolve("custom-provider-contracts/duplicate_sample_fake_provider.yaml"),
+                Files.readString(Path.of("docs/02-architecture/contracts/provider-contracts/sample_fake_provider_v0_3.yaml"))
+                        .replace("purpose: Framework-owned deterministic fake provider for DSL v0.3 golden lifecycle verification only.",
+                                "purpose: Duplicate test contract that must be rejected before runtime."));
+        String manifest = Files.readString(suite)
+                .replace("default_profile: local_v03",
+                        "default_profile: local_v03\n"
+                                + "\n"
+                                + "provider_contract_resolution:\n"
+                                + "  mode: suite_override\n"
+                                + "  custom_provider_contracts: custom-provider-contracts");
+        Files.writeString(suite, manifest);
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("reason: duplicate_provider_contract")
+                .contains("sample_fake_provider.v0.3");
     }
 
     @Test
@@ -329,7 +459,7 @@ class DslV03CommandTest {
     }
 
     private Path mutableV03Golden() throws IOException {
-        Path source = Path.of("samples/v0_3_dsl/golden");
+        Path source = Path.of("samples/00-getting-started/golden_e2e");
         Path target = Files.createTempDirectory(tempDir, "golden_v03_");
         copyDirectory(source, target);
         return target.resolve("suite_manifest.yaml");

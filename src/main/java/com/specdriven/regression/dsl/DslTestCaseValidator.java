@@ -103,7 +103,6 @@ public class DslTestCaseValidator {
             "mq_message_exists",
             "mq_payload_match",
             "start_mock",
-            "connect_mock",
             "verify_requests",
             "start_soap_mock",
             "connect_soap_mock",

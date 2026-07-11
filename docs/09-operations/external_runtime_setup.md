@@ -8,7 +8,7 @@ external systems for these samples.
 
 - Dependency: reachable Oracle database and approved Oracle JDBC driver.
 - Required env var: `JDBC_CONNECTION`.
-- Validate: `java -jar ../spec-driven-auto-regression-{{VERSION}}.jar validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml --profile external_jdbc_oracle_env_secret_ref`.
+- Validate: `java -jar ../spec-driven-auto-regression-{{VERSION}}.jar validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile external_oracle`.
 - Run: add `--driver-path ./drivers/oracle/ojdbc11.jar`.
 - Evidence: JDBC query, seed, cleanup, result JSON, and evidence index.
 - Common failures: `JDBC_DRIVER_NOT_FOUND`, `JDBC_CONNECTION_FAILED`.
@@ -17,7 +17,7 @@ external systems for these samples.
 
 - Dependency: reachable DB2 database and approved DB2 JDBC driver.
 - Required env var: `JDBC_CONNECTION`.
-- Validate: `java -jar ../spec-driven-auto-regression-{{VERSION}}.jar validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml --profile external_jdbc_db2_env_secret_ref`.
+- Validate: `java -jar ../spec-driven-auto-regression-{{VERSION}}.jar validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile external_db2`.
 - Run: add `--driver-path ./drivers/db2/jcc.jar`.
 - Evidence: JDBC query, seed, cleanup, result JSON, and evidence index.
 - Common failures: `JDBC_DRIVER_NOT_FOUND`, `JDBC_CONNECTION_FAILED`.
@@ -26,7 +26,7 @@ external systems for these samples.
 
 - Dependency: reachable Kafka bootstrap servers.
 - Required env var: `KAFKA_BOOTSTRAP_SERVERS`.
-- Validate: `java -jar ../spec-driven-auto-regression-{{VERSION}}.jar validate --suite samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml --profile ci_kafka_external`.
+- Validate: `java -jar ../spec-driven-auto-regression-{{VERSION}}.jar validate --suite samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml --profile external_kafka`.
 - Run: set broker env vars before `run`.
 - Evidence: publish/consume metadata and result JSON.
 - Common failures: `KAFKA_CONNECTION_FAILED`, `MESSAGING_TIMEOUT`.
@@ -36,7 +36,7 @@ external systems for these samples.
 - Dependency: reachable IBM MQ queue manager and channel.
 - Required env vars: project-specific host, port, queue manager, channel, queue,
   and credentials through Env_Profile secret refs.
-- Validate: `java -jar ../spec-driven-auto-regression-{{VERSION}}.jar validate --suite samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml --profile ci_ibm_mq_external`.
+- Validate: `java -jar ../spec-driven-auto-regression-{{VERSION}}.jar validate --suite samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml --profile external_ibm_mq`.
 - Run: set MQ env vars before `run`.
 - Evidence: put/get metadata and result JSON.
 - Common failures: `IBM_MQ_CONNECTION_FAILED`, `MESSAGING_TIMEOUT`.

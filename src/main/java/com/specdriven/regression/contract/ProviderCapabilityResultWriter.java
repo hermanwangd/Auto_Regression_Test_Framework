@@ -137,6 +137,7 @@ final class ProviderCapabilityResultWriter {
         return containsEvidenceSegment(normalized, "provider-evidence/")
                 || containsEvidenceSegment(normalized, "query-evidence/")
                 || containsEvidenceSegment(normalized, "event-evidence/")
+                || containsEvidenceSegment(normalized, "polling/")
                 || containsEvidenceSegment(normalized, "fixture/")
                 || containsEvidenceSegment(normalized, "actual/")
                 || hasProviderEvidenceIdPrefix(normalized);
@@ -158,6 +159,7 @@ final class ProviderCapabilityResultWriter {
                         "nats-event",
                         "kafka-event",
                         "ibm-mq-event",
+                        "polling-observation",
                         "http-request-response",
                         "grpc-request-response")
                 .stream()

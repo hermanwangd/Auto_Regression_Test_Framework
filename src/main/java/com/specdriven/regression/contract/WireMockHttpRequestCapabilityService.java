@@ -1,5 +1,7 @@
 package com.specdriven.regression.contract;
 
+import com.specdriven.regression.summary.SuiteExecutionContext;
+
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.provider.http.RestClientProviderRuntime;
@@ -50,6 +52,11 @@ public class WireMockHttpRequestCapabilityService {
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
     public MixedRunResult run(Path suiteManifest, String requestedProfile, Path outputBase) {
+        return run(suiteManifest, requestedProfile, SuiteExecutionContext.standalone(requestedProfile, outputBase, "WIREMOCK-HTTP"));
+    }
+
+    public MixedRunResult run(Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
+        requireMatchingProfile(requestedProfile, executionContext);
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {
             return MixedRunResult.blocked(validation.suiteId(), requestedProfile, validation.findings());
@@ -81,7 +88,7 @@ public class WireMockHttpRequestCapabilityService {
             return MixedRunResult.blocked(validation.suiteId(), requestedProfile, profileFindings);
         }
 
-        List<RuntimeSelection> selections = selectRuntimes(suiteManifest, requestedProfile, outputBase);
+        List<RuntimeSelection> selections = selectRuntimes(suiteManifest, requestedProfile, executionContext);
         if (selections.isEmpty()) {
             return MixedRunResult.blocked(validation.suiteId(), requestedProfile, List.of(new ContractFinding(
                     suiteManifest.toString(),
@@ -237,13 +244,10 @@ public class WireMockHttpRequestCapabilityService {
         Map<String, Object> restBindingValues = new LinkedHashMap<>(selection.restBindingValues());
         ProviderExecutionContext wireContext = context(selection, selection.wireBindingValues(), selection.wireProviderId(),
                 WIREMOCK, selection.wireRuntimeMode(), selection.wireContract(), selection.wireInstance());
-        boolean externalWireMock = hasExternalBaseUrl(selection);
-        String wireOperationName = externalWireMock ? "connect_mock" : "load_stubs";
+        String wireOperationName = "load_stubs";
 
         try {
-            SelectedOperation setup = externalWireMock
-                    ? connectOperation(selection)
-                    : operation(selection.testCase(), "setup", selection.wireTarget(), "load_stubs");
+            SelectedOperation setup = operation(selection.testCase(), "setup", selection.wireTarget(), "load_stubs");
             wireOperationName = setup.request().operation();
             ProviderRuntimeResolution setupResolution = resolver.resolve(wireContext, setup.request());
             if (!setupResolution.valid()) {
@@ -383,18 +387,16 @@ public class WireMockHttpRequestCapabilityService {
                 .toList());
     }
 
-    private List<RuntimeSelection> selectRuntimes(Path suiteManifest, String requestedProfile, Path outputBase) {
+    private List<RuntimeSelection> selectRuntimes(
+            Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
         Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
         Map<String, Object> suite = readMap(suiteManifest);
         Map<String, Map<String, Object>> instancesById =
                 readDirectoryByField(suiteRoot.resolve("provider_instances"), "provider_id");
         Map<String, Map<String, Object>> contractsByType =
                 readDirectoryByField(frameworkProviderContractsDirectory(suiteRoot), "provider_type");
-        RunIds runIds = newRunIds();
-        Path suiteRunDir = outputBase
-                .resolve(safe(stringValue(suite.get("suite_id"))))
-                .resolve(runIds.batchId())
-                .resolve(runIds.runId());
+        RunIds runIds = new RunIds(executionContext.parentBatchId(), executionContext.newRunId("WIREMOCK-REST"));
+        Path suiteRunDir = executionContext.childRunRoot(stringValue(suite.get("suite_id")), runIds.runId());
         List<RuntimeSelection> selections = new ArrayList<>();
         List<Object> testRefs = listValue(suite.get("tests"));
         boolean multiTestSuite = testRefs.size() > 1;
@@ -451,6 +453,12 @@ public class WireMockHttpRequestCapabilityService {
         return List.copyOf(selections);
     }
 
+    private void requireMatchingProfile(String profile, SuiteExecutionContext context) {
+        if (!context.matchesRequestedProfile(profile)) {
+            throw new IllegalArgumentException("Execution context profile does not match requested profile: " + profile);
+        }
+    }
+
     private List<ContractFinding> requestedProfileFindings(Path suiteManifest, String requestedProfile) {
         Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
         Map<String, Object> suite = readMap(suiteManifest);
@@ -477,23 +485,6 @@ public class WireMockHttpRequestCapabilityService {
             }
         }
         return new SelectedOperation(operationName, new ProviderOperationRequest(operationName, List.of(), Map.of()));
-    }
-
-    private SelectedOperation connectOperation(RuntimeSelection selection) {
-        return new SelectedOperation(
-                "connect_wiremock",
-                new ProviderOperationRequest(
-                        "connect_mock",
-                        List.of(Map.of(
-                                "name", "mock.base_url",
-                                "bind_as", "mock.base_url",
-                                "ref", stringValue(selection.wireBindingValues().get("base_url")))),
-                        Map.of("base_url", "base_url")));
-    }
-
-    private boolean hasExternalBaseUrl(RuntimeSelection selection) {
-        String baseUrl = stringValue(selection.wireBindingValues().get("base_url"));
-        return !baseUrl.isBlank() && !baseUrl.startsWith("generated://");
     }
 
     private List<Map<String, Object>> resolvedOperationInputs(Map<String, Object> testCase, Map<String, Object> operation) {

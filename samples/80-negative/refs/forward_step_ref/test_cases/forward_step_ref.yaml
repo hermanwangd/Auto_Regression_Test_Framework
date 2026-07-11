@@ -1,0 +1,12 @@
+dsl_version: v0.3
+test_case_id: NEG-FORWARD-STEP-REF-TC-001
+setup: []
+execute: []
+verify:
+  - id: forward_ref
+    type: assertion
+    assert:
+      actual: step://future_step/value
+      operator: equals
+      expected: ok
+cleanup: []

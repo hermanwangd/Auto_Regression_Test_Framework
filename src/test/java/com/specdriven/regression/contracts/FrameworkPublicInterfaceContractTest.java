@@ -44,7 +44,7 @@ class FrameworkPublicInterfaceContractTest {
                 .contains("`--tag <tag>`")
                 .contains("`--format text|yaml|json`")
                 .contains("`regress validate-evidence`")
-                .contains("`regress report --format json` is a v0.2.7 public report contract")
+                .contains("`regress report --format json` is a v0.3 public report contract")
                 .contains("operation-level `inputs` maps")
                 .contains("`data.<name>.ref`")
                 .contains("`generated-framework/suite_manifest.yaml`")
@@ -68,20 +68,22 @@ class FrameworkPublicInterfaceContractTest {
     }
 
     @Test
-    @DisplayName("FWK-013 | user docs keep v0.2.7 runtime release interface suite-mode only")
+    @DisplayName("FWK-013 | user docs keep v0.3 runtime release interface suite-mode only")
     void FWK_013_userDocsKeepRuntimeReleaseInterfaceSuiteModeOnly() throws Exception {
         String userGuide = Files.readString(USER_GUIDE);
         String testPlan = Files.readString(TEST_PLAN);
 
         assertThat(userGuide)
-                .contains("The v0.2.7 runtime public interface is suite-mode")
-                .contains("Product/RP tooling must translate owner-authored artifacts into suite-mode artifacts before invoking the framework runtime")
-                .contains("Direct Product/RP runtime orchestration is not part of the v0.2.7 framework public interface")
-                .contains("Product/RP-specific report forms are outside the v0.2.7 framework runtime public interface");
+                .contains("The runtime public interface is suite-mode")
+                .contains("Product/RP tooling must translate owner-authored artifacts into suite-mode")
+                .contains("artifacts before invoking the framework runtime")
+                .contains("Direct Product/RP runtime")
+                .contains("orchestration is not part of the framework public interface")
+                .contains("Product/RP-specific report forms are outside the v0.3 framework runtime public interface");
         assertThat(testPlan)
                 .contains("run --suite <suite_manifest>")
                 .contains("report --result <generated_result_json>")
-                .contains("Product/RP runtime orchestration is outside the v0.2.7 framework public interface")
+                .contains("Product/RP runtime orchestration is outside the v0.3 framework public interface")
                 .doesNotContain("report --batch-id")
                 .doesNotContain("LEGACY_RP_MODE_DEPRECATED")
                 .doesNotContain("requested `--env` Env_Profile")
@@ -247,16 +249,43 @@ class FrameworkPublicInterfaceContractTest {
     }
 
     @Test
-    @DisplayName("FWK-013 | WireMock external base URL failure codes are part of the provider contract")
-    void FWK_013_wireMockExternalBaseUrlFailureCodesAreContracted() throws Exception {
-        Map<?, ?> contract = map(loadYaml(CONTRACT_ROOT.resolve("provider-contracts/wiremock_http_mock.yaml")));
-        List<String> allowedCodes = strings(map(contract.get("failure_mapping")).get("allowed_codes"));
+    @DisplayName("FWK-013 | WireMock-backed mock providers distinguish protocol contract from runtime implementation")
+    void FWK_013_wireMockBackedMockProvidersDistinguishProtocolFromImplementation() throws Exception {
+        Map<?, ?> registry = map(loadYaml(CONTRACT_ROOT.resolve("provider_capability_registry.v0.2.yaml")));
+        Map<?, ?> providerTypes = map(registry.get("provider_types"));
 
-        assertThat(allowedCodes)
-                .contains(
-                        "WIREMOCK_EXTERNAL_BASE_URL_MISSING",
-                        "WIREMOCK_EXTERNAL_BASE_URL_INVALID",
-                        "WIREMOCK_EXTERNAL_BASE_URL_SECRET_LEAK");
+        assertWireMockBackedProvider(providerTypes, "wiremock_http_mock", "http");
+        assertWireMockBackedProvider(providerTypes, "soap_mock", "soap");
+        assertWireMockBackedProvider(providerTypes, "grpc_mock", "grpc");
+
+        Map<?, ?> httpEntry = map(providerTypes.get("wiremock_http_mock"));
+        assertThat(String.valueOf(httpEntry.get("canonical_provider_type"))).isEqualTo("http_mock");
+        assertThat(strings(httpEntry.get("compatibility_aliases"))).contains("wiremock_http_mock");
+    }
+
+    @Test
+    @DisplayName("FWK-013 | wiremock_http_mock external base_url is WireMock Admin API, not generic REST")
+    void FWK_013_wireMockHttpMockExternalBaseUrlHasNarrowAdminApiBoundary() throws Exception {
+        Path contractPath = CONTRACT_ROOT.resolve("provider-contracts/wiremock_http_mock.yaml");
+        String contractText = Files.readString(contractPath);
+        String userGuide = Files.readString(USER_GUIDE);
+        String supportMatrix = Files.readString(Path.of("docs/09-operations/provider_support_matrix.md"));
+
+        assertThat(contractText)
+                .contains("WireMock-compatible")
+                .contains("WireMock Admin API")
+                .contains("Do not use for a generic external REST/SUT endpoint")
+                .contains("rest_client.base_url")
+                .contains("must not start or stop the WireMock process");
+        assertThat(userGuide)
+                .contains("`wiremock_http_mock.base_url` has one narrow meaning")
+                .contains("not a generic external REST endpoint binding")
+                .contains("`connect_mock` is the preferred operation name for external mode")
+                .contains("Generic project-provisioned HTTP endpoints")
+                .contains("must be modeled as `rest_client.base_url`");
+        assertThat(supportMatrix)
+                .contains("External `base_url` means an owner-provisioned WireMock-compatible Admin API endpoint")
+                .contains("not a generic REST/SUT endpoint");
     }
 
     @Test
@@ -273,6 +302,20 @@ class FrameworkPublicInterfaceContractTest {
                     .contains("tests[]")
                     .doesNotContain("suite_type");
         }
+    }
+
+    private void assertWireMockBackedProvider(Map<?, ?> providerTypes, String providerType, String protocol)
+            throws IOException {
+        Map<?, ?> registryEntry = map(providerTypes.get(providerType));
+        assertThat(registryEntry).as(providerType).isNotEmpty();
+        assertThat(String.valueOf(registryEntry.get("provider_role"))).isEqualTo("mock_server");
+        assertThat(String.valueOf(registryEntry.get("protocol"))).isEqualTo(protocol);
+        assertThat(String.valueOf(registryEntry.get("runtime_implementation"))).isEqualTo("wiremock");
+
+        Map<?, ?> contract = map(loadYaml(CONTRACT_ROOT.resolve(String.valueOf(registryEntry.get("contract_ref")))));
+        assertThat(String.valueOf(contract.get("provider_role"))).isEqualTo("mock_server");
+        assertThat(String.valueOf(contract.get("protocol"))).isEqualTo(protocol);
+        assertThat(String.valueOf(contract.get("runtime_implementation"))).isEqualTo("wiremock");
     }
 
     private List<String> yamlContracts() {

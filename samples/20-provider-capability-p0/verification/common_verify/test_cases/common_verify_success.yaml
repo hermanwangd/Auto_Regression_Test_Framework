@@ -1,0 +1,33 @@
+dsl_version: v0.3
+test_case_id: COMMON-VERIFY-V03-TC-001
+title: Common framework verifiers run without provider runtime
+
+setup: []
+execute: []
+
+verify:
+  - id: payload_matches
+    type: assertion
+    assert:
+      operator: json_match
+      expected_ref: artifact://expected_results/expected_payload.json
+      actual_ref: artifact://actual_samples/actual_payload.json
+      ignore_paths: [metadata.generated_at]
+      normalize: canonical_json
+      ignore_order: true
+  - id: payload_schema_matches
+    type: assertion
+    assert:
+      operator: schema_match
+      schema_ref: artifact://expected_results/expected_schema.json
+      actual_ref: artifact://actual_samples/actual_payload.json
+      normalize: canonical_json
+  - id: file_matches
+    type: assertion
+    assert:
+      operator: file_diff
+      expected_ref: artifact://expected_results/expected_file.txt
+      actual_ref: artifact://actual_samples/actual_file.txt
+      normalize: trim_lines
+
+cleanup: []

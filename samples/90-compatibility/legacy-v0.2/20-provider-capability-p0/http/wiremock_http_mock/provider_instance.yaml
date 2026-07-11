@@ -1,0 +1,23 @@
+provider_instance_version: v0.2
+provider_id: wiremock-payment-mock
+provider_type: wiremock_http_mock
+runtime_modes: [mock, external]
+defaults:
+  timeout_seconds: 60
+operations:
+  connect_mock:
+    outputs: [base_url, server_log]
+  start_mock:
+    outputs: [base_url, server_log]
+  load_stubs:
+    outputs: [loaded_stub_count, server_log, base_url]
+  verify_requests:
+    outputs: [request_journal, matched_count, server_log]
+evidence:
+  capture: [base_url, request_journal, server_log]
+failure_mapping:
+  provider_unavailable: PROVIDER_UNAVAILABLE
+  request_missing: ASSERTION_FAILED
+  body_mismatch: ASSERTION_FAILED
+labels:
+  evidence_classification: framework_provider_capability_only

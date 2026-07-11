@@ -78,7 +78,7 @@ targets:
   order_db:
     provider_contract: jdbc.v0.3
   payment_mock:
-    provider_contract: wiremock_http_mock.v0.3
+    provider_contract: http_mock.v0.3
   event_bus:
     provider_contract: nats.v0.3
 
@@ -99,6 +99,7 @@ Rules:
 - Test cases may reference only target names declared in the suite manifest.
 - Artifact roots are the only file root definitions used by test cases.
 - Suite manifests must not define provider runtime values, URLs, credentials, topics, DB strings, or environment-specific namespaces.
+- Mock-server Provider Contracts must use protocol capability names such as `http_mock`, `soap_mock`, and `grpc_mock`; runtime implementation such as WireMock belongs in Provider Contract metadata, not in the target name.
 
 ---
 
@@ -112,20 +113,23 @@ evidence_classification: external_runtime_evidence
 
 targets:
   payment_api:
-    runtime_mode: external
+    runtime_mode: native
     bindings:
       base_url: env://PAYMENT_API_BASE_URL
 
   order_db:
-    runtime_mode: external
+    runtime_mode: native
     bindings:
       jdbc_connection: env://JDBC_CONNECTION
 
   payment_mock:
-    runtime_mode: framework_managed
-    provisioning:
-      lifecycle_scope: suite
-    generated_outputs:
+    runtime_mode: mock
+    bindings:
+      port_strategy: dynamic
+
+  payment_mock_client:
+    runtime_mode: mock
+    bindings:
       base_url: generated://payment_mock/base_url
 ```
 
@@ -133,11 +137,9 @@ Env_Profile owns runtime policy:
 
 - `execution_mode`: `local`, `ci`, `sit`, or `preprod`.
 - `isolation`: isolation expectation for the run.
-- `runtime_mode`: target-level mode such as `external` or `framework_managed`.
-- `provisioning`: framework-managed dependency lifecycle policy.
-- `generated_outputs`: generated values exposed to other targets.
+- `runtime_mode`: target-level mode declared by the Provider Contract, such as `mock`, `native`, `stub`, `ephemeral`, or `framework`.
 - `evidence_classification`: how evidence may be interpreted.
-- `bindings`: actual profile-specific values and secret refs.
+- `bindings`: actual profile-specific values, secret refs, or approved `generated://<target>/<output>` refs.
 
 Raw secret values are prohibited. Use `env://<ENV_NAME>` for environment-sourced secrets and configuration.
 
@@ -212,13 +214,13 @@ Rules:
 contract_version: v0.3
 provider_contract: jdbc.v0.3
 provider_type: jdbc
-allowed_runtime_modes: [external, framework_managed]
+runtime_modes: [native, ephemeral]
 
-runtime_bindings:
-  external:
-    required: [jdbc_connection]
-  framework_managed:
-    required: []
+binding_keys:
+  connection:
+    required: true
+  dialect:
+    required: true
 
 operations:
   db_query:
@@ -338,7 +340,7 @@ selected_profile: local_sit
 resolved_targets:
   - target: order_db
     provider_contract: jdbc.v0.3
-    runtime_mode: external
+    runtime_mode: native
     bindings_status: resolved_masked
 execution_plan:
   - phase: execute
@@ -507,7 +509,7 @@ samples/v0_3_dsl/
 Required sample groups:
 
 - golden success suite
-- multi-test suite with suite-scoped framework-managed mock target
+- multi-test suite with suite-scoped mock target
 - unknown target
 - missing Provider Contract
 - missing Env_Profile binding

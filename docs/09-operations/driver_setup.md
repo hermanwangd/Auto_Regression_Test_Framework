@@ -16,8 +16,8 @@ files. `REGRESS_DRIVER_PATH` uses the platform path separator.
 
 ```bash
 JDBC_CONNECTION='<oracle-jdbc-url>' java -jar ../spec-driven-auto-regression-{{VERSION}}.jar run \
-  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_oracle.yaml \
-  --profile external_jdbc_oracle_env_secret_ref \
+  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
+  --profile external_oracle \
   --driver-path ./drivers/oracle/ojdbc11.jar
 ```
 
@@ -25,8 +25,8 @@ JDBC_CONNECTION='<oracle-jdbc-url>' java -jar ../spec-driven-auto-regression-{{V
 
 ```bash
 JDBC_CONNECTION='<db2-jdbc-url>' java -jar ../spec-driven-auto-regression-{{VERSION}}.jar run \
-  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_external_db2.yaml \
-  --profile external_jdbc_db2_env_secret_ref \
+  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
+  --profile external_db2 \
   --driver-path ./drivers/db2/jcc.jar
 ```
 

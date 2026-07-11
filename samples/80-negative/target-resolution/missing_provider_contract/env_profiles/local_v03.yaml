@@ -1,0 +1,6 @@
+profile_id: local_v03
+execution_mode: local
+targets:
+  missing_contract:
+    runtime_mode: framework
+    bindings: {}

@@ -62,7 +62,7 @@ targets:
   order_db:
     provider_contract: jdbc.v0.3
   payment_mock:
-    provider_contract: wiremock_http_mock.v0.3
+    provider_contract: http_mock.v0.3
 
 env_profiles:
   local_sit:
@@ -81,6 +81,7 @@ Rules:
 - Suite manifests must not contain URLs, topics, queue names, JDBC strings, namespaces, credentials, or secret values.
 - `artifact_roots` are the only file roots available to `artifact://` references.
 - Artifact roots must be relative to the suite manifest directory.
+- Mock-server targets must use protocol capability contracts such as `http_mock`, `soap_mock`, and `grpc_mock`. Runtime implementation such as WireMock belongs in Provider Contract metadata, not in test case DSL target names.
 
 ## 4. Env_Profile Contract
 
@@ -94,20 +95,23 @@ evidence_classification: external_runtime_evidence
 
 targets:
   payment_api:
-    runtime_mode: external
+    runtime_mode: native
     bindings:
       base_url: env://PAYMENT_API_BASE_URL
 
   order_db:
-    runtime_mode: external
+    runtime_mode: native
     bindings:
       jdbc_connection: env://JDBC_CONNECTION
 
   payment_mock:
-    runtime_mode: framework_managed
-    provisioning:
-      lifecycle_scope: suite
-    generated_outputs:
+    runtime_mode: mock
+    bindings:
+      port_strategy: dynamic
+
+  payment_mock_client:
+    runtime_mode: mock
+    bindings:
       base_url: generated://payment_mock/base_url
 ```
 
@@ -117,7 +121,7 @@ Rules:
 - `runtime_mode` must be allowed by the target's Provider Contract.
 - `bindings` keys must match required or optional Provider Contract binding keys.
 - Missing required binding keys block before provider runtime dispatch.
-- `generated_outputs` may expose framework-created values only when the Provider Contract declares the output as bindable.
+- `generated://<target>/<output>` bindings may consume framework-created values only when the producing Provider Contract declares that output as bindable.
 - Raw secrets are prohibited. Runtime values must use safe refs such as `env://NAME` or approved generated refs.
 
 ## 5. DSL Test Case Contract
@@ -153,7 +157,7 @@ verify:
       operator: equals
       expected: 201
 
-  - id: order_persisted
+  - id: load_order
     type: provider_check
     target: order_db
     op: db_query
@@ -161,13 +165,13 @@ verify:
       sql: artifact://queries/find_order.sql
       bind:
         order_id: artifact://expected_results/payment_expected.json#/order_id
-    expect:
-      - actual: row_count
-        operator: gte
-        expected: 1
-      - actual: rows[0].status
-        operator: equals
-        expected: PAID
+
+  - id: order_persisted
+    type: assertion
+    assert:
+      actual: step://load_order/row_count
+      operator: gte
+      expected: 1
 
 cleanup:
   - id: cleanup_order
@@ -183,7 +187,8 @@ Rules:
 - `setup`, `execute`, `verify`, and `cleanup` are ordered lists.
 - Step IDs must be unique in one test case and match `[a-z][a-z0-9_]*`.
 - Test cases directly reference suite target names; they must not define aliases with `uses`.
-- `op`, `with`, `expect`, and output refs are validated by the target Provider Contract.
+- `op`, `with`, and output refs are validated by the target Provider Contract.
+- `provider_check.expect` is prohibited. Provider-specific expectation input belongs in contract-declared `with`; use a following `type: assertion` step for framework-owned comparison.
 - `verify` supports `type: assertion` and `type: provider_check`.
 - Provider configuration, endpoints, topics, queues, DB credentials, and generated runtime values do not belong in test cases.
 
@@ -204,7 +209,7 @@ Provider Contracts are framework-owned. A v0.3 Provider Contract must define:
 - operations, with required and optional `with` inputs.
 - expectation paths and operators for provider checks.
 - output refs, output type, and output sensitivity.
-- bindable generated outputs when framework-managed targets expose values.
+- bindable generated outputs when mock or framework targets expose values.
 - evidence outputs and failure codes.
 
 Operation phase restrictions are optional. If a Provider Contract does not restrict an operation to specific phases, the operation is valid in any DSL phase after all input, safety, and runtime-mode rules pass.
@@ -217,7 +222,7 @@ Allowed refs:
 | --- | --- | --- |
 | `artifact://<root>/<path>[#<json_pointer>]` | DSL | Checked-in suite artifact under a declared root. |
 | `step://<step_id>/<output_path>` | DSL | Prior step output from the same test case. |
-| `generated://<target>/<output>` | Env_Profile | Framework-generated output from a framework-managed target. |
+| `generated://<target>/<output>` | Env_Profile | Framework-generated output from a mock or framework target. |
 | `env://<ENV_NAME>` | Env_Profile | Environment variable resolved at runtime and masked in outputs. |
 
 Validation rules:

@@ -1,6 +1,8 @@
 package com.specdriven.regression.contract;
 
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -38,23 +40,40 @@ public final class ResultContractValidator {
 
     public static List<ContractFinding> validate(Path resultJson, Map<String, Object> result) {
         List<ContractFinding> findings = new ArrayList<>();
+        String resultContractVersion = stringValue(result.get("result_contract_version"));
+        boolean v03Result = "v0.3".equals(resultContractVersion);
+        if (!resultContractVersion.isBlank() && !v03Result) {
+            findings.add(finding(resultJson, "result_contract_version", "unsupported_result_contract_version",
+                    stringValue(result.get("profile")),
+                    "Publish result_contract_version `v0.3`, or omit it only for a legacy v0.2 result."));
+        }
         boolean hasTestCount = result.containsKey("test_count");
         boolean hasTestResults = result.containsKey("test_results");
         List<Map<?, ?>> providerResults = listOfMaps(result.get("provider_results"));
-        boolean standardSuiteResult = hasTestCount
-                || hasTestResults
-                || !providerResults.isEmpty()
-                || result.containsKey("batch_id")
-                || result.containsKey("run_id");
+        boolean standardSuiteResult = v03Result || hasTestCount || hasTestResults || !providerResults.isEmpty();
         if (!standardSuiteResult) {
             return findings;
         }
         String profile = stringValue(result.get("profile"));
         for (String field : STANDARD_RESULT_REQUIRED_FIELDS) {
-            if (!result.containsKey(field) || isMissing(result.get(field))) {
+            boolean missing = !result.containsKey(field)
+                    || (!"failure".equals(field) && isMissing(result.get(field)));
+            if (missing) {
                 findings.add(finding(resultJson, field, "missing_required_field", profile,
                         "Add required standard result field `" + field + "`."));
             }
+        }
+        if (v03Result) {
+            for (String field : List.of("completion_status", "termination_reason", "suite_summary_ref")) {
+                boolean missing = !result.containsKey(field)
+                        || (!"termination_reason".equals(field) && isMissing(result.get(field)));
+                if (missing) {
+                    findings.add(finding(resultJson, field, "missing_required_field", profile,
+                            "Add required v0.3 result field `" + field + "`."));
+                }
+            }
+            findings.addAll(validateV03Completion(resultJson, result, profile));
+            findings.addAll(validateSuiteSummaryRef(resultJson, result, profile));
         }
         if (!hasTestResults) {
             findings.addAll(validateMultiProviderRootFields(resultJson, result, List.of(), providerResults, profile));
@@ -73,6 +92,9 @@ public final class ResultContractValidator {
                 findings.add(finding(resultJson, "test_results[" + index + "]", "invalid_test_results", profile,
                         "Publish each `test_results[]` entry as an object with test_case_id, status, and profile."));
             }
+        }
+        if (v03Result && isAggregationResult(result, rawEntries)) {
+            findings.addAll(validateAggregationTestResultIdentities(resultJson, rawEntries, profile));
         }
         if (hasTestCount) {
             Integer declaredTestCount = integerValue(result.get("test_count"));
@@ -98,14 +120,195 @@ public final class ResultContractValidator {
                 }
             }
             String status = stringValue(rawMap.get("status"));
-            if (!status.isBlank() && !List.of("passed", "failed", "blocked").contains(status)) {
+            List<String> allowedStatuses = v03Result
+                    ? List.of("passed", "failed", "blocked", "skipped")
+                    : List.of("passed", "failed", "blocked");
+            if (!status.isBlank() && !allowedStatuses.contains(status)) {
                 findings.add(finding(resultJson, "test_results[" + index + "].status", "invalid_status", profile,
-                        "Use per-test status `passed`, `failed`, or `blocked`."));
+                        v03Result
+                                ? "Use v0.3 per-test status `passed`, `failed`, `blocked`, or `skipped`."
+                                : "Use per-test status `passed`, `failed`, or `blocked`."));
             }
         }
         findings.addAll(validateMultiProviderRootFields(resultJson, result, rawEntries, providerResults, profile));
+        findings.addAll(validateV03ProviderResults(resultJson, result, providerResults, profile));
         findings.addAll(validateProviderEvidenceRefs(resultJson, result, profile));
         return List.copyOf(findings);
+    }
+
+    private static List<ContractFinding> validateV03Completion(
+            Path resultJson,
+            Map<String, Object> result,
+            String profile) {
+        List<ContractFinding> findings = new ArrayList<>();
+        String completionStatus = stringValue(result.get("completion_status"));
+        String status = stringValue(result.get("status"));
+        Object terminationReason = result.get("termination_reason");
+        if (!completionStatus.isBlank() && !List.of("complete", "partial").contains(completionStatus)) {
+            findings.add(finding(resultJson, "completion_status", "invalid_completion_status", profile,
+                    "Use v0.3 completion_status `complete` or `partial`."));
+            return findings;
+        }
+        if (!status.isBlank() && !List.of("passed", "failed", "blocked", "skipped").contains(status)) {
+            findings.add(finding(resultJson, "status", "invalid_status", profile,
+                    "Use v0.3 result status `passed`, `failed`, `blocked`, or `skipped`."));
+        }
+        if ("complete".equals(completionStatus) && terminationReason != null) {
+            findings.add(finding(resultJson, "termination_reason", "invalid_termination_reason", profile,
+                    "Set termination_reason to null when completion_status is `complete`."));
+        }
+        if ("partial".equals(completionStatus)) {
+            if (!"blocked".equals(status)) {
+                findings.add(finding(resultJson, "status", "invalid_completion_status_tuple", profile,
+                        "Set status to `blocked` when completion_status is `partial`."));
+            }
+            String reason = stringValue(terminationReason);
+            if (!List.of("timeout", "cancelled", "framework_error", "aggregation_error").contains(reason)) {
+                findings.add(finding(resultJson, "termination_reason", "invalid_termination_reason", profile,
+                        "For a partial result use termination_reason `timeout`, `cancelled`, `framework_error`, or `aggregation_error`."));
+            }
+        }
+        return findings;
+    }
+
+    private static List<ContractFinding> validateSuiteSummaryRef(
+            Path resultJson,
+            Map<String, Object> result,
+            String profile) {
+        String ref = stringValue(result.get("suite_summary_ref"));
+        if (ref.isBlank()) {
+            return List.of();
+        }
+        Path refPath = Path.of(ref);
+        if (refPath.isAbsolute()) {
+            return List.of(invalidSummaryRef(resultJson, profile,
+                    "Use a relative suite_summary_ref; absolute paths are not allowed."));
+        }
+        if (ref.startsWith("~")) {
+            return List.of(invalidSummaryRef(resultJson, profile,
+                    "Use a literal relative suite_summary_ref; home expansion with `~` is not allowed."));
+        }
+        for (Path segment : refPath) {
+            if ("..".equals(segment.toString())) {
+                String action = refPath.normalize().equals(refPath)
+                        ? "Remove parent traversal `..` segments from suite_summary_ref."
+                        : "Use a normalized relative suite_summary_ref without `.` or `..` segments.";
+                return List.of(invalidSummaryRef(resultJson, profile, action));
+            }
+        }
+        if (!refPath.normalize().equals(refPath) || !ref.equals(refPath.toString().replace('\\', '/'))) {
+            return List.of(invalidSummaryRef(resultJson, profile,
+                    "Use a normalized relative suite_summary_ref without redundant path segments."));
+        }
+        Path resultParent = resultJson == null ? null : resultJson.toAbsolutePath().normalize().getParent();
+        if (resultParent == null || !Files.isDirectory(resultParent)) {
+            return List.of();
+        }
+        Path referencedSummary = resultParent.resolve(refPath);
+        if (!Files.exists(referencedSummary)) {
+            return List.of();
+        }
+        try {
+            Path realParent = resultParent.toRealPath();
+            if (!referencedSummary.toRealPath().startsWith(realParent)) {
+                return List.of(invalidSummaryRef(resultJson, profile,
+                        "Point suite_summary_ref to a file whose real path is inside the result directory real path."));
+            }
+        } catch (IOException e) {
+            return List.of(invalidSummaryRef(resultJson, profile,
+                    "Make suite_summary_ref resolvable inside the result directory: " + e.getMessage()));
+        }
+        return List.of();
+    }
+
+    private static ContractFinding invalidSummaryRef(Path resultJson, String profile, String ownerAction) {
+        return finding(resultJson, "suite_summary_ref", "invalid_suite_summary_ref", profile, ownerAction);
+    }
+
+    private static List<ContractFinding> validateV03ProviderResults(
+            Path resultJson,
+            Map<String, Object> result,
+            List<Map<?, ?>> providerResults,
+            String profile) {
+        if (!"v0.3".equals(stringValue(result.get("result_contract_version")))) {
+            return List.of();
+        }
+        List<ContractFinding> findings = new ArrayList<>();
+        for (int index = 0; index < providerResults.size(); index++) {
+            Map<?, ?> providerResult = providerResults.get(index);
+            String fieldPrefix = "provider_results[" + index + "]";
+            for (String field : List.of(
+                    "target",
+                    "provider_contract",
+                    "provider_type",
+                    "profile",
+                    "runtime_mode",
+                    "operation",
+                    "status",
+                    "evidence_refs")) {
+                if (isMissing(providerResult.get(field))) {
+                    findings.add(finding(resultJson, fieldPrefix + "." + field, "missing_required_field", profile,
+                            "Add v0.3 provider result field `" + field + "` without Provider Instance refs."));
+                }
+            }
+            String status = stringValue(providerResult.get("status"));
+            if (!status.isBlank() && !List.of("passed", "failed", "blocked").contains(status)) {
+                findings.add(finding(resultJson, fieldPrefix + ".status", "invalid_status", profile,
+                        "Use provider result status `passed`, `failed`, or `blocked`."));
+            }
+            if ("failed".equals(status) && isMissing(providerResult.get("failure_code"))) {
+                findings.add(finding(resultJson, fieldPrefix + ".failure_code", "missing_failure_code", profile,
+                        "Publish a v0.3 provider result failure_code when status is failed."));
+            }
+            if (!(providerResult.get("evidence_refs") instanceof Collection<?>)) {
+                findings.add(finding(resultJson, fieldPrefix + ".evidence_refs", "invalid_evidence_refs", profile,
+                        "Publish v0.3 provider result `evidence_refs` as an array."));
+            }
+            if (providerResult.containsKey("provider_instance")
+                    || providerResult.containsKey("provider_instance_ref")) {
+                findings.add(finding(resultJson, fieldPrefix, "prohibited_provider_instance_ref", profile,
+                        "Remove Provider Instance refs from v0.3 result JSON; use target and provider_contract."));
+            }
+        }
+        return List.copyOf(findings);
+    }
+
+    private static boolean isAggregationResult(Map<String, Object> result, List<Object> testResults) {
+        return stringValue(result.get("test_case_id")).endsWith("-AGGREGATE")
+                || testResults.stream()
+                        .filter(Map.class::isInstance)
+                        .map(Map.class::cast)
+                        .anyMatch(entry -> entry.containsKey("test_result_id") || entry.containsKey("suite_path"));
+    }
+
+    private static List<ContractFinding> validateAggregationTestResultIdentities(
+            Path resultJson,
+            List<Object> testResults,
+            String profile) {
+        List<ContractFinding> findings = new ArrayList<>();
+        Set<String> testResultIds = new LinkedHashSet<>();
+        for (int index = 0; index < testResults.size(); index++) {
+            if (!(testResults.get(index) instanceof Map<?, ?> entry)) {
+                continue;
+            }
+            String suitePath = stringValue(entry.get("suite_path"));
+            if (suitePath.isBlank()) {
+                findings.add(finding(resultJson, "test_results[" + index + "].suite_path",
+                        "missing_required_field", profile,
+                        "Add a non-empty aggregation `suite_path` identifying the immediate child suite."));
+            }
+            String testResultId = stringValue(entry.get("test_result_id"));
+            if (testResultId.isBlank()) {
+                findings.add(finding(resultJson, "test_results[" + index + "].test_result_id",
+                        "missing_required_field", profile,
+                        "Add a non-empty globally unique aggregation `test_result_id`."));
+            } else if (!testResultIds.add(testResultId)) {
+                findings.add(finding(resultJson, "test_results[" + index + "].test_result_id",
+                        "duplicate_test_result_id", profile,
+                        "Use a globally unique `test_result_id` formed from suite_path and test_case_id."));
+            }
+        }
+        return findings;
     }
 
     private static List<ContractFinding> validateProviderEvidenceRefs(
