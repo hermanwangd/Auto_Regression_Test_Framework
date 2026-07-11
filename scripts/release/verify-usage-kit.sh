@@ -114,6 +114,7 @@ required_paths=(
   "usage-kit/samples/20-provider-capability-p0/messaging/kafka/env_profiles/external_kafka.yaml"
   "usage-kit/samples/20-provider-capability-p0/messaging/ibm_mq/env_profiles/external_ibm_mq.yaml"
   "usage-kit/samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml"
+  "usage-kit/samples/30-cross-provider-groups/mixed_provider_e2e/suite_manifest.yaml"
   "usage-kit/samples/40-evidence-reporting/evidence_hardening/valid_result.json"
   "usage-kit/samples/80-negative/suite_manifest.yaml"
   "usage-kit/samples/80-negative/target-resolution/unknown_target/suite_manifest.yaml"
@@ -301,6 +302,7 @@ expect_validate_failure() {
   run_v03_suite samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest.yaml local_v03
   run_v03_suite samples/20-provider-capability-p0/verification/multi_test_shared_env/suite_manifest.yaml local_v03
   run_v03_suite_group samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml local_v03
+  run_v03_suite samples/30-cross-provider-groups/mixed_provider_e2e/suite_manifest.yaml local_v03
   expect_validate_failure samples/80-negative/target-resolution/unknown_target/suite_manifest.yaml local_v03 invalid_target_ref
   run_cli validate-evidence --result samples/40-evidence-reporting/evidence_hardening/valid_result.json
 )

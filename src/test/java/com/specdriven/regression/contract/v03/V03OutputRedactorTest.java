@@ -26,9 +26,11 @@ class V03OutputRedactorTest {
 
         Map<String, Object> redacted = new V03OutputRedactor().redact(plan, step, Map.of(
                 "session", "Bearer actual-token",
-                "response", Map.of("authorization", "Bearer actual-token", "status", "OK")));
+                "response", Map.of("authorization", "Bearer actual-token", "status", "OK"),
+                "undeclared_output", "must-not-persist"));
 
         assertThat(redacted).containsEntry("session", V03OutputRedactor.MASKED);
+        assertThat(redacted).doesNotContainKey("undeclared_output");
         @SuppressWarnings("unchecked")
         Map<String, Object> response = (Map<String, Object>) redacted.get("response");
         assertThat(response)
@@ -37,5 +39,28 @@ class V03OutputRedactorTest {
         assertThat(new V03OutputRedactor().redactMessage("jdbc:oracle:thin:@secret-host password=actual"))
                 .doesNotContain("secret-host")
                 .doesNotContain("actual");
+    }
+
+    @Test
+    void masksNonPublicStepOutputsInAssertionEvidence() {
+        V03ProviderContract.V03OperationDefinition operation = new V03ProviderContract.V03OperationDefinition(
+                Set.of(), Set.of(), Set.of("workspace_ref"), Map.of(), Map.of(
+                        "workspace_ref", new V03OutputDefinition(V03ValueType.STRING, V03Sensitivity.MASKED, true, false)), Set.of());
+        V03ProviderContract contract = new V03ProviderContract(
+                "test.v0.3", "test", Set.of("native"), Map.of(), Map.of("setup", operation), Set.of(), Set.of(), Set.of());
+        V03ExecutionStep producer = new V03ExecutionStep("TC-1", V03ExecutionStepKind.PROVIDER_OPERATION,
+                "setup", "prepare", "target", "test.v0.3", "test", "local", "native", "setup", Map.of(), "");
+        V03ExecutionStep assertion = new V03ExecutionStep("TC-1", V03ExecutionStepKind.ASSERTION,
+                "verify", "assert", "", "", "", "local", "", "equals",
+                Map.of("actual_ref", "step://prepare/workspace_ref"), "");
+        V03ExecutionPlan plan = new V03ExecutionPlan("S", "local", Path.of("."),
+                new V03SuiteMetadata("v0.3", "S", "local"),
+                new V03EnvironmentProfile("local", "local", "per_run", "framework_verification_only", false),
+                Map.of(), Map.of("test.v0.3", contract), Map.of(), java.util.List.of(),
+                java.util.List.of(producer, assertion), java.util.List.of(), "digest");
+
+        assertThat(new V03OutputRedactor().redactAssertionValue(
+                plan, assertion, "step://prepare/workspace_ref", "/private/workspace"))
+                .isEqualTo(V03OutputRedactor.MASKED);
     }
 }

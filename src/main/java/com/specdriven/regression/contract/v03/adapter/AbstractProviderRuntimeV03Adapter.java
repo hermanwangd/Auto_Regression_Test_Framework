@@ -57,6 +57,7 @@ abstract class AbstractProviderRuntimeV03Adapter {
         Map<String, Object> outputs = new LinkedHashMap<>();
         outputs.put("_operation_id", step.id());
         outputs.put("_test_case_id", step.testCaseId());
+        outputs.put("_test_start_time", context.testStartTime().toString());
         return new ProviderOperationRequest(step.operation(), List.copyOf(parameters), Map.copyOf(outputs));
     }
 

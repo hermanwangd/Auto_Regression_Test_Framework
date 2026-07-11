@@ -56,6 +56,10 @@ class SampleLayoutContractTest {
                     "samples/30-cross-provider-groups/mock_server_cross_verify",
                     "MOCK-SERVER-CROSS-VERIFY-v0.3",
                     true),
+            new CanonicalSample(
+                    "samples/30-cross-provider-groups/mixed_provider_e2e",
+                    "MIXED-PROVIDER-E2E-v0.3",
+                    true),
             new CanonicalSample("samples/80-negative", "NEGATIVE-v0.3", true));
 
     @Test
@@ -65,6 +69,7 @@ class SampleLayoutContractTest {
                         "samples/10-contract-baseline/mixed_wiremock_jdbc_nats",
                         "samples/20-provider-capability-p0",
                         "samples/30-cross-provider-groups/mock_server_cross_verify",
+                        "samples/30-cross-provider-groups/mixed_provider_e2e",
                         "samples/40-evidence-reporting/evidence_hardening",
                         "samples/80-negative",
                         "samples/90-compatibility/dummy_rest"))

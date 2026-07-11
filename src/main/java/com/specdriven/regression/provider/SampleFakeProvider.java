@@ -65,8 +65,13 @@ public class SampleFakeProvider {
     }
 
     public CleanupResult cleanup(Path cleanupFixture, Path evidenceDir, String providerId) {
+        return cleanup(cleanupFixture, evidenceDir, providerId, "legacy-workspace");
+    }
+
+    public CleanupResult cleanup(Path cleanupFixture, Path evidenceDir, String providerId, String workspaceRef) {
         createDirectories(evidenceDir.resolve("fixture"));
-        String status = Files.isRegularFile(cleanupFixture) ? "passed" : "failed";
+        String status = Files.isRegularFile(cleanupFixture) && workspaceRef != null && !workspaceRef.isBlank()
+                ? "passed" : "failed";
         write(evidenceDir.resolve("fixture/cleanup.yaml"), """
                 evidence_type: fixture_cleanup
                 evidence_classification: framework_verification_only

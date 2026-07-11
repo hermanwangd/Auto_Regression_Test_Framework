@@ -40,7 +40,7 @@ operations:
   event_published:
     allowed_inputs: [subject, consume_from, timeout, poll_interval, correlation_key]
     required_inputs: []
-    output_refs: [subject, observed_count, matched, duration_ms, event_evidence_ref]
+    output_refs: [subject, observed_count, matched, matched_fields, duration_ms, event_evidence_ref]
   event_payload_match:
     allowed_inputs: [subject, expected_ref, consume_from, timeout, poll_interval, correlation_key]
     required_inputs: [expected_ref]

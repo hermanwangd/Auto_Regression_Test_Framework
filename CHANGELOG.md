@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0
+
+Framework v0.3.0 establishes the v0.3 contract-first runtime surface.
+
+- Adds typed Provider Contract inputs and outputs, output sensitivity controls, and fail-closed contract enforcement.
+- Compiles each suite into one canonical v0.3 execution plan for validation, dry-run, and runtime execution.
+- Validates cross-step generated bindings, declared output availability, and illegal scalar output subpaths before provider invocation.
+- Redacts sensitive and undeclared runtime outputs from result documents and evidence.
+- Adds deterministic v0.3 reference resolution for `artifact://`, `step://`, `generated://`, and `env://` references.
+- Adds a runnable mixed-provider E2E sample that proves JDBC query output flows to a REST request, then through NATS evidence verification.
+- Hardens the sample fake-provider cleanup handoff, NATS test-start observation boundary, usage-kit packaging, and release sample gates.
+
+Known boundaries:
+
+- Provider Contracts define the public v0.3 runtime surface; provider-specific runtimes retain their documented support boundaries.
+- External JDBC, Kafka, IBM MQ, and NATS execution still requires owner-provisioned endpoints, credentials, and drivers where applicable.
+- Product, Release Package, and Release Unit topology remain outside the framework runtime.
+
 ## 0.2.7
 
 Framework v0.2.7 is an enterprise adoption hardening release for the v0.2 suite-mode interface.

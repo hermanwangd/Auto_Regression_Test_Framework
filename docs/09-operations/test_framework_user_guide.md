@@ -297,6 +297,14 @@ with:
 
 A DSL test case is invalid if it uses an `op`, `with` key, output ref, or verify `actual` ref that is not allowed by the Provider Contract resolved from the suite target.
 
+`step://<step_id>/<output>` is test-case scoped: it may reference only an earlier
+provider operation in the same test case. It cannot read a same-named step from
+another test case. A dotted subpath is valid when its root output is declared,
+for example `step://call_payment_api/response.body.order_id` requires the
+operation to declare `response.body`. If the full dotted name is not itself a
+declared output id, its declared root output must be an object; scalar outputs
+cannot be used as nested references.
+
 Runtime connection and authentication values belong to Env_Profile target bindings, not test-case data. DSL test cases must not bind `secret.*` directly. Runtime endpoints, tokens, DB credentials, broker credentials, kubeconfig, SSH keys, and runner credentials must be supplied through `env_profiles/` or generated `generated-framework/env_profiles/`.
 
 Authentication headers such as `Authorization` should be injected by provider configuration. Test cases may bind ordinary request headers, such as correlation IDs, only when the resolved Provider Contract allows `request.headers.*`.
@@ -585,6 +593,9 @@ AC -> test case -> execute step -> verify item -> evidence -> result
 - `verify` must not call hidden product logic.
 - `verify` must not infer expected business behavior from actual runtime behavior.
 - `assert.actual` must resolve to a valid provider output ref or framework evidence ref.
+- Assertions may evaluate `public`, `masked`, or `secret` outputs, but assertion
+  evidence serializes non-public values as `[MASKED]`; the raw value is never
+  written to result JSON, report output, or evidence files.
 - `expected_ref` must point to approved expected-result artifacts for business assertions.
 - Async verification must use explicit timeout and polling policy.
 - Failed cleanup is not a passed test; it should be reported separately as cleanup evidence.
@@ -607,7 +618,7 @@ A Provider Contract defines the public executable surface for one provider capab
 | `safety` | Required safety rules for command-capable providers. | Env_Profile and approved owner policy supply the allowed runtime access values. |
 | `failure_mapping` | Allowed failure codes and categories. | Runtime maps failures to those codes. |
 
-A v0.3 suite is invalid if a target references an unknown Provider Contract, an Env_Profile omits a required binding key, a binding value kind is not allowed, a DSL `op` is unsupported, a `with` key is unsupported, or a `step://...` output ref is not declared by the Provider Contract operation.
+A v0.3 suite is invalid if a target references an unknown Provider Contract, an Env_Profile omits a required binding key, a binding value kind is not allowed, a DSL `op` is unsupported, a `with` key is unsupported, or a `step://...` output ref is not declared by the Provider Contract operation. Provider runtimes must return only declared output refs; an undeclared output is blocked before it can enter the execution context or persisted result.
 
 ### 9.1 Command-Capable Provider Access Policy
 
@@ -1146,6 +1157,7 @@ The v0.3 local runtime sample matrix includes:
 | `samples/20-provider-capability-p0/rpc/soap_mock/` | `soap_mock.v0.3`, `rest_client.v0.3` |
 | `samples/20-provider-capability-p0/rpc/grpc_mock/` | `grpc_mock.v0.3`, `grpc_client.v0.3` |
 | `samples/20-provider-capability-p0/verification/multi_test_shared_env/` | shared Env_Profile multi-test assertion suite |
+| `samples/30-cross-provider-groups/mixed_provider_e2e/` | one test case across `http_mock.v0.3`, `rest_client.v0.3`, `jdbc.v0.3`, and `nats.v0.3` |
 
 Release verification runs each listed v0.3 suite through validate, dry-run, run, report, and validate-evidence.
 
@@ -1396,7 +1408,7 @@ evidence/
 `evidence_index.yaml` is a structured index, not a compact ref list. Each entry must include the stable evidence identity, file location, producer, status, and masking state:
 
 ```yaml
-evidence_index_version: v0.2
+evidence_index_version: v0.3
 suite_id: RP-PAYMENT-001-regression
 batch_id: BATCH-001
 run_id: RUN-001
@@ -1422,6 +1434,11 @@ masking:
 ```
 
 Do not publish legacy compact entries such as `ref:` plus `masked:`. Result JSON `evidence_refs[]` is the complete evidence list; `provider_evidence_refs[]` must contain only provider-produced refs such as provider, query, event, fixture, actual, HTTP, gRPC, Kafka, IBM MQ, JDBC, NATS, or WireMock evidence. Framework logs, batch summaries, assertion diffs, and expected artifacts belong in `evidence_refs[]` only.
+
+Every indexed evidence ref must be a regular file inside the current run
+directory. Refs that escape the run directory, are missing, or exceed the
+framework evidence sanitization limit are rejected rather than being marked as
+masked.
 
 Generate a release-level report:
 

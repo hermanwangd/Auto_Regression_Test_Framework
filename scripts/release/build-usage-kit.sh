@@ -326,6 +326,14 @@ canonical_samples:
     suite_id: MOCK-SERVER-CROSS-VERIFY-v0.3
     ships_in_usage_kit: true
     public_contract: true
+  - id: mixed_provider_e2e
+    root_dir: samples/30-cross-provider-groups/mixed_provider_e2e
+    entrypoint_manifest: suite_manifest.yaml
+    kind: leaf
+    default_profile: local_v03
+    suite_id: MIXED-PROVIDER-E2E-v0.3
+    ships_in_usage_kit: true
+    public_contract: true
   - id: evidence_hardening
     root_dir: samples/40-evidence-reporting/evidence_hardening
     entrypoint_manifest: null

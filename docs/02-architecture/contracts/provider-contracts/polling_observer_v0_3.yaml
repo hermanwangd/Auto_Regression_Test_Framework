@@ -24,15 +24,15 @@ operations:
   observe_condition:
     allowed_inputs: [expected_ref, actual_ref, timeout, poll_interval]
     required_inputs: [expected_ref, actual_ref]
-    output_refs: [matched, attempts, last_observed_ref, polling_evidence_ref]
+    output_refs: [matched, attempts, last_observed_ref, polling_evidence_ref, observation_start, observation_end, timeout, poll_interval]
   event_published:
     allowed_inputs: [expected_ref, actual_ref, timeout, poll_interval, consume_from]
     required_inputs: [expected_ref, actual_ref]
-    output_refs: [matched, attempts, last_observed_ref, polling_evidence_ref]
+    output_refs: [matched, attempts, last_observed_ref, polling_evidence_ref, observation_start, observation_end, timeout, poll_interval]
   db_record_exists:
     allowed_inputs: [expected_ref, actual_ref, timeout, poll_interval]
     required_inputs: [expected_ref, actual_ref]
-    output_refs: [matched, attempts, last_observed_ref, polling_evidence_ref]
+    output_refs: [matched, attempts, last_observed_ref, polling_evidence_ref, observation_start, observation_end, timeout, poll_interval]
 evidence:
   outputs: [polling_observation]
   redact: [last_observed_value]

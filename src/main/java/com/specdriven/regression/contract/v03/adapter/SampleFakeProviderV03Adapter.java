@@ -33,14 +33,17 @@ public final class SampleFakeProviderV03Adapter extends AbstractProviderRuntimeV
     private V03StepResult setup(V03ExecutionStep step, V03ExecutionContext context) {
         SampleFakeProvider.SetupResult result = provider.setup(artifactPath(step.inputs().get("fixture.setup_ref"), step, context),
                 artifactPath(step.inputs().get("fixture.input_ref"), step, context), context.runDir(), step.target());
-        return new V03StepResult(step.id(), result.passed() ? "passed" : "failed", Map.of(), List.of(relative(context, result.evidenceRef())), "", "");
+        Map<String, Object> outputs = new LinkedHashMap<>();
+        outputs.put("setup_log", relative(context, result.evidenceRef()));
+        outputs.put("workspace_ref", String.valueOf(context.targets().get(step.target()).bindings().get("workspace_ref")));
+        return new V03StepResult(step.id(), result.passed() ? "passed" : "failed", outputs,
+                List.of(relative(context, result.evidenceRef())), "", "");
     }
 
     private V03StepResult run(V03ExecutionStep step, V03ExecutionContext context) {
         SampleFakeProvider.ExecutionResult result = provider.execute(artifactPath(step.inputs().get("sample.input_ref"), step, context),
                 context.testStartTime().toString(), context.runDir());
         Map<String, Object> outputs = new LinkedHashMap<>();
-        outputs.put("actual_json.status", result.actual().get("status"));
         outputs.put("actual_json", result.actual());
         outputs.put("actual_text", relative(context, result.actualText()));
         outputs.put("execution_log", relative(context, result.executionLog()));
@@ -49,8 +52,12 @@ public final class SampleFakeProviderV03Adapter extends AbstractProviderRuntimeV
     }
 
     private V03StepResult cleanup(V03ExecutionStep step, V03ExecutionContext context) {
-        SampleFakeProvider.CleanupResult result = provider.cleanup(artifactPath(step.inputs().get("fixture.cleanup_ref"), step, context), context.runDir(), step.target());
-        return new V03StepResult(step.id(), result.passed() ? "passed" : "failed", Map.of(), List.of(relative(context, result.evidenceRef())), "", "");
+        String workspaceRef = String.valueOf(resolveProviderValue(
+                step.inputs().get("fixture.workspace_ref"), step, context));
+        SampleFakeProvider.CleanupResult result = provider.cleanup(
+                artifactPath(step.inputs().get("fixture.cleanup_ref"), step, context), context.runDir(), step.target(), workspaceRef);
+        return new V03StepResult(step.id(), result.passed() ? "passed" : "failed",
+                Map.of("cleanup_log", relative(context, result.evidenceRef())), List.of(relative(context, result.evidenceRef())), "", "");
     }
 
     private String relative(V03ExecutionContext context, Path path) { return context.runDir().relativize(path).toString(); }

@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "/payments",
+    "bodyPatterns": [
+      {
+        "equalToJson": "[{\"ORDER_ID\":\"ORD-MIXED-V03-001\",\"STATUS\":\"CREATED\"}]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "payment_id": "PAY-MIXED-V03-001",
+      "status": "APPROVED"
+    }
+  }
+}

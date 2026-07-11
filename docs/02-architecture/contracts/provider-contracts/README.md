@@ -14,7 +14,8 @@ Framework v0.3. Suite authors normally reference these contracts by id from
    `rest_client_v0_3.yaml`.
 4. Read the contract sections used by the DSL and Env_Profile:
    `binding_keys`, `operations.<op>.allowed_inputs`,
-   `operations.<op>.required_inputs`, `operations.<op>.output_refs`,
+   `operations.<op>.required_inputs`, `operations.<op>.output_refs`, typed
+   `inputs` / `outputs` when present,
    `evidence`, and `failure_mapping`.
 
 v0.2 compatibility contracts remain in this directory with legacy filenames
@@ -48,11 +49,15 @@ The Provider Contract is the runtime public interface. It controls:
 - which `binding_keys` an Env_Profile must supply;
 - which `runtime_mode` values are allowed;
 - which operation output refs and generated refs are valid;
+- the output type, sensitivity, bindability, evidence behavior, runtime modes,
+  and permitted lifecycle phases when the contract defines them;
 - which evidence types and failure codes the provider may emit.
 
 If a test case uses an unsupported `op`, unsupported `with` key, invalid
-generated ref, or missing binding key, validation must fail before provider
-runtime dispatch.
+generated ref, missing binding key, or a `step://` output from another test
+case, validation must fail before provider runtime dispatch. Provider runtime
+outputs must also be declared by the executed operation; undeclared outputs
+are rejected before persistence.
 
 ## Custom Or Snapshot Contracts
 

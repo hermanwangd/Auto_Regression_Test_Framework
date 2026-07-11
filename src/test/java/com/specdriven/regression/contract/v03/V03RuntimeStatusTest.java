@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -145,8 +146,10 @@ class V03RuntimeStatusTest {
                 } catch (java.io.IOException error) {
                     throw new java.io.UncheckedIOException(error);
                 }
-                return new V03StepResult(step.id(), "passed", Map.of(
-                        "actual_json", Map.of("token", "raw-runtime-token", "status", "OK")),
+                Map<String, Object> outputs = "execute".equals(step.phase())
+                        ? Map.of("actual_json", Map.of("token", "raw-runtime-token", "status", "OK"))
+                        : Map.of();
+                return new V03StepResult(step.id(), "passed", outputs,
                         List.of("provider-evidence/raw-runtime.txt"), "", "");
             }
         };
@@ -165,6 +168,67 @@ class V03RuntimeStatusTest {
                 .doesNotContain("raw-runtime-token")
                 .doesNotContain("raw-password")
                 .contains(V03OutputRedactor.MASKED);
+    }
+
+    @Test
+    void rejectsProviderEvidenceOutsideTheRunDirectory() {
+        V03ProviderRuntimeAdapter adapter = new V03ProviderRuntimeAdapter() {
+            @Override public String providerType() { return "sample_fake_provider"; }
+            @Override public boolean supports(String providerContract, String operation) { return true; }
+            @Override public V03StepResult execute(V03ExecutionStep step, V03ExecutionContext context) {
+                return new V03StepResult(step.id(), "passed", Map.of(), List.of("../outside.txt"), "", "");
+            }
+        };
+        V03RuntimeExecutionService service = new V03RuntimeExecutionService(
+                new ContractBaselineService(), new V03ProviderRuntimeRegistry(List.of(adapter)));
+
+        assertThatThrownBy(() -> service.run(
+                Path.of("samples/00-getting-started/golden_e2e/suite_manifest.yaml"), "local_v03",
+                tempDir.resolve("escaped-evidence")))
+                .hasMessageContaining("invalid_evidence_ref");
+    }
+
+    @Test
+    void rejectsUndeclaredProviderOutputsBeforeTheyReachExecutionContext() {
+        V03ProviderRuntimeAdapter adapter = new V03ProviderRuntimeAdapter() {
+            @Override public String providerType() { return "sample_fake_provider"; }
+            @Override public boolean supports(String providerContract, String operation) { return true; }
+            @Override public V03StepResult execute(V03ExecutionStep step, V03ExecutionContext context) {
+                return new V03StepResult(step.id(), "passed", Map.of("unexpected", "raw-value"), List.of(), "", "");
+            }
+        };
+        V03RuntimeExecutionService service = new V03RuntimeExecutionService(
+                new ContractBaselineService(), new V03ProviderRuntimeRegistry(List.of(adapter)));
+
+        assertThatThrownBy(() -> service.run(
+                Path.of("samples/00-getting-started/golden_e2e/suite_manifest.yaml"), "local_v03",
+                tempDir.resolve("undeclared-output")))
+                .hasMessageContaining("undeclared_provider_output");
+    }
+
+    @Test
+    void sampleSetupOutputCanBeConsumedByCleanupInTheSameTestCase() throws Exception {
+        Path source = Path.of("samples/00-getting-started/golden_e2e");
+        Path suiteRoot = tempDir.resolve("sample-output-binding");
+        copyDirectory(source, suiteRoot);
+
+        var run = new V03RuntimeExecutionService().run(
+                suiteRoot.resolve("suite_manifest.yaml"), "local_v03", tempDir.resolve("sample-output-run"));
+
+        assertThat(run.status()).isEqualTo("passed");
+    }
+
+    private void copyDirectory(Path source, Path target) throws Exception {
+        try (var paths = Files.walk(source)) {
+            for (Path path : paths.sorted(Comparator.comparing(Path::toString)).toList()) {
+                Path destination = target.resolve(source.relativize(path));
+                if (Files.isDirectory(path)) Files.createDirectories(destination);
+                else {
+                    Files.createDirectories(destination.getParent());
+                    Files.copy(path, destination);
+                }
+            }
+        }
     }
 
     private V03ProviderRuntimeAdapter statusAdapter(List<String> executedPhases, Map<String, String> statuses) {

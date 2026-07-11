@@ -59,7 +59,7 @@ public class RestClientProviderRuntime implements ProviderRuntime {
 
         String method = parameterValue(request, "request.method", "GET");
         String path = parameterValue(request, "request.path", "/");
-        String body = requestBody(context.suiteRoot(), parameterValue(request, "request.body", ""));
+        String body = requestBody(context.suiteRoot(), parameterValueObject(request, "request.body", ""));
         Map<String, String> headers = requestHeaders(request);
         headers.putIfAbsent("Content-Type", "application/json");
 
@@ -166,25 +166,32 @@ public class RestClientProviderRuntime implements ProviderRuntime {
         return header;
     }
 
-    private String requestBody(Path suiteRoot, String refOrValue) {
-        if (refOrValue.isBlank()) {
+    private String requestBody(Path suiteRoot, Object refOrValue) {
+        if (refOrValue == null || (refOrValue instanceof String text && text.isBlank())) {
             return "";
         }
-        Path file = suiteRoot.resolve(refOrValue).normalize();
-        if (Files.isRegularFile(file)) {
-            try {
-                return Files.readString(file).strip();
-            } catch (IOException e) {
-                throw new IllegalStateException("Unable to read request body ref `" + refOrValue + "`.", e);
+        if (refOrValue instanceof String text) {
+            Path file = suiteRoot.resolve(text).normalize();
+            if (Files.isRegularFile(file)) {
+                try {
+                    return Files.readString(file).strip();
+                } catch (IOException e) {
+                    throw new IllegalStateException("Unable to read request body ref `" + text + "`.", e);
+                }
             }
+            return text;
         }
-        return refOrValue;
+        return toJson(refOrValue);
     }
 
     private String parameterValue(ProviderOperationRequest request, String bindAs, String fallback) {
+        return stringValue(parameterValueObject(request, bindAs, fallback));
+    }
+
+    private Object parameterValueObject(ProviderOperationRequest request, String bindAs, Object fallback) {
         for (Map<String, Object> parameter : request.parameters()) {
             if (bindAs.equals(parameter.get("bind_as"))) {
-                return stringValue(parameter.get("ref"));
+                return parameter.get("ref");
             }
         }
         return fallback;

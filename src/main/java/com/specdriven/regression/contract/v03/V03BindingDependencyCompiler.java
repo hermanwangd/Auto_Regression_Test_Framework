@@ -21,7 +21,6 @@ public final class V03BindingDependencyCompiler {
         List<V03BindingDependency> dependencies = new ArrayList<>();
         for (V03ExecutionStep step : steps) {
             if (step.kind() != V03ExecutionStepKind.PROVIDER_OPERATION) {
-                priorSteps.put(step.id(), step);
                 continue;
             }
             V03ProviderContract.V03OperationDefinition operation = operation(step, contracts);
@@ -29,7 +28,7 @@ public final class V03BindingDependencyCompiler {
                 V03InputDefinition consumer = inputDefinition(operation, input.getKey());
                 collect(input.getValue(), reference -> {
                     if (reference instanceof V03Reference.Step prior) {
-                        V03ExecutionStep producer = priorSteps.get(prior.stepId());
+                        V03ExecutionStep producer = priorSteps.get(scopedStepKey(step.testCaseId(), prior.stepId()));
                         if (producer == null) {
                             throw new IllegalArgumentException("missing_or_forward_step_producer: step `" + step.id()
                                     + "` references `" + prior.stepId() + "`.");
@@ -63,7 +62,7 @@ public final class V03BindingDependencyCompiler {
                     }
                 });
             }
-            priorSteps.put(step.id(), step);
+            priorSteps.put(scopedStepKey(step.testCaseId(), step.id()), step);
         }
         return List.copyOf(dependencies);
     }
@@ -97,11 +96,14 @@ public final class V03BindingDependencyCompiler {
             throw new IllegalArgumentException("missing_provider_contract_operation: step `" + producer.id() + "`.");
         }
         V03OutputDefinition definition = operation.outputDefinitions().get(output);
+        boolean nested = definition == null;
+        String rootOutput = nested ? rootOutput(output) : output;
+        if (nested) definition = operation.outputDefinitions().get(rootOutput);
         if (definition == null) {
             throw new IllegalArgumentException("missing_provider_output: step `" + producer.id()
-                    + "` operation `" + producer.operation() + "` does not declare `" + output + "`.");
+                    + "` operation `" + producer.operation() + "` does not declare `" + rootOutput + "`.");
         }
-        return definition;
+        return nested ? nestedOutput(definition) : definition;
     }
 
     private V03OutputDefinition outputDefinition(
@@ -111,11 +113,18 @@ public final class V03BindingDependencyCompiler {
 
     private V03OutputDefinition outputDefinition(V03ProviderContract contract, String output) {
         if (contract == null) throw new IllegalArgumentException("missing_provider_contract_output: `" + output + "`.");
-        return contract.operations().values().stream()
+        V03OutputDefinition exact = contract.operations().values().stream()
                 .map(operation -> operation.outputDefinitions().get(output))
                 .filter(java.util.Objects::nonNull)
+                .findFirst().orElse(null);
+        if (exact != null) return exact;
+        String rootOutput = rootOutput(output);
+        V03OutputDefinition definition = contract.operations().values().stream()
+                .map(operation -> operation.outputDefinitions().get(rootOutput))
+                .filter(java.util.Objects::nonNull)
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("missing_provider_output: `" + output + "` is not declared."));
+                .orElseThrow(() -> new IllegalArgumentException("missing_provider_output: `" + rootOutput + "` is not declared."));
+        return nestedOutput(definition);
     }
 
     private void compatible(
@@ -139,5 +148,21 @@ public final class V03BindingDependencyCompiler {
         } else {
             consumer.accept(parser.parse(value));
         }
+    }
+
+    private String scopedStepKey(String testCaseId, String stepId) {
+        return testCaseId + "\n" + stepId;
+    }
+
+    private String rootOutput(String output) {
+        int separator = output.indexOf('.');
+        return separator < 0 ? output : output.substring(0, separator);
+    }
+
+    private V03OutputDefinition nestedOutput(V03OutputDefinition parent) {
+        if (parent.valueType() != V03ValueType.OBJECT && parent.valueType() != V03ValueType.ANY) {
+            throw new IllegalArgumentException("invalid_output_subpath: nested output refs require an object output.");
+        }
+        return new V03OutputDefinition(V03ValueType.ANY, parent.sensitivity(), parent.bindable(), parent.evidenceIncluded());
     }
 }

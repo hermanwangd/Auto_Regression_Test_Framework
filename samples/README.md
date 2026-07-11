@@ -8,6 +8,7 @@ The sample tree is the public Framework v0.3 usage-kit surface. A leaf suite is 
 - `10-contract-baseline/mixed_wiremock_jdbc_nats/`: mixed HTTP mock/client, JDBC, and NATS v0.3 baseline.
 - `20-provider-capability-p0/`: executable P0 provider capability suites grouped by capability family.
 - `30-cross-provider-groups/mock_server_cross_verify/`: suite group for REST/SOAP/gRPC mock server verification.
+- `30-cross-provider-groups/mixed_provider_e2e/`: one-test-case HTTP mock, REST, JDBC, and NATS lifecycle with cross-provider `step://` binding.
 - `40-evidence-reporting/evidence_hardening/`: result and evidence validation fixtures.
 - `80-negative/`: expected-failure v0.3 validation and runtime samples.
 - `90-compatibility/`: deprecation notes and source-tree-only v0.2 backup material.

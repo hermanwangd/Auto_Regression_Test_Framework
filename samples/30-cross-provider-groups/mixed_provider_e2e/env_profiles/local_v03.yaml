@@ -1,0 +1,27 @@
+profile_id: local_v03
+execution_mode: local
+isolation: per_run
+evidence_classification: framework_verification_only
+
+targets:
+  payment_mock:
+    runtime_mode: mock
+    bindings:
+      port_strategy: dynamic
+  payment_api:
+    runtime_mode: mock
+    bindings:
+      base_url: generated://payment_mock/base_url
+  order_db:
+    runtime_mode: ephemeral
+    bindings:
+      dialect: oracle
+      connection.local_ref: approved_local_h2_oracle
+      strict_params: true
+  event_bus:
+    runtime_mode: mock
+    bindings:
+      connection.local_ref: approved_local_nats_ref
+      subject: payments.approved.v03
+      timeout: PT2S
+      poll_interval: PT0.01S

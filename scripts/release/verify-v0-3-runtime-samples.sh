@@ -38,6 +38,7 @@ V03_P0_SUITES=(
   "samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest.yaml:local_v03"
   "samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest.yaml:local_v03"
   "samples/20-provider-capability-p0/verification/multi_test_shared_env/suite_manifest.yaml:local_v03"
+  "samples/30-cross-provider-groups/mixed_provider_e2e/suite_manifest.yaml:local_v03"
 )
 
 V03_SUITE_GROUPS=(

@@ -1,0 +1,81 @@
+dsl_version: v0.3
+test_case_id: MIXED-PROVIDER-E2E-V03-TC-001
+title: Payment mock, JDBC, REST client, and NATS execute in one lifecycle
+
+setup:
+  - id: load_payment_stub
+    target: payment_mock
+    op: load_stubs
+    with:
+      mock.mappings_ref: artifact://fixtures/payment_success_stub.json
+      mock.reset_before_load: true
+  - id: seed_order
+    target: order_db
+    op: db_seed
+    with:
+      sql_ref: artifact://fixtures/seed_order.sql
+      params.order_id: ORD-MIXED-V03-001
+      params.status: CREATED
+
+execute:
+  - id: query_order
+    target: order_db
+    op: db_query
+    with:
+      query_ref: artifact://queries/find_order_by_id.sql
+      params.order_id: ORD-MIXED-V03-001
+  - id: call_payment_api
+    target: payment_api
+    op: http_request
+    with:
+      request.method: POST
+      request.path: /payments
+      request.body: step://query_order/sample_rows
+  - id: publish_payment_event
+    target: event_bus
+    op: nats_publish
+    with:
+      payload_ref: artifact://fixtures/payment_event.json
+
+verify:
+  - id: one_order_found
+    type: assertion
+    assert:
+      actual: step://query_order/row_count
+      operator: equals
+      expected: 1
+  - id: payment_response_status
+    type: assertion
+    assert:
+      actual: step://call_payment_api/response.status
+      operator: equals
+      expected: 200
+  - id: payment_event_published
+    type: provider_check
+    target: event_bus
+    op: event_published
+    with:
+      consume_from: test_start_time
+      timeout: PT2S
+      poll_interval: PT0.01S
+  - id: payment_event_matches
+    type: provider_check
+    target: event_bus
+    op: event_payload_match
+    with:
+      expected_ref: artifact://expected_results/payment_event.json
+      consume_from: test_start_time
+      timeout: PT2S
+      poll_interval: PT0.01S
+
+cleanup:
+  - id: cleanup_order
+    target: order_db
+    op: db_cleanup
+    with:
+      sql_ref: artifact://fixtures/cleanup_order.sql
+      params.order_id: ORD-MIXED-V03-001
+  - id: reset_payment_mock
+    target: payment_mock
+    op: reset_mock
+    with: {}

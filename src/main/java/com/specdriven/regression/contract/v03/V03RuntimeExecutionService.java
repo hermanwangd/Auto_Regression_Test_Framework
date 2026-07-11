@@ -141,7 +141,7 @@ public class V03RuntimeExecutionService {
                 continue;
             }
             if (step.kind() == V03ExecutionStepKind.ASSERTION) {
-                AssertionResult assertion = evaluateAssertion(step, context, runDir);
+                AssertionResult assertion = evaluateAssertion(plan, step, context, runDir);
                 verifyResults.add(assertion.toMap());
                 evidenceRefs.add(assertion.evidenceRef());
                 if (!assertion.passed()) {
@@ -156,6 +156,7 @@ public class V03RuntimeExecutionService {
             }
             V03ProviderRuntimeAdapter adapter = runtimeRegistry.resolve(step.providerType());
             V03StepResult result = adapter.execute(step, context);
+            validateRuntimeOutputs(plan, step, result);
             providerRuntimeExecuted = true;
             outputsByStep.put(scopedStepKey(step), result.outputs());
             if (step.kind() == V03ExecutionStepKind.PROVIDER_OPERATION) {
@@ -274,7 +275,23 @@ public class V03RuntimeExecutionService {
         return List.copyOf(findings);
     }
 
+    private void validateRuntimeOutputs(V03ExecutionPlan plan, V03ExecutionStep step, V03StepResult result) {
+        V03ProviderContract contract = plan.providerContracts().get(step.providerContract());
+        V03ProviderContract.V03OperationDefinition operation = contract == null
+                ? null : contract.operations().get(step.operation());
+        if (operation == null) {
+            throw new IllegalArgumentException("missing_provider_contract_operation: step `" + step.id() + "`.");
+        }
+        for (String output : result.outputs().keySet()) {
+            if (!operation.outputDefinitions().containsKey(output)) {
+                throw new IllegalArgumentException("undeclared_provider_output: step `" + step.id()
+                        + "` returned `" + output + "` outside Provider Contract `" + contract.id() + "`.");
+            }
+        }
+    }
+
     private AssertionResult evaluateAssertion(
+            V03ExecutionPlan plan,
             V03ExecutionStep step,
             V03ExecutionContext context,
             Path runDir) {
@@ -338,8 +355,8 @@ public class V03RuntimeExecutionService {
             if (!evaluationError.isBlank()) {
                 evidence.put("evaluation_error", outputRedactor.redactMessage(evaluationError));
             }
-            evidence.put("actual", outputRedactor.redactValue(evidenceValue(actual)));
-            evidence.put("expected", outputRedactor.redactValue(evidenceValue(expected)));
+            evidence.put("actual", redactAssertionValue(plan, step, "actual", "actual_ref", actual));
+            evidence.put("expected", redactAssertionValue(plan, step, "expected", "expected_ref", expected));
             write(runDir.resolve(evidenceRef), toJson(evidence) + "\n");
         } else {
             StringBuilder evidence = new StringBuilder();
@@ -353,8 +370,8 @@ public class V03RuntimeExecutionService {
             if (!evaluationError.isBlank()) {
                 evidence.append("evaluation_error: ").append(outputRedactor.redactMessage(evaluationError)).append('\n');
             }
-            evidence.append("actual: ").append(stringValue(outputRedactor.redactValue(evidenceValue(actual)))).append('\n');
-            evidence.append("expected: ").append(stringValue(outputRedactor.redactValue(evidenceValue(expected)))).append('\n');
+            evidence.append("actual: ").append(stringValue(redactAssertionValue(plan, step, "actual", "actual_ref", actual))).append('\n');
+            evidence.append("expected: ").append(stringValue(redactAssertionValue(plan, step, "expected", "expected_ref", expected))).append('\n');
             write(runDir.resolve(evidenceRef), evidence.toString());
         }
         return new AssertionResult(
@@ -416,6 +433,18 @@ public class V03RuntimeExecutionService {
 
     private Object evidenceValue(Object value) {
         return value == V03MissingValue.INSTANCE ? "<missing>" : value;
+    }
+
+    private Object redactAssertionValue(
+            V03ExecutionPlan plan,
+            V03ExecutionStep step,
+            String literalKey,
+            String referenceKey,
+            Object value) {
+        Object raw = step.inputs().containsKey(referenceKey)
+                ? step.inputs().get(referenceKey)
+                : step.inputs().get(literalKey);
+        return outputRedactor.redactAssertionValue(plan, step, raw, evidenceValue(value));
     }
 
     private Object comparableJson(Object value, V03ExecutionStep step) {
@@ -1124,12 +1153,16 @@ public class V03RuntimeExecutionService {
         Path normalizedRunDir = runDir.toAbsolutePath().normalize();
         for (String evidenceRef : distinct(evidenceRefs)) {
             Path evidence = normalizedRunDir.resolve(evidenceRef).normalize();
-            if (!evidence.startsWith(normalizedRunDir) || !Files.isRegularFile(evidence)) {
-                continue;
+            if (!evidence.startsWith(normalizedRunDir)) {
+                throw new IllegalArgumentException("invalid_evidence_ref: `" + evidenceRef
+                        + "` escapes the v0.3 run directory.");
+            }
+            if (!Files.isRegularFile(evidence)) {
+                throw new IllegalArgumentException("missing_evidence_file: `" + evidenceRef + "`.");
             }
             try {
                 if (Files.size(evidence) > 10 * 1024 * 1024) {
-                    continue;
+                    throw new IllegalArgumentException("evidence_too_large_to_sanitize: `" + evidenceRef + "`.");
                 }
                 String original = Files.readString(evidence);
                 String redacted = outputRedactor.redactMessage(original);

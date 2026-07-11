@@ -32,3 +32,4 @@ cleanup:
     op: cleanup_fixture
     with:
       fixture.cleanup_ref: artifact://fixtures/cleanup_fixture.yaml
+      fixture.workspace_ref: step://prepare_sample_workspace/workspace_ref

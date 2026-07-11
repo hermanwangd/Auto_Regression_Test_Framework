@@ -29,7 +29,7 @@ operations:
   load_stubs:
     allowed_inputs: [mock.mappings_ref, mock.reset_before_load]
     required_inputs: [mock.mappings_ref]
-    output_refs: [base_url, loaded_stub_count, request_journal, server_log]
+    output_refs: [base_url, loaded_stub_count, request_journal, server_log, injected_stub, framework_started_wiremock]
   verify_requests:
     allowed_inputs: [mock.request_filter_ref, mock.expected_count, mock.body_pattern_ref]
     required_inputs: [mock.request_filter_ref]
