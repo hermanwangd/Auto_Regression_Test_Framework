@@ -6,6 +6,7 @@ public final class V03DryRunRenderer {
 
     public void render(PrintStream out, V03CompiledSuite suite) {
         out.println("suite_id: " + suite.suiteId());
+        out.println("plan_digest: " + suite.planDigest());
         out.println("resolved_execution_plan:");
         for (V03CompiledTestCase testCase : suite.tests()) {
             render(out, testCase.setup());

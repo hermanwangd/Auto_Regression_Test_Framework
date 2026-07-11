@@ -100,6 +100,32 @@ class DslV03CommandTest {
     }
 
     @Test
+    void validateAndDryRunProduceTheSameCanonicalPlanDigest() {
+        CommandResult validate = execute("validate", "--suite", V03_SUITE.toString(), "--profile", "local_v03");
+        CommandResult dryRun = execute("run", "--suite", V03_SUITE.toString(), "--profile", "local_v03", "--dry-run");
+
+        assertThat(validate.exit()).isZero();
+        assertThat(dryRun.exit()).isZero();
+        assertThat(outputValue(validate.stdout(), "plan_digest"))
+                .isEqualTo(outputValue(dryRun.stdout(), "plan_digest"))
+                .matches("[0-9a-f]{64}");
+    }
+
+    @Test
+    void validateV03SuiteRejectsUnsupportedLeafManifestVersion() throws Exception {
+        Path suite = mutableV03Golden();
+        Files.writeString(suite, Files.readString(suite).replaceFirst("manifest_version: v0.3", "manifest_version: v9.9"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("validation_status: failed")
+                .contains("field_path: manifest_version")
+                .contains("reason: unsupported_manifest_version");
+    }
+
+    @Test
     void validateV03HttpMockRestClientSampleResolvesProtocolTargetsWithoutProviderInstances() {
         CommandResult result = execute("validate", "--suite", V03_HTTP_MOCK_SUITE.toString(), "--profile", "local_v03");
 
@@ -576,6 +602,14 @@ class DslV03CommandTest {
                 .map(line -> Path.of(line.substring((key + ": ").length()).trim()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Missing path for " + key + " in:\n" + stdout));
+    }
+
+    private String outputValue(String stdout, String key) {
+        return stdout.lines()
+                .filter(line -> line.startsWith(key + ": "))
+                .map(line -> line.substring((key + ": ").length()).trim())
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing output key " + key + " in:\n" + stdout));
     }
 
     private record CommandResult(int exit, String stdout, String stderr) {

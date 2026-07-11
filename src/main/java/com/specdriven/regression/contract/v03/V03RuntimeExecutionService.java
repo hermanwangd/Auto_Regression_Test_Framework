@@ -78,6 +78,16 @@ public class V03RuntimeExecutionService {
     public V03RuntimeRunResult run(Path suiteManifest, String profile, SuiteExecutionContext executionContext) {
         requireMatchingProfile(profile, executionContext);
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
+        return run(suiteManifest, profile, executionContext, validation);
+    }
+
+    /** Executes a command-scoped validated v0.3 suite without validating it again. */
+    public V03RuntimeRunResult run(
+            Path suiteManifest,
+            String profile,
+            SuiteExecutionContext executionContext,
+            ValidationResult validation) {
+        requireMatchingProfile(profile, executionContext);
         if (!validation.valid()) {
             return V03RuntimeRunResult.blocked(validation.suiteId(), profile, validation.findings());
         }
@@ -626,6 +636,7 @@ public class V03RuntimeExecutionService {
         result.put("framework_version", FRAMEWORK_VERSION);
         result.put("dsl_version", testCase == null ? "v0.3" : testCase.dslVersion());
         result.put("suite_id", plan.suiteId());
+        result.put("plan_digest", plan.planDigest());
         result.put("batch_id", batchId);
         result.put("run_id", runId);
         result.put("test_case_id", testCaseId);

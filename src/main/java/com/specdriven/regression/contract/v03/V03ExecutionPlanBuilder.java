@@ -11,6 +11,8 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -64,18 +66,22 @@ public class V03ExecutionPlanBuilder {
         Map<String, Path> artifactRoots = artifactRoots(suiteRoot, suite);
         testDocuments.forEach(document -> validateReferences(document, artifactRoots));
         List<V03ExecutionStep> steps = executionSteps(testDocuments, profile, targets);
+        V03SuiteMetadata metadata = new V03SuiteMetadata(
+                stringValue(suite.get("manifest_version")),
+                stringValue(suite.get("suite_id")),
+                stringValue(suite.get("default_profile")));
+        V03EnvironmentProfile environmentProfile = compiledEnvironmentProfile(profile, envProfile);
+        List<V03CompiledTestCase> compiledTests = compiledTestCases(steps, testDocuments);
         return new V03CompiledSuite(
                 stringValue(suite.get("suite_id")),
                 profile,
                 suiteRoot,
-                new V03SuiteMetadata(
-                        stringValue(suite.get("manifest_version")),
-                        stringValue(suite.get("suite_id")),
-                        stringValue(suite.get("default_profile"))),
-                compiledEnvironmentProfile(profile, envProfile),
+                metadata,
+                environmentProfile,
                 Collections.unmodifiableMap(new LinkedHashMap<>(targets)),
                 artifactRoots,
-                compiledTestCases(steps, testDocuments));
+                compiledTests,
+                planDigest(metadata, environmentProfile, targets, compiledTests));
     }
 
     private void validateReferences(Object value, Map<String, Path> artifactRoots) {
@@ -411,5 +417,41 @@ public class V03ExecutionPlanBuilder {
 
     private String firstNonBlank(String first, String second) {
         return first == null || first.isBlank() ? second : first;
+    }
+
+    private String planDigest(
+            V03SuiteMetadata metadata,
+            V03EnvironmentProfile environmentProfile,
+            Map<String, V03ResolvedTarget> targets,
+            List<V03CompiledTestCase> tests) {
+        StringBuilder canonical = new StringBuilder()
+                .append(metadata.manifestVersion()).append('|')
+                .append(metadata.suiteId()).append('|')
+                .append(environmentProfile.profileId()).append('\n');
+        targets.values().forEach(target -> canonical.append(target.target()).append('|')
+                .append(target.providerContract()).append('|')
+                .append(target.runtimeMode()).append('|')
+                .append(target.bindings()).append('\n'));
+        tests.forEach(test -> {
+            canonical.append(test.testCaseId()).append('|').append(test.dslVersion()).append('\n');
+            appendSteps(canonical, test.setup());
+            appendSteps(canonical, test.execute());
+            appendSteps(canonical, test.verify());
+            appendSteps(canonical, test.cleanup());
+        });
+        try {
+            byte[] bytes = MessageDigest.getInstance("SHA-256").digest(canonical.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (byte value : bytes) hex.append(String.format("%02x", value));
+            return hex.toString();
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 is required to compile a v0.3 execution plan.", error);
+        }
+    }
+
+    private void appendSteps(StringBuilder canonical, List<V03ExecutionStep> steps) {
+        steps.forEach(step -> canonical.append(step.phase()).append('|')
+                .append(step.id()).append('|').append(step.target()).append('|')
+                .append(step.operation()).append('|').append(step.inputs()).append('\n'));
     }
 }

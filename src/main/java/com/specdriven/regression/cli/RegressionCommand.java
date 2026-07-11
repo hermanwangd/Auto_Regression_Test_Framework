@@ -36,6 +36,8 @@ import com.specdriven.regression.contract.WireMockHttpRequestCapabilityService;
 import com.specdriven.regression.contract.WireMockHttpRequestCapabilityService.MixedRunResult;
 import com.specdriven.regression.contract.v03.V03RuntimeExecutionService;
 import com.specdriven.regression.contract.v03.V03RuntimeExecutionService.V03RuntimeRunResult;
+import com.specdriven.regression.contract.v03.V03CompiledSuite;
+import com.specdriven.regression.contract.v03.V03ExecutionPlanBuilder;
 import com.specdriven.regression.contract.v03.V03DryRunRenderer;
 import com.specdriven.regression.discovery.ReleasePackageCompletenessReport;
 import com.specdriven.regression.discovery.ReleasePackageGap;
@@ -358,9 +360,15 @@ public class RegressionCommand {
         }
         ValidationResult result = contractBaselineService.validateSuite(suiteManifest);
         List<ContractFinding> profileFindings = suiteProfileFindings(suiteManifest, options.get("--profile"));
-        boolean valid = result.valid() && profileFindings.isEmpty();
+        List<ContractFinding> findings = new ArrayList<>(result.findings());
+        findings.addAll(profileFindings);
+        V03CompiledSuite compiled = compileV03IfReady(suiteManifest, options.get("--profile"), result, findings);
+        boolean valid = findings.isEmpty();
         out.println("validation_status: " + (valid ? "passed" : "failed"));
         out.println("suite_id: " + result.suiteId());
+        if (compiled != null) {
+            out.println("plan_digest: " + compiled.planDigest());
+        }
         if (!isV03Validation(result)) {
             out.println("provider_instances_used:");
             for (String providerId : result.providerInstancesUsed()) {
@@ -379,8 +387,6 @@ public class RegressionCommand {
         for (String providerContract : result.providerContractsUsed()) {
             out.println("  - " + providerContract);
         }
-        List<ContractFinding> findings = new ArrayList<>(result.findings());
-        findings.addAll(profileFindings);
         printContractFindings(out, findings);
         return valid ? 0 : 1;
     }
@@ -1135,12 +1141,14 @@ public class RegressionCommand {
         }
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         List<ContractFinding> profileFindings = suiteProfileFindings(suiteManifest, options.get("--profile"));
-        boolean ready = validation.valid() && profileFindings.isEmpty();
+        List<ContractFinding> findings = new ArrayList<>(validation.findings());
+        findings.addAll(profileFindings);
+        V03CompiledSuite compiled = compileV03IfReady(suiteManifest, options.get("--profile"), validation, findings);
+        boolean ready = findings.isEmpty();
         out.println("provider_runtime_invoked: false");
         out.println("run_status: " + (ready ? "dry_run_ready" : "blocked"));
-        if (validation.valid() && isV03Validation(validation)) {
-            v03DryRunRenderer.render(out, new com.specdriven.regression.contract.v03.V03ExecutionPlanBuilder(
-                    contractBaselineService).compile(suiteManifest, options.get("--profile"), validation));
+        if (compiled != null) {
+            v03DryRunRenderer.render(out, compiled);
         } else {
             DryRunResult result = contractBaselineService.dryRun(suiteManifest);
             out.println("suite_id: " + result.validation().suiteId());
@@ -1159,8 +1167,6 @@ public class RegressionCommand {
                 out.println("    runtime_mode: " + target.runtimeMode());
             }
         }
-        List<ContractFinding> findings = new ArrayList<>(validation.findings());
-        findings.addAll(profileFindings);
         printContractFindings(out, findings);
         return ready ? 0 : 1;
     }
@@ -1219,7 +1225,8 @@ public class RegressionCommand {
             return SuiteRuntimeResult.fromV03(v03RuntimeExecutionService.run(
                     suiteManifest,
                     profile,
-                    runtimeContext(parentContext, outputRoot.resolve("v03-runtime"), profile)));
+                    runtimeContext(parentContext, outputRoot.resolve("v03-runtime"), profile),
+                    validation));
         }
         if (supportsWireMockHttpRequestSample(providerTypes)) {
             return SuiteRuntimeResult.fromMixed(wireMockHttpRequestCapabilityService.run(
@@ -2000,6 +2007,26 @@ public class RegressionCommand {
 
     private boolean isV03Validation(ValidationResult validation) {
         return validation.providerContractsUsed().stream().anyMatch(contract -> contract.endsWith(".v0.3"));
+    }
+
+    private V03CompiledSuite compileV03IfReady(
+            Path suiteManifest,
+            String profile,
+            ValidationResult validation,
+            List<ContractFinding> findings) {
+        if (!validation.valid() || !isV03Validation(validation) || !findings.isEmpty()) {
+            return null;
+        }
+        try {
+            return new V03ExecutionPlanBuilder(contractBaselineService).compile(suiteManifest, profile, validation);
+        } catch (IllegalArgumentException | IllegalStateException error) {
+            findings.add(finding(
+                    suiteManifest,
+                    "execution_plan",
+                    "v03_plan_compilation_failed",
+                    "Correct the v0.3 target bindings or Provider Contract metadata: " + error.getMessage()));
+            return null;
+        }
     }
 
     private boolean supportsContractBaselineMixedSample(List<String> providerTypes) {

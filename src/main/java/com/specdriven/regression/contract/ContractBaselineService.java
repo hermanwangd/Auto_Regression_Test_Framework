@@ -2351,15 +2351,23 @@ public class ContractBaselineService {
             return ContractGraph.blocked(suiteManifest, suite, findings);
         }
         Path root = suiteManifest.toAbsolutePath().normalize().getParent();
-        boolean manifestV03 = "v0.3".equals(stringValue(suite.get("manifest_version")));
         List<Path> testPaths = listValue(suite.get("tests")).stream()
                 .map(value -> root.resolve(suiteTestRef(value)).normalize())
                 .toList();
         Map<Path, Map<String, Object>> testCases = readAll(testPaths, findings);
+        String manifestVersion = stringValue(suite.get("manifest_version"));
+        String legacyContractVersion = stringValue(suite.get("contract_version"));
+        boolean manifestV03 = "v0.3".equals(manifestVersion);
         boolean anyV03Test = testCases.values().stream()
                 .anyMatch(testCase -> "v0.3".equals(stringValue(testCase.get("dsl_version"))));
         boolean anyNonV03Test = testCases.values().stream()
                 .anyMatch(testCase -> !"v0.3".equals(stringValue(testCase.get("dsl_version"))));
+        validateLeafVersionRouting(
+                suiteManifest,
+                manifestVersion,
+                legacyContractVersion,
+                testCases,
+                findings);
         if ((manifestV03 && anyNonV03Test) || (!manifestV03 && anyV03Test)) {
             findings.add(finding(
                     suiteManifest,
@@ -2470,6 +2478,47 @@ public class ContractBaselineService {
                 allowedProviderTypes(suite, frameworkContractsByPath),
                 v03,
                 List.copyOf(findings));
+    }
+
+    private void validateLeafVersionRouting(
+            Path suiteManifest,
+            String manifestVersion,
+            String legacyContractVersion,
+            Map<Path, Map<String, Object>> testCases,
+            List<ContractFinding> findings) {
+        if (testCases.isEmpty()) {
+            return;
+        }
+        String expectedDslVersion;
+        if ("v0.3".equals(manifestVersion)) {
+            expectedDslVersion = "v0.3";
+        } else if (manifestVersion.isBlank() && "v0.2".equals(legacyContractVersion)) {
+            expectedDslVersion = "v0.2";
+        } else if (manifestVersion.isBlank()) {
+            findings.add(finding(
+                    suiteManifest,
+                    "manifest_version",
+                    "missing_manifest_version",
+                    "Set leaf suite manifest_version to `v0.3`, or retain explicit contract_version `v0.2` for compatibility suites."));
+            return;
+        } else {
+            findings.add(finding(
+                    suiteManifest,
+                    "manifest_version",
+                    "unsupported_manifest_version",
+                    "Use supported leaf manifest_version `v0.3`, or use the explicit v0.2 compatibility manifest shape."));
+            return;
+        }
+        for (Map.Entry<Path, Map<String, Object>> entry : testCases.entrySet()) {
+            if (!expectedDslVersion.equals(stringValue(entry.getValue().get("dsl_version")))) {
+                findings.add(finding(
+                        entry.getKey(),
+                        "dsl_version",
+                        "mixed_dsl_versions",
+                        "Set every test case dsl_version to `" + expectedDslVersion
+                                + "` for this leaf suite; mixed DSL versions are not routed."));
+            }
+        }
     }
 
     private String suiteTestRef(Object value) {
