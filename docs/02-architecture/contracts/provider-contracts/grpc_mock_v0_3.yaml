@@ -5,6 +5,7 @@ provider_role: mock_server
 protocol: grpc
 purpose: WireMock gRPC extension-backed mock provider contract for DSL v0.3 unary requests.
 runtime_modes: [mock]
+bindable_outputs: [target_uri]
 binding_keys:
   descriptor_ref:
     required: true

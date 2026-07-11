@@ -15,17 +15,34 @@ public final class V03GeneratedBindingDag {
     private final V03ReferenceParser parser = new V03ReferenceParser();
 
     public List<String> producerFirstOrder(Map<String, V03ResolvedTarget> targets) {
+        return producerFirstOrder(targets, Map.of());
+    }
+
+    public List<String> producerFirstOrder(
+            Map<String, V03ResolvedTarget> targets,
+            Map<String, V03ProviderContract> contracts) {
         Map<String, Set<String>> dependencies = new LinkedHashMap<>();
         for (Map.Entry<String, V03ResolvedTarget> entry : targets.entrySet()) {
+            Set<V03Reference.Generated> generated = new LinkedHashSet<>();
+            collectGeneratedReferences(entry.getValue().bindings(), generated);
             Set<String> producers = new LinkedHashSet<>();
-            collectGeneratedProducers(entry.getValue().bindings(), producers);
-            for (String producer : producers) {
+            for (V03Reference.Generated reference : generated) {
+                String producer = reference.target();
                 if (!targets.containsKey(producer)) {
                     throw invalid("missing_generated_producer", entry.getKey(), producer);
                 }
                 if (producer.equals(entry.getKey())) {
                     throw invalid("generated_binding_self_reference", entry.getKey(), producer);
                 }
+                if (!contracts.isEmpty()) {
+                    V03ResolvedTarget producerTarget = targets.get(producer);
+                    V03ProviderContract contract = contracts.get(producerTarget.providerContract());
+                    if (contract == null || !contract.bindableOutputs().contains(reference.output())) {
+                        throw new IllegalArgumentException("unknown_bindable_output: target `" + entry.getKey()
+                                + "` references `" + producer + "/" + reference.output() + "`.");
+                    }
+                }
+                producers.add(producer);
             }
             dependencies.put(entry.getKey(), producers);
         }
@@ -58,18 +75,18 @@ public final class V03GeneratedBindingDag {
         ordered.add(target);
     }
 
-    private void collectGeneratedProducers(Object value, Set<String> producers) {
+    private void collectGeneratedReferences(Object value, Set<V03Reference.Generated> references) {
         if (value instanceof Map<?, ?> map) {
-            map.values().forEach(item -> collectGeneratedProducers(item, producers));
+            map.values().forEach(item -> collectGeneratedReferences(item, references));
             return;
         }
         if (value instanceof Collection<?> collection) {
-            collection.forEach(item -> collectGeneratedProducers(item, producers));
+            collection.forEach(item -> collectGeneratedReferences(item, references));
             return;
         }
         V03Reference reference = parser.parse(value);
         if (reference instanceof V03Reference.Generated generated) {
-            producers.add(generated.target());
+            references.add(generated);
         }
     }
 

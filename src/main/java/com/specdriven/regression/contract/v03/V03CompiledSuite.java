@@ -13,4 +13,11 @@ public record V03CompiledSuite(
         Map<String, V03ResolvedTarget> targets,
         Map<String, Path> artifactRoots,
         List<V03CompiledTestCase> tests) {
+
+    public V03CompiledSuite {
+        suiteRoot = suiteRoot.toAbsolutePath().normalize();
+        targets = Map.copyOf(targets);
+        artifactRoots = Map.copyOf(artifactRoots);
+        tests = List.copyOf(tests);
+    }
 }

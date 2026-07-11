@@ -25,6 +25,7 @@ public class V03ExecutionPlanBuilder {
     private final V03ReferenceParser referenceParser = new V03ReferenceParser();
     private final V03ReferenceResolver referenceResolver = new V03ReferenceResolver(this::readDocument);
     private final V03GeneratedBindingDag generatedBindingDag = new V03GeneratedBindingDag();
+    private final V03ProviderContractCatalog providerContractCatalog = new V03ProviderContractCatalog();
 
     public V03ExecutionPlanBuilder() {
         this(new ContractBaselineService());
@@ -57,7 +58,8 @@ public class V03ExecutionPlanBuilder {
         Map<String, Object> suite = readMap(suiteManifest);
         String profile = effectiveProfile(requestedProfile, suite, validation);
         Map<String, Object> envProfile = readEnvProfile(suiteRoot, suite, profile);
-        Map<String, V03ResolvedTarget> targets = orderedTargets(resolvedTargets(validation, suite, profile, envProfile));
+        Map<String, V03ResolvedTarget> targets = orderedTargets(
+                resolvedTargets(validation, suite, profile, envProfile), providerContractCatalog.load(suiteRoot));
         List<Map<String, Object>> testDocuments = testDocuments(suiteRoot, suite);
         Map<String, Path> artifactRoots = artifactRoots(suiteRoot, suite);
         testDocuments.forEach(document -> validateReferences(document, artifactRoots));
@@ -178,9 +180,11 @@ public class V03ExecutionPlanBuilder {
         return targets;
     }
 
-    private Map<String, V03ResolvedTarget> orderedTargets(Map<String, V03ResolvedTarget> targets) {
+    private Map<String, V03ResolvedTarget> orderedTargets(
+            Map<String, V03ResolvedTarget> targets,
+            Map<String, V03ProviderContract> contracts) {
         Map<String, V03ResolvedTarget> ordered = new LinkedHashMap<>();
-        for (String target : generatedBindingDag.producerFirstOrder(targets)) {
+        for (String target : generatedBindingDag.producerFirstOrder(targets, contracts)) {
             ordered.put(target, targets.get(target));
         }
         return Collections.unmodifiableMap(ordered);

@@ -6,6 +6,7 @@ protocol: http
 runtime_implementation: wiremock
 purpose: Protocol-level HTTP mock contract for DSL v0.3 authoring. WireMock is the default runtime implementation.
 runtime_modes: [mock]
+bindable_outputs: [base_url]
 binding_keys:
   port_strategy:
     required: false
