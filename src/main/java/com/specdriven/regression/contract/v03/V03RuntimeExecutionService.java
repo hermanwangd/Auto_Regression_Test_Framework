@@ -81,7 +81,8 @@ public class V03RuntimeExecutionService {
         if (!validation.valid()) {
             return V03RuntimeRunResult.blocked(validation.suiteId(), profile, validation.findings());
         }
-        V03CompiledSuite compiled = new V03ExecutionPlanBuilder(contractBaselineService).compile(suiteManifest, profile);
+        V03CompiledSuite compiled = new V03ExecutionPlanBuilder(contractBaselineService)
+                .compile(suiteManifest, profile, validation);
         V03ExecutionPlan plan = V03ExecutionPlan.from(compiled);
         List<ContractFinding> supportFindings = unsupportedRuntimeFindings(suiteManifest, plan);
         if (!supportFindings.isEmpty()) {
@@ -89,14 +90,11 @@ public class V03RuntimeExecutionService {
         }
 
         Path suiteRoot = compiled.suiteRoot();
-        Map<String, Object> suite = compiled.suiteDocument();
-        List<Map<String, Object>> testCases = compiled.tests().stream().map(V03CompiledTestCase::document).toList();
-        Map<String, Object> envProfile = compiled.envProfile();
-        String evidenceClassification = firstNonBlank(
-                stringValue(envProfile.get("evidence_classification")),
-                "framework_verification_only");
-        boolean downstreamReleaseEvidence = downstreamReleaseEvidence(envProfile, evidenceClassification);
-        Map<String, Object> firstTestCase = testCases.isEmpty() ? Map.of() : testCases.get(0);
+        List<V03CompiledTestCase> testCases = compiled.tests();
+        String evidenceClassification = compiled.environmentProfile().evidenceClassification();
+        boolean downstreamReleaseEvidence = compiled.environmentProfile().downstreamReleaseEvidence()
+                || downstreamReleaseEvidence(evidenceClassification);
+        V03CompiledTestCase firstTestCase = testCases.isEmpty() ? null : testCases.get(0);
         String testCaseId = suiteLevelTestCaseId(plan.suiteId(), testCases);
         String batchId = executionContext.parentBatchId();
         String runId = executionContext.newRunId("V03");
@@ -117,7 +115,7 @@ public class V03RuntimeExecutionService {
                 compiled.artifactRoots(),
                 generatedOutputsByTarget,
                 outputsByStep,
-                envProfile,
+                Map.of(),
                 System.getenv(),
                 referenceResolver,
                 startedAt);
@@ -187,7 +185,6 @@ public class V03RuntimeExecutionService {
         Instant finishedAt = Instant.now();
         Path resultJson = writeResult(
                 runDir,
-                suite,
                 firstTestCase,
                 plan,
                 batchId,
@@ -607,8 +604,7 @@ public class V03RuntimeExecutionService {
 
     private Path writeResult(
             Path runDir,
-            Map<String, Object> suite,
-            Map<String, Object> testCase,
+            V03CompiledTestCase testCase,
             V03ExecutionPlan plan,
             String batchId,
             String runId,
@@ -620,7 +616,7 @@ public class V03RuntimeExecutionService {
             List<Map<String, Object>> verifyResults,
             List<Map<String, Object>> providerResults,
             List<String> evidenceRefs,
-            List<Map<String, Object>> testCases,
+            List<V03CompiledTestCase> testCases,
             Map<String, String> testStatuses,
             List<Map<String, Object>> cleanupFailures,
             Failure failure,
@@ -628,7 +624,7 @@ public class V03RuntimeExecutionService {
             boolean downstreamReleaseEvidence) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("framework_version", FRAMEWORK_VERSION);
-        result.put("dsl_version", testCase.get("dsl_version"));
+        result.put("dsl_version", testCase == null ? "v0.3" : testCase.dslVersion());
         result.put("suite_id", plan.suiteId());
         result.put("batch_id", batchId);
         result.put("run_id", runId);
@@ -646,7 +642,7 @@ public class V03RuntimeExecutionService {
         result.put("labels", Map.of(
                 "evidence_classification", evidenceClassification,
                 "downstream_release_evidence", downstreamReleaseEvidence));
-        result.put("source_refs", mapValue(testCase.get("source_refs")));
+        result.put("source_refs", testCase == null ? Map.of() : testCase.sourceRefs());
         result.put("step_results", stepResults);
         result.put("steps", stepResults);
         result.put("verify_results", verifyResults);
@@ -970,28 +966,25 @@ public class V03RuntimeExecutionService {
                 """.formatted(plan.suiteId(), testCaseId, status));
     }
 
-    private boolean downstreamReleaseEvidence(Map<String, Object> envProfile, String evidenceClassification) {
-        if (boolValue(envProfile.get("downstream_release_evidence"))) {
-            return true;
-        }
+    private boolean downstreamReleaseEvidence(String evidenceClassification) {
         return !List.of("framework_verification_only", "framework_provider_capability_only")
                 .contains(evidenceClassification);
     }
 
-    private String suiteLevelTestCaseId(String suiteId, List<Map<String, Object>> testCases) {
+    private String suiteLevelTestCaseId(String suiteId, List<V03CompiledTestCase> testCases) {
         if (testCases.size() == 1) {
-            return stringValue(testCases.get(0).get("test_case_id"));
+            return testCases.get(0).testCaseId();
         }
         return suiteId + "-MULTI";
     }
 
     private List<Map<String, Object>> testResults(
-            List<Map<String, Object>> testCases,
+            List<V03CompiledTestCase> testCases,
             Map<String, String> testStatuses,
             String profile) {
         List<Map<String, Object>> results = new ArrayList<>();
-        for (Map<String, Object> testCase : testCases) {
-            String testCaseId = stringValue(testCase.get("test_case_id"));
+        for (V03CompiledTestCase testCase : testCases) {
+            String testCaseId = testCase.testCaseId();
             results.add(Map.of(
                     "test_case_id", testCaseId,
                     "status", testStatuses.getOrDefault(testCaseId, "passed"),
@@ -1000,10 +993,10 @@ public class V03RuntimeExecutionService {
         return List.copyOf(results);
     }
 
-    private Map<String, String> initialTestStatuses(List<Map<String, Object>> testCases) {
+    private Map<String, String> initialTestStatuses(List<V03CompiledTestCase> testCases) {
         Map<String, String> statuses = new LinkedHashMap<>();
-        for (Map<String, Object> testCase : testCases) {
-            statuses.put(stringValue(testCase.get("test_case_id")), "passed");
+        for (V03CompiledTestCase testCase : testCases) {
+            statuses.put(testCase.testCaseId(), "passed");
         }
         return statuses;
     }

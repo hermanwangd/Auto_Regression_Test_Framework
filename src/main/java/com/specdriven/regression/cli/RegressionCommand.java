@@ -1140,7 +1140,7 @@ public class RegressionCommand {
         out.println("run_status: " + (ready ? "dry_run_ready" : "blocked"));
         if (validation.valid() && isV03Validation(validation)) {
             v03DryRunRenderer.render(out, new com.specdriven.regression.contract.v03.V03ExecutionPlanBuilder(
-                    contractBaselineService).compile(suiteManifest, options.get("--profile")));
+                    contractBaselineService).compile(suiteManifest, options.get("--profile"), validation));
         } else {
             DryRunResult result = contractBaselineService.dryRun(suiteManifest);
             out.println("suite_id: " + result.validation().suiteId());

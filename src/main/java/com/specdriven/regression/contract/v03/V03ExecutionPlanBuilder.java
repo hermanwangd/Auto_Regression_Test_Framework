@@ -40,6 +40,14 @@ public class V03ExecutionPlanBuilder {
 
     public V03CompiledSuite compile(Path suiteManifest, String requestedProfile) {
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
+        return compile(suiteManifest, requestedProfile, validation);
+    }
+
+    /** Compiles from a command-scoped validation result to avoid duplicate baseline validation. */
+    public V03CompiledSuite compile(
+            Path suiteManifest,
+            String requestedProfile,
+            ValidationResult validation) {
         if (!validation.valid()) {
             throw new IllegalArgumentException("v0.3 suite is not valid: " + validation.findings());
         }
@@ -57,8 +65,11 @@ public class V03ExecutionPlanBuilder {
                 stringValue(suite.get("suite_id")),
                 profile,
                 suiteRoot,
-                immutableMap(suite),
-                immutableMap(envProfile),
+                new V03SuiteMetadata(
+                        stringValue(suite.get("manifest_version")),
+                        stringValue(suite.get("suite_id")),
+                        stringValue(suite.get("default_profile"))),
+                compiledEnvironmentProfile(profile, envProfile),
                 Collections.unmodifiableMap(new LinkedHashMap<>(targets)),
                 artifactRoots,
                 compiledTestCases(steps, testDocuments));
@@ -102,10 +113,23 @@ public class V03ExecutionPlanBuilder {
             Map<String, Object> document = documents.stream()
                     .filter(candidate -> entry.getKey().equals(stringValue(candidate.get("test_case_id"))))
                     .findFirst().orElse(Map.of());
-            tests.add(new V03CompiledTestCase(entry.getKey(), immutableMap(document),
+            tests.add(new V03CompiledTestCase(
+                    entry.getKey(),
+                    stringValue(document.get("dsl_version")),
+                    stringValue(document.get("title")),
+                    stringMap(document.get("source_refs")),
                     List.copyOf(setup), List.copyOf(execute), List.copyOf(verify), List.copyOf(cleanup)));
         }
         return List.copyOf(tests);
+    }
+
+    private V03EnvironmentProfile compiledEnvironmentProfile(String profile, Map<String, Object> envProfile) {
+        return new V03EnvironmentProfile(
+                firstNonBlank(stringValue(envProfile.get("profile_id")), profile),
+                stringValue(envProfile.get("execution_mode")),
+                stringValue(envProfile.get("isolation")),
+                firstNonBlank(stringValue(envProfile.get("evidence_classification")), "framework_verification_only"),
+                Boolean.parseBoolean(stringValue(envProfile.get("downstream_release_evidence"))));
     }
 
     private Map<String, Path> artifactRoots(Path suiteRoot, Map<String, Object> suite) {
@@ -339,6 +363,14 @@ public class V03ExecutionPlanBuilder {
 
     private Map<String, Object> immutableMap(Map<String, Object> value) {
         return Collections.unmodifiableMap(new LinkedHashMap<>(value));
+    }
+
+    private Map<String, String> stringMap(Object value) {
+        Map<String, String> strings = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : mapValue(value).entrySet()) {
+            strings.put(entry.getKey(), stringValue(entry.getValue()));
+        }
+        return Map.copyOf(strings);
     }
 
     @SuppressWarnings("unchecked")

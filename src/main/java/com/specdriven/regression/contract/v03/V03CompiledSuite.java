@@ -8,8 +8,8 @@ public record V03CompiledSuite(
         String suiteId,
         String profile,
         Path suiteRoot,
-        Map<String, Object> suiteDocument,
-        Map<String, Object> envProfile,
+        V03SuiteMetadata metadata,
+        V03EnvironmentProfile environmentProfile,
         Map<String, V03ResolvedTarget> targets,
         Map<String, Path> artifactRoots,
         List<V03CompiledTestCase> tests) {

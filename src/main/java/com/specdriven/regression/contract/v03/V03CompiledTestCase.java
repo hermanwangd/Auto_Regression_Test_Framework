@@ -5,7 +5,9 @@ import java.util.Map;
 
 public record V03CompiledTestCase(
         String testCaseId,
-        Map<String, Object> document,
+        String dslVersion,
+        String title,
+        Map<String, String> sourceRefs,
         List<V03ExecutionStep> setup,
         List<V03ExecutionStep> execute,
         List<V03ExecutionStep> verify,
