@@ -24,6 +24,7 @@ public class V03ExecutionPlanBuilder {
     private final Yaml yaml = new Yaml();
     private final V03ReferenceParser referenceParser = new V03ReferenceParser();
     private final V03ReferenceResolver referenceResolver = new V03ReferenceResolver(this::readDocument);
+    private final V03GeneratedBindingDag generatedBindingDag = new V03GeneratedBindingDag();
 
     public V03ExecutionPlanBuilder() {
         this(new ContractBaselineService());
@@ -56,7 +57,7 @@ public class V03ExecutionPlanBuilder {
         Map<String, Object> suite = readMap(suiteManifest);
         String profile = effectiveProfile(requestedProfile, suite, validation);
         Map<String, Object> envProfile = readEnvProfile(suiteRoot, suite, profile);
-        Map<String, V03ResolvedTarget> targets = resolvedTargets(validation, suite, profile, envProfile);
+        Map<String, V03ResolvedTarget> targets = orderedTargets(resolvedTargets(validation, suite, profile, envProfile));
         List<Map<String, Object>> testDocuments = testDocuments(suiteRoot, suite);
         Map<String, Path> artifactRoots = artifactRoots(suiteRoot, suite);
         testDocuments.forEach(document -> validateReferences(document, artifactRoots));
@@ -175,6 +176,14 @@ public class V03ExecutionPlanBuilder {
                     immutableMap(mapValue(envTarget.get("bindings")))));
         }
         return targets;
+    }
+
+    private Map<String, V03ResolvedTarget> orderedTargets(Map<String, V03ResolvedTarget> targets) {
+        Map<String, V03ResolvedTarget> ordered = new LinkedHashMap<>();
+        for (String target : generatedBindingDag.producerFirstOrder(targets)) {
+            ordered.put(target, targets.get(target));
+        }
+        return Collections.unmodifiableMap(ordered);
     }
 
     private String providerType(String providerContract) {
