@@ -84,8 +84,11 @@ class MockServerCrossVerifySampleCommandTest {
         Path allureResults = extractPath(run.stdout(), "allure_results_dir");
         String parentBatchId = extractValue(run.stdout(), "batch_id");
         assertThat(suiteSummary.toString())
-                .contains("target/suite-groups")
-                .doesNotContain("target/provider-capability/mock_server_cross_verify");
+                .contains("target/regression")
+                .doesNotContain("target/suite-groups")
+                .doesNotContain("target/provider-capability");
+        assertThat(suiteSummary.getParent().resolve("children"))
+                .isDirectoryContaining(path -> path.getFileName().toString().equals("MOCK-SERVER-CROSS-VERIFY-REST-v0.2"));
         String summaryDocument = Files.readString(suiteSummary);
         assertThat(summaryDocument)
                 .contains("\"suite_id\": \"MOCK-SERVER-CROSS-VERIFY-v0.2\"")

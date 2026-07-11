@@ -1298,7 +1298,7 @@ Blocked aggregation runs return `run_status: blocked` and must not produce `batc
 | `run --dry-run` | `run_status: dry_run_ready`, `provider_runtime_invoked: false` | `run_status: blocked`, no runtime |
 | `run` | `batch_id`, `run_id`, `suite_summary_json`, `allure_results_dir` | `run_status: blocked`, no run artifacts |
 
-A successful v0.3 aggregation run writes canonical `result.json`, `suite_summary.json`, `suite_summary.yaml`, merged `evidence_index.yaml`, compatibility summary files, and raw Allure result files under `target/suite-groups/<suite_id>/<batch_id>/<run_id>/`. Every child uses the parent `batch_id`, a unique child `run_id`, and an isolated child directory.
+A successful v0.3 run writes canonical `result.json`, `suite_summary.json`, `suite_summary.yaml`, `evidence_index.yaml`, and optional raw Allure result files under `target/regression/<suite_id>/<batch_id>/<run_id>/`. A suite group stores each child below `children/<child_suite_id>/<child_run_id>/`; every child uses the parent `batch_id` and a unique child `run_id`.
 
 The canonical summary exposes `self_summary`, `child_aggregate_summary`, `total_summary`, `failure_summary`, `evidence_summary`, ordered `children`, and `aggregation_errors`. Parent counts come from each immediate child's validated `total_summary`; parents do not inspect grandchildren. A post-execution invalid child produces a partial blocked parent with `termination_reason: aggregation_error`. Structural preflight blockers still produce no run artifacts.
 
@@ -1308,9 +1308,9 @@ Suite-mode output paths are deterministic:
 
 | Run Type | Output Path | Canonical Artifact |
 | --- | --- | --- |
-| Direct provider capability suite | `target/provider-capability/<provider-family>/<suite_id>/<batch_id>/<run_id>/` | `result.json` |
-| Suite group aggregation | `target/suite-groups/<suite_id>/<batch_id>/<run_id>/` | `suite_summary.json` |
-| Report | Reads the printed `result_json` or `suite_summary_json` path | Deterministic text, YAML, or JSON summary |
+| Direct suite | `target/regression/<suite_id>/<batch_id>/<run_id>/` | `result.json`, `suite_summary.json` |
+| Suite group | `target/regression/<suite_id>/<batch_id>/<run_id>/` plus `children/<child_suite_id>/<child_run_id>/` | Parent and child `result.json`, `suite_summary.json` |
+| Report | Reads the printed `result_json` in the same run directory | Deterministic text, YAML, or JSON summary |
 
 Every direct suite result must reference an `evidence_index.yaml`; every suite group summary must include child suite status, `passed_count`, `failed_count`, `blocked_count`, and `status_taxonomy`. Expected-failure children are reported as `expected_failed_observed` only after execution. Preflight blockers remain `blocked` and do not produce run artifacts.
 

@@ -297,3 +297,7 @@ The remaining v0.3.0 work makes the execution plan, not raw YAML maps, the only 
 Provider Contracts gain typed binding/input/output definitions: value kind, Java/JSON shape, sensitivity, allowed phase, runtime mode, bindable output flag, evidence types, and failure codes. `generated://` bindings form a directed graph across targets; missing producers, undeclared outputs, self-references, and cycles block compilation.
 
 Version routing is strict: a leaf manifest chooses exactly one version before schema/contract lookup; mixed-version leaf artifacts block. Suite groups remain aggregators only. Canonical samples are executable documentation, and the Maven release gate must verify them from a clean checkout and outside the repository working directory.
+
+## 13. Unified Project Run Output
+
+Every entered v0.3 suite writes its canonical result, summary, and evidence below `target/regression/<suite_id>/<batch_id>/<run_id>/`. Provider type, runtime implementation, and suite-group status are internal dispatch details and must not create separate project output roots. A suite group writes the same parent artifact set and stores each child only below `children/<child_suite_id>/<child_run_id>/`.

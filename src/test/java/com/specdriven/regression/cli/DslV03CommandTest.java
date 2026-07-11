@@ -177,6 +177,10 @@ class DslV03CommandTest {
                 .doesNotContain("sample-fake-runtime");
         Path resultJson = extractPath(run.stdout(), "result_json");
         assertThat(resultJson).isRegularFile();
+        assertThat(resultJson.toString())
+                .contains("target/regression")
+                .doesNotContain("target/provider-capability")
+                .doesNotContain("target/suite-groups");
         String result = Files.readString(resultJson);
         assertThat(result)
                 .contains("\"framework_version\": \"0.3.0\"")

@@ -68,6 +68,10 @@ target, missing contract, binding keys, runtime mode, operation/input validation
 artifact traversal, symlink escape, forward `step://` refs, prohibited `data_binding`,
 raw secret guardrails, and cleanup failure preservation.
 
+## 3.1 Unified Output Contract
+
+Run a leaf suite and a suite group with `--root <project-root>`. Verify that both write canonical artifacts only below `target/regression/`; the group parent has `children/` entries for each executed child, each with a unique child `run_id`. Verify that no new run artifacts are written below `target/provider-capability/` or `target/suite-groups/`.
+
 ## 4. Positive Test Matrix
 
 | Test ID | AC | Scenario | Expected Result |

@@ -202,7 +202,7 @@ Happy path: CLI supports the invocation portion of the documented v0.2 public in
 
 Failure path: Missing suite, unknown tag, missing profile, missing option value, unsupported report format, incompatible profile, empty selection, child-suite aggregation refs that escape the aggregation manifest directory, duplicate child suite ids, or missing child suite manifests block with actionable output and usage errors returning exit code `2` where appropriate.
 
-Boundary path: Test, suite, suite group, and tag selection choose framework-readable checked-in approved tests only; they do not infer RP/RU membership. Suite group runs write aggregation output under `target/suite-groups/<suite_id>/<batch_id>/<run_id>/` with `suite_summary_json`, `suite_summary_yaml`, and `allure_results_dir`, and expected failure children pass only when observed status matches `expected_status`. Debug or next-stage support commands do not satisfy AC-015 unless they delegate to the documented v0.2 runtime interface.
+Boundary path: Test, suite, suite group, and tag selection choose framework-readable checked-in approved tests only; they do not infer RP/RU membership. Every entered v0.3 suite writes under `target/regression/<suite_id>/<batch_id>/<run_id>/`; a group stores child runs only under `children/<child_suite_id>/<child_run_id>/` and writes its parent `suite_summary_json`, `suite_summary_yaml`, and `allure_results_dir` in the same run directory. Expected failure children pass only when observed status matches `expected_status`. Debug or next-stage support commands do not satisfy AC-015 unless they delegate to the documented v0.2 runtime interface.
 
 ## AC-016 Validate Provider Contract, Provider Instance, and Provider Capability Contracts
 

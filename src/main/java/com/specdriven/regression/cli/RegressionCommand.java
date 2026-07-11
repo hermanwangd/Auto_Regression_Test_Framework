@@ -1123,7 +1123,7 @@ public class RegressionCommand {
                 return runSuiteGroup(
                         suiteManifest,
                         profile,
-                        root.resolve("target/suite-groups").normalize(),
+                        root.resolve("target/regression").normalize(),
                         driverDiscovery,
                         out);
             }
@@ -1131,7 +1131,7 @@ public class RegressionCommand {
                     suiteManifest,
                     suite,
                     profile,
-                    root.resolve("target/provider-capability").normalize(),
+                    root.resolve("target/regression").normalize(),
                     driverDiscovery);
             printSuiteRuntimeResult(out, result);
             return result.passed() ? 0 : 1;
@@ -1225,64 +1225,64 @@ public class RegressionCommand {
             return SuiteRuntimeResult.fromV03(v03RuntimeExecutionService.run(
                     suiteManifest,
                     profile,
-                    runtimeContext(parentContext, outputRoot.resolve("v03-runtime"), profile),
+                    runtimeContext(parentContext, outputRoot, profile),
                     validation));
         }
         if (supportsWireMockHttpRequestSample(providerTypes)) {
             return SuiteRuntimeResult.fromMixed(wireMockHttpRequestCapabilityService.run(
                     suiteManifest,
                     profile,
-                    runtimeContext(parentContext, outputRoot.resolve("wiremock_http_request"), profile)));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (supportsContractBaselineMixedSample(providerTypes)) {
             return SuiteRuntimeResult.fromContractBaseline(contractBaselineRuntimeService.run(
                     suiteManifest,
                     profile,
-                    runtimeContext(parentContext, outputRoot.resolve("contract_baseline"), profile),
+                    runtimeContext(parentContext, outputRoot, profile),
                     driverDiscovery));
         }
         if (supportsSoapMockSample(providerTypes)) {
             return SuiteRuntimeResult.fromSoap(soapMockCapabilityService.run(
                     suiteManifest,
                     profile,
-                    runtimeContext(parentContext, outputRoot.resolve("soap_mock"), profile)));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (supportsGrpcMockSample(providerTypes)) {
             return SuiteRuntimeResult.fromGrpc(grpcMockCapabilityService.run(
                     suiteManifest,
                     profile,
-                    runtimeContext(parentContext, outputRoot.resolve("grpc_mock"), profile)));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (providerTypes.equals(List.of("rest_client"))) {
             return SuiteRuntimeResult.fromRest(restClientCapabilityService.run(
                     suiteManifest,
                     profile,
-                    runtimeContext(parentContext, outputRoot.resolve("rest_client"), profile)));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (providerTypes.equals(List.of("wiremock_http_mock"))) {
             return SuiteRuntimeResult.fromWireMock(wireMockProviderCapabilityService.run(
                     suiteManifest,
                     profile,
-                    runtimeContext(parentContext, outputRoot.resolve("wiremock"), profile)));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (providerTypes.equals(List.of("jdbc")) || suiteRef.contains("provider_capability/jdbc")) {
             return SuiteRuntimeResult.fromJdbc(jdbcProviderCapabilityService.run(
                     suiteManifest,
                     profile,
-                    runtimeContext(parentContext, outputRoot.resolve("jdbc"), profile),
+                    runtimeContext(parentContext, outputRoot, profile),
                     driverDiscovery));
         }
         if (supportsMessagingClientSample(providerTypes, suiteRef)) {
             return SuiteRuntimeResult.fromMessaging(messagingClientProviderCapabilityService.run(
                     suiteManifest,
                     profile,
-                    runtimeContext(parentContext, outputRoot.resolve("messaging-client"), profile)));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (providerTypes.equals(List.of("nats")) || suiteRef.contains("provider_capability/nats")) {
             return SuiteRuntimeResult.fromNats(natsProviderCapabilityService.run(
                     suiteManifest,
                     profile,
-                    runtimeContext(parentContext, outputRoot.resolve("nats"), profile)));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (providerTypes.equals(List.of("common_verify"))
                 || suiteRef.contains("provider_capability/common_verify")
@@ -1290,7 +1290,7 @@ public class RegressionCommand {
             return SuiteRuntimeResult.fromCommonVerify(commonVerifyService.run(
                     suiteManifest,
                     profile,
-                    runtimeContext(parentContext, outputRoot.resolve("common_verify"), profile)));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (!providerTypes.equals(List.of("sample_fake_provider"))) {
             return SuiteRuntimeResult.blocked(validation.suiteId(), profile, List.of(new ContractFinding(
@@ -1306,7 +1306,7 @@ public class RegressionCommand {
         return SuiteRuntimeResult.fromGolden(goldenE2eService.run(
                 suiteManifest,
                 profile,
-                runtimeContext(parentContext, outputRoot.resolve("golden-e2e"), profile)));
+                runtimeContext(parentContext, outputRoot, profile)));
     }
 
     private SuiteExecutionContext runtimeContext(

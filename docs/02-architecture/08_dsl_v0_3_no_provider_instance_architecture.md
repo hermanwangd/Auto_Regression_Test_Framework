@@ -48,6 +48,8 @@ flowchart TD
 | Oracle and Assertion Engine | Execute `provider_check` operations through their Provider Contract, then evaluate framework-owned `assertion` steps over contract-declared outputs. `provider_check.expect` is not a v0.3 interface. |
 | Evidence and Reporting | Validate result/evidence references and preserve target, Provider Contract, profile, operation, output, and cleanup status. |
 
+All entered runs use one project-owned output boundary: `target/regression/<suite_id>/<batch_id>/<run_id>/`. A group parent uses that same shape and passes `children/` as the contained output root for child suites. Runtime/provider dispatch categories are not directory names in the public artifact contract.
+
 ## 4. Resolution Algorithm
 
 For each selected test case:
