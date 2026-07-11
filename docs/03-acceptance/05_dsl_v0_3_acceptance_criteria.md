@@ -1,6 +1,6 @@
 # DSL v0.3 Acceptance Criteria
 
-**Status:** Implemented for release/0.3.0 golden baseline; local release gates passed
+**Status:** v0.3.0 golden baseline and P0 assertion/reference hardening implemented; AC-V03-015 through AC-V03-017 are planned for v0.3.1.
 **Scope:** Versioned v0.3 DSL and runtime interface. These AC do not replace v0.2 acceptance criteria.
 
 ## AC-V03-001 Validate Suite Manifest Target Model
@@ -114,3 +114,21 @@ Happy path: Existing v0.2 samples continue to validate and run through the v0.2 
 Failure path: v0.3 changes must not remove or reinterpret v0.2 Provider Instance fields, Env_Profile compatibility, suite group behavior, or existing result/report compatibility.
 
 Boundary path: New v0.3 samples must not be used to claim v0.2 release support unless they are explicitly added to a versioned v0.3 release gate.
+
+## AC-V03-015 Canonical Plan and Compile-Once
+
+Happy path: validate, dry-run, and run for one v0.3 leaf suite share one typed `V03CompiledSuite` digest and produce the same resolved target/step ordering.
+
+Failure path: an invalid artifact blocks before a canonical plan is emitted; runtime must not reload YAML or revalidate semantic contracts.
+
+## AC-V03-016 Typed Contracts and Generated DAG
+
+Happy path: a typed Provider Contract validates phase, input kind, output sensitivity, runtime mode, and bindable generated output before dispatch.
+
+Failure path: invalid type, phase, runtime mode, missing producer, undeclared generated output, self-reference, or dependency cycle blocks with an owner-actionable field path.
+
+## AC-V03-017 Strict Version Routing and Executable Release Docs
+
+Happy path: each leaf suite routes by one declared manifest/DSL version; executable documentation samples validate, run where locally supported, and pass report/evidence checks from the release artifact.
+
+Failure path: absent, unsupported, or mixed leaf versions block before schema/contract lookup. A release gate fails when a documented sample, bundled contract registry, or Maven verification command is unavailable outside the repository working directory.

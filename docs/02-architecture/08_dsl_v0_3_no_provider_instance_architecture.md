@@ -1,6 +1,6 @@
 # DSL v0.3 No Provider Instance Architecture
 
-**Status:** Implemented for release/0.3.0 golden baseline; local release gates passed
+**Status:** v0.3.0 golden baseline and P0 assertion/reference hardening implemented; v0.3.1 canonical compiler architecture planned.
 **Scope:** Versioned DSL v0.3 runtime model. v0.2 and v0.2.7 Provider Instance behavior remains unchanged.
 
 ## 1. Architecture Decision
@@ -218,3 +218,9 @@ This architecture is ready for implementation when:
 - evidence/report validation no longer requires Provider Instance refs for v0.3.
 
 The companion implementation plan breaks these conditions into ordered implementation slices.
+
+## 11. v0.3.1 Canonical Compiler Boundary
+
+`ContractBaselineService` remains responsible for artifact discovery and version routing. A new typed compiler boundary then produces `V03CompiledSuite` exactly once. Its validation digest is the only semantic validation result used by `validate`, dry-run, and runtime; runtime may not reload suite, Env_Profile, test-case, or Provider Contract YAML.
+
+The canonical plan contains typed Provider Contract definitions and resolved target bindings. A `GeneratedBindingDag` is built before provider dispatch and provides deterministic target ordering. The plan exposes only masked values to renderers and evidence writers; provider runtimes receive materialized values through typed runtime requests.

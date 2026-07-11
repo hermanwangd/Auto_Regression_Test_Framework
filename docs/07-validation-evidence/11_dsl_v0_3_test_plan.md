@@ -152,3 +152,13 @@ The full v0.3 matrix is not complete until:
 - secret guardrail tests cover DSL, Env_Profile, result, evidence, and report,
 - selected v0.2 smoke tests still pass,
 - checked-in v0.3 samples are included in usage documentation only after the versioned feature is accepted.
+
+## 8. v0.3.1 Semantic Contract Matrix
+
+| Area | Happy path | Failure/boundary path |
+| --- | --- | --- |
+| Canonical plan | validate, dry-run, and run share plan digest and ordered steps | invalid input emits no plan; runtime YAML reload is detected by characterization test |
+| Typed contracts | input/output types, sensitivity, phase, runtime mode, and evidence fields validate | type mismatch, prohibited phase, unknown output, unsafe output consumption |
+| Generated DAG | producer runs before consumer deterministically | missing producer, undeclared output, self-edge, two-node and longer cycle |
+| Version routing | v0.2 and v0.3 leaf suites route independently in a group | missing/unsupported manifest version and mixed leaf versions block pre-schema |
+| Executable docs/release | clean-checkout jar/usage-kit samples validate, run, report, and validate evidence | missing sample, contract registry, schema, user guide, or outside-cwd execution fails gate |

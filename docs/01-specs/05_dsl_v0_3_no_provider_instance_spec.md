@@ -1,6 +1,6 @@
 # DSL v0.3 No Provider Instance Specification
 
-**Status:** Implemented for release/0.3.0 golden baseline; local release gates passed
+**Status:** v0.3.0 public preview and P0 assertion/reference hardening implemented. The v0.3.1 semantic-contract scope below remains planned.
 **Version:** v0.3 public preview interface
 **Scope:** Versioned DSL and runtime contract track. This document does not change the v0.2 or v0.2.7 public interface.
 
@@ -289,3 +289,11 @@ The v0.3 spec is implementation-ready when:
 - every acceptance criterion in the v0.3 AC document maps to at least one planned test.
 
 This document satisfies those readiness conditions when read together with the v0.3 architecture, AC, test plan, and implementation plan documents.
+
+## 12. v0.3.1 Semantic Contract Scope
+
+v0.3.1 makes the execution plan, not raw YAML maps, the only semantic runtime input. `V03CompiledSuite` becomes a typed canonical plan containing typed targets, tests, steps, bindings, declared outputs, evidence requirements, and a validation digest. Validation compiles once; validate, dry-run, and runtime consume that same immutable object.
+
+Provider Contracts gain typed binding/input/output definitions: value kind, Java/JSON shape, sensitivity, allowed phase, runtime mode, bindable output flag, evidence types, and failure codes. `generated://` bindings form a directed graph across targets; missing producers, undeclared outputs, self-references, and cycles block compilation.
+
+Version routing is strict: a leaf manifest chooses exactly one version before schema/contract lookup; mixed-version leaf artifacts block. Suite groups remain aggregators only. Canonical samples are executable documentation, and the Maven release gate must verify them from a clean checkout and outside the repository working directory.
