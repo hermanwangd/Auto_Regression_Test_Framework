@@ -1,12 +1,19 @@
 dsl_version: v0.3
 test_case_id: NEG-SYMLINK-ESCAPE-TC-001
+title: Reject an artifact symlink that escapes its declared root
 setup:
   - id: escaped_symlink
     target: common_verifier
     op: json_match
     with:
-      expected_ref: artifact://expected/escaped.json
+      expected_ref: artifact://expected/../outside.json
       actual_ref: artifact://actual/actual.json
 execute: []
-verify: []
+verify:
+  - id: placeholder_assertion
+    type: assertion
+    assert:
+      operator: equals
+      actual: true
+      expected: true
 cleanup: []

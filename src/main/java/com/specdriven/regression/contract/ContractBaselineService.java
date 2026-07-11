@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.specdriven.regression.contract.v03.V03ExecutionPlan;
 import com.specdriven.regression.contract.v03.V03ExecutionPlanBuilder;
+import com.specdriven.regression.contract.v03.assertion.V03AssertionValidator;
+import com.specdriven.regression.contract.v03.ref.V03ReferenceParser;
 import com.specdriven.regression.report.LegacySuiteSummaryReportAdapter;
 import com.specdriven.regression.summary.SuiteSummaryDocument;
 import com.specdriven.regression.summary.SuiteSummaryValidator;
@@ -32,6 +34,8 @@ import org.yaml.snakeyaml.Yaml;
 public class ContractBaselineService {
     private final LegacySuiteSummaryReportAdapter legacySummaryAdapter = new LegacySuiteSummaryReportAdapter();
     private final SuiteSummaryValidator suiteSummaryValidator = new SuiteSummaryValidator();
+    private final V03AssertionValidator v03AssertionValidator = new V03AssertionValidator();
+    private final V03ReferenceParser v03ReferenceParser = new V03ReferenceParser();
     private final ObjectMapper summaryMapper = new ObjectMapper().findAndRegisterModules()
             .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
 
@@ -665,15 +669,23 @@ public class ContractBaselineService {
             return;
         }
         String reference = stringValue(value);
-        if (reference.startsWith("generated://")) {
-            String body = reference.substring("generated://".length());
-            if (body.indexOf('/') < 1 || body.indexOf('/', body.indexOf('/') + 1) >= 0 || body.contains(".")) {
-                findings.add(finding(path, fieldPath, "invalid_generated_ref",
-                        "Use `generated://<target>/<output>` in DSL v0.3."));
-            }
-        } else if (reference.startsWith("env://")) {
+        if (!(reference.startsWith("artifact://")
+                || reference.startsWith("step://")
+                || reference.startsWith("generated://")
+                || reference.startsWith("env://"))) {
+            return;
+        }
+        try {
+            v03ReferenceParser.parse(reference);
+        } catch (IllegalArgumentException error) {
+            String code = error.getMessage().split(":", 2)[0];
+            findings.add(finding(path, fieldPath, code,
+                    "Use the frozen DSL v0.3 typed-reference syntax."));
+            return;
+        }
+        if (reference.startsWith("generated://") || reference.startsWith("env://")) {
             findings.add(finding(path, fieldPath, "invalid_reference_scope",
-                    "Use env:// values only in Env_Profile bindings, not in DSL test cases."));
+                    "Use generated:// and env:// values only in Env_Profile bindings, not in DSL test cases."));
         }
     }
 
@@ -687,14 +699,12 @@ public class ContractBaselineService {
             String id = stringValue(verify.get("id"));
             String fieldPath = id.isBlank() ? "verify[" + verifyIndex + "]" : "verify." + id;
             validateV03StepId(testCasePath, fieldPath, id, seenIds, findings);
-            String type = stringValue(verify.get("type"));
-            if (!type.isBlank() && !Set.of("assertion", "provider_check").contains(type)) {
-                findings.add(finding(testCasePath, fieldPath + ".type", "unsupported_verify_type",
-                        "Use `assertion` or `provider_check` for DSL v0.3 verify steps."));
-            }
-            if ("provider_check".equals(type) && verify.containsKey("expect")) {
-                findings.add(finding(testCasePath, fieldPath + ".expect", "prohibited_provider_check_expect",
-                        "Put provider-specific expected input in contract-declared `with` fields and compare provider output in a subsequent `type: assertion` step."));
+            for (V03AssertionValidator.Issue issue : v03AssertionValidator.validate(verify)) {
+                findings.add(finding(
+                        testCasePath,
+                        fieldPath + issue.fieldSuffix(),
+                        issue.code(),
+                        issue.remediation()));
             }
             verifyIndex++;
         }
@@ -1142,22 +1152,33 @@ public class ContractBaselineService {
             V03OperationRef operationRef,
             Set<String> priorSteps,
             List<ContractFinding> findings) {
-        String actual = stringValue(operationRef.inputs().get("actual"));
-        if (!actual.startsWith("step://")) {
-            return;
-        }
-        String refBody = actual.substring("step://".length());
-        String stepId = refBody.split("/", 2)[0];
-        if (!priorSteps.contains(stepId)) {
-            findings.add(new ContractFinding(
-                    testCasePath.toString(),
-                    operationRef.fieldPath() + ".assert.actual",
-                    "invalid_step_ref",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "Reference only prior steps in the same v0.3 test case. Unknown or forward step `" + stepId + "`."));
+        for (String operand : List.of("actual", "actual_ref", "expected", "expected_ref")) {
+            String reference = stringValue(operationRef.inputs().get(operand));
+            if (!reference.startsWith("step://")) {
+                continue;
+            }
+            String refBody = reference.substring("step://".length());
+            int slash = refBody.indexOf('/');
+            if (slash < 1 || slash == refBody.length() - 1) {
+                findings.add(finding(
+                        testCasePath,
+                        operationRef.fieldPath() + ".assert." + operand,
+                        "invalid_step_ref",
+                        "Use `step://<prior-step-id>/<output-path>` for v0.3 step references."));
+                continue;
+            }
+            String stepId = refBody.substring(0, slash);
+            if (!priorSteps.contains(stepId)) {
+                findings.add(new ContractFinding(
+                        testCasePath.toString(),
+                        operationRef.fieldPath() + ".assert." + operand,
+                        "invalid_step_ref",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "Reference only prior steps in the same v0.3 test case. Unknown or forward step `" + stepId + "`."));
+            }
         }
     }
 

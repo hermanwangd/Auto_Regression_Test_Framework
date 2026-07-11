@@ -42,7 +42,7 @@ public class PollingObserverV03Adapter extends AbstractProviderRuntimeV03Adapter
         String evidenceRef = "polling/" + safe(step.id()) + ".yaml";
         Map<String, Object> expected;
         try {
-            expected = mapValue(readYaml(context.suiteRoot().resolve(artifactRef(step.inputs().get("expected_ref"))).normalize()));
+            expected = mapValue(readYaml(artifactPath(step.inputs().get("expected_ref"), step, context)));
         } catch (UncheckedIOException e) {
             writePollingEvidence(context.runDir().resolve(evidenceRef), step, start, Instant.now(), 1,
                     Map.of(), "failed", "POLLING_ARTIFACT_MISSING");
@@ -77,7 +77,7 @@ public class PollingObserverV03Adapter extends AbstractProviderRuntimeV03Adapter
         while (true) {
             attempts++;
             try {
-                actual = mapValue(readYaml(context.suiteRoot().resolve(artifactRef(step.inputs().get("actual_ref"))).normalize()));
+                actual = mapValue(readYaml(artifactPath(step.inputs().get("actual_ref"), step, context)));
             } catch (UncheckedIOException e) {
                 writePollingEvidence(context.runDir().resolve(evidenceRef), step, start, Instant.now(), attempts,
                         actual, "failed", "POLLING_ARTIFACT_MISSING");
@@ -205,11 +205,6 @@ public class PollingObserverV03Adapter extends AbstractProviderRuntimeV03Adapter
             return normalized;
         }
         return Map.of();
-    }
-
-    private Path artifactRef(Object value) {
-        String text = stringValue(value);
-        return Path.of(text.startsWith("artifact://") ? text.substring("artifact://".length()) : text);
     }
 
     private Duration duration(Object value, Duration defaultValue) {

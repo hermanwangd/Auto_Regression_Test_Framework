@@ -20,6 +20,16 @@ class V03ReferenceParserTest {
     }
 
     @Test
+    void parsesStepReferenceWithJsonPointer() {
+        V03Reference.Step reference =
+                (V03Reference.Step) parser.parse("step://call/response.body#/order/id");
+
+        assertThat(reference.stepId()).isEqualTo("call");
+        assertThat(reference.outputPath()).isEqualTo("response.body");
+        assertThat(reference.jsonPointer()).isEqualTo("/order/id");
+    }
+
+    @Test
     void rejectsLegacyDotGeneratedReference() {
         assertThatThrownBy(() -> parser.parse("generated://payment_mock.base_url"))
                 .isInstanceOf(IllegalArgumentException.class)

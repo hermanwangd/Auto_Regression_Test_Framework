@@ -4,10 +4,13 @@ import com.specdriven.regression.contract.v03.V03ExecutionContext;
 import com.specdriven.regression.contract.v03.V03ExecutionStep;
 import com.specdriven.regression.contract.v03.V03ResolvedTarget;
 import com.specdriven.regression.contract.v03.V03StepResult;
+import com.specdriven.regression.contract.v03.ref.V03Reference;
+import com.specdriven.regression.contract.v03.ref.V03ReferenceParser;
 import com.specdriven.regression.provider.runtime.ProviderEvidence;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderOperationRequest;
 import com.specdriven.regression.provider.runtime.ProviderOperationResult;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,12 +18,16 @@ import java.util.Map;
 
 abstract class AbstractProviderRuntimeV03Adapter {
 
+    private final V03ReferenceParser referenceParser = new V03ReferenceParser();
+
     ProviderExecutionContext providerContext(V03ExecutionStep step, V03ExecutionContext context) {
         V03ResolvedTarget target = context.targets().get(step.target());
         Map<String, Object> bindingValues = new LinkedHashMap<>();
         if (target != null) {
             for (Map.Entry<String, Object> entry : target.bindings().entrySet()) {
-                Object resolved = resolveGenerated(entry.getValue(), context);
+                Object resolved = isSecretReferenceBinding(entry.getKey())
+                        ? entry.getValue()
+                        : resolveProviderValue(entry.getValue(), step, context);
                 bindingValues.put(entry.getKey(), resolved);
                 putDotted(bindingValues, entry.getKey(), resolved);
             }
@@ -37,14 +44,14 @@ abstract class AbstractProviderRuntimeV03Adapter {
                 bindingValues);
     }
 
-    ProviderOperationRequest request(V03ExecutionStep step) {
+    ProviderOperationRequest request(V03ExecutionStep step, V03ExecutionContext context) {
         List<Map<String, Object>> parameters = new ArrayList<>();
         for (Map.Entry<String, Object> entry : step.inputs().entrySet()) {
             String bindAs = mapBindAs(entry.getKey());
             Map<String, Object> parameter = new LinkedHashMap<>();
             parameter.put("name", bindAs);
             parameter.put("bind_as", bindAs);
-            parameter.put("ref", normalizeRef(entry.getValue()));
+            parameter.put("ref", resolveProviderValue(entry.getValue(), step, context));
             parameters.add(parameter);
         }
         Map<String, Object> outputs = new LinkedHashMap<>();
@@ -63,22 +70,28 @@ abstract class AbstractProviderRuntimeV03Adapter {
                 result.failure() == null ? "" : result.failure().reason());
     }
 
-    Object resolveGenerated(Object value, V03ExecutionContext context) {
-        String text = stringValue(value);
-        if (!text.startsWith("generated://")) {
-            return value;
+    Object resolveProviderValue(Object value, V03ExecutionStep step, V03ExecutionContext context) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> resolved = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                resolved.put(String.valueOf(entry.getKey()),
+                        resolveProviderValue(entry.getValue(), step, context));
+            }
+            return Map.copyOf(resolved);
         }
-        String ref = text.substring("generated://".length());
-        int slash = ref.indexOf('/');
-        if (slash < 0) {
-            return value;
+        if (value instanceof List<?> list) {
+            return list.stream().map(item -> resolveProviderValue(item, step, context)).toList();
         }
-        String target = ref.substring(0, slash);
-        String output = ref.substring(slash + 1);
-        Object resolved = context.generatedOutputsByTarget()
-                .getOrDefault(target, Map.of())
-                .get(output);
-        return resolved == null ? value : resolved;
+        V03Reference reference = referenceParser.parse(value);
+        return context.referenceResolver().resolveProviderValue(reference, context.referenceContext(step.testCaseId()));
+    }
+
+    Path artifactPath(Object value, V03ExecutionStep step, V03ExecutionContext context) {
+        V03Reference reference = referenceParser.parse(value);
+        if (!(reference instanceof V03Reference.Artifact artifact)) {
+            throw new IllegalArgumentException("artifact_ref_required: `" + value + "`.");
+        }
+        return context.referenceResolver().artifactPath(artifact, context.referenceContext(step.testCaseId()));
     }
 
     @SuppressWarnings("unchecked")
@@ -99,16 +112,12 @@ abstract class AbstractProviderRuntimeV03Adapter {
         current.put(parts[parts.length - 1], value);
     }
 
-    String mapBindAs(String inputName) {
-        return inputName;
+    private boolean isSecretReferenceBinding(String bindingName) {
+        return bindingName.endsWith(".secret_ref") || "secret_ref".equals(bindingName);
     }
 
-    Object normalizeRef(Object value) {
-        String text = stringValue(value);
-        if (text.startsWith("artifact://")) {
-            return text.substring("artifact://".length());
-        }
-        return value;
+    String mapBindAs(String inputName) {
+        return inputName;
     }
 
     String stringValue(Object value) {

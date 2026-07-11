@@ -29,6 +29,6 @@ public class IbmMqV03Adapter extends AbstractProviderRuntimeV03Adapter implement
 
     @Override
     public V03StepResult execute(V03ExecutionStep step, V03ExecutionContext context) {
-        return stepResult(step, runtime.execute(providerContext(step, context), request(step)));
+        return stepResult(step, runtime.execute(providerContext(step, context), request(step, context)));
     }
 }

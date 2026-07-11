@@ -22,7 +22,7 @@ public class RestClientV03Adapter extends AbstractProviderRuntimeV03Adapter impl
 
     @Override
     public V03StepResult execute(V03ExecutionStep step, V03ExecutionContext context) {
-        return stepResult(step, runtime.execute(providerContext(step, context), request(step)));
+        return stepResult(step, runtime.execute(providerContext(step, context), request(step, context)));
     }
 
     @Override

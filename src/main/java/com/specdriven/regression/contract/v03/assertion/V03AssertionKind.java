@@ -22,6 +22,10 @@ public enum V03AssertionKind {
         this.value = value;
     }
 
+    public String dslValue() {
+        return value;
+    }
+
     public static V03AssertionKind require(String value) {
         return Arrays.stream(values())
                 .filter(kind -> kind.value.equals(value))
