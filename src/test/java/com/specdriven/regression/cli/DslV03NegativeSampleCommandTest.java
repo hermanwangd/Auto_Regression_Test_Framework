@@ -42,7 +42,7 @@ class DslV03NegativeSampleCommandTest {
                 sample("unsupported operation", "operations/unsupported_operation", "unsupported_operation", "not_supported"),
                 sample("unsupported input", "operations/unsupported_input", "unsupported_input", "unsupported_input"),
                 sample("invalid artifact ref", "refs/invalid_artifact_ref", "invalid_artifact_ref", "setup.invalid_artifact.with.expected_ref"),
-                sample("symlink artifact escape", "refs/symlink_escape", "ref_outside_suite_root", "setup.escaped_symlink.with.expected_ref"),
+                sample("artifact root escape", "refs/symlink_escape", "invalid_artifact_ref", "setup.escaped_symlink.with.expected_ref"),
                 sample("forward step ref", "refs/forward_step_ref", "invalid_step_ref", "future_step"),
                 sample("legacy data binding", "legacy-fields/data_binding", "prohibited_legacy_field", "data_binding"),
                 sample("raw secret in DSL", "secrets/raw_secret_dsl", "raw_secret", "password"),

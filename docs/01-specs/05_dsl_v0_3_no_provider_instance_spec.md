@@ -190,6 +190,10 @@ Rules:
 - `op`, `with`, and output refs are validated by the target Provider Contract.
 - `provider_check.expect` is prohibited. Provider-specific expectation input belongs in contract-declared `with`; use a following `type: assertion` step for framework-owned comparison.
 - `verify` supports `type: assertion` and `type: provider_check`.
+- Every verify step must declare `type`; missing or unknown types are validation errors.
+- `type: assertion` requires an `assert` map and one of the frozen operators: `equals`, `not_equals`, `gt`, `gte`, `lt`, `lte`, `matches`, `exists`, `not_exists`, `json_match`, `schema_match`, or `file_diff`.
+- Assertion operators are fail-closed. Runtime must not reinterpret an unknown operator as `equals`, and an unresolved non-existence reference must not become an empty string.
+- Scalar comparison operators require `actual` or `actual_ref`; all except `exists` and `not_exists` also require `expected` or `expected_ref`.
 - Provider configuration, endpoints, topics, queues, DB credentials, and generated runtime values do not belong in test cases.
 
 Prohibited v0.3 test case fields:
@@ -228,6 +232,9 @@ Allowed refs:
 Validation rules:
 
 - `artifact://` roots must exist in the suite manifest.
+- Artifact root aliases are resolved to their declared physical directories before provider execution; adapters must not strip the `artifact://` prefix themselves.
+- JSON Pointer fragments are materialized by the shared reference resolver for artifact, step-output, and generated-output references.
+- Missing artifact, step, generated, or environment references fail closed; unresolved reference strings must never be forwarded to a provider runtime.
 - Paths must canonicalize under the suite directory and must reject absolute paths, `../`, `~`, drive-letter paths, encoded traversal, symlink escape, and root overlap.
 - JSON pointers must be valid RFC 6901 pointers and bounded by configured depth and extracted value size.
 - `step://` may reference only prior steps in the same test case.

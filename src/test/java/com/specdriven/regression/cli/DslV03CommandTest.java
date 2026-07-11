@@ -242,6 +242,76 @@ class DslV03CommandTest {
     }
 
     @Test
+    void validateV03SuiteRejectsMissingVerifyType() throws Exception {
+        Path suite = mutableV03Golden();
+        Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
+        Files.writeString(testCase, Files.readString(testCase).replace("    type: assertion\n", ""));
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("field_path: verify.status_is_ok.type")
+                .contains("reason: missing_verify_type");
+    }
+
+    @Test
+    void validateV03SuiteRejectsMissingAssertDefinition() throws Exception {
+        Path suite = mutableV03Golden();
+        Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
+        String yaml = Files.readString(testCase).replace(
+                "    assert:\n"
+                        + "      actual: step://produce_sample_output/actual_json.status\n"
+                        + "      operator: equals\n"
+                        + "      expected: OK\n",
+                "");
+        Files.writeString(testCase, yaml);
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("field_path: verify.status_is_ok.assert")
+                .contains("reason: missing_assert_definition");
+    }
+
+    @Test
+    void validateV03SuiteRejectsUnknownAssertionOperator() throws Exception {
+        Path suite = mutableV03Golden();
+        Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
+        Files.writeString(testCase, Files.readString(testCase).replace("operator: equals", "operator: equlas"));
+
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).isEqualTo(1);
+        assertThat(result.stdout())
+                .contains("field_path: verify.status_is_ok.assert.operator")
+                .contains("reason: unsupported_assertion_operator");
+    }
+
+    @Test
+    void runV03SuiteResolvesArtifactAliasJsonPointerAndNumericOperator() throws Exception {
+        Path suite = mutableV03Golden();
+        Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");
+        Files.writeString(suite, Files.readString(suite).replace("  fixtures: fixtures/", "  payloads: fixtures/"));
+        String yaml = Files.readString(testCase)
+                .replace("artifact://fixtures/", "artifact://payloads/")
+                .replace(
+                        "      actual: step://produce_sample_output/actual_json.status\n"
+                                + "      operator: equals\n"
+                                + "      expected: OK",
+                        "      actual_ref: artifact://payloads/input.json#/amount\n"
+                                + "      operator: gte\n"
+                                + "      expected: 100");
+        Files.writeString(testCase, yaml);
+
+        CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(result.exit()).as(result.stderr() + result.stdout()).isZero();
+        assertThat(result.stdout()).contains("run_status: passed");
+    }
+
+    @Test
     void validateV03SuiteRejectsUnknownVerifyType() throws Exception {
         Path suite = mutableV03Golden();
         Path testCase = suite.getParent().resolve("test_cases/golden_success.yaml");

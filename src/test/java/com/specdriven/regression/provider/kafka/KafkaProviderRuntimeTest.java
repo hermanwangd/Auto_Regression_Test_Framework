@@ -141,6 +141,7 @@ class KafkaProviderRuntimeTest {
                   "status": "CREATED"
                 }
                 """);
+        System.setProperty("KAFKA_BOOTSTRAP_SERVERS", "127.0.0.1:9092");
         try {
             RecordingKafkaClientTransport transport = new RecordingKafkaClientTransport();
             KafkaProviderRuntime runtime = new KafkaProviderRuntime(transport);
@@ -154,7 +155,7 @@ class KafkaProviderRuntimeTest {
                     Map.of("provider_type", "kafka"),
                     Map.of("provider_id", "order-events", "provider_type", "kafka"),
                     Map.of(
-                            "bootstrap_servers", "127.0.0.1:9092",
+                            "bootstrap_servers", Map.of("secret_ref", "env://KAFKA_BOOTSTRAP_SERVERS"),
                             "topic", "orders.created",
                             "consumer_group", "artf-ci"));
 
@@ -188,6 +189,7 @@ class KafkaProviderRuntimeTest {
                     .contains("status: passed")
                     .contains("raw_secret_found: false");
         } finally {
+            System.clearProperty("KAFKA_BOOTSTRAP_SERVERS");
         }
     }
 

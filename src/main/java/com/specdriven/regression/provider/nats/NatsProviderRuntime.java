@@ -293,15 +293,31 @@ public class NatsProviderRuntime implements ProviderRuntime {
                     "Use an approved local_ref or a secret_ref resolved by the execution environment."));
         }
         if (!secretRef.isBlank()) {
-            URI uri = natsUri(secretRef);
-            if (uri != null) {
-                return new ConnectionSelection("materialized", uri, null);
+            if (secretRef.startsWith("env://")) {
+                String envName = secretRef.substring("env://".length());
+                String value = firstNonBlank(System.getenv(envName), System.getProperty(envName));
+                if (value.isBlank()) {
+                    return new ConnectionSelection("", null, failure(
+                            "NATS_CONNECTION_FAILED",
+                            "NATS_CONNECTION_FAILED",
+                            "NATS env secret ref `" + secretRef + "` is not set.",
+                            "Set environment variable `" + envName + "` to a NATS connection URI before running."));
+                }
+                URI uri = natsUri(value);
+                if (uri == null) {
+                    return new ConnectionSelection("", null, failure(
+                            "NATS_CONNECTION_FAILED",
+                            "NATS_CONNECTION_FAILED",
+                            "NATS env secret ref `" + secretRef + "` did not resolve to a supported NATS URI.",
+                            "Set `" + envName + "` to `nats://host:port` for this execution profile."));
+                }
+                return new ConnectionSelection("env:" + envName, uri, null);
             }
             return new ConnectionSelection("", null, failure(
                     "NATS_CONNECTION_FAILED",
                     "NATS_CONNECTION_FAILED",
-                    "NATS connection binding did not resolve to a supported NATS URI.",
-                    "Set the referenced environment value to `nats://host:port` for this execution profile."));
+                    "NATS secret_ref must use an environment-backed reference for framework runtime resolution.",
+                    "Use `env://VARIABLE_NAME`; do not put raw NATS connection strings in artifacts."));
         }
         return new ConnectionSelection("", null, failure(
                 "NATS_CONNECTION_FAILED",

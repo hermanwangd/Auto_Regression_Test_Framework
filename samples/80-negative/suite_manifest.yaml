@@ -3,6 +3,14 @@ suite_id: NEGATIVE-v0.3
 purpose: Aggregate v0.3 negative validation and runtime samples. Expected failures are explicit child outcomes, not preflight blockers.
 profile: local_v03
 child_suites:
+  - id: ASSERTION-001
+    ref: assertions/missing_verify_type/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
+  - id: ASSERTION-002
+    ref: assertions/unknown_operator/suite_manifest.yaml
+    profile: local_v03
+    expected_status: failed
   - id: BINDING-001
     ref: bindings/invalid_runtime_mode/suite_manifest.yaml
     profile: local_v03

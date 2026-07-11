@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public final class SampleFakeProviderV03Adapter implements V03ProviderRuntimeAdapter {
+public final class SampleFakeProviderV03Adapter extends AbstractProviderRuntimeV03Adapter implements V03ProviderRuntimeAdapter {
 
     private static final Set<String> OPERATIONS = Set.of("setup_fixture", "execute_sample", "cleanup_fixture");
     private final SampleFakeProvider provider = new SampleFakeProvider();
@@ -31,13 +31,13 @@ public final class SampleFakeProviderV03Adapter implements V03ProviderRuntimeAda
     }
 
     private V03StepResult setup(V03ExecutionStep step, V03ExecutionContext context) {
-        SampleFakeProvider.SetupResult result = provider.setup(path(context, step.inputs().get("fixture.setup_ref")),
-                path(context, step.inputs().get("fixture.input_ref")), context.runDir(), step.target());
+        SampleFakeProvider.SetupResult result = provider.setup(artifactPath(step.inputs().get("fixture.setup_ref"), step, context),
+                artifactPath(step.inputs().get("fixture.input_ref"), step, context), context.runDir(), step.target());
         return new V03StepResult(step.id(), result.passed() ? "passed" : "failed", Map.of(), List.of(relative(context, result.evidenceRef())), "", "");
     }
 
     private V03StepResult run(V03ExecutionStep step, V03ExecutionContext context) {
-        SampleFakeProvider.ExecutionResult result = provider.execute(path(context, step.inputs().get("sample.input_ref")),
+        SampleFakeProvider.ExecutionResult result = provider.execute(artifactPath(step.inputs().get("sample.input_ref"), step, context),
                 context.testStartTime().toString(), context.runDir());
         Map<String, Object> outputs = new LinkedHashMap<>();
         outputs.put("actual_json.status", result.actual().get("status"));
@@ -49,13 +49,9 @@ public final class SampleFakeProviderV03Adapter implements V03ProviderRuntimeAda
     }
 
     private V03StepResult cleanup(V03ExecutionStep step, V03ExecutionContext context) {
-        SampleFakeProvider.CleanupResult result = provider.cleanup(path(context, step.inputs().get("fixture.cleanup_ref")), context.runDir(), step.target());
+        SampleFakeProvider.CleanupResult result = provider.cleanup(artifactPath(step.inputs().get("fixture.cleanup_ref"), step, context), context.runDir(), step.target());
         return new V03StepResult(step.id(), result.passed() ? "passed" : "failed", Map.of(), List.of(relative(context, result.evidenceRef())), "", "");
     }
 
-    private Path path(V03ExecutionContext context, Object ref) {
-        String value = String.valueOf(ref);
-        return context.suiteRoot().resolve(value.startsWith("artifact://") ? value.substring("artifact://".length()) : value).normalize();
-    }
     private String relative(V03ExecutionContext context, Path path) { return context.runDir().relativize(path).toString(); }
 }

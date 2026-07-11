@@ -23,7 +23,7 @@ public class V03ExecutionPlanBuilder {
     private final ContractBaselineService contractBaselineService;
     private final Yaml yaml = new Yaml();
     private final V03ReferenceParser referenceParser = new V03ReferenceParser();
-    private final V03ReferenceResolver referenceResolver = new V03ReferenceResolver();
+    private final V03ReferenceResolver referenceResolver = new V03ReferenceResolver(this::readDocument);
 
     public V03ExecutionPlanBuilder() {
         this(new ContractBaselineService());
@@ -228,9 +228,9 @@ public class V03ExecutionPlanBuilder {
                         mapValue(verify.get("with")),
                         profile,
                         targets.get(targetName)));
-            } else {
+            } else if ("assertion".equals(type)) {
                 Map<String, Object> assertion = mapValue(verify.get("assert"));
-                String operator = firstNonBlank(stringValue(assertion.get("operator")), "assertion");
+                String operator = stringValue(assertion.get("operator"));
                 V03AssertionKind.require(operator);
                 steps.add(new V03ExecutionStep(
                         testCaseId,
@@ -244,6 +244,10 @@ public class V03ExecutionPlanBuilder {
                         operator,
                         immutableMap(assertion),
                         ""));
+            } else {
+                throw new IllegalArgumentException(
+                        "missing_or_unsupported_verify_type: verify step `" + id
+                                + "` must declare `type: assertion` or `type: provider_check`.");
             }
             index++;
         }
@@ -315,6 +319,14 @@ public class V03ExecutionPlanBuilder {
             return stringValue(map.get("ref"));
         }
         return stringValue(value);
+    }
+
+    private Object readDocument(Path path) {
+        try (var reader = Files.newBufferedReader(path)) {
+            return yaml.load(reader);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read YAML `" + path + "`.", e);
+        }
     }
 
     private Map<String, Object> readMap(Path path) {

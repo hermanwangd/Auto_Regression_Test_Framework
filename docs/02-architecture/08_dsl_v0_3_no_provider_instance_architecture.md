@@ -170,6 +170,17 @@ steps:
 
 Dry-run returns this plan without executing provider runtime. A real run executes only this normalized plan.
 
+### Assertion and Reference Safety Boundary
+
+The v0.3 runtime uses one assertion catalog and one reference resolver:
+
+- assertion validation rejects missing type, missing assertion body, missing operands, and unknown operators before plan creation;
+- scalar operators use exhaustive dispatch and never fall back to equality;
+- missing step/generated outputs remain distinguishable from blank strings for `exists` and `not_exists`;
+- artifact aliases, containment, symlink checks, and JSON Pointer extraction are handled by the shared resolver;
+- provider adapters receive materialized values or suite-relative physical paths and do not parse raw reference prefixes;
+- unresolved `generated://` and `env://` bindings block execution rather than reaching provider runtimes as raw strings.
+
 ## 8. Failure and Error Mapping
 
 All validation and runtime failures must use the existing failure taxonomy categories where possible:

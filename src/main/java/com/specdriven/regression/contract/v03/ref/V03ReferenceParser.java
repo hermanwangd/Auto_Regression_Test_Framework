@@ -1,6 +1,11 @@
 package com.specdriven.regression.contract.v03.ref;
 
+import java.util.regex.Pattern;
+
 public final class V03ReferenceParser {
+
+    private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_-]*");
+    private static final Pattern ENVIRONMENT_NAME = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
     public V03Reference parse(Object value) {
         if (!(value instanceof String text)) {
@@ -10,14 +15,14 @@ public final class V03ReferenceParser {
             return artifact(text.substring("artifact://".length()));
         }
         if (text.startsWith("step://")) {
-            return stepReference(text);
+            return step(text.substring("step://".length()));
         }
         if (text.startsWith("generated://")) {
-            return pathReference(text, "generated://", "invalid_generated_ref", V03Reference.Generated::new);
+            return generated(text.substring("generated://".length()));
         }
         if (text.startsWith("env://")) {
             String name = text.substring("env://".length());
-            if (name.isBlank() || name.contains("/") || name.contains(".")) {
+            if (!ENVIRONMENT_NAME.matcher(name).matches()) {
                 throw invalid("invalid_environment_ref");
             }
             return new V03Reference.Environment(name);
@@ -26,43 +31,58 @@ public final class V03ReferenceParser {
     }
 
     private V03Reference.Artifact artifact(String body) {
-        String[] fragments = body.split("#", 2);
-        int slash = fragments[0].indexOf('/');
-        if (slash < 1 || slash == fragments[0].length() - 1) {
+        Fragment fragment = fragment(body);
+        int slash = fragment.path().indexOf('/');
+        if (slash < 1 || slash == fragment.path().length() - 1) {
             throw invalid("invalid_artifact_ref");
         }
+        String root = fragment.path().substring(0, slash);
+        if (!IDENTIFIER.matcher(root).matches()) {
+            throw invalid("invalid_artifact_ref");
+        }
+        return new V03Reference.Artifact(root, fragment.path().substring(slash + 1), fragment.jsonPointer());
+    }
+
+    private V03Reference.Step step(String body) {
+        Fragment fragment = fragment(body);
+        int slash = fragment.path().indexOf('/');
+        if (slash < 1 || slash == fragment.path().length() - 1) {
+            throw invalid("invalid_step_ref");
+        }
+        String stepId = fragment.path().substring(0, slash);
+        if (!IDENTIFIER.matcher(stepId).matches()) {
+            throw invalid("invalid_step_ref");
+        }
+        return new V03Reference.Step(stepId, fragment.path().substring(slash + 1), fragment.jsonPointer());
+    }
+
+    private V03Reference.Generated generated(String body) {
+        Fragment fragment = fragment(body);
+        int slash = fragment.path().indexOf('/');
+        if (slash < 1 || slash == fragment.path().length() - 1
+                || fragment.path().indexOf('/', slash + 1) >= 0) {
+            throw invalid("invalid_generated_ref");
+        }
+        String target = fragment.path().substring(0, slash);
+        if (!IDENTIFIER.matcher(target).matches()) {
+            throw invalid("invalid_generated_ref");
+        }
+        return new V03Reference.Generated(target, fragment.path().substring(slash + 1), fragment.jsonPointer());
+    }
+
+    private Fragment fragment(String body) {
+        String[] fragments = body.split("#", 2);
         String pointer = fragments.length == 2 ? fragments[1] : "";
         if (!pointer.isEmpty() && !pointer.startsWith("/")) {
             throw invalid("invalid_json_pointer");
         }
-        return new V03Reference.Artifact(fragments[0].substring(0, slash), fragments[0].substring(slash + 1), pointer);
-    }
-
-    private <T extends V03Reference> T pathReference(
-            String text, String prefix, String errorCode, ReferenceFactory<T> factory) {
-        String body = text.substring(prefix.length());
-        int slash = body.indexOf('/');
-        if (slash < 1 || slash == body.length() - 1 || body.indexOf('/', slash + 1) != -1 || body.contains(".")) {
-            throw invalid(errorCode);
-        }
-        return factory.create(body.substring(0, slash), body.substring(slash + 1));
-    }
-
-    private V03Reference.Step stepReference(String text) {
-        String body = text.substring("step://".length());
-        int slash = body.indexOf('/');
-        if (slash < 1 || slash == body.length() - 1) {
-            throw invalid("invalid_step_ref");
-        }
-        return new V03Reference.Step(body.substring(0, slash), body.substring(slash + 1));
+        return new Fragment(fragments[0], pointer);
     }
 
     private IllegalArgumentException invalid(String code) {
         return new IllegalArgumentException(code + ": use the v0.3 public reference form.");
     }
 
-    @FunctionalInterface
-    private interface ReferenceFactory<T extends V03Reference> {
-        T create(String left, String right);
+    private record Fragment(String path, String jsonPointer) {
     }
 }

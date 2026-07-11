@@ -14,6 +14,13 @@ import com.specdriven.regression.contract.v03.adapter.PollingObserverV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.RestClientV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.SoapMockV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.SampleFakeProviderV03Adapter;
+import com.specdriven.regression.contract.v03.assertion.V03AssertionEvaluation;
+import com.specdriven.regression.contract.v03.assertion.V03AssertionEvaluator;
+import com.specdriven.regression.contract.v03.assertion.V03AssertionKind;
+import com.specdriven.regression.contract.v03.assertion.V03MissingValue;
+import com.specdriven.regression.contract.v03.ref.V03Reference;
+import com.specdriven.regression.contract.v03.ref.V03ReferenceParser;
+import com.specdriven.regression.contract.v03.ref.V03ReferenceResolver;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -38,6 +45,9 @@ public class V03RuntimeExecutionService {
     private final ContractBaselineService contractBaselineService;
     private final V03ProviderRuntimeRegistry runtimeRegistry;
     private final Yaml yaml = new Yaml();
+    private final V03ReferenceParser referenceParser = new V03ReferenceParser();
+    private final V03ReferenceResolver referenceResolver = new V03ReferenceResolver(this::readYaml);
+    private final V03AssertionEvaluator assertionEvaluator = new V03AssertionEvaluator();
 
     public V03RuntimeExecutionService() {
         this(new ContractBaselineService(), new V03ProviderRuntimeRegistry(List.of(
@@ -104,8 +114,12 @@ public class V03RuntimeExecutionService {
                 runDir,
                 plan.profile(),
                 targetsByName,
+                compiled.artifactRoots(),
                 generatedOutputsByTarget,
+                outputsByStep,
                 envProfile,
+                System.getenv(),
+                referenceResolver,
                 startedAt);
         List<Map<String, Object>> stepResults = new ArrayList<>();
         List<Map<String, Object>> verifyResults = new ArrayList<>();
@@ -119,7 +133,7 @@ public class V03RuntimeExecutionService {
                 continue;
             }
             if ("verify".equals(step.phase()) && step.target().isBlank()) {
-                AssertionResult assertion = evaluateAssertion(step, suiteRoot, outputsByStep, runDir);
+                AssertionResult assertion = evaluateAssertion(step, context, runDir);
                 verifyResults.add(assertion.toMap());
                 evidenceRefs.add(assertion.evidenceRef());
                 if (!assertion.passed()) {
@@ -254,31 +268,51 @@ public class V03RuntimeExecutionService {
 
     private AssertionResult evaluateAssertion(
             V03ExecutionStep step,
-            Path suiteRoot,
-            Map<String, Map<String, Object>> outputsByStep,
+            V03ExecutionContext context,
             Path runDir) {
-        Object actual = resolveStepRef(step, stringValue(step.inputs().get("actual")), outputsByStep);
-        String operator = step.operation();
-        boolean passed;
-        Object expected = "";
-        if ("json_match".equals(operator)) {
-            expected = readYaml(suiteRoot.resolve(artifactRef(step.inputs().get("expected_ref"))).normalize());
-            actual = actualArtifactOrValue(step, suiteRoot, actual);
-            Object normalizedExpected = comparableJson(expected, step);
-            Object normalizedActual = comparableJson(actual, step);
-            passed = normalizedActual.equals(normalizedExpected);
-        } else if ("schema_match".equals(operator)) {
-            expected = readYaml(suiteRoot.resolve(artifactRef(step.inputs().get("schema_ref"))).normalize());
-            actual = actualArtifactOrValue(step, suiteRoot, actual);
-            passed = schemaMatches(mapValue(expected), actual);
-        } else if ("file_diff".equals(operator)) {
-            expected = readText(suiteRoot.resolve(artifactRef(step.inputs().get("expected_ref"))).normalize());
-            actual = readText(suiteRoot.resolve(artifactRef(step.inputs().get("actual_ref"))).normalize());
-            passed = comparableText(stringValue(actual), step).equals(comparableText(stringValue(expected), step));
-        } else {
-            expected = step.inputs().get("expected");
-            passed = stringValue(actual).equals(stringValue(expected));
+        V03AssertionKind kind = V03AssertionKind.require(step.operation());
+        Object actual = V03MissingValue.INSTANCE;
+        Object expected = null;
+        boolean passed = false;
+        String evaluationError = "";
+        try {
+            switch (kind) {
+                case JSON_MATCH -> {
+                    actual = resolveAssertionOperand(step, "actual", "actual_ref", context, false);
+                    expected = resolveRequiredReference(step.inputs().get("expected_ref"), step, context);
+                    Object normalizedExpected = comparableJson(expected, step);
+                    Object normalizedActual = comparableJson(actual, step);
+                    passed = normalizedActual.equals(normalizedExpected);
+                }
+                case SCHEMA_MATCH -> {
+                    actual = resolveAssertionOperand(step, "actual", "actual_ref", context, false);
+                    expected = resolveRequiredReference(step.inputs().get("schema_ref"), step, context);
+                    passed = schemaMatches(mapValue(expected), actual);
+                }
+                case FILE_DIFF -> {
+                    Path expectedPath = requiredArtifactPath(step.inputs().get("expected_ref"), step, context);
+                    Path actualPath = requiredArtifactPath(step.inputs().get("actual_ref"), step, context);
+                    expected = readText(expectedPath);
+                    actual = readText(actualPath);
+                    passed = comparableText(stringValue(actual), step)
+                            .equals(comparableText(stringValue(expected), step));
+                }
+                default -> {
+                    boolean allowMissing = kind == V03AssertionKind.EXISTS || kind == V03AssertionKind.NOT_EXISTS;
+                    actual = resolveAssertionOperand(step, "actual", "actual_ref", context, allowMissing);
+                    if (kind != V03AssertionKind.EXISTS && kind != V03AssertionKind.NOT_EXISTS) {
+                        expected = resolveAssertionOperand(step, "expected", "expected_ref", context, false);
+                    }
+                    V03AssertionEvaluation evaluation = assertionEvaluator.evaluate(kind, actual, expected);
+                    passed = evaluation.passed();
+                }
+            }
+        } catch (IllegalArgumentException | UncheckedIOException error) {
+            passed = false;
+            evaluationError = error.getMessage();
         }
+
+        String operator = kind.dslValue();
         String evidenceRef = "assertions/"
                 + safe(step.testCaseId())
                 + "/"
@@ -293,8 +327,11 @@ public class V03RuntimeExecutionService {
             if (!passed) {
                 evidence.put("failure_code", "ASSERTION_FAILED");
             }
-            evidence.put("actual", "<masked>");
-            evidence.put("expected", "<masked>");
+            if (!evaluationError.isBlank()) {
+                evidence.put("evaluation_error", evaluationError);
+            }
+            evidence.put("actual", evidenceValue(actual));
+            evidence.put("expected", evidenceValue(expected));
             write(runDir.resolve(evidenceRef), toJson(evidence) + "\n");
         } else {
             StringBuilder evidence = new StringBuilder();
@@ -305,8 +342,11 @@ public class V03RuntimeExecutionService {
             if (!passed) {
                 evidence.append("failure_code: ASSERTION_FAILED\n");
             }
-            evidence.append("actual: <masked>\n");
-            evidence.append("expected: <masked>\n");
+            if (!evaluationError.isBlank()) {
+                evidence.append("evaluation_error: ").append(evaluationError).append('\n');
+            }
+            evidence.append("actual: ").append(stringValue(evidenceValue(actual))).append('\n');
+            evidence.append("expected: ").append(stringValue(evidenceValue(expected))).append('\n');
             write(runDir.resolve(evidenceRef), evidence.toString());
         }
         return new AssertionResult(
@@ -318,12 +358,56 @@ public class V03RuntimeExecutionService {
                 passed ? "" : "ASSERTION_FAILED");
     }
 
-    private Object actualArtifactOrValue(V03ExecutionStep step, Path suiteRoot, Object actual) {
-        String actualRef = stringValue(step.inputs().get("actual_ref"));
-        if (!actualRef.isBlank()) {
-            return readYaml(suiteRoot.resolve(artifactRef(actualRef)).normalize());
+    private Object resolveAssertionOperand(
+            V03ExecutionStep step,
+            String literalKey,
+            String referenceKey,
+            V03ExecutionContext context,
+            boolean allowMissing) {
+        Object raw = step.inputs().containsKey(referenceKey)
+                ? step.inputs().get(referenceKey)
+                : step.inputs().get(literalKey);
+        try {
+            return context.referenceResolver().resolveValue(
+                    referenceParser.parse(raw),
+                    context.referenceContext(step.testCaseId()));
+        } catch (IllegalArgumentException error) {
+            if (allowMissing && (error.getMessage().startsWith("unresolved_step_ref")
+                    || error.getMessage().startsWith("unresolved_generated_ref")
+                    || error.getMessage().startsWith("json_pointer_missing"))) {
+                return V03MissingValue.INSTANCE;
+            }
+            throw error;
         }
-        return normalizeJson(actual);
+    }
+
+    private Object resolveRequiredReference(
+            Object raw,
+            V03ExecutionStep step,
+            V03ExecutionContext context) {
+        V03Reference reference = referenceParser.parse(raw);
+        if (reference instanceof V03Reference.Literal) {
+            throw new IllegalArgumentException("reference_required: `" + raw + "`.");
+        }
+        return context.referenceResolver().resolveValue(reference, context.referenceContext(step.testCaseId()));
+    }
+
+    private Path requiredArtifactPath(
+            Object raw,
+            V03ExecutionStep step,
+            V03ExecutionContext context) {
+        V03Reference reference = referenceParser.parse(raw);
+        if (!(reference instanceof V03Reference.Artifact artifact)) {
+            throw new IllegalArgumentException("artifact_ref_required: `" + raw + "`.");
+        }
+        if (!artifact.jsonPointer().isBlank()) {
+            throw new IllegalArgumentException("file_diff_json_pointer_not_allowed: `" + raw + "`.");
+        }
+        return context.referenceResolver().artifactPath(artifact, context.referenceContext(step.testCaseId()));
+    }
+
+    private Object evidenceValue(Object value) {
+        return value == V03MissingValue.INSTANCE ? "<missing>" : value;
     }
 
     private Object comparableJson(Object value, V03ExecutionStep step) {
@@ -445,19 +529,6 @@ public class V03RuntimeExecutionService {
             return text.lines().map(String::trim).reduce((left, right) -> left + "\n" + right).orElse("");
         }
         return text;
-    }
-
-    private Object resolveStepRef(V03ExecutionStep step, String ref, Map<String, Map<String, Object>> outputsByStep) {
-        if (!ref.startsWith("step://")) {
-            return ref;
-        }
-        String body = ref.substring("step://".length());
-        int slash = body.indexOf('/');
-        if (slash < 0) {
-            return "";
-        }
-        return outputsByStep.getOrDefault(scopedStepKey(step.testCaseId(), body.substring(0, slash)), Map.of())
-                .getOrDefault(body.substring(slash + 1), "");
     }
 
     private String scopedStepKey(V03ExecutionStep step) {
@@ -983,11 +1054,6 @@ public class V03RuntimeExecutionService {
             return "passed";
         }
         return "skipped";
-    }
-
-    private Path artifactRef(Object value) {
-        String ref = stringValue(value);
-        return Path.of(ref.startsWith("artifact://") ? ref.substring("artifact://".length()) : ref);
     }
 
     private Object readYaml(Path path) {

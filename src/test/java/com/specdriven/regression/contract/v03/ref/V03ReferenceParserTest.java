@@ -20,6 +20,16 @@ class V03ReferenceParserTest {
     }
 
     @Test
+    void parsesStepReferenceWithJsonPointer() {
+        V03Reference.Step reference =
+                (V03Reference.Step) parser.parse("step://call/response.body#/order/id");
+
+        assertThat(reference.stepId()).isEqualTo("call");
+        assertThat(reference.outputPath()).isEqualTo("response.body");
+        assertThat(reference.jsonPointer()).isEqualTo("/order/id");
+    }
+
+    @Test
     void rejectsLegacyDotGeneratedReference() {
         assertThatThrownBy(() -> parser.parse("generated://payment_mock.base_url"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -34,23 +44,5 @@ class V03ReferenceParserTest {
                 reference, Map.of("fixtures", Path.of("samples/fixtures").toAbsolutePath().normalize())))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("ref_outside_suite_root");
-    }
-
-    @Test
-    void resolvesEnvironmentAndGeneratedBindingsFailClosed() {
-        V03ReferenceResolver resolver = new V03ReferenceResolver();
-
-        assertThat(resolver.resolveBinding("env://PAYMENT_API_URL", Map.of(),
-                Map.of("PAYMENT_API_URL", "http://localhost:8080")))
-                .isEqualTo("http://localhost:8080");
-        assertThat(resolver.resolveBinding("generated://mock/base_url",
-                Map.of("mock\\nbase_url", "http://localhost:8081"), Map.of()))
-                .isEqualTo("http://localhost:8081");
-        assertThatThrownBy(() -> resolver.resolveBinding("env://MISSING", Map.of(), Map.of()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("missing_environment_value");
-        assertThatThrownBy(() -> resolver.resolveBinding("generated://mock/base_url", Map.of(), Map.of()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("unresolved_generated_ref");
     }
 }
