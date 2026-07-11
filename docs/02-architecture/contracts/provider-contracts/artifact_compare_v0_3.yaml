@@ -5,6 +5,17 @@ provider_role: framework_verifier
 protocol: file
 purpose: Framework-owned artifact comparison contract for DSL v0.3 assertion-only verification.
 runtime_modes: [framework]
+operation_defaults:
+  input:
+    value_type: any
+    reference_kinds: [literal, artifact, step, generated, env]
+    sensitivity: public
+  output:
+    value_type: any
+    sensitivity: public
+    bindable: false
+    evidence_included: true
+  phases: [setup, execute, verify, cleanup]
 binding_keys: {}
 operations:
   json_match:

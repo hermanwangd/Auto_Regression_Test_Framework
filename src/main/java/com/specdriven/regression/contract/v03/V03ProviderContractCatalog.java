@@ -48,7 +48,7 @@ public final class V03ProviderContractCatalog {
                 text(map.get("provider_type")),
                 strings(map.get("runtime_modes")),
                 bindings(map.get("binding_keys")),
-                operations(map.get("operations")),
+                operations(map.get("operations"), map(map.get("operation_defaults"))),
                 strings(map.get("bindable_outputs")),
                 strings(map(map.get("evidence")).get("outputs")),
                 strings(map(map.get("failure_mapping")).get("allowed_codes"))));
@@ -67,16 +67,95 @@ public final class V03ProviderContractCatalog {
         return Map.copyOf(result);
     }
 
-    private Map<String, V03ProviderContract.V03OperationDefinition> operations(Object value) {
+    private Map<String, V03ProviderContract.V03OperationDefinition> operations(
+            Object value, Map<String, Object> defaults) {
         Map<String, V03ProviderContract.V03OperationDefinition> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : map(value).entrySet()) {
             Map<String, Object> definition = map(entry.getValue());
+            Set<String> allowedInputs = strings(definition.get("allowed_inputs"));
+            Set<String> requiredInputs = strings(definition.get("required_inputs"));
+            Set<String> outputRefs = strings(definition.get("output_refs"));
+            Map<String, V03InputDefinition> inputs = inputs(
+                    definition.get("inputs"), allowedInputs, requiredInputs, map(defaults.get("input")));
+            Map<String, V03OutputDefinition> outputs = outputs(
+                    definition.get("outputs"), outputRefs, strings(definition.get("bindable_outputs")),
+                    map(defaults.get("output")));
             result.put(entry.getKey(), new V03ProviderContract.V03OperationDefinition(
-                    strings(definition.get("allowed_inputs")),
-                    strings(definition.get("required_inputs")),
-                    strings(definition.get("output_refs"))));
+                    allowedInputs, requiredInputs, outputRefs, inputs, outputs, strings(definition.get("runtime_modes")),
+                    phases(definition.get("phases"), defaults.get("phases"))));
         }
         return Map.copyOf(result);
+    }
+
+    private Map<String, V03InputDefinition> inputs(
+            Object definitions, Set<String> allowedInputs, Set<String> requiredInputs, Map<String, Object> defaults) {
+        Map<String, V03InputDefinition> result = new LinkedHashMap<>();
+        Map<String, Object> typed = map(definitions);
+        for (String input : allowedInputs) {
+            Map<String, Object> definition = map(typed.get(input));
+            Map<String, Object> effective = definition.isEmpty() ? defaults : definition;
+            result.put(input, effective.isEmpty()
+                    ? V03InputDefinition.legacy(requiredInputs.contains(input))
+                    : new V03InputDefinition(
+                            Boolean.parseBoolean(text(effective.get("required"))) || requiredInputs.contains(input),
+                            V03ValueType.parse(text(effective.get("value_type"))),
+                            referenceKinds(effective.get("reference_kinds")),
+                            V03Sensitivity.parse(text(effective.get("sensitivity")))));
+        }
+        for (String input : typed.keySet()) {
+            if (!result.containsKey(input)) {
+                throw new IllegalArgumentException("unknown_typed_input: `" + input + "` is not listed in allowed_inputs.");
+            }
+        }
+        return Map.copyOf(result);
+    }
+
+    private Map<String, V03OutputDefinition> outputs(
+            Object definitions, Set<String> outputRefs, Set<String> bindableOutputs, Map<String, Object> defaults) {
+        Map<String, V03OutputDefinition> result = new LinkedHashMap<>();
+        Map<String, Object> typed = map(definitions);
+        for (String output : outputRefs) {
+            Map<String, Object> definition = map(typed.get(output));
+            Map<String, Object> effective = definition.isEmpty() ? defaults : definition;
+            result.put(output, effective.isEmpty()
+                    ? V03OutputDefinition.legacy(bindableOutputs.contains(output))
+                    : new V03OutputDefinition(
+                            V03ValueType.parse(text(effective.get("value_type"))),
+                            V03Sensitivity.parse(text(effective.get("sensitivity"))),
+                            Boolean.parseBoolean(text(effective.get("bindable"))) || bindableOutputs.contains(output),
+                            !"false".equals(text(effective.get("evidence_included")))));
+        }
+        for (String output : typed.keySet()) {
+            if (!result.containsKey(output)) {
+                throw new IllegalArgumentException("unknown_typed_output: `" + output + "` is not listed in output_refs.");
+            }
+        }
+        return Map.copyOf(result);
+    }
+
+    private Set<V03ReferenceKind> referenceKinds(Object value) {
+        Set<V03ReferenceKind> result = new LinkedHashSet<>();
+        for (String kind : strings(value)) result.add(V03ReferenceKind.parse(kind));
+        return result.isEmpty()
+                ? Set.of(V03ReferenceKind.LITERAL, V03ReferenceKind.ARTIFACT, V03ReferenceKind.STEP,
+                        V03ReferenceKind.GENERATED, V03ReferenceKind.ENV)
+                : Set.copyOf(result);
+    }
+
+    private Set<String> phases(Object value, Object defaultValue) {
+        Set<String> phases = strings(value);
+        if (phases.isEmpty()) {
+            phases = strings(defaultValue);
+        }
+        if (phases.isEmpty()) {
+            return Set.of("setup", "execute", "verify", "cleanup");
+        }
+        for (String phase : phases) {
+            if (!Set.of("setup", "execute", "verify", "cleanup").contains(phase)) {
+                throw new IllegalArgumentException("invalid_operation_phase: `" + phase + "`.");
+            }
+        }
+        return phases;
     }
 
     private Set<String> strings(Object value) {

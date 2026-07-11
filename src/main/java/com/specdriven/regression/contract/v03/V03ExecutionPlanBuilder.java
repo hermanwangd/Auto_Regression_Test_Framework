@@ -28,6 +28,7 @@ public class V03ExecutionPlanBuilder {
     private final V03ReferenceResolver referenceResolver = new V03ReferenceResolver(this::readDocument);
     private final V03GeneratedBindingDag generatedBindingDag = new V03GeneratedBindingDag();
     private final V03ProviderContractCatalog providerContractCatalog = new V03ProviderContractCatalog();
+    private final V03BindingDependencyCompiler bindingDependencyCompiler = new V03BindingDependencyCompiler();
 
     public V03ExecutionPlanBuilder() {
         this(new ContractBaselineService());
@@ -38,17 +39,19 @@ public class V03ExecutionPlanBuilder {
     }
 
     public V03ExecutionPlan build(Path suiteManifest, String requestedProfile) {
-        V03CompiledSuite compiled = compile(suiteManifest, requestedProfile);
-        return V03ExecutionPlan.from(compiled);
-    }
-
-    public V03CompiledSuite compile(Path suiteManifest, String requestedProfile) {
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
-        return compile(suiteManifest, requestedProfile, validation);
+        return build(suiteManifest, requestedProfile, validation);
     }
 
-    /** Compiles from a command-scoped validation result to avoid duplicate baseline validation. */
-    public V03CompiledSuite compile(
+    public V03ExecutionPlan build(
+            Path suiteManifest,
+            String requestedProfile,
+            ValidationResult validation) {
+        return compilePlan(suiteManifest, requestedProfile, validation);
+    }
+
+    /** Compiles one immutable plan from a command-scoped validation result. */
+    private V03ExecutionPlan compilePlan(
             Path suiteManifest,
             String requestedProfile,
             ValidationResult validation) {
@@ -68,22 +71,34 @@ public class V03ExecutionPlanBuilder {
         testDocuments.forEach(document -> validateReferences(document, artifactRoots));
         List<V03ExecutionStep> steps = executionSteps(testDocuments, profile, targets);
         validateTypedContracts(targets, steps, contracts);
+        List<V03BindingDependency> dependencies = bindingDependencyCompiler.compile(
+                steps, targets, contracts, System.getenv());
         V03SuiteMetadata metadata = new V03SuiteMetadata(
                 stringValue(suite.get("manifest_version")),
                 stringValue(suite.get("suite_id")),
                 stringValue(suite.get("default_profile")));
         V03EnvironmentProfile environmentProfile = compiledEnvironmentProfile(profile, envProfile);
         List<V03CompiledTestCase> compiledTests = compiledTestCases(steps, testDocuments);
-        return new V03CompiledSuite(
+        List<V03ExecutionStep> orderedSteps = new ArrayList<>();
+        for (V03CompiledTestCase test : compiledTests) {
+            orderedSteps.addAll(test.setup());
+            orderedSteps.addAll(test.execute());
+            orderedSteps.addAll(test.verify());
+            orderedSteps.addAll(test.cleanup());
+        }
+        return new V03ExecutionPlan(
                 stringValue(suite.get("suite_id")),
                 profile,
                 suiteRoot,
                 metadata,
                 environmentProfile,
                 Collections.unmodifiableMap(new LinkedHashMap<>(targets)),
+                contracts,
                 artifactRoots,
                 compiledTests,
-                planDigest(metadata, environmentProfile, targets, compiledTests));
+                List.copyOf(orderedSteps),
+                dependencies,
+                planDigest(metadata, environmentProfile, targets, compiledTests, dependencies));
     }
 
     private void validateReferences(Object value, Map<String, Path> artifactRoots) {
@@ -103,6 +118,9 @@ public class V03ExecutionPlanBuilder {
 
     private List<V03CompiledTestCase> compiledTestCases(List<V03ExecutionStep> steps, List<Map<String, Object>> documents) {
         Map<String, List<V03ExecutionStep>> byTestCase = new LinkedHashMap<>();
+        for (Map<String, Object> document : documents) {
+            byTestCase.put(stringValue(document.get("test_case_id")), new ArrayList<>());
+        }
         for (V03ExecutionStep step : steps) {
             byTestCase.computeIfAbsent(step.testCaseId(), ignored -> new ArrayList<>()).add(step);
         }
@@ -231,11 +249,20 @@ public class V03ExecutionPlanBuilder {
                 throw new IllegalArgumentException("unsupported_operation: step `" + step.id() + "` uses `"
                         + step.operation() + "` outside Provider Contract `" + contract.id() + "`.");
             }
+            if (!operation.runtimeModes().isEmpty() && !operation.runtimeModes().contains(step.runtimeMode())) {
+                throw new IllegalArgumentException("unsupported_operation_runtime_mode: step `" + step.id()
+                        + "` uses runtime mode `" + step.runtimeMode() + "` outside operation `" + step.operation() + "`.");
+            }
+            if (!operation.allowedPhases().contains(step.phase())) {
+                throw new IllegalArgumentException("unsupported_operation_phase: step `" + step.id()
+                        + "` uses phase `" + step.phase() + "` outside operation `" + step.operation() + "`.");
+            }
             for (String input : step.inputs().keySet()) {
                 if (!matchesContractName(operation.allowedInputs(), input)) {
                     throw new IllegalArgumentException("unsupported_input: step `" + step.id() + "` uses `" + input
                             + "` outside Provider Contract `" + contract.id() + "` operation `" + step.operation() + "`.");
                 }
+                validateInputValue(step, input, step.inputs().get(input), inputDefinition(operation, input));
             }
             for (String required : operation.requiredInputs()) {
                 if (!hasContractName(step.inputs().keySet(), required)) {
@@ -273,6 +300,53 @@ public class V03ExecutionPlanBuilder {
             }
         }
         return false;
+    }
+
+    private V03InputDefinition inputDefinition(
+            V03ProviderContract.V03OperationDefinition operation, String input) {
+        V03InputDefinition exact = operation.inputDefinitions().get(input);
+        if (exact != null) return exact;
+        for (Map.Entry<String, V03InputDefinition> entry : operation.inputDefinitions().entrySet()) {
+            if (entry.getKey().endsWith(".*")
+                    && input.startsWith(entry.getKey().substring(0, entry.getKey().length() - 1))) {
+                return entry.getValue();
+            }
+        }
+        return V03InputDefinition.legacy(false);
+    }
+
+    private void validateInputValue(
+            V03ExecutionStep step, String input, Object value, V03InputDefinition definition) {
+        V03Reference reference = referenceParser.parse(value);
+        V03ReferenceKind kind = referenceKind(reference);
+        if (!definition.referenceKinds().contains(kind)) {
+            throw new IllegalArgumentException("unsupported_reference_kind: step `" + step.id() + "` input `"
+                    + input + "` does not allow `" + kind.name().toLowerCase(java.util.Locale.ROOT) + "`.");
+        }
+        if (kind != V03ReferenceKind.LITERAL || definition.valueType() == V03ValueType.ANY) return;
+        if (!matchesValueType(value, definition.valueType())) {
+            throw new IllegalArgumentException("invalid_input_type: step `" + step.id() + "` input `" + input
+                    + "` requires `" + definition.valueType().name().toLowerCase(java.util.Locale.ROOT) + "`.");
+        }
+    }
+
+    private V03ReferenceKind referenceKind(V03Reference reference) {
+        if (reference instanceof V03Reference.Artifact) return V03ReferenceKind.ARTIFACT;
+        if (reference instanceof V03Reference.Step) return V03ReferenceKind.STEP;
+        if (reference instanceof V03Reference.Generated) return V03ReferenceKind.GENERATED;
+        if (reference instanceof V03Reference.Environment) return V03ReferenceKind.ENV;
+        return V03ReferenceKind.LITERAL;
+    }
+
+    private boolean matchesValueType(Object value, V03ValueType type) {
+        return switch (type) {
+            case ANY -> true;
+            case STRING -> value instanceof String;
+            case NUMBER -> value instanceof Number;
+            case BOOLEAN -> value instanceof Boolean;
+            case OBJECT -> value instanceof Map<?, ?>;
+            case ARRAY -> value instanceof List<?>;
+        };
     }
 
     private String providerType(String providerContract) {
@@ -356,6 +430,7 @@ public class V03ExecutionPlanBuilder {
                 V03AssertionKind.require(operator);
                 steps.add(new V03ExecutionStep(
                         testCaseId,
+                        V03ExecutionStepKind.ASSERTION,
                         "verify",
                         id,
                         "",
@@ -387,6 +462,7 @@ public class V03ExecutionPlanBuilder {
         if (target == null) {
             return new V03ExecutionStep(
                     testCaseId,
+                    V03ExecutionStepKind.PROVIDER_OPERATION,
                     phase,
                     id,
                     targetName,
@@ -400,6 +476,7 @@ public class V03ExecutionPlanBuilder {
         }
         return new V03ExecutionStep(
                 testCaseId,
+                V03ExecutionStepKind.PROVIDER_OPERATION,
                 phase,
                 id,
                 targetName,
@@ -502,7 +579,8 @@ public class V03ExecutionPlanBuilder {
             V03SuiteMetadata metadata,
             V03EnvironmentProfile environmentProfile,
             Map<String, V03ResolvedTarget> targets,
-            List<V03CompiledTestCase> tests) {
+            List<V03CompiledTestCase> tests,
+            List<V03BindingDependency> bindingDependencies) {
         StringBuilder canonical = new StringBuilder()
                 .append(metadata.manifestVersion()).append('|')
                 .append(metadata.suiteId()).append('|')
@@ -518,6 +596,13 @@ public class V03ExecutionPlanBuilder {
             appendSteps(canonical, test.verify());
             appendSteps(canonical, test.cleanup());
         });
+        bindingDependencies.forEach(dependency -> canonical.append("binding|")
+                .append(dependency.consumerStepId()).append('|')
+                .append(dependency.consumerInput()).append('|')
+                .append(dependency.referenceKind()).append('|')
+                .append(dependency.producerTarget()).append('|')
+                .append(dependency.producerStepId()).append('|')
+                .append(dependency.producerOutput()).append('\n'));
         try {
             byte[] bytes = MessageDigest.getInstance("SHA-256").digest(canonical.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
             StringBuilder hex = new StringBuilder();
@@ -529,7 +614,8 @@ public class V03ExecutionPlanBuilder {
     }
 
     private void appendSteps(StringBuilder canonical, List<V03ExecutionStep> steps) {
-        steps.forEach(step -> canonical.append(step.phase()).append('|')
+        steps.forEach(step -> canonical.append(step.kind()).append('|')
+                .append(step.phase()).append('|')
                 .append(step.id()).append('|').append(step.target()).append('|')
                 .append(step.operation()).append('|').append(step.inputs()).append('\n'));
     }

@@ -5,6 +5,17 @@ provider_role: mock_server
 protocol: soap
 purpose: WireMock-backed SOAP mock provider contract for DSL v0.3.
 runtime_modes: [mock]
+operation_defaults:
+  input:
+    value_type: any
+    reference_kinds: [literal, artifact, step, generated, env]
+    sensitivity: public
+  output:
+    value_type: any
+    sensitivity: public
+    bindable: false
+    evidence_included: true
+  phases: [setup, execute, verify, cleanup]
 bindable_outputs: [endpoint_url]
 binding_keys:
   port_strategy:

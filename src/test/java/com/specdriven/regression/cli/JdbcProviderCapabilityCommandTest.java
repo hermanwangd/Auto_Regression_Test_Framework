@@ -159,7 +159,7 @@ class JdbcProviderCapabilityCommandTest {
         assertThat(report.stdout())
                 .contains("report_status: review_ready")
                 .contains("suite_id: JDBC-CAPABILITY-v0.2")
-                .contains("batch_id: BATCH-JDBC-")
+                .contains("batch_id: BATCH-STANDALONE-")
                 .contains("run_id: RUN-JDBC-")
                 .contains("test_case_id: JDBC-CAPABILITY-v0.2-MULTI")
                 .contains("status: passed")

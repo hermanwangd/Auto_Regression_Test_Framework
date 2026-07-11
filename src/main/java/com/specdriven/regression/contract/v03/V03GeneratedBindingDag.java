@@ -37,7 +37,7 @@ public final class V03GeneratedBindingDag {
                 if (!contracts.isEmpty()) {
                     V03ResolvedTarget producerTarget = targets.get(producer);
                     V03ProviderContract contract = contracts.get(producerTarget.providerContract());
-                    if (contract == null || !contract.bindableOutputs().contains(reference.output())) {
+                    if (contract == null || !declaresBindableOutput(contract, reference.output())) {
                         throw new IllegalArgumentException("unknown_bindable_output: target `" + entry.getKey()
                                 + "` references `" + producer + "/" + reference.output() + "`.");
                     }
@@ -53,6 +53,15 @@ public final class V03GeneratedBindingDag {
             visit(target, dependencies, visiting, visited, ordered);
         }
         return List.copyOf(ordered);
+    }
+
+    private boolean declaresBindableOutput(V03ProviderContract contract, String output) {
+        if (contract.bindableOutputs().contains(output)) {
+            return true;
+        }
+        return contract.operations().values().stream()
+                .map(operation -> operation.outputDefinitions().get(output))
+                .anyMatch(definition -> definition != null && definition.bindable());
     }
 
     private void visit(

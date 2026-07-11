@@ -5,12 +5,17 @@ required_fields:
   - provider_contract
   - provider_type
   - runtime_modes
+  - operation_defaults
   - operations
 provider_contract_rules:
   declares_allowed_runtime_modes: true
   declares_binding_keys_by_runtime_mode: true
   declares_operation_inputs: true
+  declares_typed_input_definitions: true
   declares_output_refs: true
+  declares_typed_output_definitions: true
+  declares_output_sensitivity: true
+  declares_operation_phases: true
   declares_bindable_outputs: true
   declares_evidence_outputs: true
   declares_failure_codes: true

@@ -48,6 +48,7 @@ public class V03RuntimeExecutionService {
     private final V03ReferenceParser referenceParser = new V03ReferenceParser();
     private final V03ReferenceResolver referenceResolver = new V03ReferenceResolver(this::readYaml);
     private final V03AssertionEvaluator assertionEvaluator = new V03AssertionEvaluator();
+    private final V03OutputRedactor outputRedactor = new V03OutputRedactor();
 
     public V03RuntimeExecutionService() {
         this(new ContractBaselineService(), new V03ProviderRuntimeRegistry(List.of(
@@ -91,18 +92,17 @@ public class V03RuntimeExecutionService {
         if (!validation.valid()) {
             return V03RuntimeRunResult.blocked(validation.suiteId(), profile, validation.findings());
         }
-        V03CompiledSuite compiled = new V03ExecutionPlanBuilder(contractBaselineService)
-                .compile(suiteManifest, profile, validation);
-        V03ExecutionPlan plan = V03ExecutionPlan.from(compiled);
+        V03ExecutionPlan plan = new V03ExecutionPlanBuilder(contractBaselineService)
+                .build(suiteManifest, profile, validation);
         List<ContractFinding> supportFindings = unsupportedRuntimeFindings(suiteManifest, plan);
         if (!supportFindings.isEmpty()) {
             return V03RuntimeRunResult.blocked(plan.suiteId(), profile, supportFindings);
         }
 
-        Path suiteRoot = compiled.suiteRoot();
-        List<V03CompiledTestCase> testCases = compiled.tests();
-        String evidenceClassification = compiled.environmentProfile().evidenceClassification();
-        boolean downstreamReleaseEvidence = compiled.environmentProfile().downstreamReleaseEvidence()
+        Path suiteRoot = plan.suiteRoot();
+        List<V03CompiledTestCase> testCases = plan.tests();
+        String evidenceClassification = plan.environmentProfile().evidenceClassification();
+        boolean downstreamReleaseEvidence = plan.environmentProfile().downstreamReleaseEvidence()
                 || downstreamReleaseEvidence(evidenceClassification);
         V03CompiledTestCase firstTestCase = testCases.isEmpty() ? null : testCases.get(0);
         String testCaseId = suiteLevelTestCaseId(plan.suiteId(), testCases);
@@ -122,7 +122,7 @@ public class V03RuntimeExecutionService {
                 runDir,
                 plan.profile(),
                 targetsByName,
-                compiled.artifactRoots(),
+                plan.artifactRoots(),
                 generatedOutputsByTarget,
                 outputsByStep,
                 Map.of(),
@@ -140,7 +140,7 @@ public class V03RuntimeExecutionService {
             if (!"cleanup".equals(step.phase()) && testTerminal(testStatuses, step.testCaseId())) {
                 continue;
             }
-            if ("verify".equals(step.phase()) && step.target().isBlank()) {
+            if (step.kind() == V03ExecutionStepKind.ASSERTION) {
                 AssertionResult assertion = evaluateAssertion(step, context, runDir);
                 verifyResults.add(assertion.toMap());
                 evidenceRefs.add(assertion.evidenceRef());
@@ -158,12 +158,12 @@ public class V03RuntimeExecutionService {
             V03StepResult result = adapter.execute(step, context);
             providerRuntimeExecuted = true;
             outputsByStep.put(scopedStepKey(step), result.outputs());
-            if (!step.target().isBlank()) {
+            if (step.kind() == V03ExecutionStepKind.PROVIDER_OPERATION) {
                 generatedOutputsByTarget.computeIfAbsent(step.target(), ignored -> new LinkedHashMap<>())
                         .putAll(result.outputs());
             }
-            stepResults.add(stepResult(step, result));
-            providerResults.add(providerResult(step, result));
+            stepResults.add(stepResult(plan, step, result));
+            providerResults.add(providerResult(plan, step, result));
             evidenceRefs.addAll(result.evidenceRefs());
             if (!result.passed() && "cleanup".equals(step.phase())) {
                 applyCleanupOutcomeStatus(testStatuses, step.testCaseId(), result.status());
@@ -172,7 +172,7 @@ public class V03RuntimeExecutionService {
                     failure = new Failure(
                             firstNonBlank(result.failureCode(), "CLEANUP_FAILED"),
                             "CLEANUP_ERROR",
-                            firstNonBlank(result.message(), "Cleanup operation failed."),
+                            outputRedactor.redactMessage(firstNonBlank(result.message(), "Cleanup operation failed.")),
                             "Review cleanup evidence for step `" + step.id() + "`.");
                 }
             } else if (!result.passed()) {
@@ -181,7 +181,7 @@ public class V03RuntimeExecutionService {
                     failure = new Failure(
                         firstNonBlank(result.failureCode(), "PROVIDER_RUNTIME_ERROR"),
                         "PROVIDER_RUNTIME_ERROR",
-                        firstNonBlank(result.message(), "Provider operation failed."),
+                        outputRedactor.redactMessage(firstNonBlank(result.message(), "Provider operation failed.")),
                         "Review provider evidence for step `" + step.id() + "`.");
                 }
             }
@@ -192,6 +192,7 @@ public class V03RuntimeExecutionService {
         evidenceRefs.add("logs/execution.log");
         writeBatch(runDir, plan, testCaseId, status);
         evidenceRefs.add("batch/batch.yaml");
+        sanitizeEvidence(runDir, evidenceRefs);
         Instant finishedAt = Instant.now();
         Path resultJson = writeResult(
                 runDir,
@@ -223,8 +224,8 @@ public class V03RuntimeExecutionService {
                 testCases.size(),
                 plan.profile(),
                 providerRuntimeExecuted,
-                plan.targets().stream().map(V03ResolvedTarget::target).toList(),
-                plan.targets().stream().map(V03ResolvedTarget::providerType).distinct().toList(),
+                plan.targets().values().stream().map(V03ResolvedTarget::target).toList(),
+                plan.targets().values().stream().map(V03ResolvedTarget::providerType).distinct().toList(),
                 resultJson,
                 runDir,
                 evidenceClassification,
@@ -241,7 +242,7 @@ public class V03RuntimeExecutionService {
     private List<ContractFinding> unsupportedRuntimeFindings(Path suiteManifest, V03ExecutionPlan plan) {
         List<ContractFinding> findings = new ArrayList<>();
         for (V03ExecutionStep step : plan.steps()) {
-            if (step.target().isBlank()) {
+            if (step.kind() != V03ExecutionStepKind.PROVIDER_OPERATION) {
                 continue;
             }
             try {
@@ -335,10 +336,10 @@ public class V03RuntimeExecutionService {
                 evidence.put("failure_code", "ASSERTION_FAILED");
             }
             if (!evaluationError.isBlank()) {
-                evidence.put("evaluation_error", evaluationError);
+                evidence.put("evaluation_error", outputRedactor.redactMessage(evaluationError));
             }
-            evidence.put("actual", evidenceValue(actual));
-            evidence.put("expected", evidenceValue(expected));
+            evidence.put("actual", outputRedactor.redactValue(evidenceValue(actual)));
+            evidence.put("expected", outputRedactor.redactValue(evidenceValue(expected)));
             write(runDir.resolve(evidenceRef), toJson(evidence) + "\n");
         } else {
             StringBuilder evidence = new StringBuilder();
@@ -350,10 +351,10 @@ public class V03RuntimeExecutionService {
                 evidence.append("failure_code: ASSERTION_FAILED\n");
             }
             if (!evaluationError.isBlank()) {
-                evidence.append("evaluation_error: ").append(evaluationError).append('\n');
+                evidence.append("evaluation_error: ").append(outputRedactor.redactMessage(evaluationError)).append('\n');
             }
-            evidence.append("actual: ").append(stringValue(evidenceValue(actual))).append('\n');
-            evidence.append("expected: ").append(stringValue(evidenceValue(expected))).append('\n');
+            evidence.append("actual: ").append(stringValue(outputRedactor.redactValue(evidenceValue(actual)))).append('\n');
+            evidence.append("expected: ").append(stringValue(outputRedactor.redactValue(evidenceValue(expected)))).append('\n');
             write(runDir.resolve(evidenceRef), evidence.toString());
         }
         return new AssertionResult(
@@ -548,13 +549,13 @@ public class V03RuntimeExecutionService {
 
     private Map<String, V03ResolvedTarget> targetsByName(V03ExecutionPlan plan) {
         Map<String, V03ResolvedTarget> targets = new LinkedHashMap<>();
-        for (V03ResolvedTarget target : plan.targets()) {
+        for (V03ResolvedTarget target : plan.targets().values()) {
             targets.put(target.target(), target);
         }
         return targets;
     }
 
-    private Map<String, Object> stepResult(V03ExecutionStep step, V03StepResult result) {
+    private Map<String, Object> stepResult(V03ExecutionPlan plan, V03ExecutionStep step, V03StepResult result) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("test_case_id", step.testCaseId());
         map.put("id", step.id());
@@ -562,14 +563,14 @@ public class V03RuntimeExecutionService {
         map.put("target", step.target());
         map.put("operation", step.operation());
         map.put("status", result.status());
-        map.put("outputs", result.outputs());
+        map.put("outputs", outputRedactor.redact(plan, step, result.outputs()));
         if (!result.failureCode().isBlank()) {
             map.put("failure_code", result.failureCode());
         }
         return map;
     }
 
-    private Map<String, Object> providerResult(V03ExecutionStep step, V03StepResult result) {
+    private Map<String, Object> providerResult(V03ExecutionPlan plan, V03ExecutionStep step, V03StepResult result) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("test_case_id", step.testCaseId());
         map.put("target", step.target());
@@ -584,7 +585,7 @@ public class V03RuntimeExecutionService {
             map.put("failure_code", result.failureCode());
         }
         if (!result.message().isBlank()) {
-            map.put("failure_reason", result.message());
+            map.put("failure_reason", outputRedactor.redactMessage(result.message()));
         }
         if ("cleanup".equals(step.phase())) {
             map.put("cleanup_status", result.status());
@@ -593,7 +594,7 @@ public class V03RuntimeExecutionService {
                 "test_case_id", step.testCaseId(),
                 "operation", step.operation(),
                 "status", result.status(),
-                "outputs", result.outputs()));
+                "outputs", outputRedactor.redact(plan, step, result.outputs())));
         map.put("release_evidence_eligible", false);
         return map;
     }
@@ -607,7 +608,7 @@ public class V03RuntimeExecutionService {
         failure.put("provider_type", step.providerType());
         failure.put("operation", step.operation());
         failure.put("failure_code", firstNonBlank(result.failureCode(), "CLEANUP_FAILED"));
-        failure.put("reason", firstNonBlank(result.message(), "Cleanup operation failed."));
+        failure.put("reason", outputRedactor.redactMessage(firstNonBlank(result.message(), "Cleanup operation failed.")));
         failure.put("evidence_refs", result.evidenceRefs());
         return failure;
     }
@@ -1113,6 +1114,32 @@ public class V03RuntimeExecutionService {
 
     private List<String> distinct(List<String> values) {
         return values.stream().filter(value -> value != null && !value.isBlank()).distinct().toList();
+    }
+
+    /**
+     * Provider adapters may write diagnostic text directly to the run directory. Runtime values remain
+     * available in memory for bindings, but no referenced text artifact is indexed before masking.
+     */
+    private void sanitizeEvidence(Path runDir, List<String> evidenceRefs) {
+        Path normalizedRunDir = runDir.toAbsolutePath().normalize();
+        for (String evidenceRef : distinct(evidenceRefs)) {
+            Path evidence = normalizedRunDir.resolve(evidenceRef).normalize();
+            if (!evidence.startsWith(normalizedRunDir) || !Files.isRegularFile(evidence)) {
+                continue;
+            }
+            try {
+                if (Files.size(evidence) > 10 * 1024 * 1024) {
+                    continue;
+                }
+                String original = Files.readString(evidence);
+                String redacted = outputRedactor.redactMessage(original);
+                if (!original.equals(redacted)) {
+                    Files.writeString(evidence, redacted);
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to sanitize v0.3 evidence `" + evidence + "`.", e);
+            }
+        }
     }
 
     private void recreateDirectory(Path path) {

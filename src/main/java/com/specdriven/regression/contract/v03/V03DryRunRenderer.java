@@ -4,11 +4,11 @@ import java.io.PrintStream;
 
 public final class V03DryRunRenderer {
 
-    public void render(PrintStream out, V03CompiledSuite suite) {
-        out.println("suite_id: " + suite.suiteId());
-        out.println("plan_digest: " + suite.planDigest());
+    public void render(PrintStream out, V03ExecutionPlan plan) {
+        out.println("suite_id: " + plan.suiteId());
+        out.println("plan_digest: " + plan.planDigest());
         out.println("resolved_execution_plan:");
-        for (V03CompiledTestCase testCase : suite.tests()) {
+        for (V03CompiledTestCase testCase : plan.tests()) {
             render(out, testCase.setup());
             render(out, testCase.execute());
             render(out, testCase.verify());
@@ -19,6 +19,7 @@ public final class V03DryRunRenderer {
     private void render(PrintStream out, Iterable<V03ExecutionStep> steps) {
         for (V03ExecutionStep step : steps) {
             out.println("  - test_case_id: " + step.testCaseId());
+            out.println("    kind: " + step.kind().name().toLowerCase(java.util.Locale.ROOT));
             out.println("    phase: " + step.phase());
             out.println("    id: " + step.id());
             if (!step.target().isBlank()) {

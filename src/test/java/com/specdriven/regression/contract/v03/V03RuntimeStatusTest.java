@@ -123,6 +123,50 @@ class V03RuntimeStatusTest {
         assertThat((List<?>) providerResult.get("cleanup_failures")).hasSize(1);
     }
 
+    @Test
+    void redactsSensitiveRuntimeOutputsAndProviderEvidenceBeforeWritingRunArtifacts() throws Exception {
+        V03ProviderRuntimeAdapter adapter = new V03ProviderRuntimeAdapter() {
+            @Override
+            public String providerType() {
+                return "sample_fake_provider";
+            }
+
+            @Override
+            public boolean supports(String providerContract, String operation) {
+                return true;
+            }
+
+            @Override
+            public V03StepResult execute(V03ExecutionStep step, V03ExecutionContext context) {
+                Path evidence = context.runDir().resolve("provider-evidence/raw-runtime.txt");
+                try {
+                    Files.createDirectories(evidence.getParent());
+                    Files.writeString(evidence, "authorization=Bearer raw-runtime-token password=raw-password");
+                } catch (java.io.IOException error) {
+                    throw new java.io.UncheckedIOException(error);
+                }
+                return new V03StepResult(step.id(), "passed", Map.of(
+                        "actual_json", Map.of("token", "raw-runtime-token", "status", "OK")),
+                        List.of("provider-evidence/raw-runtime.txt"), "", "");
+            }
+        };
+        V03RuntimeExecutionService service = new V03RuntimeExecutionService(
+                new ContractBaselineService(), new V03ProviderRuntimeRegistry(List.of(adapter)));
+
+        var run = service.run(
+                Path.of("samples/00-getting-started/golden_e2e/suite_manifest.yaml"),
+                "local_v03",
+                tempDir.resolve("redaction"));
+
+        assertThat(Files.readString(run.resultJson()))
+                .doesNotContain("raw-runtime-token")
+                .doesNotContain("raw-password");
+        assertThat(Files.readString(run.evidenceDir().resolve("provider-evidence/raw-runtime.txt")))
+                .doesNotContain("raw-runtime-token")
+                .doesNotContain("raw-password")
+                .contains(V03OutputRedactor.MASKED);
+    }
+
     private V03ProviderRuntimeAdapter statusAdapter(List<String> executedPhases, Map<String, String> statuses) {
         return new V03ProviderRuntimeAdapter() {
             @Override

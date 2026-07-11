@@ -3,11 +3,18 @@ package com.specdriven.regression.contract.v03;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class V03ExecutionPlanBuilderTest {
+
+    @TempDir
+    Path tempDir;
 
     private static final Path HTTP_MOCK_SUITE =
             Path.of("samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml");
@@ -16,7 +23,7 @@ class V03ExecutionPlanBuilderTest {
 
     @Test
     void compilesMultiTestSuiteWithSharedTargetsAndPerTestSteps() {
-        V03CompiledSuite compiled = new V03ExecutionPlanBuilder().compile(MULTI_TEST_SUITE, "local_v03");
+        V03ExecutionPlan compiled = new V03ExecutionPlanBuilder().build(MULTI_TEST_SUITE, "local_v03");
 
         assertThat(compiled.suiteId()).isEqualTo("MULTI-TEST-v0.3");
         assertThat(compiled.targets().keySet())
@@ -37,11 +44,11 @@ class V03ExecutionPlanBuilderTest {
 
         assertThat(plan.suiteId()).isEqualTo("HTTP-MOCK-REST-CLIENT-v0.3");
         assertThat(plan.profile()).isEqualTo("local_v03");
-        assertThat(plan.targets()).extracting(V03ResolvedTarget::target)
+        assertThat(plan.targets().values()).extracting(V03ResolvedTarget::target)
                 .containsExactly("payment_mock", "payment_api");
-        assertThat(plan.targets()).extracting(V03ResolvedTarget::providerContract)
+        assertThat(plan.targets().values()).extracting(V03ResolvedTarget::providerContract)
                 .containsExactly("http_mock.v0.3", "rest_client.v0.3");
-        assertThat(plan.targets()).extracting(V03ResolvedTarget::runtimeMode)
+        assertThat(plan.targets().values()).extracting(V03ResolvedTarget::runtimeMode)
                 .containsExactly("mock", "mock");
         assertThat(plan.steps()).extracting(V03ExecutionStep::providerContract)
                 .contains("http_mock.v0.3", "rest_client.v0.3");
@@ -63,6 +70,13 @@ class V03ExecutionPlanBuilderTest {
                 .containsExactly("setup", "execute", "verify", "verify", "cleanup");
         assertThat(plan.steps()).extracting(V03ExecutionStep::operation)
                 .containsExactly("load_stubs", "http_request", "equals", "json_match", "reset_mock");
+        assertThat(plan.steps()).extracting(V03ExecutionStep::kind)
+                .containsExactly(
+                        V03ExecutionStepKind.PROVIDER_OPERATION,
+                        V03ExecutionStepKind.PROVIDER_OPERATION,
+                        V03ExecutionStepKind.ASSERTION,
+                        V03ExecutionStepKind.ASSERTION,
+                        V03ExecutionStepKind.PROVIDER_OPERATION);
     }
 
     @Test
@@ -71,5 +85,39 @@ class V03ExecutionPlanBuilderTest {
                 .build(Path.of("samples/20-provider-capability-p0/http/rest_client_with_wiremock/missing.yaml"), "local_v03"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("v0.3 suite is not valid");
+    }
+
+    @Test
+    void retainsTestCaseWhenAllLifecyclePhasesAreEmpty() throws Exception {
+        Path source = Path.of("samples/00-getting-started/golden_e2e");
+        Path suiteRoot = tempDir.resolve("empty-test");
+        copyDirectory(source, suiteRoot);
+        Files.writeString(suiteRoot.resolve("test_cases/golden_success.yaml"), """
+                dsl_version: v0.3
+                test_case_id: EMPTY-V03-TC-001
+                title: Empty lifecycle test
+                execute: []
+                verify: []
+                """);
+
+        V03ExecutionPlan plan = new V03ExecutionPlanBuilder()
+                .build(suiteRoot.resolve("suite_manifest.yaml"), "local_v03");
+
+        assertThat(plan.tests()).extracting(V03CompiledTestCase::testCaseId)
+                .containsExactly("EMPTY-V03-TC-001");
+        assertThat(plan.steps()).isEmpty();
+    }
+
+    private void copyDirectory(Path source, Path target) throws IOException {
+        try (var paths = Files.walk(source)) {
+            for (Path path : paths.sorted(Comparator.comparing(Path::toString)).toList()) {
+                Path destination = target.resolve(source.relativize(path));
+                if (Files.isDirectory(path)) Files.createDirectories(destination);
+                else {
+                    Files.createDirectories(destination.getParent());
+                    Files.copy(path, destination);
+                }
+            }
+        }
     }
 }

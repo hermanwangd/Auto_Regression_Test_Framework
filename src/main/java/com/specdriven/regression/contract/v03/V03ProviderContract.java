@@ -29,12 +29,52 @@ public record V03ProviderContract(
     public record V03OperationDefinition(
             Set<String> allowedInputs,
             Set<String> requiredInputs,
-            Set<String> outputRefs) {
+            Set<String> outputRefs,
+            Map<String, V03InputDefinition> inputDefinitions,
+            Map<String, V03OutputDefinition> outputDefinitions,
+            Set<String> runtimeModes,
+            Set<String> allowedPhases) {
 
         public V03OperationDefinition {
             allowedInputs = Set.copyOf(allowedInputs);
             requiredInputs = Set.copyOf(requiredInputs);
             outputRefs = Set.copyOf(outputRefs);
+            inputDefinitions = Map.copyOf(inputDefinitions);
+            outputDefinitions = Map.copyOf(outputDefinitions);
+            runtimeModes = Set.copyOf(runtimeModes);
+            allowedPhases = Set.copyOf(allowedPhases);
+        }
+
+        public V03OperationDefinition(
+                Set<String> allowedInputs,
+                Set<String> requiredInputs,
+                Set<String> outputRefs,
+                Map<String, V03InputDefinition> inputDefinitions,
+                Map<String, V03OutputDefinition> outputDefinitions,
+                Set<String> runtimeModes) {
+            this(allowedInputs, requiredInputs, outputRefs, inputDefinitions, outputDefinitions,
+                    runtimeModes, Set.of("setup", "execute", "verify", "cleanup"));
+        }
+
+        public V03OperationDefinition(Set<String> allowedInputs, Set<String> requiredInputs, Set<String> outputRefs) {
+            this(allowedInputs, requiredInputs, outputRefs,
+                    legacyInputs(allowedInputs, requiredInputs), legacyOutputs(outputRefs), Set.of(),
+                    Set.of("setup", "execute", "verify", "cleanup"));
+        }
+
+        private static Map<String, V03InputDefinition> legacyInputs(
+                Set<String> allowedInputs, Set<String> requiredInputs) {
+            Map<String, V03InputDefinition> result = new java.util.LinkedHashMap<>();
+            for (String input : allowedInputs) {
+                result.put(input, V03InputDefinition.legacy(requiredInputs.contains(input)));
+            }
+            return result;
+        }
+
+        private static Map<String, V03OutputDefinition> legacyOutputs(Set<String> outputRefs) {
+            Map<String, V03OutputDefinition> result = new java.util.LinkedHashMap<>();
+            for (String output : outputRefs) result.put(output, V03OutputDefinition.legacy(false));
+            return result;
         }
     }
 }

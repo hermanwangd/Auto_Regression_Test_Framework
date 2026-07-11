@@ -84,7 +84,7 @@ class GoldenE2eCommandTest {
         assertThat(resultText)
                 .contains("\"framework_version\": \"0.3.0\"")
                 .contains("\"suite_id\": \"GOLDEN-E2E-v0.2\"")
-                .contains("\"batch_id\": \"BATCH-GOLDEN-E2E-001\"")
+                .contains("\"batch_id\": \"BATCH-STANDALONE-")
                 .contains("\"run_id\": \"RUN-GOLDEN-E2E-001\"")
                 .contains("\"status\": \"passed\"")
                 .contains("\"evidence_classification\": \"framework_verification_only\"")
@@ -102,8 +102,8 @@ class GoldenE2eCommandTest {
         assertThat(report.stdout())
                 .contains("report_status: review_ready")
                 .contains("suite_id: GOLDEN-E2E-v0.2")
-                .contains("batch_id: BATCH-GOLDEN-E2E-001")
-                .contains("run_id: RUN-GOLDEN-E2E-001")
+                .contains("batch_id: BATCH-STANDALONE-")
+                .contains("run_id: RUN-GOLDEN-E2E-")
                 .contains("test_case_id: GOLDEN-E2E-TC-001")
                 .contains("status: passed");
     }

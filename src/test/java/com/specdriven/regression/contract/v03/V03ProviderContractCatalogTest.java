@@ -1,6 +1,7 @@
 package com.specdriven.regression.contract.v03;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Path;
 import java.util.Map;
@@ -18,7 +19,19 @@ class V03ProviderContractCatalogTest {
         assertThat(contracts.get("rest_client.v0.3").runtimeModes()).contains("native", "mock");
         assertThat(contracts.get("rest_client.v0.3").operations().get("http_request").requiredInputs())
                 .contains("request.method", "request.path");
+        assertThat(contracts.get("sample_fake_provider.v0.3").operations().get("setup_fixture").allowedPhases())
+                .containsExactly("setup");
         assertThat(contracts.get("http_mock.v0.3").bindableOutputs()).containsExactly("base_url");
         assertThat(contracts.get("jdbc.v0.3").failureCodes()).contains("DB_CONNECTION_FAILED");
+    }
+
+    @Test
+    void rejectsUnknownTypedContractVocabulary() {
+        assertThatThrownBy(() -> V03ValueType.parse("decimal128"))
+                .hasMessageContaining("invalid_value_type");
+        assertThatThrownBy(() -> V03ReferenceKind.parse("runtime_memory"))
+                .hasMessageContaining("invalid_reference_kind");
+        assertThatThrownBy(() -> V03Sensitivity.parse("internal_only"))
+                .hasMessageContaining("invalid_sensitivity");
     }
 }

@@ -5,6 +5,17 @@ provider_role: messaging_client
 protocol: nats
 purpose: NATS messaging provider contract for DSL v0.3 publish and observation checks.
 runtime_modes: [mock, native, ephemeral]
+operation_defaults:
+  input:
+    value_type: any
+    reference_kinds: [literal, artifact, step, generated, env]
+    sensitivity: public
+  output:
+    value_type: any
+    sensitivity: public
+    bindable: false
+    evidence_included: true
+  phases: [setup, execute, verify, cleanup]
 binding_keys:
   connection.local_ref:
     required: false

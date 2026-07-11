@@ -5,6 +5,17 @@ provider_role: client
 protocol: http
 purpose: Protocol-level HTTP client contract for DSL v0.3 authoring.
 runtime_modes: [native, mock, stub]
+operation_defaults:
+  input:
+    value_type: any
+    reference_kinds: [literal, artifact, step, generated, env]
+    sensitivity: public
+  output:
+    value_type: any
+    sensitivity: public
+    bindable: false
+    evidence_included: true
+  phases: [setup, execute, verify, cleanup]
 binding_keys:
   base_url:
     required: true

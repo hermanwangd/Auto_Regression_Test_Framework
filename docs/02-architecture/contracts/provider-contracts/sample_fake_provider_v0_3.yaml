@@ -3,6 +3,17 @@ provider_contract: sample_fake_provider.v0.3
 provider_type: sample_fake_provider
 purpose: Framework-owned deterministic fake provider for DSL v0.3 golden lifecycle verification only.
 runtime_modes: [stub]
+operation_defaults:
+  input:
+    value_type: any
+    reference_kinds: [literal, artifact, step, generated, env]
+    sensitivity: public
+  output:
+    value_type: any
+    sensitivity: public
+    bindable: false
+    evidence_included: true
+  phases: [setup, execute, verify, cleanup]
 binding_keys:
   workspace_ref:
     required: true
@@ -15,17 +26,72 @@ defaults:
   retry: 0
 operations:
   setup_fixture:
+    phases: [setup]
     allowed_inputs: [fixture.setup_ref, fixture.input_ref, fixture.workspace_ref]
     required_inputs: [fixture.setup_ref, fixture.input_ref]
     output_refs: [setup_log, workspace_ref]
+    inputs:
+      fixture.setup_ref:
+        value_type: object
+        reference_kinds: [artifact]
+      fixture.input_ref:
+        value_type: object
+        reference_kinds: [artifact]
+      fixture.workspace_ref:
+        value_type: string
+        reference_kinds: [artifact, generated]
+    outputs:
+      setup_log:
+        value_type: string
+        sensitivity: public
+        evidence_included: true
+      workspace_ref:
+        value_type: string
+        sensitivity: masked
+        bindable: true
   execute_sample:
+    phases: [execute]
     allowed_inputs: [sample.input_ref, sample.expected_ref, sample.output_ref]
     required_inputs: [sample.input_ref]
     output_refs: [actual_json, actual_text, execution_log]
+    inputs:
+      sample.input_ref:
+        value_type: object
+        reference_kinds: [artifact]
+      sample.expected_ref:
+        value_type: object
+        reference_kinds: [artifact]
+      sample.output_ref:
+        value_type: string
+        reference_kinds: [artifact]
+    outputs:
+      actual_json:
+        value_type: object
+        sensitivity: public
+      actual_text:
+        value_type: string
+        sensitivity: public
+      execution_log:
+        value_type: string
+        sensitivity: masked
+        evidence_included: true
   cleanup_fixture:
+    phases: [cleanup]
     allowed_inputs: [fixture.cleanup_ref, fixture.workspace_ref]
     required_inputs: [fixture.cleanup_ref]
     output_refs: [cleanup_log]
+    inputs:
+      fixture.cleanup_ref:
+        value_type: object
+        reference_kinds: [artifact]
+      fixture.workspace_ref:
+        value_type: string
+        reference_kinds: [step, generated]
+    outputs:
+      cleanup_log:
+        value_type: string
+        sensitivity: masked
+        evidence_included: true
 evidence:
   outputs: [setup_log, cleanup_log, actual_json, actual_text, execution_log, assertion_result, diff]
   redact: []

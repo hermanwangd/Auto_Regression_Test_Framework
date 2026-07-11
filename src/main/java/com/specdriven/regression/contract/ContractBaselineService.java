@@ -2375,7 +2375,8 @@ public class ContractBaselineService {
                     "mixed_dsl_versions",
                     "A leaf suite must use one DSL version: align manifest_version and every referenced test case dsl_version."));
         }
-        boolean v03 = manifestV03 || anyV03Test;
+        // Leaf routing is selected exclusively by the validated manifest; test case versions only validate it.
+        boolean v03 = manifestV03;
         Map<Path, Map<String, Object>> frameworkContractsByPath =
                 readDirectory(frameworkProviderContractsDirectory(root), findings);
         Map<Path, Map<String, Object>> suiteLocalContractsByPath =
@@ -2510,7 +2511,14 @@ public class ContractBaselineService {
             return;
         }
         for (Map.Entry<Path, Map<String, Object>> entry : testCases.entrySet()) {
-            if (!expectedDslVersion.equals(stringValue(entry.getValue().get("dsl_version")))) {
+            String dslVersion = stringValue(entry.getValue().get("dsl_version"));
+            if (dslVersion.isBlank()) {
+                findings.add(finding(
+                        entry.getKey(),
+                        "dsl_version",
+                        "missing_required_field",
+                        "Declare dsl_version matching the leaf suite manifest before execution."));
+            } else if (!expectedDslVersion.equals(dslVersion)) {
                 findings.add(finding(
                         entry.getKey(),
                         "dsl_version",
@@ -2694,7 +2702,7 @@ public class ContractBaselineService {
     }
 
     private void require(Path path, Map<String, Object> document, String field, List<ContractFinding> findings) {
-        if ("execute".equals(field) && document.containsKey(field)) {
+        if (("execute".equals(field) || "verify".equals(field)) && document.containsKey(field)) {
             return;
         }
         if (isMissingRequiredField(field, document.get(field))) {

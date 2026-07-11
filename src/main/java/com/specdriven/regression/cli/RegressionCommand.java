@@ -36,8 +36,8 @@ import com.specdriven.regression.contract.WireMockHttpRequestCapabilityService;
 import com.specdriven.regression.contract.WireMockHttpRequestCapabilityService.MixedRunResult;
 import com.specdriven.regression.contract.v03.V03RuntimeExecutionService;
 import com.specdriven.regression.contract.v03.V03RuntimeExecutionService.V03RuntimeRunResult;
-import com.specdriven.regression.contract.v03.V03CompiledSuite;
 import com.specdriven.regression.contract.v03.V03ExecutionPlanBuilder;
+import com.specdriven.regression.contract.v03.V03ExecutionPlan;
 import com.specdriven.regression.contract.v03.V03DryRunRenderer;
 import com.specdriven.regression.discovery.ReleasePackageCompletenessReport;
 import com.specdriven.regression.discovery.ReleasePackageGap;
@@ -362,7 +362,7 @@ public class RegressionCommand {
         List<ContractFinding> profileFindings = suiteProfileFindings(suiteManifest, options.get("--profile"));
         List<ContractFinding> findings = new ArrayList<>(result.findings());
         findings.addAll(profileFindings);
-        V03CompiledSuite compiled = compileV03IfReady(suiteManifest, options.get("--profile"), result, findings);
+        V03ExecutionPlan compiled = compileV03IfReady(suiteManifest, options.get("--profile"), result, findings);
         boolean valid = findings.isEmpty();
         out.println("validation_status: " + (valid ? "passed" : "failed"));
         out.println("suite_id: " + result.suiteId());
@@ -1143,7 +1143,7 @@ public class RegressionCommand {
         List<ContractFinding> profileFindings = suiteProfileFindings(suiteManifest, options.get("--profile"));
         List<ContractFinding> findings = new ArrayList<>(validation.findings());
         findings.addAll(profileFindings);
-        V03CompiledSuite compiled = compileV03IfReady(suiteManifest, options.get("--profile"), validation, findings);
+        V03ExecutionPlan compiled = compileV03IfReady(suiteManifest, options.get("--profile"), validation, findings);
         boolean ready = findings.isEmpty();
         out.println("provider_runtime_invoked: false");
         out.println("run_status: " + (ready ? "dry_run_ready" : "blocked"));
@@ -2009,7 +2009,7 @@ public class RegressionCommand {
         return validation.providerContractsUsed().stream().anyMatch(contract -> contract.endsWith(".v0.3"));
     }
 
-    private V03CompiledSuite compileV03IfReady(
+    private V03ExecutionPlan compileV03IfReady(
             Path suiteManifest,
             String profile,
             ValidationResult validation,
@@ -2018,7 +2018,7 @@ public class RegressionCommand {
             return null;
         }
         try {
-            return new V03ExecutionPlanBuilder(contractBaselineService).compile(suiteManifest, profile, validation);
+            return new V03ExecutionPlanBuilder(contractBaselineService).build(suiteManifest, profile, validation);
         } catch (IllegalArgumentException | IllegalStateException error) {
             findings.add(finding(
                     suiteManifest,
