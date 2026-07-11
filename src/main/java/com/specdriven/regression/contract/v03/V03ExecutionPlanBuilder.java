@@ -60,12 +60,14 @@ public class V03ExecutionPlanBuilder {
         Map<String, Object> suite = readMap(suiteManifest);
         String profile = effectiveProfile(requestedProfile, suite, validation);
         Map<String, Object> envProfile = readEnvProfile(suiteRoot, suite, profile);
+        Map<String, V03ProviderContract> contracts = providerContractCatalog.load(suiteRoot);
         Map<String, V03ResolvedTarget> targets = orderedTargets(
-                resolvedTargets(validation, suite, profile, envProfile), providerContractCatalog.load(suiteRoot));
+                resolvedTargets(validation, suite, profile, envProfile), contracts);
         List<Map<String, Object>> testDocuments = testDocuments(suiteRoot, suite);
         Map<String, Path> artifactRoots = artifactRoots(suiteRoot, suite);
         testDocuments.forEach(document -> validateReferences(document, artifactRoots));
         List<V03ExecutionStep> steps = executionSteps(testDocuments, profile, targets);
+        validateTypedContracts(targets, steps, contracts);
         V03SuiteMetadata metadata = new V03SuiteMetadata(
                 stringValue(suite.get("manifest_version")),
                 stringValue(suite.get("suite_id")),
@@ -194,6 +196,83 @@ public class V03ExecutionPlanBuilder {
             ordered.put(target, targets.get(target));
         }
         return Collections.unmodifiableMap(ordered);
+    }
+
+    private void validateTypedContracts(
+            Map<String, V03ResolvedTarget> targets,
+            List<V03ExecutionStep> steps,
+            Map<String, V03ProviderContract> contracts) {
+        for (V03ResolvedTarget target : targets.values()) {
+            V03ProviderContract contract = contractFor(target, contracts);
+            if (!contract.runtimeModes().contains(target.runtimeMode())) {
+                throw new IllegalArgumentException("unsupported_runtime_mode: target `" + target.target()
+                        + "` uses `" + target.runtimeMode() + "` outside Provider Contract `" + contract.id() + "`.");
+            }
+            for (String binding : target.bindings().keySet()) {
+                if (!contract.bindings().containsKey(binding)) {
+                    throw new IllegalArgumentException("unknown_binding_key: target `" + target.target()
+                            + "` supplies `" + binding + "` outside Provider Contract `" + contract.id() + "`.");
+                }
+            }
+            for (Map.Entry<String, V03ProviderContract.V03BindingDefinition> binding : contract.bindings().entrySet()) {
+                if (binding.getValue().required() && !target.bindings().containsKey(binding.getKey())) {
+                    throw new IllegalArgumentException("missing_required_binding_key: target `" + target.target()
+                            + "` requires `" + binding.getKey() + "` from Provider Contract `" + contract.id() + "`.");
+                }
+            }
+        }
+        for (V03ExecutionStep step : steps) {
+            if (step.target().isBlank()) {
+                continue;
+            }
+            V03ProviderContract contract = contractFor(targets.get(step.target()), contracts);
+            V03ProviderContract.V03OperationDefinition operation = contract.operations().get(step.operation());
+            if (operation == null) {
+                throw new IllegalArgumentException("unsupported_operation: step `" + step.id() + "` uses `"
+                        + step.operation() + "` outside Provider Contract `" + contract.id() + "`.");
+            }
+            for (String input : step.inputs().keySet()) {
+                if (!matchesContractName(operation.allowedInputs(), input)) {
+                    throw new IllegalArgumentException("unsupported_input: step `" + step.id() + "` uses `" + input
+                            + "` outside Provider Contract `" + contract.id() + "` operation `" + step.operation() + "`.");
+                }
+            }
+            for (String required : operation.requiredInputs()) {
+                if (!hasContractName(step.inputs().keySet(), required)) {
+                    throw new IllegalArgumentException("missing_required_input: step `" + step.id() + "` requires `" + required
+                            + "` from Provider Contract `" + contract.id() + "`.");
+                }
+            }
+        }
+    }
+
+    private V03ProviderContract contractFor(
+            V03ResolvedTarget target, Map<String, V03ProviderContract> contracts) {
+        if (target == null || !contracts.containsKey(target.providerContract())) {
+            throw new IllegalArgumentException("missing_provider_contract: target `"
+                    + (target == null ? "" : target.target()) + "` has no typed Provider Contract.");
+        }
+        return contracts.get(target.providerContract());
+    }
+
+    private boolean matchesContractName(Iterable<String> allowed, String actual) {
+        for (String candidate : allowed) {
+            if (candidate.equals(actual) || (candidate.endsWith(".*")
+                    && actual.startsWith(candidate.substring(0, candidate.length() - 1)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasContractName(Iterable<String> provided, String required) {
+        for (String candidate : provided) {
+            if (candidate.equals(required) || (required.endsWith(".*")
+                    && candidate.startsWith(required.substring(0, required.length() - 1)))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String providerType(String providerContract) {

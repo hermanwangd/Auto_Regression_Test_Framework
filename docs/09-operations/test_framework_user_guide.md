@@ -103,6 +103,20 @@ regress run \
 regress report --result <generated_result_json>
 ```
 
+These are executable, checked-in samples. `validate` and `run --dry-run` print
+the same `plan_digest` for the selected leaf suite/profile. The runtime result
+persists that digest in `result.json`, so a report can be traced to the exact
+compiled execution plan.
+
+Release maintainers run the bounded Maven release gate, which validates the
+schemas and contracts, executes every supported local v0.3 sample through
+validate/dry-run/run/report/evidence validation, and verifies the bundled
+Provider Contract registry from outside the repository working directory:
+
+```bash
+MAVEN_OPTS='-Xmx1024m -XX:MaxMetaspaceSize=384m' ./mvnw verify -Pv03-release-gate
+```
+
 Product/RP tooling must translate owner-authored artifacts into suite-mode
 artifacts before invoking the framework runtime. Direct Product/RP runtime
 orchestration is not part of the framework public interface.
@@ -587,7 +601,7 @@ A Provider Contract defines the public executable surface for one provider capab
 | `provider_contract` | Stable contract id, such as `jdbc.v0.3` or `rest_client.v0.3`. | Suite manifest `targets.<target>.provider_contract`. |
 | `runtime_modes` | Allowed runtime modes and which modes are executable by this framework build. | Env_Profile `targets.<target>.runtime_mode`. |
 | `binding_keys` | Required and optional binding keys, value types, allowed value kinds, defaults, and generated-ref rules. | Env_Profile `targets.<target>.bindings`. |
-| `operations.<op>.output_refs` | Runtime outputs that may be referenced by generated refs, such as `generated://payment_mock/base_url`. | Provider runtime produces the value; another Env_Profile target may consume it. |
+| `bindable_outputs` | Provider Contract outputs that another Env_Profile target may reference, such as `generated://payment_mock/base_url`. | Provider runtime produces the declared value. |
 | `operations` | Allowed `op` names, allowed `with` keys, output refs, and supported phases. | DSL `setup`, `execute`, `verify`, and `cleanup` reference the operation. |
 | `evidence` | Allowed evidence outputs and masking requirements. | Runtime writes evidence and result refs. |
 | `safety` | Required safety rules for command-capable providers. | Env_Profile and approved owner policy supply the allowed runtime access values. |
@@ -697,7 +711,7 @@ A Provider Contract defines reusable rules for one `provider_type`:
 - `executable_runtime_modes` when only a subset is runnable by the current framework build
 - `contract_only_runtime_modes` when remaining modes are vocabulary for future implementation
 - `binding_keys`
-- `operations.<op>.output_refs`
+- `bindable_outputs`
 - `defaults`
 - `valid_env_profile_target_shape`
 - `safety`
@@ -837,7 +851,7 @@ For v0.3 suites:
 - Env_Profile has `targets.<target>` for every suite target referenced by selected test cases.
 - Env_Profile `targets.<target>.bindings` supplies every required Provider Contract `binding_key`.
 - Env_Profile binding value kinds are allowed by the Provider Contract `binding_keys`.
-- Env_Profile `generated://<target>/<output>` refs resolve to Provider Contract `operations.<op>.output_refs` from another target in the same suite.
+- Env_Profile `generated://<target>/<output>` refs resolve only to the producer Provider Contract `bindable_outputs` declared by another target in the same suite.
 - Selected `runtime_mode` is allowed by the Provider Contract and the active Env_Profile.
 - Each `op` exists in the Provider Contract.
 - Every `with` key is allowed by that Provider Contract operation.
@@ -959,7 +973,7 @@ targets:
         secret_ref: env://PAYMENT_MQ_CREDENTIAL_REF
 ```
 
-`generated_ref` can reference outputs declared in a producing Provider Contract `operations.<op>.output_refs`, such as `generated://payment_mock/base_url` from a framework-owned mock target in the same suite. Undeclared project-specific generated refs are blocked before provider dispatch. Use a literal `value`, `secret_ref`, or approved local/CI-only `local_ref` when the dependency value has already been materialized.
+`generated_ref` can reference outputs declared in the producer Provider Contract `bindable_outputs`, such as `generated://payment_mock/base_url` from a framework-owned mock target in the same suite. Undeclared, cyclic, or missing-producer generated refs are blocked before provider dispatch. Use a literal `value`, `secret_ref`, or approved local/CI-only `local_ref` when the dependency value has already been materialized.
 
 `sit` and `preprod` Env_Profiles default to `runtime_mode: native`. Mock substitution in those execution modes must not be used as downstream RP release evidence.
 
@@ -1010,7 +1024,7 @@ data_policy:
   secrets_must_use_refs: true
 ```
 
-Local and CI Env_Profiles may reference ephemeral dependencies only after those dependencies have been provisioned outside the framework runtime and declared through standard artifacts. This is separate from client providers: Kafka and IBM MQ client providers consume resolved connection values but do not create brokers or queue managers. v0.3 accepts `generated://<target>/<output>` refs only when they target Provider Contract `operations.<op>.output_refs`; unresolved generated refs block validation before provider dispatch.
+Local and CI Env_Profiles may reference ephemeral dependencies only after those dependencies have been provisioned outside the framework runtime and declared through standard artifacts. This is separate from client providers: Kafka and IBM MQ client providers consume resolved connection values but do not create brokers or queue managers. v0.3 accepts `generated://<target>/<output>` refs only when the producer Provider Contract lists `<output>` in `bindable_outputs`; unresolved generated refs block plan compilation before provider dispatch.
 
 ```yaml
 env_profile_id: ci

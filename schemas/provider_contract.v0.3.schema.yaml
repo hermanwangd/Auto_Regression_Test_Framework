@@ -11,6 +11,7 @@ provider_contract_rules:
   declares_binding_keys_by_runtime_mode: true
   declares_operation_inputs: true
   declares_output_refs: true
+  declares_bindable_outputs: true
   declares_evidence_outputs: true
   declares_failure_codes: true
 unsupported_behavior:
