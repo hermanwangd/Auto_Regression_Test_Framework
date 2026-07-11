@@ -293,8 +293,8 @@ public class V03RuntimeExecutionService {
             if (!passed) {
                 evidence.put("failure_code", "ASSERTION_FAILED");
             }
-            evidence.put("actual", actual);
-            evidence.put("expected", expected);
+            evidence.put("actual", "<masked>");
+            evidence.put("expected", "<masked>");
             write(runDir.resolve(evidenceRef), toJson(evidence) + "\n");
         } else {
             StringBuilder evidence = new StringBuilder();
@@ -305,8 +305,8 @@ public class V03RuntimeExecutionService {
             if (!passed) {
                 evidence.append("failure_code: ASSERTION_FAILED\n");
             }
-            evidence.append("actual: ").append(stringValue(actual)).append('\n');
-            evidence.append("expected: ").append(stringValue(expected)).append('\n');
+            evidence.append("actual: <masked>\n");
+            evidence.append("expected: <masked>\n");
             write(runDir.resolve(evidenceRef), evidence.toString());
         }
         return new AssertionResult(

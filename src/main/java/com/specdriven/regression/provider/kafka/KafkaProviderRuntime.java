@@ -419,19 +419,7 @@ public class KafkaProviderRuntime implements ProviderRuntime {
     }
 
     private ResolvedBinding resolveEnvBinding(String value, String bindingName) {
-        if (!value.startsWith("env://")) {
-            return new ResolvedBinding(value, null);
-        }
-        String envName = value.substring("env://".length());
-        String resolved = firstNonBlank(System.getenv(envName), System.getProperty(envName));
-        if (resolved.isBlank()) {
-            return new ResolvedBinding("", failure(
-                    "KAFKA_CONNECTION_FAILED",
-                    "KAFKA_CONNECTION_FAILED",
-                    "Kafka " + bindingName + " env ref `" + value + "` is not set.",
-                    "Set environment variable `" + envName + "` before running this execution profile."));
-        }
-        return new ResolvedBinding(resolved, null);
+        return new ResolvedBinding(value, null);
     }
 
     private ProviderFailure kafkaConnectionFailure(Exception e) {

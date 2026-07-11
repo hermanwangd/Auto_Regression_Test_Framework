@@ -174,8 +174,6 @@ class IbmMqProviderRuntimeTest {
                   "status": "READY"
                 }
                 """);
-        System.setProperty("IBM_MQ_CONN_NAME", "mq.example.test(1414)");
-        System.setProperty("IBM_MQ_CREDENTIAL", "secret-ref-materialized-outside-framework");
         try {
             RecordingIbmMqClientTransport transport = new RecordingIbmMqClientTransport();
             IbmMqProviderRuntime runtime = new IbmMqProviderRuntime(transport);
@@ -191,9 +189,9 @@ class IbmMqProviderRuntimeTest {
                     Map.of(
                             "queue_manager", "QM1",
                             "channel", "DEV.APP.SVRCONN",
-                            "conn_name", Map.of("secret_ref", "env://IBM_MQ_CONN_NAME"),
+                            "conn_name", "mq.example.test(1414)",
                             "queue", "PAYMENT.REQUEST.CI",
-                            "credential.secret_ref", Map.of("secret_ref", "env://IBM_MQ_CREDENTIAL")));
+                            "credential.secret_ref", "secret-ref-materialized-outside-framework"));
 
             ProviderOperationResult put = runtime.execute(context, new ProviderOperationRequest(
                     "mq_put",
@@ -226,8 +224,6 @@ class IbmMqProviderRuntimeTest {
                     .contains("status: passed")
                     .contains("raw_secret_found: false");
         } finally {
-            System.clearProperty("IBM_MQ_CONN_NAME");
-            System.clearProperty("IBM_MQ_CREDENTIAL");
         }
     }
 

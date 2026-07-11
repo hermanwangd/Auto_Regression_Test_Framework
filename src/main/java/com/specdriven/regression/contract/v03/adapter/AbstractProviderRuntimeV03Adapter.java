@@ -4,6 +4,7 @@ import com.specdriven.regression.contract.v03.V03ExecutionContext;
 import com.specdriven.regression.contract.v03.V03ExecutionStep;
 import com.specdriven.regression.contract.v03.V03ResolvedTarget;
 import com.specdriven.regression.contract.v03.V03StepResult;
+import com.specdriven.regression.contract.v03.ref.V03ReferenceResolver;
 import com.specdriven.regression.provider.runtime.ProviderEvidence;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderOperationRequest;
@@ -15,12 +16,14 @@ import java.util.Map;
 
 abstract class AbstractProviderRuntimeV03Adapter {
 
+    private final V03ReferenceResolver referenceResolver = new V03ReferenceResolver();
+
     ProviderExecutionContext providerContext(V03ExecutionStep step, V03ExecutionContext context) {
         V03ResolvedTarget target = context.targets().get(step.target());
         Map<String, Object> bindingValues = new LinkedHashMap<>();
         if (target != null) {
             for (Map.Entry<String, Object> entry : target.bindings().entrySet()) {
-                Object resolved = resolveGenerated(entry.getValue(), context);
+                Object resolved = resolveBinding(entry.getValue(), context);
                 bindingValues.put(entry.getKey(), resolved);
                 putDotted(bindingValues, entry.getKey(), resolved);
             }
@@ -63,22 +66,21 @@ abstract class AbstractProviderRuntimeV03Adapter {
                 result.failure() == null ? "" : result.failure().reason());
     }
 
-    Object resolveGenerated(Object value, V03ExecutionContext context) {
-        String text = stringValue(value);
-        if (!text.startsWith("generated://")) {
-            return value;
+    private Object resolveBinding(Object value, V03ExecutionContext context) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> resolved = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                resolved.put(String.valueOf(entry.getKey()), resolveBinding(entry.getValue(), context));
+            }
+            return Map.copyOf(resolved);
         }
-        String ref = text.substring("generated://".length());
-        int slash = ref.indexOf('/');
-        if (slash < 0) {
-            return value;
+        if (value instanceof List<?> list) {
+            return list.stream().map(item -> resolveBinding(item, context)).toList();
         }
-        String target = ref.substring(0, slash);
-        String output = ref.substring(slash + 1);
-        Object resolved = context.generatedOutputsByTarget()
-                .getOrDefault(target, Map.of())
-                .get(output);
-        return resolved == null ? value : resolved;
+        Map<String, Object> generated = new LinkedHashMap<>();
+        context.generatedOutputsByTarget().forEach((target, outputs) ->
+                outputs.forEach((output, resolved) -> generated.put(target + "\\n" + output, resolved)));
+        return referenceResolver.resolveBinding(value, generated, System.getenv());
     }
 
     @SuppressWarnings("unchecked")
