@@ -645,10 +645,8 @@ public class JdbcProviderRuntime implements ProviderRuntime {
             Map<String, Object> outputs,
             ProviderFailure failure) {
         String evidenceRef = writeFailureEvidence(context, request, failure);
-        Map<String, Object> resolvedOutputs = new LinkedHashMap<>(outputs);
-        resolvedOutputs.put("failure_detail_ref", evidenceRef);
         return ProviderOperationResult.failed(
-                resolvedOutputs,
+                outputs,
                 List.of(new ProviderEvidence("failure_detail", evidenceRef, true)),
                 failure);
     }

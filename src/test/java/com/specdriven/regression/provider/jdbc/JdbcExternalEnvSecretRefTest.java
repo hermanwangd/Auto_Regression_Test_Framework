@@ -69,6 +69,17 @@ class JdbcExternalEnvSecretRefTest {
         assertThat(result.failure().code()).isEqualTo("SECRET_RESOLUTION_ERROR");
         assertThat(result.failure().reason()).contains("env ref `env://JDBC_CONNECTION` is not set");
         assertThat(result.failure().ownerAction()).contains("Set environment variable `JDBC_CONNECTION`");
+        assertThat(result.outputs()).doesNotContainKey("failure_detail_ref");
+        assertThat(result.evidence()).singleElement().satisfies(evidence -> {
+            assertThat(evidence.evidenceType()).isEqualTo("failure_detail");
+            assertThat(evidence.ref()).isEqualTo("provider-evidence/jdbc/failure_missing_env_query.yaml");
+        });
+        Path evidence = tempDir.resolve("run/provider-evidence/jdbc/failure_missing_env_query.yaml");
+        assertThat(evidence).isRegularFile();
+        assertThat(Files.readString(evidence))
+                .contains("failure_code: SECRET_RESOLUTION_ERROR")
+                .contains("raw_secret_found: false")
+                .doesNotContain("JDBC_CONNECTION=");
     }
 
     @Test
