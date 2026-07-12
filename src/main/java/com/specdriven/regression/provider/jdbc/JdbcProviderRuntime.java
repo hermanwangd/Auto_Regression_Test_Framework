@@ -49,7 +49,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
     }
 
     JdbcProviderRuntime(Function<String, String> environment) {
-        this(environment, JdbcDriverDiscovery.missing(Path.of(".")));
+        this(environment, new JdbcDriverDiscovery(Path.of("."), environment).discover(List.of(), ""));
     }
 
     JdbcProviderRuntime(
