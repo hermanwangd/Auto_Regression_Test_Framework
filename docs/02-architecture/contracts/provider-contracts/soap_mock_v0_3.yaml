@@ -1,56 +1,266 @@
+---
 contract_version: v0.3
 provider_contract: soap_mock.v0.3
 provider_type: soap_mock
 provider_role: mock_server
 protocol: soap
 purpose: WireMock-backed SOAP mock provider contract for DSL v0.3.
-runtime_modes: [mock]
+runtime_modes:
+- mock
 operation_defaults:
   input:
     value_type: any
-    reference_kinds: [literal, artifact, step, generated, env]
+    reference_kinds: &1
+    - literal
+    - artifact
+    - step
+    - generated
+    - env
     sensitivity: public
   output:
     value_type: any
     sensitivity: public
     bindable: false
     evidence_included: true
-  phases: [setup, execute, verify, cleanup]
-bindable_outputs: [endpoint_url]
+  phases:
+  - setup
+  - execute
+  - verify
+  - cleanup
+bindable_outputs:
+- endpoint_url
 binding_keys:
   port_strategy:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   fixed_port:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
 operations:
   start_soap_mock:
-    allowed_inputs: [mock.port, soap.wsdl_ref]
+    inputs:
+      mock.port:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      soap.wsdl_ref:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      endpoint_url:
+        value_type: any
+        sensitivity: masked
+        bindable: true
+        evidence_included: true
+      server_log:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - mock.port
+    - soap.wsdl_ref
     required_inputs: []
-    output_refs: [endpoint_url, server_log]
+    output_refs:
+    - endpoint_url
+    - server_log
   load_soap_stub:
-    allowed_inputs: [soap.path, soap.operation, soap.action, soap.request_xpath, soap.request_xml_ref, soap.response_ref, soap.status, soap.headers.*, mock.reset_before_load]
-    required_inputs: [soap.operation, soap.response_ref]
-    output_refs: [endpoint_url, loaded_stub_count, injected_stub, server_log]
+    inputs:
+      soap.path:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      soap.operation:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      soap.action:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      soap.request_xpath:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      soap.request_xml_ref:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      soap.response_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      soap.status:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      soap.headers.*:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      mock.reset_before_load:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      endpoint_url:
+        value_type: any
+        sensitivity: masked
+        bindable: true
+        evidence_included: true
+      loaded_stub_count:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      injected_stub:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      server_log:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - soap.path
+    - soap.operation
+    - soap.action
+    - soap.request_xpath
+    - soap.request_xml_ref
+    - soap.response_ref
+    - soap.status
+    - soap.headers.*
+    - mock.reset_before_load
+    required_inputs:
+    - soap.operation
+    - soap.response_ref
+    output_refs:
+    - endpoint_url
+    - loaded_stub_count
+    - injected_stub
+    - server_log
   soap_request_received:
-    allowed_inputs: [soap.path, soap.operation, soap.action, soap.request_xpath, soap.expected_count]
-    required_inputs: [soap.operation]
-    output_refs: [request_journal, matched_count, server_log]
+    inputs:
+      soap.path:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      soap.operation:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      soap.action:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      soap.request_xpath:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      soap.expected_count:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      endpoint_url:
+        value_type: any
+        sensitivity: masked
+        bindable: true
+        evidence_included: true
+      request_journal:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      matched_count:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      server_log:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - soap.path
+    - soap.operation
+    - soap.action
+    - soap.request_xpath
+    - soap.expected_count
+    required_inputs:
+    - soap.operation
+    output_refs:
+    - endpoint_url
+    - request_journal
+    - matched_count
+    - server_log
   reset_mock:
+    inputs: {}
+    outputs:
+      cleanup_log:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      server_log:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
     allowed_inputs: []
     required_inputs: []
-    output_refs: [cleanup_log, server_log]
+    output_refs:
+    - cleanup_log
+    - server_log
 evidence:
-  outputs: [endpoint_url, request_journal, server_log, injected_stub, cleanup_log, failure_detail]
-  redact: [soap.headers.authorization]
+  outputs:
+  - endpoint_url
+  - request_journal
+  - server_log
+  - injected_stub
+  - cleanup_log
+  - failure_detail
+  redact:
+  - soap.headers.authorization
 failure_mapping:
   allowed_codes:
-    - PROVIDER_UNAVAILABLE
-    - PROVIDER_TIMEOUT
-    - PROVIDER_STUB_MISSING
-    - OPERATION_FAILED
-    - ASSERTION_FAILED
-    - XML_MISMATCH
-    - EVIDENCE_INVALID
-    - SECRET_RESOLUTION_ERROR
+  - PROVIDER_UNAVAILABLE
+  - PROVIDER_TIMEOUT
+  - PROVIDER_STUB_MISSING
+  - OPERATION_FAILED
+  - ASSERTION_FAILED
+  - XML_MISMATCH
+  - EVIDENCE_INVALID
+  - SECRET_RESOLUTION_ERROR

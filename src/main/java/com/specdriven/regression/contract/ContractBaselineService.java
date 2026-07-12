@@ -655,6 +655,8 @@ public class ContractBaselineService {
     private void validateV03ReferenceSyntax(
             Path path, String fieldPath, Object value, List<ContractFinding> findings) {
         if (value instanceof Map<?, ?> map) {
+            boolean providerContractBindingDefinition = fieldPath.contains("binding_keys.")
+                    && map.containsKey("required") && map.containsKey("source");
             for (Map.Entry<?, ?> entry : map.entrySet()) {
                 String key = stringValue(entry.getKey());
                 validateV03ReferenceSyntax(path, fieldPath.isBlank() ? key : fieldPath + "." + key,
@@ -825,7 +827,7 @@ public class ContractBaselineService {
             TargetResolution targetResolution,
             Map<String, Object> operation,
             List<ContractFinding> findings) {
-        List<String> allowedInputs = operationInputs(operation, "allowed_inputs", "allowed_bind_as");
+        List<String> allowedInputs = v03InputNames(operation);
         for (String inputName : operationRef.inputs().keySet()) {
             if (!allowedBindAs(allowedInputs, inputName)) {
                 findings.add(new ContractFinding(
@@ -843,7 +845,7 @@ public class ContractBaselineService {
             validateV03ArtifactRef(graph, testCasePath, operationRef, inputName, operationRef.inputs().get(inputName),
                     targetResolution, findings);
         }
-        for (String requiredInput : operationInputs(operation, "required_inputs", "required_parameters")) {
+        for (String requiredInput : v03RequiredInputNames(operation)) {
             if (!providedInput(new ArrayList<>(operationRef.inputs().keySet()), requiredInput)) {
                 findings.add(new ContractFinding(
                         testCasePath.toString(),
@@ -1515,7 +1517,7 @@ public class ContractBaselineService {
                 if (operation.isEmpty()) {
                     continue;
                 }
-                List<String> outputRefs = stringList(operation.get("output_refs"));
+                List<String> outputRefs = v03OutputNames(operation);
                 for (String output : operationRef.outputs().keySet()) {
                     if (!outputRefs.contains(output)) {
                         findings.add(new ContractFinding(
@@ -3405,6 +3407,24 @@ public class ContractBaselineService {
         return inputs.isEmpty() ? stringList(operation.get(legacyField)) : inputs;
     }
 
+    private List<String> v03InputNames(Map<String, Object> operation) {
+        Map<String, Object> inputs = mapValue(operation.get("inputs"));
+        return inputs.isEmpty() ? operationInputs(operation, "allowed_inputs", "allowed_bind_as") : List.copyOf(inputs.keySet());
+    }
+
+    private List<String> v03RequiredInputNames(Map<String, Object> operation) {
+        Map<String, Object> inputs = mapValue(operation.get("inputs"));
+        if (inputs.isEmpty()) return operationInputs(operation, "required_inputs", "required_parameters");
+        return inputs.entrySet().stream()
+                .filter(entry -> Boolean.parseBoolean(stringValue(mapValue(entry.getValue()).get("required"))))
+                .map(Map.Entry::getKey).toList();
+    }
+
+    private List<String> v03OutputNames(Map<String, Object> operation) {
+        Map<String, Object> outputs = mapValue(operation.get("outputs"));
+        return outputs.isEmpty() ? stringList(operation.get("output_refs")) : List.copyOf(outputs.keySet());
+    }
+
     private boolean providedInput(List<String> providedInputs, String requiredInput) {
         for (String provided : providedInputs) {
             if (allowedBindAs(List.of(requiredInput), provided)) {
@@ -3445,6 +3465,8 @@ public class ContractBaselineService {
             List<ContractFinding> findings,
             boolean secretContext) {
         if (value instanceof Map<?, ?> map) {
+            boolean providerContractBindingDefinition = fieldPath.contains("binding_keys.")
+                    && map.containsKey("required") && map.containsKey("source");
             if (Boolean.TRUE.equals(map.get("sensitive")) && map.containsKey("value")) {
                 findings.add(new ContractFinding(
                         filePath,
@@ -3491,7 +3513,7 @@ public class ContractBaselineService {
             for (Map.Entry<?, ?> entry : map.entrySet()) {
                 String key = stringValue(entry.getKey());
                 String childPath = fieldPath.isBlank() ? key : fieldPath + "." + key;
-                boolean childSecretContext = secretContext || secretKey(key);
+                boolean childSecretContext = !providerContractBindingDefinition && (secretContext || secretKey(key));
                 if (!"secret_ref".equals(key)) {
                     detectRawSecrets(filePath, childPath, entry.getValue(), findings, childSecretContext);
                 }

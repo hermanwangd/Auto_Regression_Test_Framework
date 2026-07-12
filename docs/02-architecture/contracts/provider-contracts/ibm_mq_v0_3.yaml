@@ -1,75 +1,384 @@
+---
 contract_version: v0.3
 provider_contract: ibm_mq.v0.3
 provider_type: ibm_mq
 provider_role: messaging_client
 protocol: ibm_mq
-purpose: IBM MQ messaging provider contract for DSL v0.3 browse-first put and observation checks.
-runtime_modes: [mock, native]
+purpose: IBM MQ messaging provider contract for DSL v0.3 browse-first put and observation
+  checks.
+runtime_modes:
+- mock
+- native
 operation_defaults:
   input:
     value_type: any
-    reference_kinds: [literal, artifact, step, generated, env]
+    reference_kinds: &1
+    - literal
+    - artifact
+    - step
+    - generated
+    - env
     sensitivity: public
   output:
     value_type: any
     sensitivity: public
     bindable: false
     evidence_included: true
-  phases: [setup, execute, verify, cleanup]
+  phases:
+  - setup
+  - execute
+  - verify
+  - cleanup
 binding_keys:
   queue_manager:
     required: true
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   channel:
     required: true
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   conn_name:
     required: true
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   queue:
     required: true
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   credential.secret_ref:
     required: true
     source: env_profile_secret_ref
+    value_type: string
+    reference_kinds: [literal, env]
+    sensitivity: masked
   timeout:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   poll_interval:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
 operations:
   mq_put:
-    allowed_inputs: [payload_ref, payload, correlation_id, timeout]
-    required_inputs: [payload_ref]
-    output_refs: [queue, message_id, correlation_id, put_at, mq_evidence_ref]
+    inputs:
+      payload_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      payload:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      correlation_id:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      timeout:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      queue:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      message_id:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      correlation_id:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      put_at:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      mq_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - payload_ref
+    - payload
+    - correlation_id
+    - timeout
+    required_inputs:
+    - payload_ref
+    output_refs:
+    - queue
+    - message_id
+    - correlation_id
+    - put_at
+    - mq_evidence_ref
   mq_browse:
-    allowed_inputs: [correlation_id, timeout, poll_interval]
+    inputs:
+      correlation_id:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      timeout:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      poll_interval:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      queue:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      browse_count:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      message_ids:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      last_observed_message_id:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      duration_ms:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      mq_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - correlation_id
+    - timeout
+    - poll_interval
     required_inputs: []
-    output_refs: [queue, browse_count, message_ids, last_observed_message_id, duration_ms, mq_evidence_ref]
+    output_refs:
+    - queue
+    - browse_count
+    - message_ids
+    - last_observed_message_id
+    - duration_ms
+    - mq_evidence_ref
   mq_message_exists:
-    allowed_inputs: [correlation_id, timeout, poll_interval]
+    inputs:
+      correlation_id:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      timeout:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      poll_interval:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      queue:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      browse_count:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      matched:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      last_observed_message_id:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      duration_ms:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      mq_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - correlation_id
+    - timeout
+    - poll_interval
     required_inputs: []
-    output_refs: [queue, browse_count, matched, last_observed_message_id, duration_ms, mq_evidence_ref]
+    output_refs:
+    - queue
+    - browse_count
+    - matched
+    - last_observed_message_id
+    - duration_ms
+    - mq_evidence_ref
   mq_payload_match:
-    allowed_inputs: [expected_ref, correlation_id, timeout, poll_interval]
-    required_inputs: [expected_ref]
-    output_refs: [queue, browse_count, matched, matched_fields, duration_ms, mq_evidence_ref, assertion_evidence_ref]
+    inputs:
+      expected_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      correlation_id:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      timeout:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      poll_interval:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      queue:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      browse_count:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      message_ids:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      matched:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      matched_fields:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      duration_ms:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      mq_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      assertion_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      last_observed_message_id:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - expected_ref
+    - correlation_id
+    - timeout
+    - poll_interval
+    required_inputs:
+    - expected_ref
+    output_refs:
+    - queue
+    - browse_count
+    - message_ids
+    - matched
+    - matched_fields
+    - duration_ms
+    - mq_evidence_ref
+    - assertion_evidence_ref
+    - last_observed_message_id
 evidence:
-  outputs: [mq_evidence, assertion_evidence]
-  redact: [credential, password, secret, token, authorization]
+  outputs:
+  - mq_evidence
+  - assertion_evidence
+  redact:
+  - credential
+  - password
+  - secret
+  - token
+  - authorization
 failure_mapping:
   allowed_codes:
-    - QUEUE_MANAGER_MISSING
-    - QUEUE_MISSING
-    - CREDENTIAL_REF_MISSING
-    - PAYLOAD_REF_MISSING
-    - MQ_CONNECTION_FAILED
-    - MQ_PUT_FAILED
-    - MQ_BROWSE_FAILED
-    - MESSAGE_NOT_FOUND
-    - PAYLOAD_MISMATCH
-    - MQ_TIMEOUT
-    - DESTRUCTIVE_OPERATION_UNSUPPORTED
-    - INVALID_DURATION
-    - REF_OUTSIDE_SUITE_ROOT
+  - QUEUE_MANAGER_MISSING
+  - QUEUE_MISSING
+  - CREDENTIAL_REF_MISSING
+  - PAYLOAD_REF_MISSING
+  - MQ_CONNECTION_FAILED
+  - MQ_PUT_FAILED
+  - MQ_BROWSE_FAILED
+  - MESSAGE_NOT_FOUND
+  - PAYLOAD_MISMATCH
+  - MQ_TIMEOUT
+  - DESTRUCTIVE_OPERATION_UNSUPPORTED
+  - INVALID_DURATION
+  - REF_OUTSIDE_SUITE_ROOT

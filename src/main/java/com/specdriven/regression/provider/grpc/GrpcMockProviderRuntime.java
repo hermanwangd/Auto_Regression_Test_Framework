@@ -35,6 +35,7 @@ public class GrpcMockProviderRuntime implements ProviderRuntime {
     private WireMockServer server;
     private String targetUri;
     private String adminBaseUrl;
+    private Path runtimeWorkDir;
 
     @Override
     public ProviderOperationResult execute(ProviderExecutionContext context, ProviderOperationRequest request) {
@@ -163,6 +164,7 @@ public class GrpcMockProviderRuntime implements ProviderRuntime {
                 server.resetAll();
                 server.stop();
             }
+            deleteRuntimeWorkDir();
             write(context.runDir().resolve("provider-evidence/grpc/cleanup.yaml"), """
                     evidence_type: fixture_cleanup
                     evidence_classification: framework_provider_capability_only
@@ -192,27 +194,41 @@ public class GrpcMockProviderRuntime implements ProviderRuntime {
         if (server != null && server.isRunning()) {
             return;
         }
-        Path rootDir = context.runDir().resolve("wiremock-grpc-root");
+        try {
+            runtimeWorkDir = Files.createTempDirectory("regress-v03-grpc-mock-");
+        } catch (IOException error) {
+            throw new UncheckedIOException("Failed to create isolated gRPC mock runtime directory.", error);
+        }
         GrpcDescriptorMaterializer.materialize(
                 context.suiteRoot(),
-                rootDir.resolve("grpc"),
+                runtimeWorkDir.resolve("grpc"),
                 stringValue(context.bindingValues().get("descriptor_ref")));
         String portStrategy = stringValue(context.bindingValues().get("port_strategy"));
         if ("fixed".equals(portStrategy)) {
             int port = intValue(context.bindingValues().getOrDefault("fixed_port", context.bindingValues().get("port")), 0);
             server = new WireMockServer(options()
-                    .withRootDirectory(rootDir.toString())
+                    .withRootDirectory(runtimeWorkDir.toString())
                     .extensions(new GrpcExtensionFactory())
                     .port(port));
         } else {
             server = new WireMockServer(options()
-                    .withRootDirectory(rootDir.toString())
+                    .withRootDirectory(runtimeWorkDir.toString())
                     .extensions(new GrpcExtensionFactory())
                     .dynamicPort());
         }
         server.start();
         targetUri = "localhost:" + server.port();
         adminBaseUrl = "http://localhost:" + server.port();
+    }
+
+    private void deleteRuntimeWorkDir() throws IOException {
+        if (runtimeWorkDir == null || !Files.exists(runtimeWorkDir)) return;
+        try (var paths = Files.walk(runtimeWorkDir)) {
+            for (Path path : paths.sorted((left, right) -> right.compareTo(left)).toList()) {
+                Files.deleteIfExists(path);
+            }
+        }
+        runtimeWorkDir = null;
     }
 
     private String stubJson(

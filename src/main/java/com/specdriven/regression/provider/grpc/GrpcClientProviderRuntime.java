@@ -68,10 +68,12 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
                 stringValue(context.bindingValues().get("descriptor_ref")));
         long started = System.nanoTime();
         ManagedChannel channel = null;
+        Path runtimeWorkDir = null;
         try {
+            runtimeWorkDir = Files.createTempDirectory("regress-v03-grpc-client-");
             Path descriptorPath = GrpcDescriptorMaterializer.materialize(
                     context.suiteRoot(),
-                    context.runDir().resolve("grpc-client-descriptors"),
+                    runtimeWorkDir,
                     descriptorRef);
             String payload = requestPayload(context.suiteRoot(), parameterValue(request, "grpc.message", ""));
             int timeoutSeconds = timeoutSeconds(parameterValue(request, "grpc.timeout", ""), 10);
@@ -134,6 +136,18 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
                     Thread.currentThread().interrupt();
                 }
             }
+            deleteRuntimeWorkDir(runtimeWorkDir);
+        }
+    }
+
+    private void deleteRuntimeWorkDir(Path runtimeWorkDir) {
+        if (runtimeWorkDir == null) return;
+        try (var paths = Files.walk(runtimeWorkDir)) {
+            for (Path path : paths.sorted((left, right) -> right.compareTo(left)).toList()) {
+                Files.deleteIfExists(path);
+            }
+        } catch (IOException ignored) {
+            // Working files are outside the evidence directory and never become release artifacts.
         }
     }
 

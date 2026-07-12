@@ -1,45 +1,299 @@
+---
 contract_version: v0.3
 provider_contract: polling_observer.v0.3
 provider_type: polling_observer
 provider_role: framework_observer
 protocol: file
-purpose: Framework-owned polling observation contract for DSL v0.3 provider_check verification.
-runtime_modes: [framework]
+purpose: Framework-owned polling observation contract for DSL v0.3 provider_check
+  verification.
+runtime_modes:
+- framework
 operation_defaults:
   input:
     value_type: any
-    reference_kinds: [literal, artifact, step, generated, env]
+    reference_kinds: &1
+    - literal
+    - artifact
+    - step
+    - generated
+    - env
     sensitivity: public
   output:
     value_type: any
     sensitivity: public
     bindable: false
     evidence_included: true
-  phases: [setup, execute, verify, cleanup]
+  phases:
+  - setup
+  - execute
+  - verify
+  - cleanup
 binding_keys:
   workspace_ref:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
 operations:
   observe_condition:
-    allowed_inputs: [expected_ref, actual_ref, timeout, poll_interval]
-    required_inputs: [expected_ref, actual_ref]
-    output_refs: [matched, attempts, last_observed_ref, polling_evidence_ref, observation_start, observation_end, timeout, poll_interval]
+    inputs:
+      expected_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      actual_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      timeout:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      poll_interval:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      matched:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      attempts:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      last_observed_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      polling_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      observation_start:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      observation_end:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      timeout:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      poll_interval:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - expected_ref
+    - actual_ref
+    - timeout
+    - poll_interval
+    required_inputs:
+    - expected_ref
+    - actual_ref
+    output_refs:
+    - matched
+    - attempts
+    - last_observed_ref
+    - polling_evidence_ref
+    - observation_start
+    - observation_end
+    - timeout
+    - poll_interval
   event_published:
-    allowed_inputs: [expected_ref, actual_ref, timeout, poll_interval, consume_from]
-    required_inputs: [expected_ref, actual_ref]
-    output_refs: [matched, attempts, last_observed_ref, polling_evidence_ref, observation_start, observation_end, timeout, poll_interval]
+    inputs:
+      expected_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      actual_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      timeout:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      poll_interval:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      consume_from:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      matched:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      attempts:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      last_observed_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      polling_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      observation_start:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      observation_end:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      timeout:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      poll_interval:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - expected_ref
+    - actual_ref
+    - timeout
+    - poll_interval
+    - consume_from
+    required_inputs:
+    - expected_ref
+    - actual_ref
+    output_refs:
+    - matched
+    - attempts
+    - last_observed_ref
+    - polling_evidence_ref
+    - observation_start
+    - observation_end
+    - timeout
+    - poll_interval
   db_record_exists:
-    allowed_inputs: [expected_ref, actual_ref, timeout, poll_interval]
-    required_inputs: [expected_ref, actual_ref]
-    output_refs: [matched, attempts, last_observed_ref, polling_evidence_ref, observation_start, observation_end, timeout, poll_interval]
+    inputs:
+      expected_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      actual_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      timeout:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      poll_interval:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      matched:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      attempts:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      last_observed_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      polling_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      observation_start:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      observation_end:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      timeout:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      poll_interval:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - expected_ref
+    - actual_ref
+    - timeout
+    - poll_interval
+    required_inputs:
+    - expected_ref
+    - actual_ref
+    output_refs:
+    - matched
+    - attempts
+    - last_observed_ref
+    - polling_evidence_ref
+    - observation_start
+    - observation_end
+    - timeout
+    - poll_interval
 evidence:
-  outputs: [polling_observation]
-  redact: [last_observed_value]
+  outputs:
+  - polling_observation
+  redact:
+  - last_observed_value
 failure_mapping:
   allowed_codes:
-    - POLLING_TIMEOUT
-    - INVALID_POLLING_CONFIG
-    - EXPECTED_ARTIFACT_MISSING
-    - ACTUAL_ARTIFACT_MISSING
-    - EVIDENCE_INVALID
+  - POLLING_TIMEOUT
+  - INVALID_POLLING_CONFIG
+  - EXPECTED_ARTIFACT_MISSING
+  - ACTUAL_ARTIFACT_MISSING
+  - EVIDENCE_INVALID

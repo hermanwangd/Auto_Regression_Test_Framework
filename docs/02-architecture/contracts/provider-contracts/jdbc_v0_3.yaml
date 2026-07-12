@@ -1,74 +1,290 @@
+---
 contract_version: v0.3
 provider_contract: jdbc.v0.3
 provider_type: jdbc
 provider_role: data_store
 protocol: jdbc
-purpose: Relational database provider contract for DSL v0.3 JDBC seed, query, observation, and cleanup.
-runtime_modes: [native, ephemeral]
+purpose: Relational database provider contract for DSL v0.3 JDBC seed, query, observation,
+  and cleanup.
+runtime_modes:
+- native
+- ephemeral
 operation_defaults:
   input:
     value_type: any
-    reference_kinds: [literal, artifact, step, generated, env]
+    reference_kinds: &1
+    - literal
+    - artifact
+    - step
+    - generated
+    - env
     sensitivity: public
   output:
     value_type: any
     sensitivity: public
     bindable: false
     evidence_included: true
-  phases: [setup, execute, verify, cleanup]
+  phases:
+  - setup
+  - execute
+  - verify
+  - cleanup
 dialects:
-  supported: [oracle, db2]
-  unsupported: [mariadb, mysql, postgres, mongodb]
+  supported:
+  - oracle
+  - db2
+  unsupported:
+  - mariadb
+  - mysql
+  - postgres
+  - mongodb
 binding_keys:
   dialect:
     required: true
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   connection.local_ref:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   connection.secret_ref:
     required: false
     source: env_profile_secret_ref
+    value_type: string
+    reference_kinds:
+    - env
+    sensitivity: masked
   schema:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   query_timeout:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   strict_params:
     required: false
     source: env_profile
+    value_type: boolean
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
 operations:
   db_seed:
-    allowed_inputs: [sql_ref, params.*]
-    required_inputs: [sql_ref]
-    output_refs: [affected_rows, duration_ms, seed_evidence_ref]
+    inputs:
+      sql_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      params.*:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      affected_rows:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      duration_ms:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      seed_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - sql_ref
+    - params.*
+    required_inputs:
+    - sql_ref
+    output_refs:
+    - affected_rows
+    - duration_ms
+    - seed_evidence_ref
   db_query:
-    allowed_inputs: [query_ref, params.*]
-    required_inputs: [query_ref]
-    output_refs: [row_count, sample_rows, duration_ms, query_evidence_ref]
+    inputs:
+      query_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      params.*:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      row_count:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      sample_rows:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      duration_ms:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      query_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - query_ref
+    - params.*
+    required_inputs:
+    - query_ref
+    output_refs:
+    - row_count
+    - sample_rows
+    - duration_ms
+    - query_evidence_ref
   db_record_exists:
-    allowed_inputs: [query_ref, params.*, expected.min_rows, expected.row_count]
-    required_inputs: [query_ref]
-    output_refs: [matched, row_count, duration_ms, query_evidence_ref]
+    inputs:
+      query_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      params.*:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      expected.min_rows:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      expected.row_count:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      matched:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      row_count:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      duration_ms:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      query_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - query_ref
+    - params.*
+    - expected.min_rows
+    - expected.row_count
+    required_inputs:
+    - query_ref
+    output_refs:
+    - matched
+    - row_count
+    - duration_ms
+    - query_evidence_ref
   db_cleanup:
-    allowed_inputs: [sql_ref, params.*]
-    required_inputs: [sql_ref]
-    output_refs: [affected_rows, duration_ms, cleanup_evidence_ref]
+    inputs:
+      sql_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      params.*:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      affected_rows:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      duration_ms:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      cleanup_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - sql_ref
+    - params.*
+    required_inputs:
+    - sql_ref
+    output_refs:
+    - affected_rows
+    - duration_ms
+    - cleanup_evidence_ref
 evidence:
-  outputs: [seed_evidence, query_evidence, cleanup_evidence]
-  redact: [connection, password, secret, token]
+  outputs:
+  - seed_evidence
+  - query_evidence
+  - cleanup_evidence
+  redact:
+  - connection
+  - password
+  - secret
+  - token
 failure_mapping:
   allowed_codes:
-    - SQL_REF_MISSING
-    - SQL_PARAM_MISSING
-    - QUERY_REF_MISSING
-    - UNSUPPORTED_DIALECT
-    - DB_CONNECTION_FAILED
-    - DB_EXECUTION_FAILED
-    - DB_CLEANUP_FAILED
-    - DB_QUERY_FAILED
-    - RECORD_NOT_FOUND
-    - EVIDENCE_INVALID
-    - SECRET_RESOLUTION_ERROR
-    - UNSUPPORTED_SECRET_REF_SCHEME
+  - SQL_REF_MISSING
+  - SQL_PARAM_MISSING
+  - QUERY_REF_MISSING
+  - UNSUPPORTED_DIALECT
+  - DB_CONNECTION_FAILED
+  - DB_EXECUTION_FAILED
+  - DB_CLEANUP_FAILED
+  - DB_QUERY_FAILED
+  - RECORD_NOT_FOUND
+  - EVIDENCE_INVALID
+  - SECRET_RESOLUTION_ERROR
+  - UNSUPPORTED_SECRET_REF_SCHEME

@@ -69,3 +69,6 @@ in the suite manifest and keep custom files under the configured
 Future CLI discoverability may add commands such as `regress providers` and
 `regress describe-provider --provider-contract jdbc.v0.3`; those commands are
 not part of the current v0.3 release contract.
+# v0.3 Typed Contract Rule
+
+For `contract_version: v0.3`, each operation's `inputs` and `outputs` maps are the authoritative public interface. `required`, `value_type`, `reference_kinds`, `sensitivity`, `bindable`, `evidence_included`, `phases`, and `runtime_modes` are validated before runtime invocation. Compatibility `allowed_inputs`, `required_inputs`, and `output_refs` are generated views for the v0.2 execution path; the v0.3 compiler does not use them as its source of truth.

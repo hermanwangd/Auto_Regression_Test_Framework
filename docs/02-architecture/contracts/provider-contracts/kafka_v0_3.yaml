@@ -1,63 +1,317 @@
+---
 contract_version: v0.3
 provider_contract: kafka.v0.3
 provider_type: kafka
 provider_role: messaging_client
 protocol: kafka
 purpose: Kafka messaging provider contract for DSL v0.3 publish and observation checks.
-runtime_modes: [mock, native]
+runtime_modes:
+- mock
+- native
 operation_defaults:
   input:
     value_type: any
-    reference_kinds: [literal, artifact, step, generated, env]
+    reference_kinds: &1
+    - literal
+    - artifact
+    - step
+    - generated
+    - env
     sensitivity: public
   output:
     value_type: any
     sensitivity: public
     bindable: false
     evidence_included: true
-  phases: [setup, execute, verify, cleanup]
+  phases:
+  - setup
+  - execute
+  - verify
+  - cleanup
 binding_keys:
   bootstrap_servers:
     required: true
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - env
+    sensitivity: masked
   topic:
     required: true
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   consumer_group:
     required: true
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   timeout:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   poll_interval:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
 operations:
   kafka_publish:
-    allowed_inputs: [key, payload_ref, payload, timeout]
-    required_inputs: [payload_ref]
-    output_refs: [topic, partition, offset, key, published_at, event_evidence_ref]
+    inputs:
+      key:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      payload_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      payload:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      timeout:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      topic:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      partition:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      offset:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      key:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      published_at:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      event_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - key
+    - payload_ref
+    - payload
+    - timeout
+    required_inputs:
+    - payload_ref
+    output_refs:
+    - topic
+    - partition
+    - offset
+    - key
+    - published_at
+    - event_evidence_ref
   kafka_observe:
-    allowed_inputs: [key, consume_from, timeout, poll_interval]
+    inputs:
+      key:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      consume_from:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      timeout:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      poll_interval:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      topic:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      observed_count:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      last_observed_offset:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      matched:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      duration_ms:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      event_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - key
+    - consume_from
+    - timeout
+    - poll_interval
     required_inputs: []
-    output_refs: [topic, observed_count, last_observed_offset, matched, duration_ms, event_evidence_ref]
+    output_refs:
+    - topic
+    - observed_count
+    - last_observed_offset
+    - matched
+    - duration_ms
+    - event_evidence_ref
   kafka_payload_match:
-    allowed_inputs: [expected_ref, key, consume_from, timeout, poll_interval]
-    required_inputs: [expected_ref]
-    output_refs: [topic, observed_count, matched, matched_fields, duration_ms, event_evidence_ref, assertion_evidence_ref]
+    inputs:
+      expected_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      key:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      consume_from:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      timeout:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      poll_interval:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      topic:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      observed_count:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      last_observed_offset:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      matched:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      matched_fields:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      duration_ms:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      event_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      assertion_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - expected_ref
+    - key
+    - consume_from
+    - timeout
+    - poll_interval
+    required_inputs:
+    - expected_ref
+    output_refs:
+    - topic
+    - observed_count
+    - last_observed_offset
+    - matched
+    - matched_fields
+    - duration_ms
+    - event_evidence_ref
+    - assertion_evidence_ref
 evidence:
-  outputs: [event_evidence, assertion_evidence]
-  redact: [bootstrap_servers, password, secret, token, authorization]
+  outputs:
+  - event_evidence
+  - assertion_evidence
+  redact:
+  - bootstrap_servers
+  - password
+  - secret
+  - token
+  - authorization
 failure_mapping:
   allowed_codes:
-    - TOPIC_MISSING
-    - PAYLOAD_REF_MISSING
-    - KAFKA_CONNECTION_FAILED
-    - KAFKA_PUBLISH_FAILED
-    - KAFKA_OBSERVE_FAILED
-    - EVENT_NOT_FOUND
-    - PAYLOAD_MISMATCH
-    - KAFKA_TIMEOUT
-    - INVALID_DURATION
-    - INVALID_INSTANT
-    - REF_OUTSIDE_SUITE_ROOT
+  - TOPIC_MISSING
+  - PAYLOAD_REF_MISSING
+  - KAFKA_CONNECTION_FAILED
+  - KAFKA_PUBLISH_FAILED
+  - KAFKA_OBSERVE_FAILED
+  - EVENT_NOT_FOUND
+  - PAYLOAD_MISMATCH
+  - KAFKA_TIMEOUT
+  - INVALID_DURATION
+  - INVALID_INSTANT
+  - REF_OUTSIDE_SUITE_ROOT

@@ -51,6 +51,7 @@ public final class V03ProviderContractCatalog {
                 operations(map.get("operations"), map(map.get("operation_defaults"))),
                 strings(map.get("bindable_outputs")),
                 strings(map(map.get("evidence")).get("outputs")),
+                strings(map(map.get("evidence")).get("redact")),
                 strings(map(map.get("failure_mapping")).get("allowed_codes"))));
         if (previous != null) {
             throw new IllegalArgumentException("duplicate_provider_contract: `" + id + "`.");
@@ -62,7 +63,9 @@ public final class V03ProviderContractCatalog {
         for (Map.Entry<String, Object> entry : map(value).entrySet()) {
             Map<String, Object> definition = map(entry.getValue());
             result.put(entry.getKey(), new V03ProviderContract.V03BindingDefinition(
-                    Boolean.parseBoolean(text(definition.get("required"))), text(definition.get("source"))));
+                    Boolean.parseBoolean(text(definition.get("required"))), text(definition.get("source")),
+                    V03ValueType.parse(text(definition.get("value_type"))), referenceKinds(definition.get("reference_kinds")),
+                    V03Sensitivity.parse(text(definition.get("sensitivity")))));
         }
         return Map.copyOf(result);
     }
@@ -72,9 +75,13 @@ public final class V03ProviderContractCatalog {
         Map<String, V03ProviderContract.V03OperationDefinition> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : map(value).entrySet()) {
             Map<String, Object> definition = map(entry.getValue());
-            Set<String> allowedInputs = strings(definition.get("allowed_inputs"));
-            Set<String> requiredInputs = strings(definition.get("required_inputs"));
-            Set<String> outputRefs = strings(definition.get("output_refs"));
+            Map<String, Object> typedInputs = map(definition.get("inputs"));
+            Map<String, Object> typedOutputs = map(definition.get("outputs"));
+            Set<String> allowedInputs = typedInputs.isEmpty()
+                    ? strings(definition.get("allowed_inputs")) : Set.copyOf(typedInputs.keySet());
+            Set<String> requiredInputs = typedInputs.isEmpty() ? strings(definition.get("required_inputs")) : Set.of();
+            Set<String> outputRefs = typedOutputs.isEmpty()
+                    ? strings(definition.get("output_refs")) : Set.copyOf(typedOutputs.keySet());
             Map<String, V03InputDefinition> inputs = inputs(
                     definition.get("inputs"), allowedInputs, requiredInputs, map(defaults.get("input")));
             Map<String, V03OutputDefinition> outputs = outputs(
@@ -103,9 +110,7 @@ public final class V03ProviderContractCatalog {
                             V03Sensitivity.parse(text(effective.get("sensitivity")))));
         }
         for (String input : typed.keySet()) {
-            if (!result.containsKey(input)) {
-                throw new IllegalArgumentException("unknown_typed_input: `" + input + "` is not listed in allowed_inputs.");
-            }
+            if (!result.containsKey(input)) throw new IllegalArgumentException("unknown_typed_input: `" + input + "`.");
         }
         return Map.copyOf(result);
     }
@@ -126,9 +131,7 @@ public final class V03ProviderContractCatalog {
                             !"false".equals(text(effective.get("evidence_included")))));
         }
         for (String output : typed.keySet()) {
-            if (!result.containsKey(output)) {
-                throw new IllegalArgumentException("unknown_typed_output: `" + output + "` is not listed in output_refs.");
-            }
+            if (!result.containsKey(output)) throw new IllegalArgumentException("unknown_typed_output: `" + output + "`.");
         }
         return Map.copyOf(result);
     }

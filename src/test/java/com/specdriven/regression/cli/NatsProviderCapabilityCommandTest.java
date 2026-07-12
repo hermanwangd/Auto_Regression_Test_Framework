@@ -100,7 +100,7 @@ class NatsProviderCapabilityCommandTest {
         assertThat(report.stdout())
                 .contains("report_status: review_ready")
                 .contains("suite_id: NATS-CAPABILITY-v0.2")
-                .contains("batch_id: BATCH-NATS-")
+                .contains("batch_id: BATCH-STANDALONE-")
                 .contains("run_id: RUN-NATS-")
                 .contains("test_case_id: NATS-CAPABILITY-TC-001")
                 .contains("status: passed");

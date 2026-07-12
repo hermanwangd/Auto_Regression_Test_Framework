@@ -1,52 +1,190 @@
+---
 contract_version: v0.3
 provider_contract: http_mock.v0.3
 provider_type: http_mock
 provider_role: mock_server
 protocol: http
 runtime_implementation: wiremock
-purpose: Protocol-level HTTP mock contract for DSL v0.3 authoring. WireMock is the default runtime implementation.
-runtime_modes: [mock]
+purpose: Protocol-level HTTP mock contract for DSL v0.3 authoring. WireMock is the
+  default runtime implementation.
+runtime_modes:
+- mock
 operation_defaults:
   input:
     value_type: any
-    reference_kinds: [literal, artifact, step, generated, env]
+    reference_kinds: &1
+    - literal
+    - artifact
+    - step
+    - generated
+    - env
     sensitivity: public
   output:
     value_type: any
     sensitivity: public
     bindable: false
     evidence_included: true
-  phases: [setup, execute, verify, cleanup]
-bindable_outputs: [base_url]
+  phases:
+  - setup
+  - execute
+  - verify
+  - cleanup
+bindable_outputs:
+- base_url
 binding_keys:
   port_strategy:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   fixed_port:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
 operations:
   load_stubs:
-    allowed_inputs: [mock.mappings_ref, mock.reset_before_load]
-    required_inputs: [mock.mappings_ref]
-    output_refs: [base_url, loaded_stub_count, request_journal, server_log, injected_stub, framework_started_wiremock]
+    inputs:
+      mock.mappings_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      mock.reset_before_load:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      base_url:
+        value_type: any
+        sensitivity: masked
+        bindable: true
+        evidence_included: true
+      loaded_stub_count:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      request_journal:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      server_log:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      injected_stub:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      framework_started_wiremock:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - mock.mappings_ref
+    - mock.reset_before_load
+    required_inputs:
+    - mock.mappings_ref
+    output_refs:
+    - base_url
+    - loaded_stub_count
+    - request_journal
+    - server_log
+    - injected_stub
+    - framework_started_wiremock
   verify_requests:
-    allowed_inputs: [mock.request_filter_ref, mock.expected_count, mock.body_pattern_ref]
-    required_inputs: [mock.request_filter_ref]
-    output_refs: [request_journal, matched_count, server_log]
+    inputs:
+      mock.request_filter_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      mock.expected_count:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      mock.body_pattern_ref:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      request_journal:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      matched_count:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      server_log:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - mock.request_filter_ref
+    - mock.expected_count
+    - mock.body_pattern_ref
+    required_inputs:
+    - mock.request_filter_ref
+    output_refs:
+    - request_journal
+    - matched_count
+    - server_log
   reset_mock:
+    inputs: {}
+    outputs:
+      cleanup_log:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      server_log:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
     allowed_inputs: []
     required_inputs: []
-    output_refs: [cleanup_log, server_log]
+    output_refs:
+    - cleanup_log
+    - server_log
 evidence:
-  outputs: [base_url, request_journal, server_log, injected_stub, assertion_result, timing, cleanup_log, failure_detail, error]
+  outputs:
+  - base_url
+  - request_journal
+  - server_log
+  - injected_stub
+  - assertion_result
+  - timing
+  - cleanup_log
+  - failure_detail
+  - error
   redact: []
 failure_mapping:
   allowed_codes:
-    - PROVIDER_UNAVAILABLE
-    - PROVIDER_TIMEOUT
-    - PROVIDER_STUB_MISSING
-    - OPERATION_FAILED
-    - ASSERTION_FAILED
-    - EVIDENCE_INVALID
-    - SECRET_RESOLUTION_ERROR
+  - PROVIDER_UNAVAILABLE
+  - PROVIDER_TIMEOUT
+  - PROVIDER_STUB_MISSING
+  - OPERATION_FAILED
+  - ASSERTION_FAILED
+  - EVIDENCE_INVALID
+  - SECRET_RESOLUTION_ERROR

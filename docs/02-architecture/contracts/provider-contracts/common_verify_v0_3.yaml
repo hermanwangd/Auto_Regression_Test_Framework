@@ -1,42 +1,175 @@
+---
 contract_version: v0.3
 provider_contract: common_verify.v0.3
 provider_type: common_verify
 provider_role: framework_verifier
 protocol: file
 purpose: Framework-owned common verifier contract for DSL v0.3 assertion-only verification.
-runtime_modes: [framework]
+runtime_modes:
+- framework
 operation_defaults:
   input:
     value_type: any
-    reference_kinds: [literal, artifact, step, generated, env]
+    reference_kinds: &1
+    - literal
+    - artifact
+    - step
+    - generated
+    - env
     sensitivity: public
   output:
     value_type: any
     sensitivity: public
     bindable: false
     evidence_included: true
-  phases: [setup, execute, verify, cleanup]
+  phases:
+  - setup
+  - execute
+  - verify
+  - cleanup
 binding_keys: {}
 operations:
   json_match:
-    allowed_inputs: [expected_ref, actual_ref, ignore_paths, normalize, ignore_order]
-    required_inputs: [expected_ref, actual_ref]
-    output_refs: [assertion_evidence_ref, diff_ref]
+    inputs:
+      expected_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      actual_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      ignore_paths:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      normalize:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      ignore_order:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      assertion_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      diff_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - expected_ref
+    - actual_ref
+    - ignore_paths
+    - normalize
+    - ignore_order
+    required_inputs:
+    - expected_ref
+    - actual_ref
+    output_refs:
+    - assertion_evidence_ref
+    - diff_ref
   schema_match:
-    allowed_inputs: [schema_ref, actual_ref, normalize]
-    required_inputs: [schema_ref, actual_ref]
-    output_refs: [assertion_evidence_ref, diff_ref]
+    inputs:
+      schema_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      actual_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      normalize:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      assertion_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      diff_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - schema_ref
+    - actual_ref
+    - normalize
+    required_inputs:
+    - schema_ref
+    - actual_ref
+    output_refs:
+    - assertion_evidence_ref
+    - diff_ref
   file_diff:
-    allowed_inputs: [expected_ref, actual_ref, normalize, ignore_order]
-    required_inputs: [expected_ref, actual_ref]
-    output_refs: [assertion_evidence_ref, diff_ref]
+    inputs:
+      expected_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      actual_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      normalize:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      ignore_order:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      assertion_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      diff_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - expected_ref
+    - actual_ref
+    - normalize
+    - ignore_order
+    required_inputs:
+    - expected_ref
+    - actual_ref
+    output_refs:
+    - assertion_evidence_ref
+    - diff_ref
 evidence:
-  outputs: [assertion_diff]
-  redact: [masked_actual_sample]
+  outputs:
+  - assertion_diff
+  redact:
+  - masked_actual_sample
 failure_mapping:
   allowed_codes:
-    - ASSERTION_FAILED
-    - ASSERTION_INPUT_NOT_FOUND
-    - SCHEMA_MISMATCH
-    - FILE_DIFF_MISMATCH
-    - EVIDENCE_INVALID
+  - ASSERTION_FAILED
+  - ASSERTION_INPUT_NOT_FOUND
+  - SCHEMA_MISMATCH
+  - FILE_DIFF_MISMATCH
+  - EVIDENCE_INVALID

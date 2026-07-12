@@ -1,6 +1,7 @@
 package com.specdriven.regression.contract.v03;
 
 import com.specdriven.regression.contract.ContractBaselineService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.contract.v03.adapter.HttpMockV03Adapter;
@@ -37,6 +38,7 @@ import java.util.Set;
 import java.util.UUID;
 import com.specdriven.regression.summary.SuiteExecutionContext;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.DumperOptions;
 
 public class V03RuntimeExecutionService {
 
@@ -45,6 +47,7 @@ public class V03RuntimeExecutionService {
     private final ContractBaselineService contractBaselineService;
     private final V03ProviderRuntimeRegistry runtimeRegistry;
     private final Yaml yaml = new Yaml();
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final V03ReferenceParser referenceParser = new V03ReferenceParser();
     private final V03ReferenceResolver referenceResolver = new V03ReferenceResolver(this::readYaml);
     private final V03AssertionEvaluator assertionEvaluator = new V03AssertionEvaluator();
@@ -116,6 +119,7 @@ public class V03RuntimeExecutionService {
         Map<String, V03ResolvedTarget> targetsByName = targetsByName(plan);
         Map<String, Map<String, Object>> generatedOutputsByTarget = new LinkedHashMap<>();
         Map<String, Map<String, Object>> outputsByStep = new LinkedHashMap<>();
+        Map<String, V03ProducedOutput> producedOutputs = new LinkedHashMap<>();
         Map<String, String> testStatuses = initialTestStatuses(testCases);
         V03ExecutionContext context = new V03ExecutionContext(
                 suiteRoot,
@@ -125,6 +129,7 @@ public class V03RuntimeExecutionService {
                 plan.artifactRoots(),
                 generatedOutputsByTarget,
                 outputsByStep,
+                producedOutputs,
                 Map.of(),
                 System.getenv(),
                 referenceResolver,
@@ -159,6 +164,7 @@ public class V03RuntimeExecutionService {
             validateRuntimeOutputs(plan, step, result);
             providerRuntimeExecuted = true;
             outputsByStep.put(scopedStepKey(step), result.outputs());
+            recordProducedOutputs(plan, step, result.outputs(), producedOutputs);
             if (step.kind() == V03ExecutionStepKind.PROVIDER_OPERATION) {
                 generatedOutputsByTarget.computeIfAbsent(step.target(), ignored -> new LinkedHashMap<>())
                         .putAll(result.outputs());
@@ -193,7 +199,9 @@ public class V03RuntimeExecutionService {
         evidenceRefs.add("logs/execution.log");
         writeBatch(runDir, plan, testCaseId, status);
         evidenceRefs.add("batch/batch.yaml");
-        sanitizeEvidence(runDir, evidenceRefs);
+        sanitizeEvidence(runDir, evidenceRefs, plan.providerContracts().values().stream()
+                .flatMap(contract -> contract.evidenceRedact().stream()).collect(java.util.stream.Collectors.toSet()));
+        rejectUnindexedEvidence(runDir, distinct(evidenceRefs));
         Instant finishedAt = Instant.now();
         Path resultJson = writeResult(
                 runDir,
@@ -243,7 +251,7 @@ public class V03RuntimeExecutionService {
     private List<ContractFinding> unsupportedRuntimeFindings(Path suiteManifest, V03ExecutionPlan plan) {
         List<ContractFinding> findings = new ArrayList<>();
         for (V03ExecutionStep step : plan.steps()) {
-            if (step.kind() != V03ExecutionStepKind.PROVIDER_OPERATION) {
+            if (step.kind() != V03ExecutionStepKind.PROVIDER_OPERATION && step.kind() != V03ExecutionStepKind.PROVIDER_CHECK) {
                 continue;
             }
             try {
@@ -355,8 +363,8 @@ public class V03RuntimeExecutionService {
             if (!evaluationError.isBlank()) {
                 evidence.put("evaluation_error", outputRedactor.redactMessage(evaluationError));
             }
-            evidence.put("actual", redactAssertionValue(plan, step, "actual", "actual_ref", actual));
-            evidence.put("expected", redactAssertionValue(plan, step, "expected", "expected_ref", expected));
+            evidence.put("actual", redactAssertionValue(plan, step, "actual", "actual_ref", actual, context));
+            evidence.put("expected", redactAssertionValue(plan, step, "expected", "expected_ref", expected, context));
             write(runDir.resolve(evidenceRef), toJson(evidence) + "\n");
         } else {
             StringBuilder evidence = new StringBuilder();
@@ -370,8 +378,8 @@ public class V03RuntimeExecutionService {
             if (!evaluationError.isBlank()) {
                 evidence.append("evaluation_error: ").append(outputRedactor.redactMessage(evaluationError)).append('\n');
             }
-            evidence.append("actual: ").append(stringValue(redactAssertionValue(plan, step, "actual", "actual_ref", actual))).append('\n');
-            evidence.append("expected: ").append(stringValue(redactAssertionValue(plan, step, "expected", "expected_ref", expected))).append('\n');
+            evidence.append("actual: ").append(stringValue(redactAssertionValue(plan, step, "actual", "actual_ref", actual, context))).append('\n');
+            evidence.append("expected: ").append(stringValue(redactAssertionValue(plan, step, "expected", "expected_ref", expected, context))).append('\n');
             write(runDir.resolve(evidenceRef), evidence.toString());
         }
         return new AssertionResult(
@@ -440,11 +448,12 @@ public class V03RuntimeExecutionService {
             V03ExecutionStep step,
             String literalKey,
             String referenceKey,
-            Object value) {
+            Object value,
+            V03ExecutionContext context) {
         Object raw = step.inputs().containsKey(referenceKey)
                 ? step.inputs().get(referenceKey)
                 : step.inputs().get(literalKey);
-        return outputRedactor.redactAssertionValue(plan, step, raw, evidenceValue(value));
+        return outputRedactor.redactAssertionValue(plan, step, raw, evidenceValue(value), context.producedOutputs());
     }
 
     private Object comparableJson(Object value, V03ExecutionStep step) {
@@ -1145,15 +1154,32 @@ public class V03RuntimeExecutionService {
         return values.stream().filter(value -> value != null && !value.isBlank()).distinct().toList();
     }
 
+    private void recordProducedOutputs(
+            V03ExecutionPlan plan,
+            V03ExecutionStep step,
+            Map<String, Object> outputs,
+            Map<String, V03ProducedOutput> producedOutputs) {
+        V03ProviderContract contract = plan.providerContracts().get(step.providerContract());
+        V03ProviderContract.V03OperationDefinition operation = contract == null ? null : contract.operations().get(step.operation());
+        if (operation == null) return;
+        for (Map.Entry<String, Object> output : outputs.entrySet()) {
+            V03OutputDefinition definition = operation.outputDefinitions().get(output.getKey());
+            if (definition == null) continue;
+            producedOutputs.put(scopedStepKey(step) + "\n" + output.getKey(), new V03ProducedOutput(
+                    step.testCaseId(), step.id(), step.target(), step.providerContract(), step.operation(), output.getKey(),
+                    definition.valueType(), definition.sensitivity(), definition.bindable(), output.getValue()));
+        }
+    }
+
     /**
      * Provider adapters may write diagnostic text directly to the run directory. Runtime values remain
      * available in memory for bindings, but no referenced text artifact is indexed before masking.
      */
-    private void sanitizeEvidence(Path runDir, List<String> evidenceRefs) {
+    private void sanitizeEvidence(Path runDir, List<String> evidenceRefs, java.util.Set<String> contractRedact) {
         Path normalizedRunDir = runDir.toAbsolutePath().normalize();
         for (String evidenceRef : distinct(evidenceRefs)) {
             Path evidence = normalizedRunDir.resolve(evidenceRef).normalize();
-            if (!evidence.startsWith(normalizedRunDir)) {
+            if (!evidence.startsWith(normalizedRunDir) || Files.isSymbolicLink(evidence) || hasMultipleLinks(evidence)) {
                 throw new IllegalArgumentException("invalid_evidence_ref: `" + evidenceRef
                         + "` escapes the v0.3 run directory.");
             }
@@ -1161,17 +1187,69 @@ public class V03RuntimeExecutionService {
                 throw new IllegalArgumentException("missing_evidence_file: `" + evidenceRef + "`.");
             }
             try {
+                Path realRunDir = normalizedRunDir.toRealPath();
+                Path realEvidence = evidence.toRealPath();
+                if (!realEvidence.startsWith(realRunDir)) {
+                    throw new IllegalArgumentException("invalid_evidence_ref: `" + evidenceRef
+                            + "` escapes the v0.3 run directory.");
+                }
                 if (Files.size(evidence) > 10 * 1024 * 1024) {
                     throw new IllegalArgumentException("evidence_too_large_to_sanitize: `" + evidenceRef + "`.");
                 }
                 String original = Files.readString(evidence);
-                String redacted = outputRedactor.redactMessage(original);
+                String redacted = redactEvidenceDocument(evidenceRef, original, contractRedact);
                 if (!original.equals(redacted)) {
                     Files.writeString(evidence, redacted);
                 }
             } catch (IOException e) {
                 throw new UncheckedIOException("Failed to sanitize v0.3 evidence `" + evidence + "`.", e);
             }
+        }
+    }
+
+    private String redactEvidenceDocument(String evidenceRef, String original, java.util.Set<String> contractRedact) throws IOException {
+        String lower = evidenceRef.toLowerCase(Locale.ROOT);
+        try {
+            if (lower.endsWith(".json")) {
+                Object document = objectMapper.readValue(original, Object.class);
+                return objectMapper.writeValueAsString(outputRedactor.redactEvidenceValue(document, contractRedact));
+            }
+            if (lower.endsWith(".yaml") || lower.endsWith(".yml")) {
+                Object document = yaml.load(original);
+                DumperOptions options = new DumperOptions();
+                options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+                return new Yaml(options).dump(outputRedactor.redactEvidenceValue(document, contractRedact));
+            }
+        } catch (RuntimeException malformedStructuredEvidence) {
+            // Provider evidence with a YAML extension may be diagnostic text; retain the log sanitizer path.
+        }
+        String redacted = outputRedactor.redactMessage(original);
+        for (String key : contractRedact) redacted = redacted.replaceAll("(?i)([\\\"']?" + java.util.regex.Pattern.quote(key)
+                + "[\\\"']?\\s*[:=]\\s*[\\\"']?)[^\\s,;\\\"'}]+", "$1" + V03OutputRedactor.MASKED);
+        return redacted;
+    }
+
+    private boolean hasMultipleLinks(Path evidence) {
+        try {
+            Object links = Files.getAttribute(evidence, "unix:nlink", java.nio.file.LinkOption.NOFOLLOW_LINKS);
+            return links instanceof Number number && number.longValue() > 1;
+        } catch (UnsupportedOperationException | IOException ignored) {
+            return true;
+        }
+    }
+
+    private void rejectUnindexedEvidence(Path runDir, List<String> evidenceRefs) {
+        java.util.Set<String> indexed = new java.util.LinkedHashSet<>(evidenceRefs);
+        try (var paths = Files.walk(runDir)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                String ref = runDir.toAbsolutePath().normalize().relativize(path.toAbsolutePath().normalize())
+                        .toString().replace('\\', '/');
+                if (!indexed.contains(ref)) {
+                    throw new IllegalArgumentException("unindexed_evidence_file: `" + ref + "`.");
+                }
+            }
+        } catch (IOException error) {
+            throw new UncheckedIOException("Failed to inspect v0.3 evidence directory.", error);
         }
     }
 

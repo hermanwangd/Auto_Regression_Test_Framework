@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import com.specdriven.regression.contract.v03.V03ProducedOutput;
 
 /** Single fail-closed resolver for v0.3 artifact, step, generated, and environment references. */
 public final class V03ReferenceResolver {
@@ -64,20 +65,23 @@ public final class V03ReferenceResolver {
             return applyJsonPointer(document, artifact.jsonPointer());
         }
         if (reference instanceof V03Reference.Step step) {
-            Map<String, Object> outputs = context.outputsByStep().get(scopedStepKey(context.testCaseId(), step.stepId()));
-            if (outputs == null) {
-                throw invalid("unresolved_step_ref", "step `" + step.stepId() + "` has no runtime outputs.");
-            }
-            Object value = outputValue(outputs, step.outputPath(), "unresolved_step_ref");
-            return applyJsonPointer(value, step.jsonPointer());
+            V03ProducedOutput produced = producedOutput(
+                    context.producedOutputs(), scopedStepKey(context.testCaseId(), step.stepId()), step.outputPath());
+            if (produced != null) return applyJsonPointer(outputValue(produced, step.outputPath()), step.jsonPointer());
+            throw invalid("unresolved_step_ref", "step `" + step.stepId()
+                    + "` did not produce declared output `" + step.outputPath() + "`.");
         }
         if (reference instanceof V03Reference.Generated generated) {
-            Map<String, Object> outputs = context.generatedOutputsByTarget().get(generated.target());
-            if (outputs == null) {
-                throw invalid("unresolved_generated_ref", "target `" + generated.target() + "` has no generated outputs.");
-            }
-            Object value = outputValue(outputs, generated.output(), "unresolved_generated_ref");
-            return applyJsonPointer(value, generated.jsonPointer());
+            List<V03ProducedOutput> produced = context.producedOutputs().values().stream()
+                    .filter(output -> generated.target().equals(output.target()))
+                    .filter(output -> matchesOutputPath(output, generated.output()))
+                    .toList();
+            produced = produced.stream().filter(V03ProducedOutput::bindable).toList();
+            if (produced.size() == 1) return applyJsonPointer(outputValue(produced.get(0), generated.output()), generated.jsonPointer());
+            if (produced.size() > 1) throw invalid("ambiguous_generated_ref",
+                    "target `" + generated.target() + "` produced `" + generated.output() + "` more than once.");
+            throw invalid("unresolved_generated_ref", "target `" + generated.target()
+                    + "` did not produce one bindable output `" + generated.output() + "`.");
         }
         V03Reference.Environment environment = (V03Reference.Environment) reference;
         String value = context.environment().get(environment.name());
@@ -88,6 +92,36 @@ public final class V03ReferenceResolver {
             throw invalid("blank_environment_value", "environment variable `" + environment.name() + "` is blank.");
         }
         return value;
+    }
+
+    private V03ProducedOutput producedOutput(
+            Map<String, V03ProducedOutput> producedOutputs, String stepKey, String outputPath) {
+        V03ProducedOutput exact = producedOutputs.get(stepKey + "\n" + outputPath);
+        if (exact != null) return exact;
+        String root = outputPath.contains(".") ? outputPath.substring(0, outputPath.indexOf('.')) : outputPath;
+        V03ProducedOutput parent = producedOutputs.get(stepKey + "\n" + root);
+        return matchesOutputPath(parent, outputPath) ? parent : null;
+    }
+
+    private boolean matchesOutputPath(V03ProducedOutput output, String outputPath) {
+        if (output == null) return false;
+        if (output.outputName().equals(outputPath)) return true;
+        return outputPath.startsWith(output.outputName() + ".")
+                && (output.valueType() == com.specdriven.regression.contract.v03.V03ValueType.OBJECT
+                || output.valueType() == com.specdriven.regression.contract.v03.V03ValueType.ANY);
+    }
+
+    private Object outputValue(V03ProducedOutput output, String outputPath) {
+        if (output.outputName().equals(outputPath)) return output.value();
+        Object current = output.value();
+        String suffix = outputPath.substring(output.outputName().length() + 1);
+        for (String part : suffix.split("\\.")) {
+            if (!(current instanceof Map<?, ?> map) || !map.containsKey(part)) {
+                throw invalid("unresolved_step_ref", "output path `" + outputPath + "` did not resolve.");
+            }
+            current = map.get(part);
+        }
+        return current;
     }
 
     public Object resolveProviderValue(V03Reference reference, V03ReferenceResolutionContext context) {
@@ -101,20 +135,6 @@ public final class V03ReferenceResolver {
             return declaredRoot.getFileName().resolve(artifact.path()).toString();
         }
         return resolveValue(reference, context);
-    }
-
-    private Object outputValue(Map<String, Object> outputs, String outputPath, String errorCode) {
-        if (outputs.containsKey(outputPath)) {
-            return outputs.get(outputPath);
-        }
-        Object current = outputs;
-        for (String part : outputPath.split("\\.")) {
-            if (!(current instanceof Map<?, ?> map) || !map.containsKey(part)) {
-                throw invalid(errorCode, "output path `" + outputPath + "` did not resolve.");
-            }
-            current = map.get(part);
-        }
-        return current;
     }
 
     private Object applyJsonPointer(Object value, String pointer) {

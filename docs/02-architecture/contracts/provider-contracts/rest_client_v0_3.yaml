@@ -1,38 +1,133 @@
+---
 contract_version: v0.3
 provider_contract: rest_client.v0.3
 provider_type: rest_client
 provider_role: client
 protocol: http
 purpose: Protocol-level HTTP client contract for DSL v0.3 authoring.
-runtime_modes: [native, mock, stub]
+runtime_modes:
+- native
+- mock
+- stub
 operation_defaults:
   input:
     value_type: any
-    reference_kinds: [literal, artifact, step, generated, env]
+    reference_kinds: &1
+    - literal
+    - artifact
+    - step
+    - generated
+    - env
     sensitivity: public
   output:
     value_type: any
     sensitivity: public
     bindable: false
     evidence_included: true
-  phases: [setup, execute, verify, cleanup]
+  phases:
+  - setup
+  - execute
+  - verify
+  - cleanup
 binding_keys:
   base_url:
     required: true
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
 operations:
   http_request:
-    allowed_inputs: [request.method, request.path, request.body_ref, request.body, request.headers.*, request.timeout]
-    required_inputs: [request.method, request.path]
-    output_refs: [request_url, response.status, response.headers, response.body, response.duration_ms]
+    inputs:
+      request.method:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      request.path:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      request.body_ref:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      request.body:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      request.headers.*:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      request.timeout:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      request_url:
+        value_type: any
+        sensitivity: masked
+        bindable: false
+        evidence_included: true
+      response.status:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      response.headers:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      response.body:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      response.duration_ms:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - request.method
+    - request.path
+    - request.body_ref
+    - request.body
+    - request.headers.*
+    - request.timeout
+    required_inputs:
+    - request.method
+    - request.path
+    output_refs:
+    - request_url
+    - response.status
+    - response.headers
+    - response.body
+    - response.duration_ms
 evidence:
-  outputs: [http_request_response, request, response, timing, error]
-  redact: [request.headers.authorization]
+  outputs:
+  - http_request_response
+  - request
+  - response
+  - timing
+  - error
+  redact:
+  - request.headers.authorization
 failure_mapping:
   allowed_codes:
-    - PROVIDER_UNAVAILABLE
-    - PROVIDER_TIMEOUT
-    - HTTP_REQUEST_FAILED
-    - ASSERTION_FAILED
-    - EVIDENCE_INVALID
-    - SECRET_RESOLUTION_ERROR
+  - PROVIDER_UNAVAILABLE
+  - PROVIDER_TIMEOUT
+  - HTTP_REQUEST_FAILED
+  - ASSERTION_FAILED
+  - EVIDENCE_INVALID
+  - SECRET_RESOLUTION_ERROR

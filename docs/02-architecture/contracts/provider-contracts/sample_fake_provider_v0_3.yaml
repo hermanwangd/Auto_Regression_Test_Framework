@@ -1,45 +1,74 @@
+---
 contract_version: v0.3
 provider_contract: sample_fake_provider.v0.3
 provider_type: sample_fake_provider
-purpose: Framework-owned deterministic fake provider for DSL v0.3 golden lifecycle verification only.
-runtime_modes: [stub]
+purpose: Framework-owned deterministic fake provider for DSL v0.3 golden lifecycle
+  verification only.
+runtime_modes:
+- stub
 operation_defaults:
   input:
     value_type: any
-    reference_kinds: [literal, artifact, step, generated, env]
+    reference_kinds:
+    - literal
+    - artifact
+    - step
+    - generated
+    - env
     sensitivity: public
   output:
     value_type: any
     sensitivity: public
     bindable: false
     evidence_included: true
-  phases: [setup, execute, verify, cleanup]
+  phases:
+  - setup
+  - execute
+  - verify
+  - cleanup
 binding_keys:
   workspace_ref:
     required: true
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   clock_ref:
     required: true
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
 defaults:
   timeout_seconds: 30
   retry: 0
 operations:
   setup_fixture:
-    phases: [setup]
-    allowed_inputs: [fixture.setup_ref, fixture.input_ref, fixture.workspace_ref]
-    required_inputs: [fixture.setup_ref, fixture.input_ref]
-    output_refs: [setup_log, workspace_ref]
+    phases:
+    - setup
     inputs:
       fixture.setup_ref:
+        required: true
         value_type: object
-        reference_kinds: [artifact]
+        reference_kinds:
+        - artifact
       fixture.input_ref:
+        required: true
         value_type: object
-        reference_kinds: [artifact]
+        reference_kinds:
+        - artifact
       fixture.workspace_ref:
+        required: false
         value_type: string
-        reference_kinds: [artifact, generated]
+        reference_kinds:
+        - artifact
+        - generated
     outputs:
       setup_log:
         value_type: string
@@ -49,21 +78,35 @@ operations:
         value_type: string
         sensitivity: masked
         bindable: true
+    allowed_inputs:
+    - fixture.setup_ref
+    - fixture.input_ref
+    - fixture.workspace_ref
+    required_inputs:
+    - fixture.setup_ref
+    - fixture.input_ref
+    output_refs:
+    - setup_log
+    - workspace_ref
   execute_sample:
-    phases: [execute]
-    allowed_inputs: [sample.input_ref, sample.expected_ref, sample.output_ref]
-    required_inputs: [sample.input_ref]
-    output_refs: [actual_json, actual_text, execution_log]
+    phases:
+    - execute
     inputs:
       sample.input_ref:
+        required: true
         value_type: object
-        reference_kinds: [artifact]
+        reference_kinds:
+        - artifact
       sample.expected_ref:
+        required: false
         value_type: object
-        reference_kinds: [artifact]
+        reference_kinds:
+        - artifact
       sample.output_ref:
+        required: false
         value_type: string
-        reference_kinds: [artifact]
+        reference_kinds:
+        - artifact
     outputs:
       actual_json:
         value_type: object
@@ -75,31 +118,58 @@ operations:
         value_type: string
         sensitivity: masked
         evidence_included: true
+    allowed_inputs:
+    - sample.input_ref
+    - sample.expected_ref
+    - sample.output_ref
+    required_inputs:
+    - sample.input_ref
+    output_refs:
+    - actual_json
+    - actual_text
+    - execution_log
   cleanup_fixture:
-    phases: [cleanup]
-    allowed_inputs: [fixture.cleanup_ref, fixture.workspace_ref]
-    required_inputs: [fixture.cleanup_ref]
-    output_refs: [cleanup_log]
+    phases:
+    - cleanup
     inputs:
       fixture.cleanup_ref:
+        required: true
         value_type: object
-        reference_kinds: [artifact]
+        reference_kinds:
+        - artifact
       fixture.workspace_ref:
+        required: false
         value_type: string
-        reference_kinds: [step, generated]
+        reference_kinds:
+        - step
+        - generated
     outputs:
       cleanup_log:
         value_type: string
         sensitivity: masked
         evidence_included: true
+    allowed_inputs:
+    - fixture.cleanup_ref
+    - fixture.workspace_ref
+    required_inputs:
+    - fixture.cleanup_ref
+    output_refs:
+    - cleanup_log
 evidence:
-  outputs: [setup_log, cleanup_log, actual_json, actual_text, execution_log, assertion_result, diff]
+  outputs:
+  - setup_log
+  - cleanup_log
+  - actual_json
+  - actual_text
+  - execution_log
+  - assertion_result
+  - diff
   redact: []
 failure_mapping:
   allowed_codes:
-    - SCHEMA_INVALID
-    - TARGET_RESOLUTION_FAILED
-    - EXPECTED_RESULT_MISSING
-    - ASSERTION_FAILED
-    - EVIDENCE_INVALID
-    - FRAMEWORK_ERROR
+  - SCHEMA_INVALID
+  - TARGET_RESOLUTION_FAILED
+  - EXPECTED_RESULT_MISSING
+  - ASSERTION_FAILED
+  - EVIDENCE_INVALID
+  - FRAMEWORK_ERROR

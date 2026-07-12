@@ -13,6 +13,7 @@ import java.util.Set;
 /** Computes producer-before-consumer target order for v0.3 generated bindings. */
 public final class V03GeneratedBindingDag {
     private final V03ReferenceParser parser = new V03ReferenceParser();
+    private final V03OutputDefinitionResolver outputResolver = new V03OutputDefinitionResolver();
 
     public List<String> producerFirstOrder(Map<String, V03ResolvedTarget> targets) {
         return producerFirstOrder(targets, Map.of());
@@ -56,11 +57,8 @@ public final class V03GeneratedBindingDag {
     }
 
     private boolean declaresBindableOutput(V03ProviderContract contract, String output) {
-        if (contract.bindableOutputs().contains(output)) {
-            return true;
-        }
         return contract.operations().values().stream()
-                .map(operation -> operation.outputDefinitions().get(output))
+                .map(operation -> outputResolver.find(operation, output))
                 .anyMatch(definition -> definition != null && definition.bindable());
     }
 

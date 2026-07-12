@@ -6,6 +6,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import com.specdriven.regression.contract.v03.V03ProducedOutput;
+import com.specdriven.regression.contract.v03.V03Sensitivity;
+import com.specdriven.regression.contract.v03.V03ValueType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -40,7 +43,10 @@ class V03ReferenceResolverTest {
         V03ReferenceResolutionContext context = context(
                 Map.of("TC-1\ncall", Map.of("response.body", Map.of("id", "S-1"))),
                 Map.of("mock", Map.of("base_url", "http://localhost")),
-                Map.of("TOKEN", "secret"));
+                Map.of("TOKEN", "secret"),
+                Map.of(
+                        "TC-1\ncall\nresponse.body", output("call", "api", "response.body", Map.of("id", "S-1"), false),
+                        "TC-1\nmock-start\nbase_url", output("mock-start", "mock", "base_url", "http://localhost", true)));
 
         assertThat(resolver.resolveValue(parser.parse("step://call/response.body#/id"), context))
                 .isEqualTo("S-1");
@@ -64,16 +70,44 @@ class V03ReferenceResolverTest {
                 .hasMessageContaining("missing_environment_value");
     }
 
+    @Test
+    void rejectsRawOutputMapsThatDoNotHaveProviderOutputProvenance() {
+        V03ReferenceResolver resolver = new V03ReferenceResolver(ignored -> Map.of());
+        V03ReferenceResolutionContext context = context(
+                Map.of("TC-1\ncall", Map.of("response.body", "untrusted")),
+                Map.of("mock", Map.of("base_url", "untrusted")),
+                Map.of(), Map.of());
+
+        assertThatThrownBy(() -> resolver.resolveValue(parser.parse("step://call/response.body"), context))
+                .hasMessageContaining("unresolved_step_ref");
+        assertThatThrownBy(() -> resolver.resolveValue(parser.parse("generated://mock/base_url"), context))
+                .hasMessageContaining("unresolved_generated_ref");
+    }
+
     private V03ReferenceResolutionContext context(
             Map<String, Map<String, Object>> stepOutputs,
             Map<String, Map<String, Object>> generatedOutputs,
             Map<String, String> environment) {
+        return context(stepOutputs, generatedOutputs, environment, Map.of());
+    }
+
+    private V03ReferenceResolutionContext context(
+            Map<String, Map<String, Object>> stepOutputs,
+            Map<String, Map<String, Object>> generatedOutputs,
+            Map<String, String> environment,
+            Map<String, V03ProducedOutput> producedOutputs) {
         return new V03ReferenceResolutionContext(
                 tempDir,
                 Map.of("payloads", tempDir.resolve("fixtures")),
                 "TC-1",
                 stepOutputs,
                 generatedOutputs,
+                producedOutputs,
                 environment);
+    }
+
+    private V03ProducedOutput output(String step, String target, String name, Object value, boolean bindable) {
+        return new V03ProducedOutput("TC-1", step, target, "test.v0.3", "operation", name,
+                V03ValueType.ANY, V03Sensitivity.PUBLIC, bindable, value);
     }
 }

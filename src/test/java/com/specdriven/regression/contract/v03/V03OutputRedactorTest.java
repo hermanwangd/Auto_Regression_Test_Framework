@@ -60,7 +60,40 @@ class V03OutputRedactorTest {
                 java.util.List.of(producer, assertion), java.util.List.of(), "digest");
 
         assertThat(new V03OutputRedactor().redactAssertionValue(
-                plan, assertion, "step://prepare/workspace_ref", "/private/workspace"))
+                plan, assertion, "step://prepare/workspace_ref", "/private/workspace",
+                Map.of("TC-1\nprepare\nworkspace_ref", output("prepare", "target", "workspace_ref",
+                        V03ValueType.STRING, V03Sensitivity.MASKED, true, "/private/workspace"))))
                 .isEqualTo(V03OutputRedactor.MASKED);
+    }
+
+    @Test
+    void masksExactDottedSecretOutputInAssertionEvidence() {
+        V03ProviderContract.V03OperationDefinition operation = new V03ProviderContract.V03OperationDefinition(
+                Set.of(), Set.of(), Set.of("auth.token"), Map.of(), Map.of(
+                        "auth.token", new V03OutputDefinition(V03ValueType.STRING, V03Sensitivity.SECRET, false, false)), Set.of());
+        V03ProviderContract contract = new V03ProviderContract(
+                "test.v0.3", "test", Set.of("native"), Map.of(), Map.of("login", operation), Set.of(), Set.of(), Set.of());
+        V03ExecutionStep producer = new V03ExecutionStep("TC-1", V03ExecutionStepKind.PROVIDER_OPERATION,
+                "execute", "login", "target", "test.v0.3", "test", "local", "native", "login", Map.of(), "");
+        V03ExecutionStep assertion = new V03ExecutionStep("TC-1", V03ExecutionStepKind.ASSERTION,
+                "verify", "assert", "", "", "", "local", "", "equals", Map.of(), "");
+        V03ExecutionPlan plan = new V03ExecutionPlan("S", "local", Path.of("."),
+                new V03SuiteMetadata("v0.3", "S", "local"),
+                new V03EnvironmentProfile("local", "local", "per_run", "framework_verification_only", false),
+                Map.of(), Map.of("test.v0.3", contract), Map.of(), java.util.List.of(),
+                java.util.List.of(producer, assertion), java.util.List.of(), "digest");
+
+        assertThat(new V03OutputRedactor().redactAssertionValue(
+                plan, assertion, "step://login/auth.token", "raw-token",
+                Map.of("TC-1\nlogin\nauth.token", output("login", "target", "auth.token",
+                        V03ValueType.STRING, V03Sensitivity.SECRET, false, "raw-token"))))
+                .isEqualTo(V03OutputRedactor.MASKED);
+    }
+
+    private V03ProducedOutput output(
+            String step, String target, String name, V03ValueType type, V03Sensitivity sensitivity,
+            boolean bindable, Object value) {
+        return new V03ProducedOutput("TC-1", step, target, "test.v0.3", "operation", name,
+                type, sensitivity, bindable, value);
     }
 }

@@ -1,64 +1,324 @@
+---
 contract_version: v0.3
 provider_contract: nats.v0.3
 provider_type: nats
 provider_role: messaging_client
 protocol: nats
 purpose: NATS messaging provider contract for DSL v0.3 publish and observation checks.
-runtime_modes: [mock, native, ephemeral]
+runtime_modes:
+- mock
+- native
+- ephemeral
 operation_defaults:
   input:
     value_type: any
-    reference_kinds: [literal, artifact, step, generated, env]
+    reference_kinds: &1
+    - literal
+    - artifact
+    - step
+    - generated
+    - env
     sensitivity: public
   output:
     value_type: any
     sensitivity: public
     bindable: false
     evidence_included: true
-  phases: [setup, execute, verify, cleanup]
+  phases:
+  - setup
+  - execute
+  - verify
+  - cleanup
 binding_keys:
   connection.local_ref:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   connection.secret_ref:
     required: false
     source: env_profile_secret_ref
+    value_type: string
+    reference_kinds:
+    - env
+    sensitivity: masked
   subject:
     required: true
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   timeout:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
   poll_interval:
     required: false
     source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    - generated
+    - env
+    sensitivity: public
 operations:
   nats_publish:
-    allowed_inputs: [subject, payload_ref, payload, correlation_key, timeout, poll_interval]
-    required_inputs: [payload_ref]
-    output_refs: [subject, published, published_at, duration_ms, event_evidence_ref]
+    inputs:
+      subject:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      payload_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      payload:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      correlation_key:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      timeout:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      poll_interval:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      subject:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      published:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      published_at:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      duration_ms:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      event_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - subject
+    - payload_ref
+    - payload
+    - correlation_key
+    - timeout
+    - poll_interval
+    required_inputs:
+    - payload_ref
+    output_refs:
+    - subject
+    - published
+    - published_at
+    - duration_ms
+    - event_evidence_ref
   event_published:
-    allowed_inputs: [subject, consume_from, timeout, poll_interval, correlation_key]
+    inputs:
+      subject:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      consume_from:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      timeout:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      poll_interval:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      correlation_key:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      subject:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      observed_count:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      matched:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      matched_fields:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      duration_ms:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      event_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - subject
+    - consume_from
+    - timeout
+    - poll_interval
+    - correlation_key
     required_inputs: []
-    output_refs: [subject, observed_count, matched, matched_fields, duration_ms, event_evidence_ref]
+    output_refs:
+    - subject
+    - observed_count
+    - matched
+    - matched_fields
+    - duration_ms
+    - event_evidence_ref
   event_payload_match:
-    allowed_inputs: [subject, expected_ref, consume_from, timeout, poll_interval, correlation_key]
-    required_inputs: [expected_ref]
-    output_refs: [subject, observed_count, matched, matched_fields, duration_ms, event_evidence_ref]
+    inputs:
+      subject:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      expected_ref:
+        required: true
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      consume_from:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      timeout:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      poll_interval:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+      correlation_key:
+        required: false
+        value_type: any
+        reference_kinds: *1
+        sensitivity: public
+    outputs:
+      subject:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      observed_count:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      matched:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      matched_fields:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      duration_ms:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      event_evidence_ref:
+        value_type: any
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - subject
+    - expected_ref
+    - consume_from
+    - timeout
+    - poll_interval
+    - correlation_key
+    required_inputs:
+    - expected_ref
+    output_refs:
+    - subject
+    - observed_count
+    - matched
+    - matched_fields
+    - duration_ms
+    - event_evidence_ref
 evidence:
-  outputs: [event_evidence, assertion_evidence]
-  redact: [connection, password, secret, token, authorization]
+  outputs:
+  - event_evidence
+  - assertion_evidence
+  redact:
+  - connection
+  - password
+  - secret
+  - token
+  - authorization
 failure_mapping:
   allowed_codes:
-    - SUBJECT_MISSING
-    - PAYLOAD_REF_MISSING
-    - PAYLOAD_PARAM_MISSING
-    - NATS_CONNECTION_FAILED
-    - NATS_PUBLISH_FAILED
-    - NATS_OBSERVE_FAILED
-    - EVENT_NOT_FOUND
-    - PAYLOAD_MISMATCH
-    - NATS_TIMEOUT
-    - INVALID_DURATION
-    - INVALID_INSTANT
-    - REF_OUTSIDE_SUITE_ROOT
+  - SUBJECT_MISSING
+  - PAYLOAD_REF_MISSING
+  - PAYLOAD_PARAM_MISSING
+  - NATS_CONNECTION_FAILED
+  - NATS_PUBLISH_FAILED
+  - NATS_OBSERVE_FAILED
+  - EVENT_NOT_FOUND
+  - PAYLOAD_MISMATCH
+  - NATS_TIMEOUT
+  - INVALID_DURATION
+  - INVALID_INSTANT
+  - REF_OUTSIDE_SUITE_ROOT

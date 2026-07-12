@@ -14,10 +14,19 @@ public record V03ExecutionContext(
         Map<String, Path> artifactRoots,
         Map<String, Map<String, Object>> generatedOutputsByTarget,
         Map<String, Map<String, Object>> outputsByStep,
+        Map<String, V03ProducedOutput> producedOutputs,
         Map<String, Object> envProfile,
         Map<String, String> environment,
         V03ReferenceResolver referenceResolver,
         Instant testStartTime) {
+
+    public V03ExecutionContext(Path suiteRoot, Path runDir, String profile, Map<String, V03ResolvedTarget> targets,
+            Map<String, Path> artifactRoots, Map<String, Map<String, Object>> generatedOutputsByTarget,
+            Map<String, Map<String, Object>> outputsByStep, Map<String, Object> envProfile,
+            Map<String, String> environment, V03ReferenceResolver referenceResolver, Instant testStartTime) {
+        this(suiteRoot, runDir, profile, targets, artifactRoots, generatedOutputsByTarget, outputsByStep, Map.of(),
+                envProfile, environment, referenceResolver, testStartTime);
+    }
 
     public V03ReferenceResolutionContext referenceContext(String testCaseId) {
         return new V03ReferenceResolutionContext(
@@ -26,6 +35,7 @@ public record V03ExecutionContext(
                 testCaseId,
                 outputsByStep,
                 generatedOutputsByTarget,
+                producedOutputs,
                 environment);
     }
 }

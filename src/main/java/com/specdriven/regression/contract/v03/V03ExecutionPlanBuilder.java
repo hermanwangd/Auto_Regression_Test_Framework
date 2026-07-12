@@ -98,7 +98,7 @@ public class V03ExecutionPlanBuilder {
                 compiledTests,
                 List.copyOf(orderedSteps),
                 dependencies,
-                planDigest(metadata, environmentProfile, targets, compiledTests, dependencies));
+                planDigest(suiteRoot, metadata, environmentProfile, targets, contracts, artifactRoots, compiledTests, dependencies));
     }
 
     private void validateReferences(Object value, Map<String, Path> artifactRoots) {
@@ -238,6 +238,34 @@ public class V03ExecutionPlanBuilder {
                             + "` requires `" + binding.getKey() + "` from Provider Contract `" + contract.id() + "`.");
                 }
             }
+            for (Map.Entry<String, Object> binding : target.bindings().entrySet()) {
+                V03ProviderContract.V03BindingDefinition definition = contract.bindings().get(binding.getKey());
+                if (binding.getValue() instanceof Map<?, ?> value && value.containsKey("secret_ref")
+                        && definition.sensitivity() == V03Sensitivity.PUBLIC) {
+                    throw new IllegalArgumentException("invalid_binding_secret_ref: target `" + target.target()
+                            + "` binding `" + binding.getKey() + "` is public in Provider Contract `" + contract.id() + "`.");
+                }
+                V03Reference reference = referenceParser.parse(binding.getValue());
+                V03ReferenceKind kind = referenceKind(reference);
+                if (!definition.referenceKinds().contains(kind)) {
+                    throw new IllegalArgumentException("unsupported_binding_reference_kind: target `" + target.target()
+                            + "` binding `" + binding.getKey() + "` does not allow `" + kind.name().toLowerCase(java.util.Locale.ROOT) + "`.");
+                }
+                if (reference instanceof V03Reference.Environment environment
+                        && !definition.source().contains("secret_ref")) {
+                    String resolved = System.getenv(environment.name());
+                    if (resolved == null || resolved.isBlank()) {
+                        throw new IllegalArgumentException("missing_environment_value: target `" + target.target()
+                                + "` binding `" + binding.getKey() + "` requires env://" + environment.name() + ".");
+                    }
+                }
+                if (kind == V03ReferenceKind.LITERAL && !(binding.getValue() instanceof Map<?, ?>)
+                        && !matchesValueType(binding.getValue(), definition.valueType())) {
+                    throw new IllegalArgumentException("invalid_binding_type: target `" + target.target()
+                            + "` binding `" + binding.getKey() + "` requires `"
+                            + definition.valueType().name().toLowerCase(java.util.Locale.ROOT) + "`.");
+                }
+            }
         }
         for (V03ExecutionStep step : steps) {
             if (step.target().isBlank()) {
@@ -258,15 +286,15 @@ public class V03ExecutionPlanBuilder {
                         + "` uses phase `" + step.phase() + "` outside operation `" + step.operation() + "`.");
             }
             for (String input : step.inputs().keySet()) {
-                if (!matchesContractName(operation.allowedInputs(), input)) {
+                if (!matchesContractName(operation.inputDefinitions().keySet(), input)) {
                     throw new IllegalArgumentException("unsupported_input: step `" + step.id() + "` uses `" + input
                             + "` outside Provider Contract `" + contract.id() + "` operation `" + step.operation() + "`.");
                 }
                 validateInputValue(step, input, step.inputs().get(input), inputDefinition(operation, input));
             }
-            for (String required : operation.requiredInputs()) {
-                if (!hasContractName(step.inputs().keySet(), required)) {
-                    throw new IllegalArgumentException("missing_required_input: step `" + step.id() + "` requires `" + required
+            for (Map.Entry<String, V03InputDefinition> input : operation.inputDefinitions().entrySet()) {
+                if (input.getValue().required() && !hasContractName(step.inputs().keySet(), input.getKey())) {
+                    throw new IllegalArgumentException("missing_required_input: step `" + step.id() + "` requires `" + input.getKey()
                             + "` from Provider Contract `" + contract.id() + "`.");
                 }
             }
@@ -415,7 +443,7 @@ public class V03ExecutionPlanBuilder {
             String type = stringValue(verify.get("type"));
             if ("provider_check".equals(type)) {
                 String targetName = stringValue(verify.get("target"));
-                steps.add(executionStep(
+                V03ExecutionStep operationStep = executionStep(
                         testCaseId,
                         "verify",
                         id,
@@ -423,7 +451,11 @@ public class V03ExecutionPlanBuilder {
                         stringValue(verify.get("op")),
                         mapValue(verify.get("with")),
                         profile,
-                        targets.get(targetName)));
+                        targets.get(targetName));
+                steps.add(new V03ExecutionStep(testCaseId, V03ExecutionStepKind.PROVIDER_CHECK,
+                        operationStep.phase(), operationStep.id(), operationStep.target(), operationStep.providerContract(),
+                        operationStep.providerType(), operationStep.profile(), operationStep.runtimeMode(),
+                        operationStep.operation(), operationStep.inputs(), operationStep.providerInstanceRef()));
             } else if ("assertion".equals(type)) {
                 Map<String, Object> assertion = mapValue(verify.get("assert"));
                 String operator = stringValue(assertion.get("operator"));
@@ -576,19 +608,33 @@ public class V03ExecutionPlanBuilder {
     }
 
     private String planDigest(
+            Path suiteRoot,
             V03SuiteMetadata metadata,
             V03EnvironmentProfile environmentProfile,
             Map<String, V03ResolvedTarget> targets,
+            Map<String, V03ProviderContract> contracts,
+            Map<String, Path> artifactRoots,
             List<V03CompiledTestCase> tests,
             List<V03BindingDependency> bindingDependencies) {
         StringBuilder canonical = new StringBuilder()
                 .append(metadata.manifestVersion()).append('|')
                 .append(metadata.suiteId()).append('|')
-                .append(environmentProfile.profileId()).append('\n');
+                .append(environmentProfile.profileId()).append('|')
+                .append(environmentProfile.executionMode()).append('|')
+                .append(environmentProfile.isolation()).append('|')
+                .append(environmentProfile.evidenceClassification()).append('|')
+                .append(environmentProfile.downstreamReleaseEvidence()).append('\n');
         targets.values().forEach(target -> canonical.append(target.target()).append('|')
                 .append(target.providerContract()).append('|')
                 .append(target.runtimeMode()).append('|')
                 .append(target.bindings()).append('\n'));
+        artifactRoots.forEach((name, path) -> canonical.append("artifact|").append(name).append('|')
+                .append(suiteRoot.relativize(path.toAbsolutePath().normalize())).append('\n'));
+        java.util.Set<String> usedContracts = targets.values().stream()
+                .map(V03ResolvedTarget::providerContract).collect(java.util.stream.Collectors.toSet());
+        contracts.forEach((id, contract) -> { if (usedContracts.contains(id)) canonical.append("contract|").append(id).append('|')
+                .append(contract.runtimeModes()).append('|').append(contract.bindings()).append('|')
+                .append(contract.operations()).append('\n'); });
         tests.forEach(test -> {
             canonical.append(test.testCaseId()).append('|').append(test.dslVersion()).append('\n');
             appendSteps(canonical, test.setup());

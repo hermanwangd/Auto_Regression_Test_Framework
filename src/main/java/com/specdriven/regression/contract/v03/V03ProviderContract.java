@@ -12,6 +12,7 @@ public record V03ProviderContract(
         Map<String, V03OperationDefinition> operations,
         Set<String> bindableOutputs,
         Set<String> evidenceOutputs,
+        Set<String> evidenceRedact,
         Set<String> failureCodes) {
 
     public V03ProviderContract {
@@ -20,10 +21,23 @@ public record V03ProviderContract(
         operations = Map.copyOf(operations);
         bindableOutputs = Set.copyOf(bindableOutputs);
         evidenceOutputs = Set.copyOf(evidenceOutputs);
+        evidenceRedact = Set.copyOf(evidenceRedact);
         failureCodes = Set.copyOf(failureCodes);
     }
 
-    public record V03BindingDefinition(boolean required, String source) {
+    public V03ProviderContract(String id, String providerType, Set<String> runtimeModes,
+            Map<String, V03BindingDefinition> bindings, Map<String, V03OperationDefinition> operations,
+            Set<String> bindableOutputs, Set<String> evidenceOutputs, Set<String> failureCodes) {
+        this(id, providerType, runtimeModes, bindings, operations, bindableOutputs, evidenceOutputs, Set.of(), failureCodes);
+    }
+
+    public record V03BindingDefinition(boolean required, String source, V03ValueType valueType,
+            Set<V03ReferenceKind> referenceKinds, V03Sensitivity sensitivity) {
+        public V03BindingDefinition { referenceKinds = Set.copyOf(referenceKinds); }
+        public V03BindingDefinition(boolean required, String source) {
+            this(required, source, V03ValueType.ANY, Set.of(V03ReferenceKind.LITERAL, V03ReferenceKind.GENERATED,
+                    V03ReferenceKind.ENV), V03Sensitivity.PUBLIC);
+        }
     }
 
     public record V03OperationDefinition(
@@ -36,6 +50,14 @@ public record V03ProviderContract(
             Set<String> allowedPhases) {
 
         public V03OperationDefinition {
+            if (!inputDefinitions.isEmpty()) {
+                allowedInputs = inputDefinitions.keySet();
+                requiredInputs = inputDefinitions.entrySet().stream()
+                        .filter(entry -> entry.getValue().required())
+                        .map(Map.Entry::getKey)
+                        .collect(java.util.stream.Collectors.toUnmodifiableSet());
+            }
+            if (!outputDefinitions.isEmpty()) outputRefs = outputDefinitions.keySet();
             allowedInputs = Set.copyOf(allowedInputs);
             requiredInputs = Set.copyOf(requiredInputs);
             outputRefs = Set.copyOf(outputRefs);

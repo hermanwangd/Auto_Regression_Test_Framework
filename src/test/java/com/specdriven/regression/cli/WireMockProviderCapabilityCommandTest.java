@@ -92,7 +92,7 @@ class WireMockProviderCapabilityCommandTest {
         assertThat(report.stdout())
                 .contains("report_status: review_ready")
                 .contains("suite_id: WIREMOCK-CAPABILITY-v0.2")
-                .contains("batch_id: BATCH-WIREMOCK-")
+                .contains("batch_id: BATCH-STANDALONE-")
                 .contains("run_id: RUN-WIREMOCK-")
                 .contains("test_case_id: WIREMOCK-CAPABILITY-TC-001")
                 .contains("status: passed");
