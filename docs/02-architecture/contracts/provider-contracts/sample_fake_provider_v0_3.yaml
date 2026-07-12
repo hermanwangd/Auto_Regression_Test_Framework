@@ -167,6 +167,9 @@ evidence:
   redact: []
 failure_mapping:
   allowed_codes:
+  - PROVIDER_UNAVAILABLE
+  - SETUP_FAILED
+  - CLEANUP_FAILED
   - SCHEMA_INVALID
   - TARGET_RESOLUTION_FAILED
   - EXPECTED_RESULT_MISSING

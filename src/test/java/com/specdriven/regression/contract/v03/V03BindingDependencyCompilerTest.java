@@ -111,6 +111,49 @@ class V03BindingDependencyCompilerTest {
                 .hasMessageContaining("invalid_output_subpath");
     }
 
+    @Test
+    void rejectsGeneratedReferencesWithMoreThanOnePriorProducerOperation() {
+        V03ExecutionStep first = step("first", "producer", "producer.v0.3", "first", Map.of());
+        V03ExecutionStep second = step("second", "producer", "producer.v0.3", "second", Map.of());
+        V03ExecutionStep consumer = step("consume", "consumer", "consumer.v0.3", "consume",
+                Map.of("value", "generated://producer/value"));
+        V03OutputDefinition output = new V03OutputDefinition(V03ValueType.STRING, V03Sensitivity.PUBLIC, true, false);
+        V03ProviderContract producerContract = new V03ProviderContract("producer.v0.3", "producer", Set.of("native"), Map.of(), Map.of(
+                "first", new V03ProviderContract.V03OperationDefinition(Set.of(), Set.of(), Set.of("value"), Map.of(), Map.of("value", output), Set.of("native"), Set.of("execute")),
+                "second", new V03ProviderContract.V03OperationDefinition(Set.of(), Set.of(), Set.of("value"), Map.of(), Map.of("value", output), Set.of("native"), Set.of("execute"))),
+                Set.of(), Set.of(), Set.of());
+        Map<String, V03ProviderContract> contracts = Map.of(
+                "producer.v0.3", producerContract,
+                "consumer.v0.3", contract("consumer.v0.3", "consume", Map.of(
+                        "value", new V03InputDefinition(true, V03ValueType.STRING, Set.of(V03ReferenceKind.GENERATED), V03Sensitivity.PUBLIC)), Map.of()));
+        Map<String, V03ResolvedTarget> targets = Map.of("producer",
+                new V03ResolvedTarget("producer", "producer.v0.3", "producer", "local", "native", Map.of()));
+
+        assertThatThrownBy(() -> compiler.compile(List.of(first, second, consumer), targets, contracts, Map.of()))
+                .hasMessageContaining("ambiguous_generated_producer");
+    }
+
+    @Test
+    void rejectsUnsafeGeneratedEnvProfileBindingBeforeProviderRuntime() {
+        V03ExecutionStep producer = step("produce", "producer", "producer.v0.3", "produce", Map.of());
+        V03ExecutionStep consumer = step("consume", "consumer", "consumer.v0.3", "consume", Map.of());
+        Map<String, V03ProviderContract> contracts = Map.of(
+                "producer.v0.3", contract("producer.v0.3", "produce", Map.of(), Map.of(
+                        "token", new V03OutputDefinition(V03ValueType.STRING, V03Sensitivity.SECRET, true, false))),
+                "consumer.v0.3", new V03ProviderContract("consumer.v0.3", "consumer", Set.of("native"), Map.of(
+                        "base_url", new V03ProviderContract.V03BindingDefinition(true, "env_profile", V03ValueType.STRING,
+                                Set.of(V03ReferenceKind.GENERATED), V03Sensitivity.PUBLIC)), Map.of(
+                        "consume", new V03ProviderContract.V03OperationDefinition(Set.of(), Set.of(), Set.of(), Map.of(), Map.of(), Set.of("native"), Set.of("execute"))),
+                        Set.of(), Set.of(), Set.of()));
+        Map<String, V03ResolvedTarget> targets = Map.of(
+                "producer", new V03ResolvedTarget("producer", "producer.v0.3", "producer", "local", "native", Map.of()),
+                "consumer", new V03ResolvedTarget("consumer", "consumer.v0.3", "consumer", "local", "native",
+                        Map.of("base_url", "generated://producer/token")));
+
+        assertThatThrownBy(() -> compiler.compile(List.of(producer, consumer), targets, contracts, Map.of()))
+                .hasMessageContaining("unsafe_sensitivity_flow");
+    }
+
     private V03ExecutionStep step(
             String id, String target, String contract, String operation, Map<String, Object> inputs) {
         return step("TC-1", id, target, contract, operation, inputs);

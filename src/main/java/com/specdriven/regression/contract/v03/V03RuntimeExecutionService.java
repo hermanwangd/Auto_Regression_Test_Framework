@@ -117,8 +117,6 @@ public class V03RuntimeExecutionService {
         Instant startedAt = Instant.now();
         boolean providerRuntimeExecuted = false;
         Map<String, V03ResolvedTarget> targetsByName = targetsByName(plan);
-        Map<String, Map<String, Object>> generatedOutputsByTarget = new LinkedHashMap<>();
-        Map<String, Map<String, Object>> outputsByStep = new LinkedHashMap<>();
         Map<String, V03ProducedOutput> producedOutputs = new LinkedHashMap<>();
         Map<String, String> testStatuses = initialTestStatuses(testCases);
         V03ExecutionContext context = new V03ExecutionContext(
@@ -127,8 +125,6 @@ public class V03RuntimeExecutionService {
                 plan.profile(),
                 targetsByName,
                 plan.artifactRoots(),
-                generatedOutputsByTarget,
-                outputsByStep,
                 producedOutputs,
                 Map.of(),
                 System.getenv(),
@@ -163,12 +159,7 @@ public class V03RuntimeExecutionService {
             V03StepResult result = adapter.execute(step, context);
             validateRuntimeOutputs(plan, step, result);
             providerRuntimeExecuted = true;
-            outputsByStep.put(scopedStepKey(step), result.outputs());
             recordProducedOutputs(plan, step, result.outputs(), producedOutputs);
-            if (step.kind() == V03ExecutionStepKind.PROVIDER_OPERATION) {
-                generatedOutputsByTarget.computeIfAbsent(step.target(), ignored -> new LinkedHashMap<>())
-                        .putAll(result.outputs());
-            }
             stepResults.add(stepResult(plan, step, result));
             providerResults.add(providerResult(plan, step, result));
             evidenceRefs.addAll(result.evidenceRefs());
@@ -295,6 +286,10 @@ public class V03RuntimeExecutionService {
                 throw new IllegalArgumentException("undeclared_provider_output: step `" + step.id()
                         + "` returned `" + output + "` outside Provider Contract `" + contract.id() + "`.");
             }
+        }
+        if (!result.failureCode().isBlank() && !contract.failureCodes().contains(result.failureCode())) {
+            throw new IllegalArgumentException("undeclared_provider_failure_code: step `" + step.id()
+                    + "` returned `" + result.failureCode() + "` outside Provider Contract `" + contract.id() + "`.");
         }
     }
 

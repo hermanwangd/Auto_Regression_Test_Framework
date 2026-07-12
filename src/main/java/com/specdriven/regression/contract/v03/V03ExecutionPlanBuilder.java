@@ -624,17 +624,17 @@ public class V03ExecutionPlanBuilder {
                 .append(environmentProfile.isolation()).append('|')
                 .append(environmentProfile.evidenceClassification()).append('|')
                 .append(environmentProfile.downstreamReleaseEvidence()).append('\n');
-        targets.values().forEach(target -> canonical.append(target.target()).append('|')
+        targets.values().stream().sorted(java.util.Comparator.comparing(V03ResolvedTarget::target)).forEach(target -> canonical.append(target.target()).append('|')
                 .append(target.providerContract()).append('|')
                 .append(target.runtimeMode()).append('|')
-                .append(target.bindings()).append('\n'));
-        artifactRoots.forEach((name, path) -> canonical.append("artifact|").append(name).append('|')
-                .append(suiteRoot.relativize(path.toAbsolutePath().normalize())).append('\n'));
+                .append(canonicalValue(target.bindings())).append('\n'));
+        artifactRoots.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> canonical.append("artifact|")
+                .append(entry.getKey()).append('|')
+                .append(suiteRoot.relativize(entry.getValue().toAbsolutePath().normalize())).append('\n'));
         java.util.Set<String> usedContracts = targets.values().stream()
                 .map(V03ResolvedTarget::providerContract).collect(java.util.stream.Collectors.toSet());
-        contracts.forEach((id, contract) -> { if (usedContracts.contains(id)) canonical.append("contract|").append(id).append('|')
-                .append(contract.runtimeModes()).append('|').append(contract.bindings()).append('|')
-                .append(contract.operations()).append('\n'); });
+        contracts.entrySet().stream().filter(entry -> usedContracts.contains(entry.getKey())).sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> appendContract(canonical, entry.getValue()));
         tests.forEach(test -> {
             canonical.append(test.testCaseId()).append('|').append(test.dslVersion()).append('\n');
             appendSteps(canonical, test.setup());
@@ -642,7 +642,11 @@ public class V03ExecutionPlanBuilder {
             appendSteps(canonical, test.verify());
             appendSteps(canonical, test.cleanup());
         });
-        bindingDependencies.forEach(dependency -> canonical.append("binding|")
+        bindingDependencies.stream().sorted(java.util.Comparator.comparing(V03BindingDependency::consumerStepId)
+                .thenComparing(V03BindingDependency::consumerInput)
+                .thenComparing(V03BindingDependency::producerTarget)
+                .thenComparing(V03BindingDependency::producerStepId)
+                .thenComparing(V03BindingDependency::producerOutput)).forEach(dependency -> canonical.append("binding|")
                 .append(dependency.consumerStepId()).append('|')
                 .append(dependency.consumerInput()).append('|')
                 .append(dependency.referenceKind()).append('|')
@@ -657,6 +661,55 @@ public class V03ExecutionPlanBuilder {
         } catch (NoSuchAlgorithmException error) {
             throw new IllegalStateException("SHA-256 is required to compile a v0.3 execution plan.", error);
         }
+    }
+
+    private void appendContract(StringBuilder canonical, V03ProviderContract contract) {
+        canonical.append("contract|").append(contract.id()).append('|')
+                .append(canonicalValue(contract.runtimeModes())).append('|');
+        contract.bindings().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+            V03ProviderContract.V03BindingDefinition binding = entry.getValue();
+            canonical.append("binding|").append(entry.getKey()).append('|').append(binding.required()).append('|')
+                    .append(binding.source()).append('|').append(binding.valueType()).append('|')
+                    .append(canonicalValue(binding.referenceKinds())).append('|').append(binding.sensitivity()).append('\n');
+        });
+        contract.operations().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+            V03ProviderContract.V03OperationDefinition operation = entry.getValue();
+            canonical.append("operation|").append(entry.getKey()).append('|')
+                    .append(canonicalValue(operation.runtimeModes())).append('|')
+                    .append(canonicalValue(operation.allowedPhases())).append('\n');
+            operation.inputDefinitions().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(input -> {
+                V03InputDefinition definition = input.getValue();
+                canonical.append("input|").append(input.getKey()).append('|').append(definition.required()).append('|')
+                        .append(definition.valueType()).append('|').append(canonicalValue(definition.referenceKinds()))
+                        .append('|').append(definition.sensitivity()).append('\n');
+            });
+            operation.outputDefinitions().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(output -> {
+                V03OutputDefinition definition = output.getValue();
+                canonical.append("output|").append(output.getKey()).append('|').append(definition.valueType()).append('|')
+                        .append(definition.sensitivity()).append('|').append(definition.bindable()).append('|')
+                        .append(definition.evidenceIncluded()).append('\n');
+            });
+        });
+    }
+
+    private String canonicalValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return map.entrySet().stream()
+                    .map(entry -> Map.entry(String.valueOf(entry.getKey()), canonicalValue(entry.getValue())))
+                    .sorted(Map.Entry.comparingByKey())
+                    .map(entry -> entry.getKey() + "=" + entry.getValue())
+                    .collect(java.util.stream.Collectors.joining(",", "{", "}"));
+        }
+        if (value instanceof java.util.Set<?> set) {
+            return set.stream().map(this::canonicalValue).sorted()
+                    .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+        }
+        if (value instanceof Iterable<?> values) {
+            java.util.List<String> items = new java.util.ArrayList<>();
+            values.forEach(item -> items.add(canonicalValue(item)));
+            return String.join(",", items).replaceFirst("^", "[").concat("]");
+        }
+        return String.valueOf(value);
     }
 
     private void appendSteps(StringBuilder canonical, List<V03ExecutionStep> steps) {

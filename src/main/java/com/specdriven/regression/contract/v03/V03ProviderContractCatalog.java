@@ -75,13 +75,15 @@ public final class V03ProviderContractCatalog {
         Map<String, V03ProviderContract.V03OperationDefinition> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : map(value).entrySet()) {
             Map<String, Object> definition = map(entry.getValue());
+            if (!definition.containsKey("inputs") || !definition.containsKey("outputs")) {
+                throw new IllegalArgumentException("missing_typed_operation_metadata: operation `" + entry.getKey()
+                        + "` must declare inputs and outputs maps.");
+            }
             Map<String, Object> typedInputs = map(definition.get("inputs"));
             Map<String, Object> typedOutputs = map(definition.get("outputs"));
-            Set<String> allowedInputs = typedInputs.isEmpty()
-                    ? strings(definition.get("allowed_inputs")) : Set.copyOf(typedInputs.keySet());
-            Set<String> requiredInputs = typedInputs.isEmpty() ? strings(definition.get("required_inputs")) : Set.of();
-            Set<String> outputRefs = typedOutputs.isEmpty()
-                    ? strings(definition.get("output_refs")) : Set.copyOf(typedOutputs.keySet());
+            Set<String> allowedInputs = Set.copyOf(typedInputs.keySet());
+            Set<String> requiredInputs = Set.of();
+            Set<String> outputRefs = Set.copyOf(typedOutputs.keySet());
             Map<String, V03InputDefinition> inputs = inputs(
                     definition.get("inputs"), allowedInputs, requiredInputs, map(defaults.get("input")));
             Map<String, V03OutputDefinition> outputs = outputs(
@@ -100,14 +102,15 @@ public final class V03ProviderContractCatalog {
         Map<String, Object> typed = map(definitions);
         for (String input : allowedInputs) {
             Map<String, Object> definition = map(typed.get(input));
-            Map<String, Object> effective = definition.isEmpty() ? defaults : definition;
-            result.put(input, effective.isEmpty()
-                    ? V03InputDefinition.legacy(requiredInputs.contains(input))
-                    : new V03InputDefinition(
-                            Boolean.parseBoolean(text(effective.get("required"))) || requiredInputs.contains(input),
-                            V03ValueType.parse(text(effective.get("value_type"))),
-                            referenceKinds(effective.get("reference_kinds")),
-                            V03Sensitivity.parse(text(effective.get("sensitivity")))));
+            Map<String, Object> effective = effectiveDefinition(defaults, definition);
+            if (effective.isEmpty()) {
+                throw new IllegalArgumentException("missing_typed_input_metadata: `" + input + "`.");
+            }
+            result.put(input, new V03InputDefinition(
+                    Boolean.parseBoolean(text(effective.get("required"))) || requiredInputs.contains(input),
+                    V03ValueType.parse(text(effective.get("value_type"))),
+                    referenceKinds(effective.get("reference_kinds")),
+                    V03Sensitivity.parse(text(effective.get("sensitivity")))));
         }
         for (String input : typed.keySet()) {
             if (!result.containsKey(input)) throw new IllegalArgumentException("unknown_typed_input: `" + input + "`.");
@@ -121,14 +124,15 @@ public final class V03ProviderContractCatalog {
         Map<String, Object> typed = map(definitions);
         for (String output : outputRefs) {
             Map<String, Object> definition = map(typed.get(output));
-            Map<String, Object> effective = definition.isEmpty() ? defaults : definition;
-            result.put(output, effective.isEmpty()
-                    ? V03OutputDefinition.legacy(bindableOutputs.contains(output))
-                    : new V03OutputDefinition(
-                            V03ValueType.parse(text(effective.get("value_type"))),
-                            V03Sensitivity.parse(text(effective.get("sensitivity"))),
-                            Boolean.parseBoolean(text(effective.get("bindable"))) || bindableOutputs.contains(output),
-                            !"false".equals(text(effective.get("evidence_included")))));
+            Map<String, Object> effective = effectiveDefinition(defaults, definition);
+            if (effective.isEmpty()) {
+                throw new IllegalArgumentException("missing_typed_output_metadata: `" + output + "`.");
+            }
+            result.put(output, new V03OutputDefinition(
+                    V03ValueType.parse(text(effective.get("value_type"))),
+                    V03Sensitivity.parse(text(effective.get("sensitivity"))),
+                    Boolean.parseBoolean(text(effective.get("bindable"))) || bindableOutputs.contains(output),
+                    !"false".equals(text(effective.get("evidence_included")))));
         }
         for (String output : typed.keySet()) {
             if (!result.containsKey(output)) throw new IllegalArgumentException("unknown_typed_output: `" + output + "`.");
@@ -139,10 +143,16 @@ public final class V03ProviderContractCatalog {
     private Set<V03ReferenceKind> referenceKinds(Object value) {
         Set<V03ReferenceKind> result = new LinkedHashSet<>();
         for (String kind : strings(value)) result.add(V03ReferenceKind.parse(kind));
-        return result.isEmpty()
-                ? Set.of(V03ReferenceKind.LITERAL, V03ReferenceKind.ARTIFACT, V03ReferenceKind.STEP,
-                        V03ReferenceKind.GENERATED, V03ReferenceKind.ENV)
-                : Set.copyOf(result);
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException("missing_reference_kinds: v0.3 typed metadata must declare reference_kinds.");
+        }
+        return Set.copyOf(result);
+    }
+
+    private Map<String, Object> effectiveDefinition(Map<String, Object> defaults, Map<String, Object> definition) {
+        Map<String, Object> effective = new LinkedHashMap<>(defaults);
+        effective.putAll(definition);
+        return Map.copyOf(effective);
     }
 
     private Set<String> phases(Object value, Object defaultValue) {

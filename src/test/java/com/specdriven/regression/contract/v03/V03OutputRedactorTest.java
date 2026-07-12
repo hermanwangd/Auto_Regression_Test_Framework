@@ -90,6 +90,19 @@ class V03OutputRedactorTest {
                 .isEqualTo(V03OutputRedactor.MASKED);
     }
 
+    @Test
+    void appliesContractRedactionToNestedEvidencePaths() {
+        Object redacted = new V03OutputRedactor().redactEvidenceValue(
+                Map.of("request", Map.of("headers", Map.of("client_trace", "internal-trace"))),
+                Set.of("request.headers.client_trace"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> request = (Map<String, Object>) ((Map<String, Object>) redacted).get("request");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> headers = (Map<String, Object>) request.get("headers");
+        assertThat(headers).containsEntry("client_trace", V03OutputRedactor.MASKED);
+    }
+
     private V03ProducedOutput output(
             String step, String target, String name, V03ValueType type, V03Sensitivity sensitivity,
             boolean bindable, Object value) {

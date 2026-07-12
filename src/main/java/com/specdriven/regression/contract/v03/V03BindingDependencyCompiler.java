@@ -19,12 +19,16 @@ public final class V03BindingDependencyCompiler {
             Map<String, V03ProviderContract> contracts,
             Map<String, String> environment) {
         Map<String, V03ExecutionStep> priorSteps = new LinkedHashMap<>();
+        java.util.Set<String> initializedTargets = new java.util.LinkedHashSet<>();
         List<V03BindingDependency> dependencies = new ArrayList<>();
         for (V03ExecutionStep step : steps) {
             if (step.kind() != V03ExecutionStepKind.PROVIDER_OPERATION && step.kind() != V03ExecutionStepKind.PROVIDER_CHECK) {
                 continue;
             }
             V03ProviderContract.V03OperationDefinition operation = operation(step, contracts);
+            if (initializedTargets.add(step.target())) {
+                compileTargetBindings(step, targets.get(step.target()), contracts, priorSteps, environment, dependencies);
+            }
             for (Map.Entry<String, Object> input : step.inputs().entrySet()) {
                 V03InputDefinition consumer = inputDefinition(operation, input.getKey());
                 collect(input.getValue(), reference -> {
@@ -44,14 +48,15 @@ public final class V03BindingDependencyCompiler {
                             throw new IllegalArgumentException("missing_generated_producer: step `" + step.id()
                                     + "` references target `" + generated.target() + "`.");
                         }
-                        V03OutputDefinition output = outputDefinition(producerTarget, generated.output(), contracts);
-                        if (!output.bindable()) {
+                        V03ExecutionStep producer = generatedProducer(generated, priorSteps, contracts);
+                        if (producer == null) {
                             throw new IllegalArgumentException("unknown_bindable_output: target `" + generated.target()
                                     + "` output `" + generated.output() + "` is not bindable.");
                         }
+                        V03OutputDefinition output = outputDefinition(producer, generated.output(), contracts);
                         compatible(consumer, output, step, input.getKey());
                         dependencies.add(new V03BindingDependency(step.id(), input.getKey(), V03ReferenceKind.GENERATED,
-                                generated.target(), "", generated.output()));
+                                generated.target(), producer.id(), generated.output()));
                     } else if (reference instanceof V03Reference.Environment env) {
                         String value = environment.get(env.name());
                         if (value == null || value.isBlank()) {
@@ -68,6 +73,51 @@ public final class V03BindingDependencyCompiler {
             }
         }
         return List.copyOf(dependencies);
+    }
+
+    private void compileTargetBindings(
+            V03ExecutionStep consumerStep,
+            V03ResolvedTarget target,
+            Map<String, V03ProviderContract> contracts,
+            Map<String, V03ExecutionStep> priorSteps,
+            Map<String, String> environment,
+            List<V03BindingDependency> dependencies) {
+        if (target == null) return;
+        V03ProviderContract contract = contracts.get(target.providerContract());
+        if (contract == null) {
+            throw new IllegalArgumentException("missing_provider_contract: target `" + target.target() + "`.");
+        }
+        for (Map.Entry<String, Object> binding : target.bindings().entrySet()) {
+            V03ProviderContract.V03BindingDefinition definition = contract.bindings().get(binding.getKey());
+            if (definition == null) continue;
+            if (definition.source().contains("secret_ref")) {
+                continue;
+            }
+            V03InputDefinition consumer = new V03InputDefinition(
+                    definition.required(), definition.valueType(), definition.referenceKinds(), definition.sensitivity());
+            collect(binding.getValue(), reference -> {
+                if (reference instanceof V03Reference.Generated generated) {
+                    V03ExecutionStep producer = generatedProducer(generated, priorSteps, contracts);
+                    if (producer == null) {
+                        throw new IllegalArgumentException("missing_generated_binding_producer: target `" + target.target()
+                                + "` binding `" + binding.getKey() + "` requires prior `" + generated.target()
+                                + "/" + generated.output() + "`.");
+                    }
+                    V03OutputDefinition output = outputDefinition(producer, generated.output(), contracts);
+                    compatible(consumer, output, consumerStep, "binding." + binding.getKey());
+                    dependencies.add(new V03BindingDependency(consumerStep.id(), "binding." + binding.getKey(),
+                            V03ReferenceKind.GENERATED, generated.target(), producer.id(), generated.output()));
+                } else if (reference instanceof V03Reference.Environment env) {
+                    String value = environment.get(env.name());
+                    if (value == null || value.isBlank()) {
+                        throw new IllegalArgumentException("missing_environment_value: target `" + target.target()
+                                + "` binding `" + binding.getKey() + "` requires env://" + env.name() + ".");
+                    }
+                    dependencies.add(new V03BindingDependency(consumerStep.id(), "binding." + binding.getKey(),
+                            V03ReferenceKind.ENV, "", "", env.name()));
+                }
+            });
+        }
     }
 
     private V03ProviderContract.V03OperationDefinition operation(
@@ -110,6 +160,26 @@ public final class V03BindingDependencyCompiler {
     private V03OutputDefinition outputDefinition(
             V03ResolvedTarget producer, String output, Map<String, V03ProviderContract> contracts) {
         return outputDefinition(contracts.get(producer.providerContract()), output);
+    }
+
+    private V03ExecutionStep generatedProducer(
+            V03Reference.Generated generated,
+            Map<String, V03ExecutionStep> priorSteps,
+            Map<String, V03ProviderContract> contracts) {
+        List<V03ExecutionStep> producers = priorSteps.values().stream()
+                .filter(step -> generated.target().equals(step.target()))
+                .filter(step -> {
+                    try {
+                        return outputDefinition(step, generated.output(), contracts).bindable();
+                    } catch (IllegalArgumentException ignored) {
+                        return false;
+                    }
+                }).toList();
+        if (producers.size() > 1) {
+            throw new IllegalArgumentException("ambiguous_generated_producer: target `" + generated.target()
+                    + "` output `" + generated.output() + "` has multiple prior producer operations.");
+        }
+        return producers.isEmpty() ? null : producers.get(0);
     }
 
     private V03OutputDefinition outputDefinition(V03ProviderContract contract, String output) {

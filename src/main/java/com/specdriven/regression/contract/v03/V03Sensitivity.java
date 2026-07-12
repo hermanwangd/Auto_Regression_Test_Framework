@@ -6,7 +6,9 @@ public enum V03Sensitivity {
     SECRET;
 
     static V03Sensitivity parse(String value) {
-        if (value == null || value.isBlank()) return PUBLIC;
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("missing_sensitivity: v0.3 typed metadata must declare sensitivity.");
+        }
         try {
             return valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException error) {

@@ -18,6 +18,13 @@ import org.yaml.snakeyaml.Yaml;
 
 class V03RuntimeStatusTest {
 
+    @Test
+    void doesNotExposeRawOutputMapsToProviderAdapters() {
+        assertThat(java.util.Arrays.stream(V03ExecutionContext.class.getMethods())
+                .map(java.lang.reflect.Method::getName))
+                .doesNotContain("outputsByStep", "generatedOutputsByTarget", "producedOutputs");
+    }
+
     @TempDir
     Path tempDir;
 
@@ -204,6 +211,24 @@ class V03RuntimeStatusTest {
                 Path.of("samples/00-getting-started/golden_e2e/suite_manifest.yaml"), "local_v03",
                 tempDir.resolve("undeclared-output")))
                 .hasMessageContaining("undeclared_provider_output");
+    }
+
+    @Test
+    void rejectsFailureCodesNotDeclaredByTheProviderContract() {
+        V03ProviderRuntimeAdapter adapter = new V03ProviderRuntimeAdapter() {
+            @Override public String providerType() { return "sample_fake_provider"; }
+            @Override public boolean supports(String providerContract, String operation) { return true; }
+            @Override public V03StepResult execute(V03ExecutionStep step, V03ExecutionContext context) {
+                return new V03StepResult(step.id(), "failed", Map.of(), List.of(), "NOT_DECLARED", "unexpected");
+            }
+        };
+        V03RuntimeExecutionService service = new V03RuntimeExecutionService(
+                new ContractBaselineService(), new V03ProviderRuntimeRegistry(List.of(adapter)));
+
+        assertThatThrownBy(() -> service.run(
+                Path.of("samples/00-getting-started/golden_e2e/suite_manifest.yaml"), "local_v03",
+                tempDir.resolve("undeclared-failure-code")))
+                .hasMessageContaining("undeclared_provider_failure_code");
     }
 
     @Test

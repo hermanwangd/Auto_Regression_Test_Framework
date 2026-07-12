@@ -40,6 +40,14 @@ class V03ProviderContractCatalogTest {
     }
 
     @Test
+    void requiresExplicitTypedMetadataInsteadOfPermissiveDefaults() {
+        assertThatThrownBy(() -> V03ValueType.parse(""))
+                .hasMessageContaining("missing_value_type");
+        assertThatThrownBy(() -> V03Sensitivity.parse(""))
+                .hasMessageContaining("missing_sensitivity");
+    }
+
+    @Test
     void keepsTheV02CompatibilityListsDerivedFromTypedV03OperationMaps() throws Exception {
         Path contracts = Path.of("docs/02-architecture/contracts/provider-contracts");
         try (var files = Files.list(contracts)) {

@@ -108,6 +108,16 @@ class V03ExecutionPlanBuilderTest {
         assertThat(plan.steps()).isEmpty();
     }
 
+    @Test
+    void producesTheSameDigestForRepeatedCompilationOfTheSameSuite() {
+        V03ExecutionPlanBuilder builder = new V03ExecutionPlanBuilder();
+
+        String first = builder.build(HTTP_MOCK_SUITE, "local_v03").planDigest();
+        String second = builder.build(HTTP_MOCK_SUITE, "local_v03").planDigest();
+
+        assertThat(second).isEqualTo(first);
+    }
+
     private void copyDirectory(Path source, Path target) throws IOException {
         try (var paths = Files.walk(source)) {
             for (Path path : paths.sorted(Comparator.comparing(Path::toString)).toList()) {

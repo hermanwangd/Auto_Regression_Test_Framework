@@ -104,20 +104,21 @@ public final class V03OutputRedactor {
     }
 
     public Object redactEvidenceValue(Object value, java.util.Set<String> contractKeys) {
-        return redactEvidenceNested(value, contractKeys);
+        return redactEvidenceNested(value, contractKeys, "");
     }
 
-    private Object redactEvidenceNested(Object value, java.util.Set<String> contractKeys) {
+    private Object redactEvidenceNested(Object value, java.util.Set<String> contractKeys, String path) {
         if (value instanceof Map<?, ?> map) {
             Map<String, Object> result = new LinkedHashMap<>();
             map.forEach((key, item) -> {
                 String name = String.valueOf(key);
-                result.put(name, sensitiveKey(name) || contractKeys.contains(name) ? MASKED
-                        : redactEvidenceNested(item, contractKeys));
+                String fieldPath = path.isBlank() ? name : path + "." + name;
+                result.put(name, sensitiveKey(name) || contractKeys.contains(fieldPath) ? MASKED
+                        : redactEvidenceNested(item, contractKeys, fieldPath));
             });
             return result;
         }
-        if (value instanceof List<?> list) return list.stream().map(item -> redactEvidenceNested(item, contractKeys)).toList();
+        if (value instanceof List<?> list) return list.stream().map(item -> redactEvidenceNested(item, contractKeys, path)).toList();
         return value instanceof String text ? redactMessage(text) : value;
     }
 

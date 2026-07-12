@@ -24,7 +24,7 @@ class V03ReferenceResolverTest {
         Files.writeString(fixtures.resolve("order.json"), "{\"order\":{\"id\":\"A-100\"}}");
         V03ReferenceResolver resolver = new V03ReferenceResolver(
                 ignored -> Map.of("order", Map.of("id", "A-100")));
-        V03ReferenceResolutionContext context = context(Map.of(), Map.of(), Map.of());
+        V03ReferenceResolutionContext context = context(Map.of(), Map.of());
 
         V03Reference.Artifact reference =
                 (V03Reference.Artifact) parser.parse("artifact://payloads/order.json#/order/id");
@@ -41,8 +41,6 @@ class V03ReferenceResolverTest {
     void resolvesStepGeneratedAndEnvironmentReferences() {
         V03ReferenceResolver resolver = new V03ReferenceResolver(ignored -> Map.of());
         V03ReferenceResolutionContext context = context(
-                Map.of("TC-1\ncall", Map.of("response.body", Map.of("id", "S-1"))),
-                Map.of("mock", Map.of("base_url", "http://localhost")),
                 Map.of("TOKEN", "secret"),
                 Map.of(
                         "TC-1\ncall\nresponse.body", output("call", "api", "response.body", Map.of("id", "S-1"), false),
@@ -59,7 +57,7 @@ class V03ReferenceResolverTest {
     @Test
     void failsClosedForMissingGeneratedAndEnvironmentValues() {
         V03ReferenceResolver resolver = new V03ReferenceResolver(ignored -> Map.of());
-        V03ReferenceResolutionContext context = context(Map.of(), Map.of(), Map.of());
+        V03ReferenceResolutionContext context = context(Map.of(), Map.of());
 
         assertThatThrownBy(() -> resolver.resolveValue(
                 parser.parse("generated://mock/base_url"), context))
@@ -73,10 +71,7 @@ class V03ReferenceResolverTest {
     @Test
     void rejectsRawOutputMapsThatDoNotHaveProviderOutputProvenance() {
         V03ReferenceResolver resolver = new V03ReferenceResolver(ignored -> Map.of());
-        V03ReferenceResolutionContext context = context(
-                Map.of("TC-1\ncall", Map.of("response.body", "untrusted")),
-                Map.of("mock", Map.of("base_url", "untrusted")),
-                Map.of(), Map.of());
+        V03ReferenceResolutionContext context = context(Map.of(), Map.of());
 
         assertThatThrownBy(() -> resolver.resolveValue(parser.parse("step://call/response.body"), context))
                 .hasMessageContaining("unresolved_step_ref");
@@ -85,23 +80,12 @@ class V03ReferenceResolverTest {
     }
 
     private V03ReferenceResolutionContext context(
-            Map<String, Map<String, Object>> stepOutputs,
-            Map<String, Map<String, Object>> generatedOutputs,
-            Map<String, String> environment) {
-        return context(stepOutputs, generatedOutputs, environment, Map.of());
-    }
-
-    private V03ReferenceResolutionContext context(
-            Map<String, Map<String, Object>> stepOutputs,
-            Map<String, Map<String, Object>> generatedOutputs,
             Map<String, String> environment,
             Map<String, V03ProducedOutput> producedOutputs) {
         return new V03ReferenceResolutionContext(
                 tempDir,
                 Map.of("payloads", tempDir.resolve("fixtures")),
                 "TC-1",
-                stepOutputs,
-                generatedOutputs,
                 producedOutputs,
                 environment);
     }

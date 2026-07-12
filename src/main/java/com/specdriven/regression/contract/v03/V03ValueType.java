@@ -9,7 +9,9 @@ public enum V03ValueType {
     ARRAY;
 
     static V03ValueType parse(String value) {
-        if (value == null || value.isBlank()) return ANY;
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("missing_value_type: v0.3 typed metadata must declare value_type.");
+        }
         try {
             return valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException error) {
