@@ -82,7 +82,7 @@ class GoldenE2eCommandTest {
 
         String resultText = Files.readString(resultJson);
         assertThat(resultText)
-                .contains("\"framework_version\": \"0.3.0\"")
+                .contains("\"framework_version\": \"0.3.1\"")
                 .contains("\"suite_id\": \"GOLDEN-E2E-v0.2\"")
                 .contains("\"batch_id\": \"BATCH-STANDALONE-")
                 .contains("\"run_id\": \"RUN-GOLDEN-E2E-001\"")

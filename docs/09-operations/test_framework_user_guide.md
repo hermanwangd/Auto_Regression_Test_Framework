@@ -671,12 +671,12 @@ If a command-capable Env_Profile target does not define required `safety.access_
 
 The canonical built-in Provider Contracts are materialized under `docs/02-architecture/contracts/provider-contracts/` and indexed by `docs/02-architecture/contracts/provider_capability_registry.v0.2.yaml`. Start with the [Provider Contract Catalog](../02-architecture/contracts/provider-contracts/README.md) to map `provider_contract` ids such as `jdbc.v0.3` to contract YAML files and sample suites. The user guide must not redefine a second provider contract catalog. Runtime suite manifests use this built-in catalog by default.
 
-Framework `0.3.0` has two public surfaces:
+Framework `0.3.1` has two public surfaces:
 
 - v0.2 compatibility suites use Provider Instances, Env_Profiles, and the v0.2 provider capability registry.
 - v0.3 suites do not use Provider Instance files. They declare suite targets with `provider_contract`, and Env_Profile `targets.<target>` supplies `runtime_mode` and `bindings`.
 
-Framework `0.3.0` public provider support is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is keyed by provider type and `support_status`; runtime lifecycle details such as native, mock, stub, ephemeral, or framework are Env_Profile details, not public support statuses.
+Framework `0.3.1` public provider support is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is keyed by provider type and `support_status`; runtime lifecycle details such as native, mock, stub, ephemeral, or framework are Env_Profile details, not public support statuses.
 
 RP/suite repositories do not need a `provider_contracts/` folder for built-in v0.3 Provider Contracts such as `http_mock.v0.3`, `rest_client.v0.3`, `jdbc.v0.3`, `nats.v0.3`, `kafka.v0.3`, `ibm_mq.v0.3`, `artifact_compare.v0.3`, `common_verify.v0.3`, or `polling_observer.v0.3`. Suite-local contracts are an explicit opt-in for custom provider plugins or contract snapshot pinning:
 

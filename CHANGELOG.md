@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.1
+
+Framework v0.3.1 is v0.3.0 plus the explicit Env_Profile resolution fix.
+
+- Makes an explicit `run --profile` authoritative for canonical v0.3 plans, resolved targets, provider steps, result JSON, and evidence.
+- Blocks missing selected-profile bindings and environment values before provider execution instead of falling back to `default_profile`.
+- Adds release-gate dry-runs for external NATS, Kafka, and IBM MQ profiles, rejecting any local/mock fallback without requiring external infrastructure.
+- Uses MQCSP authentication when the IBM MQ native client is given a password and records safe MQ completion/reason codes in connection failures.
+
+Known boundaries:
+
+- External JDBC, Kafka, IBM MQ, and NATS execution still requires owner-provisioned endpoints, credentials, and drivers where applicable.
+- This patch does not change the public DSL v0.3, Provider Contract, Env_Profile, result, or evidence schemas.
+
 ## 0.3.0
 
 Framework v0.3.0 establishes the v0.3 contract-first runtime surface.

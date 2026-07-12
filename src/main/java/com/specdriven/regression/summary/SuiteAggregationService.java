@@ -81,7 +81,7 @@ public final class SuiteAggregationService {
             SuiteSummaryDocument.FailureSummary failureSummary = failureSummary(realRun, children, errors);
             Instant generatedAt = Instant.now().isBefore(endedAt) ? endedAt : Instant.now();
             String frameworkVersion = children.isEmpty()
-                    ? "0.3.0" : text(children.get(0).result().get("framework_version"));
+                    ? "0.3.1" : text(children.get(0).result().get("framework_version"));
             SuiteSummaryDocument summary = new SuiteSummaryDocument(
                     "v0.3", suiteId, batchId, runId, profile, status, completion,
                     errors.isEmpty() ? null : "aggregation_error",
