@@ -56,6 +56,46 @@ class V03ExecutionPlanBuilderTest {
     }
 
     @Test
+    void explicitExternalProfileOverridesDefaultProfileForResolvedTarget() throws Exception {
+        V03ExecutionPlan plan = new V03ExecutionPlanBuilder()
+                .build(materializedKafkaSuite(), "external_kafka");
+
+        V03ResolvedTarget target = plan.targets().get("order_events");
+        assertThat(plan.profile()).isEqualTo("external_kafka");
+        assertThat(plan.environmentProfile().profileId()).isEqualTo("external_kafka");
+        assertThat(target.profile()).isEqualTo("external_kafka");
+        assertThat(target.runtimeMode()).isEqualTo("native");
+        assertThat(target.bindings())
+                .containsEntry("bootstrap_servers", "contract-validation-host:9092")
+                .containsEntry("topic", "orders.v03");
+        assertThat(plan.steps()).allSatisfy(step -> {
+            assertThat(step.profile()).isEqualTo("external_kafka");
+            assertThat(step.runtimeMode()).isEqualTo("native");
+        });
+    }
+
+    @Test
+    void absentProfileRetainsDeclaredDefaultProfile() {
+        V03ExecutionPlan plan = new V03ExecutionPlanBuilder().build(HTTP_MOCK_SUITE, null);
+
+        assertThat(plan.profile()).isEqualTo("local_v03");
+        assertThat(plan.targets().values())
+                .allSatisfy(target -> assertThat(target.profile()).isEqualTo("local_v03"));
+    }
+
+    @Test
+    void explicitExternalProfileNeverFallsBackWhenRequiredBindingIsMissing() throws Exception {
+        Path suite = materializedKafkaSuite();
+        Path profile = suite.getParent().resolve("env_profiles/external_kafka.yaml");
+        Files.writeString(profile, Files.readString(profile)
+                .replace("      bootstrap_servers: contract-validation-host:9092\n", ""));
+
+        assertThatThrownBy(() -> new V03ExecutionPlanBuilder().build(suite, "external_kafka"))
+                .hasMessageContaining("missing_required_binding_key")
+                .satisfies(error -> assertThat(error.getMessage()).doesNotContain("local_v03"));
+    }
+
+    @Test
     void recordsProviderOperationsInLifecycleOrder() {
         V03ExecutionPlan plan = new V03ExecutionPlanBuilder().build(HTTP_MOCK_SUITE, "local_v03");
 
@@ -185,5 +225,15 @@ class V03ExecutionPlanBuilderTest {
                 }
             }
         }
+    }
+
+    private Path materializedKafkaSuite() throws IOException {
+        Path source = Path.of("samples/20-provider-capability-p0/messaging/kafka");
+        Path suiteRoot = tempDir.resolve("kafka-explicit-profile");
+        copyDirectory(source, suiteRoot);
+        Path profile = suiteRoot.resolve("env_profiles/external_kafka.yaml");
+        Files.writeString(profile, Files.readString(profile)
+                .replace("env://KAFKA_BOOTSTRAP_SERVERS", "contract-validation-host:9092"));
+        return suiteRoot.resolve("suite_manifest.yaml");
     }
 }
