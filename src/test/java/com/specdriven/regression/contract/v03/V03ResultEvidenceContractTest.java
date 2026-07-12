@@ -175,7 +175,7 @@ class V03ResultEvidenceContractTest {
     private Map<String, Object> validV03Result() {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("result_contract_version", "v0.3");
-        result.put("framework_version", "0.3.1");
+        result.put("framework_version", "0.3.2");
         result.put("dsl_version", "v0.3");
         result.put("suite_id", "HTTP-MOCK-REST-CLIENT-v0.3");
         result.put("batch_id", "BATCH-1");

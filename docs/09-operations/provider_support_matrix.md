@@ -1,6 +1,6 @@
 # Provider Support Matrix
 
-This matrix defines the Framework `0.3.1` public provider support claim. It does not decide downstream Product/RP release readiness; owners still provide AC, Env_Profile, deployment readiness, expected results, and release evidence.
+This matrix defines the Framework `0.3.2` public provider support claim. It does not decide downstream Product/RP release readiness; owners still provide AC, Env_Profile, deployment readiness, expected results, and release evidence.
 
 For operation names, binding keys, output refs, and evidence rules, use the
 [Provider Contract Catalog](../02-architecture/contracts/provider-contracts/README.md)
@@ -41,7 +41,7 @@ Server or dependency lifecycle words such as native, mock, ephemeral, framework-
 
 ## Supported Mixed Suites
 
-Framework `0.3.1` supports only explicit mixed-provider suite paths:
+Framework `0.3.2` supports only explicit mixed-provider suite paths:
 
 - `samples/10-contract-baseline/mixed_wiremock_jdbc_nats/`: `http_mock` + `rest_client` + `jdbc` + `nats`, framework verification evidence only.
 - `samples/20-provider-capability-p0/http/rest_client_with_wiremock/`: `http_mock` + `rest_client`, framework verification evidence unless owner-provided release labels and bindings are present.
