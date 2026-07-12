@@ -139,8 +139,11 @@ jobs:
         env:
           REQUIRE_EXTERNAL_MESSAGING: ${{ vars.REQUIRE_EXTERNAL_MESSAGING || 'false' }}
           REQUIRE_EXTERNAL_JDBC: ${{ vars.REQUIRE_EXTERNAL_JDBC || 'false' }}
+          REQUIRE_EXTERNAL_CLIENTS: ${{ vars.REQUIRE_EXTERNAL_CLIENTS || 'false' }}
           JDBC_EXTERNAL_DIALECT: ${{ vars.JDBC_EXTERNAL_DIALECT || 'oracle' }}
           JDBC_CONNECTION: ${{ secrets.JDBC_CONNECTION }}
+          REST_BASE_URL: ${{ secrets.REST_BASE_URL }}
+          GRPC_TARGET: ${{ secrets.GRPC_TARGET }}
           NATS_CONNECTION: ${{ secrets.NATS_CONNECTION }}
           KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}
           IBM_MQ_CONN_NAME: ${{ secrets.IBM_MQ_CONN_NAME }}

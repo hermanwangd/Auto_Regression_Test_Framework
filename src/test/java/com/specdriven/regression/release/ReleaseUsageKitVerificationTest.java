@@ -25,8 +25,11 @@ class ReleaseUsageKitVerificationTest {
                 .contains("scripts/release/verify-supported-provider-samples.sh")
                 .contains("REQUIRE_EXTERNAL_MESSAGING: ${{ vars.REQUIRE_EXTERNAL_MESSAGING || 'false' }}")
                 .contains("REQUIRE_EXTERNAL_JDBC: ${{ vars.REQUIRE_EXTERNAL_JDBC || 'false' }}")
+                .contains("REQUIRE_EXTERNAL_CLIENTS: ${{ vars.REQUIRE_EXTERNAL_CLIENTS || 'false' }}")
                 .contains("JDBC_EXTERNAL_DIALECT: ${{ vars.JDBC_EXTERNAL_DIALECT || 'oracle' }}")
                 .contains("JDBC_CONNECTION: ${{ secrets.JDBC_CONNECTION }}")
+                .contains("REST_BASE_URL: ${{ secrets.REST_BASE_URL }}")
+                .contains("GRPC_TARGET: ${{ secrets.GRPC_TARGET }}")
                 .contains("NATS_CONNECTION: ${{ secrets.NATS_CONNECTION }}")
                 .contains("KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}")
                 .contains("IBM_MQ_CONN_NAME: ${{ secrets.IBM_MQ_CONN_NAME }}")
@@ -52,6 +55,10 @@ class ReleaseUsageKitVerificationTest {
                 .contains("external_nats")
                 .contains("external_kafka")
                 .contains("external_ibm_mq")
+                .contains("rest_client_external")
+                .contains("grpc_client_external")
+                .contains("REST_BASE_URL")
+                .contains("GRPC_TARGET")
                 .contains("runtime_mode: native")
                 .contains("Explicit profile fell back to local/mock")
                 .contains("contract-validation.invalid");
@@ -74,6 +81,10 @@ class ReleaseUsageKitVerificationTest {
                 .contains("NATS_CONNECTION")
                 .contains("samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml external_kafka")
                 .contains("samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml external_ibm_mq")
+                .contains("samples/20-provider-capability-p0/http/rest_client_external/suite_manifest.yaml external_native")
+                .contains("samples/20-provider-capability-p0/rpc/grpc_client_external/suite_manifest.yaml external_native")
+                .contains("external_client_runtime_verification: not_configured")
+                .contains("REQUIRE_EXTERNAL_CLIENTS")
                 .doesNotContain("--rp-id");
     }
 
@@ -157,7 +168,8 @@ class ReleaseUsageKitVerificationTest {
                 .contains(
                         new ProviderRuntimeSample("grpc_client", "native"),
                         new ProviderRuntimeSample("polling_observer", "framework"),
-                        new ProviderRuntimeSample("rest_client", "mock"));
+                        new ProviderRuntimeSample("rest_client", "mock"),
+                        new ProviderRuntimeSample("rest_client", "native"));
     }
 
     @Test

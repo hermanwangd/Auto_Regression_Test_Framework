@@ -83,6 +83,8 @@ verify_external_profile_plan() {
     KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS:-contract-validation.invalid:9092}" \
     IBM_MQ_CONN_NAME="${IBM_MQ_CONN_NAME:-CONTRACT.VALIDATION}" \
     IBM_MQ_CREDENTIAL="${IBM_MQ_CREDENTIAL:-contract-validation-placeholder}" \
+    REST_BASE_URL="${REST_BASE_URL:-http://contract-validation.invalid}" \
+    GRPC_TARGET="${GRPC_TARGET:-contract-validation.invalid:443}" \
       run_cli run --suite "$suite" --profile "$profile" --dry-run
   )"
 
@@ -155,6 +157,14 @@ verify_external_profile_plan \
   "samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml" \
   "external_ibm_mq" \
   "payment_queue"
+verify_external_profile_plan \
+  "samples/20-provider-capability-p0/http/rest_client_external/suite_manifest.yaml" \
+  "external_native" \
+  "external_api"
+verify_external_profile_plan \
+  "samples/20-provider-capability-p0/rpc/grpc_client_external/suite_manifest.yaml" \
+  "external_native" \
+  "external_customer_service"
 
 for entry in "${V03_NEGATIVE_SUITES[@]}"; do
   suite="${entry%%:*}"

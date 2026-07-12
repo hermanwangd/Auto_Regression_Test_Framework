@@ -8,8 +8,10 @@ VERSION="$("${ROOT_DIR}/scripts/release/verify-release-version.sh" "${1:-}")"
 JAR="${ROOT_DIR}/target/spec-driven-auto-regression-${VERSION}.jar"
 REQUIRE_EXTERNAL_MESSAGING="${REQUIRE_EXTERNAL_MESSAGING:-false}"
 REQUIRE_EXTERNAL_JDBC="${REQUIRE_EXTERNAL_JDBC:-false}"
+REQUIRE_EXTERNAL_CLIENTS="${REQUIRE_EXTERNAL_CLIENTS:-false}"
 JDBC_EXTERNAL_DIALECT="${JDBC_EXTERNAL_DIALECT:-oracle}"
 external_env_names=(NATS_CONNECTION KAFKA_BOOTSTRAP_SERVERS IBM_MQ_CONN_NAME IBM_MQ_CREDENTIAL)
+external_client_env_names=(REST_BASE_URL GRPC_TARGET)
 
 if [[ ! -s "$JAR" ]]; then
   echo "Missing release jar for provider sample verification: $JAR" >&2
@@ -31,6 +33,8 @@ validate_external_profile() {
   IBM_MQ_CONN_NAME="${IBM_MQ_CONN_NAME:-CONTRACT.VALIDATION}" \
   IBM_MQ_CREDENTIAL="${IBM_MQ_CREDENTIAL:-contract-validation-placeholder}" \
   JDBC_CONNECTION="${JDBC_CONNECTION:-contract-validation-placeholder}" \
+  REST_BASE_URL="${REST_BASE_URL:-http://contract-validation.invalid}" \
+  GRPC_TARGET="${GRPC_TARGET:-contract-validation.invalid:443}" \
     run_cli validate --suite "$suite" --profile "$profile"
 }
 
@@ -77,6 +81,18 @@ external_env_state() {
   done
 }
 
+external_client_env_state() {
+  missing_external_client_envs=()
+  present_external_client_envs=()
+  for name in "${external_client_env_names[@]}"; do
+    if [[ -z "${!name:-}" ]]; then
+      missing_external_client_envs+=("$name")
+    else
+      present_external_client_envs+=("$name")
+    fi
+  done
+}
+
 supported_local_suites=(
   "samples/20-provider-capability-p0/verification/artifact_compare/suite_manifest.yaml local_v03"
   "samples/20-provider-capability-p0/verification/common_verify/suite_manifest.yaml local_v03"
@@ -104,6 +120,8 @@ validate_external_profile samples/20-provider-capability-p0/messaging/ibm_mq/sui
 validate_external_profile samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml external_nats
 validate_external_profile samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml external_oracle
 validate_external_profile samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml external_db2
+validate_external_profile samples/20-provider-capability-p0/http/rest_client_external/suite_manifest.yaml external_native
+validate_external_profile samples/20-provider-capability-p0/rpc/grpc_client_external/suite_manifest.yaml external_native
 
 jdbc_external_suite=""
 jdbc_external_profile=""
@@ -159,7 +177,25 @@ else
   echo "external_messaging_runtime_verification: not_configured"
   echo "owner_action: Configure NATS, Kafka, and IBM MQ external messaging secrets and set REQUIRE_EXTERNAL_MESSAGING=true when native external runtime evidence is required."
   echo "supported_provider_sample_verification_status: passed_ci_verifiable_external_messaging_not_configured"
-  exit 0
+fi
+
+external_client_env_state
+
+if [[ "$REQUIRE_EXTERNAL_CLIENTS" == "true" || "${#present_external_client_envs[@]}" -gt 0 ]]; then
+  if [[ "${#missing_external_client_envs[@]}" -gt 0 ]]; then
+    echo "external_client_runtime_verification: blocked" >&2
+    echo "missing_external_client_env: ${missing_external_client_envs[*]}" >&2
+    echo "owner_action: Configure both REST_BASE_URL and GRPC_TARGET, or leave both unset so CI validates external profiles without invoking caller-provided services." >&2
+    exit 1
+  fi
+  require_env REST_BASE_URL
+  require_env GRPC_TARGET
+  run_suite samples/20-provider-capability-p0/http/rest_client_external/suite_manifest.yaml external_native
+  run_suite samples/20-provider-capability-p0/rpc/grpc_client_external/suite_manifest.yaml external_native
+  echo "external_client_runtime_verification: passed"
+else
+  echo "external_client_runtime_verification: not_configured"
+  echo "owner_action: Configure REST_BASE_URL and GRPC_TARGET and set REQUIRE_EXTERNAL_CLIENTS=true when caller-owned external client evidence is required."
 fi
 
 echo "supported_provider_sample_verification_status: passed"
