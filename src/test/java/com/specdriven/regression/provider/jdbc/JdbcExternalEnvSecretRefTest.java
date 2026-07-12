@@ -141,6 +141,25 @@ class JdbcExternalEnvSecretRefTest {
         assertThat(result.failure().code()).isEqualTo("JDBC_DRIVER_INVALID");
     }
 
+    @Test
+    void nativeJdbcConnectionFailureIsNotClassifiedAsSqlExecutionFailure() {
+        JdbcProviderRuntime runtime = new JdbcProviderRuntime(Map.of(
+                "JDBC_CONNECTION", "jdbc:h2:tcp://127.0.0.1:1/unreachable")::get);
+
+        ProviderOperationResult result = runtime.execute(
+                nativeContext(tempDir.resolve("suite"), Map.of("connection", Map.of("secret_ref", "env://JDBC_CONNECTION"))),
+                new ProviderOperationRequest(
+                        "db_query",
+                        List.of(Map.of("bind_as", "query_ref", "ref", "queries/order_exists.sql")),
+                        Map.of("_operation_id", "unreachable_connection_query")));
+
+        assertThat(result.passed()).isFalse();
+        assertThat(result.failure()).isNotNull();
+        assertThat(result.failure().code()).isEqualTo("DB_CONNECTION_FAILED");
+        assertThat(result.failure().classification()).isEqualTo("CONFIGURATION_ERROR");
+        assertThat(result.outputs()).doesNotContainKey("failure_detail_ref");
+    }
+
     private ProviderExecutionContext nativeContext(Path suiteRoot, Map<String, Object> bindingValues) {
         return new ProviderExecutionContext(
                 "oracle-like-db",

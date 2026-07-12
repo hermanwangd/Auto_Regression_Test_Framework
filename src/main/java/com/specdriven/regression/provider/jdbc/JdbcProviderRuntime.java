@@ -286,11 +286,19 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         }
     }
 
-    private Connection open(SecretConnection secretConnection) throws SQLException {
-        if (secretConnection.username().isBlank() && secretConnection.password().isBlank()) {
-            return DriverManager.getConnection(secretConnection.jdbcUrl());
+    private Connection open(SecretConnection secretConnection) {
+        try {
+            if (secretConnection.username().isBlank() && secretConnection.password().isBlank()) {
+                return DriverManager.getConnection(secretConnection.jdbcUrl());
+            }
+            return DriverManager.getConnection(secretConnection.jdbcUrl(), secretConnection.username(), secretConnection.password());
+        } catch (SQLException exception) {
+            throw new JdbcRuntimeFailure(ProviderFailure.of(
+                    "DB_CONNECTION_FAILED",
+                    "CONFIGURATION_ERROR",
+                    maskSensitiveText(exception.getMessage()),
+                    "Verify the JDBC connection secret_ref, vendor driver, endpoint, and network access."));
         }
-        return DriverManager.getConnection(secretConnection.jdbcUrl(), secretConnection.username(), secretConnection.password());
     }
 
     private SecretConnection resolveConnection(ProviderExecutionContext context, String dialect) {
