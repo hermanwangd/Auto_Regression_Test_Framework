@@ -271,9 +271,7 @@ public class EvidenceHardeningService {
                     requiredTypes.add("wiremock_server_log");
                 }
                 case "jdbc", "jdbc_database" -> {
-                    requiredTypes.add("jdbc_seed");
-                    requiredTypes.add("jdbc_query");
-                    requiredTypes.add("jdbc_cleanup");
+                    requireJdbcEvidenceForExecutedOperations(providerResult, requiredTypes);
                 }
                 case "nats" -> requiredTypes.add("nats_event");
                 case "kafka" -> requiredTypes.add("kafka_event");
@@ -301,6 +299,41 @@ public class EvidenceHardeningService {
             if (!presentTypes.contains(requiredType)) {
                 findings.add(finding(resultJson, "evidence_index.entries", "missing_required_evidence",
                         "Add required evidence entry type `" + requiredType + "` for this result."));
+            }
+        }
+    }
+
+    private void requireJdbcEvidenceForExecutedOperations(
+            Map<String, Object> providerResult,
+            Set<String> requiredTypes) {
+        List<String> operations = new ArrayList<>();
+        for (String operation : stringList(providerResult.get("operations"))) {
+            if (operation.contains(",")) {
+                for (String item : operation.split(",")) {
+                    if (!item.isBlank()) {
+                        operations.add(item.trim());
+                    }
+                }
+            } else if (!operation.isBlank()) {
+                operations.add(operation);
+            }
+        }
+        if (operations.isEmpty()) {
+            operations.addAll(stringList(providerResult.get("operation")));
+        }
+        if (operations.isEmpty()) {
+            requiredTypes.add("jdbc_seed");
+            requiredTypes.add("jdbc_query");
+            requiredTypes.add("jdbc_cleanup");
+            return;
+        }
+        for (String operation : operations) {
+            switch (operation) {
+                case "db_seed" -> requiredTypes.add("jdbc_seed");
+                case "db_query", "db_record_exists" -> requiredTypes.add("jdbc_query");
+                case "db_cleanup" -> requiredTypes.add("jdbc_cleanup");
+                default -> {
+                }
             }
         }
     }
