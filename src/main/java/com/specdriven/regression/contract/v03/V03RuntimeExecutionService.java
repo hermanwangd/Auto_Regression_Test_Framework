@@ -95,8 +95,21 @@ public class V03RuntimeExecutionService {
         if (!validation.valid()) {
             return V03RuntimeRunResult.blocked(validation.suiteId(), profile, validation.findings());
         }
-        V03ExecutionPlan plan = new V03ExecutionPlanBuilder(contractBaselineService)
-                .build(suiteManifest, profile, validation);
+        V03ExecutionPlan plan;
+        try {
+            plan = new V03ExecutionPlanBuilder(contractBaselineService)
+                    .build(suiteManifest, profile, validation);
+        } catch (IllegalArgumentException | IllegalStateException error) {
+            return V03RuntimeRunResult.blocked(validation.suiteId(), profile, List.of(new ContractFinding(
+                    suiteManifest.toString(),
+                    "execution_plan",
+                    "v03_plan_compilation_failed",
+                    "",
+                    "",
+                    profile,
+                    "",
+                    "Correct the v0.3 target bindings or Provider Contract metadata: " + error.getMessage())));
+        }
         List<ContractFinding> supportFindings = unsupportedRuntimeFindings(suiteManifest, plan);
         if (!supportFindings.isEmpty()) {
             return V03RuntimeRunResult.blocked(plan.suiteId(), profile, supportFindings);

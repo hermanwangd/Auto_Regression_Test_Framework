@@ -2,12 +2,15 @@ package com.specdriven.regression.provider.ibmmq;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.ibm.mq.constants.MQConstants;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderOperationRequest;
 import com.specdriven.regression.provider.runtime.ProviderOperationResult;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -17,6 +20,24 @@ class IbmMqProviderRuntimeTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void nativeClientUsesMqCspAuthenticationWhenCredentialHasPassword() throws Exception {
+        Class<?> transport = Class.forName(
+                "com.specdriven.regression.provider.ibmmq.IbmMqProviderRuntime$DefaultIbmMqClientTransport");
+        Method propertiesMethod = transport.getDeclaredMethod(
+                "connectionProperties", IbmMqProviderRuntime.MqConnection.class);
+        propertiesMethod.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        Hashtable<String, Object> properties = (Hashtable<String, Object>) propertiesMethod.invoke(
+                null,
+                new IbmMqProviderRuntime.MqConnection(
+                        "QM1", "DEV.APP.SVRCONN", "localhost(1414)", "PAYMENTS.V03", "app:password"));
+
+        assertThat(properties)
+                .containsEntry(MQConstants.USE_MQCSP_AUTHENTICATION_PROPERTY, Boolean.TRUE);
+    }
 
     @Test
     void mqPayloadMatchBrowsesEnvProfileQueueAndWritesEvidence() throws Exception {

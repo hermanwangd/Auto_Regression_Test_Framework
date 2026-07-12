@@ -1,7 +1,6 @@
 package com.specdriven.regression.contract.v03;
 
 import com.specdriven.regression.contract.ContractBaselineService;
-import com.specdriven.regression.contract.ContractBaselineService.ResolvedTarget;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.contract.v03.assertion.V03AssertionKind;
 import com.specdriven.regression.contract.v03.ref.V03Reference;
@@ -65,7 +64,7 @@ public class V03ExecutionPlanBuilder {
         Map<String, Object> envProfile = readEnvProfile(suiteRoot, suite, profile);
         Map<String, V03ProviderContract> contracts = providerContractCatalog.load(suiteRoot);
         Map<String, V03ResolvedTarget> targets = orderedTargets(
-                resolvedTargets(validation, suite, profile, envProfile), contracts);
+                resolvedTargets(suite, profile, envProfile), contracts);
         List<Map<String, Object>> testDocuments = testDocuments(suiteRoot, suite);
         Map<String, Path> artifactRoots = artifactRoots(suiteRoot, suite);
         testDocuments.forEach(document -> validateReferences(document, artifactRoots));
@@ -86,6 +85,7 @@ public class V03ExecutionPlanBuilder {
             orderedSteps.addAll(test.verify());
             orderedSteps.addAll(test.cleanup());
         }
+        requireSelectedProfileConsistency(profile, environmentProfile, targets, orderedSteps);
         return new V03ExecutionPlan(
                 stringValue(suite.get("suite_id")),
                 profile,
@@ -170,40 +170,66 @@ public class V03ExecutionPlanBuilder {
     }
 
     private Map<String, V03ResolvedTarget> resolvedTargets(
-            ValidationResult validation,
             Map<String, Object> suite,
             String profile,
             Map<String, Object> envProfile) {
-        Map<String, V03ResolvedTarget> targets = new LinkedHashMap<>();
-        for (ResolvedTarget target : validation.plan()) {
-            if (targets.containsKey(target.target())) {
-                continue;
-            }
-            Map<String, Object> envTarget = mapValue(mapValue(envProfile.get("targets")).get(target.target()));
-            targets.put(target.target(), new V03ResolvedTarget(
-                    target.target(),
-                    target.providerContract(),
-                    target.providerType(),
-                    target.profile(),
-                    target.runtimeMode(),
-                    immutableMap(mapValue(envTarget.get("bindings")))));
+        if (envProfile.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "missing_env_profile: requested profile `" + profile + "` is not declared by the suite");
         }
+        Map<String, V03ResolvedTarget> targets = new LinkedHashMap<>();
+        Map<String, Object> envTargets = mapValue(envProfile.get("targets"));
         for (Map.Entry<String, Object> entry : mapValue(suite.get("targets")).entrySet()) {
-            if (targets.containsKey(entry.getKey())) {
-                continue;
-            }
             Map<String, Object> declaration = mapValue(entry.getValue());
-            Map<String, Object> envTarget = mapValue(mapValue(envProfile.get("targets")).get(entry.getKey()));
+            Map<String, Object> envTarget = mapValue(envTargets.get(entry.getKey()));
+            if (envTarget.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "missing_env_profile_provider_binding: profile `" + profile
+                                + "` does not bind target `" + entry.getKey() + "`");
+            }
             String providerContract = stringValue(declaration.get("provider_contract"));
+            String runtimeMode = stringValue(envTarget.get("runtime_mode"));
+            if (runtimeMode.isBlank()) {
+                throw new IllegalArgumentException(
+                        "missing_required_field: profile `" + profile + "` target `"
+                                + entry.getKey() + "` must declare runtime_mode");
+            }
             targets.put(entry.getKey(), new V03ResolvedTarget(
                     entry.getKey(),
                     providerContract,
                     providerType(providerContract),
                     profile,
-                    stringValue(envTarget.get("runtime_mode")),
+                    runtimeMode,
                     immutableMap(mapValue(envTarget.get("bindings")))));
         }
         return targets;
+    }
+
+    private void requireSelectedProfileConsistency(
+            String profile,
+            V03EnvironmentProfile environmentProfile,
+            Map<String, V03ResolvedTarget> targets,
+            List<V03ExecutionStep> steps) {
+        if (!profile.equals(environmentProfile.profileId())) {
+            throw new IllegalArgumentException("profile_mismatch: execution profile does not match requested profile");
+        }
+        targets.forEach((name, target) -> {
+            if (!profile.equals(target.profile())) {
+                throw new IllegalArgumentException(
+                        "profile_mismatch: target `" + name + "` does not match requested profile `" + profile + "`");
+            }
+        });
+        steps.stream().filter(step -> !step.target().isBlank()).forEach(step -> {
+            V03ResolvedTarget target = targets.get(step.target());
+            if (target == null
+                    || !profile.equals(step.profile())
+                    || !target.profile().equals(step.profile())
+                    || !target.runtimeMode().equals(step.runtimeMode())) {
+                throw new IllegalArgumentException(
+                        "profile_mismatch: step `" + step.id()
+                                + "` does not match resolved target `" + step.target() + "`");
+            }
+        });
     }
 
     private Map<String, V03ResolvedTarget> orderedTargets(

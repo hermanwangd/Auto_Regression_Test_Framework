@@ -72,6 +72,31 @@ assert_output_contains() {
   fi
 }
 
+verify_external_profile_plan() {
+  local suite="$1"
+  local profile="$2"
+  local expected_target="$3"
+  local output
+
+  output="$(
+    NATS_CONNECTION="${NATS_CONNECTION:-nats://contract-validation.invalid:4222}" \
+    KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS:-contract-validation.invalid:9092}" \
+    IBM_MQ_CONN_NAME="${IBM_MQ_CONN_NAME:-CONTRACT.VALIDATION}" \
+    IBM_MQ_CREDENTIAL="${IBM_MQ_CREDENTIAL:-contract-validation-placeholder}" \
+      run_cli run --suite "$suite" --profile "$profile" --dry-run
+  )"
+
+  printf '%s\n' "$output"
+  assert_output_contains "$output" "run_status: dry_run_ready" "${profile} dry-run"
+  assert_output_contains "$output" "profile: ${profile}" "${profile} dry-run"
+  assert_output_contains "$output" "target: ${expected_target}" "${profile} dry-run"
+  assert_output_contains "$output" "runtime_mode: native" "${profile} dry-run"
+  if grep -Fq "profile: local_v03" <<<"$output" || grep -Fq "runtime_mode: mock" <<<"$output"; then
+    echo "Explicit profile fell back to local/mock: ${profile}" >&2
+    exit 1
+  fi
+}
+
 for entry in "${V03_P0_SUITES[@]}"; do
   suite="${entry%%:*}"
   profile="${entry##*:}"
@@ -117,6 +142,19 @@ for entry in "${V03_SUITE_GROUPS[@]}"; do
     exit 1
   fi
 done
+
+verify_external_profile_plan \
+  "samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml" \
+  "external_nats" \
+  "event_bus"
+verify_external_profile_plan \
+  "samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml" \
+  "external_kafka" \
+  "order_events"
+verify_external_profile_plan \
+  "samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml" \
+  "external_ibm_mq" \
+  "payment_queue"
 
 for entry in "${V03_NEGATIVE_SUITES[@]}"; do
   suite="${entry%%:*}"

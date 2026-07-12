@@ -5,10 +5,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.specdriven.regression.discovery.ReleasePackageService;
 import com.specdriven.regression.productrepo.ProductRepoService;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class DslV03MessagingRuntimeCommandTest {
 
@@ -16,6 +20,9 @@ class DslV03MessagingRuntimeCommandTest {
     private static final Path IBM_MQ_SUITE = Path.of("samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml");
     private static final Path MIXED_SUITE =
             Path.of("samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/suite_manifest.yaml");
+
+    @TempDir
+    Path tempDir;
 
     @Test
     void runV03KafkaExecutesMockRuntimeAndValidatesEvidence() throws Exception {
@@ -61,6 +68,30 @@ class DslV03MessagingRuntimeCommandTest {
         assertThat(report.stdout())
                 .contains("provider_results_count: 2")
                 .contains("missing_evidence_count: 0");
+    }
+
+    @Test
+    void missingExplicitExternalEnvBlocksWithoutLocalProfileFallback() throws Exception {
+        Path suiteRoot = tempDir.resolve("missing-external-kafka-env");
+        copyDirectory(KAFKA_SUITE.getParent(), suiteRoot);
+        Path profile = suiteRoot.resolve("env_profiles/external_kafka.yaml");
+        String missingEnv = "REGRESS_TEST_MISSING_"
+                + UUID.randomUUID().toString().replace("-", "").toUpperCase();
+        Files.writeString(profile, Files.readString(profile).replace(
+                "env://KAFKA_BOOTSTRAP_SERVERS", "env://" + missingEnv));
+
+        CommandResult run = execute(
+                "run",
+                "--suite", suiteRoot.resolve("suite_manifest.yaml").toString(),
+                "--profile", "external_kafka");
+
+        assertThat(run.exit()).isNotZero();
+        assertThat(run.stdout() + run.stderr())
+                .contains("v03_plan_compilation_failed")
+                .contains("missing_environment_value")
+                .contains(missingEnv)
+                .doesNotContain("profile: local_v03")
+                .doesNotContain("runtime_mode: mock");
     }
 
     private Path runAndAssert(Path suite, String suiteId, String providerType, String providerContract) {
@@ -116,6 +147,20 @@ class DslV03MessagingRuntimeCommandTest {
                 .map(line -> Path.of(line.substring((key + ": ").length()).trim()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Missing path for " + key + " in:\n" + stdout));
+    }
+
+    private void copyDirectory(Path source, Path target) throws IOException {
+        try (var paths = Files.walk(source)) {
+            for (Path path : paths.sorted(Comparator.comparing(Path::toString)).toList()) {
+                Path destination = target.resolve(source.relativize(path));
+                if (Files.isDirectory(path)) {
+                    Files.createDirectories(destination);
+                } else {
+                    Files.createDirectories(destination.getParent());
+                    Files.copy(path, destination);
+                }
+            }
+        }
     }
 
     private record CommandResult(int exit, String stdout, String stderr) {
