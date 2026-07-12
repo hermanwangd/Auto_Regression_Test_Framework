@@ -20,6 +20,20 @@ run_cli() {
   java -Xmx512m -jar "$JAR" "$@"
 }
 
+# External profiles are always schema-checked in public CI, but CI does not own
+# broker, queue-manager, or database credentials. Supply isolated, non-secret
+# placeholders only for validation; native execution still requires real values.
+validate_external_profile() {
+  local suite="$1"
+  local profile="$2"
+  NATS_CONNECTION="${NATS_CONNECTION:-nats://contract-validation.invalid:4222}" \
+  KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS:-contract-validation.invalid:9092}" \
+  IBM_MQ_CONN_NAME="${IBM_MQ_CONN_NAME:-CONTRACT.VALIDATION}" \
+  IBM_MQ_CREDENTIAL="${IBM_MQ_CREDENTIAL:-contract-validation-placeholder}" \
+  JDBC_CONNECTION="${JDBC_CONNECTION:-jdbc:oracle:thin:@contract-validation.invalid:1521/service}" \
+    run_cli validate --suite "$suite" --profile "$profile"
+}
+
 result_path_from_stdout() {
   awk -F ': ' '/^result_json:/ { print $2; exit }'
 }
@@ -85,11 +99,11 @@ done
 echo "compatibility_sample_verification: dummy_rest"
 run_suite samples/90-compatibility/dummy_rest/suite_manifest.yaml local_dummy
 
-run_cli validate --suite samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml --profile external_kafka
-run_cli validate --suite samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml --profile external_ibm_mq
-run_cli validate --suite samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml --profile external_nats
-run_cli validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile external_oracle
-run_cli validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile external_db2
+validate_external_profile samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml external_kafka
+validate_external_profile samples/20-provider-capability-p0/messaging/ibm_mq/suite_manifest.yaml external_ibm_mq
+validate_external_profile samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml external_nats
+validate_external_profile samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml external_oracle
+validate_external_profile samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml external_db2
 
 jdbc_external_suite=""
 jdbc_external_profile=""
