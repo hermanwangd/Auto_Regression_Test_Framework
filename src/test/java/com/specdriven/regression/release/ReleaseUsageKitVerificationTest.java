@@ -44,6 +44,20 @@ class ReleaseUsageKitVerificationTest {
     }
 
     @Test
+    void v03RuntimeGateRejectsExternalProfileFallbackWithoutNativeInfrastructure() throws Exception {
+        String script = Files.readString(Path.of("scripts/release/verify-v0-3-runtime-samples.sh"));
+
+        assertThat(script)
+                .contains("verify_external_profile_plan")
+                .contains("external_nats")
+                .contains("external_kafka")
+                .contains("external_ibm_mq")
+                .contains("runtime_mode: native")
+                .contains("Explicit profile fell back to local/mock")
+                .contains("contract-validation.invalid");
+    }
+
+    @Test
     void supportedProviderSampleGateUsesOnlyCanonicalFrameworkCommands() throws Exception {
         String script = Files.readString(Path.of("scripts/release/verify-supported-provider-samples.sh"));
 
