@@ -49,7 +49,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
     }
 
     JdbcProviderRuntime(Function<String, String> environment) {
-        this(environment, JdbcDriverDiscovery.missing(Path.of(".")));
+        this(environment, new JdbcDriverDiscovery(Path.of("."), environment).discover(List.of(), ""));
     }
 
     JdbcProviderRuntime(
@@ -286,11 +286,19 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         }
     }
 
-    private Connection open(SecretConnection secretConnection) throws SQLException {
-        if (secretConnection.username().isBlank() && secretConnection.password().isBlank()) {
-            return DriverManager.getConnection(secretConnection.jdbcUrl());
+    private Connection open(SecretConnection secretConnection) {
+        try {
+            if (secretConnection.username().isBlank() && secretConnection.password().isBlank()) {
+                return DriverManager.getConnection(secretConnection.jdbcUrl());
+            }
+            return DriverManager.getConnection(secretConnection.jdbcUrl(), secretConnection.username(), secretConnection.password());
+        } catch (SQLException exception) {
+            throw new JdbcRuntimeFailure(ProviderFailure.of(
+                    "DB_CONNECTION_FAILED",
+                    "CONFIGURATION_ERROR",
+                    maskSensitiveText(exception.getMessage()),
+                    "Verify the JDBC connection secret_ref, vendor driver, endpoint, and network access."));
         }
-        return DriverManager.getConnection(secretConnection.jdbcUrl(), secretConnection.username(), secretConnection.password());
     }
 
     private SecretConnection resolveConnection(ProviderExecutionContext context, String dialect) {
@@ -645,10 +653,8 @@ public class JdbcProviderRuntime implements ProviderRuntime {
             Map<String, Object> outputs,
             ProviderFailure failure) {
         String evidenceRef = writeFailureEvidence(context, request, failure);
-        Map<String, Object> resolvedOutputs = new LinkedHashMap<>(outputs);
-        resolvedOutputs.put("failure_detail_ref", evidenceRef);
         return ProviderOperationResult.failed(
-                resolvedOutputs,
+                outputs,
                 List.of(new ProviderEvidence("failure_detail", evidenceRef, true)),
                 failure);
     }

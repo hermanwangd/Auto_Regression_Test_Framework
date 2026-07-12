@@ -111,6 +111,34 @@ class DslV03JdbcRuntimeCommandTest {
     }
 
     @Test
+    void runV03JdbcFailureKeepsFailureEvidenceOutsideContractOutputs() throws Exception {
+        Path suite = mutableSuite(Path.of("samples/20-provider-capability-p0/data/jdbc"), "jdbc-invalid-local-ref");
+        Path profile = suite.getParent().resolve("env_profiles/local_v03.yaml");
+        Files.writeString(profile, Files.readString(profile)
+                .replace("approved_local_h2_oracle", "unapproved_local_connection"));
+
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_v03");
+
+        assertThat(run.exit()).as(run.stderr() + run.stdout()).isEqualTo(1);
+        assertThat(run.stdout())
+                .contains("run_status: failed")
+                .contains("failure_code: SECRET_RESOLUTION_ERROR")
+                .doesNotContain("undeclared_provider_output");
+        Path resultJson = extractPath(run.stdout(), "result_json");
+        String result = Files.readString(resultJson);
+        assertThat(result)
+                .contains("\"code\": \"SECRET_RESOLUTION_ERROR\"")
+                .contains("provider-evidence/jdbc/failure_seed_order.yaml")
+                .doesNotContain("\"failure_detail_ref\"");
+
+        CommandResult evidence = execute("validate-evidence", "--result", resultJson.toString());
+        assertThat(evidence.exit()).as(evidence.stderr() + evidence.stdout()).isZero();
+        assertThat(evidence.stdout())
+                .contains("evidence_validation_status: passed")
+                .contains("SECRET_RESOLUTION_ERROR");
+    }
+
+    @Test
     void runV03JdbcPreservesPrimaryFailureWhenCleanupAlsoFails() throws Exception {
         CommandResult validate = execute("validate", "--suite", CLEANUP_FAILURE_SUITE.toString(), "--profile", "local_v03");
 

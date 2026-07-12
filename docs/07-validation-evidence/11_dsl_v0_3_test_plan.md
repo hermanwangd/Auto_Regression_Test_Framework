@@ -39,9 +39,11 @@ samples/
   10-contract-baseline/mixed_wiremock_jdbc_nats/
   20-provider-capability-p0/
     http/rest_client_with_wiremock/
+    http/rest_client_external/
     data/jdbc/
     messaging/{nats,kafka,ibm_mq,kafka_ibm_mq_mixed}/
     rpc/{soap_mock,grpc_mock}/
+    rpc/grpc_client_external/
     verification/{common_verify,artifact_compare,polling_observer,multi_test_shared_env}/
   30-cross-provider-groups/mock_server_cross_verify/
   40-evidence-reporting/evidence_hardening/
@@ -90,6 +92,9 @@ Run a leaf suite and a suite group with `--root <project-root>`. Verify that bot
 | V03-POS-012 | AC-V03-014 | Existing v0.2 smoke suite. | v0.2 behavior remains green. |
 | V03-POS-013 | AC-V03-012 | Clean v0.3 test uses direct suite targets and no legacy fields. | Validation passes without compatibility fallback. |
 | V03-POS-014 | AC-V03-013 | Env_Profile uses `env://` and generated refs with masked output. | Validation and dry-run pass without exposing values. |
+| V03-POS-015 | AC-V03-018 | Invalid external JDBC connection. | Original JDBC failure code plus indexed masked failure evidence; no undeclared output. |
+| V03-POS-016 | AC-V03-019 | REST external Env_Profile with caller-provided endpoint. | Native profile, request/response evidence, and independent server request agree. |
+| V03-POS-017 | AC-V03-020 | gRPC external Env_Profile with caller-provided endpoint. | Native profile, unary response/status evidence, and independent server invocation agree. |
 
 ## 5. Failure Test Matrix
 
@@ -112,6 +117,8 @@ Run a leaf suite and a suite group with `--root <project-root>`. Verify that bot
 | V03-NEG-015 | AC-V03-013 | Raw JDBC credential in Env_Profile. | `SECRET_GUARDRAIL_ERROR`. |
 | V03-NEG-016 | AC-V03-014 | v0.2 sample regression. | Existing v0.2 tests must still pass. |
 | V03-NEG-017 | AC-V03-009 | Provider runtime timeout or safe provider exception after execution starts. | Failed result JSON includes target, Provider Contract, operation, failure code, and evidence refs. |
+| V03-NEG-018 | AC-V03-019 | Missing or blank `REST_BASE_URL`. | Blocked before runtime; no local/mock fallback. |
+| V03-NEG-019 | AC-V03-020 | Missing or blank `GRPC_TARGET`. | Blocked before runtime; no local/mock fallback. |
 
 ## 6. Traceability
 
@@ -131,6 +138,9 @@ Run a leaf suite and a suite group with `--root <project-root>`. Verify that bot
 | AC-V03-012 | V03-POS-013 | V03-NEG-003 and one case per prohibited field. |
 | AC-V03-013 | V03-POS-014 | V03-NEG-015 |
 | AC-V03-014 | V03-POS-012 | V03-NEG-016 |
+| AC-V03-018 | V03-POS-015 | JDBC contract-output failure regression |
+| AC-V03-019 | V03-POS-016 | V03-NEG-018 |
+| AC-V03-020 | V03-POS-017 | V03-NEG-019 |
 
 ## 7. Release Gates
 

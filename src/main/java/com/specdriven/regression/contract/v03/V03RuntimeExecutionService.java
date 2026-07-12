@@ -42,7 +42,7 @@ import org.yaml.snakeyaml.DumperOptions;
 
 public class V03RuntimeExecutionService {
 
-    private static final String FRAMEWORK_VERSION = "0.3.1";
+    private static final String FRAMEWORK_VERSION = "0.3.2";
 
     private final ContractBaselineService contractBaselineService;
     private final V03ProviderRuntimeRegistry runtimeRegistry;

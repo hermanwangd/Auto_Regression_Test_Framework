@@ -198,6 +198,21 @@ All validation and runtime failures must use the existing failure taxonomy categ
 
 Each failure must include owner-actionable message, artifact path, field path, target, Provider Contract, operation, and original cause when safe.
 
+### External Native Acceptance Boundary
+
+External-native client acceptance has two separate responsibilities. The
+framework validates the selected Env_Profile, consumes its declared endpoint
+binding, invokes the Provider Contract operation, and writes standard result
+and evidence artifacts. The caller provisions the REST/gRPC server, supplies
+environment values, and independently observes the service-side effect. No
+framework component starts Testcontainers, discovers caller infrastructure, or
+contains pi-run-specific behavior.
+
+Provider failure evidence follows the standard evidence index. It is not added
+to provider operation outputs merely to expose a diagnostic file path. This
+prevents a failure path from violating the same Provider Contract that validates
+successful operations.
+
 ## 9. Compatibility Boundary
 
 v0.3 loader selection is version-based:

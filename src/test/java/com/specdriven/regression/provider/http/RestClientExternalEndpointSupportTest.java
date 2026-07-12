@@ -1,6 +1,7 @@
 package com.specdriven.regression.provider.http;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,55 +21,77 @@ import org.junit.jupiter.api.io.TempDir;
 
 class RestClientExternalEndpointSupportTest {
 
-    private static final Path DUMMY_REST_SUITE = Path.of("samples/90-compatibility/dummy_rest");
+    private static final Path EXTERNAL_REST_SUITE =
+            Path.of("samples/20-provider-capability-p0/http/rest_client_external");
 
     @TempDir
     Path tempDir;
 
     @Test
-    void consumesProjectProvidedExternalBaseUrlThroughRestClient() throws Exception {
-        Path suite = mutableDummyRestSuite();
+    void consumesProjectProvidedExternalBaseUrlThroughV03ExternalSuite() throws Exception {
+        Path suite = mutableExternalRestSuite();
         WireMockServer externalHttpEndpoint = new WireMockServer(0);
         externalHttpEndpoint.start();
         try {
-            externalHttpEndpoint.stubFor(get(urlEqualTo("/orders/1001"))
+            externalHttpEndpoint.stubFor(get(urlEqualTo("/ready"))
+                    .withHeader("X-Regression-Trace", equalTo("rest-client-external-v03"))
                     .willReturn(aResponse()
                             .withStatus(200)
                             .withHeader("Content-Type", "application/json")
                             .withBody(Files.readString(suite.getParent()
-                                    .resolve("expected_results/order_response.json")))));
-            Path envProfile = suite.getParent().resolve("env_profiles/local_dummy.yaml");
+                                    .resolve("expected_results/ready_response.json")))));
+            Path envProfile = suite.getParent().resolve("env_profiles/external_native.yaml");
             Files.writeString(envProfile, Files.readString(envProfile)
-                    .replace("base_url: local://framework-demo-server",
-                            "base_url: " + externalHttpEndpoint.baseUrl()));
+                    .replace("base_url: env://REST_BASE_URL", "base_url: " + externalHttpEndpoint.baseUrl()));
 
-            CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_dummy");
+            CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "external_native");
 
             assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
             assertThat(run.stdout())
                     .contains("run_status: passed")
                     .contains("provider_runtime_executed: true")
                     .contains("provider_type: rest_client")
-                    .contains("provider_id: dummy-rest-client")
+                    .contains("profile: external_native")
+                    .doesNotContain("provider_type: http_mock")
                     .doesNotContain("provider_type: wiremock_http_mock");
             Path resultJson = extractPath(run.stdout(), "result_json");
             Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
             assertThat(Files.readString(resultJson))
                     .contains("\"provider_type\": \"rest_client\"")
-                    .contains("\"request_url\": \"" + externalHttpEndpoint.baseUrl() + "/orders/1001\"")
-                    .doesNotContain("external_base_url_consumed")
+                    .contains("\"profile\": \"external_native\"")
+                    .contains("\"runtime_mode\": \"native\"")
+                    .contains("\"request_url\": \"[MASKED]\"")
                     .doesNotContain("wiremock_http_mock");
             assertThat(Files.readString(evidenceDir.resolve("provider-evidence/http/request.json")))
-                    .contains("\"request_url\": \"" + externalHttpEndpoint.baseUrl() + "/orders/1001\"");
+                    .contains("\"request_url\":\"" + externalHttpEndpoint.baseUrl() + "/ready\"")
+                    .contains("rest-client-external-v03");
             assertThat(externalHttpEndpoint.getServeEvents().getRequests()).hasSize(1);
         } finally {
             externalHttpEndpoint.stop();
         }
     }
 
-    private Path mutableDummyRestSuite() throws IOException {
-        Path target = tempDir.resolve("dummy_rest_external");
-        copyDirectory(DUMMY_REST_SUITE, target);
+    @Test
+    void blocksExternalV03SuiteBeforeDispatchWhenBaseUrlIsMissing() throws Exception {
+        Path suite = mutableExternalRestSuite();
+        Path envProfile = suite.getParent().resolve("env_profiles/external_native.yaml");
+        String missingEnv = "REGRESS_TEST_MISSING_REST_BASE_URL";
+        Files.writeString(envProfile, Files.readString(envProfile)
+                .replace("env://REST_BASE_URL", "env://" + missingEnv));
+
+        CommandResult dryRun = execute("run", "--suite", suite.toString(), "--profile", "external_native", "--dry-run");
+
+        assertThat(dryRun.exit()).isEqualTo(1);
+        assertThat(dryRun.stdout())
+                .contains("run_status: blocked")
+                .contains("missing_environment_value")
+                .contains(missingEnv)
+                .doesNotContain("provider_runtime_invoked: true");
+    }
+
+    private Path mutableExternalRestSuite() throws IOException {
+        Path target = tempDir.resolve("rest_client_external");
+        copyDirectory(EXTERNAL_REST_SUITE, target);
         return target.resolve("suite_manifest.yaml");
     }
 

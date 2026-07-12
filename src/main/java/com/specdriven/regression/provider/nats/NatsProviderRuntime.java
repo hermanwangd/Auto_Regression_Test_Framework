@@ -840,7 +840,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
         }
 
         private static String connectCommand(URI uri) {
-            StringBuilder json = new StringBuilder("{\"verbose\":false,\"pedantic\":false,\"lang\":\"java\",\"version\":\"0.3.1\"");
+            StringBuilder json = new StringBuilder("{\"verbose\":false,\"pedantic\":false,\"lang\":\"java\",\"version\":\"0.3.2\"");
             String userInfo = uri.getUserInfo();
             if (userInfo != null && !userInfo.isBlank()) {
                 String[] parts = userInfo.split(":", 2);

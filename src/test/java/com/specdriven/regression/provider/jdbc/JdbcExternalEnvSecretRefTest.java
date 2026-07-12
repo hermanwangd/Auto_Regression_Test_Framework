@@ -69,6 +69,17 @@ class JdbcExternalEnvSecretRefTest {
         assertThat(result.failure().code()).isEqualTo("SECRET_RESOLUTION_ERROR");
         assertThat(result.failure().reason()).contains("env ref `env://JDBC_CONNECTION` is not set");
         assertThat(result.failure().ownerAction()).contains("Set environment variable `JDBC_CONNECTION`");
+        assertThat(result.outputs()).doesNotContainKey("failure_detail_ref");
+        assertThat(result.evidence()).singleElement().satisfies(evidence -> {
+            assertThat(evidence.evidenceType()).isEqualTo("failure_detail");
+            assertThat(evidence.ref()).isEqualTo("provider-evidence/jdbc/failure_missing_env_query.yaml");
+        });
+        Path evidence = tempDir.resolve("run/provider-evidence/jdbc/failure_missing_env_query.yaml");
+        assertThat(evidence).isRegularFile();
+        assertThat(Files.readString(evidence))
+                .contains("failure_code: SECRET_RESOLUTION_ERROR")
+                .contains("raw_secret_found: false")
+                .doesNotContain("JDBC_CONNECTION=");
     }
 
     @Test
@@ -108,6 +119,45 @@ class JdbcExternalEnvSecretRefTest {
         assertThat(result.failure().classification()).isEqualTo("CONFIGURATION_ERROR");
         assertThat(result.failure().reason()).contains("No JDBC driver jar is available");
         assertThat(result.failure().ownerAction()).contains("--driver-path");
+    }
+
+    @Test
+    void defaultRuntimeDiscoveryUsesRegressDriverPathFromItsEnvironment() throws Exception {
+        Path invalidDriver = tempDir.resolve("invalid-oracle-driver.jar");
+        Files.writeString(invalidDriver, "not a JDBC driver jar");
+        JdbcProviderRuntime runtime = new JdbcProviderRuntime(Map.of(
+                "JDBC_CONNECTION", "jdbc:oracle:thin:@//db.example.test:1521/ORCLPDB1",
+                "REGRESS_DRIVER_PATH", invalidDriver.toString())::get);
+
+        ProviderOperationResult result = runtime.execute(
+                nativeContext(tempDir.resolve("suite"), Map.of("connection", Map.of("secret_ref", "env://JDBC_CONNECTION"))),
+                new ProviderOperationRequest(
+                        "db_query",
+                        List.of(Map.of("bind_as", "query_ref", "ref", "queries/order_exists.sql")),
+                        Map.of("_operation_id", "invalid_discovered_driver_query")));
+
+        assertThat(result.passed()).isFalse();
+        assertThat(result.failure()).isNotNull();
+        assertThat(result.failure().code()).isEqualTo("JDBC_DRIVER_INVALID");
+    }
+
+    @Test
+    void nativeJdbcConnectionFailureIsNotClassifiedAsSqlExecutionFailure() {
+        JdbcProviderRuntime runtime = new JdbcProviderRuntime(Map.of(
+                "JDBC_CONNECTION", "jdbc:h2:tcp://127.0.0.1:1/unreachable")::get);
+
+        ProviderOperationResult result = runtime.execute(
+                nativeContext(tempDir.resolve("suite"), Map.of("connection", Map.of("secret_ref", "env://JDBC_CONNECTION"))),
+                new ProviderOperationRequest(
+                        "db_query",
+                        List.of(Map.of("bind_as", "query_ref", "ref", "queries/order_exists.sql")),
+                        Map.of("_operation_id", "unreachable_connection_query")));
+
+        assertThat(result.passed()).isFalse();
+        assertThat(result.failure()).isNotNull();
+        assertThat(result.failure().code()).isEqualTo("DB_CONNECTION_FAILED");
+        assertThat(result.failure().classification()).isEqualTo("CONFIGURATION_ERROR");
+        assertThat(result.outputs()).doesNotContainKey("failure_detail_ref");
     }
 
     private ProviderExecutionContext nativeContext(Path suiteRoot, Map<String, Object> bindingValues) {

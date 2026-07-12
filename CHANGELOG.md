@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.2
+
+Framework v0.3.2 completes the v0.3.1 external-profile resolution correction with native acceptance coverage and JDBC runtime hardening.
+
+- Adds checked-in v0.3 external REST and gRPC client samples plus release-gate validation of their explicit native profiles.
+- Resolves vendor JDBC drivers from `REGRESS_DRIVER_PATH` and reports unavailable drivers as owner-actionable configuration failures.
+- Classifies JDBC connection failures as `DB_CONNECTION_FAILED` without emitting undeclared Provider Contract outputs.
+- Requires evidence only for JDBC operations that actually executed, preserving validation and configuration failures as valid, mask-safe results.
+
+Known boundaries:
+
+- Public CI validates external profile selection structurally; external REST, gRPC, JDBC, Kafka, IBM MQ, and NATS execution still requires caller-provisioned endpoints, credentials, and JDBC drivers where applicable.
+- This patch does not change the public DSL v0.3, Provider Contract, Env_Profile, result, or evidence schemas.
+
 ## 0.3.1
 
 Framework v0.3.1 is v0.3.0 plus the explicit Env_Profile resolution fix.

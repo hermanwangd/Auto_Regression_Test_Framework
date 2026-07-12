@@ -671,12 +671,12 @@ If a command-capable Env_Profile target does not define required `safety.access_
 
 The canonical built-in Provider Contracts are materialized under `docs/02-architecture/contracts/provider-contracts/` and indexed by `docs/02-architecture/contracts/provider_capability_registry.v0.2.yaml`. Start with the [Provider Contract Catalog](../02-architecture/contracts/provider-contracts/README.md) to map `provider_contract` ids such as `jdbc.v0.3` to contract YAML files and sample suites. The user guide must not redefine a second provider contract catalog. Runtime suite manifests use this built-in catalog by default.
 
-Framework `0.3.1` has two public surfaces:
+Framework `0.3.2` has two public surfaces:
 
 - v0.2 compatibility suites use Provider Instances, Env_Profiles, and the v0.2 provider capability registry.
 - v0.3 suites do not use Provider Instance files. They declare suite targets with `provider_contract`, and Env_Profile `targets.<target>` supplies `runtime_mode` and `bindings`.
 
-Framework `0.3.1` public provider support is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is keyed by provider type and `support_status`; runtime lifecycle details such as native, mock, stub, ephemeral, or framework are Env_Profile details, not public support statuses.
+Framework `0.3.2` public provider support is defined in `docs/09-operations/provider_support_matrix.md`. That matrix is keyed by provider type and `support_status`; runtime lifecycle details such as native, mock, stub, ephemeral, or framework are Env_Profile details, not public support statuses.
 
 RP/suite repositories do not need a `provider_contracts/` folder for built-in v0.3 Provider Contracts such as `http_mock.v0.3`, `rest_client.v0.3`, `jdbc.v0.3`, `nats.v0.3`, `kafka.v0.3`, `ibm_mq.v0.3`, `artifact_compare.v0.3`, `common_verify.v0.3`, or `polling_observer.v0.3`. Suite-local contracts are an explicit opt-in for custom provider plugins or contract snapshot pinning:
 
@@ -1216,6 +1216,20 @@ The HTTP mock + REST client sample keeps the canonical happy path in `suite_mani
 The JDBC provider capability sample keeps fixture/query/cleanup behavior in the canonical local `suite_manifest.yaml` `tests[]` list. Running it with `--profile local_v03` executes the checked-in sample under one shared Env_Profile.
 
 For native external JDBC evidence, the checked-in external Env_Profiles keep `connection.secret_ref: env://JDBC_CONNECTION` but are split by dialect so one run targets exactly one external database. Owners must provide `JDBC_CONNECTION` in the runner environment, for example `JDBC_CONNECTION='<jdbc-url>' regress run ...`, and must select the matching external profile. Do not write raw JDBC URLs into DSL or Env_Profile files.
+
+### External Native Client Samples
+
+`rest_client_external` and `grpc_client_external` are v0.3 client suites for
+caller-owned external endpoints. They use `REST_BASE_URL` and `GRPC_TARGET`
+only through their Env_Profile bindings. The framework does not start or
+identify the external service; callers provision it and independently verify
+the HTTP request or unary gRPC invocation. A missing value blocks before
+provider dispatch and cannot fall back to a local/mock profile.
+
+Provider failure evidence is indexed evidence, not an implicit operation output.
+For example, JDBC connection failure diagnostics remain masked and are visible
+through standard result/evidence references without exposing an undeclared
+`failure_detail_ref` output.
 
 Provider Capability suite-path mode may execute only checked-in framework provider capability samples for WireMock HTTP mock, `rest_client` HTTP request, SOAP mock, gRPC unary mock, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and evidence/report behavior. It must not execute non-P0 providers, Product/RP/RU topology interpretation, release governance, SIT/preprod release evidence, or downstream product deployment.
 

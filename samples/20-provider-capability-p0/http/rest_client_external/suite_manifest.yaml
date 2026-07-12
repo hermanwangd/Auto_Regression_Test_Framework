@@ -1,0 +1,17 @@
+manifest_version: v0.3
+suite_id: REST-CLIENT-EXTERNAL-v0.3
+default_profile: external_native
+
+artifact_roots:
+  expected_results: expected_results/
+
+targets:
+  external_api:
+    provider_contract: rest_client.v0.3
+
+env_profiles:
+  external_native:
+    ref: env_profiles/external_native.yaml
+
+tests:
+  - ref: test_cases/external_ready.yaml

@@ -230,6 +230,14 @@ canonical_samples:
     suite_id: HTTP-MOCK-REST-CLIENT-v0.3
     ships_in_usage_kit: true
     public_contract: true
+  - id: rest_client_external
+    root_dir: samples/20-provider-capability-p0/http/rest_client_external
+    entrypoint_manifest: suite_manifest.yaml
+    kind: leaf
+    default_profile: external_native
+    suite_id: REST-CLIENT-EXTERNAL-v0.3
+    ships_in_usage_kit: true
+    public_contract: true
   - id: jdbc
     root_dir: samples/20-provider-capability-p0/data/jdbc
     entrypoint_manifest: suite_manifest.yaml
@@ -284,6 +292,14 @@ canonical_samples:
     kind: leaf
     default_profile: local_v03
     suite_id: GRPC-MOCK-GRPC-CLIENT-v0.3
+    ships_in_usage_kit: true
+    public_contract: true
+  - id: grpc_client_external
+    root_dir: samples/20-provider-capability-p0/rpc/grpc_client_external
+    entrypoint_manifest: suite_manifest.yaml
+    kind: leaf
+    default_profile: external_native
+    suite_id: GRPC-CLIENT-EXTERNAL-v0.3
     ships_in_usage_kit: true
     public_contract: true
   - id: common_verify
@@ -496,6 +512,8 @@ java -jar spec-driven-auto-regression-${VERSION}.jar run --suite usage-kit/sampl
 java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml --profile local_v03
 java -jar spec-driven-auto-regression-${VERSION}.jar run --suite usage-kit/samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml --profile local_v03 --dry-run
 java -jar spec-driven-auto-regression-${VERSION}.jar run --suite usage-kit/samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml --profile local_v03
+REST_BASE_URL='http://caller-provided-endpoint' java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/20-provider-capability-p0/http/rest_client_external/suite_manifest.yaml --profile external_native
+GRPC_TARGET='caller-provided-host:443' java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/20-provider-capability-p0/rpc/grpc_client_external/suite_manifest.yaml --profile external_native
 java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile local_v03
 java -jar spec-driven-auto-regression-${VERSION}.jar run --suite usage-kit/samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile local_v03
 java -jar spec-driven-auto-regression-${VERSION}.jar validate --suite usage-kit/samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest.yaml --profile local_v03
@@ -509,8 +527,9 @@ scripts/release/verify-supported-provider-samples.sh ${VERSION}
 scripts/release/verify-v0-3-runtime-samples.sh ${VERSION}
 \`\`\`
 
-NATS, Kafka, and IBM MQ native runtime verification requires external broker or
-queue-manager bindings supplied before framework execution.
+NATS, Kafka, IBM MQ, REST, and gRPC native runtime verification requires
+caller-provided external bindings before framework execution. The framework
+does not provision these services.
 EOF_COMMANDS
 
 (

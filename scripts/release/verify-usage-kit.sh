@@ -94,6 +94,8 @@ required_paths=(
   "usage-kit/samples/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml"
   "usage-kit/samples/20-provider-capability-p0/http/rest_client_with_wiremock/test_cases/payment_success.yaml"
   "usage-kit/samples/20-provider-capability-p0/http/rest_client_with_wiremock/env_profiles/local_v03.yaml"
+  "usage-kit/samples/20-provider-capability-p0/http/rest_client_external/suite_manifest.yaml"
+  "usage-kit/samples/20-provider-capability-p0/http/rest_client_external/env_profiles/external_native.yaml"
   "usage-kit/samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml"
   "usage-kit/samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml"
   "usage-kit/samples/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml"
@@ -101,6 +103,8 @@ required_paths=(
   "usage-kit/samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/suite_manifest.yaml"
   "usage-kit/samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest.yaml"
   "usage-kit/samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest.yaml"
+  "usage-kit/samples/20-provider-capability-p0/rpc/grpc_client_external/suite_manifest.yaml"
+  "usage-kit/samples/20-provider-capability-p0/rpc/grpc_client_external/env_profiles/external_native.yaml"
   "usage-kit/samples/20-provider-capability-p0/verification/artifact_compare/suite_manifest.yaml"
   "usage-kit/samples/20-provider-capability-p0/verification/common_verify/suite_manifest.yaml"
   "usage-kit/samples/20-provider-capability-p0/verification/polling_observer/suite_manifest.yaml"
@@ -300,6 +304,8 @@ expect_validate_failure() {
   run_v03_suite samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/suite_manifest.yaml local_v03
   run_v03_suite samples/20-provider-capability-p0/rpc/soap_mock/suite_manifest.yaml local_v03
   run_v03_suite samples/20-provider-capability-p0/rpc/grpc_mock/suite_manifest.yaml local_v03
+  REST_BASE_URL=http://contract-validation.invalid run_cli run --suite samples/20-provider-capability-p0/http/rest_client_external/suite_manifest.yaml --profile external_native --dry-run
+  GRPC_TARGET=contract-validation.invalid:443 run_cli run --suite samples/20-provider-capability-p0/rpc/grpc_client_external/suite_manifest.yaml --profile external_native --dry-run
   run_v03_suite samples/20-provider-capability-p0/verification/multi_test_shared_env/suite_manifest.yaml local_v03
   run_v03_suite_group samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml local_v03
   run_v03_suite samples/30-cross-provider-groups/mixed_provider_e2e/suite_manifest.yaml local_v03

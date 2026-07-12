@@ -1,0 +1,27 @@
+dsl_version: v0.3
+test_case_id: GRPC-CLIENT-EXTERNAL-V03-TC-001
+title: External unary gRPC service is consumed through the selected v0.3 Env_Profile
+
+execute:
+  - id: get_external_customer
+    target: external_customer_service
+    op: unary_call
+    with:
+      grpc.service: com.example.customer.CustomerService
+      grpc.method: GetCustomer
+      grpc.message: artifact://fixtures/get_customer_request.json
+      grpc.timeout: PT10S
+
+verify:
+  - id: external_customer_grpc_status
+    type: assertion
+    assert:
+      actual: step://get_external_customer/response.status
+      operator: equals
+      expected: OK
+  - id: external_customer_response
+    type: assertion
+    assert:
+      actual: step://get_external_customer/response.message
+      operator: json_match
+      expected_ref: artifact://expected_results/get_customer_response.json
