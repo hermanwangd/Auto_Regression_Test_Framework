@@ -7,7 +7,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import com.specdriven.regression.contract.v03.V03ProducedOutput;
+import com.specdriven.regression.contract.v03.V03GeneratedOutputKey;
 import com.specdriven.regression.contract.v03.V03Sensitivity;
+import com.specdriven.regression.contract.v03.V03StepOutputKey;
 import com.specdriven.regression.contract.v03.V03ValueType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -82,11 +84,21 @@ class V03ReferenceResolverTest {
     private V03ReferenceResolutionContext context(
             Map<String, String> environment,
             Map<String, V03ProducedOutput> producedOutputs) {
+        Map<V03StepOutputKey, V03ProducedOutput> stepOutputs = new java.util.LinkedHashMap<>();
+        Map<V03GeneratedOutputKey, V03ProducedOutput> generatedOutputs = new java.util.LinkedHashMap<>();
+        producedOutputs.values().forEach(output -> {
+            stepOutputs.put(new V03StepOutputKey(output.testCaseId(), output.stepId(), output.outputName()), output);
+            if (output.bindable()) {
+                generatedOutputs.put(new V03GeneratedOutputKey(
+                        output.testCaseId(), output.target(), output.stepId(), output.outputName()), output);
+            }
+        });
         return new V03ReferenceResolutionContext(
                 tempDir,
                 Map.of("payloads", tempDir.resolve("fixtures")),
                 "TC-1",
-                producedOutputs,
+                stepOutputs,
+                generatedOutputs,
                 environment);
     }
 

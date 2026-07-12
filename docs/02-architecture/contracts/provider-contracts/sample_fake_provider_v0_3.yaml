@@ -143,6 +143,7 @@ operations:
         reference_kinds:
         - step
         - generated
+        sensitivity: masked
     outputs:
       cleanup_log:
         value_type: string

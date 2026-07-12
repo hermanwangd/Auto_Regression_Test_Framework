@@ -178,10 +178,10 @@ The v0.3 runtime uses one assertion catalog and one reference resolver:
 
 - assertion validation rejects missing type, missing assertion body, missing operands, and unknown operators before plan creation;
 - scalar operators use exhaustive dispatch and never fall back to equality;
-- missing step/generated outputs remain distinguishable from blank strings for `exists` and `not_exists`;
+- missing step/generated outputs remain distinguishable from blank strings for `exists` and `not_exists`; generated output is registered only from `PROVIDER_OPERATION`, scoped to its test case, and resolved through the compiler-selected producer identity;
 - artifact aliases, containment, symlink checks, and JSON Pointer extraction are handled by the shared resolver;
 - provider adapters receive materialized values or suite-relative physical paths and do not parse raw reference prefixes;
-- unresolved `generated://` and `env://` bindings block execution rather than reaching provider runtimes as raw strings.
+- unresolved `generated://` and `env://` bindings block execution rather than reaching provider runtimes as raw strings. `generated://` remains an Env_Profile binding only and is materialized just before its consumer step, after the same-test-case producer operation has completed.
 
 ## 8. Failure and Error Mapping
 

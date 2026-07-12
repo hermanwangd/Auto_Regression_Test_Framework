@@ -27,7 +27,7 @@ abstract class AbstractProviderRuntimeV03Adapter {
             for (Map.Entry<String, Object> entry : target.bindings().entrySet()) {
                 Object resolved = isSecretReferenceBinding(entry.getKey())
                         ? entry.getValue()
-                        : resolveProviderValue(entry.getValue(), step, context);
+                        : context.resolveTargetBinding(step, entry.getKey(), entry.getValue());
                 bindingValues.put(entry.getKey(), resolved);
                 putDotted(bindingValues, entry.getKey(), resolved);
             }

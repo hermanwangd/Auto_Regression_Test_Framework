@@ -37,15 +37,15 @@ Boundary path: If a Provider Contract does not restrict operation phases, the op
 
 ## AC-V03-005 Validate Provider Check Boundary
 
-Happy path: A `verify` item with `type: provider_check` validates its target, operation, and contract-declared `with` inputs, then exposes only contract-declared outputs for later assertions.
+Happy path: A `verify` item with `type: provider_check` validates its target, operation, and contract-declared `with` inputs, then exposes only contract-declared step-local outputs for later assertions.
 
-Failure path: A generic `provider_check.expect`, unsupported input, or undeclared output ref fails validation before provider dispatch with owner-actionable detail.
+Failure path: A generic `provider_check.expect`, unsupported input, undeclared output ref, generated reference, or attempt by another provider operation to consume a provider-check output fails validation before provider dispatch with owner-actionable detail.
 
 Boundary path: Provider-specific semantic business comparison remains out of scope unless the Provider Contract explicitly defines the comparator.
 
 ## AC-V03-006 Validate Structured Assertions
 
-Happy path: A `verify` item with `type: assertion` compares a prior `step://` output using a supported operator and expected literal or artifact ref.
+Happy path: A `verify` item with `type: assertion` compares a prior same-test-case `step://` output using a supported operator and expected literal or artifact ref. The compiler validates the referenced Provider Contract output path before runtime dispatch.
 
 Failure path: Missing `assert`, unknown operator, unsupported actual ref, unknown step ID, forward step ref, cross-test step ref, or output marked `secret` / `internal` fails validation.
 

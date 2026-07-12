@@ -92,8 +92,8 @@ operations:
         sensitivity: public
     outputs:
       target_uri:
-        value_type: any
-        sensitivity: masked
+        value_type: string
+        sensitivity: public
         bindable: true
         evidence_included: true
       server_log:
@@ -151,8 +151,8 @@ operations:
         sensitivity: public
     outputs:
       target_uri:
-        value_type: any
-        sensitivity: masked
+        value_type: string
+        sensitivity: public
         bindable: true
         evidence_included: true
       loaded_stub_count:
@@ -211,8 +211,8 @@ operations:
         sensitivity: public
     outputs:
       target_uri:
-        value_type: any
-        sensitivity: masked
+        value_type: string
+        sensitivity: public
         bindable: true
         evidence_included: true
       request_journal:

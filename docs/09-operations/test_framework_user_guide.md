@@ -260,6 +260,8 @@ targets:
       base_url: generated://payment_mock/base_url
 ```
 
+`payment_mock` must have an explicit preceding provider operation in the same test case, normally a `setup` operation such as `load_stubs`, which produces the bindable `base_url`. The framework materializes `payment_api.base_url` immediately before the client step. It does not start targets at suite initialization, and the generated value cannot cross into another test case.
+
 ## 7. Artifact Refs and Operation Inputs
 
 Use `artifact://...` when a test needs reviewed fixtures, SQL, mock mappings, schemas, or expected results. Artifact refs resolve under the suite manifest `artifact_roots` and must not escape the suite directory. Use safe inline literals only for small technical values such as `POST`, `/payments`, or `true`.
@@ -862,7 +864,7 @@ For v0.3 suites:
 - Env_Profile has `targets.<target>` for every suite target referenced by selected test cases.
 - Env_Profile `targets.<target>.bindings` supplies every required Provider Contract `binding_key`.
 - Env_Profile binding value kinds are allowed by the Provider Contract `binding_keys`.
-- Env_Profile `generated://<target>/<output>` refs resolve only to the producer Provider Contract `bindable_outputs` declared by another target in the same suite.
+- Env_Profile `generated://<target>/<output>` refs resolve only to a compiler-selected, preceding `PROVIDER_OPERATION` in the same test case whose Provider Contract declares that output bindable. The framework materializes the binding only for its consumer step; `generated://` is not valid in DSL `with` values or assertion operands.
 - Selected `runtime_mode` is allowed by the Provider Contract and the active Env_Profile.
 - Each `op` exists in the Provider Contract.
 - Every `with` key is allowed by that Provider Contract operation.

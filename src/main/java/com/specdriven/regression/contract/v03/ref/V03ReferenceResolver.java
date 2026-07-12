@@ -7,12 +7,18 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import com.specdriven.regression.contract.v03.V03ProducedOutput;
+import com.specdriven.regression.contract.v03.V03GeneratedOutputKey;
+import com.specdriven.regression.contract.v03.V03BindingDependency;
+import com.specdriven.regression.contract.v03.V03OutputDefinitionResolver;
+import com.specdriven.regression.contract.v03.V03ResolvedProducedOutput;
+import com.specdriven.regression.contract.v03.V03StepOutputKey;
 
 /** Single fail-closed resolver for v0.3 artifact, step, generated, and environment references. */
 public final class V03ReferenceResolver {
 
     private static final int MAX_JSON_POINTER_DEPTH = 64;
     private final V03DocumentLoader documentLoader;
+    private final V03OutputDefinitionResolver outputResolver = new V03OutputDefinitionResolver();
 
     public V03ReferenceResolver() {
         this(path -> {
@@ -65,21 +71,28 @@ public final class V03ReferenceResolver {
             return applyJsonPointer(document, artifact.jsonPointer());
         }
         if (reference instanceof V03Reference.Step step) {
-            V03ProducedOutput produced = producedOutput(
-                    context.producedOutputs(), scopedStepKey(context.testCaseId(), step.stepId()), step.outputPath());
-            if (produced != null) return applyJsonPointer(outputValue(produced, step.outputPath()), step.jsonPointer());
-            throw invalid("unresolved_step_ref", "step `" + step.stepId()
-                    + "` did not produce declared output `" + step.outputPath() + "`.");
+            return applyJsonPointer(
+                    outputValue(stepOutput(context, step.stepId(), step.outputPath()), step.outputPath()), step.jsonPointer());
         }
         if (reference instanceof V03Reference.Generated generated) {
-            List<V03ProducedOutput> produced = context.producedOutputs().values().stream()
-                    .filter(output -> generated.target().equals(output.target()))
-                    .filter(output -> matchesOutputPath(output, generated.output()))
-                    .toList();
-            produced = produced.stream().filter(V03ProducedOutput::bindable).toList();
-            if (produced.size() == 1) return applyJsonPointer(outputValue(produced.get(0), generated.output()), generated.jsonPointer());
-            if (produced.size() > 1) throw invalid("ambiguous_generated_ref",
-                    "target `" + generated.target() + "` produced `" + generated.output() + "` more than once.");
+            List<V03ProducedOutput> produced = context.generatedOutputs().entrySet().stream()
+                    .filter(entry -> context.testCaseId().equals(entry.getKey().testCaseId()))
+                    .filter(entry -> generated.target().equals(entry.getKey().target()))
+                    .map(Map.Entry::getValue).toList();
+            long matchingOutputs = produced.stream()
+                    .filter(output -> output.outputName().equals(generated.output())
+                            || generated.output().startsWith(output.outputName() + "."))
+                    .count();
+            if (matchingOutputs > 1) {
+                throw invalid("ambiguous_generated_ref", "target `" + generated.target()
+                        + "` produced `" + generated.output() + "` more than once.");
+            }
+            try {
+                V03ResolvedProducedOutput resolved = outputResolver.resolveProducedPath(produced, generated.output());
+                return applyJsonPointer(outputValue(resolved.output(), generated.output()), generated.jsonPointer());
+            } catch (IllegalArgumentException ignored) {
+                // Keep the public generated-ref failure code stable below.
+            }
             throw invalid("unresolved_generated_ref", "target `" + generated.target()
                     + "` did not produce one bindable output `" + generated.output() + "`.");
         }
@@ -94,21 +107,37 @@ public final class V03ReferenceResolver {
         return value;
     }
 
-    private V03ProducedOutput producedOutput(
-            Map<String, V03ProducedOutput> producedOutputs, String stepKey, String outputPath) {
-        V03ProducedOutput exact = producedOutputs.get(stepKey + "\n" + outputPath);
-        if (exact != null) return exact;
-        String root = outputPath.contains(".") ? outputPath.substring(0, outputPath.indexOf('.')) : outputPath;
-        V03ProducedOutput parent = producedOutputs.get(stepKey + "\n" + root);
-        return matchesOutputPath(parent, outputPath) ? parent : null;
+    /** Resolves a generated target binding from its compiler-selected producer step only. */
+    public Object resolveCompiledGenerated(
+            V03Reference.Generated generated,
+            V03BindingDependency dependency,
+            V03ReferenceResolutionContext context) {
+        List<V03ProducedOutput> outputs = context.generatedOutputs().entrySet().stream()
+                .filter(entry -> entry.getKey().testCaseId().equals(dependency.producerTestCaseId()))
+                .filter(entry -> entry.getKey().target().equals(dependency.producerTarget()))
+                .filter(entry -> entry.getKey().stepId().equals(dependency.producerStepId()))
+                .map(Map.Entry::getValue).toList();
+        try {
+            V03ResolvedProducedOutput resolved = outputResolver.resolveProducedPath(outputs, generated.output());
+            return applyJsonPointer(outputValue(resolved.output(), generated.output()), generated.jsonPointer());
+        } catch (IllegalArgumentException error) {
+            throw invalid("unresolved_generated_ref", "compiled producer step `" + dependency.producerStepId()
+                    + "` did not produce `" + generated.output() + "`.");
+        }
     }
 
-    private boolean matchesOutputPath(V03ProducedOutput output, String outputPath) {
-        if (output == null) return false;
-        if (output.outputName().equals(outputPath)) return true;
-        return outputPath.startsWith(output.outputName() + ".")
-                && (output.valueType() == com.specdriven.regression.contract.v03.V03ValueType.OBJECT
-                || output.valueType() == com.specdriven.regression.contract.v03.V03ValueType.ANY);
+    private V03ProducedOutput stepOutput(
+            V03ReferenceResolutionContext context, String stepId, String outputPath) {
+        List<V03ProducedOutput> outputs = context.stepOutputs().entrySet().stream()
+                .filter(entry -> entry.getKey().testCaseId().equals(context.testCaseId()))
+                .filter(entry -> entry.getKey().stepId().equals(stepId))
+                .map(Map.Entry::getValue).toList();
+        try {
+            return outputResolver.resolveProducedPath(outputs, outputPath).output();
+        } catch (IllegalArgumentException error) {
+            throw invalid("unresolved_step_ref", "step `" + stepId
+                    + "` did not produce declared output `" + outputPath + "`.");
+        }
     }
 
     private Object outputValue(V03ProducedOutput output, String outputPath) {

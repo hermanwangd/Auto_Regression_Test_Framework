@@ -121,7 +121,7 @@ Rules:
 - `runtime_mode` must be allowed by the target's Provider Contract.
 - `bindings` keys must match required or optional Provider Contract binding keys.
 - Missing required binding keys block before provider runtime dispatch.
-- `generated://<target>/<output>` bindings may consume framework-created values only when the producing Provider Contract declares that output as bindable.
+- `generated://<target>/<output>` bindings may consume a value only when a preceding `setup` or other provider operation in the same test case produces that bindable Provider Contract output. The framework materializes the binding immediately before its consumer step; it does not start targets implicitly during suite initialization.
 - Raw secrets are prohibited. Runtime values must use safe refs such as `env://NAME` or approved generated refs.
 
 ## 5. DSL Test Case Contract
@@ -238,7 +238,7 @@ Validation rules:
 - Paths must canonicalize under the suite directory and must reject absolute paths, `../`, `~`, drive-letter paths, encoded traversal, symlink escape, and root overlap.
 - JSON pointers must be valid RFC 6901 pointers and bounded by configured depth and extracted value size.
 - `step://` may reference only prior steps in the same test case.
-- `generated://` may reference only declared generated outputs for the selected Env_Profile.
+- `generated://` is valid only in an Env_Profile target binding. Its compiler-selected producer must be a preceding `PROVIDER_OPERATION` in the same test case and must declare a bindable output. It is not valid in DSL `with` values or assertion operands.
 - Resolved `env://` values must never appear in validate, dry-run, result JSON, evidence, report, or logs.
 
 ## 8. CLI Contract
@@ -294,7 +294,7 @@ This document satisfies those readiness conditions when read together with the v
 
 The remaining v0.3.0 work makes the execution plan, not raw YAML maps, the only semantic runtime input. `V03CompiledSuite` becomes a typed canonical plan containing typed targets, tests, steps, bindings, declared outputs, evidence requirements, and a validation digest. Validation compiles once; validate, dry-run, and runtime consume that same immutable object.
 
-Provider Contracts gain typed binding/input/output definitions: value kind, Java/JSON shape, sensitivity, allowed phase, runtime mode, bindable output flag, evidence types, and failure codes. `generated://` bindings form a directed graph across targets; missing producers, undeclared outputs, self-references, and cycles block compilation.
+Provider Contracts gain typed binding/input/output definitions: value kind, Java/JSON shape, sensitivity, allowed phase, runtime mode, bindable output flag, evidence types, and failure codes. `generated://` bindings compile to a concrete preceding provider-operation producer per consumer step; missing, forward, cross-test, duplicate, or undeclared producers block compilation.
 
 Version routing is strict: a leaf manifest chooses exactly one version before schema/contract lookup; mixed-version leaf artifacts block. Suite groups remain aggregators only. Canonical samples are executable documentation, and the Maven release gate must verify them from a clean checkout and outside the repository working directory.
 

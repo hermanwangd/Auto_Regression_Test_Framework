@@ -2,6 +2,7 @@ package com.specdriven.regression.contract.v03;
 
 import com.specdriven.regression.contract.v03.ref.V03Reference;
 import com.specdriven.regression.contract.v03.ref.V03ReferenceParser;
+import com.specdriven.regression.contract.v03.assertion.V03AssertionKind;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -18,68 +19,122 @@ public final class V03BindingDependencyCompiler {
             Map<String, V03ResolvedTarget> targets,
             Map<String, V03ProviderContract> contracts,
             Map<String, String> environment) {
-        Map<String, V03ExecutionStep> priorSteps = new LinkedHashMap<>();
-        java.util.Set<String> initializedTargets = new java.util.LinkedHashSet<>();
+        Map<String, V03ExecutionStep> priorStepOutputs = new LinkedHashMap<>();
+        Map<String, V03ExecutionStep> priorGeneratedProducers = new LinkedHashMap<>();
         List<V03BindingDependency> dependencies = new ArrayList<>();
         for (V03ExecutionStep step : steps) {
+            if (step.kind() == V03ExecutionStepKind.ASSERTION) {
+                compileAssertion(step, priorStepOutputs, contracts, dependencies);
+                continue;
+            }
             if (step.kind() != V03ExecutionStepKind.PROVIDER_OPERATION && step.kind() != V03ExecutionStepKind.PROVIDER_CHECK) {
                 continue;
             }
             V03ProviderContract.V03OperationDefinition operation = operation(step, contracts);
-            if (initializedTargets.add(step.target())) {
-                compileTargetBindings(step, targets.get(step.target()), contracts, priorSteps, environment, dependencies);
-            }
+            compileTargetBindings(step, targets.get(step.target()), contracts, priorGeneratedProducers, environment, dependencies);
             for (Map.Entry<String, Object> input : step.inputs().entrySet()) {
                 V03InputDefinition consumer = inputDefinition(operation, input.getKey());
                 collect(input.getValue(), reference -> {
                     if (reference instanceof V03Reference.Step prior) {
-                        V03ExecutionStep producer = priorSteps.get(scopedStepKey(step.testCaseId(), prior.stepId()));
+                        V03ExecutionStep producer = priorStepOutputs.get(scopedStepKey(step.testCaseId(), prior.stepId()));
                         if (producer == null) {
                             throw new IllegalArgumentException("missing_or_forward_step_producer: step `" + step.id()
                                     + "` references `" + prior.stepId() + "`.");
                         }
+                        if (producer.kind() == V03ExecutionStepKind.PROVIDER_CHECK) {
+                            throw new IllegalArgumentException("provider_check_output_not_consumable: step `" + step.id()
+                                    + "` cannot consume provider-check output `" + prior.stepId() + "`.");
+                        }
                         V03OutputDefinition output = outputDefinition(producer, prior.outputPath(), contracts);
                         compatible(consumer, output, step, input.getKey());
-                        dependencies.add(new V03BindingDependency(step.id(), input.getKey(), V03ReferenceKind.STEP,
-                                "", producer.id(), prior.outputPath()));
+                        dependencies.add(new V03BindingDependency(step.testCaseId(), step.id(), input.getKey(), V03ReferenceKind.STEP,
+                                producer.testCaseId(), "", producer.id(), prior.outputPath()));
                     } else if (reference instanceof V03Reference.Generated generated) {
                         V03ResolvedTarget producerTarget = targets.get(generated.target());
                         if (producerTarget == null) {
                             throw new IllegalArgumentException("missing_generated_producer: step `" + step.id()
                                     + "` references target `" + generated.target() + "`.");
                         }
-                        V03ExecutionStep producer = generatedProducer(generated, priorSteps, contracts);
+                        V03ExecutionStep producer = generatedProducer(generated, step.testCaseId(), priorGeneratedProducers, contracts);
                         if (producer == null) {
                             throw new IllegalArgumentException("unknown_bindable_output: target `" + generated.target()
                                     + "` output `" + generated.output() + "` is not bindable.");
                         }
                         V03OutputDefinition output = outputDefinition(producer, generated.output(), contracts);
                         compatible(consumer, output, step, input.getKey());
-                        dependencies.add(new V03BindingDependency(step.id(), input.getKey(), V03ReferenceKind.GENERATED,
-                                generated.target(), producer.id(), generated.output()));
+                        dependencies.add(new V03BindingDependency(step.testCaseId(), step.id(), input.getKey(), V03ReferenceKind.GENERATED,
+                                producer.testCaseId(), generated.target(), producer.id(), generated.output()));
                     } else if (reference instanceof V03Reference.Environment env) {
                         String value = environment.get(env.name());
                         if (value == null || value.isBlank()) {
                             throw new IllegalArgumentException("missing_environment_value: input `" + input.getKey()
                                     + "` requires env://" + env.name() + ".");
                         }
-                        dependencies.add(new V03BindingDependency(step.id(), input.getKey(), V03ReferenceKind.ENV,
-                                "", "", env.name()));
+                        dependencies.add(new V03BindingDependency(step.testCaseId(), step.id(), input.getKey(), V03ReferenceKind.ENV,
+                                "", "", "", env.name()));
                     }
                 });
             }
+            priorStepOutputs.put(scopedStepKey(step.testCaseId(), step.id()), step);
             if (step.kind() == V03ExecutionStepKind.PROVIDER_OPERATION) {
-                priorSteps.put(scopedStepKey(step.testCaseId(), step.id()), step);
+                priorGeneratedProducers.put(scopedStepKey(step.testCaseId(), step.id()), step);
             }
         }
         return List.copyOf(dependencies);
+    }
+
+    private void compileAssertion(
+            V03ExecutionStep assertion,
+            Map<String, V03ExecutionStep> priorStepOutputs,
+            Map<String, V03ProviderContract> contracts,
+            List<V03BindingDependency> dependencies) {
+        V03AssertionKind kind = V03AssertionKind.require(assertion.operation());
+        for (String key : List.of("actual", "actual_ref", "expected", "expected_ref", "schema_ref")) {
+            if (!assertion.inputs().containsKey(key)) {
+                continue;
+            }
+            V03Reference reference = parser.parse(assertion.inputs().get(key));
+            if (reference instanceof V03Reference.Generated) {
+                throw new IllegalArgumentException("invalid_reference_scope: assertion `" + assertion.id()
+                        + "` may not use generated://; use an Env_Profile target binding.");
+            }
+            if (!(reference instanceof V03Reference.Step prior)) {
+                continue;
+            }
+            V03ExecutionStep producer = priorStepOutputs.get(scopedStepKey(assertion.testCaseId(), prior.stepId()));
+            if (producer == null) {
+                throw new IllegalArgumentException("missing_or_forward_step_producer: assertion `" + assertion.id()
+                        + "` references `" + prior.stepId() + "`.");
+            }
+            V03OutputDefinition output = outputDefinition(producer, prior.outputPath(), contracts);
+            validateAssertionOutputType(assertion, kind, key, output);
+            dependencies.add(new V03BindingDependency(assertion.testCaseId(), assertion.id(), key, V03ReferenceKind.STEP,
+                    producer.testCaseId(), producer.target(), producer.id(), prior.outputPath()));
+        }
+    }
+
+    private void validateAssertionOutputType(
+            V03ExecutionStep assertion,
+            V03AssertionKind kind,
+            String operand,
+            V03OutputDefinition output) {
+        if ((kind == V03AssertionKind.GT || kind == V03AssertionKind.GTE
+                || kind == V03AssertionKind.LT || kind == V03AssertionKind.LTE)
+                && output.valueType() != V03ValueType.NUMBER) {
+            throw new IllegalArgumentException("incompatible_assertion_type: assertion `" + assertion.id()
+                    + "` " + operand + " requires NUMBER output.");
+        }
+        if (kind == V03AssertionKind.MATCHES && output.valueType() != V03ValueType.STRING) {
+            throw new IllegalArgumentException("incompatible_assertion_type: assertion `" + assertion.id()
+                    + "` " + operand + " requires STRING output.");
+        }
     }
 
     private void compileTargetBindings(
             V03ExecutionStep consumerStep,
             V03ResolvedTarget target,
             Map<String, V03ProviderContract> contracts,
-            Map<String, V03ExecutionStep> priorSteps,
+            Map<String, V03ExecutionStep> priorGeneratedProducers,
             Map<String, String> environment,
             List<V03BindingDependency> dependencies) {
         if (target == null) return;
@@ -97,7 +152,8 @@ public final class V03BindingDependencyCompiler {
                     definition.required(), definition.valueType(), definition.referenceKinds(), definition.sensitivity());
             collect(binding.getValue(), reference -> {
                 if (reference instanceof V03Reference.Generated generated) {
-                    V03ExecutionStep producer = generatedProducer(generated, priorSteps, contracts);
+                    V03ExecutionStep producer = generatedProducer(
+                            generated, consumerStep.testCaseId(), priorGeneratedProducers, contracts);
                     if (producer == null) {
                         throw new IllegalArgumentException("missing_generated_binding_producer: target `" + target.target()
                                 + "` binding `" + binding.getKey() + "` requires prior `" + generated.target()
@@ -105,16 +161,16 @@ public final class V03BindingDependencyCompiler {
                     }
                     V03OutputDefinition output = outputDefinition(producer, generated.output(), contracts);
                     compatible(consumer, output, consumerStep, "binding." + binding.getKey());
-                    dependencies.add(new V03BindingDependency(consumerStep.id(), "binding." + binding.getKey(),
-                            V03ReferenceKind.GENERATED, generated.target(), producer.id(), generated.output()));
+                    dependencies.add(new V03BindingDependency(consumerStep.testCaseId(), consumerStep.id(), "binding." + binding.getKey(),
+                            V03ReferenceKind.GENERATED, producer.testCaseId(), generated.target(), producer.id(), generated.output()));
                 } else if (reference instanceof V03Reference.Environment env) {
                     String value = environment.get(env.name());
                     if (value == null || value.isBlank()) {
                         throw new IllegalArgumentException("missing_environment_value: target `" + target.target()
                                 + "` binding `" + binding.getKey() + "` requires env://" + env.name() + ".");
                     }
-                    dependencies.add(new V03BindingDependency(consumerStep.id(), "binding." + binding.getKey(),
-                            V03ReferenceKind.ENV, "", "", env.name()));
+                    dependencies.add(new V03BindingDependency(consumerStep.testCaseId(), consumerStep.id(), "binding." + binding.getKey(),
+                            V03ReferenceKind.ENV, "", "", "", env.name()));
                 }
             });
         }
@@ -164,9 +220,11 @@ public final class V03BindingDependencyCompiler {
 
     private V03ExecutionStep generatedProducer(
             V03Reference.Generated generated,
-            Map<String, V03ExecutionStep> priorSteps,
+            String consumerTestCaseId,
+            Map<String, V03ExecutionStep> priorGeneratedProducers,
             Map<String, V03ProviderContract> contracts) {
-        List<V03ExecutionStep> producers = priorSteps.values().stream()
+        List<V03ExecutionStep> producers = priorGeneratedProducers.values().stream()
+                .filter(step -> consumerTestCaseId.equals(step.testCaseId()))
                 .filter(step -> generated.target().equals(step.target()))
                 .filter(step -> {
                     try {
@@ -194,14 +252,17 @@ public final class V03BindingDependencyCompiler {
 
     private void compatible(
             V03InputDefinition consumer, V03OutputDefinition producer, V03ExecutionStep step, String input) {
-        if (consumer.valueType() != V03ValueType.ANY && producer.valueType() != V03ValueType.ANY
-                && consumer.valueType() != producer.valueType()) {
+        if (consumer.valueType() != V03ValueType.ANY && producer.valueType() == V03ValueType.ANY) {
+            throw new IllegalArgumentException("incompatible_binding_type: step `" + step.id() + "` input `"
+                    + input + "` requires a declared typed producer output.");
+        }
+        if (consumer.valueType() != V03ValueType.ANY && consumer.valueType() != producer.valueType()) {
             throw new IllegalArgumentException("incompatible_binding_type: step `" + step.id() + "` input `"
                     + input + "` cannot consume `" + producer.valueType() + "` as `" + consumer.valueType() + "`.");
         }
-        if (producer.sensitivity() == V03Sensitivity.SECRET && consumer.sensitivity() == V03Sensitivity.PUBLIC) {
+        if (producer.sensitivity().ordinal() > consumer.sensitivity().ordinal()) {
             throw new IllegalArgumentException("unsafe_sensitivity_flow: step `" + step.id() + "` input `"
-                    + input + "` accepts secret output as public.");
+                    + input + "` accepts `" + producer.sensitivity() + "` output as `" + consumer.sensitivity() + "`.");
         }
     }
 

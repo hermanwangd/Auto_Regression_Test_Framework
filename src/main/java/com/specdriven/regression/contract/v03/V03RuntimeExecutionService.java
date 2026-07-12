@@ -117,7 +117,8 @@ public class V03RuntimeExecutionService {
         Instant startedAt = Instant.now();
         boolean providerRuntimeExecuted = false;
         Map<String, V03ResolvedTarget> targetsByName = targetsByName(plan);
-        Map<String, V03ProducedOutput> producedOutputs = new LinkedHashMap<>();
+        Map<V03StepOutputKey, V03ProducedOutput> stepOutputs = new LinkedHashMap<>();
+        Map<V03GeneratedOutputKey, V03ProducedOutput> generatedOutputs = new LinkedHashMap<>();
         Map<String, String> testStatuses = initialTestStatuses(testCases);
         V03ExecutionContext context = new V03ExecutionContext(
                 suiteRoot,
@@ -125,7 +126,9 @@ public class V03RuntimeExecutionService {
                 plan.profile(),
                 targetsByName,
                 plan.artifactRoots(),
-                producedOutputs,
+                stepOutputs,
+                generatedOutputs,
+                plan.bindingDependencies(),
                 Map.of(),
                 System.getenv(),
                 referenceResolver,
@@ -159,7 +162,7 @@ public class V03RuntimeExecutionService {
             V03StepResult result = adapter.execute(step, context);
             validateRuntimeOutputs(plan, step, result);
             providerRuntimeExecuted = true;
-            recordProducedOutputs(plan, step, result.outputs(), producedOutputs);
+            recordProducedOutputs(plan, step, result.outputs(), stepOutputs, generatedOutputs);
             stepResults.add(stepResult(plan, step, result));
             providerResults.add(providerResult(plan, step, result));
             evidenceRefs.addAll(result.evidenceRefs());
@@ -448,7 +451,7 @@ public class V03RuntimeExecutionService {
         Object raw = step.inputs().containsKey(referenceKey)
                 ? step.inputs().get(referenceKey)
                 : step.inputs().get(literalKey);
-        return outputRedactor.redactAssertionValue(plan, step, raw, evidenceValue(value), context.producedOutputs());
+        return outputRedactor.redactAssertionValue(plan, step, raw, evidenceValue(value), context.stepOutputs());
     }
 
     private Object comparableJson(Object value, V03ExecutionStep step) {
@@ -1153,16 +1156,22 @@ public class V03RuntimeExecutionService {
             V03ExecutionPlan plan,
             V03ExecutionStep step,
             Map<String, Object> outputs,
-            Map<String, V03ProducedOutput> producedOutputs) {
+            Map<V03StepOutputKey, V03ProducedOutput> stepOutputs,
+            Map<V03GeneratedOutputKey, V03ProducedOutput> generatedOutputs) {
         V03ProviderContract contract = plan.providerContracts().get(step.providerContract());
         V03ProviderContract.V03OperationDefinition operation = contract == null ? null : contract.operations().get(step.operation());
         if (operation == null) return;
         for (Map.Entry<String, Object> output : outputs.entrySet()) {
             V03OutputDefinition definition = operation.outputDefinitions().get(output.getKey());
             if (definition == null) continue;
-            producedOutputs.put(scopedStepKey(step) + "\n" + output.getKey(), new V03ProducedOutput(
+            V03ProducedOutput produced = new V03ProducedOutput(
                     step.testCaseId(), step.id(), step.target(), step.providerContract(), step.operation(), output.getKey(),
-                    definition.valueType(), definition.sensitivity(), definition.bindable(), output.getValue()));
+                    definition.valueType(), definition.sensitivity(), definition.bindable(), output.getValue());
+            stepOutputs.put(new V03StepOutputKey(step.testCaseId(), step.id(), output.getKey()), produced);
+            if (step.kind() == V03ExecutionStepKind.PROVIDER_OPERATION && definition.bindable()) {
+                generatedOutputs.put(new V03GeneratedOutputKey(
+                        step.testCaseId(), step.target(), step.id(), output.getKey()), produced);
+            }
         }
     }
 

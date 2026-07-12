@@ -61,7 +61,7 @@ class V03OutputRedactorTest {
 
         assertThat(new V03OutputRedactor().redactAssertionValue(
                 plan, assertion, "step://prepare/workspace_ref", "/private/workspace",
-                Map.of("TC-1\nprepare\nworkspace_ref", output("prepare", "target", "workspace_ref",
+                Map.of(new V03StepOutputKey("TC-1", "prepare", "workspace_ref"), output("prepare", "target", "workspace_ref",
                         V03ValueType.STRING, V03Sensitivity.MASKED, true, "/private/workspace"))))
                 .isEqualTo(V03OutputRedactor.MASKED);
     }
@@ -85,7 +85,7 @@ class V03OutputRedactorTest {
 
         assertThat(new V03OutputRedactor().redactAssertionValue(
                 plan, assertion, "step://login/auth.token", "raw-token",
-                Map.of("TC-1\nlogin\nauth.token", output("login", "target", "auth.token",
+                Map.of(new V03StepOutputKey("TC-1", "login", "auth.token"), output("login", "target", "auth.token",
                         V03ValueType.STRING, V03Sensitivity.SECRET, false, "raw-token"))))
                 .isEqualTo(V03OutputRedactor.MASKED);
     }

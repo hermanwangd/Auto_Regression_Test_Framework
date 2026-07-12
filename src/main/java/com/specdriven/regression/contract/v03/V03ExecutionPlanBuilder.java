@@ -11,8 +11,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -29,6 +27,8 @@ public class V03ExecutionPlanBuilder {
     private final V03GeneratedBindingDag generatedBindingDag = new V03GeneratedBindingDag();
     private final V03ProviderContractCatalog providerContractCatalog = new V03ProviderContractCatalog();
     private final V03BindingDependencyCompiler bindingDependencyCompiler = new V03BindingDependencyCompiler();
+    private final V03PlanCanonicalizer planCanonicalizer = new V03PlanCanonicalizer();
+    private final V03BindingValueValidator bindingValueValidator = new V03BindingValueValidator();
 
     public V03ExecutionPlanBuilder() {
         this(new ContractBaselineService());
@@ -258,6 +258,9 @@ public class V03ExecutionPlanBuilder {
                         throw new IllegalArgumentException("missing_environment_value: target `" + target.target()
                                 + "` binding `" + binding.getKey() + "` requires env://" + environment.name() + ".");
                     }
+                    bindingValueValidator.validateEnvironmentValue(
+                            resolved, definition.valueType(), "target `" + target.target()
+                                    + "` binding `" + binding.getKey() + "`");
                 }
                 if (kind == V03ReferenceKind.LITERAL && !(binding.getValue() instanceof Map<?, ?>)
                         && !matchesValueType(binding.getValue(), definition.valueType())) {
@@ -347,6 +350,10 @@ public class V03ExecutionPlanBuilder {
             V03ExecutionStep step, String input, Object value, V03InputDefinition definition) {
         V03Reference reference = referenceParser.parse(value);
         V03ReferenceKind kind = referenceKind(reference);
+        if (kind == V03ReferenceKind.GENERATED) {
+            throw new IllegalArgumentException("invalid_reference_scope: DSL `with` input `" + input
+                    + "` may not use generated://; use an Env_Profile target binding.");
+        }
         if (!definition.referenceKinds().contains(kind)) {
             throw new IllegalArgumentException("unsupported_reference_kind: step `" + step.id() + "` input `"
                     + input + "` does not allow `" + kind.name().toLowerCase(java.util.Locale.ROOT) + "`.");
@@ -642,25 +649,22 @@ public class V03ExecutionPlanBuilder {
             appendSteps(canonical, test.verify());
             appendSteps(canonical, test.cleanup());
         });
-        bindingDependencies.stream().sorted(java.util.Comparator.comparing(V03BindingDependency::consumerStepId)
+        bindingDependencies.stream().sorted(java.util.Comparator.comparing(V03BindingDependency::consumerTestCaseId)
+                .thenComparing(V03BindingDependency::consumerStepId)
                 .thenComparing(V03BindingDependency::consumerInput)
+                .thenComparing(V03BindingDependency::producerTestCaseId)
                 .thenComparing(V03BindingDependency::producerTarget)
                 .thenComparing(V03BindingDependency::producerStepId)
                 .thenComparing(V03BindingDependency::producerOutput)).forEach(dependency -> canonical.append("binding|")
+                .append(dependency.consumerTestCaseId()).append('|')
                 .append(dependency.consumerStepId()).append('|')
                 .append(dependency.consumerInput()).append('|')
                 .append(dependency.referenceKind()).append('|')
+                .append(dependency.producerTestCaseId()).append('|')
                 .append(dependency.producerTarget()).append('|')
                 .append(dependency.producerStepId()).append('|')
                 .append(dependency.producerOutput()).append('\n'));
-        try {
-            byte[] bytes = MessageDigest.getInstance("SHA-256").digest(canonical.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            StringBuilder hex = new StringBuilder();
-            for (byte value : bytes) hex.append(String.format("%02x", value));
-            return hex.toString();
-        } catch (NoSuchAlgorithmException error) {
-            throw new IllegalStateException("SHA-256 is required to compile a v0.3 execution plan.", error);
-        }
+        return planCanonicalizer.digest(canonical.toString());
     }
 
     private void appendContract(StringBuilder canonical, V03ProviderContract contract) {
@@ -709,13 +713,13 @@ public class V03ExecutionPlanBuilder {
             values.forEach(item -> items.add(canonicalValue(item)));
             return String.join(",", items).replaceFirst("^", "[").concat("]");
         }
-        return String.valueOf(value);
+        return planCanonicalizer.canonicalValue(value);
     }
 
     private void appendSteps(StringBuilder canonical, List<V03ExecutionStep> steps) {
         steps.forEach(step -> canonical.append(step.kind()).append('|')
                 .append(step.phase()).append('|')
                 .append(step.id()).append('|').append(step.target()).append('|')
-                .append(step.operation()).append('|').append(step.inputs()).append('\n'));
+                .append(step.operation()).append('|').append(planCanonicalizer.canonicalValue(step.inputs())).append('\n'));
     }
 }

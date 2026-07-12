@@ -32,8 +32,8 @@ public final class V03OutputRedactor {
             V03ExecutionStep assertion,
             Object raw,
             Object value,
-            Map<String, V03ProducedOutput> producedOutputs) {
-        V03OutputDefinition definition = outputDefinitionForReference(assertion, raw, producedOutputs);
+            Map<V03StepOutputKey, V03ProducedOutput> stepOutputs) {
+        V03OutputDefinition definition = outputDefinitionForReference(assertion, raw, stepOutputs);
         if (definition != null && definition.sensitivity() != V03Sensitivity.PUBLIC) {
             return MASKED;
         }
@@ -43,7 +43,7 @@ public final class V03OutputRedactor {
     private V03OutputDefinition outputDefinitionForReference(
             V03ExecutionStep assertion,
             Object raw,
-            Map<String, V03ProducedOutput> producedOutputs) {
+            Map<V03StepOutputKey, V03ProducedOutput> stepOutputs) {
         if (!(raw instanceof String reference)) return null;
         if (reference.startsWith("step://")) {
             String body = reference.substring("step://".length());
@@ -51,43 +51,26 @@ public final class V03OutputRedactor {
             if (slash < 1) return null;
             String stepId = body.substring(0, slash);
             String output = body.substring(slash + 1).split("#", 2)[0];
-            V03ProducedOutput produced = producedOutput(producedOutputs, assertion.testCaseId(), stepId, output);
+            V03ProducedOutput produced = producedOutput(stepOutputs, assertion.testCaseId(), stepId, output);
             if (produced != null) return new V03OutputDefinition(
                     produced.valueType(), produced.sensitivity(), produced.bindable(), true);
-            return null;
-        }
-        if (reference.startsWith("generated://")) {
-            String body = reference.substring("generated://".length()).split("#", 2)[0];
-            int slash = body.indexOf('/');
-            if (slash < 1) return null;
-            String targetName = body.substring(0, slash);
-            String output = body.substring(slash + 1);
-            List<V03ProducedOutput> produced = producedOutputs.values().stream()
-                    .filter(item -> targetName.equals(item.target()) && matchesOutputPath(item, output) && item.bindable())
-                    .toList();
-            if (produced.size() == 1) {
-                V03ProducedOutput item = produced.get(0);
-                return new V03OutputDefinition(item.valueType(), item.sensitivity(), item.bindable(), true);
-            }
             return null;
         }
         return null;
     }
 
     private V03ProducedOutput producedOutput(
-            Map<String, V03ProducedOutput> producedOutputs, String testCaseId, String stepId, String outputPath) {
-        V03ProducedOutput exact = producedOutputs.get(testCaseId + "\n" + stepId + "\n" + outputPath);
-        if (exact != null) return exact;
-        String root = outputPath.contains(".") ? outputPath.substring(0, outputPath.indexOf('.')) : outputPath;
-        V03ProducedOutput parent = producedOutputs.get(testCaseId + "\n" + stepId + "\n" + root);
-        return matchesOutputPath(parent, outputPath) ? parent : null;
-    }
-
-    private boolean matchesOutputPath(V03ProducedOutput output, String outputPath) {
-        if (output == null) return false;
-        if (output.outputName().equals(outputPath)) return true;
-        return outputPath.startsWith(output.outputName() + ".")
-                && (output.valueType() == V03ValueType.OBJECT || output.valueType() == V03ValueType.ANY);
+            Map<V03StepOutputKey, V03ProducedOutput> stepOutputs, String testCaseId, String stepId, String outputPath) {
+        try {
+            return new V03OutputDefinitionResolver().resolveProducedPath(
+                    stepOutputs.entrySet().stream()
+                            .filter(entry -> entry.getKey().testCaseId().equals(testCaseId))
+                            .filter(entry -> entry.getKey().stepId().equals(stepId))
+                            .map(Map.Entry::getValue).toList(),
+                    outputPath).output();
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 
     public String redactMessage(String message) {

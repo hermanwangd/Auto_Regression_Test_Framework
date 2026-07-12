@@ -65,7 +65,7 @@ class V03BindingDependencyCompilerTest {
     }
 
     @Test
-    void acceptsDottedSubpathsOfDeclaredObjectOutputs() {
+    void acceptsDottedSubpathsOfDeclaredObjectOutputsForAnyConsumer() {
         V03ExecutionStep producer = step("produce", "producer", "producer.v0.3", "produce", Map.of());
         V03ExecutionStep consumer = step("consume", "consumer", "consumer.v0.3", "consume",
                 Map.of("value", "step://produce/response.status"));
@@ -73,7 +73,7 @@ class V03BindingDependencyCompilerTest {
                 "producer.v0.3", contract("producer.v0.3", "produce", Map.of(), Map.of(
                         "response", new V03OutputDefinition(V03ValueType.OBJECT, V03Sensitivity.PUBLIC, true, false))),
                 "consumer.v0.3", contract("consumer.v0.3", "consume", Map.of(
-                        "value", new V03InputDefinition(true, V03ValueType.STRING, Set.of(V03ReferenceKind.STEP),
+                        "value", new V03InputDefinition(true, V03ValueType.ANY, Set.of(V03ReferenceKind.STEP),
                                 V03Sensitivity.PUBLIC)), Map.of()));
 
         assertThat(compiler.compile(List.of(producer, consumer), Map.of(), contracts, Map.of())).hasSize(1);
@@ -131,6 +131,119 @@ class V03BindingDependencyCompilerTest {
 
         assertThatThrownBy(() -> compiler.compile(List.of(first, second, consumer), targets, contracts, Map.of()))
                 .hasMessageContaining("ambiguous_generated_producer");
+    }
+
+    @Test
+    void rejectsGeneratedReferenceWhenOnlyAnotherTestCaseProducedIt() {
+        V03ExecutionStep producer = step("TC-1", "produce", "producer", "producer.v0.3", "produce", Map.of());
+        V03ExecutionStep consumer = step("TC-2", "consume", "consumer", "consumer.v0.3", "consume", Map.of());
+        V03OutputDefinition output = new V03OutputDefinition(V03ValueType.STRING, V03Sensitivity.PUBLIC, true, false);
+        Map<String, V03ProviderContract> contracts = Map.of(
+                "producer.v0.3", contract("producer.v0.3", "produce", Map.of(), Map.of("base_url", output)),
+                "consumer.v0.3", new V03ProviderContract("consumer.v0.3", "consumer", Set.of("native"), Map.of(
+                        "base_url", new V03ProviderContract.V03BindingDefinition(true, "env_profile", V03ValueType.STRING,
+                                Set.of(V03ReferenceKind.GENERATED), V03Sensitivity.PUBLIC)), Map.of(
+                        "consume", new V03ProviderContract.V03OperationDefinition(Set.of(), Set.of(), Set.of(), Map.of(), Map.of(), Set.of("native"), Set.of("execute"))),
+                        Set.of(), Set.of(), Set.of()));
+        Map<String, V03ResolvedTarget> targets = Map.of(
+                "producer", new V03ResolvedTarget("producer", "producer.v0.3", "producer", "local", "native", Map.of()),
+                "consumer", new V03ResolvedTarget("consumer", "consumer.v0.3", "consumer", "local", "native",
+                        Map.of("base_url", "generated://producer/base_url")));
+
+        assertThatThrownBy(() -> compiler.compile(List.of(producer, consumer), targets, contracts, Map.of()))
+                .hasMessageContaining("missing_generated_binding_producer");
+    }
+
+    @Test
+    void rejectsGeneratedReferenceWithoutAConcretePriorProducer() {
+        V03ExecutionStep consumer = step("TC-1", "consume", "consumer", "consumer.v0.3", "consume", Map.of());
+        Map<String, V03ProviderContract> contracts = Map.of(
+                "producer.v0.3", contract("producer.v0.3", "produce", Map.of(), Map.of(
+                        "base_url", new V03OutputDefinition(V03ValueType.STRING, V03Sensitivity.PUBLIC, true, false))),
+                "consumer.v0.3", new V03ProviderContract("consumer.v0.3", "consumer", Set.of("native"), Map.of(
+                        "base_url", new V03ProviderContract.V03BindingDefinition(true, "env_profile", V03ValueType.STRING,
+                                Set.of(V03ReferenceKind.GENERATED), V03Sensitivity.PUBLIC)), Map.of(
+                        "consume", new V03ProviderContract.V03OperationDefinition(Set.of(), Set.of(), Set.of(), Map.of(), Map.of(), Set.of("native"), Set.of("execute"))),
+                        Set.of(), Set.of(), Set.of()));
+        Map<String, V03ResolvedTarget> targets = Map.of(
+                "producer", new V03ResolvedTarget("producer", "producer.v0.3", "producer", "local", "native", Map.of()),
+                "consumer", new V03ResolvedTarget("consumer", "consumer.v0.3", "consumer", "local", "native",
+                        Map.of("base_url", "generated://producer/base_url")));
+
+        assertThatThrownBy(() -> compiler.compile(List.of(consumer), targets, contracts, Map.of()))
+                .hasMessageContaining("missing_generated_binding_producer");
+    }
+
+    @Test
+    void rejectsProviderCheckAsGeneratedProducer() {
+        V03ExecutionStep check = new V03ExecutionStep("TC-1", V03ExecutionStepKind.PROVIDER_CHECK,
+                "verify", "check_mock", "producer", "producer.v0.3", "producer", "local", "native",
+                "check", Map.of(), "");
+        V03ExecutionStep consumer = step("TC-1", "consume", "consumer", "consumer.v0.3", "consume", Map.of());
+        Map<String, V03ProviderContract> contracts = Map.of(
+                "producer.v0.3", contract("producer.v0.3", "check", Map.of(), Map.of(
+                        "base_url", new V03OutputDefinition(V03ValueType.STRING, V03Sensitivity.PUBLIC, true, false))),
+                "consumer.v0.3", new V03ProviderContract("consumer.v0.3", "consumer", Set.of("native"), Map.of(
+                        "base_url", new V03ProviderContract.V03BindingDefinition(true, "env_profile", V03ValueType.STRING,
+                                Set.of(V03ReferenceKind.GENERATED), V03Sensitivity.PUBLIC)), Map.of(
+                        "consume", new V03ProviderContract.V03OperationDefinition(Set.of(), Set.of(), Set.of(), Map.of(), Map.of(), Set.of("native"), Set.of("execute"))),
+                        Set.of(), Set.of(), Set.of()));
+        Map<String, V03ResolvedTarget> targets = Map.of(
+                "producer", new V03ResolvedTarget("producer", "producer.v0.3", "producer", "local", "native", Map.of()),
+                "consumer", new V03ResolvedTarget("consumer", "consumer.v0.3", "consumer", "local", "native",
+                        Map.of("base_url", "generated://producer/base_url")));
+
+        assertThatThrownBy(() -> compiler.compile(List.of(check, consumer), targets, contracts, Map.of()))
+                .hasMessageContaining("missing_generated_binding_producer");
+    }
+
+    @Test
+    void rejectsProviderOperationThatConsumesProviderCheckOutput() {
+        V03ExecutionStep check = new V03ExecutionStep("TC-1", V03ExecutionStepKind.PROVIDER_CHECK,
+                "verify", "check_state", "observer", "observer.v0.3", "observer", "local", "native",
+                "check", Map.of(), "");
+        V03ExecutionStep operation = step("TC-1", "mutate", "consumer", "consumer.v0.3", "consume",
+                Map.of("value", "step://check_state/value"));
+        Map<String, V03ProviderContract> contracts = Map.of(
+                "observer.v0.3", contract("observer.v0.3", "check", Map.of(), Map.of(
+                        "value", new V03OutputDefinition(V03ValueType.STRING, V03Sensitivity.PUBLIC, false, false))),
+                "consumer.v0.3", contract("consumer.v0.3", "consume", Map.of(
+                        "value", new V03InputDefinition(true, V03ValueType.STRING, Set.of(V03ReferenceKind.STEP),
+                                V03Sensitivity.PUBLIC)), Map.of()));
+
+        assertThatThrownBy(() -> compiler.compile(List.of(check, operation), Map.of(), contracts, Map.of()))
+                .hasMessageContaining("provider_check_output_not_consumable");
+    }
+
+    @Test
+    void allowsAssertionToConsumeProviderCheckOutput() {
+        V03ExecutionStep check = new V03ExecutionStep("TC-1", V03ExecutionStepKind.PROVIDER_CHECK,
+                "verify", "check_state", "observer", "observer.v0.3", "observer", "local", "native",
+                "check", Map.of(), "");
+        V03ExecutionStep assertion = new V03ExecutionStep("TC-1", V03ExecutionStepKind.ASSERTION,
+                "verify", "assert_state", "", "", "", "local", "", "exists",
+                Map.of("actual", "step://check_state/value", "operator", "exists"), "");
+        Map<String, V03ProviderContract> contracts = Map.of("observer.v0.3", contract(
+                "observer.v0.3", "check", Map.of(), Map.of(
+                        "value", new V03OutputDefinition(V03ValueType.STRING, V03Sensitivity.PUBLIC, false, false))));
+
+        assertThat(compiler.compile(List.of(check, assertion), Map.of(), contracts, Map.of())).hasSize(1);
+    }
+
+    @Test
+    void rejectsSecretOutputFlowIntoMaskedConsumer() {
+        V03ExecutionStep producer = step("produce", "producer", "producer.v0.3", "produce", Map.of());
+        V03ExecutionStep consumer = step("consume", "consumer", "consumer.v0.3", "consume",
+                Map.of("value", "step://produce/value"));
+        Map<String, V03ProviderContract> contracts = Map.of(
+                "producer.v0.3", contract("producer.v0.3", "produce", Map.of(), Map.of(
+                        "value", new V03OutputDefinition(V03ValueType.STRING, V03Sensitivity.SECRET, true, false))),
+                "consumer.v0.3", contract("consumer.v0.3", "consume", Map.of(
+                        "value", new V03InputDefinition(true, V03ValueType.STRING, Set.of(V03ReferenceKind.STEP),
+                                V03Sensitivity.MASKED)), Map.of()));
+
+        assertThatThrownBy(() -> compiler.compile(List.of(producer, consumer), Map.of(), contracts, Map.of()))
+                .hasMessageContaining("unsafe_sensitivity_flow");
     }
 
     @Test

@@ -118,6 +118,62 @@ class V03ExecutionPlanBuilderTest {
         assertThat(second).isEqualTo(first);
     }
 
+    @Test
+    void rejectsAssertionReferenceToUndeclaredPriorStepOutputBeforeRuntime() throws Exception {
+        Path source = Path.of("samples/20-provider-capability-p0/http/rest_client_with_wiremock");
+        Path suiteRoot = tempDir.resolve("missing-assertion-output");
+        copyDirectory(source, suiteRoot);
+        Path testCase = suiteRoot.resolve("test_cases/payment_success.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("step://call_payment_api/response.status", "step://call_payment_api/missing_output"));
+
+        assertThatThrownBy(() -> new V03ExecutionPlanBuilder()
+                .build(suiteRoot.resolve("suite_manifest.yaml"), "local_v03"))
+                .hasMessageContaining("missing_provider_output");
+    }
+
+    @Test
+    void rejectsGeneratedReferenceInDslAssertion() throws Exception {
+        Path source = Path.of("samples/20-provider-capability-p0/http/rest_client_with_wiremock");
+        Path suiteRoot = tempDir.resolve("generated-assertion-reference");
+        copyDirectory(source, suiteRoot);
+        Path testCase = suiteRoot.resolve("test_cases/payment_success.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("step://call_payment_api/response.status", "generated://payment_mock/base_url"));
+
+        assertThatThrownBy(() -> new V03ExecutionPlanBuilder()
+                .build(suiteRoot.resolve("suite_manifest.yaml"), "local_v03"))
+                .hasMessageContaining("invalid_reference_scope");
+    }
+
+    @Test
+    void rejectsGeneratedReferenceInDslOperationInput() throws Exception {
+        Path source = Path.of("samples/20-provider-capability-p0/http/rest_client_with_wiremock");
+        Path suiteRoot = tempDir.resolve("generated-operation-reference");
+        copyDirectory(source, suiteRoot);
+        Path testCase = suiteRoot.resolve("test_cases/payment_success.yaml");
+        Files.writeString(testCase, Files.readString(testCase)
+                .replace("request.path: /payments", "request.path: generated://payment_mock/base_url"));
+
+        assertThatThrownBy(() -> new V03ExecutionPlanBuilder()
+                .build(suiteRoot.resolve("suite_manifest.yaml"), "local_v03"))
+                .hasMessageContaining("invalid_reference_scope");
+    }
+
+    @Test
+    void rejectsTargetBindingReferenceKindOutsideProviderContract() throws Exception {
+        Path source = Path.of("samples/20-provider-capability-p0/http/rest_client_with_wiremock");
+        Path suiteRoot = tempDir.resolve("unsupported-binding-reference-kind");
+        copyDirectory(source, suiteRoot);
+        Path profile = suiteRoot.resolve("env_profiles/local_v03.yaml");
+        Files.writeString(profile, Files.readString(profile)
+                .replace("generated://payment_mock/base_url", "artifact://fixtures/payment_request.json"));
+
+        assertThatThrownBy(() -> new V03ExecutionPlanBuilder()
+                .build(suiteRoot.resolve("suite_manifest.yaml"), "local_v03"))
+                .hasMessageContaining("unsupported_binding_reference_kind");
+    }
+
     private void copyDirectory(Path source, Path target) throws IOException {
         try (var paths = Files.walk(source)) {
             for (Path path : paths.sorted(Comparator.comparing(Path::toString)).toList()) {

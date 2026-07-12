@@ -70,7 +70,7 @@ class AbstractProviderRuntimeV03AdapterTest {
 
         assertThatThrownBy(() -> adapter.providerContext(step, context))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("unresolved_generated_ref");
+                .hasMessageContaining("missing_compiled_generated_binding");
     }
 
     private V03ExecutionContext context(
@@ -85,6 +85,8 @@ class AbstractProviderRuntimeV03AdapterTest {
                 targets,
                 artifactRoots,
                 Map.of(),
+                Map.of(),
+                java.util.List.of(),
                 Map.of(),
                 Map.of(),
                 resolver,
