@@ -132,3 +132,42 @@ Failure path: invalid type, phase, runtime mode, missing producer, undeclared ge
 Happy path: each leaf suite routes by one declared manifest/DSL version; executable documentation samples validate, run where locally supported, and pass report/evidence checks from the release artifact.
 
 Failure path: absent, unsupported, or mixed leaf versions block before schema/contract lookup. A release gate fails when a documented sample, bundled contract registry, or Maven verification command is unavailable outside the repository working directory.
+
+## AC-V03-018 Preserve Contract-Valid JDBC Failure Evidence
+
+Happy path: An external JDBC failure produces a non-zero result with the
+original safe JDBC failure code, an indexed masked failure-evidence ref, and a
+result accepted by `validate-evidence`.
+
+Failure path: A JDBC runtime must not return an output that is absent from the
+selected operation's Provider Contract. In particular, an invalid connection
+must not be replaced by `undeclared_provider_output`.
+
+Boundary path: An invalid-connection probe validates failure behavior only;
+Oracle and DB2 native CRUD acceptance requires separate seed, query,
+assertion, cleanup, result, and evidence runs for each dialect.
+
+## AC-V03-019 Execute External Native REST Client Suite
+
+Happy path: A checked-in v0.3 REST suite resolves `base_url` only from
+`env://REST_BASE_URL`, runs `rest_client.v0.3` in `native` mode, and writes
+result/evidence showing the selected external profile and native runtime.
+
+Failure path: Missing or blank `REST_BASE_URL` blocks before dispatch and must
+not fall back to local/mock bindings.
+
+Boundary path: The framework does not know whether the external endpoint is
+WireMock or another server. The caller independently verifies the unique HTTP
+request observed by its provisioned service.
+
+## AC-V03-020 Execute External Native gRPC Client Suite
+
+Happy path: A checked-in v0.3 unary plaintext gRPC suite resolves `target` only
+from `env://GRPC_TARGET`, runs `grpc_client.v0.3` in `native` mode, and writes
+matching client evidence.
+
+Failure path: Missing or blank `GRPC_TARGET` blocks before dispatch and must
+not fall back to local/mock bindings.
+
+Boundary path: The caller owns external gRPC server/Testcontainer lifecycle and
+independently verifies the invoked method plus a unique message identity.

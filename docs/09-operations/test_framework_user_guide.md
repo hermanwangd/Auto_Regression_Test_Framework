@@ -1217,6 +1217,20 @@ The JDBC provider capability sample keeps fixture/query/cleanup behavior in the 
 
 For native external JDBC evidence, the checked-in external Env_Profiles keep `connection.secret_ref: env://JDBC_CONNECTION` but are split by dialect so one run targets exactly one external database. Owners must provide `JDBC_CONNECTION` in the runner environment, for example `JDBC_CONNECTION='<jdbc-url>' regress run ...`, and must select the matching external profile. Do not write raw JDBC URLs into DSL or Env_Profile files.
 
+### External Native Client Samples
+
+`rest_client_external` and `grpc_client_external` are v0.3 client suites for
+caller-owned external endpoints. They use `REST_BASE_URL` and `GRPC_TARGET`
+only through their Env_Profile bindings. The framework does not start or
+identify the external service; callers provision it and independently verify
+the HTTP request or unary gRPC invocation. A missing value blocks before
+provider dispatch and cannot fall back to a local/mock profile.
+
+Provider failure evidence is indexed evidence, not an implicit operation output.
+For example, JDBC connection failure diagnostics remain masked and are visible
+through standard result/evidence references without exposing an undeclared
+`failure_detail_ref` output.
+
 Provider Capability suite-path mode may execute only checked-in framework provider capability samples for WireMock HTTP mock, `rest_client` HTTP request, SOAP mock, gRPC unary mock, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and evidence/report behavior. It must not execute non-P0 providers, Product/RP/RU topology interpretation, release governance, SIT/preprod release evidence, or downstream product deployment.
 
 Usage-kit runtime-mode coverage is represented by v0.3 suite targets and Env_Profile examples. Provider Instance files are v0.2 compatibility artifacts only and are not part of the v0.3 public sample surface.

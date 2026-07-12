@@ -273,6 +273,26 @@ Evidence validation must prove:
 - cleanup failures are visible and do not hide the original failure,
 - result, evidence, report, and logs contain no raw secrets.
 
+### Failure Evidence Boundary
+
+A provider failure result carries its failure code, safe reason, owner action,
+and evidence refs through the standard result/evidence contract. A
+failure-only evidence ref, such as JDBC connection diagnostics, is not an
+operation output, is not bindable, and must not be returned in `outputs` unless
+the Provider Contract explicitly declares it for that operation. This keeps a
+provider failure contract-valid while still preserving indexed, masked failure
+evidence.
+
+### External Native Client Boundary
+
+`rest_client.v0.3` and `grpc_client.v0.3` consume project-provided endpoints
+only through the selected Env_Profile. A REST suite binds
+`base_url: env://REST_BASE_URL`; a unary plaintext gRPC suite binds
+`target: env://GRPC_TARGET`. The DSL contains neither endpoint value nor
+server implementation details. The framework does not provision or identify
+the external server. The caller owns service/Testcontainer lifecycle and
+independently verifies that the recorded request reached that service.
+
 ## 10. Compatibility Boundary
 
 v0.2 artifacts remain supported by the v0.2 runtime path. v0.3 artifacts are versioned separately and must fail fast if they contain v0.2-only fields. A future migration command may translate v0.2 artifacts into v0.3 shape, but v0.3 runtime must not silently infer Provider Instances from legacy files.
