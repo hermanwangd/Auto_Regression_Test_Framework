@@ -30,7 +30,7 @@ validate_external_profile() {
   KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS:-contract-validation.invalid:9092}" \
   IBM_MQ_CONN_NAME="${IBM_MQ_CONN_NAME:-CONTRACT.VALIDATION}" \
   IBM_MQ_CREDENTIAL="${IBM_MQ_CREDENTIAL:-contract-validation-placeholder}" \
-  JDBC_CONNECTION="${JDBC_CONNECTION:-jdbc:oracle:thin:@contract-validation.invalid:1521/service}" \
+  JDBC_CONNECTION="${JDBC_CONNECTION:-contract-validation-placeholder}" \
     run_cli validate --suite "$suite" --profile "$profile"
 }
 
