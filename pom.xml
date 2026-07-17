@@ -53,7 +53,7 @@
         <protobuf.version>4.33.4</protobuf.version>
         <wiremock.version>4.0.0-beta.38</wiremock.version>
         <wiremock.grpc.version>1.0.0-beta.5</wiremock.grpc.version>
-        <wiremock.jetty.version>12.1.10</wiremock.jetty.version>
+        <wiremock.jetty.version>12.1.11</wiremock.jetty.version>
         <jackson-bom.version>2.22.0</jackson-bom.version>
         <kafka.version>3.9.2</kafka.version>
         <ibm.mq.version>10.0.0.0</ibm.mq.version>
