@@ -40,7 +40,7 @@ jobs:
 
       - name: Restore Dependency-Check data
         id: dependency-check-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.DEPENDENCY_CHECK_DATA_DIR }}
           key: ${{ runner.os }}-dependency-check-${{ env.DEPENDENCY_CHECK_VERSION }}-${{ steps.dependency-check-cache-date.outputs.date }}
@@ -54,7 +54,7 @@ jobs:
         run: scripts/ci/security-scan.sh --warmup
 
       - name: Save warmed Dependency-Check data
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         if: steps.dependency-check-cache.outputs.cache-hit != 'true'
         with:
           path: ${{ env.DEPENDENCY_CHECK_DATA_DIR }}
