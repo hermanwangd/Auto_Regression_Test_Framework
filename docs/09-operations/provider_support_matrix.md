@@ -20,6 +20,7 @@ Server or dependency lifecycle words such as native, mock, ephemeral, framework-
 | Provider Type | support_status | external_native_evidence | Release-verifiable sample | Runtime boundary |
 | --- | --- | --- | --- | --- |
 | `artifact_compare` | `supported` | not_applicable | `samples/20-provider-capability-p0/verification/artifact_compare/` | Common artifact read/diff utility for checked-in samples. |
+| `cli_process` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/cli/cli_process/` | v0.3 only: trusted local executable/SHA, direct argv, bounded stdin/stdout/stderr, canonical exit/output assertions. Configure the sample with a reviewed binary; no shared-SIT ownership, OS sandbox or transitive dependency pinning. |
 | `common_verify` | `supported` | not_applicable | `samples/20-provider-capability-p0/verification/common_verify/` | JSON/schema/file assertion-only verifier contract. |
 | `external_runner` | `contract_only` | not_applicable | n/a | Contract is documented, but general command execution is not a supported public release path. |
 | `grpc_client` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/rpc/grpc_mock/` | Unary client stimulus for checked-in gRPC mock capability samples; external native evidence uses `grpc_client_external/`. |

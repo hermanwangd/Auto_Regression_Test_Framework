@@ -86,21 +86,40 @@ final class CanonicalEvidence {
         require("framework_verification_only".equals(Json.required(provenance, "evidence_classification"))
                 && explicitFalse(provenance.path("downstream_release_evidence")), "Reviewed evidence cannot become release evidence");
         boolean passed = "passed".equals(Json.required(document, "status"));
-        boolean nativeHttp = "integration".equals(request.testLevel());
-        validateModes(provenance, "provider_modes", "observed_provider_modes", true, passed, nativeHttp ? "real" : "simulated");
+        boolean nativeExecution = "integration".equals(request.testLevel());
+        validateModes(provenance, "provider_modes", "observed_provider_modes", true, passed, nativeExecution ? "real" : "simulated");
         validateModes(provenance, "dependency_modes", "observed_dependency_modes", false, passed, "simulated");
-        if (nativeHttp) {
+        if (nativeExecution) {
+            byte[] reviewedBytes = LocalFiles.read(Path.of(request.reviewedHandoff()), 2 * 1024 * 1024);
+            require(request.expectedHandoffSha256().equals(LocalFiles.sha256(reviewedBytes)), "Reviewed handoff digest mismatch");
+            var contracts = Json.MAPPER.readTree(reviewedBytes).path("reviewed_contracts");
+            require(contracts.isArray() && contracts.size() == 1 && contracts.equals(provenance.path("reviewed_contracts")),
+                    "Native reviewed contract differs from pinned handoff");
+            String contract = Json.required(contracts.get(0), "provider_contract");
+            require(Set.of("rest_client.v0.3", "cli_process.v0.3").contains(contract), "Unsupported native provider contract");
+            String type = contract.equals("cli_process.v0.3") ? "cli_process" : "rest_client";
+            String operation = type.equals("cli_process") ? "run_command" : "http_request";
             require("not_used".equals(request.knowledgeMode()) && provenance.path("provider_modes").size() == 1
                     && provenance.path("dependency_modes").isEmpty(), "Unsupported native capability metadata");
             require(document.path("provider_results").isArray() && document.path("step_results").isArray()
                     && document.path("provider_results").size() <= 1 && document.path("step_results").size() <= 1
                     && (!passed || document.path("provider_results").size() == 1 && document.path("step_results").size() == 1),
-                    "Native evidence must describe one HTTP request");
-            for (var provider : document.path("provider_results")) require("rest_client".equals(provider.path("provider_type").asText())
-                    && "rest_client.v0.3".equals(provider.path("provider_contract").asText())
+                    "Native evidence must describe one selected operation");
+            for (var provider : document.path("provider_results")) require(type.equals(provider.path("provider_type").asText())
+                    && contract.equals(provider.path("provider_contract").asText())
                     && "native".equals(provider.path("runtime_mode").asText()), "Native provider metadata mismatch");
             for (var step : document.path("step_results")) require("execute".equals(step.path("phase").asText())
-                    && "http_request".equals(step.path("operation").asText()), "Native operation metadata mismatch");
+                    && operation.equals(step.path("operation").asText()), "Native operation metadata mismatch");
+            for (var provider : document.path("provider_results")) {
+                require(operation.equals(provider.path("operation").asText())
+                        && Json.MAPPER.valueToTree(List.of(operation)).equals(provider.path("operations")),
+                        "Native provider operation metadata mismatch");
+                var resolved = provider.path("resolved_operation_results");
+                require(resolved.isArray() && resolved.size() <= 1 && (!passed || resolved.size() == 1),
+                        "Native resolved operation count mismatch");
+                for (var observed : resolved) require(operation.equals(observed.path("operation").asText()),
+                        "Native resolved operation metadata mismatch");
+            }
         }
         var artifacts = new LinkedHashMap<String, ProductTestReceipt.Artifact>();
         for (var entry : tree.entrySet()) artifacts.put("evidence:" + entry.getKey(), new ProductTestReceipt.Artifact(run.resolve(entry.getKey()).toString(), entry.getValue()));

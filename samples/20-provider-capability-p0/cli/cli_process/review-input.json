@@ -1,0 +1,58 @@
+{
+  "contract_version": "product-test-reviewed-handoff.v1",
+  "suite_id": "PUBLIC-CLI-expected-nonzero",
+  "profile": "local_cli",
+  "knowledge_mode": "not_used",
+  "review_ref": "synthetic://review/cli-example",
+  "reviewed_by": "synthetic-demo-reviewer",
+  "reviewed_at": "2026-11-01T00:00:00Z",
+  "valid_until": "2099-01-01T00:00:00Z",
+  "framework_baseline": "0.3.2",
+  "repository_revisions": {
+    "https://github.com/jqlang/jq": "34f7186b86743a083a589741b6cea95293524108"
+  },
+  "swarm_source": {
+    "base_revision": "fe80374f740ed3c604836431daca5c32e92cf844",
+    "files": {
+      "Dev204Cli.java": "ff0669763d5070e834ffba893a2ebe681a20e868c85fc0b9b595256e468069b8",
+      "CogneeSearchClient.java": "506f163a5294f68881996d38f06de47ae6aa7ee2321954f77535db5c0cfc4878",
+      "SwarmKnowledgeGateway.java": "d2fb8408676d4de60d0f38528756558c0f669c61168b107ed1ea46aee23018d0"
+    }
+  },
+  "reviewed_files": [
+    {
+      "path": "suite_manifest.yaml",
+      "role": "manifest"
+    },
+    {
+      "path": "env_profiles/local_cli.yaml",
+      "role": "profile"
+    },
+    {
+      "path": "test_cases/cli.yaml",
+      "role": "test"
+    }
+  ],
+  "reviewed_contracts": [
+    {
+      "provider_contract": "cli_process.v0.3",
+      "path": "contracts/cli_process_v0_3.yaml"
+    }
+  ],
+  "requirement_mapping": [
+    {
+      "requirement_ref": "https://jqlang.org/manual/#invoking-jq",
+      "test_case_ids": [
+        "TC-CLI"
+      ],
+      "oracle_refs": [
+        "test_cases/cli.yaml#exit_ok",
+        "test_cases/cli.yaml#stdout_ok",
+        "test_cases/cli.yaml#stderr_ok"
+      ],
+      "review_ref": "synthetic://review/cli-example"
+    }
+  ],
+  "workspace_ref": "synthetic-workspace",
+  "project_ref": "public-cli-sample"
+}

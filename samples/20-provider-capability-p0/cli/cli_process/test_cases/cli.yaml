@@ -1,0 +1,52 @@
+{
+  "dsl_version": "v0.3",
+  "test_case_id": "TC-CLI",
+  "title": "Public CLI behavior through existing framework",
+  "execute": [
+    {
+      "id": "invoke",
+      "target": "cli",
+      "op": "run_command",
+      "with": {
+        "process.argv": [
+          "-n",
+          "-e",
+          "false"
+        ],
+        "process.stdin": "",
+        "process.cwd": "work",
+        "process.timeout_ms": 5000,
+        "process.max_output_bytes": 16384
+      }
+    }
+  ],
+  "verify": [
+    {
+      "id": "exit_ok",
+      "type": "assertion",
+      "assert": {
+        "actual": "step://invoke/exit_code",
+        "operator": "equals",
+        "expected": 1
+      }
+    },
+    {
+      "id": "stdout_ok",
+      "type": "assertion",
+      "assert": {
+        "actual": "step://invoke/stdout",
+        "operator": "equals",
+        "expected": "false\n"
+      }
+    },
+    {
+      "id": "stderr_ok",
+      "type": "assertion",
+      "assert": {
+        "actual": "step://invoke/stderr",
+        "operator": "equals",
+        "expected": ""
+      }
+    }
+  ]
+}

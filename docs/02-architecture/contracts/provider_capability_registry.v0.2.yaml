@@ -40,6 +40,16 @@ runtime_mode_semantics:
   contract_runtime_modes: optional runtime modes named by the Provider Contract vocabulary when broader than supported_runtime_modes
   contract_only_runtime_modes: optional runtime modes reserved for later implementation and blocked before dispatch today
 provider_types:
+  cli_process:
+    contract_ref: provider-contracts/cli_process_v0_3.yaml
+    support_status: supported
+    supported_contract_versions: [v0.3]
+    supported_runtime_modes: [native]
+    required_binding_keys: [executable, executable_sha256]
+    supported_operations: [run_command]
+    evidence_outputs: [cli_process, exit_code, stdout, stderr, duration_ms]
+    support_scope: trusted_local_direct_argv_with_finite_io_and_executable_pin
+    sample_ref: samples/20-provider-capability-p0/cli/cli_process/suite_manifest.yaml
   shell_command:
     contract_ref: provider-contracts/shell_command.yaml
     support_status: contract_only

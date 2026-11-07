@@ -23,14 +23,20 @@ Swarm remains responsible for requirements, cross-repository impact, test propos
 
 | Dimension | Implemented | Extension targets / validation gap |
 | --- | --- | --- |
-| Test level | component; one bounded native HTTP integration read | system, acceptance and broader integration workflows |
+| Test level | component; one bounded native HTTP read or CLI command | system, acceptance and broader integration workflows |
 | Test type | regression | performance, security and other types |
 | Environment stage | local | SIT, preproduction, production |
-| Provider | simulated `sample_fake_provider.v0.3`; native loopback `rest_client.v0.3` for the finite integration slice | other audited real providers |
+| Provider | simulated `sample_fake_provider.v0.3`; native loopback `rest_client.v0.3` or direct argv `cli_process.v0.3` for the finite integration slice | other audited real providers |
 | Knowledge mode | `not_used`; component tests also support `required` with a pinned existing-format selection receipt | deployed Cognee identity and company source governance |
 | Shared state | optional synthetic store shared by callers in one JVM | cross-process/distributed ownership and real SIT enforcement |
 
 Every unsupported tuple blocks. An environment name does not establish a test level, and changing a label cannot turn a fake run into SIT evidence. All delivered examples are `framework_verification_only` with `downstream_release_evidence: false`. Before launch, the module compares the request tuple with the digest-verified reviewed profile; canonical provenance and result binding retain the actual tuple.
+
+## Native CLI integration
+
+`cli_process.v0.3` adds direct executable/argv execution through the existing v0.3 provider registry. The reviewed contract selects CLI or HTTP explicitly; the test-level label alone never determines the protocol. One CLI invocation may assert `exit_code`, `stdout`, `stderr` and `duration_ms`. A normal nonzero exit can satisfy a negative test; launch failure, timeout, excess output, invalid UTF-8 or incomplete known-process cleanup cannot pass.
+
+The executable is pinned by an absolute path and SHA-256, stdin and argv are literal reviewed inputs, and cwd is created under the owned run directory. Environment is cleared except fixed C locale. This is a trusted local executable boundary, not a process sandbox or a claim of shared-SIT read-only access. See [CLI contract, bounds and example](reviewed_cli_process.md) and [reviewed implementation plan](../04-planning/reviewed-cli-provider.md). The existing ISTQB mapping also applies: provider adaptation, canonical framework verdicts, independently reviewed oracles and evidence-based AI analysis.
 
 ## Native loopback integration read
 
@@ -72,7 +78,7 @@ java -jar target/spec-driven-auto-regression-0.3.2.jar run \
 
 Required knowledge uses the existing Dev204 shape: `context.selected`, `context.excluded` and `cogneeSelection.candidateSearch.candidates`. Used candidates must exactly join governed selected records on source/revision/provider/source-ref/scope/content identities and the reviewed test mapping. Candidate-only, excluded, ambiguous or expired selected entries block. Both handoff expiry and used selected-record `validUntil` are checked at invocation; equality with current time is expired. This uses the local UTC clock. The importer does not reproduce Swarm governance/replay, fetch sources, contact Cognee, or turn expected source version 1.6.2 into verified server identity. Synthetic receipts remain synthetic. Local `not_used` tests require neither a Cognee receipt nor Cognee source-version metadata.
 
-The runtime reads each accepted input into bounded bytes, verifies its hash and materializes those same bytes into one private snapshot. It accepts the known static fake-provider graph or the finite native HTTP read described above, with typed step output references. It rejects dynamic/environment/generated inputs, unknown fields, empty/dangling/duplicate test identities, incomplete local oracle coverage, unsafe paths, symlinks and hardlinks. Limits are 128 reviewed files/contracts, 2 MiB per file and 16 MiB total executable bytes. This finite closure is not a general sandbox for all framework providers. Future broader test levels may add explicit reviewed exclusions; they are not silently supported here.
+The runtime reads each accepted input into bounded bytes, verifies its hash and materializes those same bytes into one private snapshot. It accepts the known static fake-provider graph or a finite native HTTP read or CLI command described above, with typed step output references. It rejects dynamic/environment/generated inputs, unknown fields, empty/dangling/duplicate test identities, incomplete local oracle coverage, unsafe paths, symlinks and hardlinks. Limits are 128 reviewed files/contracts, 2 MiB per file and 16 MiB total reviewed suite/contract input bytes. CLI executable bytes are hashed separately and are outside that snapshot budget. This finite closure is not a general sandbox for all framework providers. Future broader test levels may add explicit reviewed exclusions; they are not silently supported here.
 
 Both baseline validation and plan compilation use the snapshot's explicit verified contract catalog. Reviewed execution never consults CWD or ancestor contract directories. The snapshot stays alive through existing canonical finalization and is then deleted. Original inputs remain untouched. Provenance evidence contains reviewed hashes, source identities, observed modes and the executed plan digest. The standard finalizer retains its canonical manifest reference. Private fixture/oracle contents are not copied wholesale into the evidence bundle.
 

@@ -2,9 +2,15 @@
 
 This Java 17 module invokes the existing Test Framework and imports its validated canonical result and evidence. It does not run test steps, implement assertions, query Cognee, create `VerificationResult`, fabricate a Multica reference, or close a mission. Swarm analysis/review roles remain responsible for requirements, cross-repository impact, proposals, review and interpretation. Existing framework assertions decide test verdicts.
 
-The module supports **component / regression / local** using the framework's fake provider, and **integration / regression / local** for one native loopback HTTP read. System and acceptance levels, broader integration workflows, performance and security types, and SIT/preproduction/live stages are unsupported and rejected before launch. An optional local readiness/shared-state fixture exercises framework policy mechanics with the same local tuple. It does not prove real SIT or distributed ownership.
+The module supports **component / regression / local** using the framework's fake provider, and **integration / regression / local** for one native loopback HTTP read or pinned CLI command. System and acceptance levels, broader integration workflows, performance and security types, and SIT/preproduction/live stages are unsupported and rejected before launch. An optional local readiness/shared-state fixture exercises framework policy mechanics with the same local tuple. It does not prove real SIT or distributed ownership.
 
 `knowledge_mode: not_used` explicitly uses reviewed local artifacts without retrieval. `required` needs the existing governed Swarm selection receipt in the pinned handoff. Required mode cannot fall back to no knowledge. The native integration slice requires `not_used`; component tests retain both knowledge modes. The framework validates the existing receipt envelope and selected-source coverage; this module does not repeat governance or claim a deployed Cognee version. The local required-mode fixture is synthetic.
+
+## Native CLI integration
+
+`cli_process.v0.3` adds direct executable/argv execution through the existing v0.3 provider registry. The reviewed contract selects CLI or HTTP explicitly; the test-level label alone never determines the protocol. One CLI invocation may assert `exit_code`, `stdout`, `stderr` and `duration_ms`. A normal nonzero exit can satisfy a negative test; launch failure, timeout, excess output, invalid UTF-8 or incomplete known-process cleanup cannot pass.
+
+The executable is pinned by an absolute path and SHA-256, stdin and argv are literal reviewed inputs, and cwd is created under the owned run directory. Environment is cleared except fixed C locale. This is a trusted local executable boundary, not a process sandbox or a claim of shared-SIT read-only access. See [CLI contract, bounds and example](../../docs/09-operations/reviewed_cli_process.md) and [reviewed implementation plan](../../docs/04-planning/reviewed-cli-provider.md). The existing ISTQB mapping also applies: provider adaptation, canonical framework verdicts, independently reviewed oracles and evidence-based AI analysis.
 
 ## Build and packaging
 

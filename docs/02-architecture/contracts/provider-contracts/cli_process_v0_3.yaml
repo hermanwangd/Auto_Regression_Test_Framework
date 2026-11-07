@@ -1,0 +1,114 @@
+---
+contract_version: v0.3
+provider_contract: cli_process.v0.3
+provider_type: cli_process
+provider_role: client
+protocol: local_process
+purpose: Direct literal argv execution of one explicitly pinned local CLI executable.
+runtime_modes:
+- native
+operation_defaults:
+  input:
+    value_type: any
+    reference_kinds:
+    - literal
+    sensitivity: public
+  output:
+    value_type: any
+    sensitivity: public
+    bindable: false
+    evidence_included: true
+  phases:
+  - execute
+binding_keys:
+  executable:
+    required: true
+    source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    sensitivity: public
+  executable_sha256:
+    required: true
+    source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    sensitivity: public
+operations:
+  run_command:
+    phases:
+    - execute
+    inputs:
+      process.argv:
+        required: true
+        value_type: array
+        reference_kinds:
+        - literal
+      process.stdin:
+        required: false
+        value_type: string
+        reference_kinds:
+        - literal
+      process.cwd:
+        required: false
+        value_type: string
+        reference_kinds:
+        - literal
+      process.timeout_ms:
+        required: false
+        value_type: number
+        reference_kinds:
+        - literal
+      process.max_output_bytes:
+        required: false
+        value_type: number
+        reference_kinds:
+        - literal
+    outputs:
+      exit_code:
+        value_type: number
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      stdout:
+        value_type: string
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      stderr:
+        value_type: string
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+      duration_ms:
+        value_type: number
+        sensitivity: public
+        bindable: false
+        evidence_included: true
+    allowed_inputs:
+    - process.argv
+    - process.stdin
+    - process.cwd
+    - process.timeout_ms
+    - process.max_output_bytes
+    required_inputs:
+    - process.argv
+    output_refs:
+    - exit_code
+    - stdout
+    - stderr
+    - duration_ms
+evidence:
+  outputs:
+  - cli_process
+  redact:
+  - stdout.secret_like
+  - stderr.secret_like
+failure_mapping:
+  allowed_codes:
+  - PROVIDER_UNAVAILABLE
+  - PROVIDER_TIMEOUT
+  - OPERATION_FAILED
+  - EVIDENCE_INVALID
+  - SECRET_RESOLUTION_ERROR

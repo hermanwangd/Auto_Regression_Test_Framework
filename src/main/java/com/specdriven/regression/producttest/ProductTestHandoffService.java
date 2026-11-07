@@ -5,7 +5,6 @@ import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.specdriven.regression.provider.http.ReviewedLoopbackHttpPolicy;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -39,7 +38,6 @@ public final class ProductTestHandoffService {
     private static final long MAX_TOTAL_BYTES = 16L * 1024 * 1024;
     private static final int MAX_FILES = 128;
     private static final String CONTRACT = "sample_fake_provider.v0.3";
-    private static final String REST_CONTRACT = "rest_client.v0.3";
     private static final String COGNEE_COMMIT = "ba3631f2ed363a6ea50d649c34c56885af6b36fe";
     private static final Set<String> HANDOFF_FIELDS = Set.of("contract_version", "suite_id", "profile", "knowledge_mode",
             "review_ref", "reviewed_by", "reviewed_at", "valid_until", "framework_baseline", "repository_revisions", "workspace_ref", "project_ref",
@@ -187,8 +185,8 @@ public final class ProductTestHandoffService {
             Map<String,Object> contract = yaml(bytes, "reviewed_contract");
             equal(id, text(contract.get("provider_contract"), "provider_contract"), "reviewed_contract_identity");
             equal("v0.3", text(contract.get("contract_version"), "contract_version"), "reviewed_contract_version");
-            equal(s.policy.nativeHttp() ? REST_CONTRACT : CONTRACT, id, "reviewed_contract_identity");
-            equal(s.policy.nativeHttp() ? "rest_client" : "sample_fake_provider", text(contract.get("provider_type"), "provider_type"), "reviewed_contract_provider");
+            equal(s.policy.nativeExecution() ? nativeCapability(s).contract() : CONTRACT, id, "reviewed_contract_identity");
+            equal(s.policy.nativeExecution() ? nativeCapability(s).providerType() : "sample_fake_provider", text(contract.get("provider_type"), "provider_type"), "reviewed_contract_provider");
             contracts.put(id, new FileEntry(path, "contract", bytes)); total += bytes.length;
             checkBudget(allPaths.size(), total);
         }
@@ -244,13 +242,13 @@ public final class ProductTestHandoffService {
         Set<String> usedContracts = new LinkedHashSet<>();
         targets.forEach((id, raw) -> {
             Map<String,Object> t = object(raw, "target"); only(t, Set.of("provider_contract"), "target");
-            String expected = s.policy.nativeHttp() ? REST_CONTRACT : CONTRACT;
+            String expected = s.policy.nativeExecution() ? nativeCapability(s).contract() : CONTRACT;
             equal(expected, text(t.get("provider_contract"), "provider_contract"), "unsupported_provider");
             usedContracts.add(expected);
         });
         if (!usedContracts.equals(contractIds)) throw fail("reviewed_contract_coverage", "exact used contracts are required");
         if (!targets.keySet().equals(s.policy.providerModes().keySet())) throw fail("provider_mode_coverage", "each target needs exactly one mode");
-        for (String mode : s.policy.providerModes().values()) equal(s.policy.nativeHttp() ? "real" : "simulated", mode, "provider_mode_mismatch");
+        for (String mode : s.policy.providerModes().values()) equal(s.policy.nativeExecution() ? "real" : "simulated", mode, "provider_mode_mismatch");
         validateProfile(s, targets.keySet());
         Map<String,Object> roots = object(s.suite.get("artifact_roots"), "artifact_roots");
         roots.forEach((key, value) -> relativePath(text(value, "artifact_root")));
@@ -282,7 +280,7 @@ public final class ProductTestHandoffService {
                         only(step, Set.of("id", "type", "assert"), "verify_step");
                         equal("assertion", text(step.get("type"), "verify.type"), "unsupported_verify");
                         Map<String,Object> assertion = object(step.get("assert"), "assert");
-                        only(assertion, s.policy.nativeHttp() ? Set.of("actual", "operator", "expected", "expected_ref")
+                        only(assertion, s.policy.nativeExecution() ? Set.of("actual", "operator", "expected", "expected_ref")
                                 : Set.of("actual", "operator", "expected"), "assert");
                         String operator = text(assertion.get("operator"), "assert.operator");
                         if (!Set.of("equals", "not_equals", "gt", "gte", "lt", "lte", "exists", "not_exists", "json_match").contains(operator)) {
@@ -291,7 +289,7 @@ public final class ProductTestHandoffService {
                         actualRef(assertion.get("actual"), stepOps);
                         if (assertion.containsKey("expected_ref") && assertion.containsKey("expected"))
                             throw fail("ambiguous_oracle", "use one expected operand");
-                        if (s.policy.nativeHttp() && "json_match".equals(operator) && !assertion.containsKey("expected_ref"))
+                        if (s.policy.nativeExecution() && "json_match".equals(operator) && !assertion.containsKey("expected_ref"))
                             throw fail("missing_oracle", "native JSON matching requires a pinned artifact expected_ref");
                         if (assertion.containsKey("expected") || assertion.containsKey("expected_ref")) {
                             Object expected = assertion.get(assertion.containsKey("expected_ref") ? "expected_ref" : "expected");
@@ -309,10 +307,10 @@ public final class ProductTestHandoffService {
                         String target = text(step.get("target"), "step.target");
                         if (!targets.containsKey(target)) throw fail("unknown_target", "step target is not declared");
                         String op = text(step.get("op"), "step.op");
-                        if (s.policy.nativeHttp()) {
-                            if (!"execute".equals(phase) || !"http_request".equals(op) || ++nativeRequests > 1)
-                                throw fail("unsupported_operation", "native reviewed execution permits one HTTP read across the entire suite");
-                            ReviewedLoopbackHttpPolicy.validateInputs(object(step.get("with"), "step.with"));
+                        if (s.policy.nativeExecution()) {
+                            if (!"execute".equals(phase) || !nativeCapability(s).operation().equals(op) || ++nativeRequests > 1)
+                                throw fail("unsupported_operation", "native reviewed execution permits one selected operation across the entire suite");
+                            nativeCapability(s).validateInputs(object(step.get("with"), "step.with"));
                             stepOps.put(sid, op);
                             continue;
                         }
@@ -345,7 +343,7 @@ public final class ProductTestHandoffService {
                 }
             }
         }
-        if (s.policy.nativeHttp() && nativeRequests != 1) throw fail("unsupported_operation", "exactly one native HTTP read is required");
+        if (s.policy.nativeExecution() && nativeRequests != 1) throw fail("unsupported_operation", "exactly one native operation is required");
         if (!needed.keySet().equals(files.keySet())) throw fail("reviewed_file_coverage", "reviewed files must exactly cover the complete supported input graph");
         for (var entry : needed.entrySet()) {
             FileEntry file = files.get(entry.getKey());
@@ -356,6 +354,13 @@ public final class ProductTestHandoffService {
             }
         }
         return new Closure(tests, oracleTests);
+    }
+
+    private static ReviewedNativeCapability nativeCapability(Selection s) {
+        Map<String,Object> targets = object(s.suite.get("targets"), "targets");
+        if (targets.size() != 1) throw fail("targets", "native execution requires one target");
+        var target = object(targets.values().iterator().next(), "target");
+        return ReviewedNativeCapability.fromContract(text(target.get("provider_contract"), "provider_contract"));
     }
 
     private static void validateProfile(Selection s, Set<String> targets) {
@@ -369,11 +374,10 @@ public final class ProductTestHandoffService {
         if (!bindings.keySet().equals(targets)) throw fail("target_coverage", "profile and suite targets must match");
         for (Object raw : bindings.values()) {
             Map<String,Object> target = object(raw, "profile.target"); only(target, Set.of("runtime_mode", "bindings"), "profile.target");
-            if (s.policy.nativeHttp()) {
+            if (s.policy.nativeExecution()) {
                 equal("native", text(target.get("runtime_mode"), "runtime_mode"), "runtime_mode");
                 Map<String,Object> values = object(target.get("bindings"), "bindings");
-                if (!values.keySet().equals(Set.of("base_url"))) throw fail("unsupported_binding", "native reads need only base_url");
-                ReviewedLoopbackHttpPolicy.validateOrigin(values.get("base_url"));
+                nativeCapability(s).validateBindings(values);
                 continue;
             }
             equal("stub", text(target.get("runtime_mode"), "runtime_mode"), "runtime_mode");
@@ -384,7 +388,7 @@ public final class ProductTestHandoffService {
             instant(clock.substring("fixed://".length()), "clock_ref");
         }
         Set<String> checks = new LinkedHashSet<>();
-        if (s.policy.nativeHttp() && env.containsKey("sit_readiness")) throw fail("unsupported_readiness", "native local reads do not use SIT readiness");
+        if (s.policy.nativeExecution() && env.containsKey("sit_readiness")) throw fail("unsupported_readiness", "native local execution does not use SIT readiness");
         if (env.containsKey("sit_readiness")) {
             Map<String,Object> readiness = object(env.get("sit_readiness"), "sit_readiness");
             for (Object raw : list(readiness.get("checks"), "readiness.checks", false)) {
@@ -729,7 +733,8 @@ public final class ProductTestHandoffService {
         if (slash <= 0) throw fail("unsupported_reference", "actual step output is malformed");
         String op = ops.get(tail.substring(0, slash)); String output = tail.substring(slash + 1);
         boolean supported = "execute_sample".equals(op) && output.matches("actual_json(?:\\.[A-Za-z0-9_]+)*|actual_text")
-                || "http_request".equals(op) && Set.of("response.status", "response.body", "response.headers", "response.duration_ms").contains(output);
+                || "http_request".equals(op) && Set.of("response.status", "response.body", "response.headers", "response.duration_ms").contains(output)
+                || "run_command".equals(op) && Set.of("exit_code", "stdout", "stderr", "duration_ms").contains(output);
         if (!supported) throw fail("unsupported_reference", "actual must refer to an earlier supported execution output");
     }
     private static void cleanupRef(Object value, Map<String,String> ops) {

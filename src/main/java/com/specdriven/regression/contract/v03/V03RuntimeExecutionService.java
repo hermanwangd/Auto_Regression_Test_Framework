@@ -13,6 +13,7 @@ import com.specdriven.regression.contract.v03.adapter.KafkaV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.NatsV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.PollingObserverV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.RestClientV03Adapter;
+import com.specdriven.regression.contract.v03.adapter.CliProcessV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.SoapMockV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.SampleFakeProviderV03Adapter;
 import com.specdriven.regression.contract.v03.assertion.V03AssertionEvaluation;
@@ -77,6 +78,7 @@ public class V03RuntimeExecutionService {
                 new NatsV03Adapter(),
                 new PollingObserverV03Adapter(),
                 new RestClientV03Adapter(),
+                new CliProcessV03Adapter(),
                 new SoapMockV03Adapter(),
                 new SampleFakeProviderV03Adapter())));
     }
@@ -1219,6 +1221,7 @@ public class V03RuntimeExecutionService {
         if ("rest_client".equals(providerType) || evidenceRef.startsWith("provider-evidence/http/")) {
             return "http_request_response";
         }
+        if ("cli_process".equals(providerType)) return "cli_process";
         return "fixture_setup";
     }
 

@@ -2,7 +2,7 @@ package com.specdriven.regression.sit;
 
 import com.specdriven.regression.contract.v03.*;
 import com.specdriven.regression.producttest.ProductTestPolicy;
-import com.specdriven.regression.provider.http.ReviewedLoopbackHttpPolicy;
+import com.specdriven.regression.producttest.ReviewedNativeCapability;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -21,9 +21,9 @@ public final class SitExecutionGuard {
                 || !"framework_verification_only".equals(plan.environmentProfile().evidenceClassification())
                 || plan.environmentProfile().downstreamReleaseEvidence())
             throw new IllegalArgumentException("reviewed providers require local framework_verification_only evidence without release eligibility");
-        if (policy.nativeHttp() && (plan.targets().size() != 1 || plan.environmentProfile().sitReadiness() != null
+        if (policy.nativeExecution() && (plan.targets().size() != 1 || plan.environmentProfile().sitReadiness() != null
                 || plan.steps().stream().filter(step -> step.kind() != V03ExecutionStepKind.ASSERTION).count() != 1))
-            throw new IllegalArgumentException("reviewed native HTTP requires one request and no readiness/shared-state extension");
+            throw new IllegalArgumentException("reviewed native execution requires one operation and no readiness/shared-state extension");
         var shared = policy.sharedState();
         if (shared != null && "read_only".equals(shared.dataAccess()) && !"none".equals(shared.cleanup()))
             throw new IllegalArgumentException("read_only requires cleanup none");
@@ -33,14 +33,14 @@ public final class SitExecutionGuard {
             if (!(raw instanceof SitPolicyAwareProvider adapter))
                 throw new IllegalArgumentException("provider must explicitly declare its reviewed mode and shared-state effects");
             String observed = adapter.simulated() ? "simulated" : "real";
-            String expected = policy.nativeHttp() ? "real" : "simulated";
+            String expected = policy.nativeExecution() ? "real" : "simulated";
             if (!observed.equals(policy.providerModes().get(target.target())) || !expected.equals(observed))
                 throw new IllegalArgumentException("provider mode mismatch for the reviewed capability");
-            if (policy.nativeHttp()) {
-                if (!"rest_client.v0.3".equals(target.providerContract()) || !"rest_client".equals(target.providerType())
-                        || !"native".equals(target.runtimeMode()) || !target.bindings().keySet().equals(java.util.Set.of("base_url")))
-                    throw new IllegalArgumentException("reviewed native capability requires the existing REST provider and exact base_url binding");
-                ReviewedLoopbackHttpPolicy.validateOrigin(target.bindings().get("base_url"));
+            if (policy.nativeExecution()) {
+                var capability = ReviewedNativeCapability.fromContract(target.providerContract());
+                if (!capability.providerType().equals(target.providerType()) || !"native".equals(target.runtimeMode()))
+                    throw new IllegalArgumentException("reviewed native provider metadata differs from selected contract");
+                capability.validateBindings(target.bindings());
             }
             modes.put(target.target(), observed);
         }
@@ -53,6 +53,14 @@ public final class SitExecutionGuard {
             SitOperationEffect effect = adapter.sitEffect(step);
             if (effect == null || effect == SitOperationEffect.UNKNOWN)
                 throw new IllegalArgumentException("unknown provider effect blocks reviewed execution");
+            if (policy.nativeExecution()) {
+                var capability = ReviewedNativeCapability.fromContract(step.providerContract());
+                if (!"execute".equals(step.phase()) || !capability.operation().equals(step.operation()))
+                    throw new IllegalArgumentException("reviewed native operation differs from selected contract");
+                capability.validateInputs(step.inputs());
+            }
+            if (effect == SitOperationEffect.LOCAL_PROCESS && (shared != null || !policy.nativeExecution()))
+                throw new IllegalArgumentException("local processes cannot claim shared-state ownership");
             if (shared != null) {
                 if ("read_only".equals(shared.dataAccess()) && effect != SitOperationEffect.READ_ONLY)
                     throw new IllegalArgumentException("read_only cannot execute write or cleanup phases");
@@ -87,7 +95,10 @@ public final class SitExecutionGuard {
             if (!(adapter.simulated() ? "simulated" : "real").equals(modes.get(step.target()))
                     || !Objects.equals(adapter.sitEffect(step), effects.get(key(step))))
                 throw new IllegalStateException("provider mode or effect changed after policy preparation");
-            if (policy.nativeHttp()) ReviewedLoopbackHttpPolicy.validateOrigin(context.targets().get(step.target()).bindings().get("base_url"));
+            if (policy.nativeExecution()) {
+                var target = context.targets().get(step.target());
+                ReviewedNativeCapability.fromContract(target.providerContract()).validateBindings(target.bindings());
+            }
             return adapter.executeReviewed(step, context, scope);
         }
         public Map<String,String> observedProviderModes() { return modes; }

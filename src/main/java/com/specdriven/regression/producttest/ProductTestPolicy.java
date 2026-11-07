@@ -19,10 +19,10 @@ public record ProductTestPolicy(String testLevel, String testType, String enviro
         if ("integration".equals(testLevel) && (!"not_used".equals(knowledgeMode) || sharedState != null
                 || !dependencyModes.isEmpty() || providerModes.size() != 1
                 || providerModes.values().stream().anyMatch(mode -> !"real".equals(mode))))
-            throw invalid("integration", "requires one real local REST target, not_used, and no shared/dependency policy");
+            throw invalid("integration", "requires one real local native target, not_used, and no shared/dependency policy");
     }
 
-    public boolean nativeHttp() { return "integration".equals(testLevel); }
+    public boolean nativeExecution() { return "integration".equals(testLevel); }
 
     public record SharedState(String environmentId, String namespace, String owner,
             String dataAccess, String cleanup) {

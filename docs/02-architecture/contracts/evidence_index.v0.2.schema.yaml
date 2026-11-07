@@ -37,6 +37,7 @@ approved_evidence_types:
   - jdbc_query
   - jdbc_cleanup
   - nats_event
+  - cli_process
   - assertion_diff
   - polling_observation
 masking:

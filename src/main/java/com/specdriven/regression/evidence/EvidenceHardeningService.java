@@ -35,6 +35,7 @@ public class EvidenceHardeningService {
             "kafka_event",
             "ibm_mq_event",
             "http_request_response",
+            "cli_process",
             "grpc_request_response",
             "assertion_diff",
             "polling_observation");
@@ -50,6 +51,7 @@ public class EvidenceHardeningService {
             "kafka_event",
             "ibm_mq_event",
             "http_request_response",
+            "cli_process",
             "grpc_request_response");
     private static final List<String> ENTRY_REQUIRED_FIELDS = List.of(
             "evidence_id",
@@ -171,13 +173,13 @@ public class EvidenceHardeningService {
                     && Boolean.FALSE.equals(handoff.get("downstream_release_evidence")), "reviewed fake evidence cannot become release evidence");
             boolean passed = "passed".equals(result.get("status"));
             String testLevel = stringValue(handoff.get("test_level"));
-            boolean nativeHttp = "integration".equals(testLevel);
+            boolean nativeExecution = "integration".equals(testLevel);
             requireReviewed(Set.of("component", "integration").contains(testLevel)
                     && "regression".equals(handoff.get("test_type")) && "local".equals(handoff.get("environment_stage")),
                     "unsupported reviewed capability tuple");
-            if (nativeHttp) requireReviewed("not_used".equals(handoff.get("knowledge_mode"))
+            if (nativeExecution) requireReviewed("not_used".equals(handoff.get("knowledge_mode"))
                     && mapValue(handoff.get("provider_modes")).size() == 1 && mapValue(handoff.get("dependency_modes")).isEmpty(),
-                    "native capability must remain one local REST read without selected knowledge or dependencies");
+                    "native capability must remain one selected operation without selected knowledge or dependencies");
             for (String field : List.of("provider_modes", "dependency_modes")) {
                 requireReviewed(handoff.get(field) instanceof Map<?,?> && handoff.get("observed_" + field) instanceof Map<?,?>,
                         "required mode maps are missing");
@@ -185,7 +187,7 @@ public class EvidenceHardeningService {
                 Map<String,Object> observed = mapValue(handoff.get("observed_" + field));
                 requireReviewed(!"provider_modes".equals(field) || !declared.isEmpty(), "provider mode coverage is empty");
                 requireReviewed(declared.size() <= 32 && declared.values().stream().allMatch(mode ->
-                        "provider_modes".equals(field) ? (nativeHttp ? "real" : "simulated").equals(mode)
+                        "provider_modes".equals(field) ? (nativeExecution ? "real" : "simulated").equals(mode)
                                 : Set.of("real", "simulated").contains(mode)), "unsupported declared modes");
                 requireReviewed(declared.keySet().containsAll(observed.keySet()) && observed.entrySet().stream()
                         .allMatch(entry -> entry.getValue().equals(declared.get(entry.getKey()))), "observed modes differ from declaration");
@@ -199,17 +201,34 @@ public class EvidenceHardeningService {
                             "invoked provider lacks an observed mode: " + target);
                 }
             }
+            com.specdriven.regression.producttest.ReviewedNativeCapability nativeCapability = null;
+            if (nativeExecution) {
+                var contracts = mapList(handoff.get("reviewed_contracts"));
+                requireReviewed(contracts.size() == 1, "native capability requires one reviewed contract");
+                nativeCapability = com.specdriven.regression.producttest.ReviewedNativeCapability.fromContract(
+                        stringValue(contracts.get(0).get("provider_contract")));
+            }
             for (Map<String,Object> provider : mapList(result.get("provider_results")))
-                requireReviewed((nativeHttp ? "rest_client" : "sample_fake_provider").equals(provider.get("provider_type"))
-                        && (nativeHttp ? "rest_client.v0.3" : "sample_fake_provider.v0.3").equals(provider.get("provider_contract"))
-                        && (nativeHttp ? "native" : "stub").equals(provider.get("runtime_mode")), "provider metadata differs from reviewed capability");
-            if (nativeHttp) {
+                requireReviewed((nativeExecution ? nativeCapability.providerType() : "sample_fake_provider").equals(provider.get("provider_type"))
+                        && (nativeExecution ? nativeCapability.contract() : "sample_fake_provider.v0.3").equals(provider.get("provider_contract"))
+                        && (nativeExecution ? "native" : "stub").equals(provider.get("runtime_mode")), "provider metadata differs from reviewed capability");
+            if (nativeExecution) {
                 var steps = mapList(result.get("step_results"));
                 requireReviewed(steps.size() <= 1 && mapList(result.get("provider_results")).size() <= 1
                         && (!passed || steps.size() == 1 && mapList(result.get("provider_results")).size() == 1),
-                        "native evidence must describe one HTTP request");
+                        "native evidence must describe one selected operation");
                 for (var step : steps) requireReviewed("execute".equals(step.get("phase"))
-                        && "http_request".equals(step.get("operation")), "native evidence contains unsupported operation");
+                        && nativeCapability.operation().equals(step.get("operation")), "native evidence contains unsupported operation");
+                for (var provider : mapList(result.get("provider_results"))) {
+                    requireReviewed(nativeCapability.operation().equals(provider.get("operation"))
+                            && List.of(nativeCapability.operation()).equals(provider.get("operations")),
+                            "native provider operation differs from selected contract");
+                    var operations = mapList(provider.get("resolved_operation_results"));
+                    requireReviewed(operations.size() <= 1 && (!passed || operations.size() == 1),
+                            "native resolved operation count differs from selected capability");
+                    for (var operation : operations) requireReviewed(nativeCapability.operation().equals(operation.get("operation")),
+                            "native resolved operation differs from selected contract");
+                }
             }
             Map<String,Object> observedDependencies = mapValue(handoff.get("observed_dependency_modes"));
             boolean readinessPresent = entries.stream().anyMatch(entry -> "sit_readiness".equals(entry.evidenceType())
@@ -439,6 +458,7 @@ public class EvidenceHardeningService {
                 case "kafka" -> requiredTypes.add("kafka_event");
                 case "ibm_mq" -> requiredTypes.add("ibm_mq_event");
                 case "rest_client" -> requiredTypes.add("http_request_response");
+                case "cli_process" -> requiredTypes.add("cli_process");
                 case "grpc_mock" -> {
                     requiredTypes.add("wiremock_request_journal");
                     requiredTypes.add("wiremock_server_log");

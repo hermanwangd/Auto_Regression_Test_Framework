@@ -56,9 +56,9 @@ public final class V03AssertionValidator {
             return List.copyOf(issues);
         }
 
-        boolean hasActual = hasValue(assertion, "actual");
+        boolean hasActual = assertion.containsKey("actual") && assertion.get("actual") != null;
         boolean hasActualRef = hasValue(assertion, "actual_ref");
-        boolean hasExpected = hasValue(assertion, "expected");
+        boolean hasExpected = assertion.containsKey("expected") && assertion.get("expected") != null;
         boolean hasExpectedRef = hasValue(assertion, "expected_ref");
         boolean hasSchemaRef = hasValue(assertion, "schema_ref");
 

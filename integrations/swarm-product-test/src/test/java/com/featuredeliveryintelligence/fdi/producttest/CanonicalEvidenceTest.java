@@ -158,6 +158,61 @@ class CanonicalEvidenceTest {
         assertThatThrownBy(() -> CanonicalEvidence.inspect(request,root,stdout,started)).hasMessageContaining("mode");
     }
 
+    @Test void importsCliOnlyWhenPinnedContractMatches() throws Exception {
+        nativeFixture();
+        selectNativeContract("cli_process.v0.3");
+        ((ObjectNode) result.path("provider_results").get(0)).put("provider_type", "cli_process").put("provider_contract", "cli_process.v0.3");
+        ((ObjectNode) result.path("step_results").get(0)).put("operation", "run_command");
+        setOperationMetadata("run_command"); save();
+        assertThat(CanonicalEvidence.inspect(request,root,stdout,started).verdict()).isEqualTo("passed");
+    }
+
+    @Test void providerCannotSwitchFromReviewedHttpToCli() throws Exception {
+        nativeFixture();
+        ((ObjectNode) result.path("provider_results").get(0)).put("provider_type", "cli_process").put("provider_contract", "cli_process.v0.3");
+        ((ObjectNode) result.path("step_results").get(0)).put("operation", "run_command"); save();
+        assertThatThrownBy(() -> CanonicalEvidence.inspect(request,root,stdout,started)).hasMessageContaining("Native provider");
+    }
+
+    @Test void changedProvenanceCannotReplacePinnedProviderContract() throws Exception {
+        nativeFixture();
+        var provenance=(ObjectNode) Json.read(run.resolve("product-test/reviewed-handoff.json"));
+        ((ObjectNode)provenance.path("reviewed_contracts").get(0)).put("provider_contract", "cli_process.v0.3");
+        Json.MAPPER.writeValue(run.resolve("product-test/reviewed-handoff.json").toFile(), provenance);
+        assertThatThrownBy(() -> CanonicalEvidence.inspect(request,root,stdout,started)).hasMessageContaining("contract");
+    }
+
+    @Test void inconsistentProviderOperationMetadataIsRejected() throws Exception {
+        for (String field : List.of("operation", "operations", "resolved_operation_results")) {
+            nativeFixture();
+            var provider = (ObjectNode) result.path("provider_results").get(0);
+            switch(field) {
+                case "operation" -> provider.put(field, "run_command");
+                case "operations" -> provider.putArray(field).add("run_command");
+                default -> ((ObjectNode) provider.path(field).get(0)).put("operation", "run_command");
+            }
+            save();
+            assertThatThrownBy(() -> CanonicalEvidence.inspect(request,root,stdout,started)).hasMessageContaining("operation");
+        }
+    }
+
+    private void setOperationMetadata(String op) {
+        var provider = (ObjectNode) result.path("provider_results").get(0);
+        provider.put("operation", op); provider.putArray("operations").add(op);
+        provider.putArray("resolved_operation_results").addObject().put("operation", op);
+    }
+
+    private void selectNativeContract(String contract) throws Exception {
+        var provenance=(ObjectNode) Json.read(run.resolve("product-test/reviewed-handoff.json"));
+        provenance.putArray("reviewed_contracts").addObject().put("provider_contract",contract).put("path","contracts/provider.yaml").put("sha256","d".repeat(64));
+        var input=Json.MAPPER.createObjectNode(); input.set("reviewed_contracts",provenance.path("reviewed_contracts"));
+        Json.MAPPER.writeValue(Path.of(request.reviewedHandoff()).toFile(),input);
+        var value=(ObjectNode)Json.MAPPER.valueToTree(request); value.put("expected_handoff_sha256", LocalFiles.sha256(Path.of(request.reviewedHandoff())));
+        request=Json.MAPPER.treeToValue(value,ProductTestRequest.class);
+        provenance.put("handoff_sha256",request.expectedHandoffSha256());
+        Json.MAPPER.writeValue(run.resolve("product-test/reviewed-handoff.json").toFile(),provenance);
+    }
+
     private void nativeFixture() throws Exception {
         var value=(ObjectNode)Json.MAPPER.valueToTree(request); value.put("test_level","integration");
         request=Json.MAPPER.treeToValue(value,ProductTestRequest.class);
@@ -169,6 +224,7 @@ class CanonicalEvidenceTest {
         result.putArray("provider_results").addObject().put("target","todo_api").put("provider_type","rest_client")
                 .put("provider_contract","rest_client.v0.3").put("runtime_mode","native").put("release_evidence_eligible",false);
         result.putArray("step_results").addObject().put("target","todo_api").put("phase","execute").put("operation","http_request");
-        save();
+        setOperationMetadata("http_request"); save();
+        selectNativeContract("rest_client.v0.3");
     }
 }

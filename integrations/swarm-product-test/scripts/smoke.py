@@ -16,7 +16,7 @@ parser.add_argument("--handoff-sha256", required=True, help="Independently suppl
 parser.add_argument("--expect-verdict", choices=["passed", "failed", "blocked", "skipped"], required=True)
 parser.add_argument("--name", required=True)
 parser.add_argument("--test-level", choices=["component", "integration"], default="component",
-                    help="Must match the reviewed profile; integration uses the finite native HTTP capability")
+                    help="Must match the reviewed profile; integration uses the selected reviewed native provider")
 parser.add_argument("--output-dir", type=Path, help="Fresh evidence directory; an existing directory is rejected")
 parser.add_argument("--via-host", action="store_true")
 parser.add_argument("--provider-jar", type=Path)
@@ -82,7 +82,7 @@ assert receipt["request"] == request
 assert (completed.returncode == 0) == (args.expect_verdict == "passed")
 for artifact in receipt["artifacts"].values():
     assert sha(Path(artifact["path"])) == artifact["sha256"], artifact
-evidence = {"status": "passed", "claim_boundary": "LOCAL_NATIVE_HTTP_NOT_COMPANY_ACCEPTANCE" if args.test_level == "integration" else "LOCAL_PACKAGED_FAKE_PROVIDER_NOT_COMPANY_ACCEPTANCE",
+evidence = {"status": "passed", "claim_boundary": "LOCAL_NATIVE_PROVIDER_NOT_COMPANY_ACCEPTANCE" if args.test_level == "integration" else "LOCAL_PACKAGED_FAKE_PROVIDER_NOT_COMPANY_ACCEPTANCE",
     "route": "real_FdiApplication_overlay" if args.via_host else "packaged_module_cli",
     "executed_artifacts": executed_artifacts,
     "framework_sha256": args.framework_sha256, "approved_handoff_sha256": args.handoff_sha256,
