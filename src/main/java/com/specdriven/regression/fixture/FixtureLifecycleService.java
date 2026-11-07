@@ -69,6 +69,15 @@ public class FixtureLifecycleService {
                 List.copyOf(gaps));
     }
 
+    /** Optional pure assessment; the legacy validate(Path) route is unchanged. */
+    public SharedSitDataDecision assessDataReuse(byte[] contract, String expectedContractSha256,
+            com.specdriven.regression.runner.RunnerBundleService.SourceBindings source,
+            byte[] controller, String expectedControllerSha256,
+            com.specdriven.regression.sit.SitReadinessReport readiness, byte[] canonical) {
+        return new SharedSitDataContractValidator().assess(contract, expectedContractSha256,
+                source, controller, expectedControllerSha256, readiness, canonical);
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> readYamlMap(Path path) {
         try {

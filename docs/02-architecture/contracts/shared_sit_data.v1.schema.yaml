@@ -1,0 +1,284 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "contract_id",
+    "dataset_id",
+    "data_version",
+    "schema_version",
+    "artifacts",
+    "resources",
+    "preconditions",
+    "sut_expectations"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "shared-sit-data.v1"
+    },
+    "contract_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "dataset_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "data_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data",
+        "schema",
+        "oracle",
+        "cleanup",
+        "config"
+      ],
+      "properties": {
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "artifact_id",
+            "sha256"
+          ],
+          "properties": {
+            "artifact_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "sha256": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "artifact_id",
+            "sha256"
+          ],
+          "properties": {
+            "artifact_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "sha256": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "oracle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "artifact_id",
+            "sha256"
+          ],
+          "properties": {
+            "artifact_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "sha256": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "cleanup": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "artifact_id",
+            "sha256"
+          ],
+          "properties": {
+            "artifact_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "sha256": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "artifact_id",
+            "sha256"
+          ],
+          "properties": {
+            "artifact_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "sha256": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        }
+      }
+    },
+    "resources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resource_id",
+          "run_namespace",
+          "owner_token_ref",
+          "effect"
+        ],
+        "properties": {
+          "resource_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+          },
+          "run_namespace": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+          },
+          "owner_token_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 140,
+            "pattern": "^owner-ref://[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+          },
+          "effect": {
+            "enum": [
+              "READ_ONLY",
+              "OWNED_WRITE",
+              "OWNED_CLEANUP"
+            ]
+          }
+        }
+      }
+    },
+    "preconditions": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "check_id",
+          "kind",
+          "purpose",
+          "subject_id",
+          "expected_version"
+        ],
+        "properties": {
+          "check_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+          },
+          "kind": {
+            "enum": [
+              "test_data",
+              "external_system",
+              "dependency"
+            ]
+          },
+          "purpose": {
+            "enum": [
+              "DATA_VERSION",
+              "SCHEMA_VERSION",
+              "AUTH",
+              "DEPENDENCY",
+              "SUT"
+            ]
+          },
+          "subject_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+          },
+          "expected_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      }
+    },
+    "sut_expectations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sut_id",
+          "expected_deployed_revision"
+        ],
+        "properties": {
+          "sut_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+          },
+          "expected_deployed_revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      }
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:regress:shared_sit_data.v1.schema.yaml",
+  "$comment": "Metadata contract only; raw UTF-8 JSON <=65536 bytes, strict duplicates/depth/unknown fields. Externally expected raw SHA, never a self hash. Artifacts join actual admitted D2 qualified IDs/hashes and roles: data=sanitized_data; schema/config=config_template; oracle=oracle; cleanup=cleanup_definition. At least DATA_VERSION/SCHEMA_VERSION/AUTH and each SUT precondition required by validator. No executable dispatch or credential/token fields. Idempotency output only: SHA256(UTF8(shared-sit-data.idempotency.v1\\n) || canonical JSON {contract,source,run}); canonical rules in docs/02-architecture/contracts/shared_sit_data.v1.interface.md. Shared acceptance is always BLOCKED_NO_SHARED_OWNERSHIP_OR_PRECLEANUP_SAVE_BINDING in StageA; control contract source owner UNBOUND. StageA canonical identity-only profile: raw<=4MiB, depth<=64, string<=1MiB, field-name<=128. Accepted modern8MiB/depth100 or legal approximately6MiB escaped gRPC may be outside this profile and return canonicalIdentityINVALID/acceptanceBLOCKED_PRECONDITIONS; this does not invalidate or rewrite the original framework canonical verdict. No EHS semantic validation, effect gate, persistent shared lease or shared SIT PASS."
+}

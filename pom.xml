@@ -188,6 +188,7 @@
                     <include>runner_bundle.v1.schema.yaml</include>
                     <include>runner_collection.v1.schema.yaml</include>
                     <include>runner_runtime_binding.v1.schema.yaml</include>
+                    <include>shared_sit_data.v1.schema.yaml</include>
                 </includes>
             </resource>
             <resource>
