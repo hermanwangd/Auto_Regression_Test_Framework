@@ -15,7 +15,7 @@ variables:
   PYTHONDONTWRITEBYTECODE: '1'
   CI_WORK: '$(Agent.TempDirectory)/public-products-$(Build.BuildId)-$(System.JobAttempt)'
   SQLITE_CI_POLICY_SHA256: e70903e08139a1a2c4b27666cf310a47fcf0626e94be8b5b5420b6b039e79353
-  NATS_CI_POLICY_SHA256: bcefe3fe2e8e739951cd464401ae2ad6738db92390644d06a1b2e41f72129bc6
+  NATS_CI_POLICY_SHA256: db423b2ef8451f1f944125f2115a86b79cf72f62c89cb7deb1bb3c2ca8fa86d2
 
 stages:
 - stage: LocalTests
@@ -119,6 +119,12 @@ stages:
           target/surefire-reports/TEST-*.xml
           target/failsafe-reports/TEST-*.xml
           integrations/swarm-product-test/target/surefire-reports/TEST-*.xml
+          target/site/jacoco/jacoco.xml
+          target/site/jacoco/jacoco.csv
+          target/site/jacoco/**
+          integrations/swarm-product-test/target/site/jacoco/jacoco.xml
+          integrations/swarm-product-test/target/site/jacoco/jacoco.csv
+          integrations/swarm-product-test/target/site/jacoco/**
         TargetFolder: '$(Build.ArtifactStagingDirectory)/local-product-evidence/framework'
 
     - task: CopyFiles@2
@@ -131,6 +137,8 @@ stages:
           run-*/receipt.json
           run-*/smoke-evidence.json
           run-*/outputs/product-test-*/framework-report.json
+          **/outputs/product-test-*/coverage/coverage.json
+          **/outputs/product-test-*/coverage/coverage.md
           run-*/outputs/**/target/regression/**
         TargetFolder: '$(Build.ArtifactStagingDirectory)/local-product-evidence/sqlite'
 
@@ -142,6 +150,8 @@ stages:
           **/receipt.json
           **/smoke-evidence.json
           execution/*/outputs/product-test-*/framework-report.json
+          **/outputs/product-test-*/coverage/coverage.json
+          **/outputs/product-test-*/coverage/coverage.md
           execution/summary.json
           execution/lifecycle.json
           **/target/regression/**

@@ -20,17 +20,22 @@ final class CanonicalEvidence {
     private final JsonNode document;
     private final Map<String, ProductTestReceipt.Artifact> artifacts;
     private final Map<String, String> treeDigests;
+    private final boolean grpcPayload;
 
-    private CanonicalEvidence(Path result, JsonNode document, Map<String, ProductTestReceipt.Artifact> artifacts, Map<String, String> treeDigests) {
-        this.result = result; this.document = document; this.artifacts = Map.copyOf(artifacts); this.treeDigests = Map.copyOf(treeDigests);
+    private CanonicalEvidence(Path result, JsonNode document, Map<String, ProductTestReceipt.Artifact> artifacts, Map<String, String> treeDigests, boolean grpcPayload) {
+        this.result = result; this.document = document; this.artifacts = Map.copyOf(artifacts); this.treeDigests = Map.copyOf(treeDigests); this.grpcPayload=grpcPayload;
     }
 
     static CanonicalEvidence inspect(ProductTestRequest request, Path output, String stdout, Instant started) throws Exception {
+        return inspect(request,output,stdout,started,null);
+    }
+    static CanonicalEvidence inspect(ProductTestRequest request, Path output, String stdout, Instant started, String fixtureLeaseSha256) throws Exception {
         Map<String, String> lines = outputFields(stdout);
         require(lines.containsKey("result_json"), "Missing canonical result location");
         Path result = LocalFiles.contained(output, Path.of(lines.get("result_json")));
         require(result.getFileName().toString().equals("result.json"), "Unexpected canonical result filename");
-        var document = Json.read(result);
+        boolean grpcPayload=Json.reviewedGrpc(request);
+        var document = Json.readCanonical(result,request);
         for (String field : List.of("suite_id", "profile", "batch_id", "run_id"))
             require(Json.required(document, field).equals(lines.get(field)), "CLI/result identity mismatch: " + field);
         require(request.suiteId().equals(Json.required(document, "suite_id"))
@@ -51,7 +56,7 @@ final class CanonicalEvidence {
         require("framework_verification_only".equals(Json.required(document.path("labels"), "evidence_classification"))
                 && explicitFalse(document.path("labels").path("downstream_release_evidence")), "Local result cannot become release evidence");
         rejectReleaseClaims(document);
-        Map<String, String> tree = tree(run);
+        Map<String, String> tree = tree(run,grpcPayload);
         validateReferences(document, run);
         Path index = relative(run, Json.required(document, "evidence_index_ref"));
         Path summary = relative(run, Json.required(document, "suite_summary_ref"));
@@ -96,9 +101,9 @@ final class CanonicalEvidence {
             require(contracts.isArray() && contracts.size() == 1 && contracts.equals(provenance.path("reviewed_contracts")),
                     "Native reviewed contract differs from pinned handoff");
             String contract = Json.required(contracts.get(0), "provider_contract");
-            require(Set.of("rest_client.v0.3", "cli_process.v0.3", "nats.v0.3").contains(contract), "Unsupported native provider contract");
-            String type = switch (contract) { case "cli_process.v0.3" -> "cli_process"; case "nats.v0.3" -> "nats"; default -> "rest_client"; };
-            String operation = switch (type) { case "cli_process" -> "run_command"; case "nats" -> "nats_publish"; default -> "http_request"; };
+            require(Set.of("rest_client.v0.3", "cli_process.v0.3", "nats.v0.3", "grpc_client.v0.3").contains(contract), "Unsupported native provider contract");
+            String type = switch (contract) { case "cli_process.v0.3" -> "cli_process"; case "nats.v0.3" -> "nats"; case "grpc_client.v0.3" -> "grpc_client"; default -> "rest_client"; };
+            String operation = switch (type) { case "cli_process" -> "run_command"; case "nats" -> "nats_publish"; case "grpc_client" -> "unary_call"; default -> "http_request"; };
             require("not_used".equals(request.knowledgeMode()) && provenance.path("provider_modes").size() == 1
                     && provenance.path("dependency_modes").isEmpty(), "Unsupported native capability metadata");
             require(document.path("provider_results").isArray() && document.path("step_results").isArray()
@@ -110,6 +115,36 @@ final class CanonicalEvidence {
                     && "native".equals(provider.path("runtime_mode").asText()), "Native provider metadata mismatch");
             for (var step : document.path("step_results")) require("execute".equals(step.path("phase").asText())
                     && operation.equals(step.path("operation").asText()), "Native operation metadata mismatch");
+            if(type.equals("grpc_client")) {
+                require(fixtureLeaseSha256!=null && fixtureLeaseSha256.matches("[a-f0-9]{64}"),"Independent fixture lease pin missing");
+                require(fixtureLeaseSha256.equals(Json.required(provenance,"fixture_lease_sha256")),"Independent fixture lease pin mismatch");
+                var lease=provenance.path("fixture_lease");
+                Path leaseFile=LocalFiles.contained(Path.of(request.suiteManifest()).getParent(),Path.of(request.suiteManifest()).getParent().resolve("fixtures/lease.json"));
+                byte[] leaseBytes=LocalFiles.read(leaseFile,16384);
+                require(fixtureLeaseSha256.equals(LocalFiles.sha256(leaseBytes)) && lease.equals(Json.MAPPER.readTree(leaseBytes)),"Independent lease bytes differ from canonical provenance");
+                require("reviewed-grpc-lease.v1".equals(Json.required(lease,"version")) && Set.of("echo.v1","greeter.v1").contains(Json.required(lease,"profile")),"Unsupported fixture lease profile");
+                boolean bound=false;
+                for(var reviewed:Json.MAPPER.readTree(reviewedBytes).path("reviewed_files")) {
+                    if("fixtures/lease.json".equals(reviewed.path("path").asText())) {
+                        require("fixture".equals(reviewed.path("role").asText()) && fixtureLeaseSha256.equals(reviewed.path("sha256").asText()),"Reviewed lease digest mismatch");bound=true;
+                    }
+                }
+                require(bound,"Lease missing from reviewed closure");
+                if(!document.path("provider_results").isEmpty()) {
+                    String proofRef="provider-evidence/grpc-client/reviewed-unary.json";
+                    require(contains(document.path("evidence_refs"),proofRef) && containsFile(indexDocument.path("entries"),proofRef),"Native gRPC proof must be indexed");
+                    var proof=Json.readGrpcProof(relative(run,proofRef));
+                    boolean echo="echo.v1".equals(lease.path("profile").asText());
+                    require((echo?"swarm.producttest.EchoService":"helloworld.Greeter").equals(Json.required(proof,"service"))
+                            && (echo?"Echo":"SayHello").equals(Json.required(proof,"method")),"Native gRPC finite service/method mismatch");
+                    require(fixtureLeaseSha256.equals(Json.required(proof,"fixture_lease_sha256"))
+                            && Json.required(lease,"owner_run_id").equals(Json.required(proof,"owner_run_id"))
+                            && Json.required(lease,"endpoint").equals(Json.required(proof,"endpoint")),"Native gRPC fixture identity mismatch");
+                    require(proof.path("rpc_attempted").isBoolean() && proof.path("cleanup_confirmed").isBoolean(),"Missing gRPC attempt/cleanup proof");
+                    if(passed) require(proof.path("rpc_attempted").asBoolean() && proof.path("cleanup_confirmed").asBoolean()
+                            && "OK".equals(Json.required(proof,"status")),"Passed unary requires actual RPC and confirmed cleanup");
+                }
+            }
             for (var provider : document.path("provider_results")) {
                 require(operation.equals(provider.path("operation").asText())
                         && Json.MAPPER.valueToTree(List.of(operation)).equals(provider.path("operations")),
@@ -125,7 +160,7 @@ final class CanonicalEvidence {
         for (var entry : tree.entrySet()) artifacts.put("evidence:" + entry.getKey(), new ProductTestReceipt.Artifact(run.resolve(entry.getKey()).toString(), entry.getValue()));
         for (var entry : Map.of("result", result, "suite_summary", summary, "evidence_index", index, "reviewed_handoff", handoffEvidence).entrySet())
             artifacts.put(entry.getKey(), new ProductTestReceipt.Artifact(entry.getValue().toString(), LocalFiles.sha256(entry.getValue())));
-        return new CanonicalEvidence(result, document, artifacts, tree);
+        return new CanonicalEvidence(result, document, artifacts, tree, grpcPayload);
     }
     Path result() { return result; }
     String verdict() { return Json.required(document, "status"); }
@@ -139,7 +174,7 @@ final class CanonicalEvidence {
         require("passed".equals(Json.required(reported, "masking_status")), "Framework report masking failed");
     }
     void verifyUnchanged() throws Exception {
-        require(treeDigests.equals(tree(result.getParent())), "Canonical evidence changed during validation");
+        require(treeDigests.equals(tree(result.getParent(),grpcPayload)), "Canonical evidence changed during validation");
     }
     private static Map<String, String> outputFields(String stdout) {
         var fields = new LinkedHashMap<String, String>();
@@ -172,7 +207,7 @@ final class CanonicalEvidence {
         });
         else if (node.isArray()) node.forEach(CanonicalEvidence::rejectReleaseClaims);
     }
-    private static Map<String, String> tree(Path root) throws IOException {
+    private static Map<String, String> tree(Path root,boolean grpcPayload) throws IOException {
         var result = new LinkedHashMap<String, String>(); long bytes = 0; int count = 0;
         try (var paths = Files.walk(root)) {
             var iterator = paths.iterator();
@@ -183,7 +218,8 @@ final class CanonicalEvidence {
                 if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) continue;
                 require(Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS), "Special evidence file is forbidden");
                 long size = Files.size(path); bytes += size;
-                require(size <= 4 * 1024 * 1024 && bytes <= 64L * 1024 * 1024, "Evidence exceeds byte limit");
+                long fileLimit=grpcPayload && path.equals(root.resolve("result.json")) ? 8L*1024*1024 : 4L*1024*1024;
+                require(size <= fileLimit && bytes <= 64L * 1024 * 1024, "Evidence exceeds byte limit");
                 result.put(root.relativize(path).toString(), LocalFiles.sha256(path));
             }
         }

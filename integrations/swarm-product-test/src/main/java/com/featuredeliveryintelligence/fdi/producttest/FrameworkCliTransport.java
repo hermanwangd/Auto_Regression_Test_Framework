@@ -51,25 +51,27 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
             if (runExit != 0 && !run.stdout().contains("result_json: "))
                 return Receipts.failure(request, invocation, ProductTestReceipt.Outcome.FRAMEWORK_REJECTED,
                         "Framework rejected execution before producing a canonical result; inspect run.stdout.log", output.toString(), runExit);
-            var evidence = CanonicalEvidence.inspect(request, output, run.stdout(), started);
+            var evidence = CanonicalEvidence.inspect(request, output, run.stdout(), started, binding.fixtureLeaseSha256());
             checkDeadline(deadline);
             var validation = invoke(List.of("validate-evidence", "--result", evidence.result().toString(), "--root", output.toString()),
                     request, output, deadline, consumedOutput, cleanup);
             Files.writeString(output.resolve("validation.stdout.log"), validation.stdout());
             Files.writeString(output.resolve("validation.stderr.log"), validation.stderr());
             require(validation.exitCode() == 0, "Framework evidence validation failed");
-            var report = invoke(List.of("report", "--result", evidence.result().toString(), "--format", "json", "--root", output.toString()),
+            var report = invoke(List.of("report", "--result", evidence.result().toString(), "--format", "json", "--root", output.toString(), "--coverage-dir", output.resolve("coverage").toString()),
                     request, output, deadline, consumedOutput, cleanup);
             Files.writeString(output.resolve("report.stderr.log"), report.stderr());
             require(report.exitCode() == 0, "Framework report validation failed");
             Path reportPath = output.resolve("framework-report.json");
             Files.writeString(reportPath, report.stdout());
             evidence.verifyReport(reportPath);
+            var coverageArtifacts = CoverageArtifacts.verify(output.resolve("coverage"), reportPath, evidence.result(), request);
             evidence.verifyUnchanged();
             require(LocalFiles.sha256(binding.frameworkJar()).equals(binding.frameworkSha256()), "Configured framework digest changed");
             require((runExit == 0) == "passed".equals(evidence.verdict()), "Framework exit code contradicts canonical verdict");
             checkDeadline(deadline);
             var artifacts = new java.util.LinkedHashMap<>(evidence.artifacts());
+            artifacts.putAll(coverageArtifacts);
             artifacts.put("framework_report", new ProductTestReceipt.Artifact(reportPath.toString(), LocalFiles.sha256(reportPath)));
             return new ProductTestReceipt("product-test-receipt.v1", "product-test", "1", invocation, request,
                     ProductTestReceipt.Outcome.COMPLETED, evidence.verdict(), "validated", runExit, evidence.runId(),
@@ -100,6 +102,7 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
         var builder = new ProcessBuilder(argv).directory(output.toFile());
         builder.environment().clear();
         builder.environment().put("REGRESS_REVIEWED_HANDOFF_SHA256", binding.approvedHandoffSha256());
+        if(binding.fixtureLeaseSha256()!=null) builder.environment().put("REGRESS_REVIEWED_FIXTURE_LEASE_SHA256",binding.fixtureLeaseSha256());
         Process process;
         try { process = builder.start(); }
         catch (IOException e) { throw new LaunchException("Cannot launch configured framework executable", e); }

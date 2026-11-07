@@ -100,6 +100,10 @@ stages:
               if metadata.get('framework_verdict') in ('passed', 'failed', 'blocked', 'skipped'):
                   canonical = source / 'runtime/target/regression'
                   files.extend(p for p in canonical.rglob('*') if p.is_file())
+                  # Derived report pairs remain outside the frozen canonical run tree.
+                  coverage = source / 'runtime/target/coverage'
+                  for name in ('coverage.json', 'coverage.md'):
+                      files.extend(p for p in coverage.rglob(name) if p.is_file())
               collected = []
               for path in files:
                   for node in (path, *path.parents):

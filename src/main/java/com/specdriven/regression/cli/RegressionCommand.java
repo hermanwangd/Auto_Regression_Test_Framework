@@ -7,6 +7,7 @@ import com.specdriven.regression.binding.BindingResolutionReport;
 import com.specdriven.regression.binding.BindingResolver;
 import com.specdriven.regression.binding.ResolvedBinding;
 import com.specdriven.regression.contract.ContractBaselineService;
+import com.specdriven.regression.contract.ResultDocumentReader;
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.DryRunResult;
 import com.specdriven.regression.contract.ContractBaselineService.ReportResult;
@@ -312,7 +313,7 @@ public class RegressionCommand {
         out.println("  validate --suite <suite_manifest> [--profile <profile>]");
         out.println("  run --suite <suite_manifest> --profile <profile>");
         out.println("  run --suite <suite_manifest> --dry-run [--profile <profile>]");
-        out.println("  report --result <result_json> [--format text|yaml|json]");
+        out.println("  report --result <result_json> [--format text|yaml|json] [--coverage-dir <dir>] [--coverage-catalog <json>] [--coverage-selection <json>]");
         out.println("  validate-evidence --result <result_json>");
         out.println("  doctor drivers [--driver-path <jar>] [--driver-dir <dir>]");
         out.println("  prepare-product-test-handoff --suite <manifest> --profile <id> --review-input <json> --out <json> [--selection-receipt <json>]");
@@ -325,7 +326,7 @@ public class RegressionCommand {
                 out.println("       regress run --suite <suite_manifest> --dry-run [--profile <profile>]");
             }
             case "validate" -> out.println("usage: regress validate --suite <suite_manifest> [--profile <profile>]");
-            case "report" -> out.println("usage: regress report --result <result_json> [--format text|yaml|json]");
+            case "report" -> out.println("usage: regress report --result <result_json> [--format text|yaml|json] [--coverage-dir <dir>] [--coverage-catalog <json>] [--coverage-selection <json>]");
             case "validate-evidence" -> out.println("usage: regress validate-evidence --result <result_json>");
             case "doctor" -> out.println("usage: regress doctor drivers [--driver-path <jar>] [--driver-dir <dir>]");
             default -> printGeneralUsage(out);
@@ -512,13 +513,60 @@ public class RegressionCommand {
         EvidenceValidationResult evidenceResult = evidenceHardeningService.hasEvidenceIndexReference(resolvedResult)
                 ? evidenceHardeningService.validateResult(resolvedResult)
                 : null;
+        com.specdriven.regression.report.CanonicalCoverageReportResult coverage = null;
+        boolean explicitCoverage = options.containsKey("--coverage-dir") || options.containsKey("--coverage-catalog")
+                || options.containsKey("--coverage-selection");
+        Map<String, Object> coverageSource = readResultMap(resolvedResult);
+        boolean legacyMarkersAbsent = !coverageSource.containsKey("result_contract_version")
+                && !coverageSource.containsKey("product_test");
+        boolean knownLegacyCoverage = legacyMarkersAbsent && ("v0.2".equals(stringValue(coverageSource.get("dsl_version")))
+                || (!coverageSource.containsKey("dsl_version")
+                        && new com.specdriven.regression.report.LegacySuiteSummaryReportAdapter().supports(coverageSource)));
+        if (!result.suiteId().isBlank() && (explicitCoverage || !knownLegacyCoverage)) {
+            try {
+                Path coverageDir = options.containsKey("--coverage-dir")
+                        ? root.resolve(options.get("--coverage-dir")).normalize()
+                        : root.resolve("target/coverage")
+                                .resolve(result.suiteId().replaceAll("[^A-Za-z0-9._-]", "_"))
+                                .resolve(result.batchId().replaceAll("[^A-Za-z0-9._-]", "_"))
+                                .resolve(result.runId().replaceAll("[^A-Za-z0-9._-]", "_"))
+                                .resolve("report-" + java.util.UUID.randomUUID());
+                Path catalog = options.containsKey("--coverage-catalog") ? root.resolve(options.get("--coverage-catalog")) : null;
+                Path selection = options.containsKey("--coverage-selection") ? root.resolve(options.get("--coverage-selection")) : null;
+                coverage = coverageReportService.projectCanonical(resolvedResult, coverageDir, catalog, selection);
+            } catch (RuntimeException failure) {
+                if ("json".equals(format)) printReportJson(out, err, jsonFailure("COVERAGE_GENERATION_FAILED", "EVIDENCE_ERROR", failure.getMessage(), List.of()));
+                else err.println(failure.getMessage());
+                return 1;
+            }
+        }
         if ("json".equals(format)) {
-            int exitCode = evidenceResult == null || evidenceResult.valid() ? 0 : 1;
+            int exitCode = (evidenceResult == null || evidenceResult.valid()) && (coverage == null || coverage.valid()) ? 0 : 1;
             Map<String, Object> report = jsonReport(result, evidenceResult);
             addSuiteSummaryReportFields(report, resolvedResult);
+            if (coverage != null) {
+                report.put("coverage_json", coverage.json().toString());
+                report.put("coverage_md", coverage.markdown().toString());
+                report.put("coverage_report_status", coverage.status());
+                report.put("coverage_json_sha256", coverage.jsonSha256());
+                report.put("coverage_md_sha256", coverage.markdownSha256());
+                report.put("requirement_coverage_percent", coverage.document().at("/metrics/requirements/satisfied_percent"));
+                report.put("ac_coverage_percent", coverage.document().at("/metrics/acceptance_criteria/satisfied_percent"));
+            }
+            report.put("coverage_percent_metric", "test_pass_rate_percent");
+            report.put("coverage_percent_deprecation", "Use typed requirement/AC metrics; the legacy field is a test pass rate.");
             return printReportJson(out, err, report) ? exitCode : 1;
         }
-        boolean evidenceInvalid = evidenceResult != null && !evidenceResult.valid();
+        if (coverage != null) {
+            out.println("coverage_json: " + coverage.json());
+            out.println("coverage_md: " + coverage.markdown());
+            out.println("coverage_report_status: " + coverage.status());
+            out.println("requirement_coverage_percent: " + coverage.document().at("/metrics/requirements/satisfied_percent"));
+            out.println("ac_coverage_percent: " + coverage.document().at("/metrics/acceptance_criteria/satisfied_percent"));
+        }
+        out.println("coverage_percent_metric: test_pass_rate_percent");
+        out.println("coverage_percent_deprecation: Use typed requirement/AC metrics; the legacy field is a test pass rate.");
+        boolean evidenceInvalid = (evidenceResult != null && !evidenceResult.valid()) || (coverage != null && !coverage.valid());
         if (result.suiteId().isBlank()) {
             out.println("report_status: " + (evidenceInvalid ? "invalid" : result.status()));
         } else {
@@ -547,10 +595,10 @@ public class RegressionCommand {
             out.println("coverage_percent: " + coveragePercent(evidenceResult));
             printEvidenceReportSummary(out, evidenceResult);
             printContractFindings(out, evidenceResult.findings());
-            return evidenceResult.valid() ? 0 : 1;
+            return !evidenceInvalid ? 0 : 1;
         }
         out.println("coverage_percent: " + ("passed".equals(result.status()) ? "100.0" : "0.0"));
-        return 0;
+        return evidenceInvalid ? 1 : 0;
     }
 
     private void addSuiteSummaryReportFields(Map<String, Object> report, Path resultJson) {
@@ -599,7 +647,7 @@ public class RegressionCommand {
 
     private Map<String, Object> suiteSummaryForReport(Path resultJson) {
         try {
-            Map<String, Object> result = readYamlMap(resultJson);
+            Map<String, Object> result = readResultMap(resultJson);
             if (!"v0.3".equals(stringValue(result.get("result_contract_version")))) return Map.of();
             String ref = stringValue(result.get("suite_summary_ref"));
             if (ref.isBlank()) return Map.of();
@@ -3228,6 +3276,11 @@ public class RegressionCommand {
                 .map(this::stringValue)
                 .filter(profile -> !profile.isBlank())
                 .toList();
+    }
+
+    private Map<String, Object> readResultMap(Path path) {
+        try { return ResultDocumentReader.read(path).fields(); }
+        catch (IOException error) { throw new UncheckedIOException("Failed to read bounded result JSON: " + path, error); }
     }
 
     @SuppressWarnings("unchecked")

@@ -2,6 +2,7 @@ package com.specdriven.regression.evidence;
 
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ResultContractValidator;
+import com.specdriven.regression.contract.ResultDocumentReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -94,8 +95,9 @@ public class EvidenceHardeningService {
         String resultText;
         Map<String, Object> result;
         try {
-            resultText = Files.readString(resultJson);
-            result = mapValue(yaml.load(resultText));
+            var document = ResultDocumentReader.read(resultJson);
+            resultText = document.text();
+            result = document.fields();
         } catch (IOException | RuntimeException e) {
             findings.add(finding(resultJson, "result", "invalid_result_json",
                     "Fix malformed result JSON before validating evidence."));
@@ -229,6 +231,8 @@ public class EvidenceHardeningService {
                     for (var operation : operations) requireReviewed(nativeCapability.operation().equals(operation.get("operation")),
                             "native resolved operation differs from selected contract");
                 }
+                if ("grpc_client.v0.3".equals(nativeCapability.contract()))
+                    validateReviewedGrpcProof(root, result, handoff, entries, passed);
             }
             Map<String,Object> observedDependencies = mapValue(handoff.get("observed_dependency_modes"));
             boolean readinessPresent = entries.stream().anyMatch(entry -> "sit_readiness".equals(entry.evidenceType())
@@ -284,6 +288,55 @@ public class EvidenceHardeningService {
         }
     }
 
+    /** Historical joins only: the owner may be reaped and the invocation lease expired. */
+    private void validateReviewedGrpcProof(Path root, Map<String,Object> result, Map<String,Object> handoff,
+            List<EvidenceEntry> entries, boolean passed) throws IOException {
+        Map<String,Object> lease = mapValue(handoff.get("fixture_lease"));
+        requireReviewed("reviewed-grpc-lease.v1".equals(lease.get("version")), "unsupported gRPC lease version");
+        String profile = reviewedText(lease.get("profile"), "gRPC lease profile");
+        requireReviewed(Set.of("echo.v1", "greeter.v1").contains(profile), "unsupported gRPC lease profile");
+        String owner = reviewedText(lease.get("owner_run_id"), "gRPC lease owner");
+        String endpoint = reviewedText(lease.get("endpoint"), "gRPC lease endpoint");
+        String leaseSha = reviewedText(handoff.get("fixture_lease_sha256"), "gRPC lease digest");
+        requireReviewed(leaseSha.matches("[a-f0-9]{64}"), "invalid gRPC lease digest");
+        var closures = mapList(handoff.get("reviewed_files")).stream()
+                .filter(file -> "fixtures/lease.json".equals(file.get("path"))).toList();
+        requireReviewed(closures.size() == 1 && "fixture".equals(closures.get(0).get("role"))
+                && leaseSha.equals(closures.get(0).get("sha256")), "missing or ambiguous gRPC lease closure");
+        // Failed preflight can stop before a provider invocation produces a proof.
+        if (mapList(result.get("provider_results")).isEmpty()) return;
+
+        String path = "provider-evidence/grpc-client/reviewed-unary.json";
+        EvidenceEntry proofEntry = uniqueReviewedEntry(entries, path, "grpc_request_response");
+        requireReviewed(entries.stream().filter(entry -> path.equals(entry.filePath())).count() == 1,
+                "ambiguous gRPC proof path");
+        requireReviewed(result.get("run_id").equals(proofEntry.runId())
+                && result.get("batch_id").equals(proofEntry.batchId()) && evidenceRefs(result).contains(path),
+                "gRPC proof is not bound to the result");
+        var proofMapper = new com.fasterxml.jackson.databind.ObjectMapper(com.fasterxml.jackson.core.JsonFactory.builder()
+                .enable(com.fasterxml.jackson.core.StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+                .streamReadConstraints(com.fasterxml.jackson.core.StreamReadConstraints.builder()
+                        .maxStringLength(1024 * 1024).maxNestingDepth(100).build()).build())
+                .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+        Map<String,Object> proof = proofMapper.readValue(reviewedBytes(root.resolve(path), root),
+                new com.fasterxml.jackson.core.type.TypeReference<>() {});
+        requireReviewed(leaseSha.equals(proof.get("fixture_lease_sha256")) && owner.equals(proof.get("owner_run_id"))
+                && endpoint.equals(proof.get("endpoint")), "gRPC proof differs from frozen lease identity");
+        requireReviewed(("echo.v1".equals(profile) ? "swarm.producttest.EchoService" : "helloworld.Greeter")
+                .equals(proof.get("service")) && ("echo.v1".equals(profile) ? "Echo" : "SayHello")
+                .equals(proof.get("method")), "gRPC proof differs from reviewed service/method");
+        requireReviewed(proof.get("rpc_attempted") instanceof Boolean && proof.get("cleanup_confirmed") instanceof Boolean,
+                "gRPC proof attempt/cleanup flags must be boolean");
+        requireReviewed(!passed || Boolean.TRUE.equals(proof.get("rpc_attempted"))
+                && Boolean.TRUE.equals(proof.get("cleanup_confirmed")) && "OK".equals(proof.get("status")),
+                "passed gRPC result requires an attempted, cleaned-up OK operation");
+    }
+
+    private String reviewedText(Object value, String field) {
+        requireReviewed(value instanceof String && !((String)value).isBlank(), "missing or nontext " + field);
+        return (String)value;
+    }
+
     private EvidenceEntry uniqueReviewedEntry(List<EvidenceEntry> entries, String path, String type) {
         var matches = entries.stream().filter(entry -> path.equals(entry.filePath()) && type.equals(entry.evidenceType())).toList();
         requireReviewed(matches.size() == 1, "missing or ambiguous reviewed evidence entry: " + path);
@@ -308,10 +361,10 @@ public class EvidenceHardeningService {
             return false;
         }
         try {
-            Map<String, Object> result = mapValue(yaml.load(Files.readString(resultJson)));
+            Map<String, Object> result = ResultDocumentReader.read(resultJson).fields();
             return evidenceIndexPath(resultJson, result) != null;
         } catch (IOException | RuntimeException e) {
-            return false;
+            throw new IllegalArgumentException("Cannot inspect result evidence references", e);
         }
     }
 

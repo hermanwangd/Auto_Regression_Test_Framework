@@ -19,6 +19,7 @@ parser.add_argument("--test-level", choices=["component", "integration"], defaul
                     help="Must match the reviewed profile; integration uses the selected reviewed native provider")
 parser.add_argument("--output-dir", type=Path, help="Fresh evidence directory; an existing directory is rejected")
 parser.add_argument("--via-host", action="store_true")
+parser.add_argument("--fixture-lease-sha256", help="Independent reviewed local gRPC owner lease pin")
 parser.add_argument("--provider-jar", type=Path)
 parser.add_argument("--java-home", type=Path, default=Path(os.environ.get("JAVA_HOME", "/usr")))
 args = parser.parse_args()
@@ -54,6 +55,9 @@ environment = {
     "SWARM_PRODUCT_TEST_ARTIFACT_ROOT": str(suite), "SWARM_PRODUCT_TEST_OUTPUT_ROOT": str(outputs),
     "SWARM_PRODUCT_TEST_TIMEOUT_MS": "60000", "SWARM_PRODUCT_TEST_MAX_OUTPUT_BYTES": "262144",
 }
+if args.fixture_lease_sha256 is not None:
+    assert len(args.fixture_lease_sha256) == 64 and all(c in "0123456789abcdef" for c in args.fixture_lease_sha256)
+    environment["SWARM_PRODUCT_TEST_FIXTURE_LEASE_SHA256"] = args.fixture_lease_sha256
 java = str(args.java_home / "bin/java")
 provider = (args.provider_jar or module / "target/swarm-product-test-1.0.0-provider.jar").resolve(strict=True)
 host = module / "target/swarm-product-test-1.0.0-host.jar"

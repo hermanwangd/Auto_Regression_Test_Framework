@@ -216,8 +216,7 @@ public class ContractBaselineService {
         }
         Map<String, Object> result;
         try {
-            Object loaded = yaml.load(Files.readString(resultJson));
-            result = mapValue(loaded);
+            result = ResultDocumentReader.read(resultJson).fields();
         } catch (IOException | RuntimeException e) {
             return new ReportResult(false, false, "", "", "", "", "", "", 0, 0, false, List.of(), List.of(
                     new ContractFinding(

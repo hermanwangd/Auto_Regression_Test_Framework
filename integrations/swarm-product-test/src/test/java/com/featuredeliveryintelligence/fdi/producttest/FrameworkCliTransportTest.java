@@ -134,7 +134,19 @@ class FrameworkCliTransportTest {
         assertThat(viaModule.diagnostic()).contains("approved");
     }
 
+    @Test void independentLeasePinReachesChildEnvironment() throws Exception {
+        String pin="f".repeat(64);
+        var receipt=transport("System.out.println(\"lease_pin: \"+System.getenv(\"REGRESS_REVIEWED_FIXTURE_LEASE_SHA256\"));",Duration.ofSeconds(4),pin).execute(request());
+        assertThat(Files.readString(Path.of(receipt.outputDirectory()).resolve("run.stdout.log"))).contains("lease_pin: "+pin);
+    }
+    @Test void legacyBindingDoesNotInventLeasePin() throws Exception {
+        var receipt=transport("System.out.println(\"lease_pin: \"+System.getenv(\"REGRESS_REVIEWED_FIXTURE_LEASE_SHA256\"));",Duration.ofSeconds(4)).execute(request());
+        assertThat(Files.readString(Path.of(receipt.outputDirectory()).resolve("run.stdout.log"))).contains("lease_pin: null");
+    }
     private FrameworkCliTransport transport(String body, Duration timeout) throws Exception {
+        return transport(body,timeout,null);
+    }
+    private FrameworkCliTransport transport(String body, Duration timeout,String leasePin) throws Exception {
         Path source = root.resolve("FixtureMain.java");
         Files.writeString(source, "public class FixtureMain { public static void main(String[] args) throws Exception { " + body + " } }");
         assertThat(ToolProvider.getSystemJavaCompiler().run(null, null, null, "-d", root.toString(), source.toString())).isZero();
@@ -151,7 +163,7 @@ class FrameworkCliTransportTest {
         return new FrameworkCliTransport(new FrameworkBinding(
                 Path.of(System.getProperty("java.home"), "bin", "java"), jar, ProductTestingModuleTest.hash(jar),
                 handoffPin,
-                root.resolve("artifacts"), root.resolve("outputs"), timeout, 4096));
+                root.resolve("artifacts"), root.resolve("outputs"), timeout, 4096,leasePin));
     }
 
     private ProductTestRequest request() throws Exception {

@@ -59,3 +59,7 @@ These templates target **Azure DevOps Services**. Pipeline Artifact tasks are no
 - [Publish Pipeline Artifact](https://learn.microsoft.com/en-us/azure/devops/pipelines/tasks/reference/publish-pipeline-artifact-v1?view=azure-pipelines)
 - [Deployment runOnce hooks and automatic downloads](https://learn.microsoft.com/en-us/azure/devops/pipelines/yaml-schema/jobs-deployment-strategy-run-once?view=azure-pipelines)
 - [Resource-owner approvals and checks](https://learn.microsoft.com/en-us/azure/devops/pipelines/process/checks?view=azure-devops)
+
+## Coverage retention
+
+The CI staging allowlist retains framework and module `target/site/jacoco` XML, CSV and HTML artifacts plus the named external `coverage/coverage.json` and `coverage/coverage.md` pairs. The CD collector retains only named coverage pairs under runtime `target/coverage` after canonical validation. These additions retain evidence and do not change gate outcomes or grant inventory authority. Instrumentation scope/provenance must accompany any whole-project coverage claim; missing instrumentation remains MISSING. Azure execution remains NOT_RUN until the owner runs these templates.

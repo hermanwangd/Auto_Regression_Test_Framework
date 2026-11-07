@@ -1,0 +1,110 @@
+contract_version: coverage_report.v1
+artifact: derived_coverage_report
+format: strict_json
+canonical_mutation: prohibited
+output_files: [coverage.json, coverage.md]
+output_location: outside_every_selected_canonical_run_tree
+required_fields: [schema_version, generated_at, report_status, generation_status, publication_status, subject, sources, selection, inventory, risk_inventory, metrics, entities, cases, observations, breakdowns, code_coverage, gaps, evidence_links, canonical_outcome, evidence_classification, downstream_release_evidence]
+report_status: [VALID, INCOMPLETE, INVALID]
+classification: framework_verification_only
+downstream_release_evidence: false
+limits: {input_bytes: 2097152, result_and_output_bytes: 8388608, results: 100, entities: 10000, metadata_string_length: 4096, metadata_nesting_depth: 80, canonical_payload_string_length: 1048576, canonical_payload_nesting_depth: 100}
+parser: {duplicate_keys: prohibited, trailing_tokens: prohibited, symlink_paths: prohibited}
+subject:
+  identity_fields: [suite_id, profile, run_id, batch_id, project_ref, workspace_ref, repository_revisions, plan_digest]
+  version_fields: [framework_version, framework_artifact_sha256, result_contract_version]
+  absent_fields: null
+  domain: product
+  domain_basis: framework_product_test_result_contract_not_native_agent_behavior
+sources:
+  fields: [kind, path, sha256, run_id, batch_id, start_time, end_time, selection_state, reason]
+  selection_states: [SELECTED, SUPERSEDED, INCOMPATIBLE]
+selection:
+  policy: [explicit_result_only, latest_compatible_per_case]
+  ordering: newest_end_then_start_identity_compatible_before_evidence_eligibility
+  fallback_to_old_pass: prohibited
+  ambiguous_timestamp_tie: invalid
+inventory:
+  states: [UNKNOWN, KNOWN, KNOWN_EMPTY, INVALID]
+  fields: [state, completeness, catalog_revision, catalog_sha256, authority, scope, reason]
+  absent_catalog: UNKNOWN
+  mapping_only_completeness: DECLARED_SUBSET
+risk_inventory:
+  required: [state, authority, revision, denominator, reason]
+  state: UNKNOWN
+  authority: null
+  revision: null
+  denominator: null
+  reason: risk_inventory_missing
+  input_contract: not_supplied
+metrics:
+  dimensions: [requirements, acceptance_criteria]
+  fields: [denominator, mapped, executed, satisfied, mapped_percent, executed_percent, satisfied_percent]
+  counts: unique_eligible_catalog_entities
+  unknown_inventory: all_null
+  zero_denominator_percent: null
+  percent_formula: 100_times_count_divided_by_positive_denominator
+  requirement_rollup: all_eligible_child_ac_with_no_vacuous_satisfaction
+entities:
+  fields: [kind, id, parent_requirement_id, classification, state, reason, test_case_ids, mapping_refs, evidence_refs, execution_state, satisfaction_state, mapped_test_satisfaction_state]
+  mapping_states: [MAPPED, UNMAPPED, EXCLUDED]
+  partial_automation: full_ac_and_requirement_satisfaction_unknown_even_when_mapped_automated_tests_pass
+  remainder_contract: unsupported
+  exclusions: only_manual_only_or_waived_with_reason_review_approver_and_time
+cases:
+  fields: [test_case_id, run_id, batch_id, source_result, canonical_outcome, evidence_state, expected_negative, mapping_refs, evidence_refs]
+  outcomes: [PASS, FAIL, BLOCKED, NOT_RUN, SKIPPED]
+  evidence_states: [VALID, MISSING, STALE, TAMPERED, MISMATCH, INVALID]
+  expected_negative: {expected: null, detection: UNKNOWN, reason: independent_negative_detection_evidence_missing}
+  failed_execution: executed_but_not_satisfied
+breakdowns:
+  separate_dimensions: [protocol_contracts, provider_ids, provider_types, test_level, knowledge_mode, environment_stage, observed_provider_mode, observed_dependency_mode, evidence_classification, execution_domain]
+  execution_domains: [framework_unit, module, native_fixture, native_swarm, product, UNKNOWN]
+  missing_dimensions: UNKNOWN
+code_coverage:
+  measurement: actual_pinned_JaCoCo_XML_aggregate_LINE_and_BRANCH_counters_only
+  fields: [domain, state, tool, artifact_ref, artifact_sha256, repository, revision_binding, scope, line, branch, reason]
+  states: [MEASURED, MISSING, INVALID, STALE]
+  repository_binding: {framework_unit: framework, module: framework}
+  unbound_domains_or_missing_repository_key: STALE_with_null_counters
+  counter_fields: [covered, missed, total, percent]
+  scope_default: {kind: artifact_aggregate, completeness: UNKNOWN}
+  scope_assertion_requires: pinned_reviewed_provenance_revision_included_classes_and_exclusions
+  test_counts_as_coverage: prohibited
+input_catalog:
+  schema_version: coverage-catalog.v1
+  required: [schema_version, scope, catalog_revision, authority, requirements, acceptance_criteria]
+  optional: [code_coverage_artifacts]
+  scope: [domain, project_ref, workspace_ref, repository_revisions]
+  supported_domain: product
+  scope_equality: domain_project_workspace_and_structural_repository_revisions
+  authority: [kind, source_ref, source_sha256, review_ref, approved_by, approved_at]
+  authority_kind: reviewed_inventory
+  requirements: {required: [id, ac_ids]}
+  acceptance_criteria:
+    required: [id, requirement_id, classification]
+    optional: [test_case_ids, review_ref, exclusion]
+    classification: [automatable, partial, manual_only, waived]
+    mapping_requires: review_ref
+    exclusion: [reason, review_ref, approved_by, approved_at]
+input_selection:
+  schema_version: coverage-selection.v1
+  required: [schema_version, selection_id, as_of, expected_scope, max_age_seconds, results, policy]
+  optional: [code_coverage_artifacts]
+  policy: latest_compatible_per_case
+  expected_scope: [project_ref, workspace_ref, repository_revisions]
+  results: {required: [path, sha256]}
+  primary_result: always_included
+input_code_artifacts:
+  source: catalog_or_selection_but_not_both
+  required: [domain, path, sha256, repository_revision]
+  optional: [scope]
+  scope:
+    required: [kind, provenance_ref, provenance_sha256, included_classes, excluded_classes, exclusions_reason]
+    kind: [whole_project, selected_classes]
+    whole_project_additional_provenance: [project_classes, review_ref, approved_by, approved_at]
+publication:
+  existing_pair: refuse_use_fresh_directory
+  write_failure: nonzero_and_no_success_pair
+  invalid_evidence: nonzero_and_no_success_receipt
+  canonical_verdict: preserved

@@ -49,6 +49,85 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
         };
     }
 
+    /** Protected reviewed entry; generic execute remains compatible with existing external gRPC suites. */
+    public ProviderOperationResult executeReviewedUnary(ProviderExecutionContext context, ProviderOperationRequest request) {
+        long started=System.nanoTime();
+        Map<String,Object> inputs=new LinkedHashMap<>();
+        if(!"native".equals(context.runtimeMode()) || !"unary_call".equals(request.operation()))
+            throw new IllegalArgumentException("reviewed_grpc: only native unary_call is supported");
+        for (var parameter:request.parameters()) {
+            if(inputs.putIfAbsent(stringValue(parameter.get("bind_as")),parameter.get("ref"))!=null)
+                throw new IllegalArgumentException("reviewed_grpc: duplicate unary input");
+        }
+        if(!java.util.Set.of("fixtures/echo.desc.b64","fixtures/greeter.desc.b64").contains(inputs.get("grpc.descriptor_ref")) || !"fixtures/request.json".equals(inputs.get("grpc.message")))
+            throw new IllegalArgumentException("reviewed_grpc: resolved fixtures differ from reviewed fixed paths");
+        inputs.put("grpc.descriptor_ref","artifact://"+inputs.get("grpc.descriptor_ref"));
+        inputs.put("grpc.message",ReviewedLoopbackGrpcPolicy.REQUEST_REF);
+        ReviewedLoopbackGrpcPolicy.validateInputs(inputs);
+        long end=started+ReviewedLoopbackGrpcPolicy.timeout(inputs.get("grpc.timeout")).toNanos();
+        var fixture=ReviewedLoopbackGrpcPolicy.fixture(context.suiteRoot(),context.bindingValues(),true);
+        if(!fixture.method().getService().getFullName().equals(inputs.get("grpc.service")) || !fixture.method().getName().equals(inputs.get("grpc.method")))
+            throw new IllegalArgumentException("reviewed_grpc: lease profile differs from reviewed operation");
+        ManagedChannel channel=null;
+        ProviderOperationResult result;
+        String status="UNKNOWN", body="", error="";
+        boolean attempted=false, cleaned=true;
+        try {
+            DynamicMessage.Builder message=DynamicMessage.newBuilder(fixture.method().getInputType());
+            JsonFormat.parser().merge(fixture.requestJson(),message);
+            channel=ManagedChannelBuilder.forTarget(stripGrpcScheme(stringValue(context.bindingValues().get("target"))))
+                    .usePlaintext().maxInboundMessageSize(ReviewedLoopbackGrpcPolicy.MAX_RESPONSE_BYTES).build();
+            // Validate the frozen lease again immediately before the actual RPC, without a network preflight.
+            fixture=ReviewedLoopbackGrpcPolicy.fixture(context.suiteRoot(),context.bindingValues(),true);
+            long remaining=end-System.nanoTime();
+            if(remaining<=0) throw Status.DEADLINE_EXCEEDED.withDescription("whole operation budget exhausted before RPC").asRuntimeException();
+            attempted=true;
+            DynamicMessage response=ClientCalls.blockingUnaryCall(channel,grpcMethod(fixture.method()),
+                    CallOptions.DEFAULT.withDeadlineAfter(remaining,TimeUnit.NANOSECONDS),message.build());
+            if(System.nanoTime()>=end) throw Status.DEADLINE_EXCEEDED.withDescription("whole operation budget exhausted").asRuntimeException();
+            body=JsonFormat.printer().omittingInsignificantWhitespace().print(response);
+            if(body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>ReviewedLoopbackGrpcPolicy.MAX_RESPONSE_BYTES)
+                throw Status.RESOURCE_EXHAUSTED.withDescription("serialized JSON exceeds 1 MiB").asRuntimeException();
+            if(System.nanoTime()>=end) throw Status.DEADLINE_EXCEEDED.withDescription("serialization exceeded operation budget").asRuntimeException();
+            status="OK";
+        } catch(StatusRuntimeException e) { status=e.getStatus().getCode().name(); error=maskSensitiveText(safeMessage(e)); body=""; }
+        catch(Exception e) { error=maskSensitiveText(safeMessage(e)); body=""; }
+        finally {
+            if(channel!=null) {
+                channel.shutdownNow();
+                try { cleaned=channel.awaitTermination(2,TimeUnit.SECONDS); }
+                catch(InterruptedException e) {Thread.currentThread().interrupt();cleaned=false;}
+            }
+        }
+        if(!cleaned) {status="CLEANUP_UNCONFIRMED";body="";error="gRPC channel termination not confirmed within 2s";}
+        long duration=Duration.ofNanos(System.nanoTime()-started).toMillis();
+        writeReviewedEvidence(context,fixture,status,body,error,duration,attempted,cleaned);
+        var proof=evidence("grpc_request_response","provider-evidence/grpc-client/reviewed-unary.json");
+        if(status.equals("OK")) return ProviderOperationResult.passed(Map.of("response.message",body,"response.status",status,"response.duration_ms",duration),proof);
+        return ProviderOperationResult.failed(Map.of("response.status",status,"response.duration_ms",duration),proof,
+                ProviderFailure.of(status.equals("DEADLINE_EXCEEDED")?"PROVIDER_TIMEOUT":"OPERATION_FAILED",
+                        status.equals("DEADLINE_EXCEEDED")?"PROVIDER_TIMEOUT":"FRAMEWORK_ERROR",
+                        "Reviewed gRPC unary failed: "+status+" "+error,"Inspect bounded reviewed-unary evidence."));
+    }
+
+    private void writeReviewedEvidence(ProviderExecutionContext context, ReviewedLoopbackGrpcPolicy.Fixture fixture,
+            String status,String body,String error,long duration,boolean attempted,boolean cleaned) {
+        Map<String,Object> evidence=new LinkedHashMap<>();
+        evidence.put("evidence_type","grpc_request_response"); evidence.put("provider_type",PROVIDER_TYPE);
+        evidence.put("provider_id",context.providerId()); evidence.put("service",fixture.method().getService().getFullName());
+        evidence.put("method",fixture.method().getName()); evidence.put("fixture_lease_sha256",fixture.leaseSha256());
+        evidence.put("owner_run_id",fixture.lease().get("owner_run_id")); evidence.put("endpoint",fixture.lease().get("endpoint"));
+        evidence.put("rpc_attempted",attempted); evidence.put("cleanup_confirmed",cleaned);
+        evidence.put("request",fixture.requestJson()); evidence.put("status",status); evidence.put("body",maskSensitiveText(body));
+        evidence.put("duration_ms",duration); evidence.put("error",error); evidence.put("masking_applied",true);
+        try {
+            String serialized=new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(evidence);
+            if(serialized.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>2*1024*1024)
+                throw new IllegalStateException("reviewed gRPC evidence exceeds 2 MiB");
+            write(context.runDir().resolve("provider-evidence/grpc-client/reviewed-unary.json"),serialized);
+        } catch(IOException e) {throw new UncheckedIOException(e);}
+    }
+
     private ProviderOperationResult unaryCall(ProviderExecutionContext context, ProviderOperationRequest request) {
         String target = stringValue(context.bindingValues().get("target"));
         if (target.isBlank() || target.startsWith("generated://")) {

@@ -27,7 +27,8 @@ public final class ProductTestCli {
                     Path.of(required(environment, "SWARM_PRODUCT_TEST_ARTIFACT_ROOT")),
                     Path.of(required(environment, "SWARM_PRODUCT_TEST_OUTPUT_ROOT")),
                     Duration.ofMillis(Long.parseLong(environment.getOrDefault("SWARM_PRODUCT_TEST_TIMEOUT_MS", "30000"))),
-                    Integer.parseInt(environment.getOrDefault("SWARM_PRODUCT_TEST_MAX_OUTPUT_BYTES", "262144")));
+                    Integer.parseInt(environment.getOrDefault("SWARM_PRODUCT_TEST_MAX_OUTPUT_BYTES", "262144")),
+                    environment.get("SWARM_PRODUCT_TEST_FIXTURE_LEASE_SHA256"));
             var module = ProductTestingModules.resolve(request.moduleId(), request.moduleVersion(), new FrameworkCliTransport(binding), loader);
             var receipt = module.execute(request);
             out.println(Json.MAPPER.writeValueAsString(receipt));

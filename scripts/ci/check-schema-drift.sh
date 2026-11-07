@@ -8,6 +8,7 @@ CANONICAL_DIR="docs/02-architecture/contracts"
 RUNTIME_DIR="schemas"
 
 required=(
+  coverage_report.v1.schema.yaml
   env_profile.v0.2.schema.yaml
   environment_binding.v0.2.schema.yaml
   evidence_index.v0.2.schema.yaml

@@ -43,6 +43,18 @@ class ReviewedInvocationBoundaryTest {
         }
     }
 
+    @Test void fixtureLeasePinAloneNeverFallsBackToOrdinaryExecution() throws Exception {
+        for(String pin:List.of("a".repeat(64),"","malformed")) {
+            Path output=Files.createTempDirectory(temporary,"lease-output-");
+            var command=new RegressionCommand(new ProductRepoService(),new ReleasePackageService(),Map.of("REGRESS_REVIEWED_FIXTURE_LEASE_SHA256",pin));
+            var stdout=new ByteArrayOutputStream();
+            int exit=command.execute(new String[]{"run","--suite",Path.of("samples/00-getting-started/golden_e2e/suite_manifest.yaml").toAbsolutePath().toString(),"--profile","local_v03","--root",output.toString()},new PrintStream(stdout),new PrintStream(new ByteArrayOutputStream()));
+            assertThat(exit).isNotZero();
+            assertThat(stdout.toString()).contains("REVIEWED_HANDOFF_REQUIRED","provider_runtime_invoked: false");
+            assertThat(Files.exists(output.resolve("target/regression"))).isFalse();
+        }
+    }
+
     @Test void removingOrNullingReviewedPolicyAndChangingProfileCannotDowngrade() throws Exception {
         for (String alteration : List.of("removed", "null", "different-profile")) {
             Path source = Path.of("samples/41-product-testing/reviewed_local");

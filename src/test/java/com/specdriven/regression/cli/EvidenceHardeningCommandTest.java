@@ -141,8 +141,10 @@ class EvidenceHardeningCommandTest {
     @Test
     void unknownResultEvidenceRefFailsClearly() throws Exception {
         Path resultJson = mutableEvidenceHardening("unknown_ref");
-        Files.writeString(resultJson, read(resultJson)
-                .replace("\"polling-observation-001\"", "\"polling-observation-001\", \"unknown-evidence-id\""));
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var document = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(read(resultJson));
+        document.withArray("evidence_refs").add("unknown-evidence-id");
+        Files.writeString(resultJson, mapper.writeValueAsString(document));
 
         CommandResult result = execute("validate-evidence", "--result", resultJson.toString());
 

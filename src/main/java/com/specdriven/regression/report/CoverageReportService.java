@@ -15,6 +15,10 @@ import org.yaml.snakeyaml.Yaml;
 public class CoverageReportService {
     private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
 
+    public CanonicalCoverageReportResult projectCanonical(Path result, Path outputDir, Path catalog, Path selection) {
+        return new CanonicalCoverageReport().project(result, outputDir, catalog, selection);
+    }
+
     public CoverageReportResult generateBatch(Path packageRoot, String batchId) {
         Path batchDir = packageRoot.resolve("evidence/batches").resolve(batchId);
         Path batchYaml = batchDir.resolve("batch.yaml");

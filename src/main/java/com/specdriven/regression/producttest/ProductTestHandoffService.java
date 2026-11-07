@@ -53,11 +53,12 @@ public final class ProductTestHandoffService {
     public ProductTestHandoffService(Clock clock) { this.clock = java.util.Objects.requireNonNull(clock); }
 
     /** Presence survives a malformed value, so the caller cannot silently downgrade its route. */
-    public record InvocationRequirement(String expectedSha256) {
+    public record InvocationRequirement(String expectedSha256, String fixtureLeaseSha256) {
+        public InvocationRequirement(String expectedSha256) {this(expectedSha256,null);}
         public static InvocationRequirement fromEnvironment(Map<String,String> environment) {
-            return new InvocationRequirement(environment.get("REGRESS_REVIEWED_HANDOFF_SHA256"));
+            return new InvocationRequirement(environment.get("REGRESS_REVIEWED_HANDOFF_SHA256"), environment.get("REGRESS_REVIEWED_FIXTURE_LEASE_SHA256"));
         }
-        public boolean required() { return expectedSha256 != null; }
+        public boolean required() { return expectedSha256 != null || fixtureLeaseSha256 != null; }
     }
 
     /** Reads no executable/provider input and treats a present null policy as configured. */
@@ -85,7 +86,15 @@ public final class ProductTestHandoffService {
         Selection selection = select(inputs, profile);
         byte[] handoffBytes = inputs.read(selection.policy.reviewedHandoffRef());
         if (!expected.equals(digest(handoffBytes))) throw fail("handoff_digest_mismatch", "reviewed handoff bytes changed");
-        return validateAndSnapshot(inputs, selection, json(handoffBytes, "handoff"), expected, clock.instant());
+        Snapshot snapshot=validateAndSnapshot(inputs, selection, json(handoffBytes, "handoff"), expected, clock.instant());
+        try {
+            if(selection.policy.nativeExecution() && nativeCapability(selection)==ReviewedNativeCapability.GRPC) {
+                String leasePin=sha(requirement.fixtureLeaseSha256(),"fixture_lease_digest_missing_or_invalid");
+                var fixture=com.specdriven.regression.provider.grpc.ReviewedLoopbackGrpcPolicy.fixture(snapshot.root,grpcBindings(selection),true);
+                equal(leasePin,fixture.leaseSha256(),"fixture_lease_digest_mismatch");
+            }
+            return snapshot;
+        } catch(RuntimeException error) {snapshot.close();throw error;}
     }
 
     /** Packages supplied review facts; its result is explicitly prepared, never approved. */
@@ -215,7 +224,15 @@ public final class ProductTestHandoffService {
         else if (h.containsKey("selection_receipt") || h.containsKey("knowledge_sources")) {
             throw fail("not_used_knowledge_fields", "not_used forbids knowledge receipt and mappings");
         }
-        return materialize(inputs.manifestRef, s.policy, approved, contracts, provenance);
+        Snapshot snapshot=materialize(inputs.manifestRef, s.policy, approved, contracts, provenance);
+        if(s.policy.nativeExecution() && nativeCapability(s)==ReviewedNativeCapability.GRPC) {
+            try {
+                var fixture=com.specdriven.regression.provider.grpc.ReviewedLoopbackGrpcPolicy.fixture(snapshot.root,grpcBindings(s),false);
+                provenance.put("fixture_lease",fixture.lease()); provenance.put("fixture_lease_sha256",fixture.leaseSha256());
+                return new Snapshot(snapshot.root,snapshot.suiteManifest,snapshot.contractDirectory,snapshot.policy,immutableObject(provenance));
+            } catch(RuntimeException error) {snapshot.close();throw error;}
+        }
+        return snapshot;
     }
 
     private static Selection select(Inputs inputs, String requested) {
@@ -315,6 +332,14 @@ public final class ProductTestHandoffService {
                                 String fixture = artifact(text(object(step.get("with"), "step.with").get("payload_ref"), "payload_ref"), roots);
                                 need(needed, fixture, "fixture");
                             }
+                            if (nativeCapability(s) == ReviewedNativeCapability.GRPC) {
+                                var input=object(step.get("with"),"step.with");
+                                String descriptor=artifact(text(input.get("grpc.descriptor_ref"),"grpc.descriptor_ref"),roots);
+                                String request=artifact(text(input.get("grpc.message"),"grpc.message"),roots);
+                                equal(com.specdriven.regression.provider.grpc.ReviewedLoopbackGrpcPolicy.profile(input).descriptorPath(),descriptor,"grpc_descriptor_path");
+                                equal("fixtures/request.json",request,"grpc_request_path");
+                                need(needed,descriptor,"fixture"); need(needed,request,"fixture"); need(needed,"fixtures/lease.json","fixture");
+                            }
                             stepOps.put(sid, op);
                             continue;
                         }
@@ -358,6 +383,11 @@ public final class ProductTestHandoffService {
             }
         }
         return new Closure(tests, oracleTests);
+    }
+
+    private static Map<String,Object> grpcBindings(Selection s) {
+        var targets=object(s.env.get("targets"),"profile.targets");
+        return object(object(targets.values().iterator().next(),"profile.target").get("bindings"),"bindings");
     }
 
     private static ReviewedNativeCapability nativeCapability(Selection s) {
@@ -739,7 +769,8 @@ public final class ProductTestHandoffService {
         boolean supported = "execute_sample".equals(op) && output.matches("actual_json(?:\\.[A-Za-z0-9_]+)*|actual_text")
                 || "http_request".equals(op) && Set.of("response.status", "response.body", "response.headers", "response.duration_ms").contains(output)
                 || "run_command".equals(op) && Set.of("exit_code", "stdout", "stderr", "duration_ms").contains(output)
-                || "nats_publish".equals(op) && Set.of("published", "subject", "duration_ms").contains(output);
+                || "nats_publish".equals(op) && Set.of("published", "subject", "duration_ms").contains(output)
+                || "unary_call".equals(op) && Set.of("response.message", "response.status", "response.duration_ms").contains(output);
         if (!supported) throw fail("unsupported_reference", "actual must refer to an earlier supported execution output");
     }
     private static void cleanupRef(Object value, Map<String,String> ops) {

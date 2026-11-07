@@ -12,7 +12,7 @@ runtime_modes:
 operation_defaults:
   input:
     value_type: any
-    reference_kinds: &1
+    reference_kinds:
     - literal
     - artifact
     - step
@@ -39,6 +39,13 @@ binding_keys:
     - generated
     - env
     sensitivity: public
+  owner_run_id:
+    required: false
+    source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    sensitivity: public
   descriptor_ref:
     required: false
     source: env_profile
@@ -54,32 +61,62 @@ operations:
       grpc.service:
         required: true
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       grpc.method:
         required: true
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       grpc.metadata.*:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       grpc.message:
         required: true
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       grpc.descriptor_ref:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       grpc.timeout:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
     outputs:
       response.message:
