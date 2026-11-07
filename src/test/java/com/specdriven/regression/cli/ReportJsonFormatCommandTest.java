@@ -4,14 +4,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.specdriven.regression.discovery.ReleasePackageService;
 import com.specdriven.regression.productrepo.ProductRepoService;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class ReportJsonFormatCommandTest {
 
@@ -103,6 +110,94 @@ class ReportJsonFormatCommandTest {
         assertThat(json.path("failure_code").asText()).isEqualTo("SECRET_GUARDRAIL_ERROR");
         assertThat(json.path("category").asText()).isEqualTo("SECRET_GUARDRAIL_ERROR");
         assertThat(json.toString()).contains("raw_secret");
+        assertThat(json.toString()).doesNotContain("review_ready");
+    }
+
+    @ParameterizedTest
+    @MethodSource("ordinaryConnectionHeaders")
+    void ordinaryHttpConnectionHeaderDoesNotBecomeASecret(
+            String location, String headerName, List<String> values) throws Exception {
+        Path resultJson = resultWithResponseHeaders(location, Map.of(headerName, values));
+
+        CommandResult report = execute("report", "--result", resultJson.toString(), "--format", "json");
+
+        assertThat(report.exit()).as(report.stderr() + report.stdout()).isZero();
+        JsonNode json = OBJECT_MAPPER.readTree(report.stdout());
+        assertThat(json.path("report_status").asText()).isEqualTo("review_ready");
+        assertThat(json.path("masking_status").asText()).isEqualTo("passed");
+    }
+
+    private static Stream<Arguments> ordinaryConnectionHeaders() {
+        return Stream.of("steps", "step_results", "provider_results").flatMap(location -> Stream.of(
+                Arguments.of(location, "connection", List.of("keep-alive")),
+                Arguments.of(location, "Connection", List.of("CLOSE")),
+                Arguments.of(location, "cOnNeCtIoN", List.of(" Keep-Alive,\tclose ", "keep-alive"))));
+    }
+
+    @ParameterizedTest
+    @MethodSource("rawResponseHeaderValues")
+    void responseHeadersStillRejectRawCredentials(String headerName, Object value) throws Exception {
+        Path resultJson = resultWithResponseHeaders("steps", Map.of(headerName, value));
+
+        assertRawSecretReport(resultJson, "steps[0].outputs.response.headers." + headerName);
+    }
+
+    private static Stream<Arguments> rawResponseHeaderValues() {
+        return Stream.of(
+                Arguments.of("connection", List.of("unapproved-connection-value")),
+                Arguments.of("connection", List.of("jdbc:postgresql://127.0.0.1/example")),
+                Arguments.of("connection", List.of("keep-alive", "Bearer dummy-test-token")),
+                Arguments.of("connection", Map.of("value", "keep-alive")),
+                Arguments.of("Authorization", List.of("dummy-test-authorization")),
+                Arguments.of("password", List.of("dummy-test-password")));
+    }
+
+    @Test
+    void connectionOutsideHttpResponseHeadersRemainsSecret() throws Exception {
+        Path resultJson = standardResult("passed");
+        ObjectNode result = (ObjectNode) OBJECT_MAPPER.readTree(resultJson.toFile());
+        result.put("connection", "keep-alive");
+        OBJECT_MAPPER.writeValue(resultJson.toFile(), result);
+
+        assertRawSecretReport(resultJson, "connection");
+    }
+
+    @Test
+    void responseHeaderShapeCannotClearInheritedSecretContext() throws Exception {
+        Path resultJson = resultWithResponseHeaders("steps", Map.of("connection", List.of("keep-alive")));
+        ObjectNode result = (ObjectNode) OBJECT_MAPPER.readTree(resultJson.toFile());
+        result.putObject("credentials").set("steps", result.remove("steps"));
+        // Keep the required result steps while the copied shape is inside a credential object.
+        result.putArray("steps");
+        OBJECT_MAPPER.writeValue(resultJson.toFile(), result);
+
+        assertRawSecretReport(resultJson, "credentials.steps[0].outputs.response.headers.connection");
+    }
+
+    private Path resultWithResponseHeaders(String location, Map<String, Object> headers) throws Exception {
+        Path resultJson = standardResult("passed");
+        ObjectNode result = (ObjectNode) OBJECT_MAPPER.readTree(resultJson.toFile());
+        ObjectNode operation = switch (location) {
+            case "steps" -> (ObjectNode) result.path("steps").path(0);
+            case "step_results" -> result.putArray("step_results").addObject()
+                    .put("id", "sample_execute").put("status", "passed");
+            case "provider_results" -> ((ObjectNode) result.path("provider_results").path(0))
+                    .putArray("resolved_operation_results").addObject()
+                    .put("operation", "http_request").put("status", "passed");
+            default -> throw new IllegalArgumentException("Unknown canonical output location: " + location);
+        };
+        operation.putObject("outputs").set("response.headers", OBJECT_MAPPER.valueToTree(headers));
+        OBJECT_MAPPER.writeValue(resultJson.toFile(), result);
+        return resultJson;
+    }
+
+    private void assertRawSecretReport(Path resultJson, String fieldPath) throws Exception {
+        CommandResult report = execute("report", "--result", resultJson.toString(), "--format", "json");
+        assertThat(report.exit()).as(report.stderr() + report.stdout()).isEqualTo(1);
+        JsonNode json = OBJECT_MAPPER.readTree(report.stdout());
+        assertThat(json.path("failure_code").asText()).isEqualTo("SECRET_GUARDRAIL_RAW_SECRET");
+        assertThat(json.path("category").asText()).isEqualTo("SECRET_GUARDRAIL_ERROR");
+        assertThat(json.path("findings").toString()).contains("raw_secret", fieldPath);
         assertThat(json.toString()).doesNotContain("review_ready");
     }
 
