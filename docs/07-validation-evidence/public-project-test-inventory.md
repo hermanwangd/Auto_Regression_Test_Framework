@@ -1,6 +1,6 @@
 # Public-project test inventory
 
-Version: `planning-v1` · framework reference: [`b95f6b76`](https://github.com/hermanwangd/Auto_Regression_Test_Framework/commit/b95f6b76f5e54fe9b93f99aad78d17a8568e52f7)
+Version: `planning-v1` · metadata revision: `review-fixes-2026-11-07-r1` · framework reference: [`b95f6b76`](https://github.com/hermanwangd/Auto_Regression_Test_Framework/commit/b95f6b76f5e54fe9b93f99aad78d17a8568e52f7)
 
 **20 repositories / 116 proposed scenario groups**: 11 selected client/test-source repositories (62 groups) and 9 application candidates (54 groups). These are planning denominators. They are not approved executable-case counts or product requirement coverage.
 
@@ -422,6 +422,7 @@ MongoDB 7.0.16 and the separately observed 8.0.4 variant are not interchangeable
 - **Published Greeter claim**: the framework reference commit records compiled host/module/native-provider execution. A commit statement alone is not imported as per-group run evidence; exact source/input/oracle/run hashes remain required.
 - **Historical public CI**: [run 42337071696](https://github.com/hermanwangd/Auto_Regression_Test_Framework/actions/runs/42337071696), framework source `ff582c60…`, SQLite/NATS harness evidence. This does not establish a fresh b95f6b76 run.
 - **16 retained historical records**: SQLite, jq, Datasette and PocketBase. The inventory builder recomputed 48 artifact hashes and checked receipt/result identity. Their raw records and hashes are in the JSON; recorded framework validation was not rerun, artifact locations are local-retained rather than public downloads, and none contributes to the proposed denominator/current numerator.
+- **Historical classification correction**: SQLite and jq `pin-mismatch` records retain their raw `slot: unavailable`. Their normalized scenario category is `PIN_MISMATCH`; neither establishes dependency-outage coverage or an independently verified admission stage. Both remain outside the current denominator/numerator.
 
 ## Capability-case planning crosswalk
 
@@ -448,6 +449,32 @@ Separate denominator: **17 proposed capability categories**. Source observations
 | C17 | Shared SIT test data | P09, P10, P11, A01, A02, A03, A04 | data owner/schema/version, seed/oracle separation, namespace/tenant/run_id, concurrency, prerequisite readiness, reset, cleanup after failure/cancel, retained receipt
 
 Rows require capability → exact case → input/oracle → run → evidence, bound to implementation version, layer and environment. No repository-count coverage calculation is permitted.
+
+## Reconciliation and declared linked-group states
+
+`NOT_RECONCILED` on a capability is a reconciliation state: no approved capability-to-case/run binding is established. The counts below describe the existing scenario states reached through **proposed project links**, not capability verdicts, approved case mappings, readiness or a new coverage denominator. A group is counted once per capability/layer; groups can occur under multiple capabilities, so do not sum rows.
+
+Execution attempts remain **UNKNOWN for every capability**. A declared `BLOCKED` or `NOT_RUN` state alone does not establish whether an attempt occurred. Project blocker references are retained in the JSON and describe those projects, not independently graded capability blockers.
+
+| Capability | Linked groups | Upstream | Framework provider | Module | Native agent | SIT |
+| --- | ---: | --- | --- | --- | --- | --- |
+| C01 | 54 | NOT_RUN: 54 | NOT_RUN: 54 | NOT_RUN: 54 | NOT_RUN: 54 | BLOCKED: 54 |
+| C02 | 30 | NOT_RECONCILED: 24; NOT_RUN: 6 | NOT_RECONCILED: 24; NOT_RUN: 6 | NOT_RECONCILED: 13; BLOCKED: 11; NOT_RUN: 6 | NOT_RUN: 30 | BLOCKED: 30 |
+| C03 | 18 | NOT_RECONCILED: 12; NOT_RUN: 6 | NOT_RECONCILED: 12; NOT_RUN: 6 | BLOCKED: 12; NOT_RUN: 6 | NOT_RUN: 18 | BLOCKED: 18 |
+| C04 | 6 | NOT_RECONCILED: 6 | NOT_RECONCILED: 6 | NOT_RECONCILED: 6 | NOT_RUN: 6 | BLOCKED: 6 |
+| C05 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
+| C06 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
+| C07 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
+| C08 | 13 | NOT_RECONCILED: 13 | BLOCKED: 13 | BLOCKED: 13 | NOT_RUN: 13 | BLOCKED: 13 |
+| C09 | 7 | NOT_RECONCILED: 7 | BLOCKED: 7 | BLOCKED: 7 | NOT_RUN: 7 | BLOCKED: 7 |
+| C10 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
+| C11 | 12 | NOT_RUN: 12 | NOT_RUN: 12 | NOT_RUN: 12 | NOT_RUN: 12 | BLOCKED: 12 |
+| C12 | 18 | NOT_RUN: 18 | NOT_RUN: 18 | NOT_RUN: 18 | NOT_RUN: 18 | BLOCKED: 18 |
+| C13 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
+| C14 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
+| C15 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
+| C16 | 54 | NOT_RUN: 54 | NOT_RUN: 54 | NOT_RUN: 54 | NOT_RUN: 54 | BLOCKED: 54 |
+| C17 | 44 | NOT_RECONCILED: 20; NOT_RUN: 24 | BLOCKED: 20; NOT_RUN: 24 | BLOCKED: 20; NOT_RUN: 24 | NOT_RUN: 44 | BLOCKED: 44 |
 
 ## Helm / Ansible component plan
 
@@ -529,9 +556,13 @@ Oracle, DB2 and IBM MQ remain explicit selection/environment gaps in this v1 por
 2. Before admitting a result, freeze exact executable case/layer/input/oracle/review and actual runtime versions. Bind canonical run, evidence validation, artifact hashes and source revision. Retain failures, missing evidence, exclusions and stale results.
 3. Compute each layer's rate only over its explicit approved executable cases. Keep scope completeness and unknown denominators visible; no pass-rate-to-requirement-coverage conversion.
 4. Reuse isolated tester namespaces. Do not modify another worker's outputs or leak holdout material into development.
-5. Executable artifacts stay in existing product repositories (`tests/sit/`); governed knowledge/traceability stays in Product Knowledge repositories, with Cognee retrieval. This tool-repository inventory tracks validation of the testing tooling.
+5. Cross-repository SIT suites stay under `tests/sit/` in an existing product repository. Unit, local and other integration tests retain their owning repository's conventions and paths. Governed knowledge/traceability stays in Product Knowledge repositories, with Cognee retrieval. This tool-repository inventory tracks validation of the testing tooling.
 6. Reusable business-flow authoring is deferred until repeated cross-repository workflows justify it; compile to existing v0.3 only after separate concrete review.
 
 ## Change history
 
 - `planning-v1`: formalized the verified 20-repository/116-group proposal, assigned stable group IDs, and retained observations separately. Integrated the canonical 17-capability and Helm12/Ansible10 component supplement without changing the product denominator.
+
+- `review-fixes-2026-11-07-r1` (same `planning-v1` denominators): preserved raw historical slots and normalized the two pin-mismatch records; limited `tests/sit/` ownership to cross-repository SIT suites; added descriptive linked-group state summaries and explicit unknown execution attempts. Original proposal text and source pins remain unchanged.
+
+Metadata-only verification for this revision: **425 invariant assertions passed; 14 negative mutation cases were rejected**, including raw-source changes, denominator changes, history misclassification, duplicate counts, broken references, invented execution state and Markdown drift. The validator ran in memory; its execution record is retained in the tool transcript, not as a committed CI check. This establishes no provider/module/agent/SIT runtime coverage.
