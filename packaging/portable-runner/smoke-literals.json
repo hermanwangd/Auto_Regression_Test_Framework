@@ -1,0 +1,135 @@
+{
+  "schema": "image-smoke-literals.v1",
+  "expectations": "frozen before any image execution; producer/base/input pins added separately to smoke-plan.json",
+  "cases": [
+    {
+      "id": "java-start",
+      "exit": 0,
+      "verdict": "UNKNOWN",
+      "command": [
+        "/opt/java/openjdk/bin/java",
+        "-version"
+      ]
+    },
+    {
+      "id": "python-start",
+      "exit": 0,
+      "verdict": "UNKNOWN",
+      "command": [
+        "python3",
+        "--version"
+      ]
+    },
+    {
+      "id": "framework-help",
+      "exit": 0,
+      "verdict": "UNKNOWN",
+      "command": [
+        "/opt/java/openjdk/bin/java",
+        "-jar",
+        "/opt/tool/framework.jar",
+        "--help"
+      ]
+    },
+    {
+      "id": "wrapper-help",
+      "exit": 0,
+      "verdict": "UNKNOWN",
+      "command": [
+        "/opt/tool/entrypoint.sh",
+        "--help"
+      ]
+    },
+    {
+      "id": "producer-observer",
+      "exit": 0,
+      "identity_state": "JAR_OBSERVED",
+      "artifact_sha256": "exact externally root-accepted JAR SHA",
+      "schema_sha256": "exact root-accepted runtime schema SHA",
+      "source_authority": "external accepted producer manifest; observer never grants PINNED"
+    },
+    {
+      "id": "readonly-uid-proxy",
+      "exit": 0,
+      "verdict": "UNKNOWN",
+      "checks": [
+        "effective_uid65532",
+        "rootfs_write_EROFS",
+        "all_upper_lower_proxy_env_empty"
+      ]
+    },
+    {
+      "id": "cd-blocked",
+      "exit": 1,
+      "gate_status": "BLOCKED",
+      "framework_launch_attempted": false,
+      "input": "PUBLIC_SYNTHETIC deployment.json={} with independentSHA",
+      "verdict": "UNKNOWN"
+    },
+    {
+      "id": "unbound-runtime",
+      "exit": 1,
+      "runner_status": "BLOCKED",
+      "reason": "authorized_runtime_image_sut_binding_missing_NO_NATIVE_EXECUTION",
+      "verdict": "UNKNOWN"
+    },
+    {
+      "id": "collector-missing",
+      "exit": 1,
+      "collection": "PARTIAL",
+      "SAVE.complete": false,
+      "verdict": "UNKNOWN"
+    },
+    {
+      "id": "collector-passed-fixture",
+      "exit": 0,
+      "collection": "COMPLETE",
+      "validation": "VALID",
+      "publication": "SAVED",
+      "SAVE.complete": true,
+      "verdict": "passed",
+      "classification": "PUBLIC_SYNTHETIC_STATIC_CANONICAL_NOT_NATIVE_RUN"
+    },
+    {
+      "id": "collector-failed-fixture",
+      "exit": 0,
+      "collection": "COMPLETE",
+      "validation": "VALID",
+      "publication": "SAVED",
+      "SAVE.complete": true,
+      "verdict": "failed",
+      "classification": "PUBLIC_SYNTHETIC_STATIC_CANONICAL_NOT_NATIVE_RUN"
+    },
+    {
+      "id": "failed-retention",
+      "workload_exit": 1,
+      "collector_exit": 0,
+      "collection": "COMPLETE",
+      "SAVE.complete": true,
+      "verdict": "UNKNOWN"
+    },
+    {
+      "id": "timeout-retention",
+      "deadline_seconds": 3,
+      "diagnostic_sleep_seconds": 60,
+      "timed_out": true,
+      "collector_exit": 0,
+      "collection": "COMPLETE",
+      "SAVE.complete": true,
+      "verdict": "UNKNOWN"
+    }
+  ],
+  "claim_boundary": "local packaging/lifecycle/collector only; native gateway/product/SIT not run",
+  "required_security": {
+    "uid": 65532,
+    "gid": 65532,
+    "read_only_rootfs": true,
+    "network": "none",
+    "cap_drop": [
+      "ALL"
+    ],
+    "no_new_privileges": true,
+    "proxy_env": "HTTP_PROXY/http_proxy/HTTPS_PROXY/https_proxy/ALL_PROXY/all_proxy/NO_PROXY/no_proxy explicitly empty"
+  },
+  "operation_order": "capture -> corrected collector -> durable readback/SAVE verified -> exact owned container removal; stop failure does not skip capture/collection"
+}
