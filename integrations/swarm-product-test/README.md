@@ -8,6 +8,8 @@ The module supports **component / regression / local** using the framework's fak
 
 ## Build and packaging
 
+For a fresh clone, online builds, pinned smoke inputs and independent public-project validation, start with the [reproduction guide](../../docs/09-operations/product-testing-reproduction.md). A JDK with `javac` is required; a Java runtime alone cannot build the module.
+
 Build offline using cached dependencies, with bounded memory:
 
 ```sh
