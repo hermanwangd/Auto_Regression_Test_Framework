@@ -61,4 +61,6 @@ The delivered native capability is `integration / regression / local`, `knowledg
 
 For native suites, use `env_profiles/` and `test_cases/`, and a literal alias-free reviewed copy of the existing REST contract. Use the existing `prepare-product-test-handoff` command and keep its approved pin independent of the request. See [module contracts and invocation](../../integrations/swarm-product-test/README.md) and [ISTQB gTAA / CT-GenAI mapping and gaps](product-testing-module.md).
 
+Literal query targets now support the [finite reviewed query grammar](product-testing-module.md#reviewed-query-targets), including filters, sorting and pagination. Freeze expected data independently before execution, and pin the complete raw target with the rest of the suite. Use the existing `scripts/smoke.py` with `--test-level integration` and a fresh `--output-dir` to invoke the packaged module. Retain positive, wrong-oracle, unavailable-dependency and recovery receipts separately. The smoke default remains the component fake-provider tuple.
+
 Cognee retrieval candidates, governed selection/approval, native Swarm-agent behavior and product coverage are separate claims. Mark each NOT RUN when unavailable. Reference/model tests do not replace execution of this implementation. No company/shared SIT, deployment or release acceptance is implied by this reproduction procedure.

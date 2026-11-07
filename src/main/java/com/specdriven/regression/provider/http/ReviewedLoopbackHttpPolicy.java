@@ -1,7 +1,13 @@
 package com.specdriven.regression.provider.http;
 
 import java.net.URI;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -26,9 +32,7 @@ public final class ReviewedLoopbackHttpPolicy {
         require(inputs.get("request.method") instanceof String method && Set.of("GET", "HEAD").contains(method),
                 "only GET and HEAD are supported");
         require(inputs.get("request.path") instanceof String, "path must be a literal string");
-        String path = (String)inputs.get("request.path");
-        require(path.length() <= 2048 && path.matches("/[A-Za-z0-9/_.-]*") && !path.startsWith("//")
-                && URI.create(path).normalize().toString().equals(path), "path must be a static absolute local path");
+        validateTarget((String)inputs.get("request.path"));
         if (inputs.containsKey("request.timeout")) {
             Object raw = inputs.get("request.timeout");
             require(raw instanceof String && ((String)raw).length() <= 32, "timeout must be a bounded ISO duration");
@@ -39,6 +43,56 @@ public final class ReviewedLoopbackHttpPolicy {
             } catch (java.time.DateTimeException | ArithmeticException error) {
                 throw new IllegalArgumentException("reviewed_http: timeout must be a bounded ISO duration", error);
             }
+        }
+    }
+
+    private static void validateTarget(String target) {
+        require(target.length() <= 2048 && target.chars().allMatch(c -> c >= 33 && c <= 126)
+                && target.indexOf('#') < 0, "target must be bounded ASCII without a fragment");
+        int separator = target.indexOf('?');
+        String path = separator < 0 ? target : target.substring(0, separator);
+        require(path.matches("/[A-Za-z0-9/_.-]*") && !path.startsWith("//")
+                && URI.create(path).normalize().toString().equals(path), "path must be a static absolute local path");
+        if (separator < 0) return;
+        String[] pairs = target.substring(separator + 1).split("&", -1);
+        require(pairs.length <= 32, "query exceeds 32 pairs");
+        Set<String> keys = new HashSet<>();
+        for (String pair : pairs) {
+            int equals = pair.indexOf('=');
+            require(equals > 0 && equals == pair.lastIndexOf('='), "query requires key=value pairs");
+            String key = decodeQueryPart(pair.substring(0, equals));
+            String value = decodeQueryPart(pair.substring(equals + 1));
+            require(key.length() <= 128 && key.matches("[A-Za-z0-9_.:-]+"), "unsupported query key");
+            require(value.length() <= 512 && value.matches("[A-Za-z0-9 _.,:+~-]*"), "unsupported query value");
+            require(keys.add(key), "duplicate decoded query key");
+            String normalized = key.toLowerCase(Locale.ROOT).replaceAll("[._:-]", "");
+            require(!Set.of("auth", "pwd").contains(normalized)
+                    && !normalized.matches(".*(?:password|passwd|token|secret|authorization|credential|apikey|session|cookie|connection).*"),
+                    "sensitive query keys are unsupported");
+        }
+    }
+
+    /** Decode only for validation; callers transmit the original reviewed target. */
+    private static String decodeQueryPart(String raw) {
+        byte[] bytes = new byte[raw.length()];
+        int length = 0;
+        for (int i = 0; i < raw.length(); i++) {
+            char current = raw.charAt(i);
+            if (current == '%') {
+                require(i + 2 < raw.length(), "incomplete query escape");
+                int high = Character.digit(raw.charAt(++i), 16);
+                int low = Character.digit(raw.charAt(++i), 16);
+                require(high >= 0 && low >= 0, "invalid query escape");
+                bytes[length++] = (byte)((high << 4) | low);
+            } else {
+                bytes[length++] = (byte)(current == '+' ? ' ' : current);
+            }
+        }
+        try {
+            return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes, 0, length)).toString();
+        } catch (CharacterCodingException error) {
+            throw new IllegalArgumentException("reviewed_http: invalid UTF-8 query escape", error);
         }
     }
 

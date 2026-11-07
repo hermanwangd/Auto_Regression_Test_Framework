@@ -29,6 +29,7 @@ class ReviewedLoopbackRestTest {
     final Yaml yaml = new Yaml();
     final AtomicInteger calls = new AtomicInteger();
     final AtomicInteger redirected = new AtomicInteger();
+    final java.util.concurrent.atomic.AtomicReference<String> receivedTarget = new java.util.concurrent.atomic.AtomicReference<>();
     HttpServer server;
     static final String BODY = "[{\"id\":\"fixture-1\",\"name\":\"public fixture\",\"completed\":true}]";
     @AfterEach void closeServer() { if (server != null) server.stop(0); }
@@ -56,6 +57,38 @@ class ReviewedLoopbackRestTest {
         assertThat(run.status()).isEqualTo("failed");
         assertThat(json.readTree(run.resultJson().toFile()).path("failure").path("code").asText()).isEqualTo("ASSERTION_FAILED");
         assertValid(run);
+    }
+
+    @ParameterizedTest @ValueSource(strings={"GET","HEAD"})
+    void reviewedQueryBytesReachExistingProviderExactlyOnce(String method) throws Exception {
+        String target = "/api/items?name=hello+world&other=hello%20world&_sort=-views&%70age=1";
+        Path suite = fixture(serve(200,BODY),method,method.equals("GET"));
+        setTarget(suite,target);
+        var result = run(suite);
+        assertThat(result.status()).as(result.findings().toString()).isEqualTo("passed");
+        assertThat(calls).hasValue(1);
+        assertThat(receivedTarget).hasValue(target);
+        assertValid(result);
+    }
+
+    @ParameterizedTest @ValueSource(strings={"/api/items?page=2","/api/other?page=1"})
+    void changedTargetAfterReviewCannotReachProvider(String changedTarget) throws Exception {
+        Path suite = fixture(serve(200,BODY),"GET",true);
+        setTarget(suite,"/api/items?page=1");
+        assertDoesNotThrow(() -> prepare(suite));
+        var pin = new InvocationRequirement(Files.readString(suite.resolve("handoff/reviewed.json.sha256")).trim());
+        setTarget(suite,changedTarget);
+        var result = new V03RuntimeExecutionService().runReviewed(suite.resolve("suite_manifest.yaml"),"local_native",
+                SuiteExecutionContext.standalone("local_native",temporary.toRealPath().resolve("runs"),"V03"),pin);
+        assertThat(result.status()).isEqualTo("blocked");
+        assertThat(calls).hasValue(0);
+        assertThat(result.findings().toString()).contains("file_digest_mismatch");
+    }
+
+    void setTarget(Path suite,String target) throws Exception {
+        var test = read(suite.resolve("test_cases/items.yaml"));
+        map(map(((List<?>)test.get("execute")).get(0)).get("with")).put("request.path",target);
+        write(suite.resolve("test_cases/items.yaml"),test);
     }
 
     @ParameterizedTest @ValueSource(strings={"remote","dns","userinfo","missing_port","post","put","delete","authority_path","body","header","zero_timeout","multiple_calls","shared_state","fake_tuple"})
@@ -167,6 +200,7 @@ class ReviewedLoopbackRestTest {
         server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
         server.createContext("/api/items", exchange -> {
             calls.incrementAndGet(); byte[] bytes=body.getBytes(StandardCharsets.UTF_8);
+            receivedTarget.set(exchange.getRequestURI().toString());
             exchange.getResponseHeaders().set("Content-Type","application/json");
             if (status==302) exchange.getResponseHeaders().set("Location","http://127.0.0.1:"+server.getAddress().getPort()+"/followed");
             boolean head=exchange.getRequestMethod().equals("HEAD");

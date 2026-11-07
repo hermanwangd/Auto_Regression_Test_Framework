@@ -15,6 +15,9 @@ parser.add_argument("--suite-dir", type=Path, required=True)
 parser.add_argument("--handoff-sha256", required=True, help="Independently supplied reviewed pin; never derived by this script")
 parser.add_argument("--expect-verdict", choices=["passed", "failed", "blocked", "skipped"], required=True)
 parser.add_argument("--name", required=True)
+parser.add_argument("--test-level", choices=["component", "integration"], default="component",
+                    help="Must match the reviewed profile; integration uses the finite native HTTP capability")
+parser.add_argument("--output-dir", type=Path, help="Fresh evidence directory; an existing directory is rejected")
 parser.add_argument("--via-host", action="store_true")
 parser.add_argument("--provider-jar", type=Path)
 parser.add_argument("--java-home", type=Path, default=Path(os.environ.get("JAVA_HOME", "/usr")))
@@ -23,8 +26,8 @@ module = Path(__file__).resolve().parents[1]
 suite = args.suite_dir.resolve(strict=True)
 jar = args.framework_jar.resolve(strict=True)
 assert args.name and all(c.isalnum() or c in "_-" for c in args.name), "Use a simple output name"
-work = module / "target/smoke" / args.name
-work.mkdir(parents=True, exist_ok=True)
+work = (args.output_dir or module / "target/smoke" / args.name).resolve()
+work.mkdir(parents=True, exist_ok=False)
 outputs = work / "outputs"
 outputs.mkdir(mode=0o700, exist_ok=True)
 handoff_path = suite / "handoff/reviewed-tests.json"
@@ -39,7 +42,7 @@ request = {
     "execution_revision": "synthetic-revision-1", "workspace_ref": handoff["workspace_ref"], "project_ref": handoff["project_ref"],
     "repository_revisions": handoff["repository_revisions"],
     "requirement_test_mapping": {item["requirement_ref"]: item["test_case_ids"] for item in handoff["requirement_mapping"]},
-    "test_level": "component", "test_type": "regression", "environment_stage": "local", "knowledge_mode": handoff["knowledge_mode"],
+    "test_level": args.test_level, "test_type": "regression", "environment_stage": "local", "knowledge_mode": handoff["knowledge_mode"],
     "artifact_root": str(suite), "suite_manifest": str(suite / "suite_manifest.yaml"), "suite_id": handoff["suite_id"], "profile": handoff["profile"],
     "reviewed_handoff": str(handoff_path), "expected_handoff_sha256": args.handoff_sha256,
 }
@@ -58,8 +61,12 @@ if args.via_host:
     classpath = os.pathsep.join([str(module / "target/host-compatibility/classes"), str(host), str(provider),
                                 (module / "target/test-classpath.txt").read_text().strip()])
     invocation = ["-cp", classpath, "com.featuredeliveryintelligence.fdi.application.FdiApplication"]
+    executed_artifacts = {"host": {"path": str(host), "sha256": sha(host)},
+                          "provider": {"path": str(provider), "sha256": sha(provider)}}
 else:
-    invocation = ["-jar", str(module / "target/swarm-product-test-1.0.0-cli.jar")]
+    cli = module / "target/swarm-product-test-1.0.0-cli.jar"
+    invocation = ["-jar", str(cli)]
+    executed_artifacts = {"cli": {"path": str(cli), "sha256": sha(cli)}}
 stdout_file = work / "receipt.json"
 with stdout_file.open("w") as out, (work / "stderr.log").open("w") as err:
     completed = subprocess.run([java, "-Xmx512m", "-XX:MaxMetaspaceSize=256m", *invocation, "product-test", "run", "--request", str(request_file)],
@@ -75,8 +82,9 @@ assert receipt["request"] == request
 assert (completed.returncode == 0) == (args.expect_verdict == "passed")
 for artifact in receipt["artifacts"].values():
     assert sha(Path(artifact["path"])) == artifact["sha256"], artifact
-evidence = {"status": "passed", "claim_boundary": "LOCAL_PACKAGED_FAKE_PROVIDER_NOT_COMPANY_ACCEPTANCE",
+evidence = {"status": "passed", "claim_boundary": "LOCAL_NATIVE_HTTP_NOT_COMPANY_ACCEPTANCE" if args.test_level == "integration" else "LOCAL_PACKAGED_FAKE_PROVIDER_NOT_COMPANY_ACCEPTANCE",
     "route": "real_FdiApplication_overlay" if args.via_host else "packaged_module_cli",
+    "executed_artifacts": executed_artifacts,
     "framework_sha256": args.framework_sha256, "approved_handoff_sha256": args.handoff_sha256,
     "host_sha256": sha(host), "provider_sha256": sha(provider), "module_outcome": receipt["outcome"],
     "framework_verdict": receipt["framework_verdict"], "run_id": receipt["run_id"],
