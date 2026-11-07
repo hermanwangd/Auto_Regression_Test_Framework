@@ -1,0 +1,119 @@
+name: Local Product Tests
+
+on:
+  pull_request:
+    branches: [main, 'release/**']
+  push:
+    branches: [main, codex/sit-readiness]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-product-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local-tests:
+    name: Framework, module and public local products
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      MAVEN_OPTS: -Xmx1024m -XX:MaxMetaspaceSize=384m
+      PYTHONDONTWRITEBYTECODE: '1'
+      SQLITE_CI_POLICY_SHA256: e70903e08139a1a2c4b27666cf310a47fcf0626e94be8b5b5420b6b039e79353
+      NATS_CI_POLICY_SHA256: bcefe3fe2e8e739951cd464401ae2ad6738db92390644d06a1b2e41f72129bc6
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Existing framework verification and packaging
+        run: bash scripts/ci/maven-verify-with-diagnostics.sh
+
+      - name: Swarm module verification and packaging
+        run: ./mvnw -B -ntp -f integrations/swarm-product-test/pom.xml verify
+
+      - name: CD gate contract tests (no live SIT)
+        run: python3 -m unittest discover -s scripts/cd/tests -v
+
+      - name: Public CLI harness approval and fixture boundary tests
+        run: python3 -m unittest discover -s integrations/swarm-product-test/scripts/tests -v
+
+      - name: NATS harness approval and fixture boundary tests
+        run: python3 -m unittest discover -s scripts/public-projects -p test_nats.py -v
+
+      - name: Pin the local build artifacts
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, os
+          from pathlib import Path
+          from xml.etree import ElementTree
+          root = Path.cwd()
+          version = ElementTree.parse('pom.xml').getroot().find('{http://maven.apache.org/POM/4.0.0}version').text
+          jar = root / 'target' / ('spec-driven-auto-regression-' + version + '.jar')
+          module = root / 'integrations/swarm-product-test/target/swarm-product-test-1.0.0-cli.jar'
+          with open(os.environ['GITHUB_ENV'], 'a') as out:
+              for key, value in {'CI_FRAMEWORK_JAR': str(jar), 'CI_FRAMEWORK_SHA256': hashlib.sha256(jar.read_bytes()).hexdigest(),
+                                 'CI_MODULE_JAR': str(module), 'CI_MODULE_SHA256': hashlib.sha256(module.read_bytes()).hexdigest()}.items():
+                  out.write(key + '=' + value + '\n')
+          PY
+
+      - name: Fetch and compile pinned public SQLite C source
+        run: >-
+          python3 integrations/swarm-product-test/scripts/public-cli-project.py fetch
+          --project sqlite --cache-dir "$RUNNER_TEMP/public-sqlite-cache"
+
+      - name: Prepare SQLite cases under the committed local CI policy
+        run: >-
+          python3 integrations/swarm-product-test/scripts/public-cli-project.py prepare
+          --project sqlite --cache-dir "$RUNNER_TEMP/public-sqlite-cache"
+          --evidence-dir "$RUNNER_TEMP/public-sqlite-evidence"
+          --framework-jar "$CI_FRAMEWORK_JAR" --framework-sha256 "$CI_FRAMEWORK_SHA256"
+          --module-sha256 "$CI_MODULE_SHA256" --java-home "$JAVA_HOME"
+          --local-ci-policy integrations/swarm-product-test/public-projects/sqlite/local-ci-policy.json
+          --policy-sha256 "$SQLITE_CI_POLICY_SHA256"
+
+      - name: SQLite through the existing packaged module and framework
+        run: >-
+          python3 integrations/swarm-product-test/scripts/public-cli-project.py verify
+          --evidence-dir "$RUNNER_TEMP/public-sqlite-evidence" --java-home "$JAVA_HOME"
+          --local-ci-policy integrations/swarm-product-test/public-projects/sqlite/local-ci-policy.json
+          --policy-sha256 "$SQLITE_CI_POLICY_SHA256"
+
+      - name: Public NATS native protocol through the existing module and framework
+        run: >-
+          python3 scripts/public-projects/nats.py verify
+          --output "$RUNNER_TEMP/public-nats-evidence"
+          --framework-jar "$CI_FRAMEWORK_JAR" --framework-sha256 "$CI_FRAMEWORK_SHA256"
+          --module-cli "$CI_MODULE_JAR"
+          --module-sha256 "$CI_MODULE_SHA256" --ci-policy-sha256 "$NATS_CI_POLICY_SHA256"
+
+      - name: Retain local verification reports and canonical evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-product-tests-${{ github.run_id }}
+          if-no-files-found: ignore
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+            integrations/swarm-product-test/target/surefire-reports/
+            ${{ runner.temp }}/public-sqlite-evidence/verification.json
+            ${{ runner.temp }}/public-sqlite-evidence/prepared-plan.json
+            ${{ runner.temp }}/public-sqlite-evidence/run-*/receipt.json
+            ${{ runner.temp }}/public-sqlite-evidence/run-*/smoke-evidence.json
+            ${{ runner.temp }}/public-sqlite-evidence/run-*/outputs/product-test-*/framework-report.json
+            ${{ runner.temp }}/public-sqlite-evidence/run-*/outputs/**/target/regression/**
+            ${{ runner.temp }}/public-nats-evidence/**/receipt.json
+            ${{ runner.temp }}/public-nats-evidence/**/smoke-evidence.json
+            ${{ runner.temp }}/public-nats-evidence/execution/*/outputs/product-test-*/framework-report.json
+            ${{ runner.temp }}/public-nats-evidence/execution/summary.json
+            ${{ runner.temp }}/public-nats-evidence/execution/lifecycle.json
+            ${{ runner.temp }}/public-nats-evidence/**/target/regression/**

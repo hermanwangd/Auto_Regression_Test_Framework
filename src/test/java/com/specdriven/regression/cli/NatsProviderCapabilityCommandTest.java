@@ -195,12 +195,12 @@ class NatsProviderCapabilityCommandTest {
             assertThat(run.exit()).isEqualTo(1);
             assertThat(run.stdout())
                     .contains("run_status: failed")
-                    .contains("failure_code: EVENT_NOT_FOUND")
+                    .contains("failure_code: NATS_PUBLISH_FAILED")
                     .doesNotContain("nats://127.0.0.1");
             Path resultJson = extractPath(run.stdout(), "result_json");
             assertThat(read(resultJson))
                     .contains("\"status\": \"failed\"")
-                    .contains("EVENT_NOT_FOUND")
+                    .contains("NATS_PUBLISH_FAILED")
                     .doesNotContain("\"matched\": true");
         } finally {
             System.clearProperty("NATS_CONNECTION");

@@ -1,0 +1,147 @@
+{
+  "fixture_version": 1,
+  "claim": "LOCAL_CLI_INTEGRATION_NOT_SHARED_SIT_OR_RELEASE_ACCEPTANCE",
+  "oracle_source": "Fixed reviewed SQL values and documented CLI behavior; never learned from SUT output",
+  "cases": [
+    {
+      "name": "argv-query",
+      "argv": [
+        "-noinit",
+        "-batch",
+        "-bail",
+        "-noheader",
+        "-list",
+        ":memory:",
+        "CREATE TABLE items(name TEXT PRIMARY KEY,quantity INTEGER NOT NULL); INSERT INTO items VALUES('washer',2),('sentinel',20),('bolt',4); SELECT name,quantity FROM items WHERE quantity<5 ORDER BY name;"
+      ],
+      "exit": 0,
+      "stdout": "bolt|4\nwasher|2\n"
+    },
+    {
+      "name": "stdin-rollback",
+      "argv": [
+        "-noinit",
+        "-batch",
+        "-bail",
+        "-noheader",
+        "-list",
+        ":memory:"
+      ],
+      "stdin": "CREATE TABLE items(name TEXT PRIMARY KEY,quantity INTEGER NOT NULL);\nINSERT INTO items VALUES('washer',2),('sentinel',20),('bolt',4);\nBEGIN;\nUPDATE items SET quantity=999 WHERE name='washer';\nROLLBACK;\nSELECT count(*),sum(quantity) FROM items;\n",
+      "exit": 0,
+      "stdout": "3|26\n"
+    },
+    {
+      "name": "expected-nonzero",
+      "argv": [
+        "-noinit",
+        "-batch",
+        "-bail",
+        "-noheader",
+        "-list",
+        ":memory:",
+        ".exit 7"
+      ],
+      "exit": 7,
+      "stdout": ""
+    },
+    {
+      "name": "stderr",
+      "argv": [
+        "-noinit",
+        "-batch",
+        "-bail",
+        "-noheader",
+        "-list",
+        ":memory:",
+        "SELECT missing FROM absent;"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Parse error in 7th command line argument: no such table: absent\n"
+    },
+    {
+      "name": "wrong-oracle",
+      "argv": [
+        "-noinit",
+        "-batch",
+        "-bail",
+        "-noheader",
+        "-list",
+        ":memory:",
+        "CREATE TABLE items(name TEXT PRIMARY KEY,quantity INTEGER NOT NULL); INSERT INTO items VALUES('washer',2),('sentinel',20),('bolt',4); SELECT name,quantity FROM items WHERE quantity<5 ORDER BY name;"
+      ],
+      "exit": 0,
+      "stdout": "bolt|4\nwasher|999\n",
+      "observed_stdout": "bolt|4\nwasher|2\n",
+      "verdict": "failed",
+      "failure": "ASSERTION_FAILED"
+    },
+    {
+      "name": "timeout",
+      "argv": [
+        "-noinit",
+        "-batch",
+        "-bail",
+        "-noheader",
+        "-list",
+        ":memory:",
+        "WITH RECURSIVE counter(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM counter) SELECT sum(x) FROM counter;"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "timeout_ms": 500,
+      "verdict": "failed",
+      "failure": "PROVIDER_TIMEOUT"
+    },
+    {
+      "name": "output-limit",
+      "argv": [
+        "-noinit",
+        "-batch",
+        "-bail",
+        "-noheader",
+        "-list",
+        ":memory:",
+        "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<10000) SELECT printf('%0100d',x) FROM n;"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "max_output_bytes": 1024,
+      "verdict": "failed",
+      "failure": "OPERATION_FAILED",
+      "provider_error": "CLI combined output exceeds its byte budget."
+    },
+    {
+      "name": "pin-mismatch",
+      "argv": [
+        "-noinit",
+        "-batch",
+        "-bail",
+        "-noheader",
+        "-list",
+        ":memory:",
+        "SELECT 1;"
+      ],
+      "exit": 0,
+      "stdout": "1\n",
+      "bad_pin": true,
+      "verdict": "failed",
+      "failure": "PROVIDER_UNAVAILABLE"
+    },
+    {
+      "name": "recovery",
+      "argv": [
+        "-noinit",
+        "-batch",
+        "-bail",
+        "-noheader",
+        "-list",
+        ":memory:",
+        "CREATE TABLE items(name TEXT PRIMARY KEY,quantity INTEGER NOT NULL); INSERT INTO items VALUES('washer',2),('sentinel',20),('bolt',4); SELECT name,quantity FROM items WHERE quantity<5 ORDER BY name;"
+      ],
+      "exit": 0,
+      "stdout": "bolt|4\nwasher|2\n"
+    }
+  ]
+}

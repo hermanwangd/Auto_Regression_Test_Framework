@@ -311,6 +311,10 @@ public final class ProductTestHandoffService {
                             if (!"execute".equals(phase) || !nativeCapability(s).operation().equals(op) || ++nativeRequests > 1)
                                 throw fail("unsupported_operation", "native reviewed execution permits one selected operation across the entire suite");
                             nativeCapability(s).validateInputs(object(step.get("with"), "step.with"));
+                            if (nativeCapability(s) == ReviewedNativeCapability.NATS) {
+                                String fixture = artifact(text(object(step.get("with"), "step.with").get("payload_ref"), "payload_ref"), roots);
+                                need(needed, fixture, "fixture");
+                            }
                             stepOps.put(sid, op);
                             continue;
                         }
@@ -734,7 +738,8 @@ public final class ProductTestHandoffService {
         String op = ops.get(tail.substring(0, slash)); String output = tail.substring(slash + 1);
         boolean supported = "execute_sample".equals(op) && output.matches("actual_json(?:\\.[A-Za-z0-9_]+)*|actual_text")
                 || "http_request".equals(op) && Set.of("response.status", "response.body", "response.headers", "response.duration_ms").contains(output)
-                || "run_command".equals(op) && Set.of("exit_code", "stdout", "stderr", "duration_ms").contains(output);
+                || "run_command".equals(op) && Set.of("exit_code", "stdout", "stderr", "duration_ms").contains(output)
+                || "nats_publish".equals(op) && Set.of("published", "subject", "duration_ms").contains(output);
         if (!supported) throw fail("unsupported_reference", "actual must refer to an earlier supported execution output");
     }
     private static void cleanupRef(Object value, Map<String,String> ops) {

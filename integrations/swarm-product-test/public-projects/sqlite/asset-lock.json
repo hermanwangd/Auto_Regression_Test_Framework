@@ -1,0 +1,50 @@
+{
+  "lock_version": 1,
+  "project": "sqlite",
+  "language": "C",
+  "version": "3.54.1",
+  "repository": "https://github.com/sqlite/sqlite",
+  "revision": "57520227c95396ce39ba6ecaac8d475b78dd3964",
+  "source_id": "555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76",
+  "archive": {
+    "url": "https://www.sqlite.org/2026/sqlite-amalgamation-3540100.zip",
+    "sha3_256": "92281c86e2957f9b9305890f9ac04204caa7b677cc868dc326d942689df28e30",
+    "max_bytes": 4194304,
+    "root": "sqlite-amalgamation-3540100",
+    "members": [
+      "shell.c",
+      "sqlite3.c",
+      "sqlite3.h",
+      "sqlite3ext.h"
+    ],
+    "sqlite3_c_sha3_256": "e2b869d3003b33c942b7dd7063604fbc53553e1b66609570df39b9b7b558ee81",
+    "sha256": "0a9c8e34352dad46006aa82836d5383bff9dc6bc9ce5a60553c05aa30e6ad1f9"
+  },
+  "license": {
+    "url": "https://raw.githubusercontent.com/sqlite/sqlite/57520227c95396ce39ba6ecaac8d475b78dd3964/LICENSE.md",
+    "sha256": "ee6af51062b30d532991face5164136ae6f84e265ecf8abe89dc69dac45ca1e7",
+    "max_bytes": 16384,
+    "classification": "Public domain for SQLite deliverable source and CLI"
+  },
+  "compile_flags": [
+    "-O0",
+    "-DSQLITE_THREADSAFE=0",
+    "-DSQLITE_OMIT_LOAD_EXTENSION",
+    "shell.c",
+    "sqlite3.c",
+    "-lm"
+  ],
+  "sources": [
+    "https://www.sqlite.org/download.html",
+    "https://www.sqlite.org/releaselog/3_54_1.html",
+    "https://www.sqlite.org/howtocompile.html#compiling_the_command_line_interface",
+    "https://www.sqlite.org/cli.html",
+    "https://www.sqlite.org/copyright.html"
+  ],
+  "source_sha256": {
+    "shell.c": "00c5cba13701f8c02771f147190aca4faacdf6f6b0def48246fc6c2af656e9ee",
+    "sqlite3.c": "0c657666d819f261cc4007526ad57e1669de9949df7a8ea847aa284a2bf0ee52",
+    "sqlite3.h": "d6c84557261893439b341d2e6c35187ae3ea24fbfd843ad94616f72d89242b8c",
+    "sqlite3ext.h": "48963abfefb41ac329ef9d706acb5eadba952a99a748285c9ded6b5e0942721b"
+  }
+}

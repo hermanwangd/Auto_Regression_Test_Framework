@@ -1,0 +1,103 @@
+{
+  "schema": "public-nats-cases.v1",
+  "manifest": {
+    "manifest_version": "v0.3",
+    "suite_id": "__SUITE_ID__",
+    "default_profile": "local_native",
+    "artifact_roots": {
+      "fixtures": "fixtures/"
+    },
+    "targets": {
+      "event_bus": {
+        "provider_contract": "nats.v0.3"
+      }
+    },
+    "env_profiles": {
+      "local_native": {
+        "ref": "env_profiles/local_native.yaml"
+      }
+    },
+    "tests": [
+      {
+        "ref": "test_cases/publish.yaml"
+      }
+    ]
+  },
+  "profile": {
+    "profile_id": "local_native",
+    "execution_mode": "local",
+    "isolation": "per_run",
+    "evidence_classification": "framework_verification_only",
+    "downstream_release_evidence": false,
+    "targets": {
+      "event_bus": {
+        "runtime_mode": "native",
+        "bindings": {
+          "connection.uri": "__URI__",
+          "subject": "__SUBJECT__"
+        }
+      }
+    },
+    "product_test": {
+      "contract_version": "product-test.v1",
+      "test_level": "integration",
+      "test_type": "regression",
+      "environment_stage": "local",
+      "knowledge_mode": "not_used",
+      "provider_modes": {
+        "event_bus": "real"
+      },
+      "dependency_modes": {},
+      "reviewed_handoff_ref": "handoff/reviewed-tests.json"
+    }
+  },
+  "test": {
+    "dsl_version": "v0.3",
+    "test_case_id": "NATS-PUBLIC-TC-001",
+    "title": "Native public NATS publish returns the exact echo on an owned subject",
+    "execute": [
+      {
+        "id": "publish",
+        "target": "event_bus",
+        "op": "nats_publish",
+        "with": {
+          "payload_ref": "artifact://fixtures/payload.json",
+          "timeout": "PT2S"
+        }
+      }
+    ],
+    "verify": [
+      {
+        "id": "published",
+        "type": "assertion",
+        "assert": {
+          "actual": "step://publish/published",
+          "operator": "equals",
+          "expected": "__PUBLISHED__"
+        }
+      },
+      {
+        "id": "subject",
+        "type": "assertion",
+        "assert": {
+          "actual": "step://publish/subject",
+          "operator": "equals",
+          "expected": "__SUBJECT__"
+        }
+      }
+    ]
+  },
+  "review_base": {
+    "contract_version": "product-test-reviewed-handoff.v1",
+    "knowledge_mode": "not_used",
+    "framework_baseline": "0.3.2",
+    "swarm_source": {
+      "base_revision": "fe80374f740ed3c604836431daca5c32e92cf844",
+      "files": {
+        "Dev204Cli.java": "ff0669763d5070e834ffba893a2ebe681a20e868c85fc0b9b595256e468069b8",
+        "CogneeSearchClient.java": "506f163a5294f68881996d38f06de47ae6aa7ee2321954f77535db5c0cfc4878",
+        "SwarmKnowledgeGateway.java": "d2fb8408676d4de60d0f38528756558c0f669c61168b107ed1ea46aee23018d0"
+      }
+    }
+  }
+}

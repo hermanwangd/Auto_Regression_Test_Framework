@@ -2,6 +2,8 @@
 
 An optional `sit_readiness` section on the selected Env_Profile checks prerequisites before the existing runner starts any provider phase. It supports test data, external system health and pinned cross-repository versions through replaceable Java adapters. The only bundled implementation is a **local fixture**. Actual SIT remains unverified until an approved read-only adapter observes it.
 
+For local CI and the protected reusable post-deployment CD hook, see [CI/CD product tests](ci-cd-product-tests.md). The hook uses this existing pre-provider gate and requires an approved real adapter; its contract tests do not establish live SIT readiness.
+
 ## Run the local example
 
 Build with Java 17 and bounded memory:

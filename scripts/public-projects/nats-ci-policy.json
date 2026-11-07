@@ -1,0 +1,58 @@
+{
+  "actor": "local-ci-policy",
+  "allowed_dynamic_fields": [
+    "workspace/output/cwd paths",
+    "free loopback port",
+    "owned UUID subject and broker name",
+    "current request/run/invocation IDs and validity times",
+    "hashes of framework/module artifacts built from these pinned inputs"
+  ],
+  "authority": "committed constrained local automated test policy; not human approval",
+  "case_verdicts": {
+    "downtime": "failed",
+    "positive": "passed",
+    "recovery": "passed",
+    "wrong-oracle": "failed"
+  },
+  "downstream_release_evidence": false,
+  "evidence_classification": "framework_verification_only",
+  "native_agent_authority": false,
+  "required_source_files": [
+    "docs/02-architecture/contracts/provider-contracts/nats_v0_3.yaml",
+    "integrations/swarm-product-test/pom.xml",
+    "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/CanonicalEvidence.java",
+    "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/FrameworkCliTransport.java",
+    "pom.xml",
+    "scripts/public-projects/nats-cases.json",
+    "scripts/public-projects/nats-lock.json",
+    "scripts/public-projects/nats-payload.json",
+    "scripts/public-projects/nats.py",
+    "scripts/public-projects/test_nats.py",
+    "src/main/java/com/specdriven/regression/contract/v03/adapter/NatsV03Adapter.java",
+    "src/main/java/com/specdriven/regression/producttest/ProductTestHandoffService.java",
+    "src/main/java/com/specdriven/regression/producttest/ReviewedNativeCapability.java",
+    "src/main/java/com/specdriven/regression/provider/nats/NatsProviderRuntime.java",
+    "src/main/java/com/specdriven/regression/provider/nats/ReviewedLoopbackNatsPolicy.java",
+    "src/main/java/com/specdriven/regression/sit/SitExecutionGuard.java"
+  ],
+  "schema": "local-public-ci-policy.v1",
+  "sit_authority": false,
+  "source_files": {
+    "docs/02-architecture/contracts/provider-contracts/nats_v0_3.yaml": "1264839a25e912d9df2a46191ea6f0c58c4560f6a822cc827a9fc4dc44852e81",
+    "integrations/swarm-product-test/pom.xml": "2ba545bab52809022ea009af11068fadd465122c3c06c9ee47a37f91142db524",
+    "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/CanonicalEvidence.java": "639cee38f94b7b4a8b4dd96211470013a63db80571c0b19c6e3b6ad5f9fcb598",
+    "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/FrameworkCliTransport.java": "4389c173a3ff6b60321068e78422ceccca2cd6a2eddfd91435855adcdc4b86e5",
+    "pom.xml": "15b4ad8e5dcfb73f2225a34843259349ef758ccde76e6bc97e7964060d4a17b2",
+    "scripts/public-projects/nats-cases.json": "6214de207bcfb0a2e49acfd74a26fb731a64af17abe75cdc0167e37982de6081",
+    "scripts/public-projects/nats-lock.json": "dbc30fddf07c76ac6d99eb9687a4f2d9f82856f0227f6098312c45182c6e867d",
+    "scripts/public-projects/nats-payload.json": "637e3485302117f4a8039145aefd2a5021620c693b43bf8fff312724620b6fd7",
+    "scripts/public-projects/nats.py": "7aebf8629cf5cb757c42d792b9b4205475b3c2d4a15c3c55e0aff3b673443928",
+    "scripts/public-projects/test_nats.py": "b5c77afeaf68e2346893cd7f6ee4d47b0902cd065f1913f6b8e193e34a89894d",
+    "src/main/java/com/specdriven/regression/contract/v03/adapter/NatsV03Adapter.java": "9f10f70d3f42db7fc11499930ff42c385e8725de8ef7618735ee14f76e09b05b",
+    "src/main/java/com/specdriven/regression/producttest/ProductTestHandoffService.java": "9d528d93e478437936c2cba2a5e6dca2fe0e3193729c93854de32410b9b588b3",
+    "src/main/java/com/specdriven/regression/producttest/ReviewedNativeCapability.java": "42d394e7dc0ac81d280e78ccae5ac66320b49aadaaad921883920871c27be0ac",
+    "src/main/java/com/specdriven/regression/provider/nats/NatsProviderRuntime.java": "99ea4d742ebf555f1078ff10c53602de3fd1a39aa8764ba62974f9d7abd2749c",
+    "src/main/java/com/specdriven/regression/provider/nats/ReviewedLoopbackNatsPolicy.java": "842135fa6c6cadf77c4bca6e425328a74d66b20e97e2890e7d879b9138497f5d",
+    "src/main/java/com/specdriven/regression/sit/SitExecutionGuard.java": "19c9b468e454fae388b3ad74c0f0fe40c6d036f70a1cca2608bcb818b226f8bd"
+  }
+}

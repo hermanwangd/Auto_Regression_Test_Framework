@@ -1,0 +1,28 @@
+{
+  "schema": "public-nats-lock.v1",
+  "repository": "https://github.com/nats-io/nats-server",
+  "version": "v2.15.2",
+  "source_commit": "5a815f11a911efa2c88fd1dbfb18ed89a449bfc1",
+  "tag_object": "ffbde89370bc3cbef677e86fd4a6134fa5f18f9d",
+  "checksums": {
+    "name": "SHA256SUMS",
+    "size": 5435,
+    "sha256": "4651309dca08b13ee450496b2634f542d4eadf10e29d21e7229e4bb998e62976"
+  },
+  "assets": {
+    "Darwin-arm64": {
+      "name": "nats-server-v2.15.2-darwin-arm64.tar.gz",
+      "size": 6785830,
+      "sha256": "cbd2219d01502c38733485ac684269da585ee479fa3b1377264beecdefdf9e9d",
+      "binary_size": 17675362,
+      "binary_sha256": "2531878f98a383b0a83cbc2288d2095713f2eca8c9d49fec44ca77bf4bc57567"
+    },
+    "Linux-x86_64": {
+      "name": "nats-server-v2.15.2-linux-amd64.tar.gz",
+      "size": 7298258,
+      "sha256": "67cb8e10bc6f0c4b47f75a728529a20953dbae2a4f9a4a52ae8517d65ae303ff",
+      "binary_size": 18856826,
+      "binary_sha256": "33f3fe3fed80b2b229bd9fe4b735257ad8583cd2349452a0c74f3d768b593e66"
+    }
+  }
+}

@@ -2,12 +2,14 @@ package com.specdriven.regression.producttest;
 
 import com.specdriven.regression.provider.cli.ReviewedCliPolicy;
 import com.specdriven.regression.provider.http.ReviewedLoopbackHttpPolicy;
+import com.specdriven.regression.provider.nats.ReviewedLoopbackNatsPolicy;
 import java.util.Map;
 
 /** Exact native capability selected by the reviewed contract, independently of test level. */
 public enum ReviewedNativeCapability {
     HTTP("rest_client.v0.3", "rest_client", "http_request"),
-    CLI("cli_process.v0.3", "cli_process", "run_command");
+    CLI("cli_process.v0.3", "cli_process", "run_command"),
+    NATS("nats.v0.3", "nats", "nats_publish");
 
     private final String contract, providerType, operation;
     ReviewedNativeCapability(String contract, String providerType, String operation) {
@@ -22,6 +24,7 @@ public enum ReviewedNativeCapability {
     }
     public void validateBindings(Map<String,?> values) {
         if (this == CLI) ReviewedCliPolicy.validateBindings(values);
+        else if (this == NATS) ReviewedLoopbackNatsPolicy.validateBindings(values);
         else {
             if (!values.keySet().equals(java.util.Set.of("base_url")))
                 throw new IllegalArgumentException("reviewed HTTP requires exact base_url binding");
@@ -30,6 +33,7 @@ public enum ReviewedNativeCapability {
     }
     public void validateInputs(Map<String,Object> values) {
         if (this == CLI) ReviewedCliPolicy.validateInputs(values);
+        else if (this == NATS) ReviewedLoopbackNatsPolicy.validateInputs(values);
         else ReviewedLoopbackHttpPolicy.validateInputs(values);
     }
 }

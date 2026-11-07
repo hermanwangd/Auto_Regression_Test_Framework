@@ -167,6 +167,16 @@ class CanonicalEvidenceTest {
         assertThat(CanonicalEvidence.inspect(request,root,stdout,started).verdict()).isEqualTo("passed");
     }
 
+    @Test void importsNatsOnlyWhenPinnedContractAndOperationMatch() throws Exception {
+        nativeFixture(); selectNativeContract("nats.v0.3");
+        ((ObjectNode) result.path("provider_results").get(0)).put("provider_type", "nats").put("provider_contract", "nats.v0.3");
+        ((ObjectNode) result.path("step_results").get(0)).put("operation", "nats_publish");
+        setOperationMetadata("nats_publish"); save();
+        assertThat(CanonicalEvidence.inspect(request,root,stdout,started).verdict()).isEqualTo("passed");
+        ((ObjectNode) result.path("step_results").get(0)).put("operation", "http_request"); save();
+        assertThatThrownBy(() -> CanonicalEvidence.inspect(request,root,stdout,started)).hasMessageContaining("operation");
+    }
+
     @Test void providerCannotSwitchFromReviewedHttpToCli() throws Exception {
         nativeFixture();
         ((ObjectNode) result.path("provider_results").get(0)).put("provider_type", "cli_process").put("provider_contract", "cli_process.v0.3");

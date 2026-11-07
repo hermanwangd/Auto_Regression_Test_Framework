@@ -96,9 +96,9 @@ final class CanonicalEvidence {
             require(contracts.isArray() && contracts.size() == 1 && contracts.equals(provenance.path("reviewed_contracts")),
                     "Native reviewed contract differs from pinned handoff");
             String contract = Json.required(contracts.get(0), "provider_contract");
-            require(Set.of("rest_client.v0.3", "cli_process.v0.3").contains(contract), "Unsupported native provider contract");
-            String type = contract.equals("cli_process.v0.3") ? "cli_process" : "rest_client";
-            String operation = type.equals("cli_process") ? "run_command" : "http_request";
+            require(Set.of("rest_client.v0.3", "cli_process.v0.3", "nats.v0.3").contains(contract), "Unsupported native provider contract");
+            String type = switch (contract) { case "cli_process.v0.3" -> "cli_process"; case "nats.v0.3" -> "nats"; default -> "rest_client"; };
+            String operation = switch (type) { case "cli_process" -> "run_command"; case "nats" -> "nats_publish"; default -> "http_request"; };
             require("not_used".equals(request.knowledgeMode()) && provenance.path("provider_modes").size() == 1
                     && provenance.path("dependency_modes").isEmpty(), "Unsupported native capability metadata");
             require(document.path("provider_results").isArray() && document.path("step_results").isArray()

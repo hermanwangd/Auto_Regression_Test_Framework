@@ -33,6 +33,27 @@ public class NatsProviderRuntime implements ProviderRuntime {
     private final Map<String, List<ObservedEvent>> eventsByBusSubject = new ConcurrentHashMap<>();
     private final Yaml yaml = new Yaml();
 
+    public ProviderOperationResult executeReviewedPublish(ProviderExecutionContext context, ProviderOperationRequest request) {
+        if (!"native".equals(context.runtimeMode()) || !"nats_publish".equals(request.operation()))
+            throw new IllegalArgumentException("reviewed_nats: only native nats_publish is supported");
+        Map<String,Object> bindings = new LinkedHashMap<>(context.bindingValues());
+        // The generic adapter also materializes a nested copy of dotted binding names.
+        bindings.remove("connection");
+        ReviewedLoopbackNatsPolicy.validateBindings(bindings);
+        Map<String,Object> inputs = new LinkedHashMap<>();
+        for (var parameter : request.parameters()) {
+            String name = String.valueOf(parameter.get("bind_as"));
+            if (inputs.putIfAbsent(name, parameter.get("ref")) != null)
+                throw new IllegalArgumentException("reviewed_nats: duplicate input");
+        }
+        if (!"fixtures/payload.json".equals(inputs.get("payload_ref")))
+            throw new IllegalArgumentException("reviewed_nats: resolved payload differs from reviewed fixture");
+        inputs.put("payload_ref", ReviewedLoopbackNatsPolicy.PAYLOAD_REF);
+        ReviewedLoopbackNatsPolicy.validateInputs(inputs);
+        ReviewedLoopbackNatsPolicy.validateFixture(context.suiteRoot());
+        return execute(context, request);
+    }
+
     @Override
     public ProviderOperationResult execute(ProviderExecutionContext context, ProviderOperationRequest request) {
         ConnectionSelection connection = connection(context);
@@ -89,8 +110,10 @@ public class NatsProviderRuntime implements ProviderRuntime {
             if (externalObservation.failure() != null) {
                 return failed(context, request, Map.of("subject", subject), externalObservation.failure(), Observation.empty(subject));
             }
-            if (externalObservation.payloadText().isBlank()) {
-                observedCount = 0;
+            if (!payload.text().equals(externalObservation.payloadText())) {
+                return failed(context, request, Map.of("subject", subject), failure("NATS_PUBLISH_FAILED", "NATS_PUBLISH_FAILED",
+                        "NATS did not return the exact published payload on the selected subscription.",
+                        "Verify publish permissions and the native broker echo evidence."), Observation.empty(subject));
             } else {
                 Object observedPayload = parsePayload(externalObservation.payloadText());
                 eventsByBusSubject.computeIfAbsent(connection.busKey() + "|" + subject, ignored -> new ArrayList<>())
@@ -282,6 +305,17 @@ public class NatsProviderRuntime implements ProviderRuntime {
         Map<String, Object> connection = mapValue(context.bindingValues().get("connection"));
         String localRef = stringValue(connection.get("local_ref"));
         String secretRef = stringValue(connection.get("secret_ref"));
+        String publicUri = firstNonBlank(stringValue(connection.get("uri")), stringValue(context.bindingValues().get("connection.uri")));
+        if (!publicUri.isBlank()) {
+            try {
+                URI uri = ReviewedLoopbackNatsPolicy.origin(publicUri);
+                if (!localRef.isBlank() || !secretRef.isBlank()) throw new IllegalArgumentException("ambiguous connection");
+                return new ConnectionSelection("loopback:" + uri.getPort(), uri, null);
+            } catch (IllegalArgumentException error) {
+                return new ConnectionSelection("", null, failure("NATS_CONNECTION_FAILED", "NATS_CONNECTION_FAILED",
+                        "NATS public connection requires one exact loopback URI.", "Use the reviewed loopback connection binding."));
+            }
+        }
         if (!localRef.isBlank()) {
             if (approvedLocalRef(localRef)) {
                 return new ConnectionSelection("local:" + localRef, null, null);
@@ -731,108 +765,146 @@ public class NatsProviderRuntime implements ProviderRuntime {
     }
 
     private static final class ExternalNatsClient {
+        private static final int MAX_LINE_BYTES = 8192;
+        private static final int MAX_PAYLOAD_BYTES = ReviewedLoopbackNatsPolicy.MAX_PAYLOAD_BYTES;
+        private static final java.util.concurrent.ScheduledThreadPoolExecutor DEADLINES = deadlines();
 
-        private ExternalNatsClient() {
+        private static java.util.concurrent.ScheduledThreadPoolExecutor deadlines() {
+            var executor = new java.util.concurrent.ScheduledThreadPoolExecutor(1, task -> {
+                Thread thread = new Thread(task, "nats-socket-deadline"); thread.setDaemon(true); return thread;
+            });
+            executor.setRemoveOnCancelPolicy(true);
+            return executor;
         }
 
         static ExternalObservation publishAndObserve(URI uri, String subject, String payload, Duration timeout) {
-            long deadline = System.currentTimeMillis() + Math.max(timeout.toMillis(), 1);
-            try (Socket socket = connectedSocket(uri)) {
-                socket.setSoTimeout(250);
-                BufferedInputStream input = new BufferedInputStream(socket.getInputStream());
-                BufferedOutputStream output = new BufferedOutputStream(socket.getOutputStream());
-                if (!readServerInfo(input, deadline)) {
-                    return ExternalObservation.failed(connectionFailure());
-                }
+            byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+            if (payloadBytes.length == 0 || payloadBytes.length > MAX_PAYLOAD_BYTES || !validSubject(subject))
+                return ExternalObservation.failed(connectionFailure());
+            try (TimedSocket connection = new TimedSocket(uri, timeout)) {
+                Socket socket = connection.socket;
+                var input = new BufferedInputStream(socket.getInputStream());
+                var output = new BufferedOutputStream(socket.getOutputStream());
+                readServerInfo(input, connection.deadline);
                 writeAscii(output, connectCommand(uri));
                 writeAscii(output, "SUB " + subject + " 1\r\n");
-                byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
                 writeAscii(output, "PUB " + subject + " " + payloadBytes.length + "\r\n");
                 output.write(payloadBytes);
-                writeAscii(output, "\r\nPING\r\n");
-                output.flush();
-                return readObservation(input, deadline);
-            } catch (IOException | RuntimeException e) {
+                writeAscii(output, "\r\nPING\r\n"); output.flush();
+                return readObservation(input, output, connection.deadline, subject, true);
+            } catch (IOException | RuntimeException error) {
                 return ExternalObservation.failed(connectionFailure());
             }
         }
 
         static ExternalObservation observe(URI uri, String subject, Duration timeout) {
-            long deadline = System.currentTimeMillis() + Math.max(timeout.toMillis(), 1);
-            try (Socket socket = connectedSocket(uri)) {
-                socket.setSoTimeout(250);
-                BufferedInputStream input = new BufferedInputStream(socket.getInputStream());
-                BufferedOutputStream output = new BufferedOutputStream(socket.getOutputStream());
-                if (!readServerInfo(input, deadline)) {
-                    return ExternalObservation.failed(connectionFailure());
-                }
+            if (!validSubscription(subject)) return ExternalObservation.failed(connectionFailure());
+            try (TimedSocket connection = new TimedSocket(uri, timeout)) {
+                var input = new BufferedInputStream(connection.socket.getInputStream());
+                var output = new BufferedOutputStream(connection.socket.getOutputStream());
+                readServerInfo(input, connection.deadline);
                 writeAscii(output, connectCommand(uri));
-                writeAscii(output, "SUB " + subject + " 1\r\nPING\r\n");
-                output.flush();
-                return readObservation(input, deadline);
-            } catch (IOException | RuntimeException e) {
+                writeAscii(output, "SUB " + subject + " 1\r\nPING\r\n"); output.flush();
+                return readObservation(input, output, connection.deadline, subject, false);
+            } catch (IOException | RuntimeException error) {
                 return ExternalObservation.failed(connectionFailure());
             }
         }
 
-        private static boolean readServerInfo(BufferedInputStream input, long deadline) throws IOException {
-            String line = readLine(input, deadline);
-            return line != null && line.startsWith("INFO");
+        private static boolean validSubject(String subject) {
+            return subject != null && subject.length() <= 1024 && subject.matches("[!-~]+")
+                    && subject.indexOf('*') < 0 && subject.indexOf('>') < 0;
         }
 
-        private static ExternalObservation readObservation(BufferedInputStream input, long deadline) throws IOException {
-            while (System.currentTimeMillis() <= deadline) {
+        private static boolean validSubscription(String subject) {
+            return subject != null && subject.length() <= 1024 && subject.matches("[!-~]+");
+        }
+
+        private static boolean matchesSubscription(String subscription, String subject) {
+            if (!validSubject(subject)) return false;
+            String[] filter = subscription.split("\\.", -1), actual = subject.split("\\.", -1);
+            for (int i = 0; i < filter.length; i++) {
+                if (filter[i].equals(">")) return i == filter.length - 1 && i < actual.length;
+                if (i >= actual.length || !filter[i].equals("*") && !filter[i].equals(actual[i])) return false;
+            }
+            return filter.length == actual.length;
+        }
+
+        private static void readServerInfo(BufferedInputStream input, long deadline) throws IOException {
+            if (!readLine(input, deadline).startsWith("INFO ")) throw new IOException("missing INFO");
+        }
+
+        private static ExternalObservation readObservation(BufferedInputStream input, BufferedOutputStream output,
+                long deadline, String subject, boolean exactSubject) throws IOException {
+            while (System.nanoTime() < deadline) {
                 String line = readLine(input, deadline);
-                if (line == null || line.isBlank()) {
-                    continue;
+                // An empty observation is legitimate for polling; publish requires a nonempty exact echo.
+                if (line.equals("PONG")) return new ExternalObservation("", null);
+                if (line.startsWith("INFO ") || line.equals("+OK")) continue;
+                if (line.equals("PING")) { writeAscii(output, "PONG\r\n"); output.flush(); continue; }
+                if (!line.startsWith("MSG ")) throw new IOException("unexpected NATS frame");
+                String[] parts = line.split(" ", -1);
+                if ((parts.length != 4 && parts.length != 5) || !(exactSubject ? parts[1].equals(subject) : matchesSubscription(subject, parts[1])) || !parts[2].equals("1"))
+                    throw new IOException("unexpected MSG identity");
+                String rawLength = parts[parts.length - 1];
+                if (!rawLength.matches("[0-9]{1,5}")) throw new IOException("invalid MSG length");
+                int length = Integer.parseInt(rawLength);
+                if (length < 0 || length > MAX_PAYLOAD_BYTES) throw new IOException("MSG exceeds payload bound");
+                byte[] payload = new byte[length];
+                for (int offset = 0; offset < length;) {
+                    checkDeadline(deadline);
+                    int read = input.read(payload, offset, length - offset);
+                    if (read < 0) throw new java.io.EOFException("truncated MSG");
+                    offset += read;
                 }
-                if (line.startsWith("PONG")) {
-                    return new ExternalObservation("", null);
-                }
-                if (line.startsWith("INFO") || line.startsWith("+OK")) {
-                    continue;
-                }
-                if (line.startsWith("-ERR")) {
-                    return ExternalObservation.failed(connectionFailure());
-                }
-                if (line.startsWith("MSG ")) {
-                    String[] parts = line.split("\\s+");
-                    int length = Integer.parseInt(parts[parts.length - 1]);
-                    byte[] payload = input.readNBytes(length);
-                    readLine(input, deadline);
-                    return new ExternalObservation(new String(payload, StandardCharsets.UTF_8), null);
-                }
-                return ExternalObservation.failed(connectionFailure());
+                if (readByte(input, deadline) != '\r' || readByte(input, deadline) != '\n')
+                    throw new IOException("invalid MSG terminator");
+                String text = StandardCharsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(payload)).toString();
+                return new ExternalObservation(text, null);
             }
-            return ExternalObservation.failed(connectionFailure());
+            throw new java.net.SocketTimeoutException("NATS deadline exceeded");
         }
 
         private static String readLine(BufferedInputStream input, long deadline) throws IOException {
-            StringBuilder line = new StringBuilder();
-            while (System.currentTimeMillis() <= deadline) {
-                int next;
-                try {
-                    next = input.read();
-                } catch (java.net.SocketTimeoutException e) {
-                    continue;
+            var bytes = new java.io.ByteArrayOutputStream();
+            while (bytes.size() <= MAX_LINE_BYTES) {
+                int next = readByte(input, deadline);
+                if (next == '\r') {
+                    if (readByte(input, deadline) != '\n') throw new IOException("invalid NATS line ending");
+                    return bytes.toString(StandardCharsets.US_ASCII);
                 }
-                if (next < 0) {
-                    return line.length() == 0 ? null : line.toString();
-                }
-                if (next == '\n') {
-                    return line.toString().strip();
-                }
-                if (next != '\r') {
-                    line.append((char) next);
-                }
+                if (next < 32 || next > 126) throw new IOException("invalid NATS protocol line");
+                bytes.write(next);
             }
-            return line.length() == 0 ? null : line.toString();
+            throw new IOException("NATS protocol line exceeds bound");
         }
 
-        private static Socket connectedSocket(URI uri) throws IOException {
-            Socket socket = new Socket();
-            socket.connect(new InetSocketAddress(uri.getHost(), uri.getPort()), 2_000);
-            return socket;
+        private static int readByte(BufferedInputStream input, long deadline) throws IOException {
+            checkDeadline(deadline);
+            int next = input.read();
+            if (next < 0) throw new java.io.EOFException("NATS peer closed connection");
+            return next;
+        }
+
+        private static void checkDeadline(long deadline) throws IOException {
+            if (System.nanoTime() >= deadline) throw new java.net.SocketTimeoutException("NATS deadline exceeded");
+        }
+
+        private static final class TimedSocket implements AutoCloseable {
+            final Socket socket = new Socket();
+            final long deadline;
+            final java.util.concurrent.ScheduledFuture<?> closer;
+            TimedSocket(URI uri, Duration timeout) throws IOException {
+                long budget = Math.max(1, Math.min(timeout.toMillis(), Integer.MAX_VALUE));
+                deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(budget);
+                closer = DEADLINES.schedule(() -> { try { socket.close(); } catch (IOException ignored) { } },
+                        budget, java.util.concurrent.TimeUnit.MILLISECONDS);
+                try {
+                    socket.connect(new InetSocketAddress(uri.getHost(), uri.getPort()), (int)Math.min(2000, budget));
+                    socket.setSoTimeout((int)budget);
+                } catch (IOException | RuntimeException error) { close(); throw error; }
+            }
+            @Override public void close() throws IOException { closer.cancel(false); socket.close(); }
         }
 
         private static void writeAscii(BufferedOutputStream output, String value) throws IOException {

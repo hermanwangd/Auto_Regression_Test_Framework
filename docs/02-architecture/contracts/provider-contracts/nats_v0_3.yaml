@@ -12,7 +12,7 @@ runtime_modes:
 operation_defaults:
   input:
     value_type: any
-    reference_kinds: &1
+    reference_kinds:
     - literal
     - artifact
     - step
@@ -30,6 +30,13 @@ operation_defaults:
   - verify
   - cleanup
 binding_keys:
+  connection.uri:
+    required: false
+    source: env_profile
+    value_type: string
+    reference_kinds:
+    - literal
+    sensitivity: public
   connection.local_ref:
     required: false
     source: env_profile
@@ -79,32 +86,62 @@ operations:
       subject:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       payload_ref:
         required: true
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       payload:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       correlation_key:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       timeout:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       poll_interval:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
     outputs:
       subject:
@@ -152,27 +189,52 @@ operations:
       subject:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       consume_from:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       timeout:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       poll_interval:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       correlation_key:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
     outputs:
       subject:
@@ -224,32 +286,62 @@ operations:
       subject:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       expected_ref:
         required: true
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       consume_from:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       timeout:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       poll_interval:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
       correlation_key:
         required: false
         value_type: any
-        reference_kinds: *1
+        reference_kinds:
+        - literal
+        - artifact
+        - step
+        - generated
+        - env
         sensitivity: public
     outputs:
       subject:
