@@ -21,3 +21,45 @@ unsupported_behavior:
   missing_required_binding_key: block_before_execution
   unsupported_runtime_mode: block_before_execution
   invalid_generated_ref: block_before_execution
+
+optional_fields:
+  - product_test
+  - sit_readiness
+sit_readiness:
+  contract_version: sit-readiness.v1
+  applies_to: v0.3_leaf_suite_run
+  required_fields: [timeout_ms, checks]
+  timeout_ms: integer_1_through_60000_total_budget
+  checks: nonempty_list_max_32_unique_ids
+  check_required_fields: [id, kind, adapter, expected_version, config]
+  kinds: [test_data, external_system, dependency]
+  config: flat_string_map_max_32_entries_no_raw_secrets
+  states: [READY, MISSING, INVALID, UNKNOWN, BLOCKED]
+  aggregation_precedence: [BLOCKED, INVALID, MISSING, UNKNOWN, READY]
+  gate: only_all_READY_allows_existing_provider_phases
+  unknown_or_malformed: block_with_readiness_evidence
+  evidence_ref: readiness/sit-readiness.json
+  observation: fresh_during_check_with_version_and_nonempty_evidence_facts
+  simulated: local_framework_verification_only_without_downstream_release_evidence
+  dry_run: not_evaluated
+
+product_test:
+  contract_version: product-test.v1
+  applies_to: independently_pinned_v0.3_leaf_suite
+  required_fields: [contract_version, test_level, test_type, environment_stage, knowledge_mode, reviewed_handoff_ref, provider_modes]
+  supported_tuples: [[component, regression, local], [integration, regression, local]]
+  knowledge_modes: [required, not_used]
+  provider_modes: exact_target_map_real_or_simulated
+  dependency_modes: exact_readiness_check_map_when_readiness_configured
+  shared_state: optional_requires_readiness
+  shared_state_required_fields: [environment_id, namespace, owner]
+  data_access: read_only_default_or_owned
+  cleanup: none_default_or_owned_only
+  read_only_cleanup: none
+  invocation_pin: REGRESS_REVIEWED_HANDOFF_SHA256_independent_sha256_raw_handoff_bytes
+  missing_or_invalid_pin_or_policy: block_before_any_provider
+  input_catalog: explicit_verified_private_snapshot_without_cwd_or_ancestor_fallback
+  supported_providers: component_simulated_sample_fake_or_integration_native_loopback_rest
+  native_integration: one_GET_or_HEAD_not_used_no_shared_state_or_readiness
+  native_response_limit_bytes: 1048576
+  evidence: framework_verification_only_without_downstream_release_evidence

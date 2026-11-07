@@ -5,13 +5,16 @@ import com.specdriven.regression.contract.v03.V03ExecutionStep;
 import com.specdriven.regression.contract.v03.V03ProviderRuntimeAdapter;
 import com.specdriven.regression.contract.v03.V03StepResult;
 import com.specdriven.regression.provider.SampleFakeProvider;
+import com.specdriven.regression.sit.SitPolicyAwareProvider;
+import com.specdriven.regression.sit.SitOperationEffect;
+import com.specdriven.regression.sit.SitExecutionScope;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public final class SampleFakeProviderV03Adapter extends AbstractProviderRuntimeV03Adapter implements V03ProviderRuntimeAdapter {
+public final class SampleFakeProviderV03Adapter extends AbstractProviderRuntimeV03Adapter implements V03ProviderRuntimeAdapter, SitPolicyAwareProvider {
 
     private static final Set<String> OPERATIONS = Set.of("setup_fixture", "execute_sample", "cleanup_fixture");
     private final SampleFakeProvider provider = new SampleFakeProvider();
@@ -28,6 +31,31 @@ public final class SampleFakeProviderV03Adapter extends AbstractProviderRuntimeV
             case "cleanup_fixture" -> cleanup(step, context);
             default -> throw new IllegalArgumentException("Unsupported sample fake operation `" + step.operation() + "`.");
         };
+    }
+
+    @Override public boolean simulated() { return true; }
+
+    @Override public SitOperationEffect sitEffect(String contract, String operation) {
+        if (!supports(contract, operation)) return SitOperationEffect.UNKNOWN;
+        return switch (operation) {
+            case "setup_fixture" -> SitOperationEffect.OWNED_WRITE;
+            case "cleanup_fixture" -> SitOperationEffect.OWNED_CLEANUP;
+            case "execute_sample" -> SitOperationEffect.READ_ONLY;
+            default -> SitOperationEffect.UNKNOWN;
+        };
+    }
+
+    @Override public V03StepResult executeWithSitPolicy(V03ExecutionStep step, V03ExecutionContext context,
+            SitExecutionScope scope) {
+        String resource = step.testCaseId() + "/" + step.target();
+        switch (sitEffect(step.providerContract(), step.operation())) {
+            case OWNED_WRITE -> scope.store().create(scope.token(), resource, "synthetic sample fixture");
+            case OWNED_CLEANUP -> scope.store().delete(scope.token(), resource);
+            case READ_ONLY -> { if (scope.token() != null) scope.store().assertCurrent(scope.token()); }
+            default -> throw new IllegalStateException("Unknown shared-state effect.");
+        }
+        // Existing local fake operations still produce the framework's outputs and assertions.
+        return execute(step, context);
     }
 
     private V03StepResult setup(V03ExecutionStep step, V03ExecutionContext context) {

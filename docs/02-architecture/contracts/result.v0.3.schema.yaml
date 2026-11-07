@@ -30,6 +30,7 @@ required_fields:
   - termination_reason
   - suite_summary_ref
 optional_fields:
+  - product_test
   - labels
   - source_refs
   - parameter_case_id
@@ -141,3 +142,12 @@ unsupported_behavior:
   missing_runtime_mode: run_not_complete
   mock_release_evidence_claim: block_result_publication
 failure_classification: framework_error
+
+reviewed_product_test_binding:
+  required_when_reviewed_evidence_present: true
+  fields: [contract_version, handoff_sha256, provenance_sha256, knowledge_mode, test_level, test_type, environment_stage, workspace_ref, project_ref, repository_revisions, provider_modes, dependency_modes]
+  provenance_digest: sha256_of_sanitized_product_test_reviewed_handoff_json_bytes
+  identity: suite_profile_batch_run_plan_and_actual_capability_match_result_and_index
+  success: complete_observed_mode_coverage_and_passed_policy
+  failure: observed_mode_subset_is_permitted_but_not_a_success
+  classification: framework_verification_only_without_downstream_release_evidence

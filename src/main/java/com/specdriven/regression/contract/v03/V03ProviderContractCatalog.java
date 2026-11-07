@@ -16,10 +16,9 @@ public final class V03ProviderContractCatalog {
     private static final Path FRAMEWORK_CONTRACTS = Path.of("docs/02-architecture/contracts/provider-contracts");
     private final Yaml yaml = new Yaml();
 
-    public Map<String, V03ProviderContract> load(Path suiteRoot) {
-        Path directory = FrameworkProviderContractCatalog.resolveDirectory(suiteRoot, FRAMEWORK_CONTRACTS);
+    public Map<String, V03ProviderContract> loadDirectory(Path verifiedDirectory) {
         Map<String, V03ProviderContract> contracts = new LinkedHashMap<>();
-        try (var files = Files.list(directory)) {
+        try (var files = Files.list(verifiedDirectory)) {
             files.filter(path -> path.getFileName().toString().endsWith(".yaml"))
                     .sorted()
                     .forEach(path -> add(contracts, path));
@@ -27,6 +26,10 @@ public final class V03ProviderContractCatalog {
             throw new UncheckedIOException("Failed to load v0.3 Provider Contracts.", error);
         }
         return Map.copyOf(contracts);
+    }
+
+    public Map<String, V03ProviderContract> load(Path suiteRoot) {
+        return loadDirectory(FrameworkProviderContractCatalog.resolveDirectory(suiteRoot, FRAMEWORK_CONTRACTS));
     }
 
     private void add(Map<String, V03ProviderContract> contracts, Path path) {

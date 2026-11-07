@@ -1,0 +1,125 @@
+contract_version: product-test-reviewed-handoff.v1
+artifact: product_test_reviewed_handoff
+status: framework_owned_current_stage
+format: strict_json
+required_fields:
+  - contract_version
+  - suite_id
+  - profile
+  - knowledge_mode
+  - review_ref
+  - reviewed_by
+  - reviewed_at
+  - valid_until
+  - framework_baseline
+  - repository_revisions
+  - workspace_ref
+  - project_ref
+  - swarm_source
+  - reviewed_files
+  - reviewed_contracts
+  - requirement_mapping
+optional_fields: [cognee_source, selection_receipt, knowledge_sources]
+unknown_fields: prohibited
+explicit_nulls: prohibited
+duplicate_json_keys: prohibited
+limits:
+  json_bytes: 2097152
+  file_bytes: 2097152
+  reviewed_file_count_including_contracts: 128
+  total_reviewed_bytes: 16777216
+  text_length: 1024
+invocation_integrity:
+  variable: REGRESS_REVIEWED_HANDOFF_SHA256
+  format: lowercase_sha256_hex
+  digest: raw_handoff_bytes
+  present_empty_or_malformed: blocked
+  missing_for_product_test: blocked
+  scope: exact_single_v0.3_leaf_suite_and_profile
+  authority: externally_supplied_integrity_pin_not_authentication_or_approval
+review:
+  timestamp_format: UTC_ISO8601_instant
+  reviewed_at: not_after_invocation_time
+  valid_until: strictly_after_invocation_time_and_reviewed_at
+  framework_baseline: '0.3.2'
+  review_identity: traceability_only
+workspace_ref: exact_reviewed_workspace_matches_required_receipt_request_workspaceRef
+project_ref: exact_reviewed_consumer_matches_required_receipt_request_consumerProjectRef
+repository_revisions: nonempty_string_map_exact_match_with_required_receipt
+swarm_source:
+  required_fields: [base_revision, files]
+  base_revision: lowercase_git_sha40
+  files: nonempty_map_of_source_file_path_to_lowercase_sha256
+cognee_source:
+  required_fields: [version, commit, runtime_version_verified]
+  version: '1.6.2'
+  commit: ba3631f2ed363a6ea50d649c34c56885af6b36fe
+  runtime_version_verified: false
+knowledge_modes:
+  not_used:
+    cognee_source: optional_if_present_validated_as_source_provenance_only
+    selection_receipt: absent
+    knowledge_sources: absent
+    meaning: explicit_no_retrieval_still_requires_reviewed_oracles
+  required:
+    cognee_source: required
+    selection_receipt:
+      required_fields: [path, sha256]
+      path: safe_suite_relative_unmodified_receipt
+      sha256: raw_receipt_bytes
+    knowledge_sources:
+      required_fields: [source_id, source_revision, provider_revision, source_ref, knowledge_ref, content_sha256, repository_revisions, applicable_project_refs, consumer_project_ref, test_case_ids, requirement_refs]
+      source_revision: positive_integer
+      source_identity: unique_exact_selected_and_candidate_match
+      mapping: exact_reviewed_requirement_and_test_ids
+      freshness: selected_validUntil_strictly_after_invocation_time
+    receipt_shape:
+      phase: selection
+      status: ELIGIBLE_CONTEXT
+      selected: context.selected
+      excluded: context.excluded
+      candidates: cogneeSelection.candidateSearch.candidates
+      search_type: CHUNKS
+      search_status: SEARCHED
+      source_version_fields: [recordKey, recordVersion, providerRevision]
+      candidate_version_fields: [sourceId, sourceRevision, providerRevision]
+      source_ref: candidate.sourceRef_member_of_selected.proposal.sourceRefs
+      scope: candidate_workspace_and_project_equal_context_request_and_read_scope
+      repository_revisions: exact_selected_request_and_handoff_maps
+      ambiguous_or_excluded_match: prohibited
+      governance: preserve_upstream_decision_and_proposal_identity_without_replaying_authority
+      candidate_content_and_proposal_digest: distinct
+reviewed_files:
+  required_fields: [path, role, sha256]
+  roles: [manifest, profile, test, fixture, oracle]
+  path: unique_safe_suite_relative_regular_nonlinked_file
+  coverage: exact_manifest_selected_profile_all_tests_static_inputs_and_oracles
+reviewed_contracts:
+  required_fields: [provider_contract, path, sha256]
+  provider_contract: sample_fake_provider.v0.3_for_component_or_rest_client.v0.3_for_integration
+  coverage: exactly_each_used_contract
+  resolution: explicit_private_snapshot_directory_no_cwd_ancestor_or_bundled_fallback
+requirement_mapping:
+  required_fields: [requirement_ref, test_case_ids, oracle_refs, review_ref]
+  mapping: every_test_and_every_static_or_literal_expected_operand
+  oracle_refs: suite_relative_oracle_file_or_test_path_hash_assertion_step_id
+  requirement_ref: authoritative_reviewed_requirement_reference
+  review_ref: exact_handoff_review_reference
+  duplicate_or_dangling_references: prohibited
+snapshot:
+  paths: relative_no_absolute_traversal_encoded_segments_backslash_symlink_or_hardlink
+  read: read_once_hash_and_write_same_bytes
+  materialization: private_framework_created_temporary_tree
+  supported_operations: [setup_fixture, execute_sample, cleanup_fixture, http_request]
+  native_http: exactly_one_execute_GET_or_HEAD_literal_127.0.0.1_origin_no_redirects_or_shared_state
+  native_response_limit_bytes: 1048576
+  supported_inputs: static_artifact_files_literal_expected_values_typed_step_actuals_and_cleanup_workspace
+  dynamic_environment_generated_or_unknown_references: prohibited
+  executable_capabilities: [component_regression_local_fake, integration_regression_local_native_http_read]
+  evidence_classification: framework_verification_only
+  downstream_release_evidence: false
+  cleanup: only_created_private_snapshot_tree
+preparation:
+  status: prepared_not_approved
+  output: handoff_json_and_raw_byte_sha256_sidecar
+  network_provider_execution_and_approval: never

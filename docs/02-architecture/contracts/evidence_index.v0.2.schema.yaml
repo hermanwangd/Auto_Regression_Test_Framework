@@ -24,6 +24,9 @@ provider_entry_required_fields:
   - provider_type
   - provider_id
 approved_evidence_types:
+  - reviewed_handoff
+  - product_test_policy
+  - sit_readiness
   - execution_log
   - batch_summary
   - fixture_setup

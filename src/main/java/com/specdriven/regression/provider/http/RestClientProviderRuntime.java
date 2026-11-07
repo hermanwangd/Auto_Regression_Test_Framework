@@ -26,13 +26,14 @@ public class RestClientProviderRuntime implements ProviderRuntime {
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
+            .followRedirects(HttpClient.Redirect.NEVER)
             .build();
     private static final String MASK = "***MASKED***";
 
     @Override
     public ProviderOperationResult execute(ProviderExecutionContext context, ProviderOperationRequest request) {
         return switch (request.operation()) {
-            case "http_request" -> httpRequest(context, request);
+            case "http_request" -> httpRequest(context, request, false);
             default -> ProviderOperationResult.failed(
                     Map.of(),
                     List.of(),
@@ -44,7 +45,23 @@ public class RestClientProviderRuntime implements ProviderRuntime {
         };
     }
 
-    private ProviderOperationResult httpRequest(ProviderExecutionContext context, ProviderOperationRequest request) {
+    /** Used by the reviewed native adapter; preserves the ordinary REST interface and behavior. */
+    public ProviderOperationResult executeReviewedRead(ProviderExecutionContext context, ProviderOperationRequest request) {
+        if (!"http_request".equals(request.operation()) || !"native".equals(context.runtimeMode())
+                || !context.bindingValues().keySet().equals(java.util.Set.of("base_url")))
+            throw new IllegalArgumentException("Reviewed HTTP requires the native REST operation and exact base_url binding.");
+        ReviewedLoopbackHttpPolicy.validateOrigin(context.bindingValues().get("base_url"));
+        Map<String,Object> inputs = new LinkedHashMap<>();
+        for (var parameter : request.parameters()) {
+            String key = stringValue(parameter.get("bind_as"));
+            if (inputs.putIfAbsent(key, parameter.get("ref")) != null)
+                throw new IllegalArgumentException("Reviewed HTTP inputs must be unique.");
+        }
+        ReviewedLoopbackHttpPolicy.validateInputs(inputs);
+        return httpRequest(context, request, true);
+    }
+
+    private ProviderOperationResult httpRequest(ProviderExecutionContext context, ProviderOperationRequest request, boolean reviewed) {
         String baseUrl = stringValue(context.bindingValues().get("base_url"));
         if (baseUrl.isBlank() || baseUrl.startsWith("generated://")) {
             return ProviderOperationResult.failed(
@@ -72,9 +89,9 @@ public class RestClientProviderRuntime implements ProviderRuntime {
             HttpRequest.BodyPublisher publisher = body.isEmpty()
                     ? HttpRequest.BodyPublishers.noBody()
                     : HttpRequest.BodyPublishers.ofString(body);
-            HttpResponse<String> response = httpClient.send(
-                    builder.method(method, publisher).build(),
-                    HttpResponse.BodyHandlers.ofString());
+            HttpRequest httpRequest = builder.method(method, publisher).build();
+            HttpResponse<String> response = reviewed ? sendReviewed(httpRequest)
+                    : httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
             long durationMs = Duration.ofNanos(System.nanoTime() - started).toMillis();
             String maskedRequestUrl = maskUrl(requestUri.toString());
             Map<String, String> maskedRequestHeaders = maskHeaders(headers);
@@ -88,7 +105,13 @@ public class RestClientProviderRuntime implements ProviderRuntime {
             outputs.put("response.body", maskedResponseBody);
             outputs.put("response.duration_ms", durationMs);
             writeRequestEvidence(context, maskedRequestUrl, method, maskUrl(path), maskedRequestHeaders, maskedRequestBody);
-            writeResponseEvidence(context, response.statusCode(), maskedResponseBody, maskedResponseHeaders, durationMs, "passed", "");
+            boolean redirect = reviewed && response.statusCode() >= 300 && response.statusCode() < 400;
+            writeResponseEvidence(context, response.statusCode(), maskedResponseBody, maskedResponseHeaders, durationMs,
+                    redirect ? "failed" : "passed", redirect ? "Reviewed HTTP redirects are prohibited and were not followed." : "");
+            if (redirect) return ProviderOperationResult.failed(outputs,
+                    evidence("http_request", "provider-evidence/http/request.json", "http_request_response", "provider-evidence/http/response.json"),
+                    ProviderFailure.of("HTTP_REQUEST_FAILED", "VERIFICATION_FAILED", "Reviewed HTTP redirect was rejected.",
+                            "Use the reviewed direct loopback endpoint; redirects are not followed."));
             return ProviderOperationResult.passed(
                     outputs,
                     evidence(
@@ -99,10 +122,72 @@ public class RestClientProviderRuntime implements ProviderRuntime {
         } catch (ConnectException e) {
             return failed(context, "PROVIDER_UNAVAILABLE", "PROVIDER_UNAVAILABLE", e.getMessage());
         } catch (IOException e) {
-            return failed(context, "OPERATION_FAILED", "FRAMEWORK_ERROR", e.getMessage());
+            return failed(context, reviewed ? "HTTP_REQUEST_FAILED" : "OPERATION_FAILED", "FRAMEWORK_ERROR", e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return failed(context, "OPERATION_FAILED", "FRAMEWORK_ERROR", "REST request was interrupted.");
+            return failed(context, reviewed ? "HTTP_REQUEST_FAILED" : "OPERATION_FAILED", "FRAMEWORK_ERROR", "REST request was interrupted.");
+        }
+    }
+
+    /** HttpRequest.timeout alone stops protecting the body after headers on JDK 17. */
+    private HttpResponse<String> sendReviewed(HttpRequest request) throws IOException, InterruptedException {
+        long deadline = System.nanoTime() + request.timeout().orElse(Duration.ofSeconds(10)).toNanos();
+        BoundedResponseSubscriber subscriber = new BoundedResponseSubscriber();
+        var pending = httpClient.sendAsync(request, ignored -> subscriber);
+        try {
+            long remaining = deadline - System.nanoTime();
+            if (remaining <= 0) throw new java.util.concurrent.TimeoutException();
+            HttpResponse<String> response = pending.get(remaining, java.util.concurrent.TimeUnit.NANOSECONDS);
+            if (System.nanoTime() >= deadline) throw new java.util.concurrent.TimeoutException();
+            return response;
+        } catch (java.util.concurrent.TimeoutException error) {
+            subscriber.cancel(new IOException("Reviewed HTTP whole-response deadline exceeded."));
+            pending.cancel(true);
+            throw new HttpTimeoutException("Reviewed HTTP whole-response deadline exceeded.");
+        } catch (InterruptedException error) {
+            subscriber.cancel(new IOException("Reviewed HTTP request was interrupted."));
+            pending.cancel(true);
+            throw error;
+        } catch (java.util.concurrent.ExecutionException error) {
+            subscriber.cancel(new IOException("Reviewed HTTP response did not complete."));
+            pending.cancel(true);
+            Throwable cause = error.getCause();
+            if (cause instanceof IOException io) throw io;
+            throw new IOException("Reviewed HTTP response failed.", cause);
+        }
+    }
+
+    /** Cancels before copying a chunk that would exceed the reviewed response budget. */
+    private static final class BoundedResponseSubscriber implements HttpResponse.BodySubscriber<String> {
+        private final java.util.concurrent.CompletableFuture<String> body = new java.util.concurrent.CompletableFuture<>();
+        private final java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        private volatile java.util.concurrent.Flow.Subscription subscription;
+        private volatile boolean closed;
+        @Override public java.util.concurrent.CompletionStage<String> getBody() { return body; }
+        @Override public void onSubscribe(java.util.concurrent.Flow.Subscription value) {
+            subscription = value;
+            if (closed) value.cancel(); else value.request(1);
+        }
+        @Override public void onNext(List<java.nio.ByteBuffer> chunks) {
+            for (var chunk : chunks) {
+                if (closed || body.isDone()) return;
+                if (chunk.remaining() > ReviewedLoopbackHttpPolicy.MAX_RESPONSE_BYTES - bytes.size()) {
+                    cancel(new IOException("Reviewed HTTP response exceeds 1 MiB."));
+                    return;
+                }
+                byte[] part = new byte[chunk.remaining()]; chunk.get(part); bytes.writeBytes(part);
+            }
+            if (!closed && !body.isDone()) subscription.request(1);
+        }
+        @Override public void onError(Throwable error) { closed = true; body.completeExceptionally(error); }
+        @Override public void onComplete() {
+            if (!closed && !body.isDone()) body.complete(bytes.toString(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        private void cancel(IOException reason) {
+            closed = true;
+            body.completeExceptionally(reason);
+            var known = subscription;
+            if (known != null) known.cancel();
         }
     }
 

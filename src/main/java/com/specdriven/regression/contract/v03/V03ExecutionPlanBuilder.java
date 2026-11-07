@@ -20,6 +20,7 @@ import org.yaml.snakeyaml.Yaml;
 public class V03ExecutionPlanBuilder {
 
     private final ContractBaselineService contractBaselineService;
+    private final Path verifiedContractDirectory;
     private final Yaml yaml = new Yaml();
     private final V03ReferenceParser referenceParser = new V03ReferenceParser();
     private final V03ReferenceResolver referenceResolver = new V03ReferenceResolver(this::readDocument);
@@ -34,7 +35,12 @@ public class V03ExecutionPlanBuilder {
     }
 
     public V03ExecutionPlanBuilder(ContractBaselineService contractBaselineService) {
+        this(contractBaselineService, null);
+    }
+
+    public V03ExecutionPlanBuilder(ContractBaselineService contractBaselineService, Path verifiedContractDirectory) {
         this.contractBaselineService = contractBaselineService;
+        this.verifiedContractDirectory = verifiedContractDirectory;
     }
 
     public V03ExecutionPlan build(Path suiteManifest, String requestedProfile) {
@@ -62,7 +68,8 @@ public class V03ExecutionPlanBuilder {
         Map<String, Object> suite = readMap(suiteManifest);
         String profile = effectiveProfile(requestedProfile, suite, validation);
         Map<String, Object> envProfile = readEnvProfile(suiteRoot, suite, profile);
-        Map<String, V03ProviderContract> contracts = providerContractCatalog.load(suiteRoot);
+        Map<String, V03ProviderContract> contracts = verifiedContractDirectory == null
+                ? providerContractCatalog.load(suiteRoot) : providerContractCatalog.loadDirectory(verifiedContractDirectory);
         Map<String, V03ResolvedTarget> targets = orderedTargets(
                 resolvedTargets(suite, profile, envProfile), contracts);
         List<Map<String, Object>> testDocuments = testDocuments(suiteRoot, suite);
@@ -158,7 +165,11 @@ public class V03ExecutionPlanBuilder {
                 stringValue(envProfile.get("execution_mode")),
                 stringValue(envProfile.get("isolation")),
                 firstNonBlank(stringValue(envProfile.get("evidence_classification")), "framework_verification_only"),
-                Boolean.parseBoolean(stringValue(envProfile.get("downstream_release_evidence"))));
+                Boolean.parseBoolean(stringValue(envProfile.get("downstream_release_evidence"))),
+                envProfile.containsKey("sit_readiness")
+                        ? java.util.Objects.requireNonNullElse(envProfile.get("sit_readiness"), false) : null,
+                envProfile.containsKey("product_test")
+                        ? java.util.Objects.requireNonNullElse(envProfile.get("product_test"), false) : null);
     }
 
     private Map<String, Path> artifactRoots(Path suiteRoot, Map<String, Object> suite) {
@@ -657,6 +668,12 @@ public class V03ExecutionPlanBuilder {
                 .append(environmentProfile.isolation()).append('|')
                 .append(environmentProfile.evidenceClassification()).append('|')
                 .append(environmentProfile.downstreamReleaseEvidence()).append('\n');
+        if (environmentProfile.sitReadiness() != null) {
+            canonical.append("sit_readiness|").append(canonicalValue(environmentProfile.sitReadiness())).append('\n');
+        }
+        if (environmentProfile.productTest() != null) {
+            canonical.append("product_test|").append(canonicalValue(environmentProfile.productTest())).append('\n');
+        }
         targets.values().stream().sorted(java.util.Comparator.comparing(V03ResolvedTarget::target)).forEach(target -> canonical.append(target.target()).append('|')
                 .append(target.providerContract()).append('|')
                 .append(target.runtimeMode()).append('|')

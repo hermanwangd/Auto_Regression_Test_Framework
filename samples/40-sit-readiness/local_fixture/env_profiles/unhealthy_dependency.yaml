@@ -1,0 +1,36 @@
+profile_id: unhealthy_dependency
+execution_mode: local
+isolation: per_run
+evidence_classification: framework_verification_only
+
+targets:
+  sample_runtime:
+    runtime_mode: stub
+    bindings:
+      workspace_ref: local://golden-v03-workspace
+      clock_ref: fixed://2026-07-10T00:00:00Z
+
+sit_readiness:
+  timeout_ms: 1000
+  checks:
+    - id: isolated_orders
+      kind: test_data
+      adapter: fixture
+      expected_version: orders-v1
+      config:
+        state: READY
+        observed_version: orders-v1
+    - id: pricing_service
+      kind: external_system
+      adapter: fixture
+      expected_version: pricing-2026.11
+      config:
+        state: INVALID
+        observed_version: pricing-2026.11
+    - id: inventory_repo
+      kind: dependency
+      adapter: fixture
+      expected_version: inventory-build-42
+      config:
+        state: READY
+        observed_version: inventory-build-42

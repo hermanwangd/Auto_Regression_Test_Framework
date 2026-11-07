@@ -7,6 +7,9 @@ public final class V03DryRunRenderer {
     public void render(PrintStream out, V03ExecutionPlan plan) {
         out.println("suite_id: " + plan.suiteId());
         out.println("plan_digest: " + plan.planDigest());
+        if (plan.environmentProfile().sitReadiness() != null) {
+            out.println("sit_readiness: not_evaluated_dry_run");
+        }
         out.println("resolved_execution_plan:");
         for (V03CompiledTestCase testCase : plan.tests()) {
             render(out, testCase.setup());

@@ -136,6 +136,15 @@ public class ContractBaselineService {
     private static final Object MISSING_JSON_POINTER_FRAGMENT = new Object();
 
     private final Yaml yaml = new Yaml();
+    private final Path verifiedContractDirectory;
+
+    public ContractBaselineService() { this.verifiedContractDirectory = null; }
+
+    /** Explicit catalog entry point for reviewed input snapshots. */
+    public ContractBaselineService(Path verifiedContractDirectory) {
+        this.verifiedContractDirectory = java.util.Objects.requireNonNull(verifiedContractDirectory)
+                .toAbsolutePath().normalize();
+    }
 
     public ValidationResult validateSuite(Path suiteManifest) {
         ContractGraph graph = loadGraph(suiteManifest);
@@ -153,6 +162,18 @@ public class ContractBaselineService {
             validateV03ReferenceSyntax(graph, findings);
             return validationResult(graph, findings);
         }
+        java.util.stream.Stream.of(graph.envProfiles(), graph.executionProfiles(), graph.environmentBindings())
+                .flatMap(profiles -> profiles.entrySet().stream())
+                .filter(entry -> entry.getValue().containsKey("sit_readiness"))
+                .map(Map.Entry::getKey).distinct().forEach(path -> findings.add(finding(path,
+                        "sit_readiness", "unsupported_sit_readiness_version",
+                        "Migrate this suite to v0.3 before configuring the SIT readiness gate; legacy execution does not evaluate it.")));
+        java.util.stream.Stream.of(graph.envProfiles(), graph.executionProfiles(), graph.environmentBindings())
+                .flatMap(profiles -> profiles.entrySet().stream())
+                .filter(entry -> entry.getValue().containsKey("product_test"))
+                .map(Map.Entry::getKey).distinct().forEach(path -> findings.add(finding(path,
+                        "product_test", "unsupported_product_test_version",
+                        "Reviewed product testing requires a v0.3 leaf suite; legacy execution cannot ignore this policy.")));
         validateRequiredFields(graph, findings);
         validateProhibitedFields(graph, findings);
         validateDataBindingCategories(graph, findings);
@@ -2540,6 +2561,7 @@ public class ContractBaselineService {
     }
 
     private Path frameworkProviderContractsDirectory(Path suiteRoot) {
+        if (verifiedContractDirectory != null) return verifiedContractDirectory;
         return FrameworkProviderContractCatalog.resolveDirectory(suiteRoot, FRAMEWORK_PROVIDER_CONTRACTS);
     }
 

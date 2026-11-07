@@ -1,0 +1,21 @@
+profile_id: local_v03
+execution_mode: local
+isolation: per_run
+evidence_classification: framework_verification_only
+
+targets:
+  sample_runtime:
+    runtime_mode: stub
+    bindings:
+      workspace_ref: local://golden-v03-workspace
+      clock_ref: fixed://2026-07-10T00:00:00Z
+
+product_test:
+  contract_version: product-test.v1
+  test_level: component
+  test_type: regression
+  environment_stage: local
+  knowledge_mode: required
+  reviewed_handoff_ref: handoff/reviewed-tests.json
+  provider_modes:
+    sample_runtime: simulated

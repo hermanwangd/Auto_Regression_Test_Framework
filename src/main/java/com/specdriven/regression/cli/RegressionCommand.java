@@ -98,6 +98,8 @@ import com.specdriven.regression.schema.ArtifactValidationError;
 import com.specdriven.regression.testcase.ExecutionContextReadiness;
 import com.specdriven.regression.testcase.TestCaseDraftResult;
 import com.specdriven.regression.testcase.TestCaseLifecycleService;
+import com.specdriven.regression.producttest.ProductTestHandoffService;
+import com.specdriven.regression.producttest.ProductTestHandoffService.InvocationRequirement;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
@@ -140,7 +142,7 @@ public class RegressionCommand {
             "--result",
             "--suite",
             "--tag",
-            "--test-case");
+            "--test-case", "--review-input", "--selection-receipt", "--out");
 
     private final ProductRepoService productRepoService;
     private final ReleasePackageService releasePackageService;
@@ -187,6 +189,7 @@ public class RegressionCommand {
     private final SuiteAggregationService suiteAggregationService = new SuiteAggregationService();
     private final SuiteRuntimeDispatcher suiteRuntimeDispatcher = new SuiteRuntimeDispatcher();
     private boolean legacyRpModeEnabledForCompatibilityTests;
+    private final InvocationRequirement invocationRequirement;
 
     public RegressionCommand(ProductRepoService productRepoService, ReleasePackageService releasePackageService) {
         this(
@@ -206,6 +209,15 @@ public class RegressionCommand {
                 new CoverageReportService());
     }
 
+    public RegressionCommand(ProductRepoService productRepoService, ReleasePackageService releasePackageService,
+            Map<String, String> invocationEnvironment) {
+        this(productRepoService, releasePackageService, new AcIntakeService(), new RpRuMappingService(),
+                new TestCaseLifecycleService(), new ExpectedResultService(), new ExecutionEnvironmentResolver(),
+                new BindingResolver(), new ProviderContractResolver(), new FixtureLifecycleService(),
+                new ExecutionEngine(), new OracleReadinessService(), new EvidenceWriter(), new CoverageReportService(),
+                InvocationRequirement.fromEnvironment(invocationEnvironment));
+    }
+
     public RegressionCommand(
             ProductRepoService productRepoService,
             ReleasePackageService releasePackageService,
@@ -221,6 +233,21 @@ public class RegressionCommand {
             OracleReadinessService oracleReadinessService,
             EvidenceWriter evidenceWriter,
             CoverageReportService coverageReportService) {
+        this(productRepoService, releasePackageService, acIntakeService, rpRuMappingService, testCaseLifecycleService,
+                expectedResultService, executionEnvironmentResolver, bindingResolver, providerContractResolver,
+                fixtureLifecycleService, executionEngine, oracleReadinessService, evidenceWriter, coverageReportService,
+                InvocationRequirement.fromEnvironment(System.getenv()));
+    }
+
+    private RegressionCommand(ProductRepoService productRepoService, ReleasePackageService releasePackageService,
+            AcIntakeService acIntakeService, RpRuMappingService rpRuMappingService,
+            TestCaseLifecycleService testCaseLifecycleService, ExpectedResultService expectedResultService,
+            ExecutionEnvironmentResolver executionEnvironmentResolver, BindingResolver bindingResolver,
+            ProviderContractResolver providerContractResolver, FixtureLifecycleService fixtureLifecycleService,
+            ExecutionEngine executionEngine, OracleReadinessService oracleReadinessService,
+            EvidenceWriter evidenceWriter, CoverageReportService coverageReportService,
+            InvocationRequirement invocationRequirement) {
+        this.invocationRequirement = java.util.Objects.requireNonNull(invocationRequirement);
         this.productRepoService = productRepoService;
         this.releasePackageService = releasePackageService;
         this.acIntakeService = acIntakeService;
@@ -268,6 +295,7 @@ public class RegressionCommand {
             case "draft-expected-results" -> draftExpectedResults(root, options, out, err);
             case "validate" -> validate(root, options, out, err);
             case "validate-evidence" -> validateEvidence(root, options, out, err);
+            case "prepare-product-test-handoff" -> prepareProductTestHandoff(root, options, out, err);
             case "run" -> runRegression(root, options, out, err);
             case "report" -> report(root, options, out, err);
             case "doctor" -> doctor(args, root, options, out, err);
@@ -287,6 +315,7 @@ public class RegressionCommand {
         out.println("  report --result <result_json> [--format text|yaml|json]");
         out.println("  validate-evidence --result <result_json>");
         out.println("  doctor drivers [--driver-path <jar>] [--driver-dir <dir>]");
+        out.println("  prepare-product-test-handoff --suite <manifest> --profile <id> --review-input <json> --out <json> [--selection-receipt <json>]");
     }
 
     private void printCommandUsage(String command, PrintStream out) {
@@ -963,7 +992,51 @@ public class RegressionCommand {
                 : "Complete RP/RU mapping execution context before executable test generation."));
     }
 
+    private boolean reviewedRouteAllowed(Path root, Map<String,String> options) {
+        if (invocationRequirement.expectedSha256() == null
+                || !invocationRequirement.expectedSha256().matches("[a-f0-9]{64}")
+                || !options.containsKey("--suite") || !options.containsKey("--profile")
+                || options.containsKey("--rp-id") || options.containsKey("--dry-run")) return false;
+        try {
+            Path manifest = root.resolve(options.get("--suite")).normalize();
+            return "v0.3".equals(readYamlMap(manifest).get("manifest_version"))
+                    && !isSuiteGroupManifest(manifest)
+                    && ProductTestHandoffService.configured(manifest, options.get("--profile"));
+        } catch (RuntimeException error) { return false; }
+    }
+
+    private void printReviewedRouteBlocked(PrintStream out) {
+        out.println("run_status: blocked");
+        out.println("provider_runtime_invoked: false");
+        out.println("failure_code: REVIEWED_HANDOFF_REQUIRED");
+        out.println("owner_action: A present invocation pin requires its reviewed v0.3 leaf, selected profile and product_test policy; groups, legacy and package routes are unsupported.");
+    }
+
+    private int prepareProductTestHandoff(Path root, Map<String,String> options, PrintStream out, PrintStream err) {
+        for (String key : List.of("--suite", "--profile", "--review-input", "--out")) {
+            if (requiredOption(options, key, err) == null) return 2;
+        }
+        try {
+            Map<String,Object> prepared = new ProductTestHandoffService().prepare(
+                    root.resolve(options.get("--suite")), options.get("--profile"),
+                    root.resolve(options.get("--review-input")), options.containsKey("--selection-receipt")
+                            ? root.resolve(options.get("--selection-receipt")) : null,
+                    root.resolve(options.get("--out")));
+            out.println("preparation_status: prepared");
+            out.println("approval_status: not_approved");
+            prepared.forEach((key,value) -> out.println(key + ": " + value));
+            return 0;
+        } catch (RuntimeException error) {
+            err.println("preparation_status: blocked");
+            err.println("owner_action: Correct the reviewed input bundle: " + error.getMessage());
+            return 1;
+        }
+    }
+
     private int runRegression(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
+        if (invocationRequirement.required() && !reviewedRouteAllowed(root, options)) {
+            printReviewedRouteBlocked(out); return 1;
+        }
         if (options.containsKey("--suite") && !options.containsKey("--rp-id")) {
             return runSuite(root, options, out, err);
         }
@@ -1108,6 +1181,9 @@ public class RegressionCommand {
     }
 
     private int runSuite(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
+        if (invocationRequirement.required() && !reviewedRouteAllowed(root, options)) {
+            printReviewedRouteBlocked(out); return 1;
+        }
         String suite = requiredOption(options, "--suite", err);
         if (suite == null) {
             return 2;
@@ -1118,7 +1194,8 @@ public class RegressionCommand {
             if (profile == null) {
                 return 2;
             }
-            JdbcDriverDiscovery.DiscoveryResult driverDiscovery = jdbcDriverDiscovery(root, options);
+            boolean reviewed = invocationRequirement.required() || ProductTestHandoffService.configured(suiteManifest, profile);
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery = reviewed ? null : jdbcDriverDiscovery(root, options);
             if (isSuiteGroupManifest(suiteManifest)) {
                 return runSuiteGroup(
                         suiteManifest,
@@ -1192,6 +1269,10 @@ public class RegressionCommand {
         if (result.resultJson() == null) {
             return result;
         }
+        if (Files.isRegularFile(result.resultJson().getParent().resolve("product-test/reviewed-handoff.json"))) {
+            // Reviewed execution already finalized against its private snapshot before closing it.
+            return result.withSummaryJson(result.resultJson().getParent().resolve("suite_summary.json"));
+        }
         SuiteArtifactFinalizer.FinalizedArtifacts finalized =
                 suiteArtifactFinalizer.finalizeLeaf(suiteManifest, result.resultJson());
         return result.withSummaryJson(finalized.summaryJson());
@@ -1215,6 +1296,21 @@ public class RegressionCommand {
                     "",
                     "Use the suite-group parent profile `" + parentContext.profile()
                             + "` for the child suite or split it into a separate batch.")));
+        }
+        try {
+            if (invocationRequirement.required() || ProductTestHandoffService.configured(suiteManifest, profile)) {
+                if (parentContext != null) {
+                    return SuiteRuntimeResult.blocked("", profile, List.of(new ContractFinding(suiteManifest.toString(),
+                            "product_test", "REVIEWED_HANDOFF_REQUIRED", "", "", profile, "",
+                            "Run a reviewed v0.3 leaf separately; reviewed group execution is unsupported.")));
+                }
+                return SuiteRuntimeResult.fromV03(v03RuntimeExecutionService.runReviewed(suiteManifest, profile,
+                        runtimeContext(null, outputRoot, profile), invocationRequirement));
+            }
+        } catch (IllegalArgumentException | IllegalStateException | UncheckedIOException error) {
+            return SuiteRuntimeResult.blocked("", profile, List.of(new ContractFinding(suiteManifest.toString(),
+                    "product_test", "REVIEWED_HANDOFF_REQUIRED", "", "", profile, "",
+                    "Correct the reviewed leaf/profile handoff: " + error.getMessage())));
         }
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {

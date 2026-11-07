@@ -32,6 +32,11 @@ The source repo contains framework code, tests, docs, contracts, schemas, script
 
 Framework mock/local samples produce framework provider capability evidence only. Downstream SIT/preprod release evidence requires owner-provided product/RP artifacts, real Env_Profiles, and approved runtime dependencies.
 
+The optional v0.3 [SIT readiness gate](docs/09-operations/sit-readiness.md) checks prerequisites through replaceable read-only Java plugins before provider phases. Try the [local fixture and external JAR examples](samples/40-sit-readiness/README.md). The bundled fixture verifies framework behavior only; it does not observe SIT.
+
+The [Swarm product-testing module](docs/09-operations/product-testing-module.md) adds a separate application-composed caller for reviewed local product tests. It uses the existing runner and canonical evidence, with independently pinned inputs, an explicit contract snapshot and optional shared-state policy. [Synthetic examples](samples/41-product-testing/README.md) include a local test requiring no Cognee metadata, a required-knowledge receipt, and a real assertion failure.
+
+
 ## External Runtime Setup
 
 External JDBC, Kafka, IBM MQ, and similar dependencies are supplied by the runner environment. JDBC vendor drivers are never bundled; use `--driver-path`, `--driver-dir`, `REGRESS_DRIVER_PATH`, or `usage-kit/drivers/`.

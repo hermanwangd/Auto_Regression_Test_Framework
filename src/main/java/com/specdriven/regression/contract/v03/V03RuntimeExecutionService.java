@@ -37,6 +37,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import com.specdriven.regression.summary.SuiteExecutionContext;
+import com.specdriven.regression.sit.SitReadinessReport;
+import com.specdriven.regression.sit.SitReadinessService;
+import com.specdriven.regression.sit.LocalFakeSitOwnership;
+import com.specdriven.regression.sit.SitExecutionGuard;
+import com.specdriven.regression.sit.SitExecutionScope;
+import com.specdriven.regression.producttest.ProductTestPolicy;
+import com.specdriven.regression.producttest.ProductTestHandoffService;
+import com.specdriven.regression.producttest.ProductTestHandoffService.InvocationRequirement;
+import com.specdriven.regression.summary.SuiteArtifactFinalizer;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.DumperOptions;
 
@@ -46,6 +55,10 @@ public class V03RuntimeExecutionService {
 
     private final ContractBaselineService contractBaselineService;
     private final V03ProviderRuntimeRegistry runtimeRegistry;
+    private final SitReadinessService sitReadinessService;
+    private static final LocalFakeSitOwnership LOCAL_FAKE_OWNERSHIP = new LocalFakeSitOwnership();
+    private final LocalFakeSitOwnership ownershipStore;
+    private final InvocationRequirement invocationRequirement;
     private final Yaml yaml = new Yaml();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final V03ReferenceParser referenceParser = new V03ReferenceParser();
@@ -71,33 +84,93 @@ public class V03RuntimeExecutionService {
     V03RuntimeExecutionService(
             ContractBaselineService contractBaselineService,
             V03ProviderRuntimeRegistry runtimeRegistry) {
+        this(contractBaselineService, runtimeRegistry, new SitReadinessService());
+    }
+
+    public V03RuntimeExecutionService(
+            ContractBaselineService contractBaselineService,
+            V03ProviderRuntimeRegistry runtimeRegistry,
+            SitReadinessService sitReadinessService) {
+        this(contractBaselineService, runtimeRegistry, sitReadinessService,
+                InvocationRequirement.fromEnvironment(System.getenv()), LOCAL_FAKE_OWNERSHIP);
+    }
+
+    public V03RuntimeExecutionService(ContractBaselineService contractBaselineService,
+            V03ProviderRuntimeRegistry runtimeRegistry, SitReadinessService sitReadinessService,
+            InvocationRequirement invocationRequirement, LocalFakeSitOwnership ownershipStore) {
         this.contractBaselineService = contractBaselineService;
         this.runtimeRegistry = runtimeRegistry;
+        this.sitReadinessService = sitReadinessService;
+        this.invocationRequirement = java.util.Objects.requireNonNull(invocationRequirement);
+        this.ownershipStore = java.util.Objects.requireNonNull(ownershipStore);
     }
 
     public V03RuntimeRunResult run(Path suiteManifest, String profile, Path outputBase) {
         return run(suiteManifest, profile, SuiteExecutionContext.standalone(profile, outputBase, "V03"));
     }
 
-    public V03RuntimeRunResult run(Path suiteManifest, String profile, SuiteExecutionContext executionContext) {
-        requireMatchingProfile(profile, executionContext);
-        ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
-        return run(suiteManifest, profile, executionContext, validation);
+    public V03RuntimeRunResult runReviewed(Path suiteManifest, String profile, SuiteExecutionContext context,
+            InvocationRequirement requirement) {
+        if (requirement == null || !requirement.required()
+                || !requirement.expectedSha256().matches("[a-f0-9]{64}")) {
+            return reviewedBlocked(suiteManifest, profile, "An explicit reviewed invocation needs its independent SHA-256 pin.");
+        }
+        // A caller cannot remove the independently captured invocation requirement.
+        if (invocationRequirement.required() && !invocationRequirement.equals(requirement)) {
+            return reviewedBlocked(suiteManifest, profile, "The explicit digest must match the captured invocation pin.");
+        }
+        return runGuarded(suiteManifest, profile, context, null, requirement);
     }
 
-    /** Executes a command-scoped validated v0.3 suite without validating it again. */
-    public V03RuntimeRunResult run(
-            Path suiteManifest,
-            String profile,
-            SuiteExecutionContext executionContext,
+    public V03RuntimeRunResult run(Path suiteManifest, String profile, SuiteExecutionContext executionContext) {
+        return runGuarded(suiteManifest, profile, executionContext, null, invocationRequirement);
+    }
+
+    /** Command validation never bypasses the common reviewed-input boundary. */
+    public V03RuntimeRunResult run(Path suiteManifest, String profile, SuiteExecutionContext executionContext,
             ValidationResult validation) {
+        return runGuarded(suiteManifest, profile, executionContext, validation, invocationRequirement);
+    }
+
+    private V03RuntimeRunResult runGuarded(Path suiteManifest, String profile, SuiteExecutionContext executionContext,
+            ValidationResult validation, InvocationRequirement requirement) {
         requireMatchingProfile(profile, executionContext);
+        try {
+            if (requirement.required() || ProductTestHandoffService.configured(suiteManifest, profile)) {
+                try (var snapshot = new ProductTestHandoffService().snapshot(suiteManifest, profile, requirement)) {
+                    var baseline = new ContractBaselineService(snapshot.contractDirectory());
+                    var checked = baseline.validateSuite(snapshot.suiteManifest());
+                    var result = runValidated(snapshot.suiteManifest(), profile, executionContext, checked, baseline,
+                            snapshot.contractDirectory(), snapshot.policy(), snapshot.provenance());
+                    if (result.resultJson() != null) {
+                        new SuiteArtifactFinalizer().finalizeLeaf(snapshot.suiteManifest(), result.resultJson());
+                    }
+                    return result;
+                }
+            }
+        } catch (IllegalArgumentException | IllegalStateException | UncheckedIOException error) {
+            return reviewedBlocked(suiteManifest, profile, error.getMessage());
+        }
+        return runValidated(suiteManifest, profile, executionContext,
+                validation == null ? contractBaselineService.validateSuite(suiteManifest) : validation,
+                contractBaselineService, null, null, Map.of());
+    }
+
+    private V03RuntimeRunResult reviewedBlocked(Path suiteManifest, String profile, String reason) {
+        return V03RuntimeRunResult.blocked("", profile, List.of(new ContractFinding(suiteManifest.toString(),
+                "product_test", "REVIEWED_HANDOFF_REQUIRED", "", "", profile == null ? "" : profile, "",
+                "Correct the pinned reviewed bundle before execution: " + reason)));
+    }
+
+    private V03RuntimeRunResult runValidated(Path suiteManifest, String profile, SuiteExecutionContext executionContext,
+            ValidationResult validation, ContractBaselineService baseline, Path verifiedContracts,
+            ProductTestPolicy policy, Map<String,Object> provenance) {
         if (!validation.valid()) {
             return V03RuntimeRunResult.blocked(validation.suiteId(), profile, validation.findings());
         }
         V03ExecutionPlan plan;
         try {
-            plan = new V03ExecutionPlanBuilder(contractBaselineService)
+            plan = new V03ExecutionPlanBuilder(baseline, verifiedContracts)
                     .build(suiteManifest, profile, validation);
         } catch (IllegalArgumentException | IllegalStateException error) {
             return V03RuntimeRunResult.blocked(validation.suiteId(), profile, List.of(new ContractFinding(
@@ -153,7 +226,66 @@ public class V03RuntimeExecutionService {
         List<String> evidenceRefs = new ArrayList<>();
         Failure failure = Failure.none();
 
+        SitExecutionGuard.Prepared policyGuard = null;
+        boolean preflightBlocked = false;
+        Map<String,Object> policyEvidence = new LinkedHashMap<>();
+        if (policy != null) {
+            try {
+                if (policy.sharedState() != null && plan.environmentProfile().sitReadiness() == null)
+                    throw new IllegalArgumentException("Shared-state policy requires explicit readiness checks.");
+                if (plan.environmentProfile().sitReadiness() == null && !policy.dependencyModes().isEmpty())
+                    throw new IllegalArgumentException("Dependency modes require matching readiness checks.");
+                policyGuard = new SitExecutionGuard(runtimeRegistry, ownershipStore).prepare(plan, policy);
+                policyEvidence.put("status", "passed");
+            } catch (IllegalArgumentException | IllegalStateException error) {
+                preflightBlocked = true;
+                testStatuses.replaceAll((id, previous) -> "blocked");
+                failure = new Failure("PRODUCT_TEST_POLICY_BLOCKED", "ENVIRONMENT_UNAVAILABLE",
+                        outputRedactor.redactMessage(error.getMessage()), "Correct the reviewed policy and provider modes before invoking any phase.");
+                policyEvidence.put("status", "blocked");
+                policyEvidence.put("reason", outputRedactor.redactMessage(error.getMessage()));
+            }
+        }
+
+        SitReadinessReport readiness = null;
+        if (!preflightBlocked && plan.environmentProfile().sitReadiness() != null) {
+            boolean allowSimulated = "local".equals(plan.environmentProfile().executionMode())
+                    && "framework_verification_only".equals(evidenceClassification) && !downstreamReleaseEvidence;
+            readiness = sitReadinessService.evaluate(plan.environmentProfile().sitReadiness(), allowSimulated,
+                    policy == null ? null : policy.dependencyModes());
+            Map<String, Object> readinessEvidence = new LinkedHashMap<>(readiness.toMap());
+            readinessEvidence.put("suite_id", plan.suiteId());
+            readinessEvidence.put("profile", plan.profile());
+            readinessEvidence.put("batch_id", batchId);
+            readinessEvidence.put("run_id", runId);
+            readinessEvidence.put("plan_digest", plan.planDigest());
+            write(runDir.resolve("readiness/sit-readiness.json"), toJson(readinessEvidence) + "\n");
+            evidenceRefs.add("readiness/sit-readiness.json");
+            if (!readiness.ready()) {
+                preflightBlocked = true;
+                testStatuses.replaceAll((id, previous) -> "blocked");
+                failure = new Failure("SIT_READINESS_NOT_READY", "ENVIRONMENT_UNAVAILABLE",
+                        "SIT readiness is " + readiness.state() + "; no provider phase was started.",
+                        "Review readiness/sit-readiness.json and resolve each check's owner_action before rerunning.");
+            }
+        }
+
+        SitExecutionScope scope = null;
+        if (!preflightBlocked && policyGuard != null) {
+            try { scope = policyGuard.open(runId); }
+            catch (IllegalStateException error) {
+                preflightBlocked = true;
+                testStatuses.replaceAll((id, previous) -> "blocked");
+                failure = new Failure("PRODUCT_TEST_OWNERSHIP_BLOCKED", "ENVIRONMENT_UNAVAILABLE",
+                        "The fake namespace is already owned or retained.", "Use an unclaimed namespace; no automatic takeover or retry is supported.");
+                policyEvidence.put("status", "blocked");
+                policyEvidence.put("reason", "ownership unavailable");
+            }
+        }
+        try {
         for (V03ExecutionStep step : plan.steps()) {
+            // No gate failure may acquire resources or enter even cleanup.
+            if (preflightBlocked) break;
             if (!"cleanup".equals(step.phase()) && testTerminal(testStatuses, step.testCaseId())) {
                 continue;
             }
@@ -172,7 +304,26 @@ public class V03RuntimeExecutionService {
                 continue;
             }
             V03ProviderRuntimeAdapter adapter = runtimeRegistry.resolve(step.providerType());
-            V03StepResult result = adapter.execute(step, context);
+            V03StepResult result;
+            try {
+                result = policyGuard == null ? adapter.execute(step, context) : policyGuard.execute(step, context, scope);
+            } catch (IllegalArgumentException | IllegalStateException error) {
+                if (policyGuard == null) throw error;
+                result = new V03StepResult(step.id(), "blocked", Map.of(), List.of(), "FRAMEWORK_ERROR",
+                        "Reviewed policy or ownership no longer permits this phase.");
+                policyEvidence.put("status", "blocked");
+                policyEvidence.put("reason", outputRedactor.redactMessage(error.getMessage()));
+            }
+            if (policyGuard != null && !result.passed() && "cleanup".equals(step.phase())) {
+                String diagnosticRef = "policy/cleanup-" + cleanupFailures.size() + ".json";
+                write(runDir.resolve(diagnosticRef), toJson(Map.of("step_id",step.id(),"test_case_id",step.testCaseId(),
+                        "status",result.status(),"failure_code",firstNonBlank(result.failureCode(),"CLEANUP_FAILED"),
+                        "message",outputRedactor.redactMessage(firstNonBlank(result.message(),"Cleanup did not complete.")),
+                        "owner_action","Inspect exact ownership and cleanup evidence; retained resources cannot be reassigned.")) + "\n");
+                List<String> refs = new ArrayList<>(result.evidenceRefs()); refs.add(diagnosticRef);
+                result = new V03StepResult(result.stepId(),result.status(),result.outputs(),List.copyOf(refs),
+                        result.failureCode(),result.message());
+            }
             validateRuntimeOutputs(plan, step, result);
             providerRuntimeExecuted = true;
             recordProducedOutputs(plan, step, result.outputs(), stepOutputs, generatedOutputs);
@@ -201,6 +352,50 @@ public class V03RuntimeExecutionService {
             }
         }
 
+        } finally {
+            if (scope != null && scope.token() != null) {
+                try {
+                    var finalState = scope.store().finish(scope.token(), !cleanupFailures.isEmpty());
+                    policyEvidence.put("ownership_state", finalState.state().name());
+                    policyEvidence.put("retained_resource_count", finalState.resources().size());
+                    policyEvidence.put("ownership_scope", "same_store_same_jvm_only");
+                } catch (IllegalStateException error) {
+                    policyEvidence.put("status", "blocked");
+                    policyEvidence.put("ownership_state", "LOST");
+                    for (String id : testStatuses.keySet()) applyCleanupOutcomeStatus(testStatuses,id,"blocked");
+                    cleanupFailures.add(Map.of("step_id", "ownership-finalization", "status", "blocked",
+                            "failure_code", "FRAMEWORK_ERROR", "message", "Stale ownership finalizer changed no state."));
+                }
+            }
+        }
+        Map<String,Object> reviewedBinding = new LinkedHashMap<>();
+        if (policy != null) {
+            Map<String,Object> reviewedEvidence = new LinkedHashMap<>(provenance);
+            reviewedEvidence.put("suite_id", plan.suiteId()); reviewedEvidence.put("profile", plan.profile());
+            reviewedEvidence.put("batch_id", batchId); reviewedEvidence.put("run_id", runId);
+            reviewedEvidence.put("plan_digest", plan.planDigest());
+            reviewedEvidence.put("knowledge_mode", policy.knowledgeMode());
+            reviewedEvidence.put("provider_modes", policy.providerModes());
+            reviewedEvidence.put("observed_provider_modes", policyGuard == null ? Map.of() : policyGuard.observedProviderModes());
+            reviewedEvidence.put("dependency_modes", policy.dependencyModes());
+            Map<String,String> observedDependencies = new LinkedHashMap<>();
+            if (readiness != null) for (var check : readiness.checks()) {
+                if (!check.adapterVersion().isBlank()) observedDependencies.put(check.id(), check.simulated() ? "simulated" : "real");
+            }
+            reviewedEvidence.put("observed_dependency_modes", observedDependencies);
+            reviewedEvidence.put("evidence_classification", evidenceClassification);
+            reviewedEvidence.put("downstream_release_evidence", downstreamReleaseEvidence);
+            for (String key : List.of("contract_version", "handoff_sha256", "knowledge_mode", "test_level", "test_type", "environment_stage", "workspace_ref", "project_ref",
+                    "repository_revisions", "provider_modes", "dependency_modes")) reviewedBinding.put(key, reviewedEvidence.get(key));
+            write(runDir.resolve("product-test/reviewed-handoff.json"), toJson(reviewedEvidence) + "\n");
+            evidenceRefs.add("product-test/reviewed-handoff.json");
+            if ("blocked".equals(policyEvidence.get("status"))) policyEvidence.put("owner_action",
+                    "Resolve the reviewed policy, exact ownership and observed modes before a new invocation; do not retry uncertain effects.");
+            policyEvidence.put("suite_id", plan.suiteId()); policyEvidence.put("profile", plan.profile());
+            policyEvidence.put("run_id", runId); policyEvidence.put("batch_id", batchId);
+            write(runDir.resolve("product-test/policy.json"), toJson(policyEvidence) + "\n");
+            evidenceRefs.add("product-test/policy.json");
+        }
         String status = suiteStatus(testStatuses);
         writeExecutionLog(runDir, plan, status);
         evidenceRefs.add("logs/execution.log");
@@ -209,6 +404,14 @@ public class V03RuntimeExecutionService {
         sanitizeEvidence(runDir, evidenceRefs, plan.providerContracts().values().stream()
                 .flatMap(contract -> contract.evidenceRedact().stream()).collect(java.util.stream.Collectors.toSet()));
         rejectUnindexedEvidence(runDir, distinct(evidenceRefs));
+        if (!reviewedBinding.isEmpty()) {
+            try {
+                reviewedBinding.put("provenance_sha256", java.util.HexFormat.of().formatHex(java.security.MessageDigest
+                        .getInstance("SHA-256").digest(Files.readAllBytes(runDir.resolve("product-test/reviewed-handoff.json")))));
+            } catch (java.security.NoSuchAlgorithmException | IOException error) {
+                throw new IllegalStateException("Cannot bind reviewed provenance bytes to the canonical result.", error);
+            }
+        }
         Instant finishedAt = Instant.now();
         Path resultJson = writeResult(
                 runDir,
@@ -229,7 +432,9 @@ public class V03RuntimeExecutionService {
                 cleanupFailures,
                 failure,
                 evidenceClassification,
-                downstreamReleaseEvidence);
+                downstreamReleaseEvidence,
+                readiness,
+                reviewedBinding);
         return new V03RuntimeRunResult(
                 "passed".equals(status),
                 status,
@@ -681,7 +886,9 @@ public class V03RuntimeExecutionService {
             List<Map<String, Object>> cleanupFailures,
             Failure failure,
             String evidenceClassification,
-            boolean downstreamReleaseEvidence) {
+            boolean downstreamReleaseEvidence,
+            SitReadinessReport readiness,
+            Map<String,Object> reviewedBinding) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("framework_version", FRAMEWORK_VERSION);
         result.put("dsl_version", testCase == null ? "v0.3" : testCase.dslVersion());
@@ -703,6 +910,7 @@ public class V03RuntimeExecutionService {
         result.put("labels", Map.of(
                 "evidence_classification", evidenceClassification,
                 "downstream_release_evidence", downstreamReleaseEvidence));
+        if (!reviewedBinding.isEmpty()) result.put("product_test", reviewedBinding);
         result.put("source_refs", testCase == null ? Map.of() : testCase.sourceRefs());
         result.put("step_results", stepResults);
         result.put("steps", stepResults);
@@ -725,7 +933,8 @@ public class V03RuntimeExecutionService {
                 finishedAt,
                 providerResults,
                 verifyResults,
-                distinct(evidenceRefs));
+                distinct(evidenceRefs),
+                readiness);
         return resultJson;
     }
 
@@ -824,7 +1033,8 @@ public class V03RuntimeExecutionService {
             Instant createdAt,
             List<Map<String, Object>> providerOperationResults,
             List<Map<String, Object>> verifyResults,
-            List<String> evidenceRefs) {
+            List<String> evidenceRefs,
+            SitReadinessReport readiness) {
         Map<String, EvidenceMetadata> providerEvidence = providerEvidenceMetadata(providerOperationResults);
         Map<String, EvidenceMetadata> assertionEvidence = assertionEvidenceMetadata(verifyResults);
         StringBuilder index = new StringBuilder();
@@ -840,11 +1050,21 @@ public class V03RuntimeExecutionService {
             if ("evidence_index.yaml".equals(evidenceRef)) {
                 continue;
             }
-            EvidenceEntryDraft entry = evidenceEntryDraft(
+            EvidenceEntryDraft entry = "readiness/sit-readiness.json".equals(evidenceRef) && readiness != null
+                    ? new EvidenceEntryDraft(testCaseId, "sit_readiness", "framework", "", "",
+                            "application/json", "evidence_refs", readiness.ready() ? "passed" : "blocked",
+                            readiness.ready() ? "" : "SIT_READINESS_NOT_READY")
+                    : evidenceEntryDraft(
                     evidenceRef,
                     providerEvidence.getOrDefault(evidenceRef, assertionEvidence.get(evidenceRef)),
                     assertionEvidence.containsKey(evidenceRef),
                     testCaseId);
+            if ("product-test/policy.json".equals(evidenceRef)) {
+                String policyStatus = stringValue(mapValue(readYaml(runDir.resolve(evidenceRef))).get("status"));
+                entry = new EvidenceEntryDraft(testCaseId, "product_test_policy", "framework", "", "",
+                        "application/json", "evidence_refs", policyStatus,
+                        "passed".equals(policyStatus) ? "" : "PRODUCT_TEST_POLICY_BLOCKED");
+            }
             index.append("  - evidence_id: ").append(entry.evidenceId(counter++)).append('\n');
             index.append("    evidence_type: ").append(entry.evidenceType()).append('\n');
             index.append("    produced_by: ").append(entry.producedBy()).append('\n');
@@ -908,6 +1128,10 @@ public class V03RuntimeExecutionService {
             EvidenceMetadata metadata,
             boolean assertionEvidence,
             String defaultTestCaseId) {
+        if (evidenceRef.startsWith("product-test/")) {
+            return new EvidenceEntryDraft(defaultTestCaseId, "reviewed_handoff", "framework", "", "",
+                    "application/json", "evidence_refs", "passed", "");
+        }
         String status = firstNonBlank(metadata == null ? "" : metadata.status(), "passed");
         String failureCode = "failed".equals(status) ? stringValue(metadata == null ? "" : metadata.failureCode()) : "";
         String entryTestCaseId = firstNonBlank(metadata == null ? "" : metadata.testCaseId(), defaultTestCaseId);
