@@ -8,6 +8,11 @@ CANONICAL_DIR="docs/02-architecture/contracts"
 RUNTIME_DIR="schemas"
 
 required=(
+  dependencies_lock.v1.schema.yaml
+  source_bindings.v1.schema.yaml
+  runner_collection.v1.schema.yaml
+  runner_bundle.v1.schema.yaml
+  runner_runtime_binding.v1.schema.yaml
   coverage_report.v1.schema.yaml
   env_profile.v0.2.schema.yaml
   environment_binding.v0.2.schema.yaml

@@ -67,3 +67,6 @@ external systems for these samples.
 - Run: use the matching profile for mock or external endpoint.
 - Evidence: request metadata, response metadata, and result JSON.
 - Common failures: `GRPC_CALL_FAILED`, `UNSUPPORTED_OPERATION`.
+
+
+Portable source admission and bounded collection use the existing runner with external testware and an external SUT. See [portable runner contracts and limits](portable_runner.md). Native runtime bindings remain unbound/contract_only; module SIT is unchanged.

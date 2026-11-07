@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:regress:dependencies_lock.v1.schema.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "lock_id",
+    "lock_version",
+    "main_flow",
+    "repositories",
+    "artifacts",
+    "sut_expectations",
+    "relations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "runner-dependencies.lock.v1"
+    },
+    "lock_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "lock_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "main_flow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "owner_ref",
+        "source_repo",
+        "source_testrepo_version",
+        "sit_root",
+        "suite_artifact_id"
+      ],
+      "properties": {
+        "owner_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "source_repo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "source_testrepo_version": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "sit_root": {
+          "const": "tests/sit"
+        },
+        "suite_artifact_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      }
+    },
+    "repositories": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_repo",
+          "source_testrepo_version",
+          "commit_algorithm",
+          "source_owner_ref"
+        ],
+        "properties": {
+          "source_repo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "source_testrepo_version": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "commit_algorithm": {
+            "const": "git-sha1"
+          },
+          "source_owner_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifact_id",
+          "role",
+          "source_repo",
+          "source_commit",
+          "source_path",
+          "source_id",
+          "source_testrepo_version",
+          "sha256",
+          "bytes",
+          "source_owner_ref",
+          "cleanup_owner_ref",
+          "required"
+        ],
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "role": {
+            "enum": [
+              "suite",
+              "case",
+              "config_template",
+              "sanitized_data",
+              "oracle",
+              "cleanup_definition",
+              "provider_contract"
+            ]
+          },
+          "source_repo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "source_commit": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "source_path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,128}$"
+          },
+          "source_testrepo_version": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2097152
+          },
+          "source_owner_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "cleanup_owner_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "sut_expectations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sut_id",
+          "owner_ref",
+          "source_repo",
+          "expected_deployed_revision",
+          "readiness_binding_ref",
+          "cleanup_owner_ref"
+        ],
+        "properties": {
+          "sut_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "owner_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "source_repo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "expected_deployed_revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "readiness_binding_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "cleanup_owner_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    "relations": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from_artifact_id",
+          "relation",
+          "to_ref"
+        ],
+        "properties": {
+          "from_artifact_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "relation": {
+            "enum": [
+              "requires",
+              "oracle_for",
+              "config_for",
+              "data_for",
+              "cleanup_for",
+              "traceability"
+            ]
+          },
+          "to_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        }
+      }
+    }
+  },
+  "$comment": "D2 additionally enforces source qualified identities, committed lock at protected main X, main-only ancestor A/X/current blob equality and service HEAD equality, graph closure, safe paths, owner authority and exact byte pins. Existing product repo tests/sit only. No executable SSOT in PK/Cognee."
+}

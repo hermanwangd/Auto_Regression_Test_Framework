@@ -179,6 +179,18 @@
     <build>
         <resources>
             <resource>
+                <directory>schemas</directory>
+                <targetPath>schemas</targetPath>
+                <filtering>false</filtering>
+                <includes>
+                    <include>dependencies_lock.v1.schema.yaml</include>
+                    <include>source_bindings.v1.schema.yaml</include>
+                    <include>runner_bundle.v1.schema.yaml</include>
+                    <include>runner_collection.v1.schema.yaml</include>
+                    <include>runner_runtime_binding.v1.schema.yaml</include>
+                </includes>
+            </resource>
+            <resource>
                 <directory>src/main/resources</directory>
                 <filtering>false</filtering>
             </resource>

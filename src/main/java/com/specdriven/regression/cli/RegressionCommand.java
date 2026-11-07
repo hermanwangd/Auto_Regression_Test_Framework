@@ -275,6 +275,7 @@ public class RegressionCommand {
             return 0;
         }
         String command = args[0];
+        if (command.startsWith("runner-")) return new com.specdriven.regression.runner.RunnerCommand().execute(args, out, err);
         Map<String, String> options = parseOptions(args);
         Path root = Path.of(options.getOrDefault("--root", "."));
 

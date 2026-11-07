@@ -138,3 +138,6 @@ The module's host compatibility overlay compiles against the inspected read-only
 ## Coverage artifacts
 
 The framework report owns the derived `coverage.json`/`coverage.md` pair. The module validates identity, source digests and pair integrity outside the frozen canonical evidence tree, then pins them as `coverage_json` and `coverage_md` receipt artifacts. Invalid/missing coverage prevents a completion receipt. Canonical case outcome remains separate from coverage validity and publication. Unknown product inventory remains unknown even when framework/module Java code coverage is measured. Native provider fixtures do not establish native Swarm agent behavior coverage.
+
+
+Portable source admission and bounded collection use the existing runner with external testware and an external SUT. See [portable runner contracts and limits](portable_runner.md). Native runtime bindings remain unbound/contract_only; module SIT is unchanged.

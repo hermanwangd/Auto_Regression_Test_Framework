@@ -1,0 +1,511 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:regress:source_bindings.v1.schema.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "binding_id",
+    "source_binding_state",
+    "execution_binding_state",
+    "trusted_root_binding_sha256",
+    "lock",
+    "validator",
+    "repositories",
+    "artifacts",
+    "relations",
+    "sut_expectations",
+    "gaps",
+    "snapshot"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "runner-source-bindings.v1"
+    },
+    "binding_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "source_binding_state": {
+      "enum": [
+        "ADMITTED",
+        "BLOCKED"
+      ]
+    },
+    "execution_binding_state": {
+      "enum": [
+        "NOT_EVALUATED",
+        "BLOCKED",
+        "READY"
+      ]
+    },
+    "trusted_root_binding_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "lock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lock_id",
+        "lock_version",
+        "sha256",
+        "source_repo",
+        "source_testrepo_version",
+        "composition_root_version",
+        "artifact_source_testrepo_version",
+        "source_path"
+      ],
+      "properties": {
+        "lock_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "lock_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "source_repo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "source_testrepo_version": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "composition_root_version": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "artifact_source_testrepo_version": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "source_path": {
+          "const": "tests/sit/dependencies.lock"
+        }
+      }
+    },
+    "validator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "identity_state",
+        "artifact_sha256",
+        "source_commit",
+        "source_tree",
+        "schema_sha256"
+      ],
+      "properties": {
+        "version": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "identity_state": {
+          "enum": [
+            "SOURCE_CLASSES_UNBOUND_UNTIL_ACCEPTED_D2_JAR",
+            "PRODUCER_UNBOUND",
+            "JAR_OBSERVED",
+            "PINNED_JAR"
+          ]
+        },
+        "artifact_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_commit": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_tree": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "schema_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "repositories": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_repo",
+          "source_testrepo_version",
+          "commit_algorithm",
+          "source_owner_ref"
+        ],
+        "properties": {
+          "source_repo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "source_testrepo_version": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "commit_algorithm": {
+            "const": "git-sha1"
+          },
+          "source_owner_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifact_id",
+          "role",
+          "source_repo",
+          "source_commit",
+          "source_path",
+          "source_id",
+          "source_testrepo_version",
+          "sha256",
+          "bytes",
+          "source_owner_ref",
+          "cleanup_owner_ref",
+          "required"
+        ],
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "role": {
+            "enum": [
+              "suite",
+              "case",
+              "config_template",
+              "sanitized_data",
+              "oracle",
+              "cleanup_definition",
+              "provider_contract"
+            ]
+          },
+          "source_repo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "source_commit": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "source_path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,128}$"
+          },
+          "source_testrepo_version": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2097152
+          },
+          "source_owner_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "cleanup_owner_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "relations": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from_artifact_id",
+          "relation",
+          "to_ref"
+        ],
+        "properties": {
+          "from_artifact_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "relation": {
+            "enum": [
+              "requires",
+              "oracle_for",
+              "config_for",
+              "data_for",
+              "cleanup_for",
+              "traceability"
+            ]
+          },
+          "to_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        }
+      }
+    },
+    "sut_expectations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sut_id",
+          "owner_ref",
+          "source_repo",
+          "expected_deployed_revision",
+          "readiness_binding_ref",
+          "cleanup_owner_ref"
+        ],
+        "properties": {
+          "sut_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "owner_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "source_repo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "expected_deployed_revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "readiness_binding_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "cleanup_owner_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "owner_action"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "owner_action": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest_sha256",
+        "closure_sha256",
+        "artifact_count",
+        "total_bytes",
+        "classification"
+      ],
+      "properties": {
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "closure_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "artifact_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        },
+        "total_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777216
+        },
+        "classification": {
+          "const": "derived_execution_snapshot"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "trusted_root_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "binding_id",
+        "approved_lock_sha256",
+        "roots"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "runner-trusted-roots.v1"
+        },
+        "binding_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "approved_lock_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "roots": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source_repo",
+              "expected_commit",
+              "commit_algorithm",
+              "absolute_checkout_root",
+              "source_owner_ref",
+              "binding_evidence_sha256"
+            ],
+            "properties": {
+              "source_repo": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "expected_commit": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{40}$"
+              },
+              "commit_algorithm": {
+                "const": "git-sha1"
+              },
+              "absolute_checkout_root": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "source_owner_ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "binding_evidence_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$comment": "P2 consumes this metadata from an independently pinned trusted D2 process. No absolute roots/source/context text/raw logs. ADMITTED source is not approved execution; source-class identity is unbound until accepted JAR publication. JAR_OBSERVED is self-observation only; independently expected JAR and exact schema pins are mandatory for consumer trust. Source commit/tree unknown unless separately proven."
+}
