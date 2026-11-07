@@ -3535,7 +3535,9 @@ public class ContractBaselineService {
             for (Map.Entry<?, ?> entry : map.entrySet()) {
                 String key = stringValue(entry.getKey());
                 String childPath = fieldPath.isBlank() ? key : fieldPath + "." + key;
-                boolean childSecretContext = !providerContractBindingDefinition && (secretContext || secretKey(key));
+                boolean ordinaryConnectionHeader = ordinaryHttpConnectionHeader(fieldPath, key, entry.getValue());
+                boolean childSecretContext = !providerContractBindingDefinition
+                        && (secretContext || (secretKey(key) && !ordinaryConnectionHeader));
                 if (!"secret_ref".equals(key)) {
                     detectRawSecrets(filePath, childPath, entry.getValue(), findings, childSecretContext);
                 }
@@ -3573,6 +3575,18 @@ public class ContractBaselineService {
                     "",
                     "Replace raw secret value with `secret_ref`."));
         }
+    }
+
+    private boolean ordinaryHttpConnectionHeader(String parentPath, String key, Object value) {
+        if (!"connection".equalsIgnoreCase(key)
+                || !parentPath.matches("(?:steps\\[\\d+\\]|step_results\\[\\d+\\]"
+                        + "|provider_results\\[\\d+\\]\\.resolved_operation_results\\[\\d+\\])"
+                        + "\\.outputs\\.response\\.headers")
+                || !(value instanceof List<?> values) || values.isEmpty()) {
+            return false;
+        }
+        return values.stream().allMatch(item -> item instanceof String text
+                && text.matches("(?i)[ \\t]*(?:close|keep-alive)[ \\t]*(?:,[ \\t]*(?:close|keep-alive)[ \\t]*)*"));
     }
 
     private boolean secretKey(String key) {
