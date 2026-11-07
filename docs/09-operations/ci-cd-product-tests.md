@@ -1,10 +1,14 @@
 # Local tests in CI and SIT tests after deployment
 
+**Azure DevOps Services is the primary pipeline target.** Use the [Azure CI/CD setup guide](azure-devops-pipelines.md), [root CI YAML](../../azure-pipelines.yml) and [post-deployment stage template](../../pipelines/azure/sit-postdeploy.yml). The GitHub workflow wiring below remains a secondary public verification example. The shared gate contract and limitations apply to both integrations.
+
+## Secondary GitHub CI example
+
 [`local-product-tests.yml`](../../.github/workflows/local-product-tests.yml) verifies the framework and the separate Swarm module, then invokes the committed public SQLite C and NATS native harnesses. It runs on pull requests to main/release branches, pushes to main or `codex/sit-readiness`, and manual dispatch. Jobs remain serial with bounded JVM memory. Existing CI/security/release workflows retain their behavior.
 
 The public cases use the existing packaged module, providers, assertions, canonical evidence validation and report commands. The harnesses own disposable application lifecycle and deterministic fixture generation. Their reviewed committed `local-ci-policy` pins the harness, official asset lock, fixtures, contracts and independent expected values. It permits only declared runtime bindings and current build digests. Its actor is explicitly `local-ci-policy`; CI does not invent a fresh human review. Native public-product observations remain `framework_verification_only`, release-ineligible and local. See [SQLite reproduction](../../integrations/swarm-product-test/public-projects/sqlite/README.md) and [the module reproduction guide](product-testing-reproduction.md).
 
-## Protected CD entrypoint
+## Shared protected CD entrypoint and GitHub example
 
 [`sit-postdeploy.yml`](../../.github/workflows/sit-postdeploy.yml) is a reusable, same-repository workflow. A deployment owner calls it **after** its own protected deployment and independently reviewed handoff. It has no push trigger, provisioning, seeding, deployment, cloud access configuration or `local-ci-policy` authority. The existing Release workflow publishes artifacts; it is not a deployment pipeline and does not automatically call this gate.
 

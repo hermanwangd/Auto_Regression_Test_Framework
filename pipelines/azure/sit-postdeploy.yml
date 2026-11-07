@@ -1,0 +1,130 @@
+# Azure DevOps Services stage template. The caller owns the real deployment.
+parameters:
+- name: deploymentStage
+  type: string
+- name: environmentName
+  type: string
+- name: stageName
+  type: string
+  default: SitPostdeploy
+- name: deploymentArtifact
+  type: string
+  default: approved-sit-bundle
+- name: handoffSha256
+  type: string
+  default: ''
+- name: frameworkRepository
+  type: string
+  default: self
+- name: pool
+  type: object
+  default:
+    vmImage: ubuntu-latest
+- name: javaHome
+  type: string
+  default: ''
+
+stages:
+- stage: ${{ parameters.stageName }}
+  displayName: SIT tests after approved deployment
+  dependsOn: ${{ parameters.deploymentStage }}
+  condition: and(succeeded(), eq(dependencies['${{ parameters.deploymentStage }}'].result, 'Succeeded'))
+  jobs:
+  - deployment: SitPostdeployGate
+    displayName: Existing framework SIT gate
+    pool: ${{ parameters.pool }}
+    environment: ${{ parameters.environmentName }}
+    timeoutInMinutes: 10
+    cancelTimeoutInMinutes: 2
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: none
+          - checkout: ${{ parameters.frameworkRepository }}
+            path: s/product-test-framework
+            clean: true
+            persistCredentials: false
+          - ${{ if eq(parameters.javaHome, '') }}:
+            - task: JavaToolInstaller@0
+              inputs:
+                versionSpec: '17'
+                jdkArchitectureOption: x64
+                jdkSourceOption: PreInstalled
+          - bash: |
+              set -euo pipefail
+              python3 -B - <<'PY'
+              import os, re
+              if not re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', os.environ['CD_BUNDLE_NAME']):
+                  raise SystemExit('An explicit approved artifact name is required')
+              PY
+            displayName: Require one explicitly named bundle
+            env:
+              CD_BUNDLE_NAME: ${{ parameters.deploymentArtifact }}
+          - task: DownloadPipelineArtifact@2
+            displayName: Exact approved bundle from this pipeline run
+            inputs:
+              buildType: current
+              artifactName: ${{ parameters.deploymentArtifact }}
+              targetPath: '$(Pipeline.Workspace)/${{ parameters.stageName }}-bundle-$(Build.BuildId)-$(System.JobAttempt)'
+          - bash: |
+              set -euo pipefail
+              python3 -B scripts/cd/run-sit-postdeploy.py \
+                --bundle "$CD_INPUT_ROOT" \
+                --expected-handoff-sha256 "$CD_HANDOFF_SHA256" \
+                --output "$CD_EVIDENCE_ROOT" --java-home "$JAVA_HOME"
+            displayName: Existing readiness, execution and canonical evidence gate
+            workingDirectory: $(Pipeline.Workspace)/s/product-test-framework
+            env:
+              PYTHONDONTWRITEBYTECODE: '1'
+              CD_HANDOFF_SHA256: ${{ parameters.handoffSha256 }}
+              CD_INPUT_ROOT: '$(Pipeline.Workspace)/${{ parameters.stageName }}-bundle-$(Build.BuildId)-$(System.JobAttempt)'
+              CD_EVIDENCE_ROOT: '$(Agent.TempDirectory)/${{ parameters.stageName }}-$(Build.BuildId)-$(System.JobAttempt)'
+              ${{ if ne(parameters.javaHome, '') }}:
+                JAVA_HOME: ${{ parameters.javaHome }}
+          - bash: |
+              set -euo pipefail
+              python3 -B - <<'PY'
+              import json, os, shutil
+              from pathlib import Path
+              source = Path(os.environ['CD_EVIDENCE_ROOT']).resolve()
+              target = Path(os.environ['CD_STAGED_ROOT'])
+              target.mkdir(parents=True, exist_ok=False)
+              files = []
+              gate = source / 'gate-result.json'
+              metadata = {}
+              if gate.is_file() and not gate.is_symlink():
+                  metadata = json.loads(gate.read_text())
+                  files.append(gate)
+              # The existing gate sets this only after canonical validation/report.
+              if metadata.get('framework_verdict') in ('passed', 'failed', 'blocked', 'skipped'):
+                  canonical = source / 'runtime/target/regression'
+                  files.extend(p for p in canonical.rglob('*') if p.is_file())
+              collected = []
+              for path in files:
+                  for node in (path, *path.parents):
+                      if node.is_symlink():
+                          raise RuntimeError('Symlink evidence is prohibited')
+                      if node == source:
+                          break
+                  path.resolve(strict=True).relative_to(source)
+                  relative = path.relative_to(source)
+                  destination = target / relative
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(path, destination)
+                  collected.append(str(relative))
+              (target / 'collection.json').write_text(json.dumps({'files': collected, 'claim': 'artifact_collection_only'}, indent=2) + '\n')
+              PY
+            displayName: Stage gate metadata and validated canonical evidence only
+            condition: always()
+            env:
+              PYTHONDONTWRITEBYTECODE: '1'
+              CD_EVIDENCE_ROOT: '$(Agent.TempDirectory)/${{ parameters.stageName }}-$(Build.BuildId)-$(System.JobAttempt)'
+              CD_STAGED_ROOT: '$(Build.ArtifactStagingDirectory)/${{ parameters.stageName }}-$(Build.BuildId)-$(System.JobAttempt)'
+          - task: PublishPipelineArtifact@1
+            displayName: Publish allowlisted gate evidence
+            condition: always()
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)/${{ parameters.stageName }}-$(Build.BuildId)-$(System.JobAttempt)'
+              artifact: 'sit-gate-${{ parameters.stageName }}-$(Build.BuildId)-$(System.JobAttempt)'
+              publishLocation: pipeline

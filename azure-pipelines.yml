@@ -1,0 +1,155 @@
+# Azure DevOps Services. Azure Repos PR validation is configured by branch policy.
+# The pr section applies when this pipeline is connected to the GitHub repository.
+trigger:
+  branches:
+    include: [main, 'release/*', codex/sit-readiness]
+pr:
+  branches:
+    include: [main, 'release/*']
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  MAVEN_OPTS: '-Xmx1024m -XX:MaxMetaspaceSize=384m'
+  PYTHONDONTWRITEBYTECODE: '1'
+  CI_WORK: '$(Agent.TempDirectory)/public-products-$(Build.BuildId)-$(System.JobAttempt)'
+  SQLITE_CI_POLICY_SHA256: e70903e08139a1a2c4b27666cf310a47fcf0626e94be8b5b5420b6b039e79353
+  NATS_CI_POLICY_SHA256: bcefe3fe2e8e739951cd464401ae2ad6738db92390644d06a1b2e41f72129bc6
+
+stages:
+- stage: LocalTests
+  displayName: Local product tests (CI)
+  jobs:
+  - job: FrameworkAndProducts
+    timeoutInMinutes: 50
+    steps:
+    - checkout: self
+      persistCredentials: false
+
+    - task: JavaToolInstaller@0
+      inputs:
+        versionSpec: '17'
+        jdkArchitectureOption: x64
+        jdkSourceOption: PreInstalled
+
+    - bash: bash scripts/ci/maven-verify-with-diagnostics.sh
+      displayName: Framework verification and packaging
+
+    - bash: ./mvnw -B -ntp -f integrations/swarm-product-test/pom.xml verify
+      displayName: Swarm module verification and packaging
+
+    - bash: |
+        set -euo pipefail
+        python3 -B -m unittest discover -s scripts/cd/tests -v
+        python3 -B -m unittest discover -s integrations/swarm-product-test/scripts/tests -v
+        python3 -B -m unittest discover -s scripts/public-projects -p test_nats.py -v
+      displayName: Gate and public harness boundary tests (no live SIT)
+
+    - bash: |
+        set -euo pipefail
+        python3 -B - <<'PY'
+        import hashlib
+        from pathlib import Path
+        from xml.etree import ElementTree
+        root = Path.cwd()
+        version = ElementTree.parse('pom.xml').getroot().find('{http://maven.apache.org/POM/4.0.0}version').text
+        jar = root / 'target' / ('spec-driven-auto-regression-' + version + '.jar')
+        module = root / 'integrations/swarm-product-test/target/swarm-product-test-1.0.0-cli.jar'
+        values = {'CI_FRAMEWORK_JAR': str(jar), 'CI_FRAMEWORK_SHA256': hashlib.sha256(jar.read_bytes()).hexdigest(),
+                  'CI_MODULE_JAR': str(module), 'CI_MODULE_SHA256': hashlib.sha256(module.read_bytes()).hexdigest()}
+        for key, value in values.items():
+            print('##vso[task.setvariable variable=' + key + ';isReadOnly=true]' + value)
+        PY
+      displayName: Pin trusted build artifacts for the reviewed local policy
+
+    - bash: |
+        set -euo pipefail
+        python3 -B integrations/swarm-product-test/scripts/public-cli-project.py fetch \
+          --project sqlite --cache-dir "$CI_WORK/sqlite-cache"
+        python3 -B integrations/swarm-product-test/scripts/public-cli-project.py prepare \
+          --project sqlite --cache-dir "$CI_WORK/sqlite-cache" --evidence-dir "$CI_WORK/sqlite-evidence" \
+          --framework-jar "$CI_FRAMEWORK_JAR" --framework-sha256 "$CI_FRAMEWORK_SHA256" \
+          --module-sha256 "$CI_MODULE_SHA256" --java-home "$JAVA_HOME" \
+          --local-ci-policy integrations/swarm-product-test/public-projects/sqlite/local-ci-policy.json \
+          --policy-sha256 "$SQLITE_CI_POLICY_SHA256"
+        python3 -B integrations/swarm-product-test/scripts/public-cli-project.py verify \
+          --evidence-dir "$CI_WORK/sqlite-evidence" --java-home "$JAVA_HOME" \
+          --local-ci-policy integrations/swarm-product-test/public-projects/sqlite/local-ci-policy.json \
+          --policy-sha256 "$SQLITE_CI_POLICY_SHA256"
+      displayName: SQLite C CLI through the module and framework
+
+    - bash: |
+        set -euo pipefail
+        python3 -B scripts/public-projects/nats.py verify \
+          --output "$CI_WORK/nats-evidence" \
+          --framework-jar "$CI_FRAMEWORK_JAR" --framework-sha256 "$CI_FRAMEWORK_SHA256" \
+          --module-cli "$CI_MODULE_JAR" --module-sha256 "$CI_MODULE_SHA256" \
+          --ci-policy-sha256 "$NATS_CI_POLICY_SHA256"
+      displayName: Native Go NATS through the module and framework
+
+    - task: PublishTestResults@2
+      condition: always()
+      inputs:
+        testResultsFormat: JUnit
+        searchFolder: '$(Build.SourcesDirectory)'
+        testResultsFiles: |
+          target/surefire-reports/TEST-*.xml
+          target/failsafe-reports/TEST-*.xml
+          integrations/swarm-product-test/target/surefire-reports/TEST-*.xml
+        mergeTestResults: true
+        failTaskOnFailedTests: true
+        failTaskOnFailureToPublishResults: true
+        failTaskOnMissingResultsFile: true
+        testRunTitle: 'Framework and module - $(Build.BuildId)'
+
+    - bash: |
+        set -euo pipefail
+        mkdir -p -- "$CI_WORK/sqlite-evidence" "$CI_WORK/nats-evidence" "$EVIDENCE_STAGE"
+      condition: always()
+      displayName: Prepare bounded evidence staging
+      env:
+        EVIDENCE_STAGE: '$(Build.ArtifactStagingDirectory)/local-product-evidence'
+
+    - task: CopyFiles@2
+      condition: always()
+      inputs:
+        SourceFolder: '$(Build.SourcesDirectory)'
+        Contents: |
+          target/surefire-reports/TEST-*.xml
+          target/failsafe-reports/TEST-*.xml
+          integrations/swarm-product-test/target/surefire-reports/TEST-*.xml
+        TargetFolder: '$(Build.ArtifactStagingDirectory)/local-product-evidence/framework'
+
+    - task: CopyFiles@2
+      condition: always()
+      inputs:
+        SourceFolder: '$(CI_WORK)/sqlite-evidence'
+        Contents: |
+          verification.json
+          prepared-plan.json
+          run-*/receipt.json
+          run-*/smoke-evidence.json
+          run-*/outputs/product-test-*/framework-report.json
+          run-*/outputs/**/target/regression/**
+        TargetFolder: '$(Build.ArtifactStagingDirectory)/local-product-evidence/sqlite'
+
+    - task: CopyFiles@2
+      condition: always()
+      inputs:
+        SourceFolder: '$(CI_WORK)/nats-evidence'
+        Contents: |
+          **/receipt.json
+          **/smoke-evidence.json
+          execution/*/outputs/product-test-*/framework-report.json
+          execution/summary.json
+          execution/lifecycle.json
+          **/target/regression/**
+        TargetFolder: '$(Build.ArtifactStagingDirectory)/local-product-evidence/nats'
+
+    - task: PublishPipelineArtifact@1
+      condition: always()
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/local-product-evidence'
+        artifact: 'local-product-tests-$(Build.BuildId)-$(System.JobAttempt)'
+        publishLocation: pipeline
