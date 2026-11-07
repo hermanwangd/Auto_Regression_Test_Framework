@@ -1,0 +1,5 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Version1 byte-only ACKs are unsupported and cannot authorize cleanup; use receiver-ack.v2.schema.json with actual collector and stop joins.",
+  "not": {}
+}

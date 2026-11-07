@@ -1,0 +1,79 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "authority",
+    "run_id",
+    "correlation_id",
+    "nonce",
+    "resource",
+    "collection_spec_sha256",
+    "source_catalog_sha256",
+    "receiver_receipt_sha256",
+    "execution_sha256",
+    "cleanup_catalog_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "receiver-ack.v2"
+    },
+    "authority": {
+      "const": "independent_receiver"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "correlation_id": {
+      "type": "string"
+    },
+    "nonce": {
+      "type": "string"
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "device",
+        "inode",
+        "uid"
+      ],
+      "properties": {
+        "device": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "inode": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uid": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "collection_spec_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_catalog_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "receiver_receipt_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "execution_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "cleanup_catalog_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Version2 requires actual accepted collector/marker/stop semantic joins. Version1 byte-only proofs are ineligible."
+}

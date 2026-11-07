@@ -1,0 +1,43 @@
+- name: Require explicit local public fixture boundary
+  ansible.builtin.assert:
+    that:
+      - framework_runner_local_fixture | bool
+      - inventory_hostname == 'localhost'
+      - ansible_connection == 'local'
+      - not (ansible_become | default(false) | bool)
+      - framework_runner_manifest_sha256 is match('^[0-9a-f]{64}$')
+      - framework_runner_helper_sha256 is match('^[0-9a-f]{64}$')
+      - framework_runner_source is match('^/')
+      - framework_runner_target is match('^/')
+    fail_msg: Remote lifecycle not implemented; stage is only an explicit owned localhost fixture
+- name: Inspect protected package helper
+  ansible.builtin.stat:
+    path: '{{ role_path }}/../../../scripts/deployment.py'
+    checksum_algorithm: sha256
+    follow: false
+  register: framework_runner_helper_stat
+- name: Reject changed or linked helper
+  ansible.builtin.assert:
+    that:
+      - framework_runner_helper_stat.stat.isreg | default(false)
+      - not (framework_runner_helper_stat.stat.islnk | default(true))
+      - framework_runner_helper_stat.stat.nlink == 1
+      - framework_runner_helper_stat.stat.checksum == framework_runner_helper_sha256
+- name: Stage finite pinned catalog with nonroot ownership and readback
+  ansible.builtin.command:
+    argv:
+      - '{{ ansible_playbook_python }}'
+      - -B
+      - '{{ role_path }}/../../../scripts/deployment.py'
+      - stage
+      - --source
+      - '{{ framework_runner_source }}'
+      - --target
+      - '{{ framework_runner_target }}'
+      - --manifest
+      - '{{ framework_runner_manifest }}'
+      - --expected-sha256
+      - '{{ framework_runner_manifest_sha256 }}'
+  register: framework_runner_stage_result
+  changed_when: '(framework_runner_stage_result.stdout | from_json).changed | default(false)'
+  failed_when: framework_runner_stage_result.rc != 0

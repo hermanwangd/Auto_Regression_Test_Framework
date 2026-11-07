@@ -1,0 +1,6 @@
+- name: Explicit owned framework runner package
+  hosts: owned_runners
+  gather_facts: false
+  become: false
+  roles:
+    - framework_runner

@@ -1,0 +1,16 @@
+framework_runner_enabled: false
+framework_runner_action: disabled
+framework_runner_local_fixture: false
+framework_runner_source: UNBOUND
+framework_runner_target: UNBOUND
+framework_runner_manifest: UNBOUND
+framework_runner_manifest_sha256: UNBOUND
+framework_runner_helper_sha256: UNBOUND
+framework_runner_secret_refs: []
+framework_runner_cleanup_enabled: false
+framework_runner_binding: UNBOUND
+framework_runner_binding_sha256: UNBOUND
+framework_runner_composition_sha256: UNBOUND
+framework_runner_supervision_sha256: UNBOUND
+framework_runner_ack: UNBOUND
+framework_runner_ack_sha256: UNBOUND

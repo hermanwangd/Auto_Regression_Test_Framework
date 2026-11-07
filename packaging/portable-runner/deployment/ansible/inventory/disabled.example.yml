@@ -1,0 +1,5 @@
+# Empty group by default. Never add company hosts to this public example.
+all:
+  children:
+    owned_runners:
+      hosts: {}

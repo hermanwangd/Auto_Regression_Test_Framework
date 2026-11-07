@@ -1,0 +1,67 @@
+{{- include "framework-runner.admit" . -}}
+{{- if .Values.deployment.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-%s" .Values.run.id .Values.deployment.phase | quote }}
+  annotations:
+    helm.sh/resource-policy: keep
+    framework/transport: retained_source_only-NOT-full-retrieval
+    framework/correlation-id: {{ .Values.run.correlationId | quote }}
+    framework/framework-sha256: {{ .Values.pins.frameworkSha256 | quote }}
+    framework/handoff-sha256: {{ .Values.pins.handoffSha256 | quote }}
+  labels:
+    app.kubernetes.io/name: framework-runner
+    framework/run-id: {{ .Values.run.id | quote }}
+    framework/owner-nonce: {{ .Values.run.nonce | quote }}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.deadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        framework/run-id: {{ .Values.run.id | quote }}
+        framework/owner-nonce: {{ .Values.run.nonce | quote }}
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: framework-runner
+          image: {{ .Values.image | quote }}
+          imagePullPolicy: IfNotPresent
+{{- if eq .Values.deployment.phase "produce" }}
+          args: ["--bundle", "/input", "--handoff", "deployment.json", "--expected-handoff-sha256", {{ .Values.pins.handoffSha256 | quote }}, "--output", {{ printf "/output/%s/produced" .Values.run.id | quote }}, "--java-home", "/opt/java/openjdk"]
+{{- else }}
+          command: ["/opt/java/openjdk/bin/java", "-jar", "/opt/tool/framework.jar"]
+          args: ["runner-import", "--collection-spec", "/input/spec.json", "--expected-spec-sha256", {{ .Values.pins.collectionSpecSha256 | quote }}, "--source", {{ printf "/output/%s/produced" .Values.run.id | quote }}, "--out", {{ printf "/output/%s/local-saved" .Values.run.id | quote }}]
+{{- end }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          volumeMounts:
+            - {name: inputs, mountPath: /input, readOnly: true}
+            - {name: output, mountPath: /output}
+            - {name: temp, mountPath: /tmp}
+      volumes:
+        - name: inputs
+          persistentVolumeClaim:
+            claimName: {{ .Values.storage.inputClaim | quote }}
+            readOnly: true
+        - name: output
+          persistentVolumeClaim:
+            claimName: {{ .Values.storage.outputClaim | quote }}
+        - name: temp
+          emptyDir:
+            sizeLimit: 128Mi
+{{- end }}

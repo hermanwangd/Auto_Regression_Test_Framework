@@ -1,0 +1,540 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "deployment-binding.v1"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "type": "string"
+        },
+        "nonce": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "framework_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "handoff_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "owner_uid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "storage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "input_claim": {
+              "type": "string"
+            },
+            "output_claim": {
+              "type": "string"
+            },
+            "exclusive": {
+              "const": true
+            },
+            "writable_uid": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "input_claim",
+            "output_claim",
+            "exclusive",
+            "writable_uid"
+          ]
+        },
+        "transport": {
+          "const": "retained_source_only"
+        },
+        "secret_refs": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "secret_materializer": {
+          "const": "none"
+        }
+      },
+      "required": [
+        "schema_version",
+        "enabled"
+      ],
+      "if": {
+        "properties": {
+          "enabled": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "schema_version",
+          "enabled",
+          "run_id",
+          "correlation_id",
+          "nonce",
+          "image",
+          "framework_sha256",
+          "handoff_sha256",
+          "owner_uid",
+          "storage",
+          "transport",
+          "secret_refs",
+          "secret_materializer"
+        ]
+      },
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "enabled",
+        "run_id",
+        "correlation_id",
+        "nonce",
+        "deadline_seconds",
+        "target",
+        "run_parent",
+        "receiver_parent",
+        "tools",
+        "bundle",
+        "collection_spec",
+        "source_catalog",
+        "cleanup_catalog"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "deployment-composition.v1"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "type": "string"
+        },
+        "nonce": {
+          "type": "string"
+        },
+        "deadline_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600
+        },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "uid",
+            "root_identity",
+            "inventory_id",
+            "host_key_sha256"
+          ],
+          "properties": {
+            "mode": {
+              "enum": [
+                "public_local_fixture",
+                "bound_vm"
+              ]
+            },
+            "uid": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "root_identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "device",
+                "inode",
+                "uid"
+              ],
+              "properties": {
+                "device": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "inode": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "uid": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "inventory_id": {
+              "type": "string"
+            },
+            "host_key_sha256": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "run_parent": {
+          "type": "string"
+        },
+        "receiver_parent": {
+          "type": "string"
+        },
+        "tools": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "producer",
+            "framework_jar",
+            "wrapper",
+            "java",
+            "python"
+          ],
+          "properties": {
+            "producer": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "bytes",
+                "sha256",
+                "kind"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100663296
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "enum": [
+                    "producer",
+                    "framework_jar",
+                    "wrapper",
+                    "java",
+                    "python",
+                    "metadata"
+                  ]
+                }
+              }
+            },
+            "framework_jar": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "bytes",
+                "sha256",
+                "kind"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100663296
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "enum": [
+                    "producer",
+                    "framework_jar",
+                    "wrapper",
+                    "java",
+                    "python",
+                    "metadata"
+                  ]
+                }
+              }
+            },
+            "wrapper": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "bytes",
+                "sha256",
+                "kind"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100663296
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "enum": [
+                    "producer",
+                    "framework_jar",
+                    "wrapper",
+                    "java",
+                    "python",
+                    "metadata"
+                  ]
+                }
+              }
+            },
+            "java": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "bytes",
+                "sha256",
+                "kind"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100663296
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "enum": [
+                    "producer",
+                    "framework_jar",
+                    "wrapper",
+                    "java",
+                    "python",
+                    "metadata"
+                  ]
+                }
+              }
+            },
+            "python": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "bytes",
+                "sha256",
+                "kind"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100663296
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "enum": [
+                    "producer",
+                    "framework_jar",
+                    "wrapper",
+                    "java",
+                    "python",
+                    "metadata"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "bundle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "root",
+            "handoff",
+            "sha256"
+          ],
+          "properties": {
+            "root": {
+              "type": "string"
+            },
+            "handoff": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "collection_spec": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "bytes",
+                "sha256",
+                "kind"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100663296
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "enum": [
+                    "producer",
+                    "framework_jar",
+                    "wrapper",
+                    "java",
+                    "python",
+                    "metadata"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_catalog": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "bytes",
+                "sha256",
+                "kind"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100663296
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "enum": [
+                    "producer",
+                    "framework_jar",
+                    "wrapper",
+                    "java",
+                    "python",
+                    "metadata"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cleanup_catalog": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "bytes",
+                "sha256",
+                "kind"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100663296
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "enum": [
+                    "producer",
+                    "framework_jar",
+                    "wrapper",
+                    "java",
+                    "python",
+                    "metadata"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

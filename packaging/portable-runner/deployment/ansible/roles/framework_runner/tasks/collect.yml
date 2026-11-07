@@ -1,0 +1,4 @@
+# Local composition performs bounded regular-file materialization and accepted
+# controller CLI verification. Remote fetch is separately gated in fetch.yml.
+- name: Run protected fixed local collector or receiver action
+  ansible.builtin.include_tasks: execute.yml

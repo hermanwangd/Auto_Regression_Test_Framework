@@ -1,0 +1,8 @@
+# No call to this task is made by the local-only example. A future bound SSH
+# transport must establish immutable source isolation AND per-fetch hard budgets.
+# Core fetch lacks a streaming byte limit; an after-fetch size check is insufficient.
+- name: Refuse a falsely bounded native SSH fetch
+  ansible.builtin.fail:
+    msg: >-
+      Native SSH fetch remains BLOCKED_SOURCE_ISOLATION_AND_STREAM_BUDGET_UNOBSERVED.
+      Only bounded package-local receive is implemented. No slurp/archive/shell fallback.

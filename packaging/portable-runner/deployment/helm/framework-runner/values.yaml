@@ -1,0 +1,37 @@
+{
+  "deployment": {
+    "enabled": false,
+    "phase": "produce"
+  },
+  "image": "",
+  "run": {
+    "id": "",
+    "correlationId": "",
+    "nonce": ""
+  },
+  "pins": {
+    "frameworkSha256": "",
+    "handoffSha256": "",
+    "collectionSpecSha256": ""
+  },
+  "storage": {
+    "inputClaim": "",
+    "outputClaim": "",
+    "exclusive": false,
+    "writableUid": 65532
+  },
+  "transport": "UNBOUND",
+  "secretRefs": [],
+  "secretMaterializer": "UNBOUND",
+  "deadlineSeconds": 300,
+  "resources": {
+    "requests": {
+      "cpu": "100m",
+      "memory": "256Mi"
+    },
+    "limits": {
+      "cpu": "1",
+      "memory": "1Gi"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+- name: Validate finite package action
+  ansible.builtin.assert:
+    that:
+      - framework_runner_enabled is boolean
+      - framework_runner_action in ['disabled', 'stage', 'execute', 'collect', 'receive', 'cleanup']
+      - framework_runner_secret_refs | length == 0
+      - framework_runner_action == 'cleanup' or not framework_runner_cleanup_enabled
+    fail_msg: Unsupported secret bridge or cleanup; source evidence is retained
+- name: Stage explicitly owned public localhost fixture
+  ansible.builtin.include_tasks: stage.yml
+  when: framework_runner_enabled and framework_runner_action == 'stage'
+- name: Native execution gate
+  ansible.builtin.include_tasks: execute.yml
+  when: framework_runner_enabled and framework_runner_action == 'execute'
+- name: Full transport gate
+  ansible.builtin.include_tasks: collect.yml
+  when: framework_runner_enabled and framework_runner_action in ['collect', 'receive']
+- name: Cleanup gate
+  ansible.builtin.include_tasks: cleanup.yml
+  when: framework_runner_enabled and framework_runner_action == 'cleanup'

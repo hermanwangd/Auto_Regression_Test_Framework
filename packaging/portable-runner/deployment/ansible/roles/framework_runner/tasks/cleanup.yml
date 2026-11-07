@@ -1,0 +1,9 @@
+- name: Require protected external ACK before any cleanup command
+  ansible.builtin.assert:
+    that:
+      - framework_runner_cleanup_enabled | bool
+      - framework_runner_ack_sha256 is match('^[0-9a-f]{64}$')
+      - framework_runner_ack is match('^/')
+    fail_msg: Missing external receiver authority; source is retained
+- name: Run only exact verified stopped run-directory cleanup
+  ansible.builtin.include_tasks: execute.yml
