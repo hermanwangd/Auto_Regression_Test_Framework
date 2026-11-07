@@ -27,6 +27,10 @@ final class Json {
         return mapper;
     }
     private Json() {}
+    static JsonNode readMetadataUtf8(byte[] raw) throws IOException {
+        String decoded=java.nio.charset.StandardCharsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(raw)).toString();
+        return MAPPER.readTree(decoded);
+    }
     static JsonNode read(Path file) throws IOException { return MAPPER.readTree(LocalFiles.read(file, 2 * 1024 * 1024)); }
     /** Only a digest-bound finite gRPC handoff admits the larger canonical payload budget. */
     static boolean reviewedGrpc(ProductTestRequest request) throws IOException {

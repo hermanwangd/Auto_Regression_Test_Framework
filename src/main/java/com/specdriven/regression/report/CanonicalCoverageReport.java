@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.node.*;
 import com.specdriven.regression.contract.ContractBaselineService;
 import com.specdriven.regression.contract.ResultDocumentReader;
 import com.specdriven.regression.evidence.EvidenceHardeningService;
+import com.specdriven.regression.producttest.KnowledgeSelectionProof;
 import java.io.*;
 import java.nio.file.*;
 import java.security.MessageDigest;
@@ -37,10 +38,10 @@ final class CanonicalCoverageReport {
     private record Metric(Integer denominator, Integer mapped, Integer executed, Integer satisfied,
                           Double mapped_percent, Double executed_percent, Double satisfied_percent) {}
     private record Candidate(Path path, JsonNode result, JsonNode provenance, ObjectNode subject,
-                             Instant start, Instant end, String evidence, boolean compatible, String digest) {}
+                             Instant start, Instant end, String evidence, boolean compatible, String digest, boolean knowledgeValid) {}
     private record Chosen(Candidate source, JsonNode test) {}
     private record CaseIdentity(String project, String workspace, JsonNode repositoryRevisions,
-                                String suite, String profile, String testCase) {}
+                                String suite, String profile, String testCase, String qualifiedCaseRef) {}
 
     CanonicalCoverageReportResult project(Path result, Path output, Path catalogPath, Path selectionPath) {
         try { return generate(result, output, catalogPath, selectionPath); }
@@ -94,13 +95,30 @@ final class CanonicalCoverageReport {
                     "selection_state",selected ? "SELECTED" : c.compatible ? "SUPERSEDED" : "INCOMPATIBLE",
                     "reason",selected ? c.evidence : c.compatible ? "newer_identity_compatible_result" : "identity_mismatch"));
         }
-        ArrayNode cases = document.putArray("cases");
+        ArrayNode oracleTraces=document.putArray("oracle_trace");Set<String>oracleTraceIds=new HashSet<>();
+        ArrayNode cases = document.putArray("cases"),knowledgeTrace=document.putArray("knowledge_trace"),sourceCaseSelection=document.putArray("source_case_selection");
+        Set<Candidate>projectedSourceSelections=Collections.newSetFromMap(new IdentityHashMap<>());
         for (Chosen v : chosen.values()) {
             Candidate c=v.source; String id=required(v.test,"test_case_id");
-            cases.add(obj("test_case_id",id,"run_id",c.result.get("run_id"),"batch_id",c.result.get("batch_id"),
+            ObjectNode caseRow=obj("test_case_id",id,"run_id",c.result.get("run_id"),"batch_id",c.result.get("batch_id"),
                     "source_result",c.path.toString(),"canonical_outcome",outcome(text(v.test,"status")),
                     "evidence_state",c.evidence,"expected_negative",obj("expected",null,"detection","UNKNOWN","evidence_refs",List.of(),"reason","independent_negative_detection_evidence_missing"),
-                    "mapping_refs",mappingRefs(c.provenance,id),"evidence_refs",references(c.path)));
+                    "mapping_refs",mappingRefs(c.provenance,id),"evidence_refs",references(c.path));
+            if(reviewedV2(c.provenance))caseRow.put("qualified_case_ref",qualifiedCase(c,id));cases.add(caseRow);
+            ArrayNode caseTraceRefs=caseRow.putArray("oracle_trace_refs");
+            for(JsonNode trace:oracleTrace(c,v.test,catalog)) {
+                String traceId=required(trace,"trace_id");
+                if(oracleTraceIds.add(traceId))oracleTraces.add(trace);
+                if(!contains(caseTraceRefs,traceId))caseTraceRefs.add(traceId);
+                require(oracleTraces.size()<=10000,"too many aggregate oracle trace rows");
+            }
+            if(c.knowledgeValid){
+                for(JsonNode sourceRow:c.provenance.path("knowledge_trace"))if(id.equals(text(sourceRow,"test_case_id"))){
+                    ObjectNode row=(ObjectNode)sourceRow.deepCopy();row.put("run_id",text(c.result,"run_id")).put("batch_id",text(c.result,"batch_id")).put("source_result",c.path.toString()).put("source_result_sha256",c.digest).put("canonical_outcome",outcome(text(v.test,"status"))).put("evidence_state",c.evidence).put("historical_context_state","VALID_AT_INVOCATION").put("new_invocation_eligibility","NOT_EVALUATED_REQUIRES_FRESH_REVIEW");
+                    for(String field:List.of("knowledge_context_scope","source_lock","source_repository_versions"))row.set(field,c.provenance.path(field).deepCopy());row.set("scope",c.subject.deepCopy());row.set("evidence_refs",references(c.path));knowledgeTrace.add(row);
+                }
+                if(projectedSourceSelections.add(c))for(JsonNode sourceRow:c.provenance.path("source_case_selection")){ObjectNode row=(ObjectNode)sourceRow.deepCopy();row.put("run_id",text(c.result,"run_id")).put("batch_id",text(c.result,"batch_id")).put("source_result",c.path.toString()).put("source_result_sha256",c.digest);sourceCaseSelection.add(row);}
+            }
         }
         ObjectNode inventory = inventory(catalog,catalogPath,primary.subject);
         document.set("inventory",inventory);
@@ -114,6 +132,9 @@ final class CanonicalCoverageReport {
         } else {
             projectEntities(catalog,cases,entities,metrics);
         }
+        entityOracleRefs(entities,oracleTraces);
+        if(!oracleTraces.isEmpty())gap("oracle_independence_unknown","oracle_trace",primary.path,
+                "Review separately evidenced oracle independence; source binding and a declared assertion reference do not prove independence or evaluated assertions.",false);
         ObjectNode observations=document.putObject("observations");
         observations.put("selected_case_count",cases.size());
         observations.set("declared_requirement_mapping",primary.provenance.path("requirement_mapping").isArray()
@@ -122,7 +143,7 @@ final class CanonicalCoverageReport {
         Set<String> mappedTests=new HashSet<>();
         for(JsonNode entity:entities) for(JsonNode test:entity.path("test_case_ids")) mappedTests.add(test.asText());
         ArrayNode unmapped=observations.putArray("unmapped_test_case_ids");
-        for(JsonNode c:cases) if(!mappedTests.contains(c.path("test_case_id").asText())) unmapped.add(c.path("test_case_id").asText());
+        for(JsonNode c:cases) if(!mappedTests.contains(caseKey(c))) unmapped.add(caseKey(c));
         document.set("breakdowns",breakdowns(chosen));
                 require(!(catalog != null && catalog.has("code_coverage_artifacts") && selection != null && selection.has("code_coverage_artifacts")), "code artifacts supplied in both catalog and selection");
         JsonNode codeSource = selection != null && selection.has("code_coverage_artifacts") ? selection : catalog;
@@ -190,7 +211,10 @@ final class CanonicalCoverageReport {
             try { Path summary=contained(path.getParent(),text(d,"suite_summary_ref")); pin(summary,"suite_summary",text(d,"run_id")); }
             catch(Exception e) { if("VALID".equals(state)) state="MISSING"; gap("suite_summary_missing",text(d,"run_id"),path,"Restore the canonical suite summary.",true); }
         }
-        return new Candidate(path,d,provenance,subject,start,end,state,compatible,digest);
+        boolean knowledgeValid=false;
+        if(reviewedV2(provenance))try{KnowledgeSelectionProof.validateProvenance(JSON.convertValue(provenance,Map.class),JSON.convertValue(d,Map.class));knowledgeValid=true;}
+        catch(IllegalArgumentException invalidKnowledge){state="INVALID";gap("knowledge_provenance_invalid",text(d,"run_id"),path,"Restore exact recorded knowledge, source, case, oracle and invocation joins.",true);}
+        return new Candidate(path,d,provenance,subject,start,end,state,compatible,digest,knowledgeValid);
     }
 
     private Map<CaseIdentity,Chosen> select(List<Candidate> candidates) {
@@ -202,7 +226,7 @@ final class CanonicalCoverageReport {
                 String id=required(t,"test_case_id");
                 // JsonNode object equality/hashCode compare repository maps structurally, regardless of key order.
                 CaseIdentity key=new CaseIdentity(text(c.subject,"project_ref"),text(c.subject,"workspace_ref"),
-                        c.subject.path("repository_revisions").deepCopy(),text(c.result,"suite_id"),text(c.result,"profile"),id);
+                        c.subject.path("repository_revisions").deepCopy(),text(c.result,"suite_id"),text(c.result,"profile"),id,reviewedV2(c.provenance)?qualifiedCase(c,id):"");
                 Chosen old=result.get(key);
                 if(old==null) result.put(key,new Chosen(c,t));
                 else {
@@ -240,7 +264,7 @@ final class CanonicalCoverageReport {
     }
     private void projectEntities(JsonNode catalog,ArrayNode cases,ArrayNode entities,ObjectNode metrics) {
         Map<String,JsonNode> reqs=unique(array(catalog,"requirements",10000)), acs=unique(array(catalog,"acceptance_criteria",10000));
-        Map<String,JsonNode> tests=new HashMap<>(); for(JsonNode c:cases) require(tests.put(c.path("test_case_id").asText(),c)==null,"ambiguous test identity across selected scopes");
+        Map<String,JsonNode> tests=new HashMap<>(); for(JsonNode c:cases) require(tests.put(caseKey(c),c)==null,"ambiguous test identity across selected scopes");
         Map<String,ObjectNode> acEntities=new LinkedHashMap<>();
         for(var entry:acs.entrySet()) {
             String id=entry.getKey();JsonNode ac=entry.getValue();String parent=required(ac,"requirement_id"),classification=required(ac,"classification");
@@ -294,6 +318,12 @@ final class CanonicalCoverageReport {
         for(String domain:List.of("framework_unit","module","native_swarm")) result.add(obj("execution_domain",domain,"inventory_state","UNKNOWN","reason","independent_domain_evidence_missing"));
         return result;
     }
+    private static boolean reviewedV2(JsonNode provenance){return "product-test-reviewed-handoff.v2".equals(text(provenance,"contract_version"));}
+    private static String qualifiedCase(Candidate candidate,String testId){
+        Set<String>refs=new HashSet<>();for(JsonNode row:candidate.provenance.path("knowledge_trace"))if(testId.equals(text(row,"test_case_id")))refs.add(required(row,"qualified_case_ref"));
+        require(refs.size()==1,"reviewed v2 qualified case identity missing or ambiguous");String ref=refs.iterator().next();require(ref.matches("[^@#\\s]+@[a-f0-9]{40}(?:[a-f0-9]{24})?:[^@#\\s]+#[^@#\\s]+"),"reviewed v2 qualified case identity invalid");return ref;
+    }
+    private static String caseKey(JsonNode row){return row.hasNonNull("qualified_case_ref")?required(row,"qualified_case_ref"):required(row,"test_case_id");}
     private static boolean nativeFixture(JsonNode provenance) {
         if (!"integration".equals(text(provenance, "test_level"))) return false;
         for (JsonNode mode : provenance.path("observed_provider_modes")) if ("real".equals(mode.asText())) return true;
@@ -373,6 +403,124 @@ final class CanonicalCoverageReport {
     private ArrayNode mappingRefs(JsonNode p,String id) {
         ArrayNode refs=JSON.createArrayNode();for(JsonNode mapping:p.path("requirement_mapping")) for(JsonNode test:mapping.path("test_case_ids"))if(id.equals(test.asText()))refs.add(mapping);return refs;
     }
+    /** Historical metadata joins only; a reviewed pointer is neither an evaluated assertion nor independence. */
+    private ArrayNode oracleTrace(Candidate candidate, JsonNode test, JsonNode catalog) throws Exception {
+        String id=required(test,"test_case_id");
+        String qualified=reviewedV2(candidate.provenance)?qualifiedCase(candidate,id):null;
+        ArrayNode mappings=mappingRefs(candidate.provenance,id), rows=JSON.createArrayNode();
+        List<JsonNode> declaredMappings=new ArrayList<>();mappings.forEach(declaredMappings::add);
+        if(declaredMappings.isEmpty())declaredMappings.add(JSON.createObjectNode());
+        for(JsonNode mapping:declaredMappings) {
+            List<String> declared=strings(mapping.path("oracle_refs"),true);
+            List<String> pointers=declared.isEmpty()?Collections.singletonList(null):declared;
+            String requirement=nullable(text(mapping,"requirement_ref"));
+            ArrayNode knowledge=JSON.createArrayNode();Map<String,JsonNode> oracleSources=new LinkedHashMap<>();
+            if(candidate.knowledgeValid)for(JsonNode trace:candidate.provenance.path("knowledge_trace")) {
+                if(!id.equals(text(trace,"test_case_id"))||!Objects.equals(qualified,text(trace,"qualified_case_ref"))
+                        || requirement!=null&&!contains(trace.path("requirement_refs"),requirement))continue;
+                ObjectNode ref=obj("qualified_source_ref",trace.get("qualified_source_ref"),"record_version",trace.get("record_version"),
+                        "content_sha256",trace.get("content_sha256"),"selection_proof_sha256",trace.get("selection_proof_sha256"),
+                        "context_sha256",trace.get("context_sha256"),"source_bindings_sha256",trace.get("source_bindings_sha256"));
+                if(!containsNode(knowledge,ref))knowledge.add(ref);
+                oracleSources.putIfAbsent(required(trace.path("oracle"),"qualified_ref"),trace.path("oracle"));
+            }
+            for(String pointer:pointers) {
+                String reason=pointer==null?"oracle_reference_missing":null;
+                String binding="MISSING";ObjectNode oracle=emptyOracle();
+                JsonNode artifact=null, selectedOracle=null;
+                if(candidate.knowledgeValid) {
+                    for(JsonNode traceOracle:oracleSources.values()) {
+                        JsonNode bound=oracleArtifact(candidate.provenance,required(traceOracle,"qualified_ref"));
+                        if(pointer!=null&&pointer.equals(text(bound,"reviewed_path"))) {
+                            require(artifact==null,"ambiguous oracle pointer source binding");artifact=bound;selectedOracle=traceOracle;
+                        }
+                    }
+                    if(artifact==null&&oracleSources.size()==1) {
+                        selectedOracle=oracleSources.values().iterator().next();artifact=oracleArtifact(candidate.provenance,required(selectedOracle,"qualified_ref"));
+                    }
+                    if(artifact!=null) {
+                        oracle=obj("qualified_ref",selectedOracle.get("qualified_ref"),"path",artifact.get("reviewed_path"),"sha256",selectedOracle.get("sha256"),
+                                "source_repo",artifact.get("source_repo"),"source_commit",artifact.get("source_commit"),
+                                "source_testrepo_version",artifact.get("source_testrepo_version"),"review_ref",selectedOracle.get("review_ref"),"reviewed_by",selectedOracle.get("reviewed_by"));
+                        binding="SOURCE_BOUND";
+                    } else if(oracleSources.size()>1)binding="AMBIGUOUS";
+                } else if(!reviewedV2(candidate.provenance)&&pointer!=null&&!pointer.contains("#")) {
+                    JsonNode reviewed=reviewedOracle(candidate.provenance,pointer);
+                    if(reviewed!=null) {
+                        oracle.set("path",JSON.valueToTree(pointer));oracle.set("sha256",reviewed.get("sha256"));
+                        oracle.set("review_ref",JSON.valueToTree(nullable(text(mapping,"review_ref"))));
+                        oracle.set("reviewed_by",JSON.valueToTree(nullable(text(candidate.provenance,"reviewed_by"))));binding="SOURCE_BOUND";
+                    } else binding="DECLARED_ONLY";
+                } else if(pointer!=null)binding="DECLARED_ONLY";
+                String expected=null;
+                boolean singleton=mapping.path("test_case_ids").isArray()&&mapping.path("test_case_ids").size()==1&&declared.size()==1;
+                if(pointer!=null) {
+                    if(!singleton)reason="mapping_case_oracle_join_ambiguous";
+                    else if(pointer.contains("#"))reason="declared_assertion_relation_not_exported";
+                    else if(text(mapping,"review_ref").isEmpty())reason="mapping_review_missing";
+                    else if("SOURCE_BOUND".equals(binding)&&pointer.equals(text(oracle,"path")))expected=pointer;
+                    else reason="oracle_source_binding_missing";
+                }
+                // Keep historical identity, but do not promote stale/missing/invalid evidence into a bound pointer.
+                if(!"VALID".equals(candidate.evidence)) {
+                    binding="STALE".equals(candidate.evidence)?"STALE":"MISSING".equals(candidate.evidence)?"MISSING":"INVALID";
+                    expected=null;reason="selected_evidence_"+candidate.evidence.toLowerCase(Locale.ROOT);
+                }
+                if(reviewedV2(candidate.provenance)&&!candidate.knowledgeValid) {
+                    binding="INVALID";oracle=emptyOracle();expected=null;reason="knowledge_provenance_invalid";
+                }
+                ArrayNode requirements=JSON.createArrayNode();if(requirement!=null)requirements.add(requirement);
+                ArrayNode acceptances=JSON.createArrayNode();
+                if(catalog!=null)for(JsonNode ac:catalog.path("acceptance_criteria"))
+                    if(Objects.equals(requirement,nullable(text(ac,"requirement_id")))&&contains(ac.path("test_case_ids"),qualified==null?id:qualified))acceptances.add(required(ac,"id"));
+                String traceId=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(JSON.writeValueAsBytes(
+                        Arrays.asList(candidate.digest,nullable(text(candidate.subject,"project_ref")),nullable(text(candidate.subject,"workspace_ref")),
+                                qualified==null?id:qualified,requirement,nullable(text(mapping,"review_ref")),pointer))));
+                rows.add(obj("trace_id",traceId,"test_case_id",id,"qualified_case_ref",qualified,
+                        "source_result",candidate.path.toString(),"source_result_sha256",candidate.digest,"run_id",candidate.result.get("run_id"),"batch_id",candidate.result.get("batch_id"),
+                        "canonical_outcome",outcome(text(test,"status")),"evidence_state",candidate.evidence,
+                        "requirement_refs",requirements,"acceptance_criteria_refs",acceptances,"mapping_review_ref",nullable(text(mapping,"review_ref")),
+                        "declared_oracle_refs",declared,"oracle",oracle,"expected_ref",expected,
+                        "expected_ref_state",expected==null?"UNKNOWN":"BOUND_DECLARED_REFERENCE","expected_ref_reason",expected==null?reason:null,
+                        "binding_state",binding,"binding_reason",reason,"independence",obj("state","UNKNOWN","reason","independence_attestation_not_in_contract"),"knowledge_refs",knowledge));
+                require(rows.size()<=10000,"too many oracle trace rows");
+            }
+        }
+        return rows;
+    }
+    private static ObjectNode emptyOracle() {
+        return obj("qualified_ref",null,"path",null,"sha256",null,"source_repo",null,"source_commit",null,"source_testrepo_version",null,"review_ref",null,"reviewed_by",null);
+    }
+    private static JsonNode oracleArtifact(JsonNode provenance,String qualified) {
+        JsonNode found=null;
+        for(JsonNode artifact:provenance.path("executed_source_bindings"))if(qualified.equals(text(artifact,"artifact_id"))) {
+            require(found==null&&"oracle".equals(text(artifact,"role")),"ambiguous or non-oracle source binding");found=artifact;
+        }
+        require(found!=null,"oracle source binding missing");return found;
+    }
+    private static JsonNode reviewedOracle(JsonNode provenance,String path) {
+        JsonNode found=null;
+        for(JsonNode file:provenance.path("reviewed_files"))if(path.equals(text(file,"path"))) {
+            require(found==null,"ambiguous reviewed oracle path");
+            if(!"oracle".equals(text(file,"role")))return null;
+            digestField(file,"sha256");found=file;
+        }
+        return found;
+    }
+    private static boolean contains(JsonNode array,String value) {
+        for(JsonNode node:array)if(node.isTextual()&&node.asText().equals(value))return true;return false;
+    }
+    private static boolean containsNode(JsonNode array,JsonNode value) {
+        for(JsonNode node:array)if(node.equals(value))return true;return false;
+    }
+    private static void entityOracleRefs(ArrayNode entities,ArrayNode traces) {
+        for(JsonNode entity:entities) {
+            ArrayNode refs=((ObjectNode)entity).putArray("oracle_trace_refs");
+            String field="requirement".equals(text(entity,"kind"))?"requirement_refs":"acceptance_criteria_refs";
+            for(JsonNode trace:traces)if(contains(trace.path(field),text(entity,"id"))&&!contains(refs,text(trace,"trace_id")))refs.add(text(trace,"trace_id"));
+        }
+    }
+
     private ArrayNode evidenceRefs(List<String> ids,Map<String,JsonNode> tests) {
         ArrayNode refs=JSON.createArrayNode();for(String id:ids)if(tests.containsKey(id))for(JsonNode ref:tests.get(id).path("evidence_refs"))refs.add(ref);return refs;
     }
@@ -398,7 +546,8 @@ final class CanonicalCoverageReport {
         s.append("| Metric | Denominator | Mapped | Executed | Satisfied | Satisfied percent |\n| --- | --- | --- | --- | --- | --- |\n");
         d.path("metrics").properties().forEach(e -> {JsonNode m=e.getValue();s.append("| ").append(e.getKey()).append(" | ").append(m.path("denominator")).append(" | ").append(m.path("mapped")).append(" | ").append(m.path("executed")).append(" | ").append(m.path("satisfied")).append(" | ").append(m.path("satisfied_percent")).append(" |\n");});
         s.append("| risks | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |\n");
-        for(String section:List.of("subject","selection","inventory","risk_inventory","entities","cases","sources","breakdowns","code_coverage","gaps")) s.append("\n## ").append(section).append("\n\n```json\n").append(d.path(section).toPrettyString()).append("\n```\n");
+        s.append("\nOracle SOURCE_BOUND describes historical source identity only. A declared assertion reference does not prove assertion execution, evaluated expected values, or semantic independence. Independence remains UNKNOWN without a separate attestation contract.\n\n");
+        for(String section:List.of("subject","selection","inventory","risk_inventory","entities","cases","oracle_trace","knowledge_trace","source_case_selection","sources","breakdowns","code_coverage","gaps")) s.append("\n## ").append(section).append("\n\n```json\n").append(d.path(section).toPrettyString()).append("\n```\n");
         s.append("\n## Evidence links\n\n");for(JsonNode l:d.path("evidence_links")) {String p=l.path("path").asText();s.append("- [").append(p.replace("[","\\[").replace("]","\\]")).append("](<").append(p.replace(">","%3E").replace("<","%3C")).append(">) SHA256 `").append(l.path("sha256").asText()).append("`\n");}return s.toString();
     }
     private void gap(String reason,String id,Path source,String action,boolean fatal) {invalid|=fatal;gaps.add(obj("reason",reason,"subject_id",id,"source_ref",source==null?null:source.toString(),"owner_action",action));}

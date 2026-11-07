@@ -1,0 +1,13 @@
+# Historical oracle trace in coverage reports
+
+The existing `report` command writes `coverage.json` and `coverage.md`. New reports add `oracle_trace` and case/entity `oracle_trace_refs`; older reports without the optional section remain compatible. No new test runner or requirements authority is introduced.
+
+Each row retains its selected canonical case, run/batch, exact result SHA256, declared requirement mapping and reviewed oracle source identity. A qualified source reference and hash stay bound to the executed source artifact revision A. Composition/lock revision X and the SUT revision remain separate. PK links contain only admitted public identifiers, record versions and content/context/selection/source-binding hashes; raw context, private receipts, proposal bodies and source text are excluded.
+
+`expected_ref` is a declared assertion or expected-artifact reference. `BOUND_DECLARED_REFERENCE` requires valid selected evidence, a single case/oracle mapping with review, and the exact admitted pointer/path/hash/role and qualified case/oracle relation. Cardinality alone is insufficient. Existing assertion fragments whose precise relation is not exported remain in `declared_oracle_refs`, while `expected_ref` stays null with a reason. Ambiguous, missing or unsupported identities remain explicit. Conflicting modern identities/hashes fail closed. A newer FAIL or invalid/stale case keeps its own trace and never inherits an older PASS.
+
+`SOURCE_BOUND` proves only historical source/provenance identity. It does not prove that an assertion executed, that expected operands were evaluated, or that the oracle is independent. Every row currently has `independence: {state: UNKNOWN, reason: independence_attestation_not_in_contract}`. The current input contract supplies no separate independence attestation; review strings, PASS and `role=oracle` do not create one.
+
+Without a reviewed catalog, requirement and AC denominators remain null and authoritative AC links stay empty. Risk inventory remains UNKNOWN/null. Existing mapped/executed/satisfied formulas and canonical outcomes are preserved; oracle links grant no additional satisfaction credit. An empty authoritative catalog is distinct from missing authority.
+
+Outputs remain outside frozen canonical run trees and bind original bytes. Existing strict parser, result/payload/output limits and snapshot/readback checks apply; aggregate oracle rows are capped at10000. The Markdown report states the same unknown independence and pointer limitations as JSON. Historical reprojection identifies its new report producer separately and does not relabel the original framework/SUT revision or claim a fresh provider invocation.

@@ -1,0 +1,11 @@
+# Module validation of optional oracle traces
+
+The module retains its existing coverage-pair hashes, canonical request/scope/result identity, contained evidence references, canonical outcomes and required-v2 PK projection checks. The optional oracle section adds a pure historical semantic guard before coverage artifacts can enter the receipt map. It reads only bounded raw canonical/provenance bytes and verifies exact declared case/oracle/pointer/source/version/context joins, structural trace IDs and case/entity reference membership. Recomputing derived hashes does not validate altered semantic links.
+
+Older reports without oracle_trace remain supported when they make no nonempty oracle_trace_refs claims. This absence means no oracle claim. A present malformed, missing-row, duplicate, private-field or contradictory section fails closed; it cannot downgrade to the older format. Existing payload budgets are unchanged. Missing or ambiguous source identity stays null and cannot become an executed assertion, independently satisfied oracle or additional product coverage credit.
+
+SOURCE_BOUND and BOUND_DECLARED_REFERENCE identify reviewed historical source/pointers only. Independence stays exactly UNKNOWN/independence_attestation_not_in_contract. Source artifact A, composition X and SUT identities remain distinct. Entity links check consistency, not new catalog authority or requirement/risk counts.
+
+Recorded selection age is historical self-consistency, not authentication of a wholly re-pinned policy or present readiness. Legacy stale evidence can retain nullable pointers. The pure oracle guard also represents that historical null state for v2; the existing whole v2 projection guard still requires evidence_state VALID and therefore rejects a stale v2 report. This boundary is retained intentionally.
+
+This guard does not evaluate oracle operands, call providers, inspect live owners, reopen original source trees or read private PK bodies. Canonical business verdicts and bytes are preserved. Unit fixtures test the already-admitted-canonical boundary and do not establish native integration or a new accepted execution JAR. Root integrates this isolated consumer source with the separately owned native/layout path after review.

@@ -1,0 +1,16 @@
+{
+  "binding_id": "cd0e3810-8d20-4fc0-b764-96e4ba96c15d",
+  "bundle_sha256": "16085ec3cd2ba52eb522b8d359abee22709fb6140e4a6898891e56608c8e0d3c",
+  "collection_spec_sha256": "aaa49ab61d25ba7d3a65347bf29f325f8597b433a522704016be65af3bb1a178",
+  "correlation_id": "PUBLIC_SYNTHETIC-p2-request:286a39a6261149d6b92e3e451d11b2d9",
+  "evidence_classification": "framework_verification_only",
+  "expected_sut_revision": "37208c7a5b0070c5dc999fe1d5f8187f72268d79",
+  "maximum_run_ms": 60000,
+  "observed_sut_revision": "37208c7a5b0070c5dc999fe1d5f8187f72268d79",
+  "owner_nonce": "a34a0b3e7d744478af0edb0d846e1ae3",
+  "readiness_evidence_sha256": "03289f4cc32e2d491dd8cfe6796659f65671b39ff8398cfa1388bf0ec640b68c",
+  "run_id": "PUBLIC_SYNTHETIC-sut-run:95436335856946499c01a855ab24a24a",
+  "runtime_identity": "PUBLIC_SYNTHETIC:pid:161983:start:4483525:nonce:a34a0b3e7d744478af0edb0d846e1ae3",
+  "runtime_type": "contract_test",
+  "schema_version": "runner-runtime-binding.v1"
+}

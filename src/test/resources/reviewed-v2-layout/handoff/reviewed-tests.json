@@ -1,0 +1,127 @@
+{
+  "cognee_source" : {
+    "commit" : "ba3631f2ed363a6ea50d649c34c56885af6b36fe",
+    "runtime_version_verified" : false,
+    "version" : "1.6.2"
+  },
+  "contract_version" : "product-test-reviewed-handoff.v2",
+  "expected_sut_revisions" : {
+    "PUBLIC_SYNTHETIC-p2-sut" : "37208c7a5b0070c5dc999fe1d5f8187f72268d79"
+  },
+  "external_artifact_bindings" : {
+    "file_bindings" : [ {
+      "artifact_id" : "https://example.invalid/public-synthetic/p2-product-tests@6e4c070359ee29c9c48dba970548fccef91b284b:tests/sit/suite.yaml#p2-suite",
+      "reviewed_path" : "suite.yaml"
+    }, {
+      "artifact_id" : "https://example.invalid/public-synthetic/p2-product-tests@6e4c070359ee29c9c48dba970548fccef91b284b:tests/sit/config/local.yaml#p2-config",
+      "reviewed_path" : "config/local.yaml"
+    }, {
+      "artifact_id" : "https://example.invalid/public-synthetic/p2-product-tests@6e4c070359ee29c9c48dba970548fccef91b284b:tests/sit/cases/total.yaml#P2-TOTAL-1",
+      "reviewed_path" : "cases/total.yaml"
+    }, {
+      "artifact_id" : "https://example.invalid/public-synthetic/p2-product-tests@6e4c070359ee29c9c48dba970548fccef91b284b:tests/sit/data/independent-oracle.json#p2-oracle",
+      "reviewed_path" : "data/independent-oracle.json"
+    }, {
+      "artifact_id" : "https://example.invalid/public-synthetic/p2-product-tests@6e4c070359ee29c9c48dba970548fccef91b284b:tests/sit/contracts/rest.yaml#p2-rest-contract",
+      "reviewed_path" : "contracts/rest.yaml"
+    } ],
+    "lock_sha256" : "e5be541b20ae76f09b768f84e20156d8b6017bec4666b000bd8562da7ca87c81",
+    "path" : "handoff/source-bindings.json",
+    "producer_jar_sha256" : "f1c96830382b8fd86c2b596209d90ad4b0d988aff247c7466fbb364ed9a4b27b",
+    "producer_schema_sha256" : "23bd700260c26a99ce9db7dd393a9b088bfd3a2bd65593f04f651e5dee210029",
+    "sha256" : "4ba5e86a41098756d1e3d9f58ac415bf39f6124e4afb42017159e9a0966f6fe1",
+    "trusted_roots_sha256" : "4f19347e404d3db549d475e8b925d200b4918415426b37bb1795945c7f101cec"
+  },
+  "framework_baseline" : "0.3.2",
+  "knowledge_mode" : "required",
+  "knowledge_selection_proof" : {
+    "path" : "handoff/knowledge-proof.json",
+    "sha256" : "b24a959aae822d911ce7a4d882041e5cc7e1bfff9fab87a0e60ca113ab48185e"
+  },
+  "preparation_provenance" : {
+    "classification" : "framework_verification_only",
+    "context_sha256" : "dc7499a5b2662746338e4ccae8951474e4535f9b5b64899efd5ac20f4a3c7d8d",
+    "mission_ref" : "PUBLIC_SYNTHETIC-p2-mission",
+    "private_original_receipt_sha256" : "5b744d3ab1f3492bc752929c8fc9e5ac7950c3cfb76ff4ca3d6766a0ade1c89c",
+    "proposal_sha256" : "0ac27857108d7d3884b26954e8ef93b37f4cb0298a516053911e1aae9a5cd359",
+    "request_ref" : "PUBLIC_SYNTHETIC-p2-request:286a39a6261149d6b92e3e451d11b2d9",
+    "source_binding_version" : "runner-source-bindings.v1",
+    "sut_run_ref" : "PUBLIC_SYNTHETIC-sut-run:95436335856946499c01a855ab24a24a"
+  },
+  "profile" : "local",
+  "project_ref" : "PUBLIC_SYNTHETIC-p2-project",
+  "proposal_trace" : [ {
+    "acceptance_refs" : [ "https://example.invalid/public-synthetic/p2-product-knowledge@40f34e932fee1f9092878dd0c56b1177b333f947:knowledge.md#AC_TOTAL" ],
+    "api_refs" : [ "https://example.invalid/public-synthetic/p2-product-knowledge@40f34e932fee1f9092878dd0c56b1177b333f947:knowledge.md#API_TOTAL" ],
+    "case_sha256" : "c151fdd76d9a4143fb2e1f25f227aa0e4ef58a767b56a927702fb3950b4570a9",
+    "citations" : [ {
+      "content_sha256" : "3827eec225fdc459d99b467aad91ecc57395d0e964b2425a062fbb97b5d82b5f",
+      "qualified_source_ref" : "https://example.invalid/public-synthetic/p2-product-knowledge@40f34e932fee1f9092878dd0c56b1177b333f947:knowledge.md#PK_TOTAL"
+    } ],
+    "code_refs" : [ "https://example.invalid/public-synthetic/p2-sut-code@37208c7a5b0070c5dc999fe1d5f8187f72268d79:src/total_server.py#Handler.fixed" ],
+    "oracle" : {
+      "qualified_ref" : "https://example.invalid/public-synthetic/p2-product-tests@6e4c070359ee29c9c48dba970548fccef91b284b:tests/sit/data/independent-oracle.json#p2-oracle",
+      "review_ref" : "PUBLIC_SYNTHETIC-independent-oracle-review:d5ca16277c84d2d67af7f83eac59c58cb35dce1d240636bdcd51b20970cf6385",
+      "reviewed_by" : "PUBLIC_SYNTHETIC-independent-oracle-reviewer",
+      "sha256" : "d5ca16277c84d2d67af7f83eac59c58cb35dce1d240636bdcd51b20970cf6385"
+    },
+    "qualified_case_ref" : "https://example.invalid/public-synthetic/p2-product-tests@6e4c070359ee29c9c48dba970548fccef91b284b:tests/sit/cases/total.yaml#P2-TOTAL-1",
+    "requirement_refs" : [ "https://example.invalid/public-synthetic/p2-product-knowledge@40f34e932fee1f9092878dd0c56b1177b333f947:knowledge.md#REQ_TOTAL" ],
+    "risk_refs" : [ "https://example.invalid/public-synthetic/p2-product-knowledge@40f34e932fee1f9092878dd0c56b1177b333f947:knowledge.md#RISK_TOTAL" ],
+    "test_case_id" : "P2-TOTAL-1"
+  } ],
+  "repository_revisions" : {
+    "https://example.invalid/public-synthetic/p2-product-knowledge" : "40f34e932fee1f9092878dd0c56b1177b333f947",
+    "https://example.invalid/public-synthetic/p2-product-tests" : "a99e43d58320b3400bbc97d1b680f53f217ef3fd",
+    "https://example.invalid/public-synthetic/p2-sut-code" : "37208c7a5b0070c5dc999fe1d5f8187f72268d79"
+  },
+  "requirement_mapping" : [ {
+    "oracle_refs" : [ "cases/total.yaml#status", "data/independent-oracle.json" ],
+    "requirement_ref" : "https://example.invalid/public-synthetic/p2-product-knowledge@40f34e932fee1f9092878dd0c56b1177b333f947:knowledge.md#REQ_TOTAL",
+    "review_ref" : "PUBLIC_SYNTHETIC-independent-oracle-review:d5ca16277c84d2d67af7f83eac59c58cb35dce1d240636bdcd51b20970cf6385",
+    "test_case_ids" : [ "P2-TOTAL-1" ]
+  } ],
+  "review_ref" : "PUBLIC_SYNTHETIC-independent-oracle-review:d5ca16277c84d2d67af7f83eac59c58cb35dce1d240636bdcd51b20970cf6385",
+  "reviewed_at" : "2026-11-07T19:24:15.893762Z",
+  "reviewed_by" : "PUBLIC_SYNTHETIC-independent-oracle-reviewer",
+  "reviewed_contracts" : [ {
+    "path" : "contracts/rest.yaml",
+    "provider_contract" : "rest_client.v0.3",
+    "sha256" : "c2529cf2bf39b8fd4daa0823b8dde49424cdbb93333fd89c21b8a80d468545cb"
+  } ],
+  "reviewed_files" : [ {
+    "path" : "suite.yaml",
+    "role" : "manifest",
+    "sha256" : "13cb1d9c2bd39d8374e07b81ca04aa53280685e7f24c593b48883abdfed0bc7b"
+  }, {
+    "path" : "config/local.yaml",
+    "role" : "profile",
+    "sha256" : "ecf3dfa1957cd0781c35c3028f574435d8bae685c3438ad9201ea78428ba9831"
+  }, {
+    "path" : "cases/total.yaml",
+    "role" : "test",
+    "sha256" : "c151fdd76d9a4143fb2e1f25f227aa0e4ef58a767b56a927702fb3950b4570a9"
+  }, {
+    "path" : "data/independent-oracle.json",
+    "role" : "oracle",
+    "sha256" : "d5ca16277c84d2d67af7f83eac59c58cb35dce1d240636bdcd51b20970cf6385"
+  } ],
+  "suite_id" : "P2-PUBLIC-TOTAL",
+  "sut_revision_evidence" : {
+    "path" : "handoff/runtime-binding.json",
+    "sha256" : "a847baac6044281cf25486fb734fcdd8a8cda5cbfcd04bc0b7315bf408a4b0d2",
+    "sut_id" : "PUBLIC_SYNTHETIC-p2-sut"
+  },
+  "swarm_source" : {
+    "base_revision" : "fe80374f740ed3c604836431daca5c32e92cf844",
+    "files" : {
+      "src/main/java/com/featuredeliveryintelligence/fdi/application/Dev204Cli.java" : "ff0669763d5070e834ffba893a2ebe681a20e868c85fc0b9b595256e468069b8",
+      "src/main/java/com/featuredeliveryintelligence/fdi/application/FdiApplication.java" : "1e14310d39b622d7403e827403d2d2b6f1ac320ddceae51ec0be29854edac3c4",
+      "src/main/java/com/featuredeliveryintelligence/fdi/orchestration/CogneeSearchClient.java" : "506f163a5294f68881996d38f06de47ae6aa7ee2321954f77535db5c0cfc4878",
+      "src/main/java/com/featuredeliveryintelligence/fdi/orchestration/SwarmKnowledgeGateway.java" : "d2fb8408676d4de60d0f38528756558c0f669c61168b107ed1ea46aee23018d0",
+      "src/test/java/com/featuredeliveryintelligence/fdi/orchestration/MissionFlowTests.java" : "d24dd6c7b6151e18bc8516ee84ac6e58630b7b0b8b0b6b42336f00569fe07d97"
+    }
+  },
+  "valid_until" : "2026-11-07T19:26:14.785505376Z",
+  "workspace_ref" : "PUBLIC_SYNTHETIC-p2-workspace"
+}

@@ -140,7 +140,10 @@ public class V03RuntimeExecutionService {
         try {
             if (requirement.required() || ProductTestHandoffService.configured(suiteManifest, profile)) {
                 try (var snapshot = new ProductTestHandoffService().snapshot(suiteManifest, profile, requirement)) {
-                    var baseline = new ContractBaselineService(snapshot.contractDirectory());
+                    boolean selectedSourceProfile="product-test-reviewed-handoff.v2".equals(snapshot.provenance().get("contract_version"))
+                            &&snapshot.policy().nativeExecution()&&"required".equals(snapshot.policy().knowledgeMode());
+                    var baseline=selectedSourceProfile?ContractBaselineService.fromReviewedSnapshot(snapshot)
+                            :new ContractBaselineService(snapshot.contractDirectory());
                     var checked = baseline.validateSuite(snapshot.suiteManifest());
                     var result = runValidated(snapshot.suiteManifest(), profile, executionContext, checked, baseline,
                             snapshot.contractDirectory(), snapshot.policy(), snapshot.provenance());

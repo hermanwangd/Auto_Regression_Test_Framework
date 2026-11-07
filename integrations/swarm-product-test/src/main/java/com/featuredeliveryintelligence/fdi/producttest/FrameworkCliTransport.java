@@ -32,7 +32,7 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
             Path suite = LocalFiles.contained(approved, Path.of(request.suiteManifest()));
             Path artifactRoot = LocalFiles.real(Path.of(request.artifactRoot()));
             require(artifactRoot.startsWith(approved) && suite.startsWith(artifactRoot), "Artifact root is not approved");
-            DefaultProductTestingModule.validateReviewedInputs(request);
+            DefaultProductTestingModule.validateReviewedInputs(request,binding.sutBindingSha256());
             Path handoff = LocalFiles.contained(suite.getParent(), Path.of(request.reviewedHandoff()));
             require(LocalFiles.sha256(LocalFiles.read(handoff, 2 * 1024 * 1024)).equals(binding.approvedHandoffSha256()), "Reviewed handoff digest mismatch");
             require(LocalFiles.sha256(binding.frameworkJar()).equals(binding.frameworkSha256()), "Configured framework digest mismatch");
@@ -51,7 +51,7 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
             if (runExit != 0 && !run.stdout().contains("result_json: "))
                 return Receipts.failure(request, invocation, ProductTestReceipt.Outcome.FRAMEWORK_REJECTED,
                         "Framework rejected execution before producing a canonical result; inspect run.stdout.log", output.toString(), runExit);
-            var evidence = CanonicalEvidence.inspect(request, output, run.stdout(), started, binding.fixtureLeaseSha256());
+            var evidence = CanonicalEvidence.inspect(request, output, run.stdout(), started, binding.fixtureLeaseSha256(),binding.sutBindingSha256());
             checkDeadline(deadline);
             var validation = invoke(List.of("validate-evidence", "--result", evidence.result().toString(), "--root", output.toString()),
                     request, output, deadline, consumedOutput, cleanup);
@@ -103,6 +103,7 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
         builder.environment().clear();
         builder.environment().put("REGRESS_REVIEWED_HANDOFF_SHA256", binding.approvedHandoffSha256());
         if(binding.fixtureLeaseSha256()!=null) builder.environment().put("REGRESS_REVIEWED_FIXTURE_LEASE_SHA256",binding.fixtureLeaseSha256());
+        if(binding.sutBindingSha256()!=null) builder.environment().put("REGRESS_REVIEWED_SUT_BINDING_SHA256",binding.sutBindingSha256());
         Process process;
         try { process = builder.start(); }
         catch (IOException e) { throw new LaunchException("Cannot launch configured framework executable", e); }

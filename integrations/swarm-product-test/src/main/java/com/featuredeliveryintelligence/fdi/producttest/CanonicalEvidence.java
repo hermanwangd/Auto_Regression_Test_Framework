@@ -29,7 +29,8 @@ final class CanonicalEvidence {
     static CanonicalEvidence inspect(ProductTestRequest request, Path output, String stdout, Instant started) throws Exception {
         return inspect(request,output,stdout,started,null);
     }
-    static CanonicalEvidence inspect(ProductTestRequest request, Path output, String stdout, Instant started, String fixtureLeaseSha256) throws Exception {
+    static CanonicalEvidence inspect(ProductTestRequest request, Path output, String stdout, Instant started, String fixtureLeaseSha256) throws Exception { return inspect(request,output,stdout,started,fixtureLeaseSha256,null); }
+    static CanonicalEvidence inspect(ProductTestRequest request, Path output, String stdout, Instant started, String fixtureLeaseSha256,String independentSutPin) throws Exception {
         Map<String, String> lines = outputFields(stdout);
         require(lines.containsKey("result_json"), "Missing canonical result location");
         Path result = LocalFiles.contained(output, Path.of(lines.get("result_json")));
@@ -104,7 +105,9 @@ final class CanonicalEvidence {
             require(Set.of("rest_client.v0.3", "cli_process.v0.3", "nats.v0.3", "grpc_client.v0.3").contains(contract), "Unsupported native provider contract");
             String type = switch (contract) { case "cli_process.v0.3" -> "cli_process"; case "nats.v0.3" -> "nats"; case "grpc_client.v0.3" -> "grpc_client"; default -> "rest_client"; };
             String operation = switch (type) { case "cli_process" -> "run_command"; case "nats" -> "nats_publish"; case "grpc_client" -> "unary_call"; default -> "http_request"; };
-            require("not_used".equals(request.knowledgeMode()) && provenance.path("provider_modes").size() == 1
+            boolean requiredV2="required".equals(request.knowledgeMode())&&ReviewedKnowledgeAdmission.v2(Json.MAPPER.readTree(reviewedBytes));
+            if(requiredV2)ReviewedKnowledgeAdmission.after(request,Json.MAPPER.readTree(reviewedBytes),Path.of(request.suiteManifest()).getParent(),provenance,independentSutPin,start);
+            require(("not_used".equals(request.knowledgeMode())||requiredV2) && provenance.path("provider_modes").size() == 1
                     && provenance.path("dependency_modes").isEmpty(), "Unsupported native capability metadata");
             require(document.path("provider_results").isArray() && document.path("step_results").isArray()
                     && document.path("provider_results").size() <= 1 && document.path("step_results").size() <= 1

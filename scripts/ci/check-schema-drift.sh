@@ -26,6 +26,8 @@ required=(
   test_case_dsl.v0.2.schema.yaml
   env_profile.v0.3.schema.yaml
   product_test_reviewed_handoff.v1.schema.yaml
+  knowledge_selection_proof.v1.schema.yaml
+  product_test_reviewed_handoff.v2.schema.yaml
   provider_contract.v0.3.schema.yaml
   result.v0.3.schema.yaml
   suite_summary.v0.3.schema.yaml

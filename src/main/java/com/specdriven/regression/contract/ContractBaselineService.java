@@ -137,13 +137,26 @@ public class ContractBaselineService {
 
     private final Yaml yaml = new Yaml();
     private final Path verifiedContractDirectory;
+    private final com.specdriven.regression.producttest.ProductTestHandoffService.Snapshot reviewedSnapshot;
 
-    public ContractBaselineService() { this.verifiedContractDirectory = null; }
+    public ContractBaselineService() { this.verifiedContractDirectory = null; this.reviewedSnapshot=null; }
 
     /** Explicit catalog entry point for reviewed input snapshots. */
     public ContractBaselineService(Path verifiedContractDirectory) {
         this.verifiedContractDirectory = java.util.Objects.requireNonNull(verifiedContractDirectory)
                 .toAbsolutePath().normalize();
+        this.reviewedSnapshot=null;
+    }
+
+    private ContractBaselineService(com.specdriven.regression.producttest.ProductTestHandoffService.Snapshot snapshot) {
+        this.reviewedSnapshot=java.util.Objects.requireNonNull(snapshot);
+        snapshot.verifiedSelectedEnvProfiles(snapshot.suiteManifest());
+        this.verifiedContractDirectory=snapshot.contractDirectory().toAbsolutePath().normalize();
+    }
+
+    /** Only the opaque, open, verified v2 native-required snapshot supplies alternate profile location. */
+    public static ContractBaselineService fromReviewedSnapshot(com.specdriven.regression.producttest.ProductTestHandoffService.Snapshot snapshot) {
+        return new ContractBaselineService(snapshot);
     }
 
     public ValidationResult validateSuite(Path suiteManifest) {
@@ -2368,6 +2381,7 @@ public class ContractBaselineService {
 
     private ContractGraph loadGraph(Path suiteManifest) {
         List<ContractFinding> findings = new ArrayList<>();
+        Map<Path,Map<String,Object>> verifiedProfiles=reviewedSnapshot==null?null:reviewedSnapshot.verifiedSelectedEnvProfiles(suiteManifest);
         Map<String, Object> suite = readYamlMap(suiteManifest, findings);
         if (suite.isEmpty()) {
             return ContractGraph.blocked(suiteManifest, suite, findings);
@@ -2410,8 +2424,8 @@ public class ContractBaselineService {
                 ? Map.of()
                 : readDirectory(root.resolve("provider_instances"), findings);
         Path envProfilesRoot = root.resolve("env_profiles");
-        Map<Path, Map<String, Object>> envProfiles = withEnvProfileDefaults(readOptionalDirectory(envProfilesRoot, findings));
-        boolean envProfileMode = Files.isDirectory(envProfilesRoot);
+        Map<Path, Map<String, Object>> envProfiles = withEnvProfileDefaults(verifiedProfiles==null?readOptionalDirectory(envProfilesRoot, findings):verifiedProfiles);
+        boolean envProfileMode = verifiedProfiles!=null||Files.isDirectory(envProfilesRoot);
         Map<Path, Map<String, Object>> profiles = envProfileMode
                 ? Map.of()
                 : readDirectory(root.resolve("execution_profiles"), findings);

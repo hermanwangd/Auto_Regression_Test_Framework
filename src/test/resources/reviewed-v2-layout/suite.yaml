@@ -1,0 +1,24 @@
+{
+  "manifest_version": "v0.3",
+  "suite_id": "P2-PUBLIC-TOTAL",
+  "default_profile": "local",
+  "artifact_roots": {
+    "expected_results": "data/",
+    "fixtures": "data/"
+  },
+  "targets": {
+    "public_api": {
+      "provider_contract": "rest_client.v0.3"
+    }
+  },
+  "env_profiles": {
+    "local": {
+      "ref": "config/local.yaml"
+    }
+  },
+  "tests": [
+    {
+      "ref": "cases/total.yaml"
+    }
+  ]
+}

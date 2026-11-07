@@ -23,8 +23,6 @@ public final class DefaultProductTestingModule implements ProductTestingModule {
         require(List.of("component", "integration").contains(request.testLevel()) && "regression".equals(request.testType())
                 && "local".equals(request.environmentStage()), "Unsupported capability; supported tuples are component or integration/regression/local");
         require(List.of("required", "not_used").contains(request.knowledgeMode()), "Unsupported knowledge mode");
-        require(!"integration".equals(request.testLevel()) || "not_used".equals(request.knowledgeMode()),
-                "Native local integration requires not_used knowledge mode");
         for (String value : List.of(request.missionRef(), request.requestRef(), request.workspaceRef(), request.projectRef(), request.executionRevision(),
                 request.suiteId(), request.profile()))
             require(value != null && !value.isBlank() && value.length() <= 256 && value.chars().noneMatch(Character::isISOControl), "Invalid correlation or suite identity");
@@ -44,7 +42,8 @@ public final class DefaultProductTestingModule implements ProductTestingModule {
     }
 
     /** Only called after the production transport checks its independent pin and approved directory. */
-    static void validateReviewedInputs(ProductTestRequest request) throws Exception {
+    static void validateReviewedInputs(ProductTestRequest request) throws Exception { validateReviewedInputs(request,null); }
+    static void validateReviewedInputs(ProductTestRequest request,String independentSutPin) throws Exception {
         Path root = LocalFiles.real(absolute(request.artifactRoot()));
         Path suite = LocalFiles.contained(root, absolute(request.suiteManifest()));
         Path handoff = LocalFiles.contained(suite.getParent(), absolute(request.reviewedHandoff()));
@@ -90,9 +89,13 @@ public final class DefaultProductTestingModule implements ProductTestingModule {
                 && request.knowledgeMode().equals(Json.required(policy, "knowledge_mode")), "Request tuple differs from reviewed profile");
         if (document.has("valid_until"))
             require(Instant.parse(Json.required(document, "valid_until")).isAfter(Instant.now()), "Reviewed handoff has expired");
-        if ("required".equals(request.knowledgeMode()))
-            require(document.path("selection_receipt").isObject() && !document.path("selection_receipt").isEmpty(), "Required governed knowledge receipt is unavailable");
-        else require(!document.has("selection_receipt"), "not_used cannot claim a governed knowledge receipt");
+        if("integration".equals(request.testLevel())&&"required".equals(request.knowledgeMode()))
+            ReviewedKnowledgeAdmission.before(request,document,suite.getParent(),independentSutPin);
+        else {
+            require(!ReviewedKnowledgeAdmission.v2(document)&&independentSutPin==null,"SUT binding/v2 requires native required route");
+            if ("required".equals(request.knowledgeMode()))require(document.path("selection_receipt").isObject()&&!document.path("selection_receipt").isEmpty(),"Required governed knowledge receipt is unavailable");
+            else require(!document.has("selection_receipt"),"not_used cannot claim a governed knowledge receipt");
+        }
         // Detailed governance, reviewed-file coverage and snapshot validation belong to the existing framework.
     }
 

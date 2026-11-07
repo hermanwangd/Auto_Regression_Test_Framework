@@ -74,6 +74,7 @@ final class CoverageArtifacts {
                     && canonical.toString().equals(Json.required(test, "source_result")), "Coverage case outcome/source identity mismatch");
         }
         require(cases.isEmpty(), "Coverage canonical cases missing");
+        ReviewedCoverageProjection.verify(coverage,canonical,result,request);
         if ("UNKNOWN".equals(coverage.path("inventory").path("state").asText()))
             for (String metric : List.of("requirements", "acceptance_criteria"))
                 require(coverage.path("metrics").path(metric).path("denominator").isNull()

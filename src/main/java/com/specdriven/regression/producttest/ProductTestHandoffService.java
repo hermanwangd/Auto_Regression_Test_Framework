@@ -43,6 +43,8 @@ public final class ProductTestHandoffService {
             "review_ref", "reviewed_by", "reviewed_at", "valid_until", "framework_baseline", "repository_revisions", "workspace_ref", "project_ref",
             "swarm_source", "cognee_source", "reviewed_files", "reviewed_contracts", "requirement_mapping",
             "selection_receipt", "knowledge_sources");
+    private static final Set<String> V2_FIELDS;
+    static { var fields=new java.util.LinkedHashSet<>(HANDOFF_FIELDS);fields.remove("selection_receipt");fields.remove("knowledge_sources");fields.addAll(Set.of("knowledge_selection_proof","preparation_provenance","external_artifact_bindings","proposal_trace","expected_sut_revisions","sut_revision_evidence"));V2_FIELDS=Set.copyOf(fields); }
     private static final ObjectMapper JSON = new ObjectMapper(JsonFactory.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(64).build()).build())
@@ -53,12 +55,13 @@ public final class ProductTestHandoffService {
     public ProductTestHandoffService(Clock clock) { this.clock = java.util.Objects.requireNonNull(clock); }
 
     /** Presence survives a malformed value, so the caller cannot silently downgrade its route. */
-    public record InvocationRequirement(String expectedSha256, String fixtureLeaseSha256) {
+    public record InvocationRequirement(String expectedSha256, String fixtureLeaseSha256,String sutBindingSha256) {
+        public InvocationRequirement(String expectedSha256,String fixtureLeaseSha256){this(expectedSha256,fixtureLeaseSha256,null);}
         public InvocationRequirement(String expectedSha256) {this(expectedSha256,null);}
         public static InvocationRequirement fromEnvironment(Map<String,String> environment) {
-            return new InvocationRequirement(environment.get("REGRESS_REVIEWED_HANDOFF_SHA256"), environment.get("REGRESS_REVIEWED_FIXTURE_LEASE_SHA256"));
+            return new InvocationRequirement(environment.get("REGRESS_REVIEWED_HANDOFF_SHA256"), environment.get("REGRESS_REVIEWED_FIXTURE_LEASE_SHA256"),environment.get("REGRESS_REVIEWED_SUT_BINDING_SHA256"));
         }
-        public boolean required() { return expectedSha256 != null || fixtureLeaseSha256 != null; }
+        public boolean required() { return expectedSha256 != null || fixtureLeaseSha256 != null || sutBindingSha256 != null; }
     }
 
     /** Reads no executable/provider input and treats a present null policy as configured. */
@@ -86,7 +89,9 @@ public final class ProductTestHandoffService {
         Selection selection = select(inputs, profile);
         byte[] handoffBytes = inputs.read(selection.policy.reviewedHandoffRef());
         if (!expected.equals(digest(handoffBytes))) throw fail("handoff_digest_mismatch", "reviewed handoff bytes changed");
-        Snapshot snapshot=validateAndSnapshot(inputs, selection, json(handoffBytes, "handoff"), expected, clock.instant());
+        Map<String,Object> document=json(handoffBytes,"handoff");
+        if(!"product-test-reviewed-handoff.v2".equals(document.get("contract_version"))&&requirement.sutBindingSha256()!=null)throw fail("sut_binding_route","SUT binding pin requires reviewed v2");
+        Snapshot snapshot=validateAndSnapshot(inputs, selection, document, expected, clock.instant(),requirement.sutBindingSha256());
         try {
             if(selection.policy.nativeExecution() && nativeCapability(selection)==ReviewedNativeCapability.GRPC) {
                 String leasePin=sha(requirement.fixtureLeaseSha256(),"fixture_lease_digest_missing_or_invalid");
@@ -104,8 +109,9 @@ public final class ProductTestHandoffService {
         String outRef = inputs.relative(out);
         equal(selection.policy.reviewedHandoffRef(), outRef, "handoff_output_path");
         Map<String,Object> handoff = new LinkedHashMap<>(json(readStandalone(reviewInput), "review_input"));
-        only(handoff, HANDOFF_FIELDS, "review_input");
-        suppliedOrPut(handoff, "contract_version", "product-test-reviewed-handoff.v1");
+        String proposedVersion=handoff.containsKey("contract_version")?text(handoff.get("contract_version"),"contract_version"):"product-test-reviewed-handoff.v1";
+        only(handoff,"product-test-reviewed-handoff.v2".equals(proposedVersion)?V2_FIELDS:HANDOFF_FIELDS,"review_input");
+        suppliedOrPut(handoff, "contract_version", proposedVersion);
         suppliedOrPut(handoff, "suite_id", text(selection.suite.get("suite_id"), "suite_id"));
         suppliedOrPut(handoff, "profile", selection.profile);
         suppliedOrPut(handoff, "knowledge_mode", selection.policy.knowledgeMode());
@@ -122,7 +128,11 @@ public final class ProductTestHandoffService {
             }
             handoff.put(field, hashed);
         }
-        if ("required".equals(selection.policy.knowledgeMode())) {
+        boolean proposedV2="product-test-reviewed-handoff.v2".equals(proposedVersion);
+        if(proposedV2){
+            if(selectionReceipt!=null)throw fail("private_receipt_forbidden","v2 accepts metadata proof only");
+            object(handoff.get("knowledge_selection_proof"),"knowledge_selection_proof");
+        } else if ("required".equals(selection.policy.knowledgeMode())) {
             if (selectionReceipt == null) throw fail("selection_receipt_missing", "required knowledge needs the supplied receipt");
             String ref = inputs.relative(selectionReceipt);
             handoff.put("selection_receipt", Map.of("path", ref, "sha256", digest(inputs.read(ref))));
@@ -135,7 +145,7 @@ public final class ProductTestHandoffService {
         if (bytes.length > MAX_FILE_BYTES) throw fail("file_size_limit", "prepared handoff exceeds 2 MiB");
         String pin = digest(bytes);
         // Reuse the same cached file bytes and closure checks; no source copy or provider call occurs.
-        try (Snapshot ignored = validateAndSnapshot(inputs, selection, handoff, pin, clock.instant())) {
+        try (Snapshot ignored = validateAndSnapshot(inputs, selection, handoff, pin, clock.instant(),proposedV2?text(object(handoff.get("sut_revision_evidence"),"sut_revision_evidence").get("sha256"),"sut_revision_evidence.sha256"):null)) {
             Path output = inputs.root.resolve(outRef);
             safeOutputParent(inputs.root, output.getParent());
             writeNewOrRegular(output, bytes);
@@ -146,9 +156,12 @@ public final class ProductTestHandoffService {
         }
     }
 
-    private Snapshot validateAndSnapshot(Inputs inputs, Selection s, Map<String,Object> h, String pin, Instant now) {
-        only(h, HANDOFF_FIELDS, "handoff");
-        equal("product-test-reviewed-handoff.v1", text(h.get("contract_version"), "contract_version"), "contract_version");
+    private Snapshot validateAndSnapshot(Inputs inputs, Selection s, Map<String,Object> h, String pin, Instant now,String sutBindingSha256) {
+        String version=text(h.get("contract_version"),"contract_version");boolean v2="product-test-reviewed-handoff.v2".equals(version);
+        if(!v2)equal("product-test-reviewed-handoff.v1",version,"contract_version");
+        only(h,v2?V2_FIELDS:HANDOFF_FIELDS,"handoff");
+        if(v2&&(!s.policy.nativeExecution()||!"required".equals(s.policy.knowledgeMode())))throw fail("v2_capability","v2 requires native local required knowledge");
+        if(!v2&&s.policy.nativeExecution()&&"required".equals(s.policy.knowledgeMode()))throw fail("native_required_v2_missing","native required knowledge needs v2");
         equal(s.policy.knowledgeMode(), text(h.get("knowledge_mode"), "knowledge_mode"), "knowledge_mode");
         String review = text(h.get("review_ref"), "review_ref"); text(h.get("reviewed_by"), "reviewed_by");
         String workspace = text(h.get("workspace_ref"), "workspace_ref");
@@ -205,7 +218,7 @@ public final class ProductTestHandoffService {
         Closure closure = validateClosure(inputs, s, approved, contracts.keySet());
         validateMappings(h, closure, review);
         Map<String,Object> provenance = new LinkedHashMap<>();
-        provenance.put("contract_version", "product-test-reviewed-handoff.v1");
+        provenance.put("contract_version", version);
         provenance.put("handoff_sha256", pin); provenance.put("suite_id", h.get("suite_id"));
         provenance.put("profile", s.profile); provenance.put("knowledge_mode", s.policy.knowledgeMode());
         provenance.put("test_level", s.policy.testLevel()); provenance.put("test_type", s.policy.testType());
@@ -220,7 +233,11 @@ public final class ProductTestHandoffService {
         provenance.put("reviewed_files", freeze(h.get("reviewed_files")));
         provenance.put("reviewed_contracts", freeze(h.get("reviewed_contracts")));
         provenance.put("evidence_classification", "framework_verification_only"); provenance.put("downstream_release_evidence", false);
-        if ("required".equals(s.policy.knowledgeMode())) validateKnowledge(inputs, h, repositories, closure, now, allPaths, provenance);
+        if(v2){
+            var reviewed=new LinkedHashMap<String,KnowledgeSelectionProof.ReviewedInput>();approved.forEach((path,file)->reviewed.put(path,new KnowledgeSelectionProof.ReviewedInput(file.role,digest(file.bytes))));contracts.forEach((id,file)->reviewed.put(file.path,new KnowledgeSelectionProof.ReviewedInput("contract",digest(file.bytes))));
+            provenance.putAll(KnowledgeSelectionProof.validate(h,repositories,closure.tests,reviewed,inputs::read,now,sutBindingSha256));
+            checkProvenanceBudget(provenance);
+        } else if ("required".equals(s.policy.knowledgeMode())) validateKnowledge(inputs, h, repositories, closure, now, allPaths, provenance);
         else if (h.containsKey("selection_receipt") || h.containsKey("knowledge_sources")) {
             throw fail("not_used_knowledge_fields", "not_used forbids knowledge receipt and mappings");
         }
@@ -233,6 +250,17 @@ public final class ProductTestHandoffService {
             } catch(RuntimeException error) {snapshot.close();throw error;}
         }
         return snapshot;
+    }
+
+    /** Bound the actual encoded projection before any runner snapshot or TEST dispatch. */
+    static void checkProvenanceBudget(Map<String,Object> provenance){
+        // Leave room for runtime identities and the finite gRPC lease added after admission.
+        final int limit=MAX_FILE_BYTES-65536;
+        try{JSON.writerWithDefaultPrettyPrinter().writeValue(new java.io.OutputStream(){
+            private int written;
+            @Override public void write(int value)throws IOException{if(written>=limit)throw new IOException("provenance_output_limit");written++;}
+            @Override public void write(byte[]bytes,int offset,int length)throws IOException{java.util.Objects.checkFromIndexSize(offset,length,bytes.length);if(length>limit-written)throw new IOException("provenance_output_limit");written+=length;}
+        },provenance);}catch(IOException invalid){throw fail("provenance_output_limit","reviewed v2 projection exceeds runtime metadata budget");}
     }
 
     private static Selection select(Inputs inputs, String requested) {
@@ -638,14 +666,53 @@ public final class ProductTestHandoffService {
         private final ProductTestPolicy policy;
         private final Map<String,Object> provenance;
         private boolean closed;
+        private final Object rootIdentity;
         private Snapshot(Path root, Path suiteManifest, Path contractDirectory, ProductTestPolicy policy, Map<String,Object> provenance) {
             this.root = root; this.suiteManifest = suiteManifest; this.contractDirectory = contractDirectory;
             this.policy = policy; this.provenance = provenance;
+            this.rootIdentity = isVerifiedV2NativeRequired() ? currentRootIdentity() : null;
         }
         public Path suiteManifest() { return suiteManifest; }
         public Path contractDirectory() { return contractDirectory; }
         public ProductTestPolicy policy() { return policy; }
         public Map<String,Object> provenance() { return provenance; }
+        private boolean isVerifiedV2NativeRequired() {
+            return "product-test-reviewed-handoff.v2".equals(provenance.get("contract_version"))
+                    && policy.nativeExecution() && "required".equals(policy.knowledgeMode());
+        }
+        private Object currentRootIdentity() {
+            noSymlinks(root);
+            try {
+                BasicFileAttributes attributes=Files.readAttributes(root,BasicFileAttributes.class,LinkOption.NOFOLLOW_LINKS);
+                if(!attributes.isDirectory()||attributes.fileKey()==null)throw fail("snapshot_root_identity","private snapshot directory identity unavailable");
+                return attributes.fileKey();
+            }catch(IOException unavailable){throw fail("snapshot_root_unavailable","private snapshot directory unavailable",unavailable);}
+        }
+        /** The actual verified capability, not caller labels or alternate filesystem discovery. */
+        public synchronized Map<Path,Map<String,Object>> verifiedSelectedEnvProfiles(Path requestedManifest) {
+            if(closed||!isVerifiedV2NativeRequired())throw fail("snapshot_profile_capability","requires an open verified v2 native required snapshot");
+            equal(suiteManifest.toAbsolutePath().normalize(),requestedManifest.toAbsolutePath().normalize(),"snapshot_manifest_path");
+            equal(rootIdentity,currentRootIdentity(),"snapshot_root_replaced");
+            String manifestRef=null,profileRef=null;byte[]manifestBytes=null,profileBytes=null;int count=0;long total=0;
+            for(Object raw:list(provenance.get("reviewed_files"),"snapshot.reviewed_files",false)){
+                Map<String,Object> file=object(raw,"snapshot.reviewed_file");String ref=relativePath(text(file.get("path"),"snapshot.path"));
+                byte[]bytes=readStandalone(root.resolve(ref));equal(sha(file.get("sha256"),"snapshot.sha256"),digest(bytes),"snapshot_input_digest_mismatch");total+=bytes.length;checkBudget(++count,total);
+                String role=text(file.get("role"),"snapshot.role");
+                if("manifest".equals(role)){if(manifestRef!=null)throw fail("snapshot_manifest_ambiguous","one verified manifest required");manifestRef=ref;manifestBytes=bytes;}
+                if("profile".equals(role)){if(profileRef!=null)throw fail("snapshot_profile_ambiguous","one verified profile required");profileRef=ref;profileBytes=bytes;}
+            }
+            for(Object raw:list(provenance.get("reviewed_contracts"),"snapshot.reviewed_contracts",false)){
+                Map<String,Object> file=object(raw,"snapshot.reviewed_contract");String ref=relativePath(text(file.get("path"),"snapshot.contract.path"));byte[]bytes=readStandalone(contractDirectory.resolve(Path.of(ref).getFileName()));
+                equal(sha(file.get("sha256"),"snapshot.contract.sha256"),digest(bytes),"snapshot_contract_digest_mismatch");total+=bytes.length;checkBudget(++count,total);
+            }
+            if(manifestRef==null||profileRef==null)throw fail("snapshot_profile_missing","verified manifest/profile entry missing");
+            equal(suiteManifest,root.resolve(manifestRef),"snapshot_manifest_identity");String profile=text(provenance.get("profile"),"snapshot.profile");
+            Map<String,Object> manifest=yaml(manifestBytes,"snapshot.manifest");Map<String,Object> selected=object(object(manifest.get("env_profiles"),"snapshot.env_profiles").get(profile),"snapshot.selected_profile");
+            equal(profileRef,relativePath(text(selected.get("ref"),"snapshot.selected_profile.ref")),"snapshot_selected_profile_ref");
+            Map<String,Object> document=yaml(profileBytes,"snapshot.profile");equal(profile,text(document.get("profile_id"),"snapshot.profile_id"),"snapshot_profile_id");
+            equal(rootIdentity,currentRootIdentity(),"snapshot_root_replaced");
+            return Map.of(root.resolve(profileRef),immutableObject(document));
+        }
         @Override public synchronized void close() { if (!closed) { deleteTree(root); closed = true; } }
     }
 

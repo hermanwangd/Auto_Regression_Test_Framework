@@ -156,7 +156,8 @@ public class EvidenceHardeningService {
             requireReviewed(actualSha.equals(binding.get("provenance_sha256")), "provenance bytes differ from canonical result binding");
             for (String field : boundFields) requireReviewed(binding.get(field) != null
                     && binding.get(field).equals(handoff.get(field)), "reviewed binding mismatch: " + field);
-            requireReviewed("product-test-reviewed-handoff.v1".equals(handoff.get("contract_version")), "unsupported reviewed evidence version");
+            boolean reviewedV2="product-test-reviewed-handoff.v2".equals(handoff.get("contract_version"));
+            requireReviewed(reviewedV2||"product-test-reviewed-handoff.v1".equals(handoff.get("contract_version")),"unsupported reviewed evidence version");
             requireReviewed(stringValue(handoff.get("handoff_sha256")).matches("[a-f0-9]{64}"), "invalid handoff digest");
             for (String field : List.of("suite_id", "profile", "batch_id", "run_id", "plan_digest")) {
                 requireReviewed(!stringValue(result.get(field)).isBlank() && result.get(field).equals(handoff.get(field)), "result identity mismatch: " + field);
@@ -179,9 +180,11 @@ public class EvidenceHardeningService {
             requireReviewed(Set.of("component", "integration").contains(testLevel)
                     && "regression".equals(handoff.get("test_type")) && "local".equals(handoff.get("environment_stage")),
                     "unsupported reviewed capability tuple");
-            if (nativeExecution) requireReviewed("not_used".equals(handoff.get("knowledge_mode"))
+            boolean nativeRequiredV2=reviewedV2&&nativeExecution&&"required".equals(handoff.get("knowledge_mode"));
+            requireReviewed(!reviewedV2||nativeRequiredV2,"v2 requires native required knowledge");
+            if (nativeExecution) requireReviewed(("not_used".equals(handoff.get("knowledge_mode"))||nativeRequiredV2)
                     && mapValue(handoff.get("provider_modes")).size() == 1 && mapValue(handoff.get("dependency_modes")).isEmpty(),
-                    "native capability must remain one selected operation without selected knowledge or dependencies");
+                    "native capability must remain one selected operation without dependencies");
             for (String field : List.of("provider_modes", "dependency_modes")) {
                 requireReviewed(handoff.get(field) instanceof Map<?,?> && handoff.get("observed_" + field) instanceof Map<?,?>,
                         "required mode maps are missing");
@@ -270,7 +273,8 @@ public class EvidenceHardeningService {
             } else requireReviewed(observedDependencies.isEmpty(), "dependency modes lack readiness evidence");
             String knowledge = stringValue(handoff.get("knowledge_mode"));
             requireReviewed(Set.of("required", "not_used").contains(knowledge), "unknown knowledge mode");
-            if ("required".equals(knowledge)) {
+            if(nativeRequiredV2)com.specdriven.regression.producttest.KnowledgeSelectionProof.validateProvenance(handoff,result);
+            else if ("required".equals(knowledge)) {
                 for (String field : List.of("selection_receipt_raw_sha256", "selection_receipt_sha256", "source_snapshot_sha256",
                         "candidate_search_sha256", "query_sha256"))
                     requireReviewed(stringValue(handoff.get(field)).matches("[a-f0-9]{64}"), "required knowledge digest is missing");

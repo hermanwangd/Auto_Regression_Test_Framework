@@ -1,0 +1,61 @@
+contract_version: product-test-reviewed-handoff.v2
+artifact: reviewed_native_required_knowledge_handoff
+format: strict_utf8_json
+required_fields: [contract_version, suite_id, profile, knowledge_mode, review_ref, reviewed_by, reviewed_at, valid_until, framework_baseline, repository_revisions, workspace_ref, project_ref, swarm_source, cognee_source, reviewed_files, reviewed_contracts, requirement_mapping, knowledge_selection_proof, preparation_provenance, external_artifact_bindings, proposal_trace, expected_sut_revisions, sut_revision_evidence]
+unknown_fields: prohibited
+explicit_nulls: prohibited
+duplicate_keys: prohibited
+limits: {bytes: 2097152, reviewed_files_including_contracts: 128, file_bytes: 2097152, total_executable_bytes: 16777216, native_providers: 1, dependency_modes: 0, selected_SUTs: 1, trace_cases: 512}
+capability: {test_level: integration, test_type: regression, environment_stage: local, knowledge_mode: required, provider_mode: real}
+legacy:
+  v1_not_used: unchanged
+  v1_component_required: unchanged
+  v1_native_required: blocked
+  v2_not_used_or_component: blocked
+protected_invocation:
+  handoff_sha_variable: REGRESS_REVIEWED_HANDOFF_SHA256
+  sut_binding_sha_variable: REGRESS_REVIEWED_SUT_BINDING_SHA256
+  module_sut_binding_sha_variable: SWARM_PRODUCT_TEST_SUT_BINDING_SHA256
+  missing_or_malformed_required_pin: blocked_before_TEST_provider_dispatch
+  producer_adoption: independently_pinned_actual_source_admission_JAR_and_exact_embedded_schema
+  execution_JAR: separate_FrameworkBinding_pin_not_assumed_equal_source_admission_producer_JAR
+knowledge_selection_proof:
+  required_fields: [path, sha256]
+  contract: knowledge-selection-proof.v1
+  original_private_receipt: prohibited_in_runtime
+preparation_provenance:
+  required_fields: [mission_ref, request_ref, sut_run_ref, private_original_receipt_sha256, context_sha256, proposal_sha256, source_binding_version, classification]
+  source_binding_version: runner-source-bindings.v1
+  classification: framework_verification_only
+external_artifact_bindings:
+  required_fields: [path, sha256, producer_jar_sha256, producer_schema_sha256, lock_sha256, trusted_roots_sha256, file_bindings]
+  contract: exact_accepted_D2_runner-source-bindings.v1
+  source_access: no_runtime_Git_network_root_resolution_or_second_assembler
+  file_bindings:
+    required_fields: [reviewed_path, artifact_id]
+    closure: exact_every_reviewed_executable_and_contract
+    identity: exact_qualified_artifact_role_source_owner_cleanup_owner_bytes_hash
+  versions: artifact_source_A_distinct_from_composition_root_lock_X_and_deployed_SUT_versions
+proposal_trace:
+  required_fields: [test_case_id, qualified_case_ref, case_sha256, requirement_refs, acceptance_refs, risk_refs, api_refs, code_refs, citations, oracle]
+  citations: exact_selected_qualified_PK_identity_and_content_sha256
+  oracle: {required_fields: [qualified_ref, sha256, review_ref, reviewed_by], source: independently_reviewed_fixed_oracle_artifact}
+  requirement_coverage: every_reviewed_requirement_test_pair
+  bare_ID_cross_repository_credit: prohibited
+sut_revision_evidence:
+  required_fields: [path, sha256, sut_id]
+  contract: existing_D2_runner-runtime-binding.v1
+  independent_pin: mandatory_outside_editable_request
+  correlation: exact_request_ref_and_sut_run_ref
+  revisions: expected_equals_observed_and_reviewed_source_SUT_expectation
+  source_admission_NOT_EVALUATED: never_promoted_to_execution_by_itself
+expiry:
+  valid_until: strictly_after_invocation_no_more_than_10_minutes_after_review_and_no_later_than_used_context_expiry
+  evidence_validation: historical_comparison_against_recorded_invocation_time_only_no_live_owner_or_current_expiry_recheck
+execution:
+  providers: existing_finite_REST_CLI_NATS_gRPC_contracts_only
+  shared_state_or_dependencies: prohibited
+  existing_endpoint_profile_service_budget_payload_and_gRPC_lease_controls: unchanged
+  oracle_changes_or_retrieval_in_runner: prohibited
+classification: framework_verification_only
+downstream_release_evidence: false

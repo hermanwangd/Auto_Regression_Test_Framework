@@ -16,10 +16,10 @@ public record ProductTestPolicy(String testLevel, String testType, String enviro
         text(reviewedHandoffRef, "reviewed_handoff_ref");
         providerModes = modes(providerModes, "provider_modes", false);
         dependencyModes = modes(dependencyModes, "dependency_modes", true);
-        if ("integration".equals(testLevel) && (!"not_used".equals(knowledgeMode) || sharedState != null
+        if ("integration".equals(testLevel) && (sharedState != null
                 || !dependencyModes.isEmpty() || providerModes.size() != 1
                 || providerModes.values().stream().anyMatch(mode -> !"real".equals(mode))))
-            throw invalid("integration", "requires one real local native target, not_used, and no shared/dependency policy");
+            throw invalid("integration", "requires one real local native target and no shared/dependency policy");
     }
 
     public boolean nativeExecution() { return "integration".equals(testLevel); }

@@ -52,7 +52,7 @@ entities:
   remainder_contract: unsupported
   exclusions: only_manual_only_or_waived_with_reason_review_approver_and_time
 cases:
-  fields: [test_case_id, run_id, batch_id, source_result, canonical_outcome, evidence_state, expected_negative, mapping_refs, evidence_refs]
+  fields: [test_case_id, qualified_case_ref, run_id, batch_id, source_result, canonical_outcome, evidence_state, expected_negative, mapping_refs, evidence_refs, oracle_trace_refs]
   outcomes: [PASS, FAIL, BLOCKED, NOT_RUN, SKIPPED]
   evidence_states: [VALID, MISSING, STALE, TAMPERED, MISMATCH, INVALID]
   expected_negative: {expected: null, detection: UNKNOWN, reason: independent_negative_detection_evidence_missing}
@@ -108,3 +108,37 @@ publication:
   write_failure: nonzero_and_no_success_pair
   invalid_evidence: nonzero_and_no_success_receipt
   canonical_verdict: preserved
+
+oracle_trace:
+  optional_additive_for_older_reports: true
+  closed_row_fields: [trace_id, test_case_id, qualified_case_ref, source_result, source_result_sha256, run_id, batch_id, canonical_outcome, evidence_state, requirement_refs, acceptance_criteria_refs, mapping_review_ref, declared_oracle_refs, oracle, expected_ref, expected_ref_state, expected_ref_reason, binding_state, binding_reason, independence, knowledge_refs]
+  trace_id: sha256_of_strict_JSON_array_result_digest_project_workspace_qualified_or_scoped_case_requirement_mapping_review_declared_pointer
+  aggregate_rows_maximum: 10000
+  entity_and_case_refs: stable_trace_ids_exact_case_and_requirement_or_authoritative_AC_links_only
+  oracle_closed_fields: [qualified_ref, path, sha256, source_repo, source_commit, source_testrepo_version, review_ref, reviewed_by]
+  unsupported_source_identity_fields: null
+  binding_states: [SOURCE_BOUND, DECLARED_ONLY, MISSING, AMBIGUOUS, STALE, INVALID]
+  expected_ref_states: [BOUND_DECLARED_REFERENCE, UNKNOWN]
+  expected_ref_requires: valid_selected_evidence_exact_singleton_case_mapping_review_and_admitted_reviewed_path_hash_role_and_qualified_oracle_join
+  assertion_fragments_without_exported_exact_join: retain_declared_pointer_only_expected_ref_null
+  singleton_cardinality_alone: insufficient
+  SOURCE_BOUND: historical_source_identity_only_not_assertion_execution_expected_values_or_independence
+  independence: {state: UNKNOWN, reason: independence_attestation_not_in_contract}
+  knowledge_refs_closed_fields: [qualified_source_ref, record_version, content_sha256, selection_proof_sha256, context_sha256, source_bindings_sha256]
+  private_PK_body_or_original_receipt: prohibited
+  acceptance_criteria_refs_without_authoritative_catalog: []
+  case_and_entity_trace_links_do_not_change_metrics: true
+  source_A_composition_X_and_SUT_revisions: separate
+
+knowledge_trace:
+  optional_additive_for_older_reports: true
+  admitted_source: exact_KnowledgeSelectionProof_validateProvenance_success
+  source_and_case_identity: qualified_reference_at_artifact_A_not_bare_case_or_composition_X
+  oracle_closed_fields: [qualified_ref, sha256, review_ref, reviewed_by]
+  historical_context_state: VALID_AT_INVOCATION
+  new_invocation_eligibility: NOT_EVALUATED_REQUIRES_FRESH_REVIEW
+  raw_context_original_receipt_source_or_proposal_body: prohibited
+source_case_selection:
+  optional_additive_for_older_reports: true
+  fields: [qualified_case_ref, source_test_id, state, run_id, batch_id, source_result, source_result_sha256]
+  states: [SELECTED, NOT_SELECTED]

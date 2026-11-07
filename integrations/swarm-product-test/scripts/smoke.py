@@ -20,6 +20,10 @@ parser.add_argument("--test-level", choices=["component", "integration"], defaul
 parser.add_argument("--output-dir", type=Path, help="Fresh evidence directory; an existing directory is rejected")
 parser.add_argument("--via-host", action="store_true")
 parser.add_argument("--fixture-lease-sha256", help="Independent reviewed local gRPC owner lease pin")
+parser.add_argument("--sut-binding-sha256", help="Independently protected reviewed v2 runtime SUT binding pin")
+parser.add_argument("--mission-ref", help="Frozen reviewed v2 preparation mission identity")
+parser.add_argument("--request-ref", help="Frozen reviewed v2 preparation request correlation identity")
+parser.add_argument("--suite-manifest", type=Path, help="Explicit existing manifest contained in the reviewed suite directory")
 parser.add_argument("--provider-jar", type=Path)
 parser.add_argument("--java-home", type=Path, default=Path(os.environ.get("JAVA_HOME", "/usr")))
 args = parser.parse_args()
@@ -33,18 +37,22 @@ outputs = work / "outputs"
 outputs.mkdir(mode=0o700, exist_ok=True)
 handoff_path = suite / "handoff/reviewed-tests.json"
 handoff = json.loads(handoff_path.read_text())
+manifest = (args.suite_manifest or suite / "suite_manifest.yaml").resolve(strict=True)
+assert manifest.is_relative_to(suite) and manifest.is_file(), "Manifest must be contained in reviewed suite"
+for value in (args.mission_ref,args.request_ref):
+    assert value is None or (0 < len(value) <= 256 and value == value.strip() and not any(ord(c) < 32 or ord(c) == 127 for c in value)), "Correlation reference must be bounded metadata"
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 assert sha(jar) == args.framework_sha256, "Framework artifact differs from supplied pin"
 assert sha(handoff_path) == args.handoff_sha256, "Handoff differs from independently supplied pin"
 request = {
     "contract_version": "product-test-request.v1", "module_id": "product-test", "module_version": "1",
-    "mission_ref": "synthetic-mission:product-module-smoke", "request_ref": "synthetic-request:" + str(uuid.uuid4()),
+    "mission_ref": args.mission_ref or "synthetic-mission:product-module-smoke", "request_ref": args.request_ref or "synthetic-request:" + str(uuid.uuid4()),
     "execution_revision": "synthetic-revision-1", "workspace_ref": handoff["workspace_ref"], "project_ref": handoff["project_ref"],
     "repository_revisions": handoff["repository_revisions"],
     "requirement_test_mapping": {item["requirement_ref"]: item["test_case_ids"] for item in handoff["requirement_mapping"]},
     "test_level": args.test_level, "test_type": "regression", "environment_stage": "local", "knowledge_mode": handoff["knowledge_mode"],
-    "artifact_root": str(suite), "suite_manifest": str(suite / "suite_manifest.yaml"), "suite_id": handoff["suite_id"], "profile": handoff["profile"],
+    "artifact_root": str(suite), "suite_manifest": str(manifest), "suite_id": handoff["suite_id"], "profile": handoff["profile"],
     "reviewed_handoff": str(handoff_path), "expected_handoff_sha256": args.handoff_sha256,
 }
 request_file = work / "request.json"
@@ -58,6 +66,9 @@ environment = {
 if args.fixture_lease_sha256 is not None:
     assert len(args.fixture_lease_sha256) == 64 and all(c in "0123456789abcdef" for c in args.fixture_lease_sha256)
     environment["SWARM_PRODUCT_TEST_FIXTURE_LEASE_SHA256"] = args.fixture_lease_sha256
+if args.sut_binding_sha256 is not None:
+    assert len(args.sut_binding_sha256) == 64 and all(c in "0123456789abcdef" for c in args.sut_binding_sha256)
+    environment["SWARM_PRODUCT_TEST_SUT_BINDING_SHA256"] = args.sut_binding_sha256
 java = str(args.java_home / "bin/java")
 provider = (args.provider_jar or module / "target/swarm-product-test-1.0.0-provider.jar").resolve(strict=True)
 host = module / "target/swarm-product-test-1.0.0-host.jar"
