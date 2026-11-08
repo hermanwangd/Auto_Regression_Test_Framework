@@ -16,4 +16,13 @@ class ReviewedGrpcCapabilityTest {
   var capability=ReviewedNativeCapability.fromContract("grpc_client.v0.3");
   assertThatCode(()->capability.validateInputs(Map.of("grpc.service","helloworld.Greeter","grpc.method","SayHello","grpc.descriptor_ref","artifact://fixtures/greeter.desc.b64","grpc.message","artifact://fixtures/request.json"))).doesNotThrowAnyException();
  }
+ @Test void routeGuideCapabilityAdmitsOnlyGetFeatureAndItsFixedArtifact() {
+  var capability=ReviewedNativeCapability.fromContract("grpc_client.v0.3");
+  assertThatCode(()->capability.validateInputs(Map.of("grpc.service","routeguide.RouteGuide","grpc.method","GetFeature","grpc.descriptor_ref","artifact://fixtures/routeguide.desc.b64","grpc.message","artifact://fixtures/request.json"))).doesNotThrowAnyException();
+  for(String method:java.util.List.of("ListFeatures","RecordRoute","RouteChat"))
+   assertThatThrownBy(()->capability.validateInputs(Map.of("grpc.service","routeguide.RouteGuide","grpc.method",method,"grpc.descriptor_ref","artifact://fixtures/routeguide.desc.b64","grpc.message","artifact://fixtures/request.json"))).isInstanceOf(IllegalArgumentException.class);
+  for(String descriptor:java.util.List.of("artifact://fixtures/greeter.desc.b64","artifact://fixtures/unknown.desc.b64","artifact://fixtures/../routeguide.desc.b64"))
+   assertThatThrownBy(()->capability.validateInputs(Map.of("grpc.service","routeguide.RouteGuide","grpc.method","GetFeature","grpc.descriptor_ref",descriptor,"grpc.message","artifact://fixtures/request.json"))).isInstanceOf(IllegalArgumentException.class);
+ }
+
 }

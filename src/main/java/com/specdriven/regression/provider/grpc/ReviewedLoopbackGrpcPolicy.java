@@ -28,6 +28,7 @@ public final class ReviewedLoopbackGrpcPolicy {
     public static final String DESCRIPTOR_REF = "artifact://fixtures/echo.desc.b64";
     public static final String REQUEST_REF = "artifact://fixtures/request.json";
     public static final String LEASE_PATH = "fixtures/lease.json";
+    private static final String ROUTE_GUIDE_FDP_SHA256 = "d8a8aef917b101b9374d015e9f1911edc98e5f94ff4653b0ee859ea047b4d549";
     private static final ObjectMapper JSON = new ObjectMapper(JsonFactory.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build())
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
@@ -35,7 +36,8 @@ public final class ReviewedLoopbackGrpcPolicy {
     private static final Set<String> LEASE_FIELDS = Set.of("version", "profile", "endpoint", "owner_run_id", "pid", "process_start_instant", "issued_at", "expires_at", "request_sha256", "descriptor_sha256");
     public enum Profile {
         ECHO("echo.v1","swarm.producttest","EchoService","Echo","EchoRequest","EchoReply","message","echo.desc.b64"),
-        GREETER("greeter.v1","helloworld","Greeter","SayHello","HelloRequest","HelloReply","name","greeter.desc.b64");
+        GREETER("greeter.v1","helloworld","Greeter","SayHello","HelloRequest","HelloReply","name","greeter.desc.b64"),
+        ROUTE_GUIDE("routeguide.getfeature.v1","routeguide","RouteGuide","GetFeature","Point","Feature","","routeguide.desc.b64");
         final String id,pkg,service,method,request,response,requestField,descriptor;
         Profile(String id,String pkg,String service,String method,String request,String response,String requestField,String descriptor) {
             this.id=id;this.pkg=pkg;this.service=service;this.method=method;this.request=request;this.response=response;this.requestField=requestField;this.descriptor=descriptor;
@@ -45,7 +47,7 @@ public final class ReviewedLoopbackGrpcPolicy {
     public static Profile profile(Map<String,?> values) {
         for(var profile:Profile.values()) if((profile.pkg+"."+profile.service).equals(values.get("grpc.service"))
                 && profile.method.equals(values.get("grpc.method")) && ("artifact://"+profile.descriptorPath()).equals(values.get("grpc.descriptor_ref")))return profile;
-        throw new IllegalArgumentException("reviewed_grpc: only finite Echo/Echo or Greeter/SayHello profiles are supported");
+        throw new IllegalArgumentException("reviewed_grpc: only finite Echo/Echo, Greeter/SayHello or RouteGuide/GetFeature profiles are supported");
     }
     private ReviewedLoopbackGrpcPolicy() { }
 
@@ -92,30 +94,38 @@ public final class ReviewedLoopbackGrpcPolicy {
             var set=DescriptorProtos.FileDescriptorSet.parseFrom(bytes);
             require(set.getFileCount()==1 && set.getUnknownFields().asMap().isEmpty(), "one descriptor file is required");
             var proto=set.getFile(0);
-            require(proto.getSyntax().equals("proto3") && proto.getPackage().equals(profile.pkg)
-                    && proto.getDependencyCount()==0 && proto.getServiceCount()==1 && proto.getMessageTypeCount()==2
-                    && proto.getExtensionCount()==0 && proto.getEnumTypeCount()==0 && validFileOptions(proto,profile)
-                    && proto.getUnknownFields().asMap().isEmpty(), "descriptor must be self-contained finite proto3 Echo schema");
-            var service=proto.getService(0);
-            require(service.getName().equals(profile.service) && service.getMethodCount()==1 && !service.hasOptions()
-                    && service.getUnknownFields().asMap().isEmpty(), "only one Echo service/method is accepted");
-            var rpc=service.getMethod(0);
-            require(rpc.getName().equals(profile.method) && !rpc.getClientStreaming() && !rpc.getServerStreaming()
-                    && (!rpc.hasOptions() || rpc.getOptions().equals(DescriptorProtos.MethodOptions.getDefaultInstance()))
-                    && rpc.getUnknownFields().asMap().isEmpty(), "only unary Echo is accepted");
-            require(rpc.getInputType().equals("."+profile.pkg+"."+profile.request) && rpc.getOutputType().equals("."+profile.pkg+"."+profile.response),"method must use exact profile request/reply types");
-            for (var message:proto.getMessageTypeList()) {
-                require(message.getName().equals(profile.request) || message.getName().equals(profile.response),"unknown profile message");
-                String fieldName=message.getName().equals(profile.request)?profile.requestField:"message";
-                require(message.getFieldCount()==1 && message.getNestedTypeCount()==0 && message.getEnumTypeCount()==0
-                        && message.getExtensionCount()==0 && message.getOneofDeclCount()==0 && message.getExtensionRangeCount()==0
-                        && message.getReservedRangeCount()==0 && message.getReservedNameCount()==0 && !message.hasOptions()
-                        && message.getUnknownFields().asMap().isEmpty(), "each message must contain one string field");
-                var field=message.getField(0);
-                require(field.getName().equals(fieldName) && field.getNumber()==1 && field.getType()==DescriptorProtos.FieldDescriptorProto.Type.TYPE_STRING
-                        && field.getLabel()==DescriptorProtos.FieldDescriptorProto.Label.LABEL_OPTIONAL && !field.hasOptions()
-                        && !field.hasOneofIndex() && !field.hasTypeName() && (!field.hasJsonName() || field.getJsonName().equals(fieldName)) && !field.hasDefaultValue() && !field.hasExtendee() && !field.getProto3Optional()
-                        && field.getUnknownFields().asMap().isEmpty(), "message must be optional string message=1");
+            if (profile==Profile.ROUTE_GUIDE) {
+                // Exact tracked upstream schema, including all streaming declarations and options.
+                // Only GetFeature is an admitted operation; these declarations do not enable streaming.
+                require(digest(proto.toByteArray()).equals(ROUTE_GUIDE_FDP_SHA256)
+                        && java.util.Arrays.equals(bytes,set.toByteArray()),
+                        "RouteGuide descriptor must match the exact reviewed full schema");
+            } else {
+                require(proto.getSyntax().equals("proto3") && proto.getPackage().equals(profile.pkg)
+                        && proto.getDependencyCount()==0 && proto.getServiceCount()==1 && proto.getMessageTypeCount()==2
+                        && proto.getExtensionCount()==0 && proto.getEnumTypeCount()==0 && validFileOptions(proto,profile)
+                        && proto.getUnknownFields().asMap().isEmpty(), "descriptor must be self-contained finite proto3 Echo schema");
+                var service=proto.getService(0);
+                require(service.getName().equals(profile.service) && service.getMethodCount()==1 && !service.hasOptions()
+                        && service.getUnknownFields().asMap().isEmpty(), "only one Echo service/method is accepted");
+                var rpc=service.getMethod(0);
+                require(rpc.getName().equals(profile.method) && !rpc.getClientStreaming() && !rpc.getServerStreaming()
+                        && (!rpc.hasOptions() || rpc.getOptions().equals(DescriptorProtos.MethodOptions.getDefaultInstance()))
+                        && rpc.getUnknownFields().asMap().isEmpty(), "only unary Echo is accepted");
+                require(rpc.getInputType().equals("."+profile.pkg+"."+profile.request) && rpc.getOutputType().equals("."+profile.pkg+"."+profile.response),"method must use exact profile request/reply types");
+                for (var message:proto.getMessageTypeList()) {
+                    require(message.getName().equals(profile.request) || message.getName().equals(profile.response),"unknown profile message");
+                    String fieldName=message.getName().equals(profile.request)?profile.requestField:"message";
+                    require(message.getFieldCount()==1 && message.getNestedTypeCount()==0 && message.getEnumTypeCount()==0
+                            && message.getExtensionCount()==0 && message.getOneofDeclCount()==0 && message.getExtensionRangeCount()==0
+                            && message.getReservedRangeCount()==0 && message.getReservedNameCount()==0 && !message.hasOptions()
+                            && message.getUnknownFields().asMap().isEmpty(), "each message must contain one string field");
+                    var field=message.getField(0);
+                    require(field.getName().equals(fieldName) && field.getNumber()==1 && field.getType()==DescriptorProtos.FieldDescriptorProto.Type.TYPE_STRING
+                            && field.getLabel()==DescriptorProtos.FieldDescriptorProto.Label.LABEL_OPTIONAL && !field.hasOptions()
+                            && !field.hasOneofIndex() && !field.hasTypeName() && (!field.hasJsonName() || field.getJsonName().equals(fieldName)) && !field.hasDefaultValue() && !field.hasExtendee() && !field.getProto3Optional()
+                            && field.getUnknownFields().asMap().isEmpty(), "message must be optional string message=1");
+                }
             }
             var descriptor=Descriptors.FileDescriptor.buildFrom(proto,new Descriptors.FileDescriptor[0]);
             var method=descriptor.getServices().get(0).getMethods().get(0);
@@ -124,7 +134,20 @@ public final class ReviewedLoopbackGrpcPolicy {
             byte[] request=read(root,"fixtures/request.json",MAX_REQUEST_BYTES);
             String payload=StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(request)).toString();
             JsonNode requestDoc=JSON.readTree(payload);
-            require(requestDoc!=null && requestDoc.isObject() && requestDoc.size()==1 && requestDoc.path(profile.requestField).isTextual(), "request must be exactly one string message");
+            if (profile==Profile.ROUTE_GUIDE) {
+                require(requestDoc!=null && requestDoc.isObject() && requestDoc.size()==2
+                        && requestDoc.has("latitude") && requestDoc.has("longitude"),
+                        "RouteGuide request must contain exactly latitude and longitude");
+                for (String field : java.util.List.of("latitude","longitude"))
+                    require(requestDoc.path(field).isIntegralNumber() && requestDoc.path(field).canConvertToInt(),
+                            "RouteGuide request coordinates must be int32 integers");
+                int latitude=requestDoc.path("latitude").intValue(),longitude=requestDoc.path("longitude").intValue();
+                require(latitude>=-900000000 && latitude<=900000000
+                        && longitude>=-1800000000 && longitude<=1800000000,
+                        "RouteGuide request coordinates exceed E7 geographic range");
+            } else {
+                require(requestDoc!=null && requestDoc.isObject() && requestDoc.size()==1 && requestDoc.path(profile.requestField).isTextual(), "request must be exactly one string message");
+            }
             if(profile==Profile.GREETER)require(requestDoc.path("name").textValue().equals("swarm-probe"),"Greeter request must be exact swarm-probe");
             require(leaseDoc.path("version").asText().equals("reviewed-grpc-lease.v1"), "unsupported lease version");
             require(bindings.get("target").equals(leaseDoc.path("endpoint").textValue()) && bindings.get("owner_run_id").equals(leaseDoc.path("owner_run_id").textValue()), "lease endpoint/run identity mismatch");

@@ -346,7 +346,7 @@ public class EvidenceHardeningService {
         Map<String,Object> lease = mapValue(handoff.get("fixture_lease"));
         requireReviewed("reviewed-grpc-lease.v1".equals(lease.get("version")), "unsupported gRPC lease version");
         String profile = reviewedText(lease.get("profile"), "gRPC lease profile");
-        requireReviewed(Set.of("echo.v1", "greeter.v1").contains(profile), "unsupported gRPC lease profile");
+        requireReviewed(Set.of("echo.v1", "greeter.v1", "routeguide.getfeature.v1").contains(profile), "unsupported gRPC lease profile");
         String owner = reviewedText(lease.get("owner_run_id"), "gRPC lease owner");
         String endpoint = reviewedText(lease.get("endpoint"), "gRPC lease endpoint");
         String leaseSha = reviewedText(handoff.get("fixture_lease_sha256"), "gRPC lease digest");
@@ -374,9 +374,12 @@ public class EvidenceHardeningService {
                 new com.fasterxml.jackson.core.type.TypeReference<>() {});
         requireReviewed(leaseSha.equals(proof.get("fixture_lease_sha256")) && owner.equals(proof.get("owner_run_id"))
                 && endpoint.equals(proof.get("endpoint")), "gRPC proof differs from frozen lease identity");
-        requireReviewed(("echo.v1".equals(profile) ? "swarm.producttest.EchoService" : "helloworld.Greeter")
-                .equals(proof.get("service")) && ("echo.v1".equals(profile) ? "Echo" : "SayHello")
-                .equals(proof.get("method")), "gRPC proof differs from reviewed service/method");
+        String expectedService=Map.of("echo.v1","swarm.producttest.EchoService","greeter.v1","helloworld.Greeter",
+                "routeguide.getfeature.v1","routeguide.RouteGuide").get(profile);
+        String expectedMethod=Map.of("echo.v1","Echo","greeter.v1","SayHello",
+                "routeguide.getfeature.v1","GetFeature").get(profile);
+        requireReviewed(expectedService.equals(proof.get("service")) && expectedMethod.equals(proof.get("method")),
+                "gRPC proof differs from reviewed service/method");
         requireReviewed(proof.get("rpc_attempted") instanceof Boolean && proof.get("cleanup_confirmed") instanceof Boolean,
                 "gRPC proof attempt/cleanup flags must be boolean");
         requireReviewed(!passed || Boolean.TRUE.equals(proof.get("rpc_attempted"))

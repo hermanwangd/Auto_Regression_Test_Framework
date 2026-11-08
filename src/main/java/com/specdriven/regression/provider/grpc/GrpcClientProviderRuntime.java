@@ -63,7 +63,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
             if(inputs.putIfAbsent(stringValue(parameter.get("bind_as")),parameter.get("ref"))!=null)
                 throw new IllegalArgumentException("reviewed_grpc: duplicate unary input");
         }
-        if(!java.util.Set.of("fixtures/echo.desc.b64","fixtures/greeter.desc.b64").contains(inputs.get("grpc.descriptor_ref")) || !"fixtures/request.json".equals(inputs.get("grpc.message")))
+        if(!java.util.Set.of("fixtures/echo.desc.b64","fixtures/greeter.desc.b64","fixtures/routeguide.desc.b64").contains(inputs.get("grpc.descriptor_ref")) || !"fixtures/request.json".equals(inputs.get("grpc.message")))
             throw new IllegalArgumentException("reviewed_grpc: resolved fixtures differ from reviewed fixed paths");
         inputs.put("grpc.descriptor_ref","artifact://"+inputs.get("grpc.descriptor_ref"));
         inputs.put("grpc.message",ReviewedLoopbackGrpcPolicy.REQUEST_REF);

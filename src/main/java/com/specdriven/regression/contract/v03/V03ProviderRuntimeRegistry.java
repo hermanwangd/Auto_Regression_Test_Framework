@@ -27,6 +27,8 @@ public class V03ProviderRuntimeRegistry {
     }
 
     public V03ProviderRuntimeAdapter resolve(String providerType) {
+        if ("ibm_mq".equals(providerType) && !com.specdriven.regression.build.RunnerBuildVariant.ibmMqAvailable())
+            throw new IllegalArgumentException(com.specdriven.regression.build.RunnerBuildVariant.mqUnsupportedReason());
         V03ProviderRuntimeAdapter adapter = adapters.get(providerType);
         if (adapter == null) {
             throw new IllegalArgumentException("No v0.3 runtime adapter for provider_type `" + providerType + "`.");

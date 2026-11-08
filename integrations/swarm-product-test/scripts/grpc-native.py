@@ -16,10 +16,26 @@ import sys
 PROFILES = {
     "echo.v1": ("swarm.producttest.EchoService", "Echo", "echo.desc.b64"),
     "greeter.v1": ("helloworld.Greeter", "SayHello", "greeter.desc.b64"),
+    "routeguide.getfeature.v1": ("routeguide.RouteGuide", "GetFeature", "routeguide.desc.b64"),
 }
 
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+def valid_oracle(profile, value):
+    """Validate only the selected oracle's closed shape; never derive its values."""
+    if not isinstance(value, dict):
+        return False
+    if profile in ("echo.v1", "greeter.v1"):
+        return set(value) == {"message"} and isinstance(value["message"], str)
+    if profile != "routeguide.getfeature.v1" or set(value) != {"name", "location"} or not isinstance(value["name"], str):
+        return False
+    point = value["location"]
+    return (isinstance(point, dict) and set(point) == {"latitude", "longitude"}
+            and type(point["latitude"]) is int and type(point["longitude"]) is int
+            and -900000000 <= point["latitude"] <= 900000000
+            and -1800000000 <= point["longitude"] <= 1800000000)
+
 
 def write(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -44,7 +60,8 @@ def main():
     oracle = args.oracle_file.resolve(strict=True)
     oracle_bytes = oracle.read_bytes()
     expected = json.loads(oracle_bytes)
-    assert isinstance(expected, dict) and set(expected) == {"message"} and isinstance(expected["message"], str), "Independent oracle must have one string message"
+    assert valid_oracle(args.profile, expected), ("Independent RouteGuide oracle must have a string name and closed integer Point location"
+            if args.profile == "routeguide.getfeature.v1" else "Independent oracle must have one string message")
     assert len(oracle_bytes) <= 65536
     lease_file = fixture / "fixtures/lease.json"
     assert sha(lease_file) == args.fixture_lease_sha256, "Fixture lease differs from independent pin"

@@ -147,7 +147,7 @@ final class CanonicalEvidence {
                 Path leaseFile=LocalFiles.contained(Path.of(request.suiteManifest()).getParent(),Path.of(request.suiteManifest()).getParent().resolve("fixtures/lease.json"));
                 byte[] leaseBytes=LocalFiles.read(leaseFile,16384);
                 require(fixtureLeaseSha256.equals(LocalFiles.sha256(leaseBytes)) && lease.equals(Json.MAPPER.readTree(leaseBytes)),"Independent lease bytes differ from canonical provenance");
-                require("reviewed-grpc-lease.v1".equals(Json.required(lease,"version")) && Set.of("echo.v1","greeter.v1").contains(Json.required(lease,"profile")),"Unsupported fixture lease profile");
+                require("reviewed-grpc-lease.v1".equals(Json.required(lease,"version")) && Set.of("echo.v1","greeter.v1","routeguide.getfeature.v1").contains(Json.required(lease,"profile")),"Unsupported fixture lease profile");
                 boolean bound=false;
                 for(var reviewed:Json.MAPPER.readTree(reviewedBytes).path("reviewed_files")) {
                     if("fixtures/lease.json".equals(reviewed.path("path").asText())) {
@@ -159,9 +159,13 @@ final class CanonicalEvidence {
                     String proofRef="provider-evidence/grpc-client/reviewed-unary.json";
                     require(contains(document.path("evidence_refs"),proofRef) && containsFile(indexDocument.path("entries"),proofRef),"Native gRPC proof must be indexed");
                     var proof=Json.readGrpcProof(relative(run,proofRef));
-                    boolean echo="echo.v1".equals(lease.path("profile").asText());
-                    require((echo?"swarm.producttest.EchoService":"helloworld.Greeter").equals(Json.required(proof,"service"))
-                            && (echo?"Echo":"SayHello").equals(Json.required(proof,"method")),"Native gRPC finite service/method mismatch");
+                    String grpcProfile=Json.required(lease,"profile");
+                    String expectedService=java.util.Map.of("echo.v1","swarm.producttest.EchoService","greeter.v1","helloworld.Greeter",
+                            "routeguide.getfeature.v1","routeguide.RouteGuide").get(grpcProfile);
+                    String expectedMethod=java.util.Map.of("echo.v1","Echo","greeter.v1","SayHello",
+                            "routeguide.getfeature.v1","GetFeature").get(grpcProfile);
+                    require(expectedService.equals(Json.required(proof,"service"))
+                            && expectedMethod.equals(Json.required(proof,"method")),"Native gRPC finite service/method mismatch");
                     require(fixtureLeaseSha256.equals(Json.required(proof,"fixture_lease_sha256"))
                             && Json.required(lease,"owner_run_id").equals(Json.required(proof,"owner_run_id"))
                             && Json.required(lease,"endpoint").equals(Json.required(proof,"endpoint")),"Native gRPC fixture identity mismatch");

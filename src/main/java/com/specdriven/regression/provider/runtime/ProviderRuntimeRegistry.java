@@ -17,6 +17,8 @@ public class ProviderRuntimeRegistry {
     }
 
     public ProviderRuntime resolve(String providerType) {
+        if (omittedMq(providerType)) throw new IllegalStateException(
+                com.specdriven.regression.build.RunnerBuildVariant.mqUnsupportedReason());
         ProviderRuntime runtime = runtimes.get(normalize(providerType));
         if (runtime == null) {
             throw new IllegalStateException("No provider runtime registered for provider_type `" + providerType + "`.");
@@ -25,6 +27,10 @@ public class ProviderRuntimeRegistry {
     }
 
     public RuntimeResolution tryResolve(String providerType) {
+        if (omittedMq(providerType)) return RuntimeResolution.failed(ProviderFailure.of(
+                "UNKNOWN_PROVIDER_TYPE", "TARGET_RESOLUTION_FAILED",
+                com.specdriven.regression.build.RunnerBuildVariant.mqUnsupportedReason(),
+                "Use an independently qualified full runner when IBM MQ is required."));
         ProviderRuntime runtime = runtimes.get(normalize(providerType));
         if (runtime == null) {
             return RuntimeResolution.failed(ProviderFailure.of(
@@ -34,6 +40,11 @@ public class ProviderRuntimeRegistry {
                     "Register a ProviderRuntime for the Provider Contract provider_type."));
         }
         return RuntimeResolution.resolved(runtime);
+    }
+
+    private boolean omittedMq(String providerType) {
+        return "ibm_mq".equals(normalize(providerType))
+                && !com.specdriven.regression.build.RunnerBuildVariant.ibmMqAvailable();
     }
 
     private String normalize(String value) {

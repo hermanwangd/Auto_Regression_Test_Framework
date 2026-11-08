@@ -95,4 +95,30 @@ class ReviewedGrpcProofIdentityTest {
         result.put("status",status);((ObjectNode)result.path("test_results").get(0)).put("status",status);result.putArray("provider_results");result.putArray("provider_summary");result.putArray("step_results");result.putArray("steps");result.withArray("evidence_refs").remove(0);result.putArray("provider_evidence_refs");index.withArray("entries").remove(0);provenance.putObject("observed_provider_modes");policy.put("status","blocked");((ObjectNode)index.path("entries").get(1)).put("status","blocked");save();Files.delete(root.resolve(PROOF));assertThat(validate().valid()).as(validate().findings().toString()).isTrue();
     }
     @Test void changingProvenanceWithoutCanonicalPinStillFails() throws Exception {((ObjectNode)provenance.path("fixture_lease")).put("endpoint","grpc://127.0.0.1:1");write(HANDOFF,provenance);assertThat(validate().valid()).isFalse();}
+    void routeGuideFixture() throws Exception {
+        ((ObjectNode)provenance.path("fixture_lease")).put("profile","routeguide.getfeature.v1");
+        proof.put("service","routeguide.RouteGuide").put("method","GetFeature")
+                .put("request","{\"latitude\":407838351,\"longitude\":-746143763}")
+                .put("body","{\"name\":\"recorded contract fixture\",\"location\":{\"latitude\":407838351,\"longitude\":-746143763}}");
+        save();
+    }
+    @Test void routeGuideFullFeatureProofIsValidatedHistoricallyWithoutOwnerReplay() throws Exception {
+        routeGuideFixture();
+        assertThat(validate().valid()).as(validate().findings().toString()).isTrue();
+        assertThat(root.resolve("fixtures/lease.json")).doesNotExist();
+    }
+    @ParameterizedTest @ValueSource(strings={"service","stream_method","owner","attempt","cleanup"})
+    void routeGuideProofCannotBorrowAnotherServiceMethodOrOwnership(String mutation) throws Exception {
+        routeGuideFixture();
+        switch(mutation) {
+            case "service" -> proof.put("service","helloworld.Greeter");
+            case "stream_method" -> proof.put("method","ListFeatures");
+            case "owner" -> proof.put("owner_run_id","0".repeat(32));
+            case "attempt" -> proof.put("rpc_attempted",false);
+            case "cleanup" -> proof.put("cleanup_confirmed",false);
+            default -> throw new AssertionError(mutation);
+        }
+        save();assertThat(validate().valid()).isFalse();
+    }
+
 }

@@ -373,11 +373,12 @@ class CanonicalEvidenceTest {
         Path path=run.resolve("provider-evidence/kafka/reviewed-publish.json");Files.createDirectories(path.getParent());Json.MAPPER.writeValue(path.toFile(),proof);result.withArray("evidence_refs").add("provider-evidence/kafka/reviewed-publish.json");Files.writeString(run.resolve("evidence_index.yaml"),"  - run_id: "+result.path("run_id").asText()+"\n    batch_id: BATCH-1\n    file_path: provider-evidence/kafka/reviewed-publish.json\n",java.nio.file.StandardOpenOption.APPEND);save();return pin;
     }
 
-    private String grpcFixture() throws Exception {
+    private String grpcFixture() throws Exception { return grpcFixture("echo.v1"); }
+    private String grpcFixture(String profile) throws Exception {
         nativeFixture(); selectNativeContract("grpc_client.v0.3");
         ((ObjectNode)result.path("provider_results").get(0)).put("provider_type","grpc_client").put("provider_contract","grpc_client.v0.3");
         ((ObjectNode)result.path("step_results").get(0)).put("operation","unary_call");setOperationMetadata("unary_call");
-        var lease=Json.MAPPER.createObjectNode().put("version","reviewed-grpc-lease.v1").put("profile","echo.v1").put("endpoint","grpc://127.0.0.1:12345").put("owner_run_id","a".repeat(32));
+        var lease=Json.MAPPER.createObjectNode().put("version","reviewed-grpc-lease.v1").put("profile",profile).put("endpoint","grpc://127.0.0.1:12345").put("owner_run_id","a".repeat(32));
         Files.createDirectories(root.resolve("fixtures"));Json.MAPPER.writeValue(root.resolve("fixtures/lease.json").toFile(),lease);
         String pin=LocalFiles.sha256(root.resolve("fixtures/lease.json"));
         var provenance=(ObjectNode)Json.read(run.resolve("product-test/reviewed-handoff.json"));
@@ -389,7 +390,7 @@ class CanonicalEvidenceTest {
         request=Json.MAPPER.treeToValue(requestValue,ProductTestRequest.class);provenance.put("handoff_sha256",request.expectedHandoffSha256());
         Json.MAPPER.writeValue(run.resolve("product-test/reviewed-handoff.json").toFile(),provenance);
         Path proofPath=run.resolve("provider-evidence/grpc-client/reviewed-unary.json");Files.createDirectories(proofPath.getParent());
-        Json.MAPPER.writeValue(proofPath.toFile(),Map.of("fixture_lease_sha256",pin,"owner_run_id","a".repeat(32),"endpoint","grpc://127.0.0.1:12345","rpc_attempted",true,"cleanup_confirmed",true,"status","OK","service","swarm.producttest.EchoService","method","Echo"));
+        Json.MAPPER.writeValue(proofPath.toFile(),Map.of("fixture_lease_sha256",pin,"owner_run_id","a".repeat(32),"endpoint","grpc://127.0.0.1:12345","rpc_attempted",true,"cleanup_confirmed",true,"status","OK","service",Map.of("echo.v1","swarm.producttest.EchoService","greeter.v1","helloworld.Greeter","routeguide.getfeature.v1","routeguide.RouteGuide").get(profile),"method",Map.of("echo.v1","Echo","greeter.v1","SayHello","routeguide.getfeature.v1","GetFeature").get(profile)));
         result.withArray("evidence_refs").add("provider-evidence/grpc-client/reviewed-unary.json");
         String runId=result.path("run_id").asText();Files.writeString(run.resolve("evidence_index.yaml"),"  - run_id: "+runId+"\n    batch_id: BATCH-1\n    file_path: provider-evidence/grpc-client/reviewed-unary.json\n",java.nio.file.StandardOpenOption.APPEND);
         save();return pin;
@@ -426,4 +427,26 @@ class CanonicalEvidenceTest {
         setOperationMetadata("http_request"); save();
         selectNativeContract("rest_client.v0.3");
     }
+    @ParameterizedTest @ValueSource(strings={"greeter.v1","routeguide.getfeature.v1"})
+    void additionalFiniteProfilesKeepIndependentRawLeaseAndCanonicalVerdict(String profile) throws Exception {
+        String pin=grpcFixture(profile);
+        assertThat(CanonicalEvidence.inspect(request,root,stdout,started,pin).verdict()).isEqualTo("passed");
+    }
+    @ParameterizedTest @ValueSource(strings={"service","stream_method","owner","attempt","cleanup"})
+    void routeGuideProofStillRequiresExactFiniteTupleAndOwnership(String mutation) throws Exception {
+        String pin=grpcFixture("routeguide.getfeature.v1");
+        Path path=run.resolve("provider-evidence/grpc-client/reviewed-unary.json");
+        var proof=(ObjectNode)Json.read(path);
+        switch(mutation) {
+            case "service" -> proof.put("service","helloworld.Greeter");
+            case "stream_method" -> proof.put("method","ListFeatures");
+            case "owner" -> proof.put("owner_run_id","0".repeat(32));
+            case "attempt" -> proof.put("rpc_attempted",false);
+            case "cleanup" -> proof.put("cleanup_confirmed",false);
+            default -> throw new AssertionError(mutation);
+        }
+        Json.MAPPER.writeValue(path.toFile(),proof);
+        assertThatThrownBy(()->CanonicalEvidence.inspect(request,root,stdout,started,pin)).isInstanceOf(IllegalArgumentException.class);
+    }
+
 }

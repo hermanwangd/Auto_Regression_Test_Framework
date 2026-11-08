@@ -275,6 +275,12 @@ public class RegressionCommand {
             return 0;
         }
         String command = args[0];
+        if ("build-info".equals(command)) {
+            var info = com.specdriven.regression.build.RunnerBuildVariant.describe();
+            try { out.println(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(info)); }
+            catch (java.io.IOException error) { err.println("Cannot render runner build information."); return 2; }
+            return "VALID".equals(info.get("descriptor_status")) ? 0 : 2;
+        }
         if (command.startsWith("runner-")) return new com.specdriven.regression.runner.RunnerCommand().execute(args, out, err);
         Map<String, String> options = parseOptions(args);
         Path root = Path.of(options.getOrDefault("--root", "."));
@@ -311,6 +317,7 @@ public class RegressionCommand {
     private void printGeneralUsage(PrintStream out) {
         out.println("usage: regress <command> [options]");
         out.println("commands:");
+        out.println("  build-info --format json");
         out.println("  validate --suite <suite_manifest> [--profile <profile>]");
         out.println("  run --suite <suite_manifest> --profile <profile>");
         out.println("  run --suite <suite_manifest> --dry-run [--profile <profile>]");

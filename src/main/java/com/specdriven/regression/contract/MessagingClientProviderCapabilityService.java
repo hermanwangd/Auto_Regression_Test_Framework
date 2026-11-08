@@ -5,7 +5,8 @@ import com.specdriven.regression.summary.SuiteExecutionContext;
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.evidence.EvidenceIndexFormatter;
-import com.specdriven.regression.provider.ibmmq.IbmMqProviderRuntime;
+import com.specdriven.regression.provider.ibmmq.IbmMqRuntimeFactory;
+import com.specdriven.regression.build.RunnerBuildVariant;
 import com.specdriven.regression.provider.kafka.KafkaProviderRuntime;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderFailure;
@@ -56,6 +57,12 @@ public class MessagingClientProviderCapabilityService {
         }
         List<String> providerTypes = validation.providerTypesUsed();
         String providerTypeLabel = providerTypeLabel(providerTypes);
+        if (providerTypes.contains("ibm_mq") && !RunnerBuildVariant.ibmMqAvailable()) {
+            return MessagingClientRunResult.blocked(validation.suiteId(), requestedProfile, providerTypeLabel,
+                    List.of(new ContractFinding(suiteManifest.toString(), "provider_type", "unsupported_suite_runtime",
+                            "", "ibm_mq", requestedProfile == null ? "" : requestedProfile, "",
+                            RunnerBuildVariant.mqUnsupportedReason())));
+        }
         if (providerTypes.isEmpty() || providerTypes.stream().anyMatch(providerType -> !SUPPORTED_PROVIDER_TYPES.contains(providerType))) {
             return MessagingClientRunResult.blocked(validation.suiteId(), requestedProfile, "", List.of(new ContractFinding(
                     suiteManifest.toString(),
@@ -105,7 +112,7 @@ public class MessagingClientProviderCapabilityService {
         ProviderRuntimeResolver resolver = new ProviderRuntimeResolver(
                 new ProviderRuntimeRegistry(Map.of(
                         "kafka", new KafkaProviderRuntime(),
-                        "ibm_mq", new IbmMqProviderRuntime())));
+                        "ibm_mq", IbmMqRuntimeFactory.create())));
 
         Instant startedAt = Instant.now();
         String status = "passed";

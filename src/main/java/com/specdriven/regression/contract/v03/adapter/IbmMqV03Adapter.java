@@ -4,7 +4,9 @@ import com.specdriven.regression.contract.v03.V03ExecutionContext;
 import com.specdriven.regression.contract.v03.V03ExecutionStep;
 import com.specdriven.regression.contract.v03.V03ProviderRuntimeAdapter;
 import com.specdriven.regression.contract.v03.V03StepResult;
-import com.specdriven.regression.provider.ibmmq.IbmMqProviderRuntime;
+import com.specdriven.regression.provider.ibmmq.IbmMqRuntimeFactory;
+import com.specdriven.regression.provider.runtime.ProviderRuntime;
+import com.specdriven.regression.build.RunnerBuildVariant;
 import java.util.Set;
 
 public class IbmMqV03Adapter extends AbstractProviderRuntimeV03Adapter implements V03ProviderRuntimeAdapter {
@@ -15,7 +17,7 @@ public class IbmMqV03Adapter extends AbstractProviderRuntimeV03Adapter implement
             "mq_message_exists",
             "mq_payload_match");
 
-    private final IbmMqProviderRuntime runtime = new IbmMqProviderRuntime();
+    private final ProviderRuntime runtime = IbmMqRuntimeFactory.create();
 
     @Override
     public String providerType() {
@@ -24,7 +26,7 @@ public class IbmMqV03Adapter extends AbstractProviderRuntimeV03Adapter implement
 
     @Override
     public boolean supports(String providerContract, String operation) {
-        return "ibm_mq.v0.3".equals(providerContract) && OPERATIONS.contains(operation);
+        return RunnerBuildVariant.ibmMqAvailable() && "ibm_mq.v0.3".equals(providerContract) && OPERATIONS.contains(operation);
     }
 
     @Override
