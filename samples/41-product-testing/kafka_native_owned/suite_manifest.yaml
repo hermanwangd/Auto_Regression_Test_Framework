@@ -1,0 +1,24 @@
+{
+  "manifest_version": "v0.3",
+  "suite_id": "PUBLIC-KAFKA-CONTRACT-TEMPLATE",
+  "default_profile": "local_native",
+  "artifact_roots": {
+    "fixtures": "fixtures/",
+    "expected_results": "expected_results/"
+  },
+  "targets": {
+    "owned_kafka": {
+      "provider_contract": "kafka.v0.3"
+    }
+  },
+  "env_profiles": {
+    "local_native": {
+      "ref": "env_profiles/local_native.yaml"
+    }
+  },
+  "tests": [
+    {
+      "ref": "test_cases/publish.yaml"
+    }
+  ]
+}

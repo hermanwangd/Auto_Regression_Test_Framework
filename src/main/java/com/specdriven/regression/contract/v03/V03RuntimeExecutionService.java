@@ -137,6 +137,7 @@ public class V03RuntimeExecutionService {
     private V03RuntimeRunResult runGuarded(Path suiteManifest, String profile, SuiteExecutionContext executionContext,
             ValidationResult validation, InvocationRequirement requirement) {
         requireMatchingProfile(profile, executionContext);
+        long reviewedOperationStarted=System.nanoTime();
         try {
             if (requirement.required() || ProductTestHandoffService.configured(suiteManifest, profile)) {
                 try (var snapshot = new ProductTestHandoffService().snapshot(suiteManifest, profile, requirement)) {
@@ -145,8 +146,10 @@ public class V03RuntimeExecutionService {
                     var baseline=selectedSourceProfile?ContractBaselineService.fromReviewedSnapshot(snapshot)
                             :new ContractBaselineService(snapshot.contractDirectory());
                     var checked = baseline.validateSuite(snapshot.suiteManifest());
+                    boolean jdbc=snapshot.policy().nativeExecution()&&((java.util.List<?>)snapshot.provenance().get("reviewed_contracts")).stream().anyMatch(raw->raw instanceof Map<?,?> contract&&"jdbc.v0.3".equals(contract.get("provider_contract")));
+                    var jdbcInvocation=jdbc?com.specdriven.regression.provider.jdbc.ReviewedJdbcInvocation.fromProtectedChild(requirement,reviewedOperationStarted):null;
                     var result = runValidated(snapshot.suiteManifest(), profile, executionContext, checked, baseline,
-                            snapshot.contractDirectory(), snapshot.policy(), snapshot.provenance());
+                            snapshot.contractDirectory(), snapshot.policy(), snapshot.provenance(),jdbcInvocation);
                     if (result.resultJson() != null) {
                         new SuiteArtifactFinalizer().finalizeLeaf(snapshot.suiteManifest(), result.resultJson());
                     }
@@ -170,6 +173,12 @@ public class V03RuntimeExecutionService {
     private V03RuntimeRunResult runValidated(Path suiteManifest, String profile, SuiteExecutionContext executionContext,
             ValidationResult validation, ContractBaselineService baseline, Path verifiedContracts,
             ProductTestPolicy policy, Map<String,Object> provenance) {
+        return runValidated(suiteManifest,profile,executionContext,validation,baseline,verifiedContracts,policy,provenance,null);
+    }
+    private V03RuntimeRunResult runValidated(Path suiteManifest,String profile,SuiteExecutionContext executionContext,
+            ValidationResult validation,ContractBaselineService baseline,Path verifiedContracts,ProductTestPolicy policy,Map<String,Object> provenance,
+            com.specdriven.regression.provider.jdbc.ReviewedJdbcInvocation jdbcInvocation) {
+        V03ProviderRuntimeRegistry selectedRegistry=jdbcInvocation==null?runtimeRegistry:runtimeRegistry.replacing(new JdbcV03Adapter(jdbcInvocation));
         if (!validation.valid()) {
             return V03RuntimeRunResult.blocked(validation.suiteId(), profile, validation.findings());
         }
@@ -240,7 +249,7 @@ public class V03RuntimeExecutionService {
                     throw new IllegalArgumentException("Shared-state policy requires explicit readiness checks.");
                 if (plan.environmentProfile().sitReadiness() == null && !policy.dependencyModes().isEmpty())
                     throw new IllegalArgumentException("Dependency modes require matching readiness checks.");
-                policyGuard = new SitExecutionGuard(runtimeRegistry, ownershipStore).prepare(plan, policy);
+                policyGuard = new SitExecutionGuard(selectedRegistry, ownershipStore).prepare(plan, policy);
                 policyEvidence.put("status", "passed");
             } catch (IllegalArgumentException | IllegalStateException error) {
                 preflightBlocked = true;
@@ -308,7 +317,7 @@ public class V03RuntimeExecutionService {
                 }
                 continue;
             }
-            V03ProviderRuntimeAdapter adapter = runtimeRegistry.resolve(step.providerType());
+            V03ProviderRuntimeAdapter adapter = selectedRegistry.resolve(step.providerType());
             V03StepResult result;
             try {
                 result = policyGuard == null ? adapter.execute(step, context) : policyGuard.execute(step, context, scope);

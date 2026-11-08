@@ -15,6 +15,7 @@ required=(
   runner_runtime_binding.v1.schema.yaml
   shared_sit_data.v1.schema.yaml
   coverage_report.v1.schema.yaml
+  coverage_authority.v1.schema.yaml
   env_profile.v0.2.schema.yaml
   environment_binding.v0.2.schema.yaml
   evidence_index.v0.2.schema.yaml

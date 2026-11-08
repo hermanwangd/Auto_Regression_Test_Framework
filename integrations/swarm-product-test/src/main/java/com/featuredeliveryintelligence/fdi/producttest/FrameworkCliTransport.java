@@ -25,9 +25,12 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
         Instant started = Instant.now();
         var consumedOutput = new AtomicInteger();
         var cleanup = new CleanupState();
+        JdbcProcessChannel jdbc=null;boolean jdbcSelected=false;String jdbcConsumerStage="RUN_CHILD";
         try {
             require(binding.approvedHandoffSha256().equals(request.expectedHandoffSha256()), "Request handoff pin differs from independent approved binding");
             DefaultProductTestingModule.validateStructure(request);
+            try {if(binding.coverageAuthority()!=null)new ReviewedOracleCoverageProjection.Authority(binding.coverageAuthority(),binding.coverageAuthoritySha256(),Json.MAPPER).verifyScope(Json.MAPPER.valueToTree(java.util.Map.of("domain","product","project_ref",request.projectRef(),"workspace_ref",request.workspaceRef(),"repository_revisions",request.repositoryRevisions())));}
+            catch(Exception invalidAuthority){throw ReviewedOracleCoverageProjection.Authority.rejection(invalidAuthority);}
             Path approved = LocalFiles.real(binding.approvedArtifactRoot());
             Path suite = LocalFiles.contained(approved, Path.of(request.suiteManifest()));
             Path artifactRoot = LocalFiles.real(Path.of(request.artifactRoot()));
@@ -36,42 +39,52 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
             Path handoff = LocalFiles.contained(suite.getParent(), Path.of(request.reviewedHandoff()));
             require(LocalFiles.sha256(LocalFiles.read(handoff, 2 * 1024 * 1024)).equals(binding.approvedHandoffSha256()), "Reviewed handoff digest mismatch");
             require(LocalFiles.sha256(binding.frameworkJar()).equals(binding.frameworkSha256()), "Configured framework digest mismatch");
+            if(JdbcProcessChannel.selected(request)){jdbcSelected=true;jdbc=JdbcProcessChannel.prepare(binding,request,invocation);}
             Path parent = LocalFiles.real(binding.outputParent());
             output = Files.createTempDirectory(parent, "product-test-" + invocation + "-",
                     PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
         } catch (Exception e) {
-            return Receipts.failure(request, invocation, ProductTestReceipt.Outcome.REJECTED, message(e), "", null);
+            return Receipts.failure(request, invocation, ProductTestReceipt.Outcome.REJECTED, jdbcSelected?"Protected JDBC admission rejected":message(e), "", null);
         }
         try {
             var run = invoke(List.of("run", "--suite", request.suiteManifest(), "--profile", request.profile(),
-                    "--root", output.toString()), request, output, deadline, consumedOutput, cleanup);
+                    "--root", output.toString()), request, output, deadline, consumedOutput, cleanup,jdbc);
             runExit = run.exitCode();
+            if(jdbc!=null){jdbcConsumerStage="SCAN_STDOUT";jdbc.scan(run.stdout());jdbcConsumerStage="SCAN_STDERR";jdbc.scan(run.stderr());jdbcConsumerStage="DRIVER_RECHECK";jdbc.verifyDriver();}
+            jdbcConsumerStage="RUN_LOGS";
             Files.writeString(output.resolve("run.stdout.log"), run.stdout());
             Files.writeString(output.resolve("run.stderr.log"), run.stderr());
             if (runExit != 0 && !run.stdout().contains("result_json: "))
                 return Receipts.failure(request, invocation, ProductTestReceipt.Outcome.FRAMEWORK_REJECTED,
                         "Framework rejected execution before producing a canonical result; inspect run.stdout.log", output.toString(), runExit);
+            jdbcConsumerStage="CANONICAL_PARSE";
             var evidence = CanonicalEvidence.inspect(request, output, run.stdout(), started, binding.fixtureLeaseSha256(),binding.sutBindingSha256());
+            if(jdbc!=null)jdbc.verifyCanonicalChild(evidence.result());
             checkDeadline(deadline);
             var validation = invoke(List.of("validate-evidence", "--result", evidence.result().toString(), "--root", output.toString()),
-                    request, output, deadline, consumedOutput, cleanup);
+                    request, output, deadline, consumedOutput, cleanup,null);
+            if(jdbc!=null){jdbc.scan(validation.stdout());jdbc.scan(validation.stderr());}
             Files.writeString(output.resolve("validation.stdout.log"), validation.stdout());
             Files.writeString(output.resolve("validation.stderr.log"), validation.stderr());
             require(validation.exitCode() == 0, "Framework evidence validation failed");
-            var report = invoke(List.of("report", "--result", evidence.result().toString(), "--format", "json", "--root", output.toString(), "--coverage-dir", output.resolve("coverage").toString()),
-                    request, output, deadline, consumedOutput, cleanup);
+            List<String> reportArgs=new ArrayList<>(List.of("report","--result",evidence.result().toString(),"--format","json","--root",output.toString(),"--coverage-dir",output.resolve("coverage").toString()));
+            if(binding.coverageAuthority()!=null)reportArgs.addAll(List.of("--coverage-authority",binding.coverageAuthority().toString(),"--expected-coverage-authority-sha256",binding.coverageAuthoritySha256()));
+            var report = invoke(reportArgs,
+                    request, output, deadline, consumedOutput, cleanup,null);
+            if(jdbc!=null){jdbc.scan(report.stdout());jdbc.scan(report.stderr());jdbc.verifyDriver();}
             Files.writeString(output.resolve("report.stderr.log"), report.stderr());
             require(report.exitCode() == 0, "Framework report validation failed");
             Path reportPath = output.resolve("framework-report.json");
             Files.writeString(reportPath, report.stdout());
             evidence.verifyReport(reportPath);
-            var coverageArtifacts = CoverageArtifacts.verify(output.resolve("coverage"), reportPath, evidence.result(), request);
+            var coverageArtifacts = CoverageArtifacts.verify(output.resolve("coverage"), reportPath, evidence.result(), request,binding.coverageAuthority(),binding.coverageAuthoritySha256());
             evidence.verifyUnchanged();
             require(LocalFiles.sha256(binding.frameworkJar()).equals(binding.frameworkSha256()), "Configured framework digest changed");
             require((runExit == 0) == "passed".equals(evidence.verdict()), "Framework exit code contradicts canonical verdict");
             checkDeadline(deadline);
             var artifacts = new java.util.LinkedHashMap<>(evidence.artifacts());
             artifacts.putAll(coverageArtifacts);
+            if(jdbc!=null)artifacts.put("jdbc_child_observation",new ProductTestReceipt.Artifact(output.resolve("jdbc-child-observation.json").toString(),LocalFiles.sha256(output.resolve("jdbc-child-observation.json"))));
             artifacts.put("framework_report", new ProductTestReceipt.Artifact(reportPath.toString(), LocalFiles.sha256(reportPath)));
             return new ProductTestReceipt("product-test-receipt.v1", "product-test", "1", invocation, request,
                     ProductTestReceipt.Outcome.COMPLETED, evidence.verdict(), "validated", runExit, evidence.runId(),
@@ -85,19 +98,22 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
         } catch (LaunchException e) {
             return Receipts.failure(request, invocation, ProductTestReceipt.Outcome.FAILED_TO_LAUNCH, message(e), output.toString(), runExit);
         } catch (Exception e) {
-            return Receipts.failure(request, invocation, ProductTestReceipt.Outcome.INVALID_EVIDENCE, message(e), output.toString(), runExit);
-        }
+            return Receipts.failure(request, invocation, ProductTestReceipt.Outcome.INVALID_EVIDENCE, jdbc==null?message(e):"Protected JDBC invocation failed at "+jdbcConsumerStage+"; inspect typed parent/child observations", output.toString(), runExit);
+        } finally {if(jdbc!=null)jdbc.close();}
     }
 
     private ProcessResult invoke(List<String> command, ProductTestRequest request, Path output, long deadline,
-                                 AtomicInteger consumed, CleanupState cleanup) throws Exception {
+                                 AtomicInteger consumed, CleanupState cleanup,JdbcProcessChannel jdbc) throws Exception {
         checkDeadline(deadline);
         require(LocalFiles.sha256(binding.frameworkJar()).equals(binding.frameworkSha256()), "Configured framework digest mismatch");
         Path java;
         try { java = binding.javaExecutable().toRealPath(); }
         catch (IOException e) { throw new LaunchException("Cannot resolve configured Java executable", e); }
-        var argv = new ArrayList<>(List.of(java.toString(), "-Xmx512m", "-XX:MaxMetaspaceSize=256m",
-                "-Djava.io.tmpdir=" + output, "-jar", binding.frameworkJar().toRealPath().toString()));
+        long operationStart=System.nanoTime();
+        long phaseDeadline=jdbc==null?deadline:Math.min(deadline,operationStart+TimeUnit.SECONDS.toNanos(5));
+        var argv = new ArrayList<>(List.of(java.toString(), "-Xmx512m", "-XX:MaxMetaspaceSize=256m","-Djava.io.tmpdir="+output));
+        if(jdbc!=null)jdbc.addJavaArguments(argv);
+        argv.add("-jar");argv.add(binding.frameworkJar().toRealPath().toString());
         argv.addAll(command);
         var builder = new ProcessBuilder(argv).directory(output.toFile());
         builder.environment().clear();
@@ -113,22 +129,25 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
         Thread outThread = new Thread(stdout, "product-test-stdout"); outThread.setDaemon(true); outThread.start();
         Thread errThread = new Thread(stderr, "product-test-stderr"); errThread.setDaemon(true); errThread.start();
         try {
+            if(jdbc!=null)jdbc.start(process,phaseDeadline);
             while (!process.waitFor(20, TimeUnit.MILLISECONDS)) {
-                checkDeadline(deadline);
+                checkDeadline(phaseDeadline);if(jdbc!=null)jdbc.check();
                 if (consumed.get() > binding.maximumOutputBytes()) throw new OutputLimitException();
             }
             while (outThread.isAlive() || errThread.isAlive()) {
-                checkDeadline(deadline);
+                checkDeadline(phaseDeadline);if(jdbc!=null)jdbc.check();
                 if (consumed.get() > binding.maximumOutputBytes()) throw new OutputLimitException();
                 outThread.join(10); errThread.join(10);
             }
+            if(jdbc!=null)jdbc.check();
             if (consumed.get() > binding.maximumOutputBytes()) throw new OutputLimitException();
             if (stdout.failed || stderr.failed) throw new IOException("Cannot capture framework output");
             return new ProcessResult(process.exitValue(), stdout.text(), stderr.text());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); throw new DeadlineException();
         } finally {
-            cleanup(process, outThread, errThread, cleanup);
+            if(jdbc==null)cleanup(process,outThread,errThread,cleanup);
+            else {jdbc.finish(process,outThread,errThread,operationStart);jdbc.observation(output);jdbc.requireFinished();}
         }
     }
 

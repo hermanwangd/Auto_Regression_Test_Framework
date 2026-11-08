@@ -1,0 +1,37 @@
+{
+  "dsl_version": "v0.3",
+  "test_case_id": "PUBLIC-KAFKA-PUBLISH",
+  "title": "PUBLIC_SYNTHETIC template; runtime authority unbound",
+  "execute": [
+    {
+      "id": "publish",
+      "target": "owned_kafka",
+      "op": "kafka_publish",
+      "with": {
+        "payload_ref": "artifact://fixtures/payload.json",
+        "key": "run.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "timeout": "PT5S"
+      }
+    }
+  ],
+  "verify": [
+    {
+      "id": "partition",
+      "type": "assertion",
+      "assert": {
+        "actual": "step://publish/partition",
+        "operator": "equals",
+        "expected_ref": "artifact://expected_results/partition.json"
+      }
+    },
+    {
+      "id": "offset",
+      "type": "assertion",
+      "assert": {
+        "actual": "step://publish/offset",
+        "operator": "equals",
+        "expected_ref": "artifact://expected_results/offset.json"
+      }
+    }
+  ]
+}

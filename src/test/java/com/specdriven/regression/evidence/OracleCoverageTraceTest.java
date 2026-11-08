@@ -124,5 +124,42 @@ class OracleCoverageTraceTest {
         String table=md.substring(md.indexOf("| Metric |"),md.indexOf("Oracle SOURCE_BOUND"));
         assertThat(table.lines().filter(line->!line.isBlank()).toList()).hasSize(5).allMatch(line->line.startsWith("|")&&line.endsWith("|"));
     }
+
+    private ObjectNode parserRelation(ReviewedGrpcProofIdentityTest f)throws Exception {
+        ObjectNode section=f.provenance.putObject("parser_expected_artifact_relations").put("schema_version","parser-expected-artifact-relations.v1").put("state","COMPLETE").put("manifest_path","suite.yaml").put("manifest_sha256","6".repeat(64));
+        section.putArray("assertions").add(ReviewedGrpcProofIdentityTest.obj("qualified_case_ref",KnowledgeV2Fixture.CASE,"case_path","test_cases/case.yaml","case_sha256","8".repeat(64),"test_case_id","TC-1","assertion_id","total_oracle","assertion_operator","json_match","expected_operand","EXPECTED_REF","raw_expected_ref","artifact://expected_results/oracle.json","normalized_expected_path","expected_results/oracle.json","expected_artifact_sha256","9".repeat(64),"qualified_expected_artifact_ref",KnowledgeV2Fixture.ORACLE));
+        f.save();return section;
+    }
+    @Test void parserSourceExportCannotAuthorizeExpectedRefWithoutIndependentProducerAuthority()throws Exception {
+        var f=fixture("parser",true);((ObjectNode)f.provenance.path("requirement_mapping").get(0)).withArray("oracle_refs").add("test_cases/case.yaml#status");parserRelation(f);
+        var report=project(f,"parser-report",null,null);assertThat(report.document().path("oracle_trace").size()).isEqualTo(2);
+        var file=report.document().path("oracle_trace").get(0);var literal=report.document().path("oracle_trace").get(1);
+        assertThat(file.path("expected_ref").isNull()).isTrue();
+        assertThat(file.path("expected_ref_state").asText()).isEqualTo("UNKNOWN");
+        assertThat(literal.path("expected_ref").isNull()).isTrue();assertThat(file.at("/independence/state").asText()).isEqualTo("UNKNOWN");
+        assertThat(report.document().at("/metrics/requirements/denominator").isNull()).isTrue();
+    }
+    @Test void presentMalformedParserRelationCannotHideBehindOtherwiseValidKnowledge()throws Exception {
+        var f=fixture("parser",true);parserRelation(f).put("state","SELF_REVIEWED");f.save();
+        assertThatThrownBy(()->project(f,"invalid-parser",null,null)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("parser");
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest @org.junit.jupiter.params.provider.ValueSource(strings={"manifest_hash","manifest_path","case_hash","case_ref","case_id","case_path","oracle_hash","oracle_ref","normalized_path","unsafe_uri","operator","literal_borrow","duplicate","unknown_field","unselected","source_A_vs_X"})
+    void directParserSourceJoinsRejectResealedMetadataWithoutEarlierPinMasking(String mode)throws Exception {
+        var f=fixture("parser-join",true);ObjectNode section=parserRelation(f),edge=(ObjectNode)section.path("assertions").get(0);
+        switch(mode){
+            case "manifest_hash"->section.put("manifest_sha256","0".repeat(64));case "manifest_path"->section.put("manifest_path","other.yaml");
+            case "case_hash"->edge.put("case_sha256","0".repeat(64));case "case_ref"->edge.put("qualified_case_ref",KnowledgeV2Fixture.CASE.replace(KnowledgeV2Fixture.A,KnowledgeV2Fixture.X));case "case_id"->edge.put("test_case_id","OTHER");case "case_path"->edge.put("case_path","other/case.yaml");
+            case "oracle_hash"->edge.put("expected_artifact_sha256","0".repeat(64));case "oracle_ref"->edge.put("qualified_expected_artifact_ref",KnowledgeV2Fixture.ORACLE.replace("#ORACLE1","#OTHER"));case "normalized_path"->edge.put("normalized_expected_path","different/oracle.json");case "unsafe_uri"->edge.put("raw_expected_ref","artifact://expected_results/%2e%2e/oracle.json");
+            case "operator"->edge.put("assertion_operator","inferred");case "literal_borrow"->edge.put("expected_operand","EXPECTED");case "duplicate"->section.withArray("assertions").add(edge.deepCopy());case "unknown_field"->edge.put("raw_body","PUBLIC_SYNTHETIC_CANARY");case "unselected"->((ObjectNode)f.provenance.path("source_case_selection").get(0)).put("state","NOT_SELECTED");
+            case "source_A_vs_X"->{for(JsonNode raw:f.provenance.path("executed_source_bindings"))if("case".equals(raw.path("role").asText()))((ObjectNode)raw).put("source_commit",KnowledgeV2Fixture.X);}
+        }
+        var type=Class.forName("com.specdriven.regression.report.CanonicalCoverageReport");var check=type.getDeclaredMethod("parserRelations",JsonNode.class);check.setAccessible(true);
+        assertThatThrownBy(()->{try{check.invoke(null,f.provenance);}catch(java.lang.reflect.InvocationTargetException wrapped){throw wrapped.getCause();}}).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("parser expected artifact metadata");
+    }
+    @Test void twoExplicitFileConsumersRemainAmbiguousEvenForTheSameExactOracle()throws Exception {
+        var f=fixture("two-edges",true);((ObjectNode)f.provenance.path("requirement_mapping").get(0)).withArray("oracle_refs").add("test_cases/case.yaml#status");ObjectNode section=parserRelation(f);ObjectNode second=(ObjectNode)section.path("assertions").get(0).deepCopy();second.put("assertion_id","second_ref");section.withArray("assertions").add(second);f.save();
+        for(JsonNode row:project(f,"two-edges-report",null,null).document().path("oracle_trace"))assertThat(row.path("expected_ref").isNull()).isTrue();
+    }
     static String sha(Path path)throws Exception{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(path)));}
 }

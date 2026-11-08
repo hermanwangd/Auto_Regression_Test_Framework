@@ -59,3 +59,20 @@ execution:
   oracle_changes_or_retrieval_in_runner: prohibited
 classification: framework_verification_only
 downstream_release_evidence: false
+
+# DERIVED canonical Snapshot sidecar only; never an accepted raw handoff field.
+parser_expected_artifact_relations:
+  location: derived_v2_canonical_provenance_only
+  caller_input: prohibited_unknown_field
+  schema_version: parser-expected-artifact-relations.v1
+  closed_fields: [schema_version, state, manifest_path, manifest_sha256, assertions]
+  state: COMPLETE_source_parser_closure_only_not_execution_or_independence
+  assertion_closed_fields: [qualified_case_ref, case_path, case_sha256, test_case_id, assertion_id, assertion_operator, expected_operand, raw_expected_ref, normalized_expected_path, expected_artifact_sha256, qualified_expected_artifact_ref]
+  expected_operand: [EXPECTED_REF, EXPECTED, ABSENT]
+  artifact_fields: nonnull_only_for_explicit_expected_ref
+  limits: {assertions: 256, utf8_bytes: 262144, overflow: whole_optional_section_absent}
+  provenance_budget: unchanged_mandatory_2MiB_gate_before_optional_append
+  namespace_authority: existing_parser_resolver_over_cached_reviewed_manifest_bytes
+  consumer: pinned_canonical_source_identity_and_hash_joins_not_live_manifest_resolution
+  selection: legacy_oracle_tests_and_manual_authority_joint_declaration_unchanged
+  semantics: declared_source_reference_only_never_assertion_execution_correctness_review_or_independence

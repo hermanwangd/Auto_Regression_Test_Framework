@@ -133,4 +133,37 @@ class ReviewedGrpcIntegrationTest {
    Files.writeString(root.resolve("cleanup.json"),"{\"pid\":"+process.pid()+",\"reaped\":true,\"port_closed\":true}");
   }
  }
+
+ @ParameterizedTest @ValueSource(strings={"absent","empty"})
+ void defaultMethodOptionsRemainCompatible(String mode)throws Exception {
+  try(var owner=owner("echo")) {
+   Path suite=fixture(owner,false);
+   Path descriptor=suite.resolve("fixtures/echo.desc.b64");
+   var set=com.google.protobuf.DescriptorProtos.FileDescriptorSet.parseFrom(Base64.getDecoder().decode(Files.readAllBytes(descriptor))).toBuilder();
+   var rpc=set.getFileBuilder(0).getServiceBuilder(0).getMethodBuilder(0);
+   if(mode.equals("empty"))rpc.setOptions(com.google.protobuf.DescriptorProtos.MethodOptions.getDefaultInstance());else rpc.clearOptions();
+   Files.write(descriptor,Base64.getEncoder().encode(set.build().toByteArray()));
+   var lease=helper.json.readValue(suite.resolve("fixtures/lease.json").toFile(),Map.class);
+   lease.put("descriptor_sha256",hash(descriptor));helper.json.writeValue(suite.resolve("fixtures/lease.json").toFile(),lease);
+   var result=run(suite,true);assertThat(result.status()).as(result.findings().toString()).isEqualTo("passed");
+   helper.assertValid(result);assertThat(owner.receipts()).isEqualTo(1);
+  }
+ }
+ @ParameterizedTest @ValueSource(strings={"nondefault","unknown"})
+ void nondefaultMethodOptionsRejectBeforeProvider(String mode)throws Exception {
+  try(var owner=owner("echo")) {
+   Path suite=fixture(owner,false);
+   Path descriptor=suite.resolve("fixtures/echo.desc.b64");
+   var set=com.google.protobuf.DescriptorProtos.FileDescriptorSet.parseFrom(Base64.getDecoder().decode(Files.readAllBytes(descriptor))).toBuilder();
+   var options=com.google.protobuf.DescriptorProtos.MethodOptions.newBuilder();
+   if(mode.equals("nondefault"))options.setIdempotencyLevel(com.google.protobuf.DescriptorProtos.MethodOptions.IdempotencyLevel.IDEMPOTENT);
+   else options.setUnknownFields(com.google.protobuf.UnknownFieldSet.newBuilder().addField(50000,com.google.protobuf.UnknownFieldSet.Field.newBuilder().addVarint(1).build()).build());
+   set.getFileBuilder(0).getServiceBuilder(0).getMethodBuilder(0).setOptions(options);
+   Files.write(descriptor,Base64.getEncoder().encode(set.build().toByteArray()));
+   var lease=helper.json.readValue(suite.resolve("fixtures/lease.json").toFile(),Map.class);
+   lease.put("descriptor_sha256",hash(descriptor));helper.json.writeValue(suite.resolve("fixtures/lease.json").toFile(),lease);
+   assertThatThrownBy(()->helper.prepare(suite)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("only unary Echo");
+   assertThat(owner.receipts()).isZero();
+  }
+ }
 }

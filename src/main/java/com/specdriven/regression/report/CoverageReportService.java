@@ -19,6 +19,10 @@ public class CoverageReportService {
         return new CanonicalCoverageReport().project(result, outputDir, catalog, selection);
     }
 
+    public CanonicalCoverageReportResult projectCanonical(Path result,Path outputDir,Path catalog,Path selection,Path authority,String expectedAuthoritySha) {
+        return new CanonicalCoverageReport().project(result,outputDir,catalog,selection,authority,expectedAuthoritySha);
+    }
+
     public CoverageReportResult generateBatch(Path packageRoot, String batchId) {
         Path batchDir = packageRoot.resolve("evidence/batches").resolve(batchId);
         Path batchYaml = batchDir.resolve("batch.yaml");

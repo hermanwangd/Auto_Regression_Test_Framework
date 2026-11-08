@@ -189,6 +189,7 @@
                     <include>runner_collection.v1.schema.yaml</include>
                     <include>runner_runtime_binding.v1.schema.yaml</include>
                     <include>shared_sit_data.v1.schema.yaml</include>
+                    <include>coverage_authority.v1.schema.yaml</include>
                     <include>knowledge_selection_proof.v1.schema.yaml</include>
                     <include>product_test_reviewed_handoff.v2.schema.yaml</include>
                 </includes>

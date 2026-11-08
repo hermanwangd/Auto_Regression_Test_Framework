@@ -20,6 +20,12 @@ public class V03ProviderRuntimeRegistry {
         this.adapters = Map.copyOf(byProviderType);
     }
 
+    /** Per-run replacement; never mutates a registry shared by other invocations. */
+    public V03ProviderRuntimeRegistry replacing(V03ProviderRuntimeAdapter replacement) {
+        java.util.Objects.requireNonNull(replacement);var selected=new java.util.ArrayList<V03ProviderRuntimeAdapter>(adapters.values());
+        selected.removeIf(adapter->adapter.providerType().equals(replacement.providerType()));selected.add(replacement);return new V03ProviderRuntimeRegistry(selected);
+    }
+
     public V03ProviderRuntimeAdapter resolve(String providerType) {
         V03ProviderRuntimeAdapter adapter = adapters.get(providerType);
         if (adapter == null) {

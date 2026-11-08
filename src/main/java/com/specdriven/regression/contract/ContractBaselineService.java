@@ -1233,9 +1233,42 @@ public class ContractBaselineService {
         graph.providerContractsByPath().forEach((path, document) -> scanAll(path, document, findings));
         graph.providerInstancesByPath().forEach((path, document) -> scanAll(path, document, findings));
         graph.executionProfiles().forEach((path, document) -> scanAll(path, document, findings));
-        graph.envProfiles().forEach((path, document) -> scanAll(path, document, findings));
+        graph.envProfiles().forEach((path, document) -> detectRawSecrets(path.toString(),"",document,findings,false,ownedJdbcMarkerPointers(graph,document),""));
         graph.environmentBindings().forEach((path, document) -> scanAll(path, document, findings));
     }
+
+    /** Classifies one exact nonsecret marker, only in an actual graph env-profile's masked JDBC slot. */
+    private Set<String> ownedJdbcMarkerPointers(ContractGraph graph,Map<String,Object> profile) {
+        try {
+            if(!graph.v03())return Set.of();
+            var suiteTargets=mapValue(graph.suite().get("targets"));var targets=mapValue(profile.get("targets"));
+            if(suiteTargets.size()!=1||targets.size()!=1||!suiteTargets.keySet().equals(targets.keySet()))return Set.of();
+            String name=suiteTargets.keySet().iterator().next();
+            if(!"jdbc.v0.3".equals(mapValue(suiteTargets.get(name)).get("provider_contract")))return Set.of();
+            var target=mapValue(targets.get(name));if(!"native".equals(target.get("runtime_mode")))return Set.of();
+            com.specdriven.regression.provider.jdbc.ReviewedOwnedMariaDbPolicy.validateBindings(mapValue(target.get("bindings")));
+            var policy=com.specdriven.regression.producttest.ProductTestPolicy.parse(profile.get("product_test"));
+            if(!policy.nativeExecution()||!"not_used".equals(policy.knowledgeMode())||policy.sharedState()!=null||!policy.dependencyModes().isEmpty()||!policy.providerModes().equals(Map.of(name,"real")))return Set.of();
+            var contracts=graph.providerContractsByPath().values().stream().filter(c->"v0.3".equals(c.get("contract_version"))&&"jdbc.v0.3".equals(c.get("provider_contract"))).toList();
+            if(contracts.size()!=1||!"jdbc".equals(contracts.get(0).get("provider_type"))||!scopedOwnedMemoryDeclarations(contracts.get(0),""))return Set.of();
+            var definition=mapValue(mapValue(contracts.get(0).get("binding_keys")).get("connection.secret_ref"));
+            var kinds=stringList(definition.get("reference_kinds"));
+            if(!"masked".equals(definition.get("sensitivity"))||!"string".equals(definition.get("value_type"))||!"env_profile_secret_ref".equals(definition.get("source"))||kinds.size()!=2||!Set.copyOf(kinds).equals(Set.of("env","owned_memory")))return Set.of();
+            return Set.of("/targets/"+pointerSegment(name)+"/bindings/connection.secret_ref");
+        } catch(RuntimeException unavailable){return Set.of();}
+    }
+    private boolean scopedOwnedMemoryDeclarations(Object value,String pointer) {
+        if(value instanceof Map<?,?> fields){for(var field:fields.entrySet()){
+            String child=pointer+"/"+pointerSegment(stringValue(field.getKey()));
+            if("reference_kinds".equals(field.getKey())){
+                if(!(field.getValue() instanceof Collection<?> kinds))return false;
+                for(Object kind:kinds){if(!(kind instanceof String text))return false;if(text.trim().equalsIgnoreCase("owned_memory")&&!child.equals("/binding_keys/connection.secret_ref/reference_kinds"))return false;}
+            }
+            if(!scopedOwnedMemoryDeclarations(field.getValue(),child))return false;
+        }}else if(value instanceof Collection<?> values){int i=0;for(Object item:values)if(!scopedOwnedMemoryDeclarations(item,pointer+"/"+i++))return false;}
+        return true;
+    }
+    private String pointerSegment(String key){return key.replace("~","~0").replace("/","~1");}
 
     private void scanAll(Path path, Map<String, Object> document, List<ContractFinding> findings) {
         detectRawSecrets(path.toString(), document, findings);
@@ -3499,6 +3532,10 @@ public class ContractBaselineService {
             Object value,
             List<ContractFinding> findings,
             boolean secretContext) {
+        detectRawSecrets(filePath,fieldPath,value,findings,secretContext,Set.of(),"");
+    }
+    private void detectRawSecrets(String filePath,String fieldPath,Object value,List<ContractFinding> findings,boolean secretContext,Set<String> ownedPointers,String pointer) {
+        if(value instanceof String marker&&marker.equals("memory://owned-mariadb")&&ownedPointers.contains(pointer))return;
         if (value instanceof Map<?, ?> map) {
             boolean providerContractBindingDefinition = fieldPath.contains("binding_keys.")
                     && map.containsKey("required") && map.containsKey("source");
@@ -3552,7 +3589,7 @@ public class ContractBaselineService {
                 boolean childSecretContext = !providerContractBindingDefinition
                         && (secretContext || (secretKey(key) && !ordinaryConnectionHeader));
                 if (!"secret_ref".equals(key)) {
-                    detectRawSecrets(filePath, childPath, entry.getValue(), findings, childSecretContext);
+                    detectRawSecrets(filePath, childPath, entry.getValue(), findings, childSecretContext,ownedPointers,pointer+"/"+pointerSegment(key));
                 }
             }
             return;
@@ -3560,7 +3597,7 @@ public class ContractBaselineService {
         if (value instanceof Collection<?> collection) {
             int index = 0;
             for (Object item : collection) {
-                detectRawSecrets(filePath, fieldPath + "[" + index++ + "]", item, findings, secretContext);
+                detectRawSecrets(filePath,fieldPath+"["+index+"]",item,findings,secretContext,ownedPointers,pointer+"/"+index);index++;
             }
             return;
         }

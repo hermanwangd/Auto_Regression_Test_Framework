@@ -11,6 +11,10 @@ public final class V03ReferenceParser {
         if (!(value instanceof String text)) {
             return new V03Reference.Literal(value);
         }
+        if(text.startsWith("memory://")){
+            if(!text.equals("memory://owned-mariadb"))throw invalid("invalid_owned_memory_ref");
+            return new V03Reference.OwnedMemory();
+        }
         if (text.startsWith("artifact://")) {
             return artifact(text.substring("artifact://".length()));
         }

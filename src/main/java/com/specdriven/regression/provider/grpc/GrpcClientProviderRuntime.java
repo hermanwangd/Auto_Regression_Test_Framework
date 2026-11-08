@@ -12,6 +12,10 @@ import com.specdriven.regression.provider.runtime.ProviderOperationResult;
 import com.specdriven.regression.provider.runtime.ProviderRuntime;
 import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
+import io.grpc.ClientInterceptors;
+import io.grpc.stub.MetadataUtils;
+import java.util.concurrent.atomic.AtomicReference;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -155,28 +159,36 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
                     runtimeWorkDir,
                     descriptorRef);
             String payload = requestPayload(context.suiteRoot(), parameterValue(request, "grpc.message", ""));
-            int timeoutSeconds = timeoutSeconds(parameterValue(request, "grpc.timeout", ""), 10);
+            long timeoutNanos = timeoutNanos(parameterValue(request, "grpc.timeout", ""), 10);
+            Metadata outgoingMetadata = requestMetadata(request);
+            AtomicReference<Metadata> initialMetadata = new AtomicReference<>();
+            Descriptors.MethodDescriptor method = descriptorMethod(descriptorPath, service, methodName);
+            if (method.isClientStreaming() || method.isServerStreaming()) {
+                throw new IllegalArgumentException("Unsupported streaming descriptor for gRPC unary_call; select a unary method.");
+            }
             channel = ManagedChannelBuilder.forTarget(stripGrpcScheme(target))
                     .usePlaintext()
                     .build();
-            Descriptors.MethodDescriptor method = descriptorMethod(descriptorPath, service, methodName);
             DynamicMessage.Builder requestMessage = DynamicMessage.newBuilder(method.getInputType());
             JsonFormat.parser().merge(payload, requestMessage);
             DynamicMessage response = ClientCalls.blockingUnaryCall(
-                    channel,
+                    ClientInterceptors.intercept(channel,
+                            MetadataUtils.newAttachHeadersInterceptor(outgoingMetadata),
+                            MetadataUtils.newCaptureMetadataInterceptor(initialMetadata, new AtomicReference<>())),
                     grpcMethod(method),
-                    CallOptions.DEFAULT.withDeadlineAfter(Math.max(1, timeoutSeconds), TimeUnit.SECONDS),
+                    CallOptions.DEFAULT.withDeadlineAfter(timeoutNanos, TimeUnit.NANOSECONDS),
                     requestMessage.build());
             long durationMs = Duration.ofNanos(System.nanoTime() - started).toMillis();
             String responseJson = JsonFormat.printer().omittingInsignificantWhitespace().print(response);
             String maskedResponseJson = maskSensitiveText(responseJson);
             writeRequestEvidence(context, service, methodName, payload);
-            writeResponseEvidence(context, "OK", maskedResponseJson, durationMs, "passed", "");
+            Map<String, String> responseMetadata = responseMetadata(initialMetadata.get());
+            writeResponseEvidence(context, "OK", maskedResponseJson, durationMs, "passed", "", responseMetadata);
             return ProviderOperationResult.passed(
                     Map.of(
                             "response.message", maskedResponseJson,
                             "response.status", "OK",
-                            "response.metadata", Map.of(),
+                            "response.metadata", responseMetadata,
                             "response.duration_ms", durationMs),
                     evidence(
                             "grpc_request", "provider-evidence/grpc-client/request.json",
@@ -328,15 +340,42 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
         return target.startsWith("grpc://") ? target.substring("grpc://".length()) : target;
     }
 
-    private int timeoutSeconds(String timeout, int fallback) {
-        if (timeout == null || timeout.isBlank()) {
-            return fallback;
-        }
+    private long timeoutNanos(String timeout, int fallbackSeconds) {
+        long fallback = TimeUnit.SECONDS.toNanos(fallbackSeconds);
+        if (timeout == null || timeout.isBlank()) return fallback;
         try {
-            return (int) Math.max(1, Duration.parse(timeout).toSeconds());
+            Duration duration = Duration.parse(timeout);
+            if (duration.isZero() || duration.isNegative()) return TimeUnit.SECONDS.toNanos(1);
+            return duration.toNanos();
         } catch (RuntimeException e) {
             return fallback;
         }
+    }
+
+    private Metadata requestMetadata(ProviderOperationRequest request) {
+        Metadata metadata = new Metadata();
+        for (Map<String, Object> parameter : request.parameters()) {
+            String binding = stringValue(parameter.get("bind_as"));
+            if (!binding.startsWith("grpc.metadata.")) continue;
+            String name = binding.substring("grpc.metadata.".length()).toLowerCase(java.util.Locale.ROOT);
+            if (name.endsWith(Metadata.BINARY_HEADER_SUFFIX))
+                throw new IllegalArgumentException("Binary gRPC metadata is unsupported; use ASCII metadata inputs.");
+            metadata.put(Metadata.Key.of(name, Metadata.ASCII_STRING_MARSHALLER), stringValue(parameter.get("ref")));
+        }
+        return metadata;
+    }
+
+    /** Single-valued initial ASCII headers; binary metadata and trailers are not exposed. */
+    private Map<String, String> responseMetadata(Metadata headers) {
+        Map<String, String> values = new LinkedHashMap<>();
+        if (headers == null) return values;
+        for (String name : headers.keys()) {
+            if (name.endsWith(Metadata.BINARY_HEADER_SUFFIX)) continue;
+            String value = headers.get(Metadata.Key.of(name, Metadata.ASCII_STRING_MARSHALLER));
+            boolean sensitive = name.matches("(?i).*(?:authorization|password|token|secret|credential|cookie|api[_-]?key).*");
+            values.put(name, sensitive ? "***MASKED***" : maskSensitiveText(value));
+        }
+        return values;
     }
 
     private String parameterValue(ProviderOperationRequest request, String bindAs, String fallback) {
@@ -378,6 +417,15 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
             long durationMs,
             String operationStatus,
             String error) {
+        writeResponseEvidence(context, status, body, durationMs, operationStatus, error, Map.of());
+    }
+
+    private void writeResponseEvidence(
+            ProviderExecutionContext context, String status, String body, long durationMs,
+            String operationStatus, String error, Map<String, String> metadata) {
+        String metadataJson;
+        try { metadataJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(metadata); }
+        catch (IOException e) { throw new UncheckedIOException(e); }
         write(context.runDir().resolve("provider-evidence/grpc-client/response.json"), """
                 {
                   "evidence_type": "grpc_request_response",
@@ -386,6 +434,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
                   "status": "%s",
                   "body": %s,
                   "duration_ms": %s,
+                  "metadata": %s,
                   "operation_status": "%s",
                   "error": %s,
                   "masking_applied": true
@@ -396,6 +445,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
                         escape(status),
                         toJson(body),
                         durationMs,
+                        metadataJson,
                         escape(operationStatus),
                         toJson(error)));
     }

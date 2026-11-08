@@ -101,7 +101,8 @@ public final class ReviewedLoopbackGrpcPolicy {
                     && service.getUnknownFields().asMap().isEmpty(), "only one Echo service/method is accepted");
             var rpc=service.getMethod(0);
             require(rpc.getName().equals(profile.method) && !rpc.getClientStreaming() && !rpc.getServerStreaming()
-                    && !rpc.hasOptions() && rpc.getUnknownFields().asMap().isEmpty(), "only unary Echo is accepted");
+                    && (!rpc.hasOptions() || rpc.getOptions().equals(DescriptorProtos.MethodOptions.getDefaultInstance()))
+                    && rpc.getUnknownFields().asMap().isEmpty(), "only unary Echo is accepted");
             require(rpc.getInputType().equals("."+profile.pkg+"."+profile.request) && rpc.getOutputType().equals("."+profile.pkg+"."+profile.response),"method must use exact profile request/reply types");
             for (var message:proto.getMessageTypeList()) {
                 require(message.getName().equals(profile.request) || message.getName().equals(profile.response),"unknown profile message");

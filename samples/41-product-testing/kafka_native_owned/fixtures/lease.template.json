@@ -1,0 +1,23 @@
+{
+  "version": "reviewed-kafka-lease.v1",
+  "owner_run_id": null,
+  "nonce": null,
+  "endpoint": null,
+  "topic": null,
+  "consumer_group": null,
+  "key": null,
+  "payload_sha256": null,
+  "runtime_version": null,
+  "image_child_sha256": null,
+  "image_config_sha256": null,
+  "advertised_listener_sha256": null,
+  "broker_container_id": null,
+  "network_mode": null,
+  "client_network_container_id": null,
+  "advertised_listener": null,
+  "controller_listener": null,
+  "partitions": null,
+  "initial_offset": null,
+  "issued_at": null,
+  "expires_at": null
+}

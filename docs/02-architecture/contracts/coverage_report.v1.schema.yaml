@@ -111,19 +111,19 @@ publication:
 
 oracle_trace:
   optional_additive_for_older_reports: true
-  closed_row_fields: [trace_id, test_case_id, qualified_case_ref, source_result, source_result_sha256, run_id, batch_id, canonical_outcome, evidence_state, requirement_refs, acceptance_criteria_refs, mapping_review_ref, declared_oracle_refs, oracle, expected_ref, expected_ref_state, expected_ref_reason, binding_state, binding_reason, independence, knowledge_refs]
+  base_closed_row_fields: [trace_id, test_case_id, qualified_case_ref, source_result, source_result_sha256, run_id, batch_id, canonical_outcome, evidence_state, requirement_refs, acceptance_criteria_refs, mapping_review_ref, declared_oracle_refs, oracle, expected_ref, expected_ref_state, expected_ref_reason, binding_state, binding_reason, independence, knowledge_refs]
   trace_id: sha256_of_strict_JSON_array_result_digest_project_workspace_qualified_or_scoped_case_requirement_mapping_review_declared_pointer
   aggregate_rows_maximum: 10000
   entity_and_case_refs: stable_trace_ids_exact_case_and_requirement_or_authoritative_AC_links_only
   oracle_closed_fields: [qualified_ref, path, sha256, source_repo, source_commit, source_testrepo_version, review_ref, reviewed_by]
   unsupported_source_identity_fields: null
   binding_states: [SOURCE_BOUND, DECLARED_ONLY, MISSING, AMBIGUOUS, STALE, INVALID]
-  expected_ref_states: [BOUND_DECLARED_REFERENCE, UNKNOWN]
+  expected_ref_states: [BOUND_DECLARED_REFERENCE, DECLARED_REVIEWED, UNKNOWN]
   expected_ref_requires: valid_selected_evidence_exact_singleton_case_mapping_review_and_admitted_reviewed_path_hash_role_and_qualified_oracle_join
-  assertion_fragments_without_exported_exact_join: retain_declared_pointer_only_expected_ref_null
+  assertion_fragments_without_exported_or_externally_admitted_exact_join: retain_declared_pointer_only_expected_ref_null
   singleton_cardinality_alone: insufficient
   SOURCE_BOUND: historical_source_identity_only_not_assertion_execution_expected_values_or_independence
-  independence: {state: UNKNOWN, reason: independence_attestation_not_in_contract}
+  independence_default_without_authority: {state: UNKNOWN, reason: independence_attestation_not_in_contract}
   knowledge_refs_closed_fields: [qualified_source_ref, record_version, content_sha256, selection_proof_sha256, context_sha256, source_bindings_sha256]
   private_PK_body_or_original_receipt: prohibited
   acceptance_criteria_refs_without_authoritative_catalog: []
@@ -142,3 +142,22 @@ source_case_selection:
   optional_additive_for_older_reports: true
   fields: [qualified_case_ref, source_test_id, state, run_id, batch_id, source_result, source_result_sha256]
   states: [SELECTED, NOT_SELECTED]
+
+coverage_authority:
+  optional_additive_for_older_reports: true
+  input_contract: coverage_authority.v1
+  closed_fields: [state, reason, path, sha256, scope, authority, catalog, artifacts]
+  artifacts_closed_fields: [path, sha256]
+  states: [BOUND_REVIEWED, UNKNOWN]
+  original_protected_pin_and_all_consumed_artifact_hashes: rechecked_before_publication_and_module_receipt
+  module_acceptance_without_protected_pin: prohibited
+oracle_reviewed_extension:
+  optional_row_field: reviewed_binding
+  closed_binding_fields: [qualified_case_ref, case_sha256, assertion_ref, expected_ref, qualified_oracle_ref, oracle_sha256, source_repo, source_commit, review_ref]
+  expected_ref_state: DECLARED_REVIEWED
+  assertion_execution_claim: false
+  independence_unknown_closed_fields: [state, reason]
+  independence_review_attested_closed_fields: [state, reason, attestation_ref, attestation_sha256, attestor, review_ref, issued_at, expires_at, qualification]
+  independence_review_attested_qualification: accepted_reviewed_origin_statement_not_proof_of_truth_or_execution
+  optional_absent: retain_existing_UNKNOWN_shape
+  canonical_verdict_and_metrics: unchanged

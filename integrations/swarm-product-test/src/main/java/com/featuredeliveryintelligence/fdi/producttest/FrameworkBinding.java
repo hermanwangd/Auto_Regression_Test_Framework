@@ -6,7 +6,16 @@ import java.time.Duration;
 /** Independently provisioned deployment binding; never loaded from mission text or the request. */
 public record FrameworkBinding(Path javaExecutable, Path frameworkJar, String frameworkSha256, String approvedHandoffSha256,
                                Path approvedArtifactRoot, Path outputParent, Duration totalTimeout, int maximumOutputBytes,
-                               String fixtureLeaseSha256,String sutBindingSha256) {
+                               String fixtureLeaseSha256,String sutBindingSha256,Path coverageAuthority,String coverageAuthoritySha256,ReviewedJdbcBinding reviewedJdbc) {
+    public FrameworkBinding(Path javaExecutable,Path frameworkJar,String frameworkSha256,String approvedHandoffSha256,Path approvedArtifactRoot,Path outputParent,Duration totalTimeout,int maximumOutputBytes,String fixtureLeaseSha256,String sutBindingSha256) {
+        this(javaExecutable,frameworkJar,frameworkSha256,approvedHandoffSha256,approvedArtifactRoot,outputParent,totalTimeout,maximumOutputBytes,fixtureLeaseSha256,sutBindingSha256,null,null,null);
+    }
+    public FrameworkBinding(Path javaExecutable,Path frameworkJar,String frameworkSha256,String approvedHandoffSha256,Path approvedArtifactRoot,Path outputParent,Duration totalTimeout,int maximumOutputBytes,String fixtureLeaseSha256,String sutBindingSha256,Path coverageAuthority,String coverageAuthoritySha256) {
+        this(javaExecutable,frameworkJar,frameworkSha256,approvedHandoffSha256,approvedArtifactRoot,outputParent,totalTimeout,maximumOutputBytes,fixtureLeaseSha256,sutBindingSha256,coverageAuthority,coverageAuthoritySha256,null);
+    }
+    public FrameworkBinding(Path javaExecutable,Path frameworkJar,String frameworkSha256,String approvedHandoffSha256,Path approvedArtifactRoot,Path outputParent,Duration totalTimeout,int maximumOutputBytes,String fixtureLeaseSha256,String sutBindingSha256,ReviewedJdbcBinding reviewedJdbc) {
+        this(javaExecutable,frameworkJar,frameworkSha256,approvedHandoffSha256,approvedArtifactRoot,outputParent,totalTimeout,maximumOutputBytes,fixtureLeaseSha256,sutBindingSha256,null,null,reviewedJdbc);
+    }
     public FrameworkBinding(Path javaExecutable,Path frameworkJar,String frameworkSha256,String approvedHandoffSha256,Path approvedArtifactRoot,Path outputParent,Duration totalTimeout,int maximumOutputBytes,String fixtureLeaseSha256) {
         this(javaExecutable,frameworkJar,frameworkSha256,approvedHandoffSha256,approvedArtifactRoot,outputParent,totalTimeout,maximumOutputBytes,fixtureLeaseSha256,null);
     }
@@ -15,6 +24,8 @@ public record FrameworkBinding(Path javaExecutable, Path frameworkJar, String fr
         this(javaExecutable,frameworkJar,frameworkSha256,approvedHandoffSha256,approvedArtifactRoot,outputParent,totalTimeout,maximumOutputBytes,null);
     }
     public FrameworkBinding {
+        if(coverageAuthority!=null&&!coverageAuthority.isAbsolute())throw new IllegalArgumentException("COVERAGE_AUTHORITY_ABSOLUTE_PATH_REQUIRED");
+        if((coverageAuthority==null)!=(coverageAuthoritySha256==null)||coverageAuthoritySha256!=null&&!coverageAuthoritySha256.matches("[a-f0-9]{64}"))throw new IllegalArgumentException("Independent coverage authority path and SHA-256 required together");
         if(sutBindingSha256!=null&&!sutBindingSha256.matches("[a-f0-9]{64}"))throw new IllegalArgumentException("SUT binding pin requires a lowercase SHA-256");
         if(fixtureLeaseSha256!=null && !fixtureLeaseSha256.matches("[a-f0-9]{64}"))
             throw new IllegalArgumentException("Fixture lease pin requires a lowercase SHA-256");

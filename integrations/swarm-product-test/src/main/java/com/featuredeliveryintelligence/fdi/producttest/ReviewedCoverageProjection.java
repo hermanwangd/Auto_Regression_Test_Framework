@@ -10,7 +10,10 @@ final class ReviewedCoverageProjection {
     private static final Set<String> TRACE_FIELDS=Set.of("qualified_source_ref","governed_record_key","record_version","source_valid_until","content_sha256","context_sha256","selection_proof_sha256","source_bindings_sha256","qualified_case_ref","test_case_id","requirement_refs","acceptance_refs","risk_refs","api_refs","code_refs","oracle","binding_state","selection_state");
     private ReviewedCoverageProjection(){}
     static void verify(JsonNode coverage,Path canonical,JsonNode result,ProductTestRequest request)throws Exception{
-        ReviewedOracleCoverageProjection.verify(coverage,canonical,result,request);
+        verify(coverage,canonical,result,request,null);
+    }
+    static void verify(JsonNode coverage,Path canonical,JsonNode result,ProductTestRequest request,ReviewedOracleCoverageProjection.Authority authority)throws Exception{
+        ReviewedOracleCoverageProjection.verify(coverage,canonical,result,request,authority);
         if(!"product-test-reviewed-handoff.v2".equals(result.path("product_test").path("contract_version").asText())){
             require(!coverage.has("knowledge_trace")||coverage.path("knowledge_trace").isArray()&&coverage.path("knowledge_trace").isEmpty(),"Unexpected legacy knowledge trace");return;
         }

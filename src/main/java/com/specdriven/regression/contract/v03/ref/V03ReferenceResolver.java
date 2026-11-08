@@ -63,6 +63,7 @@ public final class V03ReferenceResolver {
     }
 
     public Object resolveValue(V03Reference reference, V03ReferenceResolutionContext context) {
+        if(reference instanceof V03Reference.OwnedMemory)throw invalid("protected_owned_memory_unavailable","Only the independently reviewed typed JDBC carrier may provide RAM credentials.");
         if (reference instanceof V03Reference.Literal literal) {
             return literal.value();
         }

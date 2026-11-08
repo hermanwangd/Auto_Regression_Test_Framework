@@ -98,6 +98,18 @@ public final class ProductTestHandoffService {
                 var fixture=com.specdriven.regression.provider.grpc.ReviewedLoopbackGrpcPolicy.fixture(snapshot.root,grpcBindings(selection),true);
                 equal(leasePin,fixture.leaseSha256(),"fixture_lease_digest_mismatch");
             }
+            if(selection.policy.nativeExecution() && nativeCapability(selection)==ReviewedNativeCapability.KAFKA) {
+                String leasePin=sha(requirement.fixtureLeaseSha256(),"fixture_lease_digest_missing_or_invalid");
+                var bindings=grpcBindings(selection);
+                com.specdriven.regression.provider.kafka.ReviewedLoopbackKafkaPolicy.admit(snapshot.root,bindings,
+                        Map.of("payload_ref","artifact://fixtures/payload.json","key","run."+com.specdriven.regression.provider.kafka.ReviewedLoopbackKafkaPolicy.owner(bindings)),leasePin,clock.instant());
+            }
+            if(selection.policy.nativeExecution()&&nativeCapability(selection)==ReviewedNativeCapability.JDBC) {
+                String leasePin=sha(requirement.fixtureLeaseSha256(),"fixture_lease_digest_missing_or_invalid");
+                var fixture=com.specdriven.regression.provider.jdbc.ReviewedOwnedMariaDbPolicy.fixture(snapshot.root,grpcBindings(selection),false);
+                equal(leasePin,fixture.leaseSha256(),"fixture_lease_digest_mismatch");
+                com.specdriven.regression.provider.jdbc.ReviewedOwnedMariaDbPolicy.fixture(snapshot.root,grpcBindings(selection),true);
+            }
             return snapshot;
         } catch(RuntimeException error) {snapshot.close();throw error;}
     }
@@ -236,7 +248,13 @@ public final class ProductTestHandoffService {
         if(v2){
             var reviewed=new LinkedHashMap<String,KnowledgeSelectionProof.ReviewedInput>();approved.forEach((path,file)->reviewed.put(path,new KnowledgeSelectionProof.ReviewedInput(file.role,digest(file.bytes))));contracts.forEach((id,file)->reviewed.put(file.path,new KnowledgeSelectionProof.ReviewedInput("contract",digest(file.bytes))));
             provenance.putAll(KnowledgeSelectionProof.validate(h,repositories,closure.tests,reviewed,inputs::read,now,sutBindingSha256));
-            checkProvenanceBudget(provenance);
+            checkProvenanceBudget(provenance); // Mandatory metadata must pass before considering the optional section.
+            Map<String,Object> relations=parserRelations(inputs.manifestRef,closure,approved,provenance);
+            if(relations!=null) {
+                provenance.put("parser_expected_artifact_relations",relations);
+                try { checkProvenanceBudget(provenance); }
+                catch(IllegalArgumentException optionalOverflow) { provenance.remove("parser_expected_artifact_relations"); }
+            }
         } else if ("required".equals(s.policy.knowledgeMode())) validateKnowledge(inputs, h, repositories, closure, now, allPaths, provenance);
         else if (h.containsKey("selection_receipt") || h.containsKey("knowledge_sources")) {
             throw fail("not_used_knowledge_fields", "not_used forbids knowledge receipt and mappings");
@@ -249,7 +267,29 @@ public final class ProductTestHandoffService {
                 return new Snapshot(snapshot.root,snapshot.suiteManifest,snapshot.contractDirectory,snapshot.policy,immutableObject(provenance));
             } catch(RuntimeException error) {snapshot.close();throw error;}
         }
+        if(s.policy.nativeExecution() && nativeCapability(s)==ReviewedNativeCapability.KAFKA) {
+            try {
+                var fixture=com.specdriven.regression.provider.kafka.ReviewedLoopbackKafkaPolicy.fixture(snapshot.root,grpcBindings(s));
+                provenance.put("fixture_lease",fixture.lease());provenance.put("fixture_lease_sha256",fixture.leaseSha256());provenance.put("fixture_lease_base64",fixture.leaseBase64());
+                return new Snapshot(snapshot.root,snapshot.suiteManifest,snapshot.contractDirectory,snapshot.policy,immutableObject(provenance));
+            } catch(RuntimeException error) {snapshot.close();throw error;}
+        }
+        if(s.policy.nativeExecution()&&nativeCapability(s)==ReviewedNativeCapability.JDBC) {
+            try {
+                var fixture=com.specdriven.regression.provider.jdbc.ReviewedOwnedMariaDbPolicy.fixture(snapshot.root,grpcBindings(s),false);
+                recordJdbcLease(provenance,fixture.lease(),fixture.leaseSha256(),approved.get("fixtures/lease.json").bytes);
+                return new Snapshot(snapshot.root,snapshot.suiteManifest,snapshot.contractDirectory,snapshot.policy,immutableObject(provenance));
+            } catch(RuntimeException error){snapshot.close();throw error;}
+        }
         return snapshot;
+    }
+
+    /** Retains the original approved bytes; it does not perform or bypass live admission. */
+    private static void recordJdbcLease(Map<String,Object> provenance,Map<String,Object> lease,String pin,byte[] raw) {
+        if(raw.length>16384||!digest(raw).equals(pin))throw fail("fixture_lease_changed","reviewed JDBC lease bytes changed");
+        String encoded=java.util.Base64.getEncoder().encodeToString(raw);
+        com.specdriven.regression.provider.jdbc.ReviewedJdbcProof.boundLease(JSON.valueToTree(lease),encoded,pin);
+        provenance.put("fixture_lease",lease);provenance.put("fixture_lease_sha256",pin);provenance.put("fixture_lease_raw_base64",encoded);checkProvenanceBudget(provenance);
     }
 
     /** Bound the actual encoded projection before any runner snapshot or TEST dispatch. */
@@ -300,6 +340,7 @@ public final class ProductTestHandoffService {
         Set<String> tests = new LinkedHashSet<>();
         Map<String,Set<String>> oracleTests = new LinkedHashMap<>();
         Set<String> testPaths = new LinkedHashSet<>();
+        ParserAssertions parserAssertions=new ParserAssertions();
         int nativeRequests = 0;
         for (Object raw : list(s.suite.get("tests"), "tests", false)) {
             Map<String,Object> ref = object(raw, "test_ref"); only(ref, Set.of("ref"), "test_ref");
@@ -347,6 +388,7 @@ public final class ProductTestHandoffService {
                             }
                         } else if (!Set.of("exists", "not_exists").contains(operator)) throw fail("missing_oracle", "assertion expected operand is required");
                         else addOracle(oracleTests, path + "#" + sid, id);
+                        parserAssertions.add(path,digest(entry.bytes),id,sid,operator,assertion,roots);
                     } else {
                         only(step, Set.of("id", "target", "op", "with"), "provider_step");
                         String target = text(step.get("target"), "step.target");
@@ -356,6 +398,16 @@ public final class ProductTestHandoffService {
                             if (!"execute".equals(phase) || !nativeCapability(s).operation().equals(op) || ++nativeRequests > 1)
                                 throw fail("unsupported_operation", "native reviewed execution permits one selected operation across the entire suite");
                             nativeCapability(s).validateInputs(object(step.get("with"), "step.with"));
+                            if (nativeCapability(s) == ReviewedNativeCapability.KAFKA) {
+                                var kafkaInput=object(step.get("with"),"step.with");
+                                String payload=artifact(text(kafkaInput.get("payload_ref"),"payload_ref"),roots);
+                                equal("fixtures/payload.json",payload,"kafka_payload_path");need(needed,payload,"fixture");need(needed,"fixtures/lease.json","fixture");
+                                equal("run."+com.specdriven.regression.provider.kafka.ReviewedLoopbackKafkaPolicy.owner(grpcBindings(s)),kafkaInput.get("key"),"kafka_key_join");
+                            }
+                            if(nativeCapability(s)==ReviewedNativeCapability.JDBC) {
+                                need(needed,artifact(text(object(step.get("with"),"step.with").get("query_ref"),"query_ref"),roots),"fixture");
+                                need(needed,"fixtures/lease.json","fixture");
+                            }
                             if (nativeCapability(s) == ReviewedNativeCapability.NATS) {
                                 String fixture = artifact(text(object(step.get("with"), "step.with").get("payload_ref"), "payload_ref"), roots);
                                 need(needed, fixture, "fixture");
@@ -410,7 +462,7 @@ public final class ProductTestHandoffService {
                 staticValue(value);
             }
         }
-        return new Closure(tests, oracleTests);
+        return new Closure(tests, oracleTests, parserAssertions);
     }
 
     private static Map<String,Object> grpcBindings(Selection s) {
@@ -422,10 +474,14 @@ public final class ProductTestHandoffService {
         Map<String,Object> targets = object(s.suite.get("targets"), "targets");
         if (targets.size() != 1) throw fail("targets", "native execution requires one target");
         var target = object(targets.values().iterator().next(), "target");
-        return ReviewedNativeCapability.fromContract(text(target.get("provider_contract"), "provider_contract"));
+        var capability=ReviewedNativeCapability.fromContract(text(target.get("provider_contract"), "provider_contract"));
+        if(capability==ReviewedNativeCapability.JDBC&&(!"not_used".equals(s.policy.knowledgeMode())||s.policy.sharedState()!=null||!s.policy.dependencyModes().isEmpty()||s.policy.providerModes().size()!=1||s.policy.providerModes().values().stream().anyMatch(mode->!"real".equals(mode))))throw fail("unsupported_jdbc_policy","JDBC supports only one real owned local readonly target without knowledge/shared/dependency policy");
+        return capability;
     }
 
     private static void validateProfile(Selection s, Set<String> targets) {
+        if(s.policy.nativeExecution() && nativeCapability(s)==ReviewedNativeCapability.KAFKA && !"not_used".equals(s.policy.knowledgeMode()))
+            throw fail("kafka_not_used_only","reviewed Kafka leaf supports only not_used knowledge");
         Map<String,Object> env = s.env;
         only(env, Set.of("profile_id", "execution_mode", "isolation", "evidence_classification", "downstream_release_evidence", "targets", "product_test", "sit_readiness"), "env_profile");
         equal(s.profile, text(env.get("profile_id"), "profile_id"), "profile_id");
@@ -836,8 +892,10 @@ public final class ProductTestHandoffService {
         boolean supported = "execute_sample".equals(op) && output.matches("actual_json(?:\\.[A-Za-z0-9_]+)*|actual_text")
                 || "http_request".equals(op) && Set.of("response.status", "response.body", "response.headers", "response.duration_ms").contains(output)
                 || "run_command".equals(op) && Set.of("exit_code", "stdout", "stderr", "duration_ms").contains(output)
+                || "kafka_publish".equals(op) && Set.of("partition", "offset", "key", "topic").contains(output)
                 || "nats_publish".equals(op) && Set.of("published", "subject", "duration_ms").contains(output)
-                || "unary_call".equals(op) && Set.of("response.message", "response.status", "response.duration_ms").contains(output);
+                || "unary_call".equals(op) && Set.of("response.message", "response.status", "response.duration_ms").contains(output)
+                || "db_query".equals(op) && "result".equals(output);
         if (!supported) throw fail("unsupported_reference", "actual must refer to an earlier supported execution output");
     }
     private static void cleanupRef(Object value, Map<String,String> ops) {
@@ -958,5 +1016,52 @@ public final class ProductTestHandoffService {
     private static IllegalArgumentException fail(String code, String reason, Throwable cause) { return new IllegalArgumentException("product_test_" + code + ": " + reason, cause); }
     private record Selection(String profile, String profileRef, Map<String,Object> suite, Map<String,Object> env, ProductTestPolicy policy) { }
     private record FileEntry(String path, String role, byte[] bytes) { }
-    private record Closure(Set<String> tests, Map<String,Set<String>> oracleTests) { }
+    private record Closure(Set<String> tests, Map<String,Set<String>> oracleTests, ParserAssertions parserAssertions) { }
+
+    /** Source facts only, collected with fixed limits while the original strict closure is validated. */
+    private static final class ParserAssertions {
+        private final List<Map<String,Object>> rows=new ArrayList<>();
+        private int bytes; private boolean omitted;
+        void add(String path,String sha,String id,String sid,String operator,Map<String,Object> assertion,Map<String,Object> roots) {
+            if(omitted)return;
+            if(rows.size()==256){rows.clear();omitted=true;return;}
+            Map<String,Object> row=new LinkedHashMap<>();
+            row.put("qualified_case_ref",null);row.put("case_path",path);row.put("case_sha256",sha);row.put("test_case_id",id);
+            row.put("assertion_id",sid);row.put("assertion_operator",operator);
+            boolean ref=assertion.containsKey("expected_ref");row.put("expected_operand",ref?"EXPECTED_REF":assertion.containsKey("expected")?"EXPECTED":"ABSENT");
+            row.put("raw_expected_ref",ref?assertion.get("expected_ref"):null);
+            row.put("normalized_expected_path",ref?artifact((String)assertion.get("expected_ref"),roots):null);
+            row.put("expected_artifact_sha256",null);row.put("qualified_expected_artifact_ref",null);
+            try { int size=JSON.writeValueAsBytes(row).length;if(size>262144-bytes){rows.clear();omitted=true;return;}bytes+=size;rows.add(immutableObject(row)); }
+            catch(IOException impossible){throw new IllegalStateException(impossible);}
+        }
+    }
+    private static Map<String,Object> parserRelations(String manifest,Closure closure,Map<String,FileEntry> files,Map<String,Object> provenance) {
+        if(closure.parserAssertions.omitted)return null;
+        Map<String,Object> section=new LinkedHashMap<>();section.put("schema_version","parser-expected-artifact-relations.v1");section.put("state","COMPLETE");
+        section.put("manifest_path",manifest);section.put("manifest_sha256",digest(files.get(manifest).bytes));
+        List<Map<String,Object>> rows=new ArrayList<>();section.put("assertions",rows);
+        for(Map<String,Object> parsed:closure.parserAssertions.rows) {
+            Map<String,Object> row=new LinkedHashMap<>(parsed);String path=(String)row.get("case_path");
+            row.put("qualified_case_ref",parserSource(provenance,path,"case",(String)row.get("case_sha256")));
+            if("EXPECTED_REF".equals(row.get("expected_operand"))) {
+                String expected=(String)row.get("normalized_expected_path");String sha=digest(files.get(expected).bytes);
+                row.put("expected_artifact_sha256",sha);row.put("qualified_expected_artifact_ref",parserSource(provenance,expected,"oracle",sha));
+            }
+            rows.add(immutableObject(row));
+            // Stream into a counting sink, never materialize an unbounded serialized extension.
+            try { JSON.writeValue(new java.io.OutputStream(){int count;public void write(int value)throws IOException{if(++count>262144)throw new IOException("optional_parser_limit");}public void write(byte[] b,int off,int len)throws IOException{if(len>262144-count)throw new IOException("optional_parser_limit");count+=len;}},section); }
+            catch(IOException overflow){return null;}
+        }
+        return immutableObject(section);
+    }
+    private static String parserSource(Map<String,Object> provenance,String path,String role,String sha) {
+        String found=null;
+        for(Object raw:list(provenance.get("executed_source_bindings"),"parser_source",false)) {
+            Map<String,Object> source=object(raw,"parser_source");if(!path.equals(source.get("reviewed_path")))continue;
+            if(found!=null)throw fail("parser_source","ambiguous source identity");
+            equal(role,source.get("role"),"parser_source_role");equal(sha,source.get("sha256"),"parser_source_hash");found=text(source.get("artifact_id"),"parser_source_id");
+        }
+        if(found==null)throw fail("parser_source","validated source identity missing");return found;
+    }
 }

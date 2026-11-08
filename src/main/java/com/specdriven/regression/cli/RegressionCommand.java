@@ -314,7 +314,7 @@ public class RegressionCommand {
         out.println("  validate --suite <suite_manifest> [--profile <profile>]");
         out.println("  run --suite <suite_manifest> --profile <profile>");
         out.println("  run --suite <suite_manifest> --dry-run [--profile <profile>]");
-        out.println("  report --result <result_json> [--format text|yaml|json] [--coverage-dir <dir>] [--coverage-catalog <json>] [--coverage-selection <json>]");
+        out.println("  report --result <result_json> [--format text|yaml|json] [--coverage-dir <dir>] [--coverage-catalog <json>] [--coverage-selection <json>] [--coverage-authority <json> --expected-coverage-authority-sha256 <sha256>]");
         out.println("  validate-evidence --result <result_json>");
         out.println("  doctor drivers [--driver-path <jar>] [--driver-dir <dir>]");
         out.println("  prepare-product-test-handoff --suite <manifest> --profile <id> --review-input <json> --out <json> [--selection-receipt <json>]");
@@ -327,7 +327,7 @@ public class RegressionCommand {
                 out.println("       regress run --suite <suite_manifest> --dry-run [--profile <profile>]");
             }
             case "validate" -> out.println("usage: regress validate --suite <suite_manifest> [--profile <profile>]");
-            case "report" -> out.println("usage: regress report --result <result_json> [--format text|yaml|json] [--coverage-dir <dir>] [--coverage-catalog <json>] [--coverage-selection <json>]");
+            case "report" -> out.println("usage: regress report --result <result_json> [--format text|yaml|json] [--coverage-dir <dir>] [--coverage-catalog <json>] [--coverage-selection <json>] [--coverage-authority <json> --expected-coverage-authority-sha256 <sha256>]");
             case "validate-evidence" -> out.println("usage: regress validate-evidence --result <result_json>");
             case "doctor" -> out.println("usage: regress doctor drivers [--driver-path <jar>] [--driver-dir <dir>]");
             default -> printGeneralUsage(out);
@@ -516,7 +516,7 @@ public class RegressionCommand {
                 : null;
         com.specdriven.regression.report.CanonicalCoverageReportResult coverage = null;
         boolean explicitCoverage = options.containsKey("--coverage-dir") || options.containsKey("--coverage-catalog")
-                || options.containsKey("--coverage-selection");
+                || options.containsKey("--coverage-selection") || options.containsKey("--coverage-authority") || options.containsKey("--expected-coverage-authority-sha256");
         Map<String, Object> coverageSource = readResultMap(resolvedResult);
         boolean legacyMarkersAbsent = !coverageSource.containsKey("result_contract_version")
                 && !coverageSource.containsKey("product_test");
@@ -534,7 +534,10 @@ public class RegressionCommand {
                                 .resolve("report-" + java.util.UUID.randomUUID());
                 Path catalog = options.containsKey("--coverage-catalog") ? root.resolve(options.get("--coverage-catalog")) : null;
                 Path selection = options.containsKey("--coverage-selection") ? root.resolve(options.get("--coverage-selection")) : null;
-                coverage = coverageReportService.projectCanonical(resolvedResult, coverageDir, catalog, selection);
+                Path authority;
+                try {authority=options.containsKey("--coverage-authority")?root.resolve(options.get("--coverage-authority")):null;}
+                catch(java.nio.file.InvalidPathException invalid){throw new IllegalArgumentException("COVERAGE_AUTHORITY_INVALID_REFERENCE");}
+                coverage = coverageReportService.projectCanonical(resolvedResult, coverageDir, catalog, selection,authority,options.get("--expected-coverage-authority-sha256"));
             } catch (RuntimeException failure) {
                 if ("json".equals(format)) printReportJson(out, err, jsonFailure("COVERAGE_GENERATION_FAILED", "EVIDENCE_ERROR", failure.getMessage(), List.of()));
                 else err.println(failure.getMessage());

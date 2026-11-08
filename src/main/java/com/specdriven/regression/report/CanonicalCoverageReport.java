@@ -44,15 +44,21 @@ final class CanonicalCoverageReport {
                                 String suite, String profile, String testCase, String qualifiedCaseRef) {}
 
     CanonicalCoverageReportResult project(Path result, Path output, Path catalogPath, Path selectionPath) {
-        try { return generate(result, output, catalogPath, selectionPath); }
-        catch (IOException e) { throw new UncheckedIOException("Coverage generation failed: " + e.getMessage(), e); }
-        catch (RuntimeException e) { throw new IllegalArgumentException("Coverage generation failed: " + e.getMessage(), e); }
-        catch (Exception e) { throw new IllegalArgumentException("Coverage generation failed: " + e.getMessage(), e); }
+        return project(result,output,catalogPath,selectionPath,null,null);
+    }
+    CanonicalCoverageReportResult project(Path result,Path output,Path catalogPath,Path selectionPath,Path authorityPath,String authoritySha) {
+        try { return generate(result, output, catalogPath, selectionPath,authorityPath,authoritySha); }
+        catch (IOException e) { if(authorityPath!=null||authoritySha!=null)throw ReviewedCoverageAuthority.rejection(e);throw new UncheckedIOException("Coverage generation failed: " + e.getMessage(), e); }
+        catch (RuntimeException e) { if(authorityPath!=null||authoritySha!=null)throw ReviewedCoverageAuthority.rejection(e);throw new IllegalArgumentException("Coverage generation failed: " + e.getMessage(), e); }
+        catch (Exception e) { if(authorityPath!=null||authoritySha!=null)throw ReviewedCoverageAuthority.rejection(e);throw new IllegalArgumentException("Coverage generation failed: " + e.getMessage(), e); }
     }
 
-    private CanonicalCoverageReportResult generate(Path primaryPath, Path output, Path catalogPath, Path selectionPath) throws Exception {
+    private CanonicalCoverageReportResult generate(Path primaryPath, Path output, Path catalogPath, Path selectionPath,Path authorityPath,String authoritySha) throws Exception {
         primaryPath = regular(primaryPath); output = safeOutput(output);
         JsonNode selection = selectionPath == null ? null : read(selectionPath, INPUT_LIMIT);
+        ReviewedCoverageAuthority originalAuthority=authorityPath==null&&authoritySha==null?null:new ReviewedCoverageAuthority(authorityPath,authoritySha,JSON);
+        ReviewedCoverageAuthority authority=originalAuthority;
+        require(authority==null||catalogPath==null,"conflicting catalog sources with authority");
         JsonNode catalog = catalogPath == null ? null : read(catalogPath, INPUT_LIMIT);
         if (selection != null) {
             require("coverage-selection.v1".equals(text(selection,"schema_version")), "unsupported selection version");
@@ -86,6 +92,8 @@ final class CanonicalCoverageReport {
                 "max_age_seconds",selection == null ? null : selection.get("max_age_seconds"),
                 "input_sha256",selectionPath == null ? null : sha(regular(selectionPath)));
         document.set("selection",selectionOut);
+        if(authority!=null)authority.verifyCatalogTiming(Instant.parse(required(selectionOut,"as_of")));
+        if(authority!=null&&authority.catalogActive(Instant.parse(required(selectionOut,"as_of")))) {catalogPath=authority.catalogPath();catalog=catalogPath==null?null:read(catalogPath,INPUT_LIMIT);}
         ArrayNode sources = document.putArray("sources");
         for (Candidate c : candidates) {
             boolean selected = chosen.values().stream().anyMatch(v -> v.source == c);
@@ -121,6 +129,7 @@ final class CanonicalCoverageReport {
             }
         }
         ObjectNode inventory = inventory(catalog,catalogPath,primary.subject);
+        if(authority!=null&&authority.catalogPath()!=null&&catalog==null)inventory.put("reason",authority.active(Instant.parse(required(selectionOut,"as_of")))?"catalog_approval_future":"authority_approval_future");
         document.set("inventory",inventory);
         document.set("risk_inventory",obj("state","UNKNOWN","authority",null,"revision",null,
                 "denominator",null,"reason","risk_inventory_missing"));
@@ -133,7 +142,8 @@ final class CanonicalCoverageReport {
             projectEntities(catalog,cases,entities,metrics);
         }
         entityOracleRefs(entities,oracleTraces);
-        if(!oracleTraces.isEmpty())gap("oracle_independence_unknown","oracle_trace",primary.path,
+        if(authority!=null){authority=authority.snapshotTo(output.resolve("coverage-inputs"));if(catalogPath!=null)for(JsonNode link:links)if(catalogPath.toAbsolutePath().normalize().toString().equals(link.path("path").asText()))((ObjectNode)link).put("path",authority.catalogPath().toString());Map<String,JsonNode> provenance=new LinkedHashMap<>();for(Candidate c:candidates)provenance.put(c.path.toString(),c.provenance);authority.apply(document,provenance);}
+        if(java.util.stream.StreamSupport.stream(oracleTraces.spliterator(),false).anyMatch(t->!"REVIEW_ATTESTED".equals(t.path("independence").path("state").asText())))gap("oracle_independence_unknown","oracle_trace",primary.path,
                 "Review separately evidenced oracle independence; source binding and a declared assertion reference do not prove independence or evaluated assertions.",false);
         ObjectNode observations=document.putObject("observations");
         observations.put("selected_case_count",cases.size());
@@ -158,8 +168,9 @@ final class CanonicalCoverageReport {
         String status = invalid ? "INVALID" : incomplete ? "INCOMPLETE" : "VALID";
         document.put("report_status",status); document.set("gaps",gaps); document.set("evidence_links",links);
         verifySnapshots();
+        if(authority!=null){authority.verifyUnchanged();originalAuthority.verifyUnchanged();}
         publish(output, document);
-        try { verifySnapshots(); }
+        try { verifySnapshots();if(authority!=null){authority.verifyUnchanged();originalAuthority.verifyUnchanged();} }
         catch (Exception changed) {
             Files.deleteIfExists(output.resolve("coverage.json"));
             Files.deleteIfExists(output.resolve("coverage.md"));
@@ -405,6 +416,7 @@ final class CanonicalCoverageReport {
     }
     /** Historical metadata joins only; a reviewed pointer is neither an evaluated assertion nor independence. */
     private ArrayNode oracleTrace(Candidate candidate, JsonNode test, JsonNode catalog) throws Exception {
+        parserRelations(candidate.provenance);
         String id=required(test,"test_case_id");
         String qualified=reviewedV2(candidate.provenance)?qualifiedCase(candidate,id):null;
         ArrayNode mappings=mappingRefs(candidate.provenance,id), rows=JSON.createArrayNode();
@@ -488,6 +500,58 @@ final class CanonicalCoverageReport {
         }
         return rows;
     }
+
+    /** A pinned parser declaration is source metadata, never execution or independent oracle authority. */
+    private static JsonNode parserRelations(JsonNode p) throws Exception {
+        if(!p.has("parser_expected_artifact_relations"))return null;
+        JsonNode section=p.path("parser_expected_artifact_relations");
+        parserExact(section,Set.of("schema_version","state","manifest_path","manifest_sha256","assertions"));
+        parserRequire("product-test-reviewed-handoff.v2".equals(p.path("contract_version").asText()),"v2 source required");
+        parserRequire("parser-expected-artifact-relations.v1".equals(parserText(section,"schema_version"))&&"COMPLETE".equals(parserText(section,"state")),"version/state");
+        parserRequire(JSON.writeValueAsBytes(section).length<=262144,"byte limit");
+        String manifest=parserPath(parserText(section,"manifest_path"));
+        parserReviewed(p,manifest,"manifest",parserText(section,"manifest_sha256"));
+        parserArtifact(p,null,manifest,"suite",parserText(section,"manifest_sha256"),null);
+        JsonNode assertions=section.path("assertions");parserRequire(assertions.isArray()&&assertions.size()<=256,"assertion limit/type");
+        Set<List<String>> seen=new HashSet<>();
+        for(JsonNode row:assertions) {
+            parserExact(row,Set.of("qualified_case_ref","case_path","case_sha256","test_case_id","assertion_id","assertion_operator","expected_operand","raw_expected_ref","normalized_expected_path","expected_artifact_sha256","qualified_expected_artifact_ref"));
+            String qualified=parserText(row,"qualified_case_ref"),path=parserPath(parserText(row,"case_path")),id=parserText(row,"test_case_id");
+            parserRequire(seen.add(List.of(qualified,parserText(row,"assertion_id"))),"duplicate assertion identity");
+            parserRequire(Set.of("equals","not_equals","gt","gte","lt","lte","exists","not_exists","json_match").contains(parserText(row,"assertion_operator")),"operator");
+            parserReviewed(p,path,"test",parserText(row,"case_sha256"));parserArtifact(p,qualified,path,"case",parserText(row,"case_sha256"),id);
+            int selected=0;for(JsonNode selection:p.path("source_case_selection"))if(qualified.equals(selection.path("qualified_case_ref").asText())&&id.equals(selection.path("source_test_id").asText())&&"SELECTED".equals(selection.path("state").asText()))selected++;
+            parserRequire(selected==1,"selected case source");
+            String operand=parserText(row,"expected_operand");parserRequire(Set.of("EXPECTED_REF","EXPECTED","ABSENT").contains(operand),"operand");
+            if("EXPECTED_REF".equals(operand)) {
+                String raw=parserText(row,"raw_expected_ref");parserRequire(raw.startsWith("artifact://"),"static artifact URI");
+                String uri=raw.substring(11);int slash=uri.indexOf('/');parserRequire(slash>0,"artifact namespace");parserPath(uri);
+                String normalized=parserPath(parserText(row,"normalized_expected_path")),suffix=uri.substring(slash+1);
+                parserRequire(normalized.equals(suffix)||normalized.endsWith("/"+suffix),"artifact URI/path suffix");
+                parserReviewed(p,normalized,"oracle",parserText(row,"expected_artifact_sha256"));
+                parserArtifact(p,parserText(row,"qualified_expected_artifact_ref"),normalized,"oracle",parserText(row,"expected_artifact_sha256"),null);
+            } else for(String field:List.of("raw_expected_ref","normalized_expected_path","expected_artifact_sha256","qualified_expected_artifact_ref"))parserRequire(row.path(field).isNull(),"literal/absent operand has artifact fields");
+        }
+        return section;
+    }
+    private static void parserReviewed(JsonNode p,String path,String role,String sha) {
+        parserRequire(sha.matches("[a-f0-9]{64}"),"invalid source digest");int found=0;
+        for(JsonNode file:p.path("reviewed_files"))if(path.equals(file.path("path").asText())){found++;parserRequire(role.equals(file.path("role").asText())&&sha.equals(file.path("sha256").asText()),"reviewed role/hash join");}
+        parserRequire(found==1,"reviewed source identity");
+    }
+    private static void parserArtifact(JsonNode p,String qualified,String path,String role,String sha,String id) {
+        JsonNode found=null;for(JsonNode source:p.path("executed_source_bindings"))if(path.equals(source.path("reviewed_path").asText())){parserRequire(found==null,"ambiguous artifact path");found=source;}
+        parserRequire(found!=null,"source artifact missing");
+        String repo=parserText(found,"source_repo"),commit=parserText(found,"source_commit"),sourcePath=parserPath(parserText(found,"source_path")),sourceId=parserText(found,"source_id");
+        parserRequire(commit.matches("[a-f0-9]{40}(?:[a-f0-9]{24})?")&&commit.equals(found.path("source_testrepo_version").asText())&&role.equals(found.path("role").asText())&&sha.equals(found.path("sha256").asText()),"artifact role/hash/version");
+        String ref=repo+"@"+commit+":"+sourcePath+"#"+sourceId;parserRequire(ref.equals(found.path("artifact_id").asText())&&(qualified==null||qualified.equals(ref))&&(id==null||id.equals(sourceId)),"qualified artifact identity");
+        int versions=0;for(JsonNode version:p.path("source_repository_versions"))if(repo.equals(version.path("source_repo").asText())){versions++;parserRequire(commit.equals(version.path("source_testrepo_version").asText()),"artifact A/source version");}parserRequire(versions==1,"repository source version");
+    }
+    private static String parserPath(String path) {parserRequire(!path.startsWith("/")&&!path.contains("\\")&&!path.contains("%")&&!path.contains("#")&&!path.contains("$")&&Arrays.stream(path.split("/",-1)).noneMatch(part->part.isEmpty()||part.equals(".")||part.equals("..")),"unsafe source reference");return path;}
+    private static String parserText(JsonNode node,String field){JsonNode value=node.path(field);parserRequire(value.isTextual()&&!value.asText().isBlank()&&value.asText().length()<=4096&&!value.asText().codePoints().anyMatch(Character::isISOControl),"text field");return value.asText();}
+    private static void parserExact(JsonNode node,Set<String> fields){Set<String> actual=new HashSet<>();node.fieldNames().forEachRemaining(actual::add);parserRequire(node.isObject()&&actual.equals(fields),"closed fields");}
+    private static void parserRequire(boolean value,String reason){if(!value)throw new IllegalArgumentException("parser expected artifact metadata: "+reason);}
+
     private static ObjectNode emptyOracle() {
         return obj("qualified_ref",null,"path",null,"sha256",null,"source_repo",null,"source_commit",null,"source_testrepo_version",null,"review_ref",null,"reviewed_by",null);
     }
@@ -546,8 +610,8 @@ final class CanonicalCoverageReport {
         s.append("| Metric | Denominator | Mapped | Executed | Satisfied | Satisfied percent |\n| --- | --- | --- | --- | --- | --- |\n");
         d.path("metrics").properties().forEach(e -> {JsonNode m=e.getValue();s.append("| ").append(e.getKey()).append(" | ").append(m.path("denominator")).append(" | ").append(m.path("mapped")).append(" | ").append(m.path("executed")).append(" | ").append(m.path("satisfied")).append(" | ").append(m.path("satisfied_percent")).append(" |\n");});
         s.append("| risks | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |\n");
-        s.append("\nOracle SOURCE_BOUND describes historical source identity only. A declared assertion reference does not prove assertion execution, evaluated expected values, or semantic independence. Independence remains UNKNOWN without a separate attestation contract.\n\n");
-        for(String section:List.of("subject","selection","inventory","risk_inventory","entities","cases","oracle_trace","knowledge_trace","source_case_selection","sources","breakdowns","code_coverage","gaps")) s.append("\n## ").append(section).append("\n\n```json\n").append(d.path(section).toPrettyString()).append("\n```\n");
+        s.append("\nOracle SOURCE_BOUND describes historical source identity only. A declared assertion reference does not prove assertion execution, evaluated expected values, or semantic independence. DECLARED_REVIEWED identifies an externally reviewed relation only. REVIEW_ATTESTED accepts a pinned reviewed origin statement and does not prove business correctness. Independence remains UNKNOWN without an admitted attestation.\n\n");
+        for(String section:List.of("subject","selection","inventory","risk_inventory","coverage_authority","entities","cases","oracle_trace","knowledge_trace","source_case_selection","sources","breakdowns","code_coverage","gaps")) s.append("\n## ").append(section).append("\n\n```json\n").append(d.path(section).toPrettyString()).append("\n```\n");
         s.append("\n## Evidence links\n\n");for(JsonNode l:d.path("evidence_links")) {String p=l.path("path").asText();s.append("- [").append(p.replace("[","\\[").replace("]","\\]")).append("](<").append(p.replace(">","%3E").replace("<","%3C")).append(">) SHA256 `").append(l.path("sha256").asText()).append("`\n");}return s.toString();
     }
     private void gap(String reason,String id,Path source,String action,boolean fatal) {invalid|=fatal;gaps.add(obj("reason",reason,"subject_id",id,"source_ref",source==null?null:source.toString(),"owner_action",action));}

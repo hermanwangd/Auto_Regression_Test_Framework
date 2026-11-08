@@ -234,8 +234,12 @@ public class EvidenceHardeningService {
                     for (var operation : operations) requireReviewed(nativeCapability.operation().equals(operation.get("operation")),
                             "native resolved operation differs from selected contract");
                 }
+                if ("kafka.v0.3".equals(nativeCapability.contract()))
+                    validateReviewedKafkaProof(root,result,handoff,entries);
                 if ("grpc_client.v0.3".equals(nativeCapability.contract()))
                     validateReviewedGrpcProof(root, result, handoff, entries, passed);
+                if ("jdbc.v0.3".equals(nativeCapability.contract()))
+                    validateReviewedJdbcProof(root,result,handoff,entries,passed);
             }
             Map<String,Object> observedDependencies = mapValue(handoff.get("observed_dependency_modes"));
             boolean readinessPresent = entries.stream().anyMatch(entry -> "sit_readiness".equals(entry.evidenceType())
@@ -290,6 +294,50 @@ public class EvidenceHardeningService {
             findings.add(finding(resultJson, "product_test", "reviewed_evidence_invalid",
                     "Restore matching canonical reviewed provenance, modes and local-only evidence: " + error.getMessage()));
         }
+    }
+
+    /** Kafka-specific historical validation. No live broker, owner, clock or source-tree lookup. */
+    private void validateReviewedKafkaProof(Path root,Map<String,Object> result,Map<String,Object> handoff,List<EvidenceEntry> entries)throws IOException {
+        requireReviewed("not_used".equals(handoff.get("knowledge_mode")),"Kafka requires not_used knowledge");
+        var json=new com.fasterxml.jackson.databind.ObjectMapper();
+        var provenance=json.valueToTree(handoff);
+        var lease=com.specdriven.regression.provider.kafka.ReviewedKafkaPublishProof.frozenLease(provenance);
+        com.specdriven.regression.provider.kafka.ReviewedKafkaPublishProof.verifyInvocation(lease,json.valueToTree(result));
+        String pin=provenance.path("fixture_lease_sha256").asText();
+        var closures=mapList(handoff.get("reviewed_files")).stream().filter(f->"fixtures/lease.json".equals(f.get("path"))).toList();
+        requireReviewed(closures.size()==1&&"fixture".equals(closures.get(0).get("role"))&&pin.equals(closures.get(0).get("sha256")),"Kafka lease closure mismatch");
+        var payloads=mapList(handoff.get("reviewed_files")).stream().filter(f->"fixtures/payload.json".equals(f.get("path"))).toList();
+        requireReviewed(payloads.size()==1&&"fixture".equals(payloads.get(0).get("role"))&&lease.path("payload_sha256").asText().equals(payloads.get(0).get("sha256")),"Kafka payload closure mismatch");
+        if(mapList(result.get("provider_results")).isEmpty())return;
+        String path=com.specdriven.regression.provider.kafka.ReviewedKafkaPublishProof.PATH;
+        var entry=uniqueReviewedEntry(entries,path,"kafka_event");
+        requireReviewed(entries.stream().filter(e->path.equals(e.filePath())).count()==1&&result.get("run_id").equals(entry.runId())&&result.get("batch_id").equals(entry.batchId())&&evidenceRefs(result).contains(path),"Kafka proof index mismatch");
+        byte[] raw=reviewedBytes(root.resolve(path),root);requireReviewed(raw.length<=16384,"Kafka proof byte bound");
+        com.specdriven.regression.provider.kafka.ReviewedKafkaPublishProof.verify(com.specdriven.regression.provider.kafka.ReviewedLoopbackKafkaPolicy.parse(raw),lease,pin,json.valueToTree(result));
+    }
+
+    /** Historical JDBC identity only; live ownership and the independent operator binding belong to execution. */
+    private void validateReviewedJdbcProof(Path root,Map<String,Object> result,Map<String,Object> handoff,List<EvidenceEntry> entries,boolean passed)throws IOException {
+        var mapper=new com.fasterxml.jackson.databind.ObjectMapper(com.fasterxml.jackson.core.JsonFactory.builder()
+                .enable(com.fasterxml.jackson.core.StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+                .streamReadConstraints(com.fasterxml.jackson.core.StreamReadConstraints.builder().maxStringLength(16384).maxNestingDepth(32).build()).build())
+                .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+        var parsedLease=mapper.valueToTree(handoff.get("fixture_lease"));
+        String pin=reviewedText(handoff.get("fixture_lease_sha256"),"JDBC lease digest");requireReviewed(pin.matches("[a-f0-9]{64}"),"JDBC lease digest invalid");
+        var lease=com.specdriven.regression.provider.jdbc.ReviewedJdbcProof.boundLease(parsedLease,handoff.get("fixture_lease_raw_base64") instanceof String raw?raw:null,pin);
+        var closures=mapList(handoff.get("reviewed_files")).stream().filter(f->"fixtures/lease.json".equals(f.get("path"))).toList();
+        requireReviewed(closures.size()==1&&"fixture".equals(closures.get(0).get("role"))&&pin.equals(closures.get(0).get("sha256")),"JDBC lease closure mismatch");
+        if(mapList(result.get("provider_results")).isEmpty())return;
+        String path=com.specdriven.regression.provider.jdbc.ReviewedJdbcProof.PATH;
+        var entry=uniqueReviewedEntry(entries,path,"jdbc_query");
+        requireReviewed(entries.stream().filter(e->path.equals(e.filePath())).count()==1&&result.get("run_id").equals(entry.runId())&&result.get("batch_id").equals(entry.batchId())&&evidenceRefs(result).contains(path),"JDBC proof is not uniquely bound to canonical run");
+        requireReviewed(Files.size(root.resolve(path))<=65536,"JDBC proof exceeds64KiB");byte[] bytes=reviewedBytes(root.resolve(path),root);requireReviewed(bytes.length<=65536,"JDBC proof exceeds64KiB");
+        var proof=mapper.readTree(bytes);
+        var operations=mapList(mapList(result.get("provider_results")).get(0).get("resolved_operation_results"));
+        requireReviewed(operations.size()==1&&"db_query".equals(operations.get(0).get("operation")),"JDBC proof requires its single canonical resolved operation");
+        Object payload=operations.isEmpty()?null:mapValue(operations.get(0).get("outputs")).get("result");
+        var provider=mapList(result.get("provider_results")).get(0);
+        com.specdriven.regression.provider.jdbc.ReviewedJdbcProof.validate(lease,pin,proof,passed,payload instanceof String str?str:null,stringValue(provider.get("provider_id")),stringValue(provider.get("operation")),java.time.Instant.parse(stringValue(result.get("start_time"))),java.time.Instant.parse(stringValue(result.get("end_time"))));
     }
 
     /** Historical joins only: the owner may be reaped and the invocation lease expired. */

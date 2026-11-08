@@ -5,7 +5,8 @@ public enum V03ReferenceKind {
     ARTIFACT,
     STEP,
     GENERATED,
-    ENV;
+    ENV,
+    OWNED_MEMORY;
 
     static V03ReferenceKind parse(String value) {
         try {

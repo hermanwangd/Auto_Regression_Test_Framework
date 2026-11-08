@@ -284,6 +284,10 @@ public class V03ExecutionPlanBuilder {
                 }
                 V03Reference reference = referenceParser.parse(binding.getValue());
                 V03ReferenceKind kind = referenceKind(reference);
+                if(kind==V03ReferenceKind.OWNED_MEMORY) {
+                    if(!contract.id().equals("jdbc.v0.3")||!contract.providerType().equals("jdbc")||!target.runtimeMode().equals("native")||!binding.getKey().equals("connection.secret_ref")||definition.sensitivity()!=V03Sensitivity.MASKED||!definition.source().equals("env_profile_secret_ref"))throw new IllegalArgumentException("invalid_owned_memory_scope: finite native JDBC binding required");
+                    com.specdriven.regression.provider.jdbc.ReviewedOwnedMariaDbPolicy.validateBindings(target.bindings());
+                }
                 if (!definition.referenceKinds().contains(kind)) {
                     throw new IllegalArgumentException("unsupported_binding_reference_kind: target `" + target.target()
                             + "` binding `" + binding.getKey() + "` does not allow `" + kind.name().toLowerCase(java.util.Locale.ROOT) + "`.");
@@ -387,6 +391,7 @@ public class V03ExecutionPlanBuilder {
             V03ExecutionStep step, String input, Object value, V03InputDefinition definition) {
         V03Reference reference = referenceParser.parse(value);
         V03ReferenceKind kind = referenceKind(reference);
+        if(kind==V03ReferenceKind.OWNED_MEMORY)throw new IllegalArgumentException("invalid_owned_memory_scope: DSL inputs cannot contain protected credential markers");
         if (kind == V03ReferenceKind.GENERATED) {
             throw new IllegalArgumentException("invalid_reference_scope: DSL `with` input `" + input
                     + "` may not use generated://; use an Env_Profile target binding.");
@@ -403,6 +408,7 @@ public class V03ExecutionPlanBuilder {
     }
 
     private V03ReferenceKind referenceKind(V03Reference reference) {
+        if(reference instanceof V03Reference.OwnedMemory)return V03ReferenceKind.OWNED_MEMORY;
         if (reference instanceof V03Reference.Artifact) return V03ReferenceKind.ARTIFACT;
         if (reference instanceof V03Reference.Step) return V03ReferenceKind.STEP;
         if (reference instanceof V03Reference.Generated) return V03ReferenceKind.GENERATED;

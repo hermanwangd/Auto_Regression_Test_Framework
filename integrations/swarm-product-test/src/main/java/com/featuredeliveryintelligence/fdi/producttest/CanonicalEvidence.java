@@ -102,9 +102,9 @@ final class CanonicalEvidence {
             require(contracts.isArray() && contracts.size() == 1 && contracts.equals(provenance.path("reviewed_contracts")),
                     "Native reviewed contract differs from pinned handoff");
             String contract = Json.required(contracts.get(0), "provider_contract");
-            require(Set.of("rest_client.v0.3", "cli_process.v0.3", "nats.v0.3", "grpc_client.v0.3").contains(contract), "Unsupported native provider contract");
-            String type = switch (contract) { case "cli_process.v0.3" -> "cli_process"; case "nats.v0.3" -> "nats"; case "grpc_client.v0.3" -> "grpc_client"; default -> "rest_client"; };
-            String operation = switch (type) { case "cli_process" -> "run_command"; case "nats" -> "nats_publish"; case "grpc_client" -> "unary_call"; default -> "http_request"; };
+            require(Set.of("rest_client.v0.3", "cli_process.v0.3", "nats.v0.3", "grpc_client.v0.3", "kafka.v0.3", "jdbc.v0.3").contains(contract), "Unsupported native provider contract");
+            String type = switch (contract) { case "cli_process.v0.3" -> "cli_process"; case "kafka.v0.3" -> "kafka"; case "jdbc.v0.3" -> "jdbc"; case "nats.v0.3" -> "nats"; case "grpc_client.v0.3" -> "grpc_client"; default -> "rest_client"; };
+            String operation = switch (type) { case "cli_process" -> "run_command"; case "kafka" -> "kafka_publish"; case "jdbc" -> "db_query"; case "nats" -> "nats_publish"; case "grpc_client" -> "unary_call"; default -> "http_request"; };
             boolean requiredV2="required".equals(request.knowledgeMode())&&ReviewedKnowledgeAdmission.v2(Json.MAPPER.readTree(reviewedBytes));
             if(requiredV2)ReviewedKnowledgeAdmission.after(request,Json.MAPPER.readTree(reviewedBytes),Path.of(request.suiteManifest()).getParent(),provenance,independentSutPin,start);
             require(("not_used".equals(request.knowledgeMode())||requiredV2) && provenance.path("provider_modes").size() == 1
@@ -118,6 +118,28 @@ final class CanonicalEvidence {
                     && "native".equals(provider.path("runtime_mode").asText()), "Native provider metadata mismatch");
             for (var step : document.path("step_results")) require("execute".equals(step.path("phase").asText())
                     && operation.equals(step.path("operation").asText()), "Native operation metadata mismatch");
+            if(type.equals("kafka")) {
+                require("not_used".equals(request.knowledgeMode()),"Kafka requires not_used knowledge");
+                require(fixtureLeaseSha256!=null&&fixtureLeaseSha256.matches("[a-f0-9]{64}"),"Independent Kafka fixture lease pin missing");
+                verifyKafka(request,run,document,provenance,indexDocument,fixtureLeaseSha256);
+            }
+            if(type.equals("jdbc")) {
+                require(fixtureLeaseSha256!=null&&fixtureLeaseSha256.matches("[a-f0-9]{64}"),"JDBC independent lease pin missing");
+                require(fixtureLeaseSha256.equals(Json.required(provenance,"fixture_lease_sha256")),"JDBC independent lease pin mismatch");
+                var lease=ReviewedJdbcProof.boundLease(provenance.path("fixture_lease"),provenance.path("fixture_lease_raw_base64").isTextual()?provenance.path("fixture_lease_raw_base64").textValue():null,fixtureLeaseSha256);
+                Path file=LocalFiles.contained(Path.of(request.suiteManifest()).getParent(),Path.of(request.suiteManifest()).getParent().resolve("fixtures/lease.json"));
+                byte[] bytes=LocalFiles.read(file,16384);require(fixtureLeaseSha256.equals(LocalFiles.sha256(bytes))&&lease.equals(Json.MAPPER.readTree(bytes)),"JDBC independent lease bytes mismatch");
+                long matches=0;for(var reviewed:Json.MAPPER.readTree(reviewedBytes).path("reviewed_files"))if("fixtures/lease.json".equals(reviewed.path("path").asText())){require("fixture".equals(reviewed.path("role").asText())&&fixtureLeaseSha256.equals(reviewed.path("sha256").asText()),"JDBC reviewed lease digest mismatch");matches++;}
+                require(matches==1,"JDBC lease missing or ambiguous in reviewed closure");
+                if(!document.path("provider_results").isEmpty()) {
+                    require(contains(document.path("evidence_refs"),ReviewedJdbcProof.PATH)&&containsFile(indexDocument.path("entries"),ReviewedJdbcProof.PATH),"JDBC proof must be indexed");
+                    var proof=ReviewedJdbcProof.parseProof(LocalFiles.read(relative(run,ReviewedJdbcProof.PATH),65536));
+                    var jdbcPayload=document.path("provider_results").get(0).path("resolved_operation_results").path(0).path("outputs").path("result");
+                    var provider=document.path("provider_results").get(0);
+                    require(provider.path("provider_id").isTextual()&&!provider.path("provider_id").textValue().isBlank()&&"real".equals(provenance.path("observed_provider_modes").path(provider.path("target").textValue()).textValue())&&provider.path("operations").isArray()&&provider.path("operations").size()==1&&"db_query".equals(provider.path("operations").get(0).textValue())&&provider.path("resolved_operation_results").isArray()&&provider.path("resolved_operation_results").size()==1&&"db_query".equals(provider.path("resolved_operation_results").get(0).path("operation").textValue()),"JDBC canonical provider/operation identity mismatch");
+                    ReviewedJdbcProof.validate(lease,fixtureLeaseSha256,proof,passed,jdbcPayload.isTextual()?jdbcPayload.textValue():null,provider.path("provider_id").textValue(),provider.path("operation").textValue(),start,end);
+                }
+            }
             if(type.equals("grpc_client")) {
                 require(fixtureLeaseSha256!=null && fixtureLeaseSha256.matches("[a-f0-9]{64}"),"Independent fixture lease pin missing");
                 require(fixtureLeaseSha256.equals(Json.required(provenance,"fixture_lease_sha256")),"Independent fixture lease pin mismatch");
@@ -165,6 +187,54 @@ final class CanonicalEvidence {
             artifacts.put(entry.getKey(), new ProductTestReceipt.Artifact(entry.getValue().toString(), LocalFiles.sha256(entry.getValue())));
         return new CanonicalEvidence(result, document, artifacts, tree, grpcPayload);
     }
+    /** Kafka-specific historical joins. No live-owner lookup or provider/network calls. */
+    private static void verifyKafka(ProductTestRequest request,Path run,com.fasterxml.jackson.databind.JsonNode result,
+            com.fasterxml.jackson.databind.JsonNode provenance,com.fasterxml.jackson.databind.JsonNode index,String pin)throws Exception {
+        Path root=Path.of(request.suiteManifest()).getParent();
+        byte[] raw=LocalFiles.read(LocalFiles.contained(root,root.resolve("fixtures/lease.json")),16384);
+        require(pin.equals(LocalFiles.sha256(raw))&&pin.equals(Json.required(provenance,"fixture_lease_sha256")),"Independent Kafka lease bytes/pin mismatch");
+        var lease=Json.readMetadataUtf8(raw);require(lease.equals(provenance.path("fixture_lease"))&&java.util.Base64.getEncoder().encodeToString(raw).equals(Json.required(provenance,"fixture_lease_base64")),"Kafka frozen lease differs from independent bytes");
+        kafkaExact(lease,Set.of("version","owner_run_id","nonce","endpoint","topic","consumer_group","key","payload_sha256","runtime_version","image_child_sha256","image_config_sha256","advertised_listener_sha256","broker_container_id","network_mode","client_network_container_id","advertised_listener","controller_listener","partitions","initial_offset","issued_at","expires_at"));
+        require("reviewed-kafka-lease.v1".equals(Json.required(lease,"version")),"Kafka lease version");String owner=Json.required(lease,"owner_run_id"),endpoint=Json.required(lease,"endpoint");
+        require(owner.matches("[a-f0-9]{32}")&&owner.equals(Json.required(lease,"nonce"))&&("sit."+owner+".publish").equals(Json.required(lease,"topic"))&&("sit."+owner+".group").equals(Json.required(lease,"consumer_group"))&&("run."+owner).equals(Json.required(lease,"key")),"Kafka lease owner/topic/group/key mismatch");
+        kafkaEndpoint(endpoint);String controller=Json.required(lease,"controller_listener");kafkaEndpoint(controller);
+        require(endpoint.equals(Json.required(lease,"advertised_listener"))&&!endpoint.equals(controller)&&"none".equals(Json.required(lease,"network_mode"))&&Json.required(lease,"broker_container_id").equals(Json.required(lease,"client_network_container_id")),"Kafka declared fence mismatch");
+        for(String field:List.of("payload_sha256","image_child_sha256","image_config_sha256","advertised_listener_sha256","broker_container_id"))require(Json.required(lease,field).matches("[a-f0-9]{64}"),"Kafka lease digest");
+        require(Json.required(lease,"runtime_version").matches("[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}")&&lease.path("partitions").isIntegralNumber()&&lease.path("partitions").canConvertToInt()&&lease.path("partitions").asInt()==1&&lease.path("initial_offset").isIntegralNumber()&&lease.path("initial_offset").canConvertToLong()&&lease.path("initial_offset").asLong()==0,"Kafka runtime/fresh-partition profile");
+        Instant issue=Instant.parse(Json.required(lease,"issued_at")),expiry=Instant.parse(Json.required(lease,"expires_at")),start=Instant.parse(Json.required(result,"start_time"));
+        require(expiry.isAfter(issue)&&java.time.Duration.between(issue,expiry).compareTo(java.time.Duration.ofMinutes(10))<=0&&!start.isBefore(issue)&&start.isBefore(expiry),"Kafka historical lease time mismatch");
+        byte[] payload=LocalFiles.read(LocalFiles.contained(root,root.resolve("fixtures/payload.json")),65536);require(payload.length>0&&LocalFiles.sha256(payload).equals(Json.required(lease,"payload_sha256")),"Kafka payload digest mismatch");
+        for(String path:List.of("fixtures/lease.json","fixtures/payload.json")){
+            String expected=path.endsWith("lease.json")?pin:LocalFiles.sha256(payload);int count=0;
+            for(var f:provenance.path("reviewed_files"))if(path.equals(f.path("path").asText())){require("fixture".equals(f.path("role").asText())&&expected.equals(f.path("sha256").asText()),"Kafka reviewed input closure mismatch");count++;}
+            require(count==1,"Kafka reviewed closure missing/ambiguous");
+        }
+        if(result.path("provider_results").isEmpty())return;
+        String path="provider-evidence/kafka/reviewed-publish.json";
+        require(contains(result.path("evidence_refs"),path)&&containsFile(index.path("entries"),path),"Kafka proof is not indexed");
+        var proof=Json.readMetadataUtf8(LocalFiles.read(relative(run,path),16384));
+        var identities=Set.of("owner_run_id","endpoint","topic","consumer_group","key","payload_sha256","runtime_version","image_child_sha256","image_config_sha256","advertised_listener_sha256","broker_container_id","network_mode");var fields=new java.util.HashSet<>(identities);fields.addAll(Set.of("version","evidence_type","provider_type","run_id","batch_id","step_id","provider_id","operation","fixture_lease_sha256","client_version","attempted","acknowledged","cleanup_confirmed","status","partition","offset","client_started_at","client_finished_at"));kafkaExact(proof,fields);
+        require("reviewed-kafka-publish.v1".equals(Json.required(proof,"version"))&&"kafka_event".equals(Json.required(proof,"evidence_type"))&&"kafka".equals(Json.required(proof,"provider_type"))&&"kafka_publish".equals(Json.required(proof,"operation"))&&"3.9.2".equals(Json.required(proof,"client_version"))&&pin.equals(Json.required(proof,"fixture_lease_sha256")),"Kafka proof profile/client/pin mismatch");
+        for(String f:identities)require(lease.path(f).equals(proof.path(f)),"Kafka proof lease identity mismatch");
+        for(String f:List.of("run_id","batch_id"))require(Json.required(result,f).equals(Json.required(proof,f)),"Kafka proof run identity mismatch");
+        var step=result.path("step_results").get(0);var provider=result.path("provider_results").get(0);
+        require(Json.required(step,"id").equals(Json.required(proof,"step_id"))&&Json.required(step,"target").equals(Json.required(proof,"provider_id"))&&Json.required(provider,"target").equals(Json.required(proof,"provider_id")),"Kafka proof step/provider mismatch");
+        for(String f:List.of("attempted","acknowledged","cleanup_confirmed"))require(proof.path(f).isBoolean(),"Kafka proof boolean");
+        boolean attempt=proof.path("attempted").booleanValue(),ack=proof.path("acknowledged").booleanValue(),clean=proof.path("cleanup_confirmed").booleanValue();String status=Json.required(proof,"status");
+        require(Set.of("ACK","CLIENT_FAILED","DEADLINE_EXCEEDED","INTERRUPTED","CLEANUP_UNCERTAIN","PREFLIGHT_BLOCKED").contains(status),"Kafka proof status");
+        require(proof.path("partition").isIntegralNumber()&&proof.path("partition").canConvertToInt()&&proof.path("offset").isIntegralNumber()&&proof.path("offset").canConvertToLong(),"Kafka ACK metadata type");
+        int partition=proof.path("partition").asInt();long offset=proof.path("offset").asLong();require(!ack||attempt&&partition==0&&offset==0,"Kafka ACK partition/offset mismatch");require(ack||partition==-1&&offset==-1,"Kafka unacked metadata mismatch");
+        require(!status.equals("ACK")||attempt&&ack&&clean,"Kafka ACK state mismatch");require(!status.equals("PREFLIGHT_BLOCKED")||!attempt&&!ack&&clean,"Kafka preflight state mismatch");require(!"passed".equals(Json.required(result,"status"))||status.equals("ACK"),"Kafka passed without confirmed ACK");
+        if(ack){var outputs=step.path("outputs");for(String f:List.of("partition","offset"))require(outputs.path(f).isIntegralNumber()&&outputs.path(f).canConvertToLong()&&outputs.path(f).longValue()==proof.path(f).longValue(),"Kafka proof output mismatch");for(String f:List.of("key","topic"))require(outputs.path(f).equals(proof.path(f)),"Kafka proof output mismatch");}
+        try {
+            Instant clientStart=Instant.parse(Json.required(proof,"client_started_at")),clientEnd=Instant.parse(Json.required(proof,"client_finished_at"));
+            require(!clientEnd.isBefore(clientStart)&&!clientStart.isBefore(start)&&!clientEnd.isAfter(Instant.parse(Json.required(result,"end_time"))),"Kafka client/invocation interval mismatch");
+            require(!clientStart.isBefore(issue)&&clientStart.isBefore(expiry)&&!clientEnd.isAfter(expiry),"Kafka client/lease interval mismatch");
+        } catch(java.time.DateTimeException e) {throw new IllegalArgumentException("Kafka historical client time format");}
+    }
+    private static void kafkaEndpoint(String endpoint){require(endpoint.matches("127\\.0\\.0\\.1:[1-9][0-9]{0,4}")&&Integer.parseInt(endpoint.substring(10))<=65535,"Kafka endpoint");}
+    private static void kafkaExact(com.fasterxml.jackson.databind.JsonNode node,Set<String> fields){var actual=new java.util.HashSet<String>();node.fieldNames().forEachRemaining(actual::add);require(node.isObject()&&actual.equals(fields),"Kafka closed fields");}
+
     Path result() { return result; }
     String verdict() { return Json.required(document, "status"); }
     String runId() { return Json.required(document, "run_id"); }

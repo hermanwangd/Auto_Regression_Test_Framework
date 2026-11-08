@@ -15,7 +15,7 @@ variables:
   PYTHONDONTWRITEBYTECODE: '1'
   CI_WORK: '$(Agent.TempDirectory)/public-products-$(Build.BuildId)-$(System.JobAttempt)'
   SQLITE_CI_POLICY_SHA256: e70903e08139a1a2c4b27666cf310a47fcf0626e94be8b5b5420b6b039e79353
-  NATS_CI_POLICY_SHA256: db423b2ef8451f1f944125f2115a86b79cf72f62c89cb7deb1bb3c2ca8fa86d2
+  NATS_CI_POLICY_SHA256: f10f5842ff6f1741372586f6db9db7a20d037aa8fd99ed91ebff6d6dfa5624dc
 
 stages:
 - stage: LocalTests
@@ -139,6 +139,7 @@ stages:
           run-*/outputs/product-test-*/framework-report.json
           **/outputs/product-test-*/coverage/coverage.json
           **/outputs/product-test-*/coverage/coverage.md
+          **/outputs/product-test-*/coverage/coverage-inputs/**
           run-*/outputs/**/target/regression/**
         TargetFolder: '$(Build.ArtifactStagingDirectory)/local-product-evidence/sqlite'
 
@@ -152,6 +153,7 @@ stages:
           execution/*/outputs/product-test-*/framework-report.json
           **/outputs/product-test-*/coverage/coverage.json
           **/outputs/product-test-*/coverage/coverage.md
+          **/outputs/product-test-*/coverage/coverage-inputs/**
           execution/summary.json
           execution/lifecycle.json
           **/target/regression/**

@@ -23,7 +23,7 @@ jobs:
       MAVEN_OPTS: -Xmx1024m -XX:MaxMetaspaceSize=384m
       PYTHONDONTWRITEBYTECODE: '1'
       SQLITE_CI_POLICY_SHA256: e70903e08139a1a2c4b27666cf310a47fcf0626e94be8b5b5420b6b039e79353
-      NATS_CI_POLICY_SHA256: 908dda22696f6eecf380a98c7e65070c492e863b683819a1e6cf4dbced6d5000
+      NATS_CI_POLICY_SHA256: f10f5842ff6f1741372586f6db9db7a20d037aa8fd99ed91ebff6d6dfa5624dc
     steps:
       - uses: actions/checkout@v4
 
@@ -104,16 +104,24 @@ jobs:
           path: |
             target/surefire-reports/
             target/failsafe-reports/
+            target/site/jacoco/jacoco.xml
+            integrations/swarm-product-test/target/site/jacoco/jacoco.xml
             integrations/swarm-product-test/target/surefire-reports/
             ${{ runner.temp }}/public-sqlite-evidence/verification.json
             ${{ runner.temp }}/public-sqlite-evidence/prepared-plan.json
             ${{ runner.temp }}/public-sqlite-evidence/run-*/receipt.json
             ${{ runner.temp }}/public-sqlite-evidence/run-*/smoke-evidence.json
             ${{ runner.temp }}/public-sqlite-evidence/run-*/outputs/product-test-*/framework-report.json
+            ${{ runner.temp }}/public-sqlite-evidence/run-*/outputs/product-test-*/coverage/coverage.json
+            ${{ runner.temp }}/public-sqlite-evidence/run-*/outputs/product-test-*/coverage/coverage.md
+            ${{ runner.temp }}/public-sqlite-evidence/run-*/outputs/product-test-*/coverage/coverage-inputs/**
             ${{ runner.temp }}/public-sqlite-evidence/run-*/outputs/**/target/regression/**
             ${{ runner.temp }}/public-nats-evidence/**/receipt.json
             ${{ runner.temp }}/public-nats-evidence/**/smoke-evidence.json
             ${{ runner.temp }}/public-nats-evidence/execution/*/outputs/product-test-*/framework-report.json
+            ${{ runner.temp }}/public-nats-evidence/**/outputs/product-test-*/coverage/coverage.json
+            ${{ runner.temp }}/public-nats-evidence/**/outputs/product-test-*/coverage/coverage.md
+            ${{ runner.temp }}/public-nats-evidence/**/outputs/product-test-*/coverage/coverage-inputs/**
             ${{ runner.temp }}/public-nats-evidence/execution/summary.json
             ${{ runner.temp }}/public-nats-evidence/execution/lifecycle.json
             ${{ runner.temp }}/public-nats-evidence/**/target/regression/**

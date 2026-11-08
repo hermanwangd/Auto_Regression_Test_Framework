@@ -1,7 +1,10 @@
 package com.specdriven.regression.contract.v03.ref;
 
 public sealed interface V03Reference permits V03Reference.Literal, V03Reference.Artifact,
-        V03Reference.Step, V03Reference.Generated, V03Reference.Environment {
+        V03Reference.Step, V03Reference.Generated, V03Reference.Environment, V03Reference.OwnedMemory {
+
+    /** Fixed nonsecret marker; its presence grants no credential authority. */
+    record OwnedMemory() implements V03Reference {}
 
     record Literal(Object value) implements V03Reference {
     }

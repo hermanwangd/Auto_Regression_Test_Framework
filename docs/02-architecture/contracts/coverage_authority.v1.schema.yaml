@@ -1,0 +1,84 @@
+contract_version: coverage_authority.v1
+artifact: optional_operator_reviewed_coverage_authority
+format: strict_json
+external_trust_anchor: protected_FrameworkBinding_or_separately_authorized_operator_expected_raw_sha256
+self_asserted_digest_or_reviewer_string: not_authorization
+canonical_mutation: prohibited
+required_closed_fields: [schema_version, scope, authority, catalog, assertion_bindings, independent_attestations]
+limits: {closure_bytes: 2097152, metadata_string_length: 4096, metadata_nesting_depth: 80, combined_binding_attestation_rows: 10000, unique_artifacts: 128, path_length: 1024, relative_path_components: 8, consumed_plus_exact_copy_raw_bytes: 4194304}
+parser: {duplicate_keys: prohibited, trailing_tokens: prohibited, unknown_fields: prohibited, symlink_paths: prohibited, hardlink_files: prohibited}
+references: normalized_relative_paths_inside_authority_directory_no_dot_segments_or_backslashes
+scope:
+  closed_fields: [domain, project_ref, workspace_ref, repository_revisions]
+  domain: product
+  identity: exact_report_subject_root_revisions_not_artifact_A_replacement
+  repository_revisions: nonempty_string_map
+  other_fields: nonempty_strings
+approval:
+  field: authority
+  closed_fields: [review_ref, reviewed_by, approved_at]
+  types: {review_ref: nonempty_string, reviewed_by: nonempty_string, approved_at: RFC3339_instant}
+  active: approved_at_less_than_or_equal_to_explicit_selection_as_of
+catalog:
+  type: null_or_object
+  closed_fields: [path, sha256]
+  contract: existing_coverage-catalog.v1_unchanged
+  source_conflict: explicit_catalog_plus_authority_is_invalid
+  inactive_approval: inventory_UNKNOWN_metrics_null
+assertion_bindings:
+  type: array
+  closed_row_fields: [qualified_case_ref, case_sha256, assertion_ref, expected_ref, qualified_oracle_ref, oracle_sha256, source_repo, source_commit, review_ref]
+  field_types: nonempty_strings_with_lowercase_SHA256_for_case_sha256_and_oracle_sha256
+  key: [qualified_case_ref, assertion_ref]
+  duplicates_or_conflicts: invalid
+  required_joins: exact_admitted_case_identity_hash_and_case_path_fragment_plus_same_case_declared_assertion_and_expected_operands_and_exact_admitted_oracle_identity_path_hash_repository_revision
+  source_repo_and_source_commit: oracle_artifact_identity_case_uses_its_own_qualified_identity
+  state: DECLARED_REVIEWED
+  proves_assertion_execution: false
+independent_attestations:
+  type: array
+  closed_admission_fields: [path, sha256, attestor, review_ref]
+  field_types: nonempty_strings_with_lowercase_SHA256_for_sha256
+  authorization: exact_raw_artifact_sha_and_attestor_authorized_by_external_pinned_authority
+  artifact:
+    schema_version: oracle_independence_attestation.v1
+    closed_fields: [schema_version, binding, attestor, issued_at, expires_at, origin_statement, origin_evidence_refs]
+    binding: exact_admitted_assertion_binding_object
+    attestor: exact_admitted_attestor_nonempty_string
+    issued_at: RFC3339_instant
+    expires_at: null_or_RFC3339_instant_strictly_after_issued_at
+    origin_statement: nonempty_reviewed_origin_statement_string
+    origin_evidence_refs: nonempty_unique_string_array_review_references_not_fetched_or_promoted_to_execution_proof
+  active: issued_at_less_than_or_equal_to_selection_as_of_and_expires_at_absent_or_selection_as_of_strictly_before_expires_at
+  future_or_expired_or_absent: UNKNOWN_with_reason
+  malformed_hash_identity_or_structure: INVALID_nonzero_no_success_receipt
+  accepted_state: REVIEW_ATTESTED
+  qualification: acceptance_of_reviewed_origin_statement_not_execution_or_proof_of_business_truth
+module:
+  authority_pin_location: protected_FrameworkBinding_never_ProductTestRequest_or_model_bundle
+  forwarding: report_coverage_authority_path_and_expected_sha_unchanged
+  consumption: bounded_bytes_plus_pre_and_post_receipt_original_hash_rechecks
+  output: exact_canonical_plus_authority_recomputation_and_pinned_named_receipt_references
+  missing_bound_input_or_dropped_derived_claims: INVALID_no_legacy_downgrade
+legacy_absence: compatible_UNKNOWN_no_new_claim
+risk_inventory: UNKNOWN_no_new_risk_authority
+product_metric_semantics: unchanged_mapped_test_satisfaction_not_business_oracle_correctness
+
+retention: fresh_private_coverage-inputs_directory_exact_raw_relative_closure_readback_verified_named_receipt_artifacts_no_unreferenced_files
+public_CI_profile: separately_reviewed_public_metadata_only_no_automatic_private_PK_or_original_receipt_publication
+
+claim_activation: inventory_catalog_approval_and_oracle_authority_review_are_distinct_both_bounded_by_selection_as_of
+present_inactive_input: structure_hash_scope_identity_still_validated_never_downgraded_to_legacy
+
+new_envelope_catalog_profile:
+  root_closed_required: [schema_version, catalog_revision, scope, authority, requirements, acceptance_criteria]
+  scope_closed_required: [domain, project_ref, workspace_ref, repository_revisions]
+  authority_closed_required: [kind, source_ref, source_sha256, review_ref, approved_by, approved_at]
+  requirement_closed_required: [id, ac_ids]
+  AC_closed_required: [id, requirement_id, classification]
+  AC_allowed_optional: [test_case_ids, review_ref, exclusion]
+  exclusion: absent_null_or_known_subset_of_reason_review_ref_approved_by_approved_at_nonempty_strings
+  incomplete_exclusion: existing_engine_retains_eligible_denominator_no_waiver_credit
+  code_coverage_artifacts: explicit_unsupported_profile_error_use_existing_separate_pinned_code_input
+  unknown_fields: rejected_before_copy_without_echoing_raw_values
+  legacy_direct_catalog: unchanged

@@ -5,7 +5,7 @@ provider_type: jdbc
 provider_role: data_store
 protocol: jdbc
 purpose: Relational database provider contract for DSL v0.3 JDBC seed, query, observation,
-  and cleanup.
+  and cleanup. MariaDB is restricted to reviewed owned-mariadb-readonly.v1 db_query; general MariaDB and its writes remain unsupported.
 runtime_modes:
 - native
 - ephemeral
@@ -33,8 +33,8 @@ dialects:
   supported:
   - oracle
   - db2
-  unsupported:
   - mariadb
+  unsupported:
   - mysql
   - postgres
   - mongodb
@@ -47,6 +47,24 @@ binding_keys:
     - literal
     - generated
     - env
+    sensitivity: public
+  profile:
+    required: false
+    source: env_profile
+    value_type: string
+    reference_kinds: [literal]
+    sensitivity: public
+  endpoint:
+    required: false
+    source: env_profile
+    value_type: string
+    reference_kinds: [literal]
+    sensitivity: public
+  owner_run_id:
+    required: false
+    source: env_profile
+    value_type: string
+    reference_kinds: [literal]
     sensitivity: public
   connection.local_ref:
     required: false
@@ -63,6 +81,7 @@ binding_keys:
     value_type: string
     reference_kinds:
     - env
+    - owned_memory
     sensitivity: masked
   schema:
     required: false
@@ -142,6 +161,11 @@ operations:
         reference_kinds: *1
         sensitivity: public
     outputs:
+      result:
+        value_type: string
+        sensitivity: public
+        bindable: false
+        evidence_included: true
       row_count:
         value_type: any
         sensitivity: public
@@ -168,6 +192,7 @@ operations:
     required_inputs:
     - query_ref
     output_refs:
+    - result
     - row_count
     - sample_rows
     - duration_ms
@@ -290,3 +315,13 @@ failure_mapping:
   - EVIDENCE_INVALID
   - SECRET_RESOLUTION_ERROR
   - UNSUPPORTED_SECRET_REF_SCHEME
+  - DEADLINE_EXCEEDED
+  - CONNECT_FAILED
+  - QUERY_FAILED
+  - RESULT_LIMIT
+  - RESULT_TYPE
+  - DRIVER_INVALID
+  - CREDENTIAL_REJECTED
+  - CLEANUP_UNCONFIRMED
+  - OPERATION_FAILED
+  - SECRET_OUTPUT_BLOCKED

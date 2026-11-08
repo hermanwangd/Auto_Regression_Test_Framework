@@ -115,6 +115,11 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         }
     }
 
+    /** Separate protected branch; generic Oracle/DB2 dialect and env resolution are unchanged. */
+    public ProviderOperationResult executeReviewedQuery(ProviderExecutionContext context,ProviderOperationRequest request,ReviewedJdbcInvocation invocation) {
+        return ReviewedJdbcExecution.protectedChild().execute(context,request,invocation);
+    }
+
     private ProviderOperationResult executeUpdate(
             ProviderExecutionContext context,
             ProviderOperationRequest request,

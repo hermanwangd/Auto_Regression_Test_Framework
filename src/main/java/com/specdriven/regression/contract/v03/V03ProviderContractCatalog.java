@@ -46,11 +46,12 @@ public final class V03ProviderContractCatalog {
         if (id.isBlank()) {
             return;
         }
+        if(declaresOwnedMemory(map.get("operation_defaults")))throw ownedMemoryInvalid();
         V03ProviderContract previous = contracts.putIfAbsent(id, new V03ProviderContract(
                 id,
                 text(map.get("provider_type")),
                 strings(map.get("runtime_modes")),
-                bindings(map.get("binding_keys")),
+                bindings(id,text(map.get("provider_type")),map.get("binding_keys")),
                 operations(map.get("operations"), map(map.get("operation_defaults"))),
                 strings(map.get("bindable_outputs")),
                 strings(map(map.get("evidence")).get("outputs")),
@@ -61,10 +62,12 @@ public final class V03ProviderContractCatalog {
         }
     }
 
-    private Map<String, V03ProviderContract.V03BindingDefinition> bindings(Object value) {
+    private Map<String, V03ProviderContract.V03BindingDefinition> bindings(String contract,String provider,Object value) {
         Map<String, V03ProviderContract.V03BindingDefinition> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : map(value).entrySet()) {
             Map<String, Object> definition = map(entry.getValue());
+            var kinds=referenceKinds(definition.get("reference_kinds"));
+            if(kinds.contains(V03ReferenceKind.OWNED_MEMORY)&&!(contract.equals("jdbc.v0.3")&&provider.equals("jdbc")&&entry.getKey().equals("connection.secret_ref")&&text(definition.get("source")).equals("env_profile_secret_ref")&&text(definition.get("sensitivity")).equals("masked")&&text(definition.get("value_type")).equals("string")&&kinds.equals(Set.of(V03ReferenceKind.ENV,V03ReferenceKind.OWNED_MEMORY))))throw ownedMemoryInvalid();
             result.put(entry.getKey(), new V03ProviderContract.V03BindingDefinition(
                     Boolean.parseBoolean(text(definition.get("required"))), text(definition.get("source")),
                     V03ValueType.parse(text(definition.get("value_type"))), referenceKinds(definition.get("reference_kinds")),
@@ -106,6 +109,7 @@ public final class V03ProviderContractCatalog {
         for (String input : allowedInputs) {
             Map<String, Object> definition = map(typed.get(input));
             Map<String, Object> effective = effectiveDefinition(defaults, definition);
+            if(declaresOwnedMemory(effective))throw ownedMemoryInvalid();
             if (effective.isEmpty()) {
                 throw new IllegalArgumentException("missing_typed_input_metadata: `" + input + "`.");
             }
@@ -142,6 +146,13 @@ public final class V03ProviderContractCatalog {
         }
         return Map.copyOf(result);
     }
+
+    private boolean declaresOwnedMemory(Object value) {
+        if(value instanceof Map<?,?> values){for(var entry:values.entrySet()){if("reference_kinds".equals(entry.getKey()))for(String kind:strings(entry.getValue()))if(kind.trim().equalsIgnoreCase("owned_memory"))return true;if(declaresOwnedMemory(entry.getValue()))return true;}}
+        else if(value instanceof Iterable<?> values){for(Object item:values)if(declaresOwnedMemory(item))return true;}
+        return false;
+    }
+    private IllegalArgumentException ownedMemoryInvalid(){return new IllegalArgumentException("invalid_owned_memory_scope: only the masked fixed JDBC secret-ref binding may declare owned_memory, never literals/inputs/defaults");}
 
     private Set<V03ReferenceKind> referenceKinds(Object value) {
         Set<V03ReferenceKind> result = new LinkedHashSet<>();

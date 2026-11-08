@@ -170,6 +170,13 @@ class CanonicalEvidenceTest {
         assertThat(CanonicalEvidence.inspect(request,root,stdout,started).verdict()).isEqualTo("passed");
     }
 
+    @Test void kafkaPublishWithoutIndependentLeaseIsRejectedByItsOwnGuard() throws Exception {
+        nativeFixture();selectNativeContract("kafka.v0.3");
+        ((ObjectNode)result.path("provider_results").get(0)).put("provider_type","kafka").put("provider_contract","kafka.v0.3");
+        ((ObjectNode)result.path("step_results").get(0)).put("operation","kafka_publish");setOperationMetadata("kafka_publish");save();
+        assertThatThrownBy(()->CanonicalEvidence.inspect(request,root,stdout,started)).hasMessageContaining("Independent Kafka fixture lease pin");
+    }
+
     @Test void importsNatsOnlyWhenPinnedContractAndOperationMatch() throws Exception {
         nativeFixture(); selectNativeContract("nats.v0.3");
         ((ObjectNode) result.path("provider_results").get(0)).put("provider_type", "nats").put("provider_contract", "nats.v0.3");
@@ -310,6 +317,60 @@ class CanonicalEvidenceTest {
         assertThatThrownBy(()->Json.read(metadata)).isInstanceOf(java.io.IOException.class);
         result.put("untrusted_large_field","x".repeat(300000));save();
         assertThatThrownBy(()->CanonicalEvidence.inspect(request,root,stdout,started)).isInstanceOf(java.io.IOException.class);
+    }
+
+    @Test void kafkaHistoricalImportJoinsPinnedLeaseAndPreservesWrongOracleFail() throws Exception {
+        String pin=kafkaFixture();assertThat(CanonicalEvidence.inspect(request,root,stdout,started,pin).verdict()).isEqualTo("passed");
+        result.put("status","failed");save();Json.MAPPER.writeValue(run.resolve("suite_summary.json").toFile(),result);assertThat(CanonicalEvidence.inspect(request,root,stdout,started,pin).verdict()).isEqualTo("failed");
+    }
+    @ParameterizedTest @ValueSource(strings={"run_id","batch_id","step_id","provider_id","operation","fixture_lease_sha256","owner_run_id","endpoint","topic","consumer_group","key","payload_sha256","client_version","runtime_version","image_child_sha256","image_config_sha256","advertised_listener_sha256","broker_container_id","network_mode","attempted","acknowledged","cleanup_confirmed","partition","offset","status","extra","missing","raw_lease","lease_bytes","payload_closure","output"})
+    void kafkaProofIdentityCannotBeChangedAfterResealing(String mutation)throws Exception {
+        String pin=kafkaFixture();Path proofFile=run.resolve("provider-evidence/kafka/reviewed-publish.json");var proof=(ObjectNode)Json.read(proofFile);
+        switch(mutation){
+            case "attempted","acknowledged","cleanup_confirmed"->proof.put(mutation,false);
+            case "partition","offset"->proof.put(mutation,1);
+            case "extra"->proof.put("private_body","PRIVATE-CANARY");
+            case "missing"->{Files.delete(proofFile);returnKafkaReject(pin);return;}
+            case "raw_lease"->{var provenance=(ObjectNode)Json.read(run.resolve("product-test/reviewed-handoff.json"));((ObjectNode)provenance.path("fixture_lease")).put("endpoint","127.0.0.1:2");Json.MAPPER.writeValue(run.resolve("product-test/reviewed-handoff.json").toFile(),provenance);proof.put("endpoint","127.0.0.1:2");}
+            case "lease_bytes"->Files.writeString(root.resolve("fixtures/lease.json"),Files.readString(root.resolve("fixtures/lease.json"))+" ");
+            case "payload_closure"->{var provenance=(ObjectNode)Json.read(run.resolve("product-test/reviewed-handoff.json"));for(var f:provenance.path("reviewed_files"))if(f.path("path").asText().equals("fixtures/payload.json"))((ObjectNode)f).put("sha256","0".repeat(64));Json.MAPPER.writeValue(run.resolve("product-test/reviewed-handoff.json").toFile(),provenance);}
+            case "output"->((ObjectNode)result.path("step_results").get(0).path("outputs")).put("offset",1);
+            default->proof.put(mutation,"ALTERED");
+        }
+        Json.MAPPER.writeValue(proofFile.toFile(),proof);save();returnKafkaReject(pin);
+    }
+    private void returnKafkaReject(String pin){assertThatThrownBy(()->CanonicalEvidence.inspect(request,root,stdout,started,pin)).isInstanceOf(Exception.class);}
+    @ParameterizedTest @ValueSource(strings={"lease_expired","lease_future","client_before_run","client_after_run","client_after_lease"})
+    void kafkaHistoricalTimeJoinsMatchCoreAdmission(String variant)throws Exception {
+        kafkaFixture();String pin=resealKafkaTime(variant);assertThatThrownBy(()->CanonicalEvidence.inspect(request,root,stdout,started,pin)).isInstanceOf(IllegalArgumentException.class);
+    }
+    @Test void kafkaHistoricalLeaseExpiredNowDoesNotRequireCurrentReadiness()throws Exception {
+        kafkaFixture();String pin=resealKafkaTime("historic");var lease=Json.read(root.resolve("fixtures/lease.json"));assertThat(Instant.parse(lease.path("expires_at").asText()).isBefore(Instant.now())).isTrue();assertThat(CanonicalEvidence.inspect(request,root,stdout,started,pin).verdict()).isEqualTo("passed");
+    }
+    @Test void kafkaNoProviderPreflightRetainsValidHistoricalLeaseWithoutInventedProof()throws Exception {
+        String pin=kafkaFixture();result.put("status","blocked");result.putArray("provider_results");result.putArray("step_results");var refs=(com.fasterxml.jackson.databind.node.ArrayNode)result.path("evidence_refs");for(int i=refs.size()-1;i>=0;i--)if(refs.get(i).asText().equals("provider-evidence/kafka/reviewed-publish.json"))refs.remove(i);Files.delete(run.resolve("provider-evidence/kafka/reviewed-publish.json"));
+        var yaml=new org.yaml.snakeyaml.Yaml();Map<String,Object> index=yaml.load(Files.readString(run.resolve("evidence_index.yaml")));((List<Map<String,Object>>)index.get("entries")).removeIf(e->"provider-evidence/kafka/reviewed-publish.json".equals(e.get("file_path")));Files.writeString(run.resolve("evidence_index.yaml"),yaml.dump(index));var provenance=(ObjectNode)Json.read(run.resolve("product-test/reviewed-handoff.json"));provenance.putObject("observed_provider_modes");Json.MAPPER.writeValue(run.resolve("product-test/reviewed-handoff.json").toFile(),provenance);save();Json.MAPPER.writeValue(run.resolve("suite_summary.json").toFile(),result);assertThat(CanonicalEvidence.inspect(request,root,stdout,started,pin).verdict()).isEqualTo("blocked");
+    }
+    @Test void kafkaFailedSendRetainsValidUnacknowledgedHistoricalProof()throws Exception {
+        String pin=kafkaFixture();result.put("status","failed");var step=(ObjectNode)result.path("step_results").get(0);step.put("status","failed");((ObjectNode)step.path("outputs")).put("partition",-1).put("offset",-1);var proof=(ObjectNode)Json.read(run.resolve("provider-evidence/kafka/reviewed-publish.json"));proof.put("status","CLIENT_FAILED").put("attempted",true).put("acknowledged",false).put("cleanup_confirmed",true).put("partition",-1).put("offset",-1);Json.MAPPER.writeValue(run.resolve("provider-evidence/kafka/reviewed-publish.json").toFile(),proof);save();Json.MAPPER.writeValue(run.resolve("suite_summary.json").toFile(),result);assertThat(CanonicalEvidence.inspect(request,root,stdout,started,pin).verdict()).isEqualTo("failed");
+    }
+    private String resealKafkaTime(String variant)throws Exception {
+        var lease=(ObjectNode)Json.read(root.resolve("fixtures/lease.json"));var proof=(ObjectNode)Json.read(run.resolve("provider-evidence/kafka/reviewed-publish.json"));var provenance=(ObjectNode)Json.read(run.resolve("product-test/reviewed-handoff.json"));Instant start=Instant.parse(result.path("start_time").asText()),end=Instant.parse(result.path("end_time").asText());
+        switch(variant){case "lease_expired"->lease.put("issued_at",start.minusSeconds(300).toString()).put("expires_at",start.minusNanos(1).toString());case "lease_future"->lease.put("issued_at",start.plusNanos(1).toString()).put("expires_at",start.plusSeconds(300).toString());case "client_before_run"->proof.put("client_started_at",start.minusNanos(1).toString());case "client_after_run"->proof.put("client_finished_at",end.plusNanos(1).toString());case "client_after_lease"->lease.put("expires_at",Instant.parse(proof.path("client_finished_at").asText()).minusNanos(1).toString());case "historic"->{start=start.minusSeconds(60);end=end.minusSeconds(60);started=started.minusSeconds(60);result.put("start_time",start.toString()).put("end_time",end.toString());proof.put("client_started_at",start.toString()).put("client_finished_at",end.toString());lease.put("issued_at",start.minusSeconds(1).toString()).put("expires_at",end.plusSeconds(1).toString());}default->throw new AssertionError(variant);}
+        byte[] raw=Json.MAPPER.writeValueAsBytes(lease);Files.write(root.resolve("fixtures/lease.json"),raw);String pin=LocalFiles.sha256(raw);provenance.set("fixture_lease",lease);provenance.put("fixture_lease_sha256",pin).put("fixture_lease_base64",java.util.Base64.getEncoder().encodeToString(raw));for(var f:provenance.path("reviewed_files"))if(f.path("path").asText().equals("fixtures/lease.json"))((ObjectNode)f).put("sha256",pin);
+        var input=(ObjectNode)Json.read(Path.of(request.reviewedHandoff()));for(var f:input.path("reviewed_files"))if(f.path("path").asText().equals("fixtures/lease.json"))((ObjectNode)f).put("sha256",pin);Json.MAPPER.writeValue(Path.of(request.reviewedHandoff()).toFile(),input);var req=(ObjectNode)Json.MAPPER.valueToTree(request);req.put("expected_handoff_sha256",LocalFiles.sha256(Path.of(request.reviewedHandoff())));request=Json.MAPPER.treeToValue(req,ProductTestRequest.class);provenance.put("handoff_sha256",request.expectedHandoffSha256());Json.MAPPER.writeValue(run.resolve("product-test/reviewed-handoff.json").toFile(),provenance);proof.put("fixture_lease_sha256",pin);Json.MAPPER.writeValue(run.resolve("provider-evidence/kafka/reviewed-publish.json").toFile(),proof);save();Json.MAPPER.writeValue(run.resolve("suite_summary.json").toFile(),result);return pin;
+    }
+    private String kafkaFixture()throws Exception {
+        nativeFixture();selectNativeContract("kafka.v0.3");String owner="b".repeat(32),topic="sit."+owner+".publish";
+        ((ObjectNode)result.path("provider_results").get(0)).put("provider_type","kafka").put("provider_contract","kafka.v0.3");
+        var step=(ObjectNode)result.path("step_results").get(0);step.put("id","publish").put("operation","kafka_publish");step.putObject("outputs").put("partition",0).put("offset",0).put("key","run."+owner).put("topic",topic);setOperationMetadata("kafka_publish");
+        Files.createDirectories(root.resolve("fixtures"));Files.writeString(root.resolve("fixtures/payload.json"),"{\"id\":\"public\"}");
+        var lease=Json.MAPPER.createObjectNode().put("version","reviewed-kafka-lease.v1").put("owner_run_id",owner).put("nonce",owner).put("endpoint","127.0.0.1:19092").put("topic",topic).put("consumer_group","sit."+owner+".group").put("key","run."+owner).put("payload_sha256",LocalFiles.sha256(root.resolve("fixtures/payload.json"))).put("runtime_version","3.9.2");
+        for(String f:List.of("image_child_sha256","image_config_sha256","advertised_listener_sha256"))lease.put(f,"c".repeat(64));lease.put("broker_container_id","d".repeat(64)).put("network_mode","none").put("client_network_container_id","d".repeat(64)).put("advertised_listener","127.0.0.1:19092").put("controller_listener","127.0.0.1:19093").put("partitions",1).put("initial_offset",0).put("issued_at",started.minusSeconds(1).toString()).put("expires_at",started.plusSeconds(300).toString());
+        Json.MAPPER.writeValue(root.resolve("fixtures/lease.json").toFile(),lease);byte[] raw=Files.readAllBytes(root.resolve("fixtures/lease.json"));String pin=LocalFiles.sha256(raw);
+        var provenance=(ObjectNode)Json.read(run.resolve("product-test/reviewed-handoff.json"));provenance.set("fixture_lease",lease);provenance.put("fixture_lease_sha256",pin).put("fixture_lease_base64",java.util.Base64.getEncoder().encodeToString(raw));var input=(ObjectNode)Json.read(Path.of(request.reviewedHandoff()));var files=input.putArray("reviewed_files");files.addObject().put("path","fixtures/lease.json").put("role","fixture").put("sha256",pin);files.addObject().put("path","fixtures/payload.json").put("role","fixture").put("sha256",LocalFiles.sha256(root.resolve("fixtures/payload.json")));provenance.set("reviewed_files",files.deepCopy());Json.MAPPER.writeValue(Path.of(request.reviewedHandoff()).toFile(),input);var value=(ObjectNode)Json.MAPPER.valueToTree(request);value.put("expected_handoff_sha256",LocalFiles.sha256(Path.of(request.reviewedHandoff())));request=Json.MAPPER.treeToValue(value,ProductTestRequest.class);provenance.put("handoff_sha256",request.expectedHandoffSha256());Json.MAPPER.writeValue(run.resolve("product-test/reviewed-handoff.json").toFile(),provenance);
+        var proof=Json.MAPPER.createObjectNode();for(String f:List.of("owner_run_id","endpoint","topic","consumer_group","key","payload_sha256","runtime_version","image_child_sha256","image_config_sha256","advertised_listener_sha256","broker_container_id","network_mode"))proof.set(f,lease.get(f));proof.put("version","reviewed-kafka-publish.v1").put("evidence_type","kafka_event").put("provider_type","kafka").put("run_id",result.path("run_id").asText()).put("batch_id","BATCH-1").put("step_id","publish").put("provider_id","todo_api").put("operation","kafka_publish").put("fixture_lease_sha256",pin).put("client_version","3.9.2").put("attempted",true).put("acknowledged",true).put("cleanup_confirmed",true).put("status","ACK").put("partition",0).put("offset",0).put("client_started_at",result.path("start_time").asText()).put("client_finished_at",result.path("end_time").asText());
+        Path path=run.resolve("provider-evidence/kafka/reviewed-publish.json");Files.createDirectories(path.getParent());Json.MAPPER.writeValue(path.toFile(),proof);result.withArray("evidence_refs").add("provider-evidence/kafka/reviewed-publish.json");Files.writeString(run.resolve("evidence_index.yaml"),"  - run_id: "+result.path("run_id").asText()+"\n    batch_id: BATCH-1\n    file_path: provider-evidence/kafka/reviewed-publish.json\n",java.nio.file.StandardOpenOption.APPEND);save();return pin;
     }
 
     private String grpcFixture() throws Exception {

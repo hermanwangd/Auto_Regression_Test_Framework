@@ -16,6 +16,10 @@ public final class ProductTestCli {
         return true;
     }
     static int run(String[] args, PrintStream out, PrintStream err, Map<String, String> environment, ClassLoader loader) {
+        return runWithJdbcBinding(args,out,err,environment,loader,null);
+    }
+    /** Trusted embedding hook. Default CLI supplies no owner/source binding and cannot execute MariaDB. */
+    public static int runWithJdbcBinding(String[] args,PrintStream out,PrintStream err,Map<String,String> environment,ClassLoader loader,ReviewedJdbcBinding jdbc) {
         try {
             if (args.length != 4 || !"product-test".equals(args[0]) || !"run".equals(args[1]) || !"--request".equals(args[2]))
                 throw new IllegalArgumentException("usage: product-test run --request <request.json>");
@@ -28,7 +32,8 @@ public final class ProductTestCli {
                     Path.of(required(environment, "SWARM_PRODUCT_TEST_OUTPUT_ROOT")),
                     Duration.ofMillis(Long.parseLong(environment.getOrDefault("SWARM_PRODUCT_TEST_TIMEOUT_MS", "30000"))),
                     Integer.parseInt(environment.getOrDefault("SWARM_PRODUCT_TEST_MAX_OUTPUT_BYTES", "262144")),
-                    environment.get("SWARM_PRODUCT_TEST_FIXTURE_LEASE_SHA256"),environment.get("SWARM_PRODUCT_TEST_SUT_BINDING_SHA256"));
+                    environment.get("SWARM_PRODUCT_TEST_FIXTURE_LEASE_SHA256"),environment.get("SWARM_PRODUCT_TEST_SUT_BINDING_SHA256"),
+                    authorityPath(environment),environment.get("SWARM_PRODUCT_TEST_COVERAGE_AUTHORITY_SHA256"),jdbc);
             var module = ProductTestingModules.resolve(request.moduleId(), request.moduleVersion(), new FrameworkCliTransport(binding), loader);
             var receipt = module.execute(request);
             out.println(Json.MAPPER.writeValueAsString(receipt));
@@ -36,6 +41,11 @@ public final class ProductTestCli {
         } catch (Exception e) {
             err.println("product-test: " + e.getMessage()); return 2;
         }
+    }
+    private static Path authorityPath(Map<String,String> environment){
+        if(!environment.containsKey("SWARM_PRODUCT_TEST_COVERAGE_AUTHORITY"))return null;
+        try{return Path.of(environment.get("SWARM_PRODUCT_TEST_COVERAGE_AUTHORITY"));}
+        catch(java.nio.file.InvalidPathException invalid){throw new IllegalArgumentException("COVERAGE_AUTHORITY_INVALID_REFERENCE");}
     }
     private static String required(Map<String, String> environment, String name) {
         String value = environment.get(name);
