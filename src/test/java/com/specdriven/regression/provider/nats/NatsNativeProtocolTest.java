@@ -67,6 +67,41 @@ class NatsNativeProtocolTest {
         } finally { System.clearProperty("NATS_NATIVE_PROTOCOL_TEST"); }
     }
 
+    @ParameterizedTest @ValueSource(strings={"wrong_sid", "wrong_subject"})
+    void completeMalformedIdentityResponseCannotRequireSecondWrite(String behavior) throws Exception {
+        byte[] payload = "{\"id\":\"reviewed\"}".getBytes(StandardCharsets.UTF_8);
+        var output = new FirstWriteThenClosed();
+        org.assertj.core.api.Assertions.assertThatCode(() -> Peer.writeResponse(output, behavior, payload))
+                .doesNotThrowAnyException();
+        String subject = behavior.equals("wrong_subject") ? "other.subject" : SUBJECT;
+        String sid = behavior.equals("wrong_sid") ? "2" : "1";
+        var expected = new ByteArrayOutputStream();
+        expected.write(("MSG " + subject + " " + sid + " " + payload.length + "\r\n").getBytes(StandardCharsets.UTF_8));
+        expected.write(payload); expected.write("\r\n".getBytes(StandardCharsets.UTF_8));
+        assertThat(output.received.toByteArray()).isEqualTo(expected.toByteArray());
+        assertThat(output.writes).isEqualTo(1);
+    }
+
+    @Test void unexpectedResponseWriteFailurePropagates() {
+        IOException failure = new IOException("PUBLIC_SYNTHETIC_UNEXPECTED_WRITE");
+        OutputStream output = new OutputStream() {
+            @Override public void write(int value) throws IOException { throw failure; }
+        };
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> Peer.writeResponse(output, "wrong_sid",
+                "{\"id\":\"reviewed\"}".getBytes(StandardCharsets.UTF_8))).isSameAs(failure);
+    }
+
+    /** Exposure-boundary double; no claim that a TCP write is atomic. */
+    static final class FirstWriteThenClosed extends OutputStream {
+        final ByteArrayOutputStream received = new ByteArrayOutputStream();
+        int writes;
+        @Override public void write(byte[] value, int offset, int length) throws IOException {
+            if (writes++ != 0) throw new SocketException("PUBLIC_SYNTHETIC_PEER_CLOSED_AFTER_FIRST_WRITE");
+            received.write(value, offset, length);
+        }
+        @Override public void write(int value) { throw new AssertionError("unexpected single-byte publication"); }
+    }
+
     static final class Peer implements AutoCloseable {
         final ServerSocket server;
         final ExecutorService executor = Executors.newSingleThreadExecutor(task -> { var t = new Thread(task, "nats-test-peer"); t.setDaemon(true); return t; });
@@ -82,26 +117,33 @@ class NatsNativeProtocolTest {
                     if (!subscription.equals("SUB " + SUBJECT + " 1")) throw new IOException("wrong subscription");
                     int length = Integer.parseInt(publish.substring(publish.lastIndexOf(' ') + 1));
                     byte[] payload = in.readNBytes(length); line(in); line(in);
-                    String subject = behavior.equals("wrong_subject") ? "other.subject" : SUBJECT;
-                    String sid = behavior.equals("wrong_sid") ? "2" : "1";
-                    byte[] echo = behavior.equals("wrong") ? "wrong".getBytes(StandardCharsets.UTF_8) : payload;
-                    if (behavior.equals("pong")) out.write("PONG\r\n".getBytes(StandardCharsets.UTF_8));
-                    else if (behavior.equals("error")) out.write("-ERR 'Permissions Violation'\r\n".getBytes(StandardCharsets.UTF_8));
-                    else if (behavior.equals("long_line")) out.write(("+OK " + "x".repeat(9000) + "\r\n").getBytes(StandardCharsets.UTF_8));
-                    else if (behavior.equals("oversized")) out.write(("MSG " + subject + " 1 2147483647\r\n").getBytes(StandardCharsets.UTF_8));
-                    else {
-                        int frameLength = behavior.equals("bad_utf8") ? 2 : echo.length;
-                        out.write(("MSG " + subject + " " + sid + " " + frameLength + "\r\n").getBytes(StandardCharsets.UTF_8));
-                        if (behavior.equals("stall")) { out.write('{'); out.flush(); Thread.sleep(500); }
-                        else if (behavior.equals("truncated")) out.write('{');
-                        else {
-                            out.write(behavior.equals("bad_utf8") ? new byte[]{(byte)0xc3, (byte)0x28} : echo);
-                            out.write((behavior.equals("bad_crlf") ? "xx" : "\r\n").getBytes(StandardCharsets.UTF_8));
-                        }
-                    }
-                    out.flush();
+                    writeResponse(out, behavior, payload);
                 } catch (Exception e) { throw new RuntimeException(e); }
             });
+        }
+        static void writeResponse(OutputStream output, String behavior, byte[] payload) throws Exception {
+            // Complete the non-stall response before exposure; a TCP write is not claimed atomic.
+            var response = behavior.equals("stall") ? null : new ByteArrayOutputStream();
+            OutputStream out = response == null ? output : response;
+            String subject = behavior.equals("wrong_subject") ? "other.subject" : SUBJECT;
+            String sid = behavior.equals("wrong_sid") ? "2" : "1";
+            byte[] echo = behavior.equals("wrong") ? "wrong".getBytes(StandardCharsets.UTF_8) : payload;
+            if (behavior.equals("pong")) out.write("PONG\r\n".getBytes(StandardCharsets.UTF_8));
+            else if (behavior.equals("error")) out.write("-ERR 'Permissions Violation'\r\n".getBytes(StandardCharsets.UTF_8));
+            else if (behavior.equals("long_line")) out.write(("+OK " + "x".repeat(9000) + "\r\n").getBytes(StandardCharsets.UTF_8));
+            else if (behavior.equals("oversized")) out.write(("MSG " + subject + " 1 2147483647\r\n").getBytes(StandardCharsets.UTF_8));
+            else {
+                int frameLength = behavior.equals("bad_utf8") ? 2 : echo.length;
+                out.write(("MSG " + subject + " " + sid + " " + frameLength + "\r\n").getBytes(StandardCharsets.UTF_8));
+                if (behavior.equals("stall")) { out.write('{'); out.flush(); Thread.sleep(500); }
+                else if (behavior.equals("truncated")) out.write('{');
+                else {
+                    out.write(behavior.equals("bad_utf8") ? new byte[]{(byte)0xc3, (byte)0x28} : echo);
+                    out.write((behavior.equals("bad_crlf") ? "xx" : "\r\n").getBytes(StandardCharsets.UTF_8));
+                }
+            }
+            out.flush();
+            if (response != null) { output.write(response.toByteArray()); output.flush(); }
         }
         int port() { return server.getLocalPort(); }
         void completed() throws Exception { task.get(3, TimeUnit.SECONDS); }
