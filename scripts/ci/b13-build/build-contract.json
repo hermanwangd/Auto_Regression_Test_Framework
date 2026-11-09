@@ -34,7 +34,7 @@
   },
   "driver": {
     "path": "scripts/ci/b13-build/build_driver.py",
-    "sha256": "364610b76dd34bc1b7092fbc2d80b74fae65b22669ecd82f5a54c446c1d2907b",
+    "sha256": "6c94e2bb8989a895884cd46701b71f48143057113b6eae2accc6346937647b94",
     "implementation": "Python standard library; no bootstrap dependency install"
   },
   "limits": {
@@ -64,9 +64,9 @@
     "build-manifest.json"
   ],
   "current_evidence": {
-    "driver_synthetic_tests": "13 PASS; 0.580s; Python 3.12.14 Linux",
-    "Maven_Java_execution": "NOT_RUN",
-    "GitHub_CI": "NOT_RUN",
+    "driver_synthetic_tests": "19 PASS; 0.615s; Python 3.12.14 Linux",
+    "Maven_Java_execution": "First run progressed through packaging to ZIP validation, but no artifact accepted",
+    "GitHub_CI": "Run 42651409017 failed at incorrect descriptor ZIP path; corrected candidate NOT_RUN",
     "P04": "NOT_RUN",
     "SIT": "NOT_RUN",
     "formal_coverage_credit": 0
@@ -77,5 +77,13 @@
     "scripts/ci/b13-build/test_build_driver.py": "implementation/test_build_driver.py",
     "scripts/ci/b13-build/build-contract.json": "build-binding.template.json",
     "scripts/ci/b13-build/README.md": "PLAN.md"
+  },
+  "packaging_descriptor": {
+    "exact_entry": "META-INF/regression/runner-build.properties",
+    "schema": "runner-build.v1",
+    "variant": "no-ibm-mq",
+    "ibm_mq": "unsupported",
+    "runtime_parser_git_blob": "7c2fe6f650d28884960780a5380d77f9d051bdd1",
+    "packager_git_blob": "dac90b1c6fb716bfeb2c0042e4d37434655e64b8"
   }
 }

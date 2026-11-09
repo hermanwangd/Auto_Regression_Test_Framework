@@ -96,13 +96,16 @@ cleanup, output and RSS rejection, storage/cache limits, stale outputs, source
 mismatch, wrong digest, unsafe archive paths and manifest publication limits.
 These are driver controls, not Framework/Module or native-agent behavior tests.
 
-Current local result: 13 controls passed on Linux/Python 3.12.14 in 0.580 s.
-No Maven/Java packaging or GitHub workflow has run. No P04/SIT result or formal
-coverage credit is claimed. The initial missing-driver baseline and the first
+Current local result: 19 controls passed on Linux/Python 3.12.14 in 0.615 s.
+The first real build run progressed through packaging but failed ZIP validation
+because this driver incorrectly expected the descriptor under BOOT-INF/classes.
+No artifact was delivered. The corrected build candidate has not run. No P04/SIT
+result or formal coverage credit is claimed. The initial missing-driver baseline and the first
 mock-related test failure remain in local development records, not this
 publication subset.
 
-The technical candidate and its precise activation change have been reviewed.
+The initial technical candidate and its activation change were reviewed.
+The focused descriptor-path repair is now subject to its exact-diff check.
 The disabled-job and failing-step guards have been removed; the workflow is
 ready for authorized publication but remains NOT_RUN. Tool pins and the
 resource driver are implemented. Before any push, recheck branch ownership
@@ -117,3 +120,24 @@ predicts the result of a later write.
 - [Pinned artifact action](https://github.com/actions/upload-artifact/tree/ea165f8d65b6e75b540449e92b4886f43607fa02)
 - [Temurin release](https://github.com/adoptium/temurin17-binaries/releases/tag/jdk-17.0.21%2B9)
 - [Official Maven checksum](https://archive.apache.org/dist/maven/maven-3/3.9.11/binaries/apache-maven-3.9.11-bin.tar.gz.sha512)
+
+## Descriptor-path correction
+
+[First failed run](https://github.com/hermanwangd/Auto_Regression_Test_Framework/actions/runs/42651409017)
+is preserved. The POM generates `META-INF/regression/runner-build.properties`.
+The b13 `RunnerBuildVariant` reader uses exactly that classpath resource and
+requires exactly the schema/variant/ibm_mq keys. Spring Boot 3.5.16's
+`Packager.RepackagingEntryTransformer` leaves this META-INF resource at the
+archive root. It relocates only specified META-INF exceptions, not this file.
+
+The repair reads only that exact root entry, rejects missing or duplicate root
+resources and a conflicting BOOT-INF copy, strictly matches the b13 descriptor
+shape, and keeps the IBM payload and size checks. It does not accept arbitrary
+fallback locations or weaken the no-MQ requirement. Six new ZIP controls cover
+the valid root, wrong location, duplicates, invalid values, missing/oversized
+metadata and IBM payload; the prior 13 controls still pass. The real corrected
+JAR layout will be confirmed by the next build's binding and artifact readback,
+not inferred to have passed from these synthetic fixtures.
+
+- [b13 runtime reader](https://github.com/hermanwangd/Auto_Regression_Test_Framework/blob/b13c503cc9fadd930e11fb8adc6496308697a966/src/main/java/com/specdriven/regression/build/RunnerBuildVariant.java)
+- [Spring Boot 3.5.16 packaging rules](https://github.com/spring-projects/spring-boot/blob/v3.5.16/spring-boot-project/spring-boot-tools/spring-boot-loader-tools/src/main/java/org/springframework/boot/loader/tools/Packager.java)

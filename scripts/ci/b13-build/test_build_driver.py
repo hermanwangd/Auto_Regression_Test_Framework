@@ -7,6 +7,8 @@ import tarfile
 import tempfile
 import time
 import unittest
+import zipfile
+import warnings
 from unittest import mock
 import build_driver as d
 
@@ -73,5 +75,44 @@ class DriverTests(unittest.TestCase):
     def test_wrong_download_digest_rejected(self):
         p=self.root/'archive'; p.write_bytes(b'fixture')
         with self.assertRaisesRegex(d.BuildError,'DIGEST'): d.verify_digest(p,'sha256','0'*64,self.budget())
+
+    def jar_fixture(self, entries):
+        p=self.root/'fixture.jar'
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore',UserWarning)
+            with zipfile.ZipFile(p,'w') as z:
+                for name,body in entries: z.writestr(name,body)
+        return p
+    def test_descriptor_correct_root_location(self):
+        body='schema=runner-build.v1\nvariant=no-ibm-mq\nibm_mq=unsupported\n'
+        p=self.jar_fixture([('META-INF/regression/runner-build.properties',body)])
+        self.assertEqual(d.read_framework_metadata(p),body)
+    def test_descriptor_boot_only_location_rejected(self):
+        body='schema=runner-build.v1\nvariant=no-ibm-mq\nibm_mq=unsupported\n'
+        p=self.jar_fixture([('BOOT-INF/classes/META-INF/regression/runner-build.properties',body)])
+        with self.assertRaises(d.BuildError): d.read_framework_metadata(p)
+    def test_descriptor_duplicate_resources_rejected(self):
+        root='META-INF/regression/runner-build.properties'
+        body='schema=runner-build.v1\nvariant=no-ibm-mq\nibm_mq=unsupported\n'
+        for other in (root,'BOOT-INF/classes/'+root):
+            with self.subTest(other=other):
+                p=self.jar_fixture([(root,body),(other,body)])
+                with self.assertRaises(d.BuildError): d.read_framework_metadata(p)
+    def test_descriptor_wrong_values_rejected(self):
+        for body in ('schema=runner-build.v2\nvariant=no-ibm-mq\nibm_mq=unsupported\n',
+                     'schema=runner-build.v1\nvariant=no-ibm-mq\nibm_mq=unsupported\nextra=1\n',
+                     'schema=runner-build.v1\nvariant=no-ibm-mq\nibm_mq=unsupported\nibm_mq=available\n',
+                     'schema=runner-build.v1\nvariant=full\nibm_mq=available\n'):
+            with self.subTest(body=body):
+                p=self.jar_fixture([('META-INF/regression/runner-build.properties',body)])
+                with self.assertRaises(d.BuildError): d.read_framework_metadata(p)
+    def test_descriptor_missing_and_oversized_rejected(self):
+        for entries in ([],[('META-INF/regression/runner-build.properties','x'*4097)]):
+            with self.subTest(entries=len(entries)):
+                with self.assertRaises(d.BuildError): d.read_framework_metadata(self.jar_fixture(entries))
+    def test_descriptor_ibm_payload_rejected(self):
+        body='schema=runner-build.v1\nvariant=no-ibm-mq\nibm_mq=unsupported\n'
+        p=self.jar_fixture([('META-INF/regression/runner-build.properties',body),('BOOT-INF/lib/com.ibm.mq.allclient-10.0.0.0.jar',b'fixture')])
+        with self.assertRaisesRegex(d.BuildError,'IBM'): d.read_framework_metadata(p)
 
 if __name__=='__main__': unittest.main()

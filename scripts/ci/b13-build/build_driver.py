@@ -199,6 +199,29 @@ def inventory(root,budget):
             result.append({'path':p.relative_to(root).as_posix(),'bytes':size,'sha256':digest_file(p,'sha256',budget)})
     return result,total
 
+def read_framework_metadata(path):
+    # Boot 3.5.16 keeps this META-INF resource at the archive root.
+    # Match b13 RunnerBuildVariant.parse; do not accept a guessed fallback path.
+    prop='META-INF/regression/runner-build.properties'
+    with zipfile.ZipFile(path) as jar:
+        names=jar.namelist()
+        if any('com.ibm.mq.allclient' in n for n in names): raise BuildError('ARTIFACT: IBM payload present')
+        if names.count(prop)!=1 or 'BOOT-INF/classes/'+prop in names:
+            candidates=[n[:200] for n in names if n.endswith('runner-build.properties')][:8]
+            raise BuildError('ARTIFACT: missing/duplicate descriptor; candidates='+json.dumps(candidates))
+        if jar.getinfo(prop).file_size>4096: raise BuildError('ARTIFACT: variant metadata oversized')
+        try: metadata=jar.read(prop).decode('utf-8')
+        except UnicodeDecodeError as error: raise BuildError('ARTIFACT: malformed descriptor text') from error
+        values={}
+        for line in metadata.replace('\r\n','\n').split('\n'):
+            if not line: continue
+            key,separator,value=line.partition('=')
+            if not separator or not key or key in values: raise BuildError('ARTIFACT: malformed/duplicate descriptor key')
+            values[key]=value
+        if values!={'schema':'runner-build.v1','variant':'no-ibm-mq','ibm_mq':'unsupported'}:
+            raise BuildError('ARTIFACT: wrong descriptor shape or variant')
+    return metadata
+
 def write_manifest(delivery,manifest,max_bytes=MIB):
     data=(json.dumps(manifest,sort_keys=True,indent=2)+'\n').encode()
     if len(data)>max_bytes: raise BuildError('MANIFEST: byte cap')
@@ -247,13 +270,7 @@ def main():
     for p in jars:
         if not p.is_file() or p.is_symlink(): raise BuildError('ARTIFACT: missing or unsafe')
     if sum(p.stat().st_size for p in jars)>255*MIB: raise BuildError('ARTIFACT: delivery cap')
-    with zipfile.ZipFile(jars[0]) as jar:
-        names=jar.namelist()
-        if any('com.ibm.mq.allclient' in n for n in names): raise BuildError('ARTIFACT: IBM payload present')
-        prop='BOOT-INF/classes/META-INF/regression/runner-build.properties'
-        if jar.getinfo(prop).file_size>4096: raise BuildError('ARTIFACT: variant metadata oversized')
-        metadata=jar.read(prop).decode('utf-8')
-        if 'variant=no-ibm-mq' not in metadata or 'ibm_mq=unsupported' not in metadata: raise BuildError('ARTIFACT: wrong variant')
+    metadata=read_framework_metadata(jars[0])
     deps,cache_bytes=inventory(m2,budget)
     delivery=fresh_dir(work/'delivery'); artifacts=[]
     for p in jars:
@@ -268,6 +285,8 @@ def main():
       'resource_limits':{'driver_seconds':840,'cleanup_reserve_seconds':30,'aggregate_rss_bytes':2048*MIB,'storage_bytes':2048*MIB,'cache_bytes':1024*MIB,'per_process_output_bytes':MIB,'delivery_bytes':256*MIB,'manifest_bytes':MIB,'entry_cap':50000},
       'observed':{'peak_process_group_rss_bytes':budget.peak_rss,'peak_logical_storage_bytes':budget.peak_storage,'cache_bytes':cache_bytes},
       'dependencies':deps,'artifacts':artifacts,'packaged_variant':metadata.strip(),
+      'packaged_variant_entry':'META-INF/regression/runner-build.properties',
+      'packaged_variant_sha256':hashlib.sha256(metadata.encode('utf-8')).hexdigest(),
       'acceptance':{'framework_module':'NOT_RUN','P04':'NOT_RUN','SIT':'NOT_RUN','coverage_credit':0,'tests':'SKIPPED','reproducibility_proven':False}}
     write_manifest(delivery,manifest)
     print(json.dumps({'status':'BUILT_NOT_TESTED','artifacts':artifacts,'manifest_sha256':digest_file(delivery/'build-manifest.json','sha256',budget)}))
