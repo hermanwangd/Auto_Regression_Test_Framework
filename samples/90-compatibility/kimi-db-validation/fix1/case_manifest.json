@@ -1,0 +1,97 @@
+{
+  "manifest_version": "1.0",
+  "queue": "SWARM-DB-02",
+  "suite": "sqlite-utils",
+  "project": {
+    "name": "sqlite-utils",
+    "distribution": "sqlite-utils",
+    "version": "4.2.1",
+    "source_repository": "https://github.com/simonw/sqlite-utils",
+    "source_tag": "4.2.1",
+    "source_commit": "28dc6278cc03a9245325d056e6986818544abc68"
+  },
+  "frozen_before_case_execution": true,
+  "command": "python3 run_suite.py",
+  "test_command_template": "python3 -m pytest -q -p no:cacheprovider --junitxml evidence/run-<run-id>.junit.xml tests",
+  "existing_denominator": 116,
+  "existing_denominator_changed": false,
+  "candidate_cases_added_to_existing_denominator": false,
+  "evidence_class": "package/runtime evidence only",
+  "native_pass": false,
+  "sit_pass": false,
+  "formal_acceptance": false,
+  "amendments": [],
+  "scope_note": "Click is only a transitive dependency; no Click/Typer/Rich test case is owned or claimed.",
+  "cases": [
+    {
+      "case_id": "DB02-SU-SCHEMA-001",
+      "purpose": "以真實 sqlite-utils API 建立帶 PK 的 schema、插入資料並查詢，核對 SQLite 實際欄位型別與 rows。",
+      "fixed_input": {
+        "schema": {"id": "int", "name": "str", "score": "float"},
+        "rows": [
+          {"id": 1, "name": "alpha", "score": 1.5},
+          {"id": 2, "name": "beta", "score": 2.0}
+        ]
+      },
+      "expected": {
+        "schema": [["id", "INTEGER", 1], ["name", "TEXT", 0], ["score", "REAL", 0]],
+        "rows": [[1, "alpha", 1.5], [2, "beta", 2.0]]
+      }
+    },
+    {
+      "case_id": "DB02-SU-PK-002",
+      "purpose": "驗證重複 PRIMARY KEY 產生 IntegrityError、錯誤指向 items.id，且後續不同 PK 插入可恢復。",
+      "fixed_input": {
+        "original": {"id": 1, "name": "original", "score": 1.0},
+        "duplicate": {"id": 1, "name": "duplicate", "score": 9.0},
+        "recovered": {"id": 3, "name": "recovered", "score": 3.0}
+      },
+      "expected": {
+        "error_type": "IntegrityError",
+        "error_mentions_pk": true,
+        "after_recovery": [[1, "original", 1.0], [3, "recovered", 3.0]]
+      }
+    },
+    {
+      "case_id": "DB02-SU-TYPES-003",
+      "purpose": "驗證 SQLite type affinity 對可轉換字串與不可轉換 score 的實際 stored type 邊界，不假設 STRICT table。",
+      "fixed_input": {
+        "rows": [
+          {"id": "7", "name": 123, "score": "9.5"},
+          {"id": 8, "name": "raw", "score": "not-a-number"}
+        ]
+      },
+      "expected": {
+        "rows": [
+          [7, "integer", "123", "text", 9.5, "real"],
+          [8, "integer", "raw", "text", "not-a-number", "text"]
+        ]
+      }
+    },
+    {
+      "case_id": "DB02-SU-SEQUENCE-004",
+      "purpose": "驗證 insert_all、upsert、update、delete、insert 連續操作與關閉重開後最終資料一致且未殘留被刪除 row。",
+      "fixed_input": {
+        "initial_rows": [
+          {"id": 1, "name": "one", "score": 1.0},
+          {"id": 2, "name": "two", "score": 2.0},
+          {"id": 3, "name": "three", "score": 3.0}
+        ],
+        "upsert": {"id": 2, "name": "two-updated", "score": 22.0},
+        "update_id": 3,
+        "update_values": {"name": "three-updated"},
+        "delete_id": 1,
+        "final_insert": {"id": 4, "name": "four", "score": 4.0}
+      },
+      "expected": {
+        "database_file_exists": true,
+        "row_count": 3,
+        "final_rows": [
+          [2, "two-updated", 22.0],
+          [3, "three-updated", 3.0],
+          [4, "four", 4.0]
+        ]
+      }
+    }
+  ]
+}

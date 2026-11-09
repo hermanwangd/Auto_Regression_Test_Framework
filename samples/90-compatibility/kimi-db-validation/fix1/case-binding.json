@@ -1,0 +1,97 @@
+{
+  "binding_version": "2.0",
+  "suites": {
+    "sqlite-utils": {
+      "cases": {
+        "DB02-SU-SCHEMA-001": {
+          "classname": "tests.test_sqlite_utils_runtime",
+          "name": "test_schema_insert_and_query"
+        },
+        "DB02-SU-PK-002": {
+          "classname": "tests.test_sqlite_utils_runtime",
+          "name": "test_duplicate_pk_error_and_recovery"
+        },
+        "DB02-SU-TYPES-003": {
+          "classname": "tests.test_sqlite_utils_runtime",
+          "name": "test_type_affinity_conversion_boundary"
+        },
+        "DB02-SU-SEQUENCE-004": {
+          "classname": "tests.test_sqlite_utils_runtime",
+          "name": "test_consecutive_operations_and_reopen_consistency"
+        }
+      }
+    },
+    "hardening-controls-r2": {
+      "cases": {
+        "HR2-RECORD-EMPTY-001": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_record_empty_rejected"
+        },
+        "HR2-RECORD-UNHASHED-002": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_only_unhashed_and_dehashed_required_rejected"
+        },
+        "HR2-RECORD-COVERAGE-003": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_missing_row_and_changed_bytes_rejected"
+        },
+        "HR2-RECORD-EXCEPTIONS-004": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_valid_record_and_pyc_exceptions_positive"
+        },
+        "HR2-WHEEL-TRUST-005": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_wrong_wheel_hash_rejected"
+        },
+        "HR2-JUNIT-NODES-006": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_fake_counters_missing_duplicate_unknown_rejected"
+        },
+        "HR2-JUNIT-OUTCOME-007": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_hidden_failure_error_skip_rejected"
+        },
+        "HR2-JUNIT-COUNTER-008": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_counter_node_mismatch_rejected"
+        },
+        "HR2-JUNIT-POSITIVE-009": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_valid_testcase_nodes_positive"
+        },
+        "HR2-ISOLATION-AMBIENT-010": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_ambient_package_and_plugin_neutralized"
+        },
+        "HR2-TIMEOUT-TREE-011": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_timeout_kills_owned_child_and_grandchild"
+        },
+        "HR2-TIMEOUT-NORMAL-012": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_normal_child_grandchild_exit"
+        },
+        "HR2-SOURCE-DIGEST-013": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_control_source_change_rejected_after_real_pytest"
+        },
+        "HR2-CASE-SOURCE-014": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_case_wrong_source_digest_rejected"
+        },
+        "HR2-RUNTIME-POSITIVE-015": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_full_trusted_runtime_positive"
+        },
+        "HR2F1-PYC-016": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_magic_valid_changed_pyc_rejected_by_approved_inventory"
+        },
+        "HR2F1-IMPORTABLE-017": {
+          "classname": "controls.tests.test_hardening_controls",
+          "name": "test_unrecorded_importable_rejected_before_approved_import"
+        }
+      }
+    }
+  }
+}

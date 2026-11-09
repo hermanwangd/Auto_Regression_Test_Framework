@@ -1,0 +1,33 @@
+{
+  "manifest_version": "2.1",
+  "queue": "DB-02-runtime-hardening-r2-fix1-controls",
+  "suite": "hardening-controls-r2",
+  "frozen_before_case_execution": true,
+  "command": "python3 run_controls.py --runtime /tmp/db02-r2-fix1-control-runtime",
+  "existing_denominator": 116,
+  "existing_denominator_changed": false,
+  "candidate_cases_added_to_existing_denominator": false,
+  "native_pass": false,
+  "sit_pass": false,
+  "formal_acceptance": false,
+  "amendments": [],
+  "cases": [
+    {"case_id":"HR2-RECORD-EMPTY-001","purpose":"空 RECORD 必須拒絕。","fixed_input":{"record":"empty"},"expected":{"pass":false,"empty_detected":true,"no_hashed_detected":true}},
+    {"case_id":"HR2-RECORD-UNHASHED-002","purpose":"只剩無雜湊 rows 與 required file 去雜湊必須拒絕。","fixed_input":{"variants":["only-unhashed","dehashed-source"]},"expected":{"only_unhashed_rejected":true,"required_dehash_rejected":true}},
+    {"case_id":"HR2-RECORD-COVERAGE-003","purpose":"刪 required row 與改 installed bytes 必須對 trusted wheel 拒絕。","fixed_input":{"variants":["deleted-row","changed-bytes"]},"expected":{"deleted_row_rejected":true,"changed_bytes_rejected":true}},
+    {"case_id":"HR2-RECORD-EXCEPTIONS-004","purpose":"合法 RECORD self、generated pyc 與精確 installer metadata 正向控制。","fixed_input":{"wheel_files":3,"pyc":true,"installer":true},"expected":{"pass":true,"wheel_files_verified":3,"installed_wheel_files_verified":3,"record_self":true,"generated_pyc":true,"installer_metadata":true}},
+    {"case_id":"HR2-WHEEL-TRUST-005","purpose":"wheel 雜湊不符 trusted lock 必須拒絕。","fixed_input":{"wheel_sha256":"0000000000000000000000000000000000000000000000000000000000000000"},"expected":{"pass":false,"trusted_hash_rejected":true,"wheel_files_verified":0}},
+    {"case_id":"HR2-JUNIT-NODES-006","purpose":"偽造 counters、missing、duplicate、unknown testcase nodes 必須拒絕。","fixed_input":{"variants":["empty-9-tests","missing","duplicate","unknown"]},"expected":{"empty_rejected":true,"missing_rejected":true,"duplicate_rejected":true,"unknown_rejected":true}},
+    {"case_id":"HR2-JUNIT-OUTCOME-007","purpose":"failure、error、skipped 必須由 testcase child nodes 辨識。","fixed_input":{"outcomes":["failure","error","skipped"]},"expected":{"failure_rejected":true,"error_rejected":true,"skipped_rejected":true,"all_outcomes_parsed":true}},
+    {"case_id":"HR2-JUNIT-COUNTER-008","purpose":"suite counters 與真實 nodes 不一致必須拒絕。","fixed_input":{"declared_tests":9,"actual_nodes":2},"expected":{"pass":false,"counter_mismatch_detected":true,"real_node_count":2}},
+    {"case_id":"HR2-JUNIT-POSITIVE-009","purpose":"正確 testcase identity、outcome、counters 與 run properties 正向控制。","fixed_input":{"cases":["A","B"],"outcomes":"passed"},"expected":{"pass":true,"tests":2,"case_outcomes":{"A":"passed","B":"passed"},"properties_match":true}},
+    {"case_id":"HR2-ISOLATION-AMBIENT-010","purpose":"ambient PYTHONPATH package 與 pytest plugin 注入不得影響執行。","fixed_input":{"PYTHONPATH":"ambient","PYTEST_PLUGINS":"ambient_poison","PYTEST_ADDOPTS":"-p ambient_poison"},"expected":{"exit_code":0,"probe_pass":true,"ambient_marker_absent":true,"plugin_distinfo_empty":true,"ambient_absent_sys_path":true,"no_site_flags":true}},
+    {"case_id":"HR2-TIMEOUT-TREE-011","purpose":"忽略 TERM 且保留 stdio 的 child／grandchild 必須有界清理。","fixed_input":{"timeout_seconds":0.3,"sleep_seconds":60,"ignore_term":true},"expected":{"status":"timeout","exit_code":124,"bounded_wall_time":true,"parent_reaped":true,"no_live_owned_group_members":true,"cleanup_pass":true,"child_and_grandchild_started":true}},
+    {"case_id":"HR2-TIMEOUT-NORMAL-012","purpose":"正常 child／grandchild 退出正向控制。","fixed_input":{"timeout_seconds":10},"expected":{"status":"completed","exit_code":0,"not_timed_out":true,"cleanup_pass":true,"no_owned_group_members":true,"grandchild_completed":true}},
+    {"case_id":"HR2-SOURCE-DIGEST-013","purpose":"實際 pytest 通過後改 controlled source，仍須整批拒絕並保留 snapshot。","fixed_input":{"mutation":"append-comment-after-pytest"},"expected":{"actual_pytest_passed":true,"post_source_rejected":true,"batch_rejected":true,"reject_reason_present":true,"snapshot_preserved":true}},
+    {"case_id":"HR2-CASE-SOURCE-014","purpose":"case record 的 source digest 不符必須拒絕。","fixed_input":{"record_source_digest":"0000000000000000000000000000000000000000000000000000000000000000"},"expected":{"pass":false,"wrong_source_digest_detected":true,"executed":0}},
+    {"case_id":"HR2-RUNTIME-POSITIVE-015","purpose":"完整 13 wheel／distribution、RECORD、tzdata 與 isolation 正向控制。","fixed_input":{"locked_distributions":13},"expected":{"pass":true,"locked_count":13,"installed_count":13,"wheel_count":13,"record_failures":{},"isolated_import_failures":[],"tzdata_pass":true}},
+    {"case_id":"HR2F1-PYC-016","purpose":"有效 magic 但內容未受信任的 pyc 即使列入 RECORD，也必須被 approved source-only inventory 拒絕。","fixed_input":{"pyc":"magic-valid-changed-content","record_row":"explicit-unhashed-generated-pyc"},"expected":{"pass":false,"record_exception_still_classified":true,"bytecode_rejected":true,"magic_valid":true}},
+    {"case_id":"HR2F1-IMPORTABLE-017","purpose":"未列入 installed RECORD 的 importable 必須在 approved import 前拒絕，poison side effect 不得發生。","fixed_input":{"importable":"sqlite_utils/unapproved_poison.py","record_row":false},"expected":{"pass":false,"unapproved_importable_rejected":true,"record_verification_otherwise_passed":true,"poison_not_imported":true}}
+  ]
+}
