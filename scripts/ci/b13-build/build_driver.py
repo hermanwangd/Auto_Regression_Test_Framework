@@ -27,7 +27,7 @@ MIB = 1024 * 1024
 ROOT_TESTS = {
     'com.specdriven.regression.producttest.P04DescriptorAdmissionTest': 2,
     'com.specdriven.regression.producttest.ReviewedGrpcCapabilityTest': 3,
-    'com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest': 27,
+    'com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest': 31,
     'com.specdriven.regression.provider.grpc.RouteGuideProfileTest': 32,
     'com.specdriven.regression.provider.grpc.GrpcClientExternalEndpointSupportTest': 2,
     'com.specdriven.regression.provider.grpc.GrpcMetadataDeadlineContractTest': 8,
@@ -81,7 +81,8 @@ def validate_junit(folder, expected, budget, max_bytes=4*MIB):
         if any(list(suite.iter(tag)) for tag in ('failure', 'error', 'skipped')): raise BuildError('JUNIT: nonpassing node')
         for key, value in {'tests': len(cases), 'failures': 0, 'errors': 0, 'skipped': 0}.items():
             if suite.get(key) != str(value): raise BuildError('JUNIT: counter mismatch')
-        if len(cases) != expected[classname]: raise BuildError('JUNIT: unexpected testcase count')
+        if len(cases) != expected[classname]:
+            raise BuildError('JUNIT: unexpected testcase count: %s expected=%s actual=%s' % (classname, expected[classname], len(cases)))
         names = []
         for case in cases:
             name = case.get('name'); identity = (case.get('classname'), name)

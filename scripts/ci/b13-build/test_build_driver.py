@@ -133,6 +133,9 @@ class DriverTests(unittest.TestCase):
                      '<testsuite tests="2" failures="0" errors="0" skipped="0"><testcase classname="example.Case" name="caseOne"/><testcase classname="example.Case" name="caseOne"/></testsuite>'):
             with self.subTest(text=text):
                 with self.assertRaisesRegex(d.BuildError,'JUNIT'): d.validate_junit(self.junit_fixture(text),{'example.Case':1},self.budget())
+        text='<testsuite tests="2" failures="0" errors="0" skipped="0"><testcase classname="example.Case" name="caseOne"/><testcase classname="example.Case" name="caseTwo"/></testsuite>'
+        with self.assertRaisesRegex(d.BuildError,'example.Case expected=1 actual=2'):
+            d.validate_junit(self.junit_fixture(text),{'example.Case':1},self.budget())
     def test_junit_failure_error_or_skip_fails(self):
         for kind in ('failure','error','skipped'):
             text='<testsuite tests="1" failures="0" errors="0" skipped="0"><testcase classname="example.Case" name="caseOne"><'+kind+'/></testcase></testsuite>'

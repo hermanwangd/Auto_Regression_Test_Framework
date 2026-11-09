@@ -34,7 +34,7 @@
   },
   "driver": {
     "path": "scripts/ci/b13-build/build_driver.py",
-    "sha256": "9e52b1d871f3b51124ae5316d8ecb807dd6605fcf71d5ff7503b3f5ede3c9e79",
+    "sha256": "ea39746b51eddb49d978936c51283365a052c6749e8d47c8565ee622d770dd2e",
     "implementation": "Python standard library; no bootstrap dependency install"
   },
   "limits": {
@@ -68,9 +68,9 @@
     "build-manifest.json"
   ],
   "current_evidence": {
-    "driver_synthetic_tests": "25 PASS; 0.607s; Python 3.12.14 Linux",
+    "driver_synthetic_tests": "25 PASS; 0.577s; Python 3.12.14 Linux",
     "prior_b13_build_run": 42653127637,
-    "current_focused_CI": "NOT_RUN",
+    "current_focused_CI": "Corrected source-derived count candidate NOT_RUN; first run 42663421700 failed closed at JUnit count validation with no artifact",
     "full_packaged_Framework_Module": "NOT_RUN",
     "original_P04": "NOT_ACCEPTED",
     "SIT": "NOT_RUN",
@@ -95,7 +95,7 @@
     "root": {
       "com.specdriven.regression.producttest.P04DescriptorAdmissionTest": 2,
       "com.specdriven.regression.producttest.ReviewedGrpcCapabilityTest": 3,
-      "com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest": 27,
+      "com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest": 31,
       "com.specdriven.regression.provider.grpc.RouteGuideProfileTest": 32,
       "com.specdriven.regression.provider.grpc.GrpcClientExternalEndpointSupportTest": 2,
       "com.specdriven.regression.provider.grpc.GrpcMetadataDeadlineContractTest": 8,
@@ -105,7 +105,7 @@
       "com.featuredeliveryintelligence.fdi.producttest.GrpcDescriptorAdmissionProofTest": 1,
       "com.featuredeliveryintelligence.fdi.producttest.GrpcBindingTest": 1
     },
-    "expected_total": 138,
+    "expected_total": 142,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
@@ -113,5 +113,13 @@
     "testcase_nodes_required": true,
     "unique_classname_name_required": true,
     "counter_consistency_required": true
+  },
+  "count_correction": {
+    "class": "com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest",
+    "previous_incorrect_expected": 27,
+    "source_derived_expected": 31,
+    "derivation": "2 @Test methods + @ValueSource entries 5+6+14+2+2",
+    "product_source_changed": false,
+    "validator_weakened": false
   }
 }

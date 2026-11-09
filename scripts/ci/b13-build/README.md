@@ -19,13 +19,13 @@ On the pinned Java 17 toolchain the driver runs these seven root classes:
 
 - P04DescriptorAdmissionTest: 2 JUnit testcases
 - ReviewedGrpcCapabilityTest: 3
-- ReviewedGrpcIntegrationTest: 27
+- ReviewedGrpcIntegrationTest: 31
 - RouteGuideProfileTest: 32
 - GrpcClientExternalEndpointSupportTest: 2
 - GrpcMetadataDeadlineContractTest: 8
 - ReviewedGrpcProofIdentityTest: 62
 
-The root total is 136. The Module classes are
+The root total is 140. The Module classes are
 GrpcDescriptorAdmissionProofTest and GrpcBindingTest, one testcase each.
 Their exact fully-qualified names are frozen in the driver and contract.
 Both Maven test commands require nonempty matching tests. The root uses
@@ -94,10 +94,23 @@ The prior fixed b13 build succeeded in
 Its binaries remain separate from this candidate. The first historical failed
 run is preserved; no previous evidence is relabeled.
 
-Local Python standard-library driver controls: 25 passed in 0.607 seconds.
+Local Python standard-library driver controls: 25 passed in 0.577 seconds.
 These comprise the prior 19 controls and six focused JUnit/tail tests, including
 negative subcases. They did not execute Maven, Java or product code.
 The new real focused CI and packaged Module execution are still NOT_RUN at
 preparation. Normal publication must preserve the current builder branch
 history and use an expected-head lease. It must not create another source
 branch or write to production/main/plug-in-module as part of this CI update.
+
+## Exact parameterized-count correction
+
+[First focused run 42663421700](https://github.com/hermanwangd/Auto_Regression_Test_Framework/actions/runs/42663421700)
+failed closed after the root Maven process exited 0, because the frozen expected
+JUnit count was wrong. No artifact was produced. Exact source review of all
+seven root classes establishes counts 2/3/31/32/2/8/62, total 140, plus the two
+Module cases. ReviewedGrpcIntegrationTest has two plain @Test methods and
+ValueSource groups 5/6/14/2/2. The earlier expected 27 omitted the last two groups
+of two. No product source or tests have changed, and no validator has been
+relaxed. The driver now includes classname, expected and actual counts in a
+count-mismatch error. A negative fixture verifies that exact diagnostic.
+The corrected 142-case CI remains NOT_RUN until the next authorized run.
