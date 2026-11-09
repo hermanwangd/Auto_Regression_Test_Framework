@@ -71,6 +71,7 @@ public class V03RuntimeExecutionService {
         this(new ContractBaselineService(), new V03ProviderRuntimeRegistry(List.of(
                 new HttpMockV03Adapter(),
                 new GrpcClientV03Adapter(),
+                new com.specdriven.regression.contract.v03.adapter.GrpcDescriptorAdmissionV03Adapter(),
                 new GrpcMockV03Adapter(),
                 new IbmMqV03Adapter(),
                 new JdbcV03Adapter(),
@@ -1221,7 +1222,7 @@ public class V03RuntimeExecutionService {
         if ("polling_observer".equals(providerType) || evidenceRef.startsWith("polling/")) {
             return "polling_observation";
         }
-        if ("grpc_client".equals(providerType) || evidenceRef.startsWith("provider-evidence/grpc-client/")) {
+        if ("grpc_client".equals(providerType) || "grpc_descriptor_admission".equals(providerType) || evidenceRef.startsWith("provider-evidence/grpc-client/")) {
             return "grpc_request_response";
         }
         if (evidenceRef.contains("request_journal")) {

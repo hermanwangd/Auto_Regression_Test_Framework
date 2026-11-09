@@ -236,6 +236,8 @@ public class EvidenceHardeningService {
                 }
                 if ("kafka.v0.3".equals(nativeCapability.contract()))
                     validateReviewedKafkaProof(root,result,handoff,entries);
+                if ("grpc_descriptor_admission.v0.3".equals(nativeCapability.contract()))
+                    validateReviewedDescriptorProof(root,result,handoff,entries);
                 if ("grpc_client.v0.3".equals(nativeCapability.contract()))
                     validateReviewedGrpcProof(root, result, handoff, entries, passed);
                 if ("jdbc.v0.3".equals(nativeCapability.contract()))
@@ -341,6 +343,20 @@ public class EvidenceHardeningService {
     }
 
     /** Historical joins only: the owner may be reaped and the invocation lease expired. */
+    private void validateReviewedDescriptorProof(Path root, Map<String,Object> result, Map<String,Object> handoff,
+            List<EvidenceEntry> entries) throws IOException {
+        String path=com.specdriven.regression.provider.grpc.ReviewedGrpcDescriptorProof.PATH;
+        EvidenceEntry entry=uniqueReviewedEntry(entries,path,"grpc_request_response");
+        requireReviewed(entries.stream().filter(e->path.equals(e.filePath())).count()==1
+                &&result.get("run_id").equals(entry.runId())&&result.get("batch_id").equals(entry.batchId())
+                &&evidenceRefs(result).contains(path),"descriptor proof must have one indexed run binding");
+        var mapper=new com.fasterxml.jackson.databind.ObjectMapper(com.fasterxml.jackson.core.JsonFactory.builder()
+                .enable(com.fasterxml.jackson.core.StreamReadFeature.STRICT_DUPLICATE_DETECTION).build())
+                .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+        byte[] bytes=reviewedBytes(root.resolve(path),root);requireReviewed(bytes.length<=16384,"descriptor proof exceeds bound");
+        com.specdriven.regression.provider.grpc.ReviewedGrpcDescriptorProof.validate(mapper.readTree(bytes),mapper.valueToTree(result),mapper.valueToTree(handoff));
+    }
+
     private void validateReviewedGrpcProof(Path root, Map<String,Object> result, Map<String,Object> handoff,
             List<EvidenceEntry> entries, boolean passed) throws IOException {
         Map<String,Object> lease = mapValue(handoff.get("fixture_lease"));
@@ -571,7 +587,7 @@ public class EvidenceHardeningService {
                     requiredTypes.add("wiremock_request_journal");
                     requiredTypes.add("wiremock_server_log");
                 }
-                case "grpc_client" -> requiredTypes.add("grpc_request_response");
+                case "grpc_client", "grpc_descriptor_admission" -> requiredTypes.add("grpc_request_response");
                 default -> {
                 }
             }

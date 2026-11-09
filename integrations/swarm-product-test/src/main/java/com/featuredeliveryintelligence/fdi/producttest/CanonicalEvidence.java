@@ -102,9 +102,9 @@ final class CanonicalEvidence {
             require(contracts.isArray() && contracts.size() == 1 && contracts.equals(provenance.path("reviewed_contracts")),
                     "Native reviewed contract differs from pinned handoff");
             String contract = Json.required(contracts.get(0), "provider_contract");
-            require(Set.of("rest_client.v0.3", "cli_process.v0.3", "nats.v0.3", "grpc_client.v0.3", "kafka.v0.3", "jdbc.v0.3").contains(contract), "Unsupported native provider contract");
-            String type = switch (contract) { case "cli_process.v0.3" -> "cli_process"; case "kafka.v0.3" -> "kafka"; case "jdbc.v0.3" -> "jdbc"; case "nats.v0.3" -> "nats"; case "grpc_client.v0.3" -> "grpc_client"; default -> "rest_client"; };
-            String operation = switch (type) { case "cli_process" -> "run_command"; case "kafka" -> "kafka_publish"; case "jdbc" -> "db_query"; case "nats" -> "nats_publish"; case "grpc_client" -> "unary_call"; default -> "http_request"; };
+            require(Set.of("rest_client.v0.3", "cli_process.v0.3", "nats.v0.3", "grpc_client.v0.3", "grpc_descriptor_admission.v0.3", "kafka.v0.3", "jdbc.v0.3").contains(contract), "Unsupported native provider contract");
+            String type = switch (contract) { case "cli_process.v0.3" -> "cli_process"; case "kafka.v0.3" -> "kafka"; case "jdbc.v0.3" -> "jdbc"; case "nats.v0.3" -> "nats"; case "grpc_descriptor_admission.v0.3" -> "grpc_descriptor_admission"; case "grpc_client.v0.3" -> "grpc_client"; default -> "rest_client"; };
+            String operation = switch (type) { case "cli_process" -> "run_command"; case "kafka" -> "kafka_publish"; case "jdbc" -> "db_query"; case "nats" -> "nats_publish"; case "grpc_client", "grpc_descriptor_admission" -> "unary_call"; default -> "http_request"; };
             boolean requiredV2="required".equals(request.knowledgeMode())&&ReviewedKnowledgeAdmission.v2(Json.MAPPER.readTree(reviewedBytes));
             if(requiredV2)ReviewedKnowledgeAdmission.after(request,Json.MAPPER.readTree(reviewedBytes),Path.of(request.suiteManifest()).getParent(),provenance,independentSutPin,start);
             require(("not_used".equals(request.knowledgeMode())||requiredV2) && provenance.path("provider_modes").size() == 1
@@ -139,6 +139,13 @@ final class CanonicalEvidence {
                     require(provider.path("provider_id").isTextual()&&!provider.path("provider_id").textValue().isBlank()&&"real".equals(provenance.path("observed_provider_modes").path(provider.path("target").textValue()).textValue())&&provider.path("operations").isArray()&&provider.path("operations").size()==1&&"db_query".equals(provider.path("operations").get(0).textValue())&&provider.path("resolved_operation_results").isArray()&&provider.path("resolved_operation_results").size()==1&&"db_query".equals(provider.path("resolved_operation_results").get(0).path("operation").textValue()),"JDBC canonical provider/operation identity mismatch");
                     ReviewedJdbcProof.validate(lease,fixtureLeaseSha256,proof,passed,jdbcPayload.isTextual()?jdbcPayload.textValue():null,provider.path("provider_id").textValue(),provider.path("operation").textValue(),start,end);
                 }
+            }
+            if(type.equals("grpc_descriptor_admission")) {
+                require(fixtureLeaseSha256==null&&independentSutPin==null,"Descriptor-only evidence cannot consume an RPC lease/SUT binding");
+                String proofRef=ReviewedGrpcDescriptorProof.PATH;
+                require(contains(document.path("evidence_refs"),proofRef)&&containsFile(indexDocument.path("entries"),proofRef),"Descriptor proof must be indexed");
+                byte[] proofBytes=LocalFiles.read(relative(run,proofRef),16384);
+                ReviewedGrpcDescriptorProof.validate(Json.MAPPER.readTree(proofBytes),document,provenance);
             }
             if(type.equals("grpc_client")) {
                 require(fixtureLeaseSha256!=null && fixtureLeaseSha256.matches("[a-f0-9]{64}"),"Independent fixture lease pin missing");

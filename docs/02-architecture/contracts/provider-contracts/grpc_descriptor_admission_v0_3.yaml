@@ -1,0 +1,45 @@
+contract_version: v0.3
+provider_contract: grpc_descriptor_admission.v0.3
+provider_type: grpc_descriptor_admission
+provider_role: client
+protocol: grpc
+purpose: Offline reviewed descriptor admission for one pinned unsupported server-stream method. Never authorizes RPC execution.
+runtime_modes: [native]
+operation_defaults:
+  input:
+    value_type: string
+    reference_kinds: [literal, artifact]
+    sensitivity: public
+  output:
+    value_type: string
+    sensitivity: public
+    bindable: false
+    evidence_included: true
+  phases: [execute]
+binding_keys:
+  admission_mode:
+    required: true
+    source: env_profile
+    value_type: string
+    reference_kinds: [literal]
+    sensitivity: public
+  source_revision:
+    required: true
+    source: env_profile
+    value_type: string
+    reference_kinds: [literal]
+    sensitivity: public
+operations:
+  unary_call:
+    inputs:
+      grpc.service: {required: true}
+      grpc.method: {required: true}
+      grpc.descriptor_ref: {required: true}
+      grpc.message: {required: true}
+    outputs:
+      response.status: {}
+evidence:
+  outputs: [grpc_request_response]
+  redact: []
+failure_mapping:
+  allowed_codes: [OPERATION_FAILED]

@@ -12,6 +12,7 @@ public enum ReviewedNativeCapability {
     CLI("cli_process.v0.3", "cli_process", "run_command"),
     NATS("nats.v0.3", "nats", "nats_publish"),
     GRPC("grpc_client.v0.3", "grpc_client", "unary_call"),
+    GRPC_DESCRIPTOR("grpc_descriptor_admission.v0.3", "grpc_descriptor_admission", "unary_call"),
     KAFKA("kafka.v0.3", "kafka", "kafka_publish"),
     JDBC("jdbc.v0.3", "jdbc", "db_query");
 
@@ -27,7 +28,8 @@ public enum ReviewedNativeCapability {
         throw new IllegalArgumentException("unsupported_reviewed_native_contract: " + contract);
     }
     public void validateBindings(Map<String,?> values) {
-        if (this == KAFKA) com.specdriven.regression.provider.kafka.ReviewedLoopbackKafkaPolicy.validateBindings(values);
+        if (this == GRPC_DESCRIPTOR) com.specdriven.regression.provider.grpc.ReviewedGrpcDescriptorPolicy.validateBindings(values);
+        else if (this == KAFKA) com.specdriven.regression.provider.kafka.ReviewedLoopbackKafkaPolicy.validateBindings(values);
         else if (this == JDBC) com.specdriven.regression.provider.jdbc.ReviewedOwnedMariaDbPolicy.validateBindings(values);
         else if (this == GRPC) ReviewedLoopbackGrpcPolicy.validateBindings(values);
         else if (this == CLI) ReviewedCliPolicy.validateBindings(values);
@@ -39,7 +41,8 @@ public enum ReviewedNativeCapability {
         }
     }
     public void validateInputs(Map<String,Object> values) {
-        if (this == KAFKA) com.specdriven.regression.provider.kafka.ReviewedLoopbackKafkaPolicy.validateInputs(values);
+        if (this == GRPC_DESCRIPTOR) com.specdriven.regression.provider.grpc.ReviewedGrpcDescriptorPolicy.validateInputs(values);
+        else if (this == KAFKA) com.specdriven.regression.provider.kafka.ReviewedLoopbackKafkaPolicy.validateInputs(values);
         else if (this == JDBC) com.specdriven.regression.provider.jdbc.ReviewedOwnedMariaDbPolicy.validateInputs(values);
         else if (this == GRPC) ReviewedLoopbackGrpcPolicy.validateInputs(values);
         else if (this == CLI) ReviewedCliPolicy.validateInputs(values);

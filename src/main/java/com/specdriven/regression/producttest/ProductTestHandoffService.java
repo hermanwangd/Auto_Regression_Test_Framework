@@ -87,6 +87,9 @@ public final class ProductTestHandoffService {
         String expected = sha(requirement.expectedSha256(), "handoff_digest_invalid");
         Inputs inputs = new Inputs(manifest);
         Selection selection = select(inputs, profile);
+        if(selection.policy.nativeExecution() && nativeCapability(selection)==ReviewedNativeCapability.GRPC_DESCRIPTOR
+                && (requirement.fixtureLeaseSha256()!=null || requirement.sutBindingSha256()!=null))
+            throw fail("descriptor_no_lease", "descriptor-only admission cannot consume an RPC lease or SUT binding");
         byte[] handoffBytes = inputs.read(selection.policy.reviewedHandoffRef());
         if (!expected.equals(digest(handoffBytes))) throw fail("handoff_digest_mismatch", "reviewed handoff bytes changed");
         Map<String,Object> document=json(handoffBytes,"handoff");
@@ -260,6 +263,13 @@ public final class ProductTestHandoffService {
             throw fail("not_used_knowledge_fields", "not_used forbids knowledge receipt and mappings");
         }
         Snapshot snapshot=materialize(inputs.manifestRef, s.policy, approved, contracts, provenance);
+        if(s.policy.nativeExecution() && nativeCapability(s)==ReviewedNativeCapability.GRPC_DESCRIPTOR) {
+            try {
+                if(!"not_used".equals(s.policy.knowledgeMode()))throw fail("descriptor_knowledge", "descriptor admission supports only not_used");
+                if(!com.specdriven.regression.provider.grpc.ReviewedGrpcDescriptorPolicy.SOURCE_REVISION.equals(repositories.get("python-betterproto")))throw fail("descriptor_source", "the pinned upstream revision is required");
+                com.specdriven.regression.provider.grpc.ReviewedGrpcDescriptorPolicy.fixture(snapshot.root,grpcBindings(s));
+            } catch(RuntimeException error) {snapshot.close();throw error;}
+        }
         if(s.policy.nativeExecution() && nativeCapability(s)==ReviewedNativeCapability.GRPC) {
             try {
                 var fixture=com.specdriven.regression.provider.grpc.ReviewedLoopbackGrpcPolicy.fixture(snapshot.root,grpcBindings(s),false);
@@ -411,6 +421,9 @@ public final class ProductTestHandoffService {
                             if (nativeCapability(s) == ReviewedNativeCapability.NATS) {
                                 String fixture = artifact(text(object(step.get("with"), "step.with").get("payload_ref"), "payload_ref"), roots);
                                 need(needed, fixture, "fixture");
+                            }
+                            if (nativeCapability(s) == ReviewedNativeCapability.GRPC_DESCRIPTOR) {
+                                for(String fixture:com.specdriven.regression.provider.grpc.ReviewedGrpcDescriptorPolicy.FILES.keySet())need(needed,fixture,"fixture");
                             }
                             if (nativeCapability(s) == ReviewedNativeCapability.GRPC) {
                                 var input=object(step.get("with"),"step.with");
