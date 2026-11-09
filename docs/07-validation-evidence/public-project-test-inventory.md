@@ -1,10 +1,10 @@
 # Public-project test inventory
 
-Version: `planning-v1` · metadata revision: `review-fixes-2026-11-07-r1` · framework reference: [`b95f6b76`](https://github.com/hermanwangd/Auto_Regression_Test_Framework/commit/b95f6b76f5e54fe9b93f99aad78d17a8568e52f7)
+Version: `planning-v1` · metadata revision: `p04-sg02-reconciliation-2026-11-09-r1` · framework reference: [`b95f6b76`](https://github.com/hermanwangd/Auto_Regression_Test_Framework/commit/b95f6b76f5e54fe9b93f99aad78d17a8568e52f7)
 
 **20 repositories / 116 proposed scenario groups**: 11 selected client/test-source repositories (62 groups) and 9 application candidates (54 groups). These are planning denominators. They are not approved executable-case counts or product requirement coverage.
 
-Full product requirements/AC denominator: **UNKNOWN**. Approved executable-case/layer denominators and rates: **UNKNOWN** until exact case IDs, layer, input, independent oracle, review and compatible evidence bindings are frozen. No `0/116` or `100%` execution claim is derived here.
+Full product requirements/AC denominator and global approved executable-case/layer denominators remain **UNKNOWN**. P04-SG02 now has a bounded, frozen four-case Framework-provider/Module result as detailed below. This does not define a portfolio-wide execution rate. The 116 groups remain a planning denominator.
 
 Authoritative machine-readable snapshot: [public-project-test-inventory.json](public-project-test-inventory.json). Original proposal project IDs, ordering, complete commits, titles and notes are preserved; its 13,829 bytes were verified against SHA256 `d98ea460034ab3b3b10a15c075378d61e264324e4672f5dd4f3194e83f0e14f3`.
 
@@ -110,9 +110,17 @@ Planned group slots: **116 for each of the five layers**, not 580 approved runna
 | Group | Planned behavior | Upstream | Framework provider | Module | Native agent | SIT |
 | --- | --- | --- | --- | --- | --- | --- |
 | P04-SG01 | repeated response 精確元素 | NOT_RECONCILED | NOT_RECONCILED | NOT_RECONCILED | NOT_RUN | BLOCKED |
-| P04-SG02 | 四種 RPC cardinality 的 admission 或明確 unsupported | NOT_RECONCILED | NOT_RECONCILED | BLOCKED | NOT_RUN | BLOCKED |
+| P04-SG02 | 四種 RPC cardinality 的 admission 或明確 unsupported | NOT_RECONCILED | ACCEPTED | ACCEPTED | NOT_RUN | BLOCKED |
 | P04-SG03 | 空 repeated／default 邊界 | NOT_RECONCILED | NOT_RECONCILED | NOT_RECONCILED | NOT_RUN | BLOCKED |
 | P04-SG04 | imported well-known type 的 descriptor 處理 | NOT_RECONCILED | NOT_RECONCILED | BLOCKED | NOT_RUN | BLOCKED |
+
+P04-SG02 acceptance is limited to **schema-derived owned Java fixture** execution through `grpc_client.v0.3` and the packaged Swarm product-test Module. It does not establish upstream Python, native Swarm-agent or SIT acceptance. Source [`173ee0ec`](https://github.com/hermanwangd/Auto_Regression_Test_Framework/commit/173ee0ecb4212b0e0963aa3c574d6c02c30eb3aa), tree `5d7c8aaa2685c02dc8855630a0457ae9bc616fef`, ran on OpenJDK 21.0.13. [CI 42681020126](https://github.com/hermanwangd/Auto_Regression_Test_Framework/actions/runs/42681020126) built/tested on Java17 (142 root + 7 Module tests); packaged Java17 runtime was not run.
+
+The JSON P04-SG02 row binds all four exact case IDs, input manifests, requests, reviewed handoffs, frozen oracles, canonical results, receipts and cleanup hashes. `TC-P04-SG02-UNARY-ADMIT-001` passed with one real RPC. `TC-P04-SG02-CLIENTSTREAM-REJECT-001`, `TC-P04-SG02-SERVERSTREAM-REJECT-001` and `TC-P04-SG02-BIDISTREAM-REJECT-001` retain genuine failed/UNKNOWN product verdicts and exit1, with the exact unsupported-cardinality diagnostic before channel construction and zero RPCs. Each correct oracle ACCEPT and wrong oracle REJECT references that case's single canonical result; these are four executable cases, not eight executions. All four owners exited0, were reaped, and had closed ports.
+
+Execution seal `p04-packaged-four-review.v3` predates the run. Independent existing-evidence review `p04-packaged-four-postrun.v1` accepted this bounded scope at 2026-11-09T21:07:12Z. This maintenance entry reconciles the original `P04-SG02-PROPOSED-FOUR-CARDINALITY` request mapping without rewriting sealed evidence. Earlier failed attempts and `release_evidence_eligible=false` remain unchanged. Target-branch integration is recorded separately and does not imply a new runtime result.
+
+This adds **one accepted group record in each of two layers**, supported by four cases. Across declared groups, Framework NOT_RECONCILED changes 42→41 and ACCEPTED 0→1; Module BLOCKED changes 43→42 and ACCEPTED 0→1. Other layer states, the 20/116 planning denominator, global UNKNOWN execution/requirement denominators, and all 16 excluded historical case records remain unchanged. It is not 17/116 or four additional groups.
 
 ### P05 — grpc/grpc-node
 
@@ -454,12 +462,12 @@ Rows require capability → exact case → input/oracle → run → evidence, bo
 
 `NOT_RECONCILED` on a capability is a reconciliation state: no approved capability-to-case/run binding is established. The counts below describe the existing scenario states reached through **proposed project links**, not capability verdicts, approved case mappings, readiness or a new coverage denominator. A group is counted once per capability/layer; groups can occur under multiple capabilities, so do not sum rows.
 
-Execution attempts remain **UNKNOWN for every capability**. A declared `BLOCKED` or `NOT_RUN` state alone does not establish whether an attempt occurred. Project blocker references are retained in the JSON and describe those projects, not independently graded capability blockers.
+Capability-level execution assessment remains **UNKNOWN**. The bounded P04-SG02 executions are established separately and do not establish complete C02 capability acceptance. A declared `BLOCKED` or `NOT_RUN` state alone does not establish whether an attempt occurred. Project blocker references are retained in the JSON and describe those projects, not independently graded capability blockers.
 
 | Capability | Linked groups | Upstream | Framework provider | Module | Native agent | SIT |
 | --- | ---: | --- | --- | --- | --- | --- |
 | C01 | 54 | NOT_RUN: 54 | NOT_RUN: 54 | NOT_RUN: 54 | NOT_RUN: 54 | BLOCKED: 54 |
-| C02 | 30 | NOT_RECONCILED: 24; NOT_RUN: 6 | NOT_RECONCILED: 24; NOT_RUN: 6 | NOT_RECONCILED: 13; BLOCKED: 11; NOT_RUN: 6 | NOT_RUN: 30 | BLOCKED: 30 |
+| C02 | 30 | NOT_RECONCILED: 24; NOT_RUN: 6 | NOT_RECONCILED: 23; NOT_RUN: 6; ACCEPTED: 1 | NOT_RECONCILED: 13; BLOCKED: 10; NOT_RUN: 6; ACCEPTED: 1 | NOT_RUN: 30 | BLOCKED: 30 |
 | C03 | 18 | NOT_RECONCILED: 12; NOT_RUN: 6 | NOT_RECONCILED: 12; NOT_RUN: 6 | BLOCKED: 12; NOT_RUN: 6 | NOT_RUN: 18 | BLOCKED: 18 |
 | C04 | 6 | NOT_RECONCILED: 6 | NOT_RECONCILED: 6 | NOT_RECONCILED: 6 | NOT_RUN: 6 | BLOCKED: 6 |
 | C05 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
@@ -565,4 +573,6 @@ Oracle, DB2 and IBM MQ remain explicit selection/environment gaps in this v1 por
 
 - `review-fixes-2026-11-07-r1` (same `planning-v1` denominators): preserved raw historical slots and normalized the two pin-mismatch records; limited `tests/sit/` ownership to cross-repository SIT suites; added descriptive linked-group state summaries and explicit unknown execution attempts. Original proposal text and source pins remain unchanged.
 
-Metadata-only verification for this revision: **425 invariant assertions passed; 14 negative mutation cases were rejected**, including raw-source changes, denominator changes, history misclassification, duplicate counts, broken references, invented execution state and Markdown drift. The validator ran in memory; its execution record is retained in the tool transcript, not as a committed CI check. This establishes no provider/module/agent/SIT runtime coverage.
+Metadata-only verification for the prior `review-fixes-2026-11-07-r1` revision: **425 invariant assertions passed; 14 negative mutation cases were rejected**, including raw-source changes, denominator changes, history misclassification, duplicate counts, broken references, invented execution state and Markdown drift. The validator ran in memory; its execution record is retained in the tool transcript, not as a committed CI check. This establishes no provider/module/agent/SIT runtime coverage.
+
+- `p04-sg02-reconciliation-2026-11-09-r1` (same `planning-v1` denominators): bound P04-SG02 to four frozen cardinality cases, source173ee0ec and JRE21; recorded Framework-provider/Module acceptance only for the schema-derived owned Java fixture scope under `p04-packaged-four-postrun.v1`. Preserved three failed/UNKNOWN product verdicts, all excluded layers, original artifacts and historical records. Updated only the affected C02 descriptive state counts; no portfolio execution denominator or requirement-coverage rate was introduced.
