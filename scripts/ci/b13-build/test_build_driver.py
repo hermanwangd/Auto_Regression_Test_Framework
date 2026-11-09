@@ -1,0 +1,77 @@
+import io
+import json
+import os
+import pathlib
+import sys
+import tarfile
+import tempfile
+import time
+import unittest
+from unittest import mock
+import build_driver as d
+
+class DriverTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='b13-driver-test-')
+        self.root = pathlib.Path(self.tmp.name)
+        self.env = {'PATH': os.defpath, 'HOME': str(self.root), 'LANG': 'C.UTF-8'}
+    def tearDown(self): self.tmp.cleanup()
+    def budget(self, **kw): return d.Budget(roots=[self.root], total=kw.pop('total', 4), reserve=.3, **kw)
+    def run_child(self, text, budget=None):
+        return d.run_process([sys.executable, '-I', '-c', text], self.root, self.env, budget or self.budget(), 'fixture')
+    def test_normal_completion(self):
+        r=self.run_child("print('ok')")
+        self.assertEqual(r['exit_code'],0); self.assertEqual(r['output_bytes'],3)
+        self.assertEqual(r['stdout'], 'ok\n')
+    def test_nonzero_fails(self):
+        with self.assertRaisesRegex(d.BuildError,'EXIT'): self.run_child('raise SystemExit(3)')
+    def test_timeout_kills_descendant(self):
+        marker=self.root/'pid'
+        text="import subprocess,sys,pathlib,time; p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']); pathlib.Path(%r).write_text(str(p.pid)); time.sleep(30)" % str(marker)
+        start=time.monotonic()
+        with self.assertRaisesRegex(d.BuildError,'DEADLINE'): self.run_child(text,self.budget(total=.8))
+        self.assertLess(time.monotonic()-start,2)
+        if marker.exists(): self.assertFalse(d.pid_running(int(marker.read_text())))
+    def test_output_cap_fails(self):
+        with self.assertRaisesRegex(d.BuildError,'OUTPUT'): self.run_child("print('x'*5000)",self.budget(log_cap=1024))
+    def test_stale_directory_rejected(self):
+        p=self.root/'delivery'; p.mkdir(); (p/'old.jar').write_text('old')
+        with self.assertRaisesRegex(d.BuildError,'EXISTS'): d.fresh_dir(p)
+        self.assertEqual((p/'old.jar').read_text(),'old')
+    def test_storage_cap_fails(self):
+        (self.root/'oversize').write_bytes(b'x'*2048)
+        with self.assertRaisesRegex(d.BuildError,'STORAGE'): self.budget(storage_cap=1024).check_storage()
+    def test_source_mismatch_fails_closed(self):
+        with mock.patch.object(d,'run_process',return_value={'stdout':'wrong\n','exit_code':0}):
+            with self.assertRaisesRegex(d.BuildError,'SOURCE'): d.source_identity(self.root,self.env,self.budget())
+    def test_rss_cap_fails_and_cleans(self):
+        actual=d.group_state; calls=0
+        def oversized_once(pgid):
+            nonlocal calls
+            calls+=1
+            return ([pgid],4096) if calls==1 else actual(pgid)
+        with mock.patch.object(d,'group_state',side_effect=oversized_once):
+            with self.assertRaisesRegex(d.BuildError,'MEMORY'): self.run_child('import time; time.sleep(2)',self.budget(rss_cap=1024))
+    def test_cache_cap_checked_during_process(self):
+        cache=self.root/'m2'; cache.mkdir(); (cache/'payload').write_bytes(b'x'*2048)
+        b=self.budget(); b.cache_roots=[cache]; b.cache_cap=1024
+        with self.assertRaisesRegex(d.BuildError,'CACHE'): self.run_child('import time; time.sleep(.1)',b)
+    def test_archive_traversal_rejected(self):
+        archive=self.root/'bad.tar.gz'
+        with tarfile.open(archive,'w:gz') as t:
+            x=tarfile.TarInfo('../escape'); x.size=1; t.addfile(x,io.BytesIO(b'x'))
+        with self.assertRaisesRegex(d.BuildError,'ARCHIVE'): d.extract_archive(archive,self.root/'extract',self.budget())
+        self.assertFalse((self.root.parent/'escape').exists())
+    def test_manifest_too_large_no_success_file(self):
+        out=self.root/'delivery'; out.mkdir()
+        with self.assertRaisesRegex(d.BuildError,'MANIFEST'): d.write_manifest(out,{'x':'z'*1024},max_bytes=100)
+        self.assertFalse((out/'build-manifest.json').exists())
+    def test_manifest_published_atomically(self):
+        out=self.root/'delivery'; out.mkdir()
+        d.write_manifest(out,{'status':'BUILT_NOT_TESTED'})
+        self.assertEqual(json.loads((out/'build-manifest.json').read_text())['status'],'BUILT_NOT_TESTED')
+    def test_wrong_download_digest_rejected(self):
+        p=self.root/'archive'; p.write_bytes(b'fixture')
+        with self.assertRaisesRegex(d.BuildError,'DIGEST'): d.verify_digest(p,'sha256','0'*64,self.budget())
+
+if __name__=='__main__': unittest.main()

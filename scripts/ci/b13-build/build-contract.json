@@ -1,0 +1,81 @@
+{
+  "schema": "b13-build-only-contract.v1",
+  "status": "READY_FOR_AUTHORIZED_PUBLICATION_NOT_RUN",
+  "source": {
+    "repository": "hermanwangd/Auto_Regression_Test_Framework",
+    "commit": "b13c503cc9fadd930e11fb8adc6496308697a966",
+    "tree": "a912fc45e68cf1dd31f7e4b16a795338eaec054f"
+  },
+  "activation": {
+    "event": "push",
+    "exact_branch": "codex/b13-build-only",
+    "default_branch_change": false,
+    "production_workflow_change": false,
+    "candidate_guards_retained": false
+  },
+  "action_pins": {
+    "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
+    "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02"
+  },
+  "toolchain": {
+    "java": {
+      "version": "17.0.21+9",
+      "distribution": "Eclipse Temurin Linux x64",
+      "archive_bytes": 193594705,
+      "archive_sha256": "8b9b611d917e3dfd8419d3566b5949226f69b052fed7e109c1368add1dfe8711",
+      "provenance": "https://api.github.com/repos/adoptium/temurin17-binaries/releases/latest"
+    },
+    "maven": {
+      "version": "3.9.11",
+      "archive_format": "tar.gz",
+      "archive_sha512": "bcfe4fe305c962ace56ac7b5fc7a08b87d5abd8b7e89027ab251069faebee516b0ded8961445d6d91ec1985dfe30f8153268843c89aa392733d1a3ec956c9978",
+      "checksum_source": "https://archive.apache.org/dist/maven/maven-3/3.9.11/binaries/apache-maven-3.9.11-bin.tar.gz.sha512"
+    }
+  },
+  "driver": {
+    "path": "scripts/ci/b13-build/build_driver.py",
+    "sha256": "364610b76dd34bc1b7092fbc2d80b74fae65b22669ecd82f5a54c446c1d2907b",
+    "implementation": "Python standard library; no bootstrap dependency install"
+  },
+  "limits": {
+    "github_job_seconds": 900,
+    "driver_seconds_including_cleanup": 840,
+    "cleanup_reserve_seconds": 30,
+    "maven_heap_mib": 1024,
+    "maven_metaspace_mib": 384,
+    "sampled_process_group_rss_mib": 2048,
+    "fresh_owned_storage_mib": 2048,
+    "fresh_dependency_cache_mib": 1024,
+    "log_bytes_per_process": 1048576,
+    "delivery_mib": 256,
+    "manifest_bytes": 1048576,
+    "owned_entry_cap": 50000
+  },
+  "boundary": {
+    "new_independent_build_only_profile": true,
+    "old_Main_or_DB_or_P09_caps_changed": false,
+    "memory_is_sampled_not_cgroup_hard_cap": true,
+    "dependencies_fresh_official_central_only": true,
+    "dependency_reproducibility_proven": false
+  },
+  "outputs": [
+    "spec-driven-auto-regression-0.3.2.jar",
+    "swarm-product-test-1.0.0-cli.jar",
+    "build-manifest.json"
+  ],
+  "current_evidence": {
+    "driver_synthetic_tests": "13 PASS; 0.580s; Python 3.12.14 Linux",
+    "Maven_Java_execution": "NOT_RUN",
+    "GitHub_CI": "NOT_RUN",
+    "P04": "NOT_RUN",
+    "SIT": "NOT_RUN",
+    "formal_coverage_credit": 0
+  },
+  "publication_allowlist": {
+    ".github/workflows/b13-build-artifacts.yml": "b13-build-artifacts.yml",
+    "scripts/ci/b13-build/build_driver.py": "implementation/build_driver.py",
+    "scripts/ci/b13-build/test_build_driver.py": "implementation/test_build_driver.py",
+    "scripts/ci/b13-build/build-contract.json": "build-binding.template.json",
+    "scripts/ci/b13-build/README.md": "PLAN.md"
+  }
+}

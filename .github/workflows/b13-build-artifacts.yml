@@ -1,0 +1,55 @@
+# Reviewed build-only candidate. No production workflow is modified.
+name: b13 nonproduction build artifacts
+on:
+  push:
+    branches:
+      - codex/b13-build-only
+permissions:
+  contents: read
+concurrency:
+  group: b13-artifact-build-only
+  cancel-in-progress: false
+jobs:
+  build-only:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed workflow and driver
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: hermanwangd/Auto_Regression_Test_Framework
+          ref: ${{ github.sha }}
+          path: control
+          fetch-depth: 1
+          persist-credentials: false
+          submodules: false
+          lfs: false
+      - name: Checkout exact b13 build source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: hermanwangd/Auto_Regression_Test_Framework
+          ref: b13c503cc9fadd930e11fb8adc6496308697a966
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+          submodules: false
+          lfs: false
+      - name: Verify driver and package only
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' '364610b76dd34bc1b7092fbc2d80b74fae65b22669ecd82f5a54c446c1d2907b' 'control/scripts/ci/b13-build/build_driver.py' | sha256sum --check --strict
+          python3 -I -B control/scripts/ci/b13-build/build_driver.py \
+            --source "$GITHUB_WORKSPACE/source" --work "$RUNNER_TEMP/b13-build-only" \
+            --workflow-commit "$GITHUB_SHA"
+      - name: Retain exactly two JARs and their build binding
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: b13-build-only-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          path: |
+            ${{ runner.temp }}/b13-build-only/delivery/spec-driven-auto-regression-0.3.2.jar
+            ${{ runner.temp }}/b13-build-only/delivery/swarm-product-test-1.0.0-cli.jar
+            ${{ runner.temp }}/b13-build-only/delivery/build-manifest.json
