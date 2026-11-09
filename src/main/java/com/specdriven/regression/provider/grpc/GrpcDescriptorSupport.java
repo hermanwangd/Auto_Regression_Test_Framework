@@ -14,9 +14,12 @@ import java.util.Map;
 /** Shared descriptor parsing and cardinality boundary; no channel or network API. */
 public final class GrpcDescriptorSupport {
     private GrpcDescriptorSupport() {}
+    public static final class StreamingDescriptorException extends IllegalArgumentException {
+        private StreamingDescriptorException() {super("Unsupported streaming descriptor for gRPC unary_call; select a unary method.");}
+    }
     public static void requireUnary(Descriptors.MethodDescriptor method) {
         if (method.isClientStreaming() || method.isServerStreaming())
-            throw new IllegalArgumentException("Unsupported streaming descriptor for gRPC unary_call; select a unary method.");
+            throw new StreamingDescriptorException();
     }
     public static Descriptors.MethodDescriptor method(Path descriptorPath, String serviceName, String methodName)
             throws IOException {

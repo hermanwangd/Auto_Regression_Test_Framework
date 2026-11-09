@@ -15,7 +15,8 @@ public final class P04DescriptorAdmissionProbe {
             unary.validateInputs(inputs(profile[0], profile[1], profile[2]));
             checks++;
         }
-        rejects(() -> unary.validateInputs(inputs("service.Test", "GetThingVersions", "service")));
+        unary.validateInputs(inputs("service.Test", "GetThingVersions", "service"));checks++;
+        // Admission is now exact-profile only; live lease, byte pins and real rejection are checked by P04OwnedStreamingTest.
         rejects(() -> unary.validateInputs(inputs("routeguide.RouteGuide", "ListFeatures", "routeguide")));
         rejects(() -> unary.validateBindings(Map.of("target", "grpc://example.com:12345", "owner_run_id", "a".repeat(32))));
         rejects(() -> unary.validateBindings(Map.of("target", "grpc://127.0.0.1:12345")));

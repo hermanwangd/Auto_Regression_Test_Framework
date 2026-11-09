@@ -63,7 +63,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
             if(inputs.putIfAbsent(stringValue(parameter.get("bind_as")),parameter.get("ref"))!=null)
                 throw new IllegalArgumentException("reviewed_grpc: duplicate unary input");
         }
-        if(!java.util.Set.of("fixtures/echo.desc.b64","fixtures/greeter.desc.b64","fixtures/routeguide.desc.b64").contains(inputs.get("grpc.descriptor_ref")) || !"fixtures/request.json".equals(inputs.get("grpc.message")))
+        if(!java.util.Set.of("fixtures/echo.desc.b64","fixtures/greeter.desc.b64","fixtures/routeguide.desc.b64","fixtures/service.desc.b64").contains(inputs.get("grpc.descriptor_ref")) || !"fixtures/request.json".equals(inputs.get("grpc.message")))
             throw new IllegalArgumentException("reviewed_grpc: resolved fixtures differ from reviewed fixed paths");
         inputs.put("grpc.descriptor_ref","artifact://"+inputs.get("grpc.descriptor_ref"));
         inputs.put("grpc.message",ReviewedLoopbackGrpcPolicy.REQUEST_REF);
@@ -75,14 +75,20 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
         ManagedChannel channel=null;
         ProviderOperationResult result;
         String status="UNKNOWN", body="", error="";
-        boolean attempted=false, cleaned=true;
+        boolean attempted=false, cleaned=true, streamingRejected=false;
+        var selectedProfile=ReviewedLoopbackGrpcPolicy.profile(inputs);
+        boolean rejectionOnly=selectedProfile.rejectionOnly();
+        String leaseCheckedAt=java.time.Instant.now().toString();
         try {
+            if(rejectionOnly) requireRejectionOnly(fixture.method(),GrpcDescriptorSupport::requireUnary);
+            else GrpcDescriptorSupport.requireUnary(fixture.method());
             DynamicMessage.Builder message=DynamicMessage.newBuilder(fixture.method().getInputType());
             JsonFormat.parser().merge(fixture.requestJson(),message);
             channel=ManagedChannelBuilder.forTarget(stripGrpcScheme(stringValue(context.bindingValues().get("target"))))
                     .usePlaintext().maxInboundMessageSize(ReviewedLoopbackGrpcPolicy.MAX_RESPONSE_BYTES).build();
             // Validate the frozen lease again immediately before the actual RPC, without a network preflight.
             fixture=ReviewedLoopbackGrpcPolicy.fixture(context.suiteRoot(),context.bindingValues(),true);
+            leaseCheckedAt=java.time.Instant.now().toString();
             long remaining=end-System.nanoTime();
             if(remaining<=0) throw Status.DEADLINE_EXCEEDED.withDescription("whole operation budget exhausted before RPC").asRuntimeException();
             attempted=true;
@@ -94,6 +100,8 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
                 throw Status.RESOURCE_EXHAUSTED.withDescription("serialized JSON exceeds 1 MiB").asRuntimeException();
             if(System.nanoTime()>=end) throw Status.DEADLINE_EXCEEDED.withDescription("serialization exceeded operation budget").asRuntimeException();
             status="OK";
+        } catch(GrpcDescriptorSupport.StreamingDescriptorException e) {
+            streamingRejected=rejectionOnly; error=maskSensitiveText(safeMessage(e)); body="";
         } catch(StatusRuntimeException e) { status=e.getStatus().getCode().name(); error=maskSensitiveText(safeMessage(e)); body=""; }
         catch(Exception e) { error=maskSensitiveText(safeMessage(e)); body=""; }
         finally {
@@ -105,17 +113,24 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
         }
         if(!cleaned) {status="CLEANUP_UNCONFIRMED";body="";error="gRPC channel termination not confirmed within 2s";}
         long duration=Duration.ofNanos(System.nanoTime()-started).toMillis();
-        writeReviewedEvidence(context,fixture,status,body,error,duration,attempted,cleaned);
+        writeReviewedEvidence(context,request,fixture,status,body,error,duration,attempted,cleaned,streamingRejected,channel!=null,leaseCheckedAt);
         var proof=evidence("grpc_request_response","provider-evidence/grpc-client/reviewed-unary.json");
         if(status.equals("OK")) return ProviderOperationResult.passed(Map.of("response.message",body,"response.status",status,"response.duration_ms",duration),proof);
         return ProviderOperationResult.failed(Map.of("response.status",status,"response.duration_ms",duration),proof,
                 ProviderFailure.of(status.equals("DEADLINE_EXCEEDED")?"PROVIDER_TIMEOUT":"OPERATION_FAILED",
                         status.equals("DEADLINE_EXCEEDED")?"PROVIDER_TIMEOUT":"FRAMEWORK_ERROR",
-                        "Reviewed gRPC unary failed: "+status+" "+error,"Inspect bounded reviewed-unary evidence."));
+                        reviewedFailureReason(streamingRejected,status,error),"Inspect bounded reviewed-unary evidence."));
     }
 
-    private void writeReviewedEvidence(ProviderExecutionContext context, ReviewedLoopbackGrpcPolicy.Fixture fixture,
-            String status,String body,String error,long duration,boolean attempted,boolean cleaned) {
+    static void requireRejectionOnly(Descriptors.MethodDescriptor method,java.util.function.Consumer<Descriptors.MethodDescriptor> guard) {
+        guard.accept(method);
+        throw new IllegalStateException("reviewed_grpc: rejection-only cardinality guard returned without rejecting");
+    }
+    static String reviewedFailureReason(boolean streamingRejected,String status,String error) {
+        return streamingRejected ? "gRPC unary_call failed: "+error : "Reviewed gRPC unary failed: "+status+" "+error;
+    }
+    private void writeReviewedEvidence(ProviderExecutionContext context,ProviderOperationRequest request, ReviewedLoopbackGrpcPolicy.Fixture fixture,
+            String status,String body,String error,long duration,boolean attempted,boolean cleaned,boolean streamingRejected,boolean channelCreated,String leaseCheckedAt) {
         Map<String,Object> evidence=new LinkedHashMap<>();
         evidence.put("evidence_type","grpc_request_response"); evidence.put("provider_type",PROVIDER_TYPE);
         evidence.put("provider_id",context.providerId()); evidence.put("service",fixture.method().getService().getFullName());
@@ -124,6 +139,20 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
         evidence.put("rpc_attempted",attempted); evidence.put("cleanup_confirmed",cleaned);
         evidence.put("request",fixture.requestJson()); evidence.put("status",status); evidence.put("body",maskSensitiveText(body));
         evidence.put("duration_ms",duration); evidence.put("error",error); evidence.put("masking_applied",true);
+        if(ReviewedGrpcStreamingRejectionProof.ownsProfile(String.valueOf(fixture.lease().get("profile")))) {
+            boolean unaryProfile=ReviewedLoopbackGrpcPolicy.Profile.P04_UNARY.id.equals(fixture.lease().get("profile"));
+            evidence.put("schema",unaryProfile?"reviewed-grpc-owned-unary.v1":"reviewed-grpc-owned-streaming-rejection.v1");evidence.put("operation","unary_call");
+            evidence.put("run_id",context.runDir().getFileName().toString());
+            evidence.put("test_case_id",request.outputs().get("_test_case_id"));evidence.put("step_id",request.outputs().get("_operation_id"));
+            evidence.put("source_revision",ReviewedGrpcDescriptorPolicy.SOURCE_REVISION);evidence.put("source_sha256",ReviewedGrpcDescriptorPolicy.SOURCE_SHA);
+            evidence.put("descriptor_sha256",ReviewedGrpcDescriptorPolicy.DESCRIPTOR_SHA);evidence.put("request_sha256",ReviewedGrpcDescriptorPolicy.REQUEST_SHA);
+            evidence.put("input_type",fixture.method().getInputType().getFullName());evidence.put("output_type",fixture.method().getOutputType().getFullName());
+            evidence.put("client_streaming",fixture.method().isClientStreaming());evidence.put("server_streaming",fixture.method().isServerStreaming());
+            evidence.put("operation_status",status.equals("OK")?"passed":"failed");evidence.put("failure_code",status.equals("OK")?"":"OPERATION_FAILED");
+            evidence.put("diagnostic",status.equals("OK")?"":reviewedFailureReason(streamingRejected,status,error));evidence.put("guard_rejection_observed",streamingRejected);
+            evidence.put("channel_created",channelCreated);evidence.put("lease_checked_at",leaseCheckedAt);
+            evidence.put("descriptor_generation","reviewed_descriptor_assembly");evidence.put("compiler",null);
+        }
         try {
             String serialized=new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(evidence);
             if(serialized.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>2*1024*1024)

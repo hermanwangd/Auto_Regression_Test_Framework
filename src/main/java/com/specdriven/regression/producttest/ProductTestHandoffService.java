@@ -273,6 +273,9 @@ public final class ProductTestHandoffService {
         if(s.policy.nativeExecution() && nativeCapability(s)==ReviewedNativeCapability.GRPC) {
             try {
                 var fixture=com.specdriven.regression.provider.grpc.ReviewedLoopbackGrpcPolicy.fixture(snapshot.root,grpcBindings(s),false);
+                if(com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.ownsProfile(String.valueOf(fixture.lease().get("profile")))
+                        && !com.specdriven.regression.provider.grpc.ReviewedGrpcDescriptorPolicy.SOURCE_REVISION.equals(repositories.get("python-betterproto")))
+                    throw fail("grpc_streaming_source", "the pinned BetterProto source revision is required for owned cardinality profiles");
                 provenance.put("fixture_lease",fixture.lease()); provenance.put("fixture_lease_sha256",fixture.leaseSha256());
                 return new Snapshot(snapshot.root,snapshot.suiteManifest,snapshot.contractDirectory,snapshot.policy,immutableObject(provenance));
             } catch(RuntimeException error) {snapshot.close();throw error;}
@@ -432,6 +435,7 @@ public final class ProductTestHandoffService {
                                 equal(com.specdriven.regression.provider.grpc.ReviewedLoopbackGrpcPolicy.profile(input).descriptorPath(),descriptor,"grpc_descriptor_path");
                                 equal("fixtures/request.json",request,"grpc_request_path");
                                 need(needed,descriptor,"fixture"); need(needed,request,"fixture"); need(needed,"fixtures/lease.json","fixture");
+                                if(com.specdriven.regression.provider.grpc.ReviewedLoopbackGrpcPolicy.profile(input).isP04())need(needed,"fixtures/service.proto","fixture");
                             }
                             stepOps.put(sid, op);
                             continue;

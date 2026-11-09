@@ -37,17 +37,25 @@ public final class ReviewedLoopbackGrpcPolicy {
     public enum Profile {
         ECHO("echo.v1","swarm.producttest","EchoService","Echo","EchoRequest","EchoReply","message","echo.desc.b64"),
         GREETER("greeter.v1","helloworld","Greeter","SayHello","HelloRequest","HelloReply","name","greeter.desc.b64"),
-        ROUTE_GUIDE("routeguide.getfeature.v1","routeguide","RouteGuide","GetFeature","Point","Feature","","routeguide.desc.b64");
+        ROUTE_GUIDE("routeguide.getfeature.v1","routeguide","RouteGuide","GetFeature","Point","Feature","","routeguide.desc.b64"),
+        P04_UNARY("betterproto.dothing-unary.v1","service","Test","DoThing","DoThingRequest","DoThingResponse","name","service.desc.b64"),
+        P04_CLIENT_REJECT("betterproto.domanythings-reject.v1","service","Test","DoManyThings","DoThingRequest","DoThingResponse","name","service.desc.b64"),
+        P04_BIDI_REJECT("betterproto.getdifferentthings-reject.v1","service","Test","GetDifferentThings","GetThingRequest","GetThingResponse","name","service.desc.b64"),
+        P04_STREAM_REJECT("betterproto.getthingversions-reject.v1","service","Test","GetThingVersions","GetThingRequest","GetThingResponse","name","service.desc.b64");
         final String id,pkg,service,method,request,response,requestField,descriptor;
         Profile(String id,String pkg,String service,String method,String request,String response,String requestField,String descriptor) {
             this.id=id;this.pkg=pkg;this.service=service;this.method=method;this.request=request;this.response=response;this.requestField=requestField;this.descriptor=descriptor;
         }
         public String descriptorPath(){return "fixtures/"+descriptor;}
+        public boolean isP04(){return this==P04_UNARY||this==P04_CLIENT_REJECT||this==P04_STREAM_REJECT||this==P04_BIDI_REJECT;}
+        public boolean rejectionOnly(){return isP04()&&this!=P04_UNARY;}
+        public boolean clientStreaming(){return this==P04_CLIENT_REJECT||this==P04_BIDI_REJECT;}
+        public boolean serverStreaming(){return this==P04_STREAM_REJECT||this==P04_BIDI_REJECT;}
     }
     public static Profile profile(Map<String,?> values) {
         for(var profile:Profile.values()) if((profile.pkg+"."+profile.service).equals(values.get("grpc.service"))
                 && profile.method.equals(values.get("grpc.method")) && ("artifact://"+profile.descriptorPath()).equals(values.get("grpc.descriptor_ref")))return profile;
-        throw new IllegalArgumentException("reviewed_grpc: only finite Echo/Echo, Greeter/SayHello or RouteGuide/GetFeature profiles are supported");
+        throw new IllegalArgumentException("reviewed_grpc: only finite Echo/Echo, Greeter/SayHello or RouteGuide/GetFeature profiles, or exact BetterProto cardinality profiles, are supported");
     }
     private ReviewedLoopbackGrpcPolicy() { }
 
@@ -94,7 +102,12 @@ public final class ReviewedLoopbackGrpcPolicy {
             var set=DescriptorProtos.FileDescriptorSet.parseFrom(bytes);
             require(set.getFileCount()==1 && set.getUnknownFields().asMap().isEmpty(), "one descriptor file is required");
             var proto=set.getFile(0);
-            if (profile==Profile.ROUTE_GUIDE) {
+            if (profile.isP04()) {
+                require(bytes.length==587 && digest(bytes).equals(ReviewedGrpcDescriptorPolicy.DESCRIPTOR_SHA)
+                        && digest(encoded).equals(ReviewedGrpcDescriptorPolicy.ENCODED_SHA)
+                        && digest(read(root,"fixtures/service.proto",4096)).equals(ReviewedGrpcDescriptorPolicy.SOURCE_SHA),
+                        "P04 must use the exact pinned full BetterProto descriptor and source");
+            } else if (profile==Profile.ROUTE_GUIDE) {
                 // Exact tracked upstream schema, including all streaming declarations and options.
                 // Only GetFeature is an admitted operation; these declarations do not enable streaming.
                 require(digest(proto.toByteArray()).equals(ROUTE_GUIDE_FDP_SHA256)
@@ -127,8 +140,14 @@ public final class ReviewedLoopbackGrpcPolicy {
                             && field.getUnknownFields().asMap().isEmpty(), "message must be optional string message=1");
                 }
             }
-            var descriptor=Descriptors.FileDescriptor.buildFrom(proto,new Descriptors.FileDescriptor[0]);
-            var method=descriptor.getServices().get(0).getMethods().get(0);
+            var descriptor=profile.isP04()
+                    ? GrpcDescriptorSupport.method(bytes,"service.Test",profile.method).getFile()
+                    : Descriptors.FileDescriptor.buildFrom(proto,new Descriptors.FileDescriptor[0]);
+            var method=profile.isP04() ? descriptor.findServiceByName("Test").findMethodByName(profile.method)
+                    : descriptor.getServices().get(0).getMethods().get(0);
+            if(profile.isP04())require(method.isClientStreaming()==profile.clientStreaming() && method.isServerStreaming()==profile.serverStreaming()
+                    && method.getInputType().getFullName().equals("service."+profile.request)
+                    && method.getOutputType().getFullName().equals("service."+profile.response),"P04 method/cardinality differs");
             require(!method.getInputType().equals(method.getOutputType()) && method.getInputType().getFile()==descriptor
                     && method.getOutputType().getFile()==descriptor, "request and response must be the two local messages");
             byte[] request=read(root,"fixtures/request.json",MAX_REQUEST_BYTES);
@@ -148,6 +167,8 @@ public final class ReviewedLoopbackGrpcPolicy {
             } else {
                 require(requestDoc!=null && requestDoc.isObject() && requestDoc.size()==1 && requestDoc.path(profile.requestField).isTextual(), "request must be exactly one string message");
             }
+            if(profile.isP04())require(digest(request).equals(ReviewedGrpcDescriptorPolicy.REQUEST_SHA)
+                    && requestDoc.path("name").textValue().equals("my milkshakes"),"P04 request bytes differ");
             if(profile==Profile.GREETER)require(requestDoc.path("name").textValue().equals("swarm-probe"),"Greeter request must be exact swarm-probe");
             require(leaseDoc.path("version").asText().equals("reviewed-grpc-lease.v1"), "unsupported lease version");
             require(bindings.get("target").equals(leaseDoc.path("endpoint").textValue()) && bindings.get("owner_run_id").equals(leaseDoc.path("owner_run_id").textValue()), "lease endpoint/run identity mismatch");

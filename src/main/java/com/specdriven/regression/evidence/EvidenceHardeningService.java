@@ -362,7 +362,7 @@ public class EvidenceHardeningService {
         Map<String,Object> lease = mapValue(handoff.get("fixture_lease"));
         requireReviewed("reviewed-grpc-lease.v1".equals(lease.get("version")), "unsupported gRPC lease version");
         String profile = reviewedText(lease.get("profile"), "gRPC lease profile");
-        requireReviewed(Set.of("echo.v1", "greeter.v1", "routeguide.getfeature.v1").contains(profile), "unsupported gRPC lease profile");
+        requireReviewed(Set.of("echo.v1", "greeter.v1", "routeguide.getfeature.v1", "betterproto.getthingversions-reject.v1","betterproto.dothing-unary.v1","betterproto.domanythings-reject.v1","betterproto.getdifferentthings-reject.v1").contains(profile), "unsupported gRPC lease profile");
         String owner = reviewedText(lease.get("owner_run_id"), "gRPC lease owner");
         String endpoint = reviewedText(lease.get("endpoint"), "gRPC lease endpoint");
         String leaseSha = reviewedText(handoff.get("fixture_lease_sha256"), "gRPC lease digest");
@@ -386,16 +386,22 @@ public class EvidenceHardeningService {
                 .streamReadConstraints(com.fasterxml.jackson.core.StreamReadConstraints.builder()
                         .maxStringLength(1024 * 1024).maxNestingDepth(100).build()).build())
                 .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
-        Map<String,Object> proof = proofMapper.readValue(reviewedBytes(root.resolve(path), root),
+        byte[] proofBytes=reviewedBytes(root.resolve(path), root);
+        requireReviewed(!com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.ownsProfile(profile)||proofBytes.length<=16384,"owned streaming proof exceeds bound");
+        Map<String,Object> proof = proofMapper.readValue(proofBytes,
                 new com.fasterxml.jackson.core.type.TypeReference<>() {});
         requireReviewed(leaseSha.equals(proof.get("fixture_lease_sha256")) && owner.equals(proof.get("owner_run_id"))
                 && endpoint.equals(proof.get("endpoint")), "gRPC proof differs from frozen lease identity");
         String expectedService=Map.of("echo.v1","swarm.producttest.EchoService","greeter.v1","helloworld.Greeter",
-                "routeguide.getfeature.v1","routeguide.RouteGuide").get(profile);
+                "routeguide.getfeature.v1","routeguide.RouteGuide","betterproto.getthingversions-reject.v1","service.Test","betterproto.dothing-unary.v1","service.Test","betterproto.domanythings-reject.v1","service.Test","betterproto.getdifferentthings-reject.v1","service.Test").get(profile);
         String expectedMethod=Map.of("echo.v1","Echo","greeter.v1","SayHello",
-                "routeguide.getfeature.v1","GetFeature").get(profile);
+                "routeguide.getfeature.v1","GetFeature","betterproto.getthingversions-reject.v1","GetThingVersions","betterproto.dothing-unary.v1","DoThing","betterproto.domanythings-reject.v1","DoManyThings","betterproto.getdifferentthings-reject.v1","GetDifferentThings").get(profile);
         requireReviewed(expectedService.equals(proof.get("service")) && expectedMethod.equals(proof.get("method")),
                 "gRPC proof differs from reviewed service/method");
+        if(com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.ownsProfile(profile)) {
+            if(com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.UNARY_PROFILE.equals(profile)) com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.validateUnary(proofMapper.valueToTree(proof),proofMapper.valueToTree(result),proofMapper.valueToTree(handoff));
+            else com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.validate(proofMapper.valueToTree(proof),proofMapper.valueToTree(result),proofMapper.valueToTree(handoff));
+        }
         requireReviewed(proof.get("rpc_attempted") instanceof Boolean && proof.get("cleanup_confirmed") instanceof Boolean,
                 "gRPC proof attempt/cleanup flags must be boolean");
         requireReviewed(!passed || Boolean.TRUE.equals(proof.get("rpc_attempted"))
