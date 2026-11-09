@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s  %s\n' 'aee5d331f4bd09c80b9b29cec43c5701c93284fd045ae9d49db3b3e5836ec6d9' 'control/scripts/ci/b13-build/build_driver.py' | sha256sum --check --strict
+          printf '%s  %s\n' '27e39f176a955390cf8e492318a36ea577a8f1759f1dbd9d0ea9c508e443667b' 'control/scripts/ci/b13-build/build_driver.py' | sha256sum --check --strict
           python3 -I -B control/scripts/ci/b13-build/build_driver.py \
             --source "$GITHUB_WORKSPACE/source" --work "$RUNNER_TEMP/b13-build-only" \
             --workflow-commit "$GITHUB_SHA"

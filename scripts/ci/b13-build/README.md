@@ -114,8 +114,9 @@ retained result. This was JDK21 with source/target17, not the new packaged
 Module or Java17 execution. Original public-project SG02 and SIT remain
 NOT_ACCEPTED / NOT_RUN. No formal coverage credit is claimed.
 
-All 25 standard-library driver controls are retained unchanged and passed
-in 0.588 seconds against the finalized fixed source bindings. An initial
+The original 25 standard-library driver controls are retained unchanged.
+Five targeted controls were added, and all 30 passed in 0.663 seconds against
+the same finalized source bindings. An initial
 isolated-mode launcher omitted the local module path and failed to import
 build_driver before any test; the corrected exact-path launcher is recorded. No local Maven,
 Java, tool download or product test is part of this control-plane preparation.
@@ -126,3 +127,29 @@ commit object and tree were created and independently read back; the exact
 pins above are now fixed. The final five-file CI package requires only its
 existing finite hash/control confirmation before normal publication. No source
 branch is created, and no production or plug-in-module pipeline changes.
+
+## Minimal post-exit process snapshot repair
+
+Run 42678590545 failed closed with `CLEANUP: descendant after parent exit`;
+no artifact was produced. The actual CI child state was not retained, so
+this repair does not claim to have proven that run's root cause.
+
+The old loop sampled its process group before selecting output and polling
+the parent. A deterministic regression reproduces rejection from a stale
+pre-exit snapshot even when a fresh post-exit snapshot is empty. The repair
+refreshes the group only after observing parent exit, reapplies the same RSS
+cap, and still rejects every freshly observed surviving descendant. It adds
+no grace period and leaves the existing cleanup and resource guards intact.
+The bounded diagnostic includes the process label, returncode, fresh count,
+at most three PIDs and the existing encoded output tail (at most 8 KiB).
+
+The five focused controls were RED against the untouched old driver (10
+failures including subcases); all 30 controls pass against the repair. The
+real synthetic descendant is still rejected and cleaned. Unknown process
+state is never accepted. Product source, fixed 142+7 selectors, JDK/Maven
+and action pins, XML validation, all caps and the three outputs are unchanged.
+
+A corrected CI run has not started at this preparation stage. The failed
+run and original source, driver and evidence remain preserved. Publication
+uses expected head 66d7d80e229c6f678db600b9d568f1b1ac01c53b on the same
+nonproduction builder, never force or another ref.

@@ -36,7 +36,7 @@
   },
   "driver": {
     "path": "scripts/ci/b13-build/build_driver.py",
-    "sha256": "aee5d331f4bd09c80b9b29cec43c5701c93284fd045ae9d49db3b3e5836ec6d9",
+    "sha256": "27e39f176a955390cf8e492318a36ea577a8f1759f1dbd9d0ea9c508e443667b",
     "implementation": "Python standard library; no bootstrap dependency install"
   },
   "limits": {
@@ -70,11 +70,11 @@
     "build-manifest.json"
   ],
   "current_evidence": {
-    "driver_synthetic_tests": "25 PASS, 0.588s, Python isolated mode with only the exact implementation directory explicitly added for local import",
+    "driver_synthetic_tests": "30 PASS, 0.663s; unchanged original25 plus5 targeted post-exit snapshot controls",
     "prior_focused_run": 42665015387,
     "prior_focused_cases": "140 Framework + 2 Module passed",
     "local_source_overlay": "one four-case attempt, 156 internal checks; independent Module consumer 48 checks per same actual result; JDK21, not packaged or JDK17",
-    "current_focused_CI": "NOT_RUN",
+    "current_focused_CI": "Repair NOT_RUN; run42678590545 FAILED_CLOSED at descendant-after-parent-exit guard; artifacts=[]; actual CI child state unknown",
     "full_packaged_original_Framework_Module": "NOT_RUN",
     "original_P04": "NOT_ACCEPTED",
     "SIT": "NOT_RUN",
@@ -130,5 +130,13 @@
     "product_source_changed": false,
     "validator_weakened": false
   },
-  "count_derivation": "Existing140+2 source counts retained; checkpoint adds1+1 @Test; extension adds1 @Test and one @ParameterizedTest with4 literal @ValueSource strings. Internal assertions are not JUnit cases."
+  "count_derivation": "Existing140+2 source counts retained; checkpoint adds1+1 @Test; extension adds1 @Test and one @ParameterizedTest with4 literal @ValueSource strings. Internal assertions are not JUnit cases.",
+  "post_exit_snapshot_repair": {
+    "refresh_process_group_after_observed_parent_exit": true,
+    "fresh_surviving_descendant_still_rejected": true,
+    "rss_cap_rechecked": true,
+    "additional_grace_seconds": 0,
+    "limits_unchanged": true,
+    "failed_CI_root_cause_proven": false
+  }
 }

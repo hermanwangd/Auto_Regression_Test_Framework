@@ -185,7 +185,12 @@ def run_process(argv,cwd,env,budget,label):
                     output.extend(chunk)
                 else: sel.unregister(key.fileobj)
             if proc.poll() is not None:
-                if live and any(pid!=proc.pid for pid in live): raise BuildError('CLEANUP: descendant after parent exit')
+                live,rss=group_state(proc.pid); budget.peak_rss=max(budget.peak_rss,rss)
+                if rss>budget.rss_cap: raise BuildError('MEMORY: process group RSS cap')
+                descendants=[pid for pid in live if pid!=proc.pid]
+                if descendants:
+                    raise BuildError('CLEANUP: descendant after parent exit; %s=%s; count=%s; pids=%s; output_tail=%s' %
+                                     (label,proc.returncode,len(descendants),descendants[:3],failure_tail(output)))
                 if not sel.get_map(): break
         if proc.returncode: raise BuildError('EXIT: %s=%s; output_tail=%s' % (label,proc.returncode,failure_tail(output)))
         return {'label':label,'exit_code':proc.returncode,'seconds':round(time.monotonic()-started,6),
