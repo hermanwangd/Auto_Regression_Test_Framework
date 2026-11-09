@@ -63,7 +63,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
             if(inputs.putIfAbsent(stringValue(parameter.get("bind_as")),parameter.get("ref"))!=null)
                 throw new IllegalArgumentException("reviewed_grpc: duplicate unary input");
         }
-        if(!java.util.Set.of("fixtures/echo.desc.b64","fixtures/greeter.desc.b64","fixtures/routeguide.desc.b64","fixtures/service.desc.b64").contains(inputs.get("grpc.descriptor_ref")) || !"fixtures/request.json".equals(inputs.get("grpc.message")))
+        if(!java.util.Set.of("fixtures/echo.desc.b64","fixtures/greeter.desc.b64","fixtures/routeguide.desc.b64","fixtures/service.desc.b64","fixtures/catalog.desc.b64").contains(inputs.get("grpc.descriptor_ref")) || !"fixtures/request.json".equals(inputs.get("grpc.message")))
             throw new IllegalArgumentException("reviewed_grpc: resolved fixtures differ from reviewed fixed paths");
         inputs.put("grpc.descriptor_ref","artifact://"+inputs.get("grpc.descriptor_ref"));
         inputs.put("grpc.message",ReviewedLoopbackGrpcPolicy.REQUEST_REF);
@@ -79,6 +79,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
         var selectedProfile=ReviewedLoopbackGrpcPolicy.profile(inputs);
         boolean rejectionOnly=selectedProfile.rejectionOnly();
         String leaseCheckedAt=java.time.Instant.now().toString();
+        String rpcStartedAt="",rpcFinishedAt="";
         try {
             if(rejectionOnly) requireRejectionOnly(fixture.method(),GrpcDescriptorSupport::requireUnary);
             else GrpcDescriptorSupport.requireUnary(fixture.method());
@@ -92,6 +93,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
             long remaining=end-System.nanoTime();
             if(remaining<=0) throw Status.DEADLINE_EXCEEDED.withDescription("whole operation budget exhausted before RPC").asRuntimeException();
             attempted=true;
+            rpcStartedAt=java.time.Instant.now().toString();
             DynamicMessage response=ClientCalls.blockingUnaryCall(channel,grpcMethod(fixture.method()),
                     CallOptions.DEFAULT.withDeadlineAfter(remaining,TimeUnit.NANOSECONDS),message.build());
             if(System.nanoTime()>=end) throw Status.DEADLINE_EXCEEDED.withDescription("whole operation budget exhausted").asRuntimeException();
@@ -105,6 +107,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
         } catch(StatusRuntimeException e) { status=e.getStatus().getCode().name(); error=maskSensitiveText(safeMessage(e)); body=""; }
         catch(Exception e) { error=maskSensitiveText(safeMessage(e)); body=""; }
         finally {
+            if(attempted)rpcFinishedAt=java.time.Instant.now().toString();
             if(channel!=null) {
                 channel.shutdownNow();
                 try { cleaned=channel.awaitTermination(2,TimeUnit.SECONDS); }
@@ -113,7 +116,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
         }
         if(!cleaned) {status="CLEANUP_UNCONFIRMED";body="";error="gRPC channel termination not confirmed within 2s";}
         long duration=Duration.ofNanos(System.nanoTime()-started).toMillis();
-        writeReviewedEvidence(context,request,fixture,status,body,error,duration,attempted,cleaned,streamingRejected,channel!=null,leaseCheckedAt);
+        writeReviewedEvidence(context,request,fixture,status,body,error,duration,attempted,cleaned,streamingRejected,channel!=null,leaseCheckedAt,rpcStartedAt,rpcFinishedAt);
         var proof=evidence("grpc_request_response","provider-evidence/grpc-client/reviewed-unary.json");
         if(status.equals("OK")) return ProviderOperationResult.passed(Map.of("response.message",body,"response.status",status,"response.duration_ms",duration),proof);
         return ProviderOperationResult.failed(Map.of("response.status",status,"response.duration_ms",duration),proof,
@@ -130,7 +133,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
         return streamingRejected ? "gRPC unary_call failed: "+error : "Reviewed gRPC unary failed: "+status+" "+error;
     }
     private void writeReviewedEvidence(ProviderExecutionContext context,ProviderOperationRequest request, ReviewedLoopbackGrpcPolicy.Fixture fixture,
-            String status,String body,String error,long duration,boolean attempted,boolean cleaned,boolean streamingRejected,boolean channelCreated,String leaseCheckedAt) {
+            String status,String body,String error,long duration,boolean attempted,boolean cleaned,boolean streamingRejected,boolean channelCreated,String leaseCheckedAt,String rpcStartedAt,String rpcFinishedAt) {
         Map<String,Object> evidence=new LinkedHashMap<>();
         evidence.put("evidence_type","grpc_request_response"); evidence.put("provider_type",PROVIDER_TYPE);
         evidence.put("provider_id",context.providerId()); evidence.put("service",fixture.method().getService().getFullName());
@@ -152,6 +155,21 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
             evidence.put("diagnostic",status.equals("OK")?"":reviewedFailureReason(streamingRejected,status,error));evidence.put("guard_rejection_observed",streamingRejected);
             evidence.put("channel_created",channelCreated);evidence.put("lease_checked_at",leaseCheckedAt);
             evidence.put("descriptor_generation","reviewed_descriptor_assembly");evidence.put("compiler",null);
+        }
+        if(ReviewedA01CatalogPolicy.PROFILE.equals(fixture.lease().get("profile"))) {
+            String runId=context.runDir().getFileName().toString();
+            String batchId=context.runDir().getParent().getFileName().toString();
+            if(!runId.matches("RUN-(?:[A-Za-z0-9]+-)?[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}") || !batchId.matches("[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"))
+                throw new IllegalArgumentException("reviewed_a01: invalid canonical run directory identity");
+            evidence.put("version",ReviewedA01CatalogProof.VERSION);evidence.put("profile",ReviewedA01CatalogPolicy.PROFILE);
+            evidence.put("operation","unary_call");evidence.put("run_id",runId);evidence.put("batch_id",batchId);
+            evidence.put("test_case_id",request.outputs().get("_test_case_id"));evidence.put("step_id",request.outputs().get("_operation_id"));
+            evidence.put("input_type",fixture.method().getInputType().getFullName());evidence.put("output_type",fixture.method().getOutputType().getFullName());
+            for(String key:java.util.Set.of("upstream_revision","source_manifest_sha256","runtime_manifest_sha256","build_manifest_sha256","owner_launch_sha256","owner_launch","canonical_proto_sha256","generated_proto_sha256","descriptor_fdp_sha256","descriptor_sha256","request_sha256","data_sha256","supervisor","child","listener"))evidence.put(key,fixture.lease().get(key));
+            evidence.put("live_checked_at",leaseCheckedAt);evidence.put("rpc_started_at",rpcStartedAt);evidence.put("rpc_finished_at",rpcFinishedAt);
+            evidence.put("channel_created",channelCreated);evidence.put("operation_status",status.equals("OK")?"passed":"failed");
+            evidence.put("failure_code",status.equals("OK")?"":status.equals("DEADLINE_EXCEEDED")?"PROVIDER_TIMEOUT":"OPERATION_FAILED");
+            evidence.put("diagnostic",status.equals("OK")?"":reviewedFailureReason(false,status,error));
         }
         try {
             String serialized=new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(evidence);

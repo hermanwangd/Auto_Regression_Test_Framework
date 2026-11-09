@@ -35,6 +35,7 @@ public final class ReviewedLoopbackGrpcPolicy {
     private static final Set<String> INPUTS = Set.of("grpc.service", "grpc.method", "grpc.descriptor_ref", "grpc.message", "grpc.timeout");
     private static final Set<String> LEASE_FIELDS = Set.of("version", "profile", "endpoint", "owner_run_id", "pid", "process_start_instant", "issued_at", "expires_at", "request_sha256", "descriptor_sha256");
     public enum Profile {
+        A01_CATALOG("microservices-demo.getproduct.v1","hipstershop","ProductCatalogService","GetProduct","GetProductRequest","Product","id","catalog.desc.b64"),
         ECHO("echo.v1","swarm.producttest","EchoService","Echo","EchoRequest","EchoReply","message","echo.desc.b64"),
         GREETER("greeter.v1","helloworld","Greeter","SayHello","HelloRequest","HelloReply","name","greeter.desc.b64"),
         ROUTE_GUIDE("routeguide.getfeature.v1","routeguide","RouteGuide","GetFeature","Point","Feature","","routeguide.desc.b64"),
@@ -88,6 +89,8 @@ public final class ReviewedLoopbackGrpcPolicy {
         try {
             byte[] leaseBytes=read(root,LEASE_PATH,16384);
             JsonNode leaseDoc=JSON.readTree(leaseBytes);
+            if (leaseDoc!=null && ReviewedA01CatalogPolicy.PROFILE.equals(leaseDoc.path("profile").asText()))
+                return ReviewedA01CatalogPolicy.fixture(root,bindings,live);
             require(leaseDoc!=null && leaseDoc.isObject() && leaseDoc.size()==LEASE_FIELDS.size(), "lease fields must be exact");
             leaseDoc.fieldNames().forEachRemaining(key->require(LEASE_FIELDS.contains(key),"unknown lease field"));
             Profile selected=null;

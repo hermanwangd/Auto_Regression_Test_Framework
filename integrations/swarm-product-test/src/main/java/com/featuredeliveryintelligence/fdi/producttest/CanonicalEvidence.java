@@ -154,7 +154,7 @@ final class CanonicalEvidence {
                 Path leaseFile=LocalFiles.contained(Path.of(request.suiteManifest()).getParent(),Path.of(request.suiteManifest()).getParent().resolve("fixtures/lease.json"));
                 byte[] leaseBytes=LocalFiles.read(leaseFile,16384);
                 require(fixtureLeaseSha256.equals(LocalFiles.sha256(leaseBytes)) && lease.equals(Json.MAPPER.readTree(leaseBytes)),"Independent lease bytes differ from canonical provenance");
-                require("reviewed-grpc-lease.v1".equals(Json.required(lease,"version")) && Set.of("echo.v1","greeter.v1","routeguide.getfeature.v1","betterproto.getthingversions-reject.v1","betterproto.dothing-unary.v1","betterproto.domanythings-reject.v1","betterproto.getdifferentthings-reject.v1").contains(Json.required(lease,"profile")),"Unsupported fixture lease profile");
+                require((ReviewedA01CatalogProof.PROFILE.equals(Json.required(lease,"profile")) && ReviewedA01CatalogProof.LEASE_VERSION.equals(Json.required(lease,"version"))) || "reviewed-grpc-lease.v1".equals(Json.required(lease,"version")) && Set.of("echo.v1","greeter.v1","routeguide.getfeature.v1","betterproto.getthingversions-reject.v1","betterproto.dothing-unary.v1","betterproto.domanythings-reject.v1","betterproto.getdifferentthings-reject.v1").contains(Json.required(lease,"profile")),"Unsupported fixture lease profile");
                 boolean bound=false;
                 for(var reviewed:Json.MAPPER.readTree(reviewedBytes).path("reviewed_files")) {
                     if("fixtures/lease.json".equals(reviewed.path("path").asText())) {
@@ -168,9 +168,9 @@ final class CanonicalEvidence {
                     String grpcProfile=Json.required(lease,"profile");
                     var proof=ReviewedGrpcStreamingRejectionProof.ownsProfile(grpcProfile)
                             ? Json.MAPPER.readTree(LocalFiles.read(relative(run,proofRef),16384)) : Json.readGrpcProof(relative(run,proofRef));
-                    String expectedService=java.util.Map.of("echo.v1","swarm.producttest.EchoService","greeter.v1","helloworld.Greeter",
+                    String expectedService=java.util.Map.of("microservices-demo.getproduct.v1","hipstershop.ProductCatalogService","echo.v1","swarm.producttest.EchoService","greeter.v1","helloworld.Greeter",
                             "routeguide.getfeature.v1","routeguide.RouteGuide","betterproto.getthingversions-reject.v1","service.Test","betterproto.dothing-unary.v1","service.Test","betterproto.domanythings-reject.v1","service.Test","betterproto.getdifferentthings-reject.v1","service.Test").get(grpcProfile);
-                    String expectedMethod=java.util.Map.of("echo.v1","Echo","greeter.v1","SayHello",
+                    String expectedMethod=java.util.Map.of("microservices-demo.getproduct.v1","GetProduct","echo.v1","Echo","greeter.v1","SayHello",
                             "routeguide.getfeature.v1","GetFeature","betterproto.getthingversions-reject.v1","GetThingVersions","betterproto.dothing-unary.v1","DoThing","betterproto.domanythings-reject.v1","DoManyThings","betterproto.getdifferentthings-reject.v1","GetDifferentThings").get(grpcProfile);
                     require(expectedService.equals(Json.required(proof,"service"))
                             && expectedMethod.equals(Json.required(proof,"method")),"Native gRPC finite service/method mismatch");
@@ -180,6 +180,10 @@ final class CanonicalEvidence {
                     if(ReviewedGrpcStreamingRejectionProof.ownsProfile(grpcProfile)) {
                         if(ReviewedGrpcStreamingRejectionProof.UNARY_PROFILE.equals(grpcProfile)) ReviewedGrpcStreamingRejectionProof.validateUnary(proof,document,provenance);
                         else ReviewedGrpcStreamingRejectionProof.validate(proof,document,provenance);
+                    }
+                    if(ReviewedA01CatalogProof.owns(grpcProfile)) {
+                        require(LocalFiles.read(relative(run,proofRef),32768).length<=32768,"A01 proof exceeds bound");
+                        ReviewedA01CatalogProof.validate(proof,document,provenance);
                     }
                     require(proof.path("rpc_attempted").isBoolean() && proof.path("cleanup_confirmed").isBoolean(),"Missing gRPC attempt/cleanup proof");
                     if(passed) require(proof.path("rpc_attempted").asBoolean() && proof.path("cleanup_confirmed").asBoolean()

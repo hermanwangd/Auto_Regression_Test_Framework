@@ -360,9 +360,9 @@ public class EvidenceHardeningService {
     private void validateReviewedGrpcProof(Path root, Map<String,Object> result, Map<String,Object> handoff,
             List<EvidenceEntry> entries, boolean passed) throws IOException {
         Map<String,Object> lease = mapValue(handoff.get("fixture_lease"));
-        requireReviewed("reviewed-grpc-lease.v1".equals(lease.get("version")), "unsupported gRPC lease version");
+        requireReviewed("reviewed-grpc-lease.v1".equals(lease.get("version")) || com.specdriven.regression.provider.grpc.ReviewedA01CatalogProof.PROFILE.equals(lease.get("profile")) && com.specdriven.regression.provider.grpc.ReviewedA01CatalogProof.LEASE_VERSION.equals(lease.get("version")), "unsupported gRPC lease version");
         String profile = reviewedText(lease.get("profile"), "gRPC lease profile");
-        requireReviewed(Set.of("echo.v1", "greeter.v1", "routeguide.getfeature.v1", "betterproto.getthingversions-reject.v1","betterproto.dothing-unary.v1","betterproto.domanythings-reject.v1","betterproto.getdifferentthings-reject.v1").contains(profile), "unsupported gRPC lease profile");
+        requireReviewed(Set.of("microservices-demo.getproduct.v1", "echo.v1", "greeter.v1", "routeguide.getfeature.v1", "betterproto.getthingversions-reject.v1","betterproto.dothing-unary.v1","betterproto.domanythings-reject.v1","betterproto.getdifferentthings-reject.v1").contains(profile), "unsupported gRPC lease profile");
         String owner = reviewedText(lease.get("owner_run_id"), "gRPC lease owner");
         String endpoint = reviewedText(lease.get("endpoint"), "gRPC lease endpoint");
         String leaseSha = reviewedText(handoff.get("fixture_lease_sha256"), "gRPC lease digest");
@@ -392,15 +392,19 @@ public class EvidenceHardeningService {
                 new com.fasterxml.jackson.core.type.TypeReference<>() {});
         requireReviewed(leaseSha.equals(proof.get("fixture_lease_sha256")) && owner.equals(proof.get("owner_run_id"))
                 && endpoint.equals(proof.get("endpoint")), "gRPC proof differs from frozen lease identity");
-        String expectedService=Map.of("echo.v1","swarm.producttest.EchoService","greeter.v1","helloworld.Greeter",
+        String expectedService=Map.of("microservices-demo.getproduct.v1","hipstershop.ProductCatalogService","echo.v1","swarm.producttest.EchoService","greeter.v1","helloworld.Greeter",
                 "routeguide.getfeature.v1","routeguide.RouteGuide","betterproto.getthingversions-reject.v1","service.Test","betterproto.dothing-unary.v1","service.Test","betterproto.domanythings-reject.v1","service.Test","betterproto.getdifferentthings-reject.v1","service.Test").get(profile);
-        String expectedMethod=Map.of("echo.v1","Echo","greeter.v1","SayHello",
+        String expectedMethod=Map.of("microservices-demo.getproduct.v1","GetProduct","echo.v1","Echo","greeter.v1","SayHello",
                 "routeguide.getfeature.v1","GetFeature","betterproto.getthingversions-reject.v1","GetThingVersions","betterproto.dothing-unary.v1","DoThing","betterproto.domanythings-reject.v1","DoManyThings","betterproto.getdifferentthings-reject.v1","GetDifferentThings").get(profile);
         requireReviewed(expectedService.equals(proof.get("service")) && expectedMethod.equals(proof.get("method")),
                 "gRPC proof differs from reviewed service/method");
         if(com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.ownsProfile(profile)) {
             if(com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.UNARY_PROFILE.equals(profile)) com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.validateUnary(proofMapper.valueToTree(proof),proofMapper.valueToTree(result),proofMapper.valueToTree(handoff));
             else com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.validate(proofMapper.valueToTree(proof),proofMapper.valueToTree(result),proofMapper.valueToTree(handoff));
+        }
+        if(com.specdriven.regression.provider.grpc.ReviewedA01CatalogProof.owns(profile)) {
+            requireReviewed(proofBytes.length<=32768,"A01 proof exceeds bound");
+            com.specdriven.regression.provider.grpc.ReviewedA01CatalogProof.validate(proofMapper.valueToTree(proof),proofMapper.valueToTree(result),proofMapper.valueToTree(handoff));
         }
         requireReviewed(proof.get("rpc_attempted") instanceof Boolean && proof.get("cleanup_confirmed") instanceof Boolean,
                 "gRPC proof attempt/cleanup flags must be boolean");

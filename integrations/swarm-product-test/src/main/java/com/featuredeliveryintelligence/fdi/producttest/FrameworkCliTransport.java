@@ -25,6 +25,7 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
         Instant started = Instant.now();
         var consumedOutput = new AtomicInteger();
         var cleanup = new CleanupState();
+        List<String> a01LaunchArguments=List.of();
         JdbcProcessChannel jdbc=null;boolean jdbcSelected=false;String jdbcConsumerStage="RUN_CHILD";
         try {
             require(binding.approvedHandoffSha256().equals(request.expectedHandoffSha256()), "Request handoff pin differs from independent approved binding");
@@ -39,6 +40,16 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
             Path handoff = LocalFiles.contained(suite.getParent(), Path.of(request.reviewedHandoff()));
             require(LocalFiles.sha256(LocalFiles.read(handoff, 2 * 1024 * 1024)).equals(binding.approvedHandoffSha256()), "Reviewed handoff digest mismatch");
             require(LocalFiles.sha256(binding.frameworkJar()).equals(binding.frameworkSha256()), "Configured framework digest mismatch");
+            String a01Pin=System.getProperty("swarm.grpc.a01.owner_launch_sha256");
+            boolean a01Declared=request.repositoryRevisions().containsKey("microservices-demo");
+            if(a01Declared||a01Pin!=null) {
+                require(binding.fixtureLeaseSha256()!=null&&binding.fixtureLeaseSha256().matches("[a-f0-9]{64}"),"A01 independent fixture lease pin missing");
+                Path leaseFile=LocalFiles.contained(suite.getParent(),Path.of("fixtures/lease.json"));
+                byte[] leaseBytes=LocalFiles.read(leaseFile,16384);
+                require(binding.fixtureLeaseSha256().equals(LocalFiles.sha256(leaseBytes)),"A01 independent fixture lease digest mismatch");
+                var lease=Json.MAPPER.readTree(leaseBytes);
+                a01LaunchArguments=a01JavaArguments(a01Pin,binding.fixtureLeaseSha256(),lease.path("profile").asText(),lease.path("owner_launch_sha256").asText());
+            }
             if(JdbcProcessChannel.selected(request)){jdbcSelected=true;jdbc=JdbcProcessChannel.prepare(binding,request,invocation);}
             Path parent = LocalFiles.real(binding.outputParent());
             output = Files.createTempDirectory(parent, "product-test-" + invocation + "-",
@@ -48,7 +59,7 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
         }
         try {
             var run = invoke(List.of("run", "--suite", request.suiteManifest(), "--profile", request.profile(),
-                    "--root", output.toString()), request, output, deadline, consumedOutput, cleanup,jdbc);
+                    "--root", output.toString()), request, output, deadline, consumedOutput, cleanup,jdbc,a01LaunchArguments);
             runExit = run.exitCode();
             if(jdbc!=null){jdbcConsumerStage="SCAN_STDOUT";jdbc.scan(run.stdout());jdbcConsumerStage="SCAN_STDERR";jdbc.scan(run.stderr());jdbcConsumerStage="DRIVER_RECHECK";jdbc.verifyDriver();}
             jdbcConsumerStage="RUN_LOGS";
@@ -62,7 +73,7 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
             if(jdbc!=null)jdbc.verifyCanonicalChild(evidence.result());
             checkDeadline(deadline);
             var validation = invoke(List.of("validate-evidence", "--result", evidence.result().toString(), "--root", output.toString()),
-                    request, output, deadline, consumedOutput, cleanup,null);
+                    request, output, deadline, consumedOutput, cleanup,null,a01LaunchArguments);
             if(jdbc!=null){jdbc.scan(validation.stdout());jdbc.scan(validation.stderr());}
             Files.writeString(output.resolve("validation.stdout.log"), validation.stdout());
             Files.writeString(output.resolve("validation.stderr.log"), validation.stderr());
@@ -70,7 +81,7 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
             List<String> reportArgs=new ArrayList<>(List.of("report","--result",evidence.result().toString(),"--format","json","--root",output.toString(),"--coverage-dir",output.resolve("coverage").toString()));
             if(binding.coverageAuthority()!=null)reportArgs.addAll(List.of("--coverage-authority",binding.coverageAuthority().toString(),"--expected-coverage-authority-sha256",binding.coverageAuthoritySha256()));
             var report = invoke(reportArgs,
-                    request, output, deadline, consumedOutput, cleanup,null);
+                    request, output, deadline, consumedOutput, cleanup,null,a01LaunchArguments);
             if(jdbc!=null){jdbc.scan(report.stdout());jdbc.scan(report.stderr());jdbc.verifyDriver();}
             Files.writeString(output.resolve("report.stderr.log"), report.stderr());
             require(report.exitCode() == 0, "Framework report validation failed");
@@ -102,8 +113,18 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
         } finally {if(jdbc!=null)jdbc.close();}
     }
 
+    static List<String> a01JavaArguments(String pin,String fixtureLeasePin,String profile,String leaseLaunchPin) {
+        boolean catalog=ReviewedA01CatalogProof.owns(profile);
+        if(pin==null&&!catalog)return List.of();
+        require(catalog,"A01 launch pin is not applicable to this profile");
+        require(pin!=null&&pin.matches("[a-f0-9]{64}"),"A01 independent launch pin missing or malformed");
+        require(fixtureLeasePin!=null&&fixtureLeasePin.matches("[a-f0-9]{64}"),"A01 independent fixture lease pin missing");
+        require(pin.equals(leaseLaunchPin),"A01 launch pin differs from independently pinned lease");
+        return List.of("-Dswarm.grpc.a01.owner_launch_sha256="+pin);
+    }
+
     private ProcessResult invoke(List<String> command, ProductTestRequest request, Path output, long deadline,
-                                 AtomicInteger consumed, CleanupState cleanup,JdbcProcessChannel jdbc) throws Exception {
+                                 AtomicInteger consumed, CleanupState cleanup,JdbcProcessChannel jdbc,List<String> a01LaunchArguments) throws Exception {
         checkDeadline(deadline);
         require(LocalFiles.sha256(binding.frameworkJar()).equals(binding.frameworkSha256()), "Configured framework digest mismatch");
         Path java;
@@ -112,6 +133,7 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
         long operationStart=System.nanoTime();
         long phaseDeadline=jdbc==null?deadline:Math.min(deadline,operationStart+TimeUnit.SECONDS.toNanos(5));
         var argv = new ArrayList<>(List.of(java.toString(), "-Xmx512m", "-XX:MaxMetaspaceSize=256m","-Djava.io.tmpdir="+output));
+        argv.addAll(a01LaunchArguments);
         if(jdbc!=null)jdbc.addJavaArguments(argv);
         argv.add("-jar");argv.add(binding.frameworkJar().toRealPath().toString());
         argv.addAll(command);

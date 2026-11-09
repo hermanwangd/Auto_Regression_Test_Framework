@@ -1,0 +1,325 @@
+{
+  "classification": "SYNTHETIC_HISTORICAL_CONTRACT_ONLY_NOT_LIVE_EVIDENCE",
+  "source": {
+    "version": "a01-catalog-source.v1",
+    "upstream_revision": "c7cb6d5bfd6ea3aed768634ebbcb98cb7a523712",
+    "canonical_proto_sha256": "b1f2fa42c0a9305211bf51fba7d8b5832cd3defd7b8855c327ebd5b1f0f86884",
+    "generated_proto_sha256": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af",
+    "data_sha256": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa",
+    "descriptor_fdp_sha256": "8f6b5761a04e7d699c0e40c2776d94900581f2706a112544fa80ba71169f5d54",
+    "descriptor_sha256": "285bd375bc4bff89d44ed51a0ddaf205670b35ff070860311b1fc0f4bdab1921",
+    "loopback_source_sha256": "db5cfbb858f0d9b94c5d3b3e6334e1d2821f2e740edf925aee1f58d76c9de530",
+    "source_files": {
+      "server.go": "2d52d47db2a00c743470b94b1f7b970b190e9d45f9e4b76d0a345f5d00272b5a",
+      "product_catalog.go": "045a50900ba49382d920c644a6bee04c6372073761b2867ecf202428ce0c6545",
+      "catalog_loader.go": "c37a169b74faf6be29f1ae9999ea2a22daf8f2d7dd676b4706459b36cf95a4a4",
+      "go.mod": "b891e7545c990ad13307d416678a9719e5f667f45e1b11bcf3e367b2713a6e8d",
+      "go.sum": "68f514d3a43c025b8c6abd1979bcb3ef6794d7b66cb866a317f35dded082c8c2",
+      "products.json": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa",
+      "genproto/demo.pb.go": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af",
+      "genproto/demo_grpc.pb.go": "70bb93b42e93399bf30d9971b6568244d0fa2eb1cb4757f967354810601dc916"
+    }
+  },
+  "runtime": {
+    "version": "a01-catalog-runtime.v1",
+    "owner_root": "/tmp/a01-contract-only",
+    "binary_path": "/tmp/a01-contract-only/productcatalogservice",
+    "binary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "supervisor_executable_path": "/usr/lib/jvm/java-21-openjdk-amd64/bin/java",
+    "supervisor_executable_sha256": "1a7e0b17c39003c75b457d686775ccb032e56fa9c8afe3c492d8eb3715e8951a",
+    "build_manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "source_manifest_sha256": "f5eec4f92e52f3f3aa83cfb6c1ad48203680327e2c390ffd714c59b4d933949e",
+    "data_sha256": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa",
+    "owner_launch_sha256": "1df0deb3fe98aa8f2e6c19135aba356d44072cac35b18206ba2aab9a0fba5d98"
+  },
+  "lease": {
+    "version": "reviewed-a01-catalog-lease.v1",
+    "profile": "microservices-demo.getproduct.v1",
+    "endpoint": "grpc://127.0.0.1:3550",
+    "owner_run_id": "11111111111111111111111111111111",
+    "issued_at": "2026-11-09T22:00:00Z",
+    "expires_at": "2026-11-09T22:03:00Z",
+    "supervisor": {
+      "pid": 123,
+      "process_start_instant": "2026-11-09T21:59:59Z",
+      "executable_path": "/usr/lib/jvm/java-21-openjdk-amd64/bin/java",
+      "executable_sha256": "1a7e0b17c39003c75b457d686775ccb032e56fa9c8afe3c492d8eb3715e8951a",
+      "nonce_argument": "-Dswarm.grpc.owner_nonce=11111111111111111111111111111111"
+    },
+    "child": {
+      "pid": 124,
+      "process_start_instant": "2026-11-09T21:59:59Z",
+      "ppid": 123,
+      "executable_path": "/tmp/a01-contract-only/productcatalogservice",
+      "executable_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "cwd": "/tmp/a01-contract-only"
+    },
+    "listener": {
+      "family": "ipv4",
+      "address": "127.0.0.1",
+      "port": 3550,
+      "inode": 70000,
+      "network_namespace_inode": 4026531992
+    },
+    "upstream_revision": "c7cb6d5bfd6ea3aed768634ebbcb98cb7a523712",
+    "canonical_proto_sha256": "b1f2fa42c0a9305211bf51fba7d8b5832cd3defd7b8855c327ebd5b1f0f86884",
+    "generated_proto_sha256": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af",
+    "data_sha256": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa",
+    "descriptor_fdp_sha256": "8f6b5761a04e7d699c0e40c2776d94900581f2706a112544fa80ba71169f5d54",
+    "descriptor_sha256": "285bd375bc4bff89d44ed51a0ddaf205670b35ff070860311b1fc0f4bdab1921",
+    "source_manifest_sha256": "f5eec4f92e52f3f3aa83cfb6c1ad48203680327e2c390ffd714c59b4d933949e",
+    "runtime_manifest_sha256": "a4564eff3596215f55e80d2ec3dcdfad8ddea1745a96885fd61d63476cfc6ef1",
+    "build_manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "request_sha256": "079ffb4c48534e807f1bf07060f840290751bd4f011a94542d3b4f42eb8b98f7",
+    "owner_launch": {
+      "version": "a01-owner-launch.v1",
+      "java_path": "/usr/lib/jvm/java-21-openjdk-amd64/bin/java",
+      "java_sha256": "1a7e0b17c39003c75b457d686775ccb032e56fa9c8afe3c492d8eb3715e8951a",
+      "suite_root": "/synthetic/a01-suite",
+      "classpath": [
+        {
+          "path": "/synthetic/reviewed-owner.jar",
+          "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+          "bytes": 4096
+        }
+      ]
+    },
+    "owner_launch_sha256": "1df0deb3fe98aa8f2e6c19135aba356d44072cac35b18206ba2aab9a0fba5d98"
+  },
+  "proof": {
+    "version": "reviewed-a01-catalog-proof.v1",
+    "evidence_type": "grpc_request_response",
+    "provider_type": "grpc_client",
+    "provider_id": "catalog",
+    "operation": "unary_call",
+    "run_id": "RUN-11111111-1111-1111-1111-111111111111",
+    "batch_id": "a01-normal",
+    "test_case_id": "A01-SG01-NORMAL",
+    "step_id": "get_product",
+    "profile": "microservices-demo.getproduct.v1",
+    "service": "hipstershop.ProductCatalogService",
+    "method": "GetProduct",
+    "input_type": "hipstershop.GetProductRequest",
+    "output_type": "hipstershop.Product",
+    "fixture_lease_sha256": "b50898ab800be1ec17d42d217ca76017b489e09c918c308f10bb09f22351b4d8",
+    "owner_run_id": "11111111111111111111111111111111",
+    "endpoint": "grpc://127.0.0.1:3550",
+    "upstream_revision": "c7cb6d5bfd6ea3aed768634ebbcb98cb7a523712",
+    "canonical_proto_sha256": "b1f2fa42c0a9305211bf51fba7d8b5832cd3defd7b8855c327ebd5b1f0f86884",
+    "generated_proto_sha256": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af",
+    "data_sha256": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa",
+    "descriptor_fdp_sha256": "8f6b5761a04e7d699c0e40c2776d94900581f2706a112544fa80ba71169f5d54",
+    "descriptor_sha256": "285bd375bc4bff89d44ed51a0ddaf205670b35ff070860311b1fc0f4bdab1921",
+    "source_manifest_sha256": "f5eec4f92e52f3f3aa83cfb6c1ad48203680327e2c390ffd714c59b4d933949e",
+    "runtime_manifest_sha256": "a4564eff3596215f55e80d2ec3dcdfad8ddea1745a96885fd61d63476cfc6ef1",
+    "build_manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "request_sha256": "079ffb4c48534e807f1bf07060f840290751bd4f011a94542d3b4f42eb8b98f7",
+    "supervisor": {
+      "pid": 123,
+      "process_start_instant": "2026-11-09T21:59:59Z",
+      "executable_path": "/usr/lib/jvm/java-21-openjdk-amd64/bin/java",
+      "executable_sha256": "1a7e0b17c39003c75b457d686775ccb032e56fa9c8afe3c492d8eb3715e8951a",
+      "nonce_argument": "-Dswarm.grpc.owner_nonce=11111111111111111111111111111111"
+    },
+    "child": {
+      "pid": 124,
+      "process_start_instant": "2026-11-09T21:59:59Z",
+      "ppid": 123,
+      "executable_path": "/tmp/a01-contract-only/productcatalogservice",
+      "executable_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "cwd": "/tmp/a01-contract-only"
+    },
+    "listener": {
+      "family": "ipv4",
+      "address": "127.0.0.1",
+      "port": 3550,
+      "inode": 70000,
+      "network_namespace_inode": 4026531992
+    },
+    "request": "{\"id\":\"OLJCESPC7Z\"}\n",
+    "live_checked_at": "2026-11-09T22:00:01Z",
+    "rpc_started_at": "2026-11-09T22:00:01.001Z",
+    "rpc_finished_at": "2026-11-09T22:00:01.010Z",
+    "channel_created": true,
+    "rpc_attempted": true,
+    "status": "OK",
+    "body": "{\"id\":\"OLJCESPC7Z\",\"name\":\"Sunglasses\",\"description\":\"Add a modern touch to your outfits with these sleek aviator sunglasses.\",\"picture\":\"/static/img/products/sunglasses.jpg\",\"priceUsd\":{\"currencyCode\":\"USD\",\"units\":\"19\",\"nanos\":990000000},\"categories\":[\"accessories\"]}",
+    "error": "",
+    "operation_status": "passed",
+    "failure_code": "",
+    "diagnostic": "",
+    "duration_ms": 20,
+    "cleanup_confirmed": true,
+    "masking_applied": true,
+    "owner_launch": {
+      "version": "a01-owner-launch.v1",
+      "java_path": "/usr/lib/jvm/java-21-openjdk-amd64/bin/java",
+      "java_sha256": "1a7e0b17c39003c75b457d686775ccb032e56fa9c8afe3c492d8eb3715e8951a",
+      "suite_root": "/synthetic/a01-suite",
+      "classpath": [
+        {
+          "path": "/synthetic/reviewed-owner.jar",
+          "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+          "bytes": 4096
+        }
+      ]
+    },
+    "owner_launch_sha256": "1df0deb3fe98aa8f2e6c19135aba356d44072cac35b18206ba2aab9a0fba5d98"
+  },
+  "result": {
+    "run_id": "RUN-11111111-1111-1111-1111-111111111111",
+    "batch_id": "a01-normal",
+    "status": "passed",
+    "start_time": "2026-11-09T22:00:00Z",
+    "end_time": "2026-11-09T22:00:02Z",
+    "step_results": [
+      {
+        "id": "get_product",
+        "test_case_id": "A01-SG01-NORMAL",
+        "target": "catalog",
+        "phase": "execute",
+        "operation": "unary_call",
+        "status": "passed",
+        "outputs": {
+          "response.status": "OK",
+          "response.message": "{\"id\":\"OLJCESPC7Z\",\"name\":\"Sunglasses\",\"description\":\"Add a modern touch to your outfits with these sleek aviator sunglasses.\",\"picture\":\"/static/img/products/sunglasses.jpg\",\"priceUsd\":{\"currencyCode\":\"USD\",\"units\":\"19\",\"nanos\":990000000},\"categories\":[\"accessories\"]}",
+          "response.duration_ms": 20
+        },
+        "failure_code": null
+      }
+    ],
+    "provider_results": [
+      {
+        "target": "catalog",
+        "provider_contract": "grpc_client.v0.3",
+        "provider_type": "grpc_client",
+        "operation": "unary_call",
+        "status": "passed",
+        "resolved_operation_results": [
+          {
+            "operation": "unary_call",
+            "test_case_id": "A01-SG01-NORMAL",
+            "status": "passed",
+            "outputs": {
+              "response.status": "OK",
+              "response.message": "{\"id\":\"OLJCESPC7Z\",\"name\":\"Sunglasses\",\"description\":\"Add a modern touch to your outfits with these sleek aviator sunglasses.\",\"picture\":\"/static/img/products/sunglasses.jpg\",\"priceUsd\":{\"currencyCode\":\"USD\",\"units\":\"19\",\"nanos\":990000000},\"categories\":[\"accessories\"]}",
+              "response.duration_ms": 20
+            }
+          }
+        ]
+      }
+    ],
+    "failure": {
+      "code": null,
+      "reason": null
+    },
+    "test_case_id": "A01-SG01-NORMAL"
+  },
+  "handoff": {
+    "fixture_lease": {
+      "version": "reviewed-a01-catalog-lease.v1",
+      "profile": "microservices-demo.getproduct.v1",
+      "endpoint": "grpc://127.0.0.1:3550",
+      "owner_run_id": "11111111111111111111111111111111",
+      "issued_at": "2026-11-09T22:00:00Z",
+      "expires_at": "2026-11-09T22:03:00Z",
+      "supervisor": {
+        "pid": 123,
+        "process_start_instant": "2026-11-09T21:59:59Z",
+        "executable_path": "/usr/lib/jvm/java-21-openjdk-amd64/bin/java",
+        "executable_sha256": "1a7e0b17c39003c75b457d686775ccb032e56fa9c8afe3c492d8eb3715e8951a",
+        "nonce_argument": "-Dswarm.grpc.owner_nonce=11111111111111111111111111111111"
+      },
+      "child": {
+        "pid": 124,
+        "process_start_instant": "2026-11-09T21:59:59Z",
+        "ppid": 123,
+        "executable_path": "/tmp/a01-contract-only/productcatalogservice",
+        "executable_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "cwd": "/tmp/a01-contract-only"
+      },
+      "listener": {
+        "family": "ipv4",
+        "address": "127.0.0.1",
+        "port": 3550,
+        "inode": 70000,
+        "network_namespace_inode": 4026531992
+      },
+      "upstream_revision": "c7cb6d5bfd6ea3aed768634ebbcb98cb7a523712",
+      "canonical_proto_sha256": "b1f2fa42c0a9305211bf51fba7d8b5832cd3defd7b8855c327ebd5b1f0f86884",
+      "generated_proto_sha256": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af",
+      "data_sha256": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa",
+      "descriptor_fdp_sha256": "8f6b5761a04e7d699c0e40c2776d94900581f2706a112544fa80ba71169f5d54",
+      "descriptor_sha256": "285bd375bc4bff89d44ed51a0ddaf205670b35ff070860311b1fc0f4bdab1921",
+      "source_manifest_sha256": "f5eec4f92e52f3f3aa83cfb6c1ad48203680327e2c390ffd714c59b4d933949e",
+      "runtime_manifest_sha256": "a4564eff3596215f55e80d2ec3dcdfad8ddea1745a96885fd61d63476cfc6ef1",
+      "build_manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "request_sha256": "079ffb4c48534e807f1bf07060f840290751bd4f011a94542d3b4f42eb8b98f7",
+      "owner_launch": {
+        "version": "a01-owner-launch.v1",
+        "java_path": "/usr/lib/jvm/java-21-openjdk-amd64/bin/java",
+        "java_sha256": "1a7e0b17c39003c75b457d686775ccb032e56fa9c8afe3c492d8eb3715e8951a",
+        "suite_root": "/synthetic/a01-suite",
+        "classpath": [
+          {
+            "path": "/synthetic/reviewed-owner.jar",
+            "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+            "bytes": 4096
+          }
+        ]
+      },
+      "owner_launch_sha256": "1df0deb3fe98aa8f2e6c19135aba356d44072cac35b18206ba2aab9a0fba5d98"
+    },
+    "fixture_lease_sha256": "b50898ab800be1ec17d42d217ca76017b489e09c918c308f10bb09f22351b4d8",
+    "repository_revisions": {
+      "microservices-demo": "c7cb6d5bfd6ea3aed768634ebbcb98cb7a523712"
+    },
+    "reviewed_files": [
+      {
+        "path": "fixtures/lease.json",
+        "role": "fixture",
+        "sha256": "b50898ab800be1ec17d42d217ca76017b489e09c918c308f10bb09f22351b4d8"
+      },
+      {
+        "path": "fixtures/catalog-source.json",
+        "role": "fixture",
+        "sha256": "f5eec4f92e52f3f3aa83cfb6c1ad48203680327e2c390ffd714c59b4d933949e"
+      },
+      {
+        "path": "fixtures/catalog-runtime.json",
+        "role": "fixture",
+        "sha256": "a4564eff3596215f55e80d2ec3dcdfad8ddea1745a96885fd61d63476cfc6ef1"
+      },
+      {
+        "path": "fixtures/catalog.desc.b64",
+        "role": "fixture",
+        "sha256": "285bd375bc4bff89d44ed51a0ddaf205670b35ff070860311b1fc0f4bdab1921"
+      },
+      {
+        "path": "fixtures/request.json",
+        "role": "fixture",
+        "sha256": "079ffb4c48534e807f1bf07060f840290751bd4f011a94542d3b4f42eb8b98f7"
+      },
+      {
+        "path": "fixtures/products.json",
+        "role": "fixture",
+        "sha256": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa"
+      },
+      {
+        "path": "fixtures/demo.proto",
+        "role": "fixture",
+        "sha256": "b1f2fa42c0a9305211bf51fba7d8b5832cd3defd7b8855c327ebd5b1f0f86884"
+      },
+      {
+        "path": "fixtures/generated-demo.pb.go",
+        "role": "fixture",
+        "sha256": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af"
+      },
+      {
+        "path": "fixtures/catalog-owner-launch.json",
+        "role": "fixture",
+        "sha256": "1df0deb3fe98aa8f2e6c19135aba356d44072cac35b18206ba2aab9a0fba5d98"
+      }
+    ]
+  }
+}
