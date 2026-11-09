@@ -1,19 +1,20 @@
-# A01 fixture compilation only; never starts a service or changes production.
-name: A01 nonproduction fixture build
+# Reviewed focused-test and packaging candidate. No production workflow is modified.
+name: A01 nonproduction focused Java and Module
 on:
   push:
-    branches: [codex/b13-build-only]
+    branches:
+      - codex/b13-build-only
 permissions:
   contents: read
 concurrency:
   group: b13-artifact-build-only
   cancel-in-progress: false
 jobs:
-  fixture-only:
+  build-only:
     runs-on: ubuntu-22.04
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
-      - name: Checkout reviewed control package
+      - name: Checkout reviewed workflow and driver
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: hermanwangd/Auto_Regression_Test_Framework
@@ -23,29 +24,91 @@ jobs:
           persist-credentials: false
           submodules: false
           lfs: false
-          sparse-checkout-cone-mode: false
-          sparse-checkout: |
-            /scripts/ci/b13-build/
-            /.github/workflows/b13-build-artifacts.yml
-      - name: Build pinned Go fixture without running it
+      - name: Checkout exact reviewed A01 source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: hermanwangd/Auto_Regression_Test_Framework
+          ref: 6c2ba5400c7458a2409477fb7ce08ad42e3fd646
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+          submodules: false
+          lfs: false
+      - name: Verify driver, run focused tests and package
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s  %s\n' '28235510558d9c8dfa9bbbaf3984f7288b7ecbfeb394123454db1b72b4aed2a2' 'control/scripts/ci/b13-build/a01_build.py' | sha256sum --check --strict
-          printf '%s  %s\n' '27e39f176a955390cf8e492318a36ea577a8f1759f1dbd9d0ea9c508e443667b' 'control/scripts/ci/b13-build/build_driver.py' | sha256sum --check --strict
-          printf '%s  %s\n' '2bc8bf49c6a7c1d53d6b339c920e748b261067512684e32ed1201b42db324a55' 'control/scripts/ci/b13-build/a01-build-contract.json' | sha256sum --check --strict
-          python3 -I -B control/scripts/ci/b13-build/a01_build.py \
-            --control "$GITHUB_WORKSPACE/control" \
-            --work "$RUNNER_TEMP/a01-fixture-build" --workflow-commit "$GITHUB_SHA"
-      - name: Retain exactly four fixture outputs
+          printf '%s  %s\n' '9550803fa05eae97572893f454fc3725d01700db3436356bbf3db16ee4a0d629' 'control/scripts/ci/b13-build/build_driver.py' | sha256sum --check --strict
+          python3 -I -B control/scripts/ci/b13-build/build_driver.py \
+            --source "$GITHUB_WORKSPACE/source" --work "$RUNNER_TEMP/b13-build-only" \
+            --workflow-commit "$GITHUB_SHA"
+      - name: Retain validated Java, owner support and JUnit evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: a01-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          name: a01-focused-java-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
           path: |
-            ${{ runner.temp }}/a01-fixture-build/delivery/productcatalogservice
-            ${{ runner.temp }}/a01-fixture-build/delivery/products.json
-            ${{ runner.temp }}/a01-fixture-build/delivery/fixtures/catalog.desc.b64
-            ${{ runner.temp }}/a01-fixture-build/delivery/build-manifest.json
+            ${{ runner.temp }}/b13-build-only/delivery/spec-driven-auto-regression-0.3.2.jar
+            ${{ runner.temp }}/b13-build-only/delivery/swarm-product-test-1.0.0-cli.jar
+            ${{ runner.temp }}/b13-build-only/delivery/build-manifest.json
+            ${{ runner.temp }}/b13-build-only/delivery/owner/owner-support.jar
+            ${{ runner.temp }}/b13-build-only/delivery/owner/jackson-annotations-2.22.jar
+            ${{ runner.temp }}/b13-build-only/delivery/owner/jackson-core-2.22.0.jar
+            ${{ runner.temp }}/b13-build-only/delivery/owner/jackson-databind-2.22.0.jar
+            ${{ runner.temp }}/b13-build-only/delivery/owner/protobuf-java-4.33.4.jar
+            ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.provider.grpc.A01CatalogProfileTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.provider.grpc.A01CatalogProofTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.provider.grpc.A01CatalogOwnerTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.producttest.P04DescriptorAdmissionTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.producttest.ReviewedGrpcCapabilityTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.provider.grpc.RouteGuideProfileTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.provider.grpc.GrpcClientExternalEndpointSupportTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.provider.grpc.GrpcMetadataDeadlineContractTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.evidence.ReviewedGrpcProofIdentityTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.provider.grpc.P04OwnedStreamingTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.provider.grpc.P04FourCardinalityTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.A01CatalogProofTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.A01LaunchArgumentsTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcDescriptorAdmissionProofTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcBindingTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcOwnedStreamingProofTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcFourCardinalityProofTest.xml
+      - name: Locate bounded failure diagnostics
+        if: ${{ failure() }}
+        id: diagnostics
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/b13-build-only/diagnostics/failure.json" ]; then
+            printf 'present=true\n' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Retain bounded failure diagnostics only
+        if: ${{ failure() && steps.diagnostics.outputs.present == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: a01-java-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          path: |
+            ${{ runner.temp }}/b13-build-only/diagnostics/failure.json
+            ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.provider.grpc.A01CatalogProfileTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.provider.grpc.A01CatalogProofTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.provider.grpc.A01CatalogOwnerTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.producttest.P04DescriptorAdmissionTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.producttest.ReviewedGrpcCapabilityTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.provider.grpc.RouteGuideProfileTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.provider.grpc.GrpcClientExternalEndpointSupportTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.provider.grpc.GrpcMetadataDeadlineContractTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.evidence.ReviewedGrpcProofIdentityTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.provider.grpc.P04OwnedStreamingTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.provider.grpc.P04FourCardinalityTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/module/TEST-com.featuredeliveryintelligence.fdi.producttest.A01CatalogProofTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/module/TEST-com.featuredeliveryintelligence.fdi.producttest.A01LaunchArgumentsTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcDescriptorAdmissionProofTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcBindingTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcOwnedStreamingProofTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcFourCardinalityProofTest.xml

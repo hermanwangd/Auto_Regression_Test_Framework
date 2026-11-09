@@ -1,13 +1,13 @@
 {
-  "schema": "p04-focused-build-contract.v1",
-  "status": "FOUR_CARDINALITY_FOCUSED_CI_CANDIDATE_NOT_RUN",
+  "schema": "a01-focused-java-contract.v1",
+  "status": "FROZEN_SOURCE_BOUND_NOT_RUN",
   "source": {
     "repository": "hermanwangd/Auto_Regression_Test_Framework",
-    "commit": "173ee0ecb4212b0e0963aa3c574d6c02c30eb3aa",
-    "tree": "5d7c8aaa2685c02dc8855630a0457ae9bc616fef",
-    "base_commit": "c20829f9b574e753ecb6258aac8f4ba22a9e0b59",
-    "original_b13_commit": "b13c503cc9fadd930e11fb8adc6496308697a966",
-    "candidate_manifest_sha256": "0616fa3d14f40782904c2613d1992d11aad71787b46b8f119dc52b7874de6630"
+    "commit": "6c2ba5400c7458a2409477fb7ce08ad42e3fd646",
+    "tree": "20c155097e753ea45389c7944b481192eb1bc369",
+    "development_base": "e08cdb2b4c4aaddc8317c140058b2469ddc73c85",
+    "candidate_manifest_sha256": "ffd97b87f8853107614bcc2900b9119e72daab366b3aab54b1abbc6ef5b55e09",
+    "candidate_patch_sha256": "2a94bff4dfe5971a460923d19b92fb3d30e9bba2e1825b0e34334d415ef67a6d"
   },
   "activation": {
     "event": "push",
@@ -36,7 +36,7 @@
   },
   "driver": {
     "path": "scripts/ci/b13-build/build_driver.py",
-    "sha256": "27e39f176a955390cf8e492318a36ea577a8f1759f1dbd9d0ea9c508e443667b",
+    "sha256": "9550803fa05eae97572893f454fc3725d01700db3436356bbf3db16ee4a0d629",
     "implementation": "Python standard library; no bootstrap dependency install"
   },
   "limits": {
@@ -67,25 +67,47 @@
   "outputs": [
     "spec-driven-auto-regression-0.3.2.jar",
     "swarm-product-test-1.0.0-cli.jar",
-    "build-manifest.json"
+    "build-manifest.json",
+    "owner/owner-support.jar",
+    "owner/jackson-annotations-2.22.jar",
+    "owner/jackson-core-2.22.0.jar",
+    "owner/jackson-databind-2.22.0.jar",
+    "owner/protobuf-java-4.33.4.jar",
+    "junit/root/TEST-com.specdriven.regression.provider.grpc.A01CatalogProfileTest.xml",
+    "junit/root/TEST-com.specdriven.regression.provider.grpc.A01CatalogProofTest.xml",
+    "junit/root/TEST-com.specdriven.regression.provider.grpc.A01CatalogOwnerTest.xml",
+    "junit/root/TEST-com.specdriven.regression.producttest.P04DescriptorAdmissionTest.xml",
+    "junit/root/TEST-com.specdriven.regression.producttest.ReviewedGrpcCapabilityTest.xml",
+    "junit/root/TEST-com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest.xml",
+    "junit/root/TEST-com.specdriven.regression.provider.grpc.RouteGuideProfileTest.xml",
+    "junit/root/TEST-com.specdriven.regression.provider.grpc.GrpcClientExternalEndpointSupportTest.xml",
+    "junit/root/TEST-com.specdriven.regression.provider.grpc.GrpcMetadataDeadlineContractTest.xml",
+    "junit/root/TEST-com.specdriven.regression.evidence.ReviewedGrpcProofIdentityTest.xml",
+    "junit/root/TEST-com.specdriven.regression.provider.grpc.P04OwnedStreamingTest.xml",
+    "junit/root/TEST-com.specdriven.regression.provider.grpc.P04FourCardinalityTest.xml",
+    "junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.A01CatalogProofTest.xml",
+    "junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.A01LaunchArgumentsTest.xml",
+    "junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcDescriptorAdmissionProofTest.xml",
+    "junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcBindingTest.xml",
+    "junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcOwnedStreamingProofTest.xml",
+    "junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcFourCardinalityProofTest.xml"
   ],
   "current_evidence": {
-    "driver_synthetic_tests": "30 PASS, 0.663s; unchanged original25 plus5 targeted post-exit snapshot controls",
-    "prior_focused_run": 42665015387,
-    "prior_focused_cases": "140 Framework + 2 Module passed",
-    "local_source_overlay": "one four-case attempt, 156 internal checks; independent Module consumer 48 checks per same actual result; JDK21, not packaged or JDK17",
-    "current_focused_CI": "Repair NOT_RUN; run42678590545 FAILED_CLOSED at descendant-after-parent-exit guard; artifacts=[]; actual CI child state unknown",
-    "full_packaged_original_Framework_Module": "NOT_RUN",
-    "original_P04": "NOT_ACCEPTED",
+    "historical_Java_CI": 42681020126,
+    "historical_Go_CI": 42715816478,
+    "candidate_263_JUnit": "NOT_RUN",
+    "stdlib": "44 PASS; original30 plus14 packaging/diagnostic controls",
+    "runtime": "NOT_RUN",
     "SIT": "NOT_RUN",
-    "formal_coverage_credit": 0
+    "coverage_credit": 0
   },
   "publication_allowlist": {
     ".github/workflows/b13-build-artifacts.yml": "b13-build-artifacts.yml",
-    "scripts/ci/b13-build/build_driver.py": "implementation/build_driver.py",
-    "scripts/ci/b13-build/test_build_driver.py": "implementation/test_build_driver.py",
-    "scripts/ci/b13-build/build-contract.json": "build-binding.template.json",
-    "scripts/ci/b13-build/README.md": "PLAN.md"
+    "scripts/ci/b13-build/build_driver.py": "build_driver.py",
+    "scripts/ci/b13-build/test_build_driver.py": "test_build_driver.py",
+    "scripts/ci/b13-build/test_a01_java.py": "test_a01_java.py",
+    "scripts/ci/b13-build/build-contract.json": "build-contract.json",
+    "scripts/ci/b13-build/README.md": "README.md"
   },
   "packaging_descriptor": {
     "exact_entry": "META-INF/regression/runner-build.properties",
@@ -97,6 +119,9 @@
   },
   "focused_tests": {
     "root": {
+      "com.specdriven.regression.provider.grpc.A01CatalogProfileTest": 23,
+      "com.specdriven.regression.provider.grpc.A01CatalogProofTest": 38,
+      "com.specdriven.regression.provider.grpc.A01CatalogOwnerTest": 5,
       "com.specdriven.regression.producttest.P04DescriptorAdmissionTest": 2,
       "com.specdriven.regression.producttest.ReviewedGrpcCapabilityTest": 3,
       "com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest": 31,
@@ -108,19 +133,22 @@
       "com.specdriven.regression.provider.grpc.P04FourCardinalityTest": 1
     },
     "module": {
+      "com.featuredeliveryintelligence.fdi.producttest.A01CatalogProofTest": 38,
+      "com.featuredeliveryintelligence.fdi.producttest.A01LaunchArgumentsTest": 10,
       "com.featuredeliveryintelligence.fdi.producttest.GrpcDescriptorAdmissionProofTest": 1,
       "com.featuredeliveryintelligence.fdi.producttest.GrpcBindingTest": 1,
       "com.featuredeliveryintelligence.fdi.producttest.GrpcOwnedStreamingProofTest": 1,
       "com.featuredeliveryintelligence.fdi.producttest.GrpcFourCardinalityProofTest": 4
     },
-    "expected_total": 149,
+    "expected_total": 263,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
     "fresh_reports": true,
     "testcase_nodes_required": true,
     "unique_classname_name_required": true,
-    "counter_consistency_required": true
+    "counter_consistency_required": true,
+    "expected_reports": 18
   },
   "count_correction": {
     "class": "com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest",
@@ -130,7 +158,7 @@
     "product_source_changed": false,
     "validator_weakened": false
   },
-  "count_derivation": "Existing140+2 source counts retained; checkpoint adds1+1 @Test; extension adds1 @Test and one @ParameterizedTest with4 literal @ValueSource strings. Internal assertions are not JUnit cases.",
+  "count_derivation": "Original149 retained; final owner-declared profile23+Frameworkproof38+owner5+Moduleproof38+launcharguments10=114, total263; actual execution NOT_RUN.",
   "post_exit_snapshot_repair": {
     "refresh_process_group_after_observed_parent_exit": true,
     "fresh_surviving_descendant_still_rejected": true,
@@ -138,5 +166,61 @@
     "additional_grace_seconds": 0,
     "limits_unchanged": true,
     "failed_CI_root_cause_proven": false
+  },
+  "owner_support": {
+    "classes": [
+      {
+        "origin": "target/test-classes",
+        "entry": "com/specdriven/regression/provider/grpc/A01CatalogOwner.class"
+      },
+      {
+        "origin": "target/test-classes",
+        "entry": "com/specdriven/regression/provider/grpc/A01CatalogOwner$Lifecycle.class"
+      },
+      {
+        "origin": "target/classes",
+        "entry": "com/specdriven/regression/provider/grpc/ReviewedA01CatalogPolicy.class"
+      },
+      {
+        "origin": "target/classes",
+        "entry": "com/specdriven/regression/provider/grpc/ReviewedA01CatalogProof.class"
+      },
+      {
+        "origin": "target/classes",
+        "entry": "com/specdriven/regression/provider/grpc/ReviewedLoopbackGrpcPolicy.class"
+      },
+      {
+        "origin": "target/classes",
+        "entry": "com/specdriven/regression/provider/grpc/ReviewedLoopbackGrpcPolicy$Profile.class"
+      },
+      {
+        "origin": "target/classes",
+        "entry": "com/specdriven/regression/provider/grpc/ReviewedLoopbackGrpcPolicy$Fixture.class"
+      },
+      {
+        "origin": "target/classes",
+        "entry": "com/specdriven/regression/provider/grpc/GrpcDescriptorSupport.class"
+      },
+      {
+        "origin": "target/classes",
+        "entry": "com/specdriven/regression/provider/grpc/GrpcDescriptorSupport$StreamingDescriptorException.class"
+      }
+    ],
+    "ordered_dependency_paths": [
+      "com/fasterxml/jackson/core/jackson-annotations/2.22/jackson-annotations-2.22.jar",
+      "com/fasterxml/jackson/core/jackson-core/2.22.0/jackson-core-2.22.0.jar",
+      "com/fasterxml/jackson/core/jackson-databind/2.22.0/jackson-databind-2.22.0.jar",
+      "com/google/protobuf/protobuf-java/4.33.4/protobuf-java-4.33.4.jar"
+    ],
+    "max_jars": 8,
+    "max_bytes": 33554432,
+    "external_manifest_class_path": "REJECT"
+  },
+  "diagnostics": {
+    "artifact": "separate failure-only, no JARs",
+    "xml_total_bytes": 4194304,
+    "xml_per_file_bytes": 524288,
+    "failure_json_bytes": 65536,
+    "report_count_max": 18
   }
 }

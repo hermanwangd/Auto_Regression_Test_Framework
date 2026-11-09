@@ -16,8 +16,9 @@ import urllib.request
 import zipfile
 import xml.etree.ElementTree as ET
 
-SOURCE = '173ee0ecb4212b0e0963aa3c574d6c02c30eb3aa'
-TREE = '5d7c8aaa2685c02dc8855630a0457ae9bc616fef'
+SOURCE = '6c2ba5400c7458a2409477fb7ce08ad42e3fd646'
+DIAGNOSTIC_CONTEXT = None
+TREE = '20c155097e753ea45389c7944b481192eb1bc369'
 JDK_URL = 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.21%2B9/OpenJDK17U-jdk_x64_linux_hotspot_17.0.21_9.tar.gz'
 JDK_SHA256 = '8b9b611d917e3dfd8419d3566b5949226f69b052fed7e109c1368add1dfe8711'
 MAVEN_URL = 'https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.tar.gz'
@@ -25,6 +26,9 @@ MAVEN_SHA512 = 'bcfe4fe305c962ace56ac7b5fc7a08b87d5abd8b7e89027ab251069faebee516
 MIB = 1024 * 1024
 
 ROOT_TESTS = {
+    'com.specdriven.regression.provider.grpc.A01CatalogProfileTest': 23,
+    'com.specdriven.regression.provider.grpc.A01CatalogProofTest': 38,
+    'com.specdriven.regression.provider.grpc.A01CatalogOwnerTest': 5,
     'com.specdriven.regression.producttest.P04DescriptorAdmissionTest': 2,
     'com.specdriven.regression.producttest.ReviewedGrpcCapabilityTest': 3,
     'com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest': 31,
@@ -36,6 +40,8 @@ ROOT_TESTS = {
     'com.specdriven.regression.provider.grpc.P04FourCardinalityTest': 1,
 }
 MODULE_TESTS = {
+    'com.featuredeliveryintelligence.fdi.producttest.A01CatalogProofTest': 38,
+    'com.featuredeliveryintelligence.fdi.producttest.A01LaunchArgumentsTest': 10,
     'com.featuredeliveryintelligence.fdi.producttest.GrpcDescriptorAdmissionProofTest': 1,
     'com.featuredeliveryintelligence.fdi.producttest.GrpcBindingTest': 1,
     'com.featuredeliveryintelligence.fdi.producttest.GrpcOwnedStreamingProofTest': 1,
@@ -311,7 +317,84 @@ def write_manifest(delivery,manifest,max_bytes=MIB):
     with tmp.open('xb') as f: f.write(data)
     tmp.replace(target)
 
+
+OWNER_BYTES=32*MIB
+OWNER_PACKAGE='com/specdriven/regression/provider/grpc/'
+OWNER_CLASSES=[('target/test-classes',OWNER_PACKAGE+n+'.class') for n in ('A01CatalogOwner','A01CatalogOwner$Lifecycle')]+[('target/classes',OWNER_PACKAGE+n+'.class') for n in ('ReviewedA01CatalogPolicy','ReviewedA01CatalogProof','ReviewedLoopbackGrpcPolicy','ReviewedLoopbackGrpcPolicy$Profile','ReviewedLoopbackGrpcPolicy$Fixture','GrpcDescriptorSupport','GrpcDescriptorSupport$StreamingDescriptorException')]
+OWNER_DEPS=['com/fasterxml/jackson/core/jackson-annotations/2.22/jackson-annotations-2.22.jar','com/fasterxml/jackson/core/jackson-core/2.22.0/jackson-core-2.22.0.jar','com/fasterxml/jackson/core/jackson-databind/2.22.0/jackson-databind-2.22.0.jar','com/google/protobuf/protobuf-java/4.33.4/protobuf-java-4.33.4.jar']
+
+def validate_owner_jar(path):
+    if path.is_symlink() or not path.is_file(): raise BuildError('OWNER: unsafe jar')
+    with zipfile.ZipFile(path) as jar:
+        infos=jar.infolist(); names=[x.filename for x in infos]
+        if len(names)>20000 or len(set(names))!=len(names): raise BuildError('OWNER: duplicate/too many entries')
+        for info in infos:
+            if info.filename.startswith('/') or '..' in Path(info.filename).parts or info.flag_bits&1 or stat.S_IFMT(info.external_attr>>16) not in (0,stat.S_IFREG,stat.S_IFDIR): raise BuildError('OWNER: unsafe jar entry')
+        if 'META-INF/MANIFEST.MF' in names:
+            info=jar.getinfo('META-INF/MANIFEST.MF')
+            if info.file_size>65536: raise BuildError('OWNER: manifest cap')
+            text=jar.read(info).decode('utf-8').replace('\r\n','\n').replace('\n ','')
+            if any(line.partition(':')[0].lower()=='class-path' for line in text.splitlines()): raise BuildError('OWNER: external Class-Path')
+
+def package_owner(source,m2,delivery,budget):
+    inputs=[]; names=[]; class_bytes=0
+    for origin,entry in OWNER_CLASSES:
+        budget.check(); p=source/origin/entry
+        if any(x.is_symlink() for x in [p,*p.parents] if x!=source.parent) or not p.is_file() or p.stat().st_size>2*MIB: raise BuildError('OWNER: missing/unsafe/oversized class')
+        class_bytes+=p.stat().st_size; inputs.append(p); names.append(entry)
+    for origin,entry in OWNER_CLASSES:
+        if '$' in Path(entry).name: continue
+        p=source/origin/entry; stem=p.stem
+        expected={Path(e).name for o,e in OWNER_CLASSES if o==origin and (Path(e).stem==stem or Path(e).stem.startswith(stem+'$'))}
+        observed={x.name for x in p.parent.iterdir() if x.name==stem+'.class' or (x.name.startswith(stem+'$') and x.name.endswith('.class'))}
+        if observed!=expected: raise BuildError('OWNER: extra/missing class closure')
+    dependencies=[m2/rel for rel in OWNER_DEPS]
+    for p in dependencies:
+        if any(x.is_symlink() for x in [p,*p.parents] if x!=m2.parent): raise BuildError('OWNER: symlink dependency path')
+        validate_owner_jar(p)
+    if len(dependencies)+1>8 or class_bytes+sum(p.stat().st_size for p in dependencies)>OWNER_BYTES: raise BuildError('OWNER: aggregate cap')
+    folder=fresh_dir(delivery/'owner'); support=folder/'owner-support.jar'
+    with zipfile.ZipFile(support,'x',compression=zipfile.ZIP_STORED) as jar:
+        for p,entry in zip(inputs,names):
+            budget.check(); info=zipfile.ZipInfo(entry); info.external_attr=0o100644<<16; jar.writestr(info,p.read_bytes())
+    validate_owner_jar(support)
+    output=[support]
+    for p in dependencies:
+        budget.check(); target=folder/p.name; shutil.copyfile(p,target); output.append(target); budget.check_storage()
+    if sum(p.stat().st_size for p in output)>OWNER_BYTES: raise BuildError('OWNER: aggregate cap')
+    rows=[{'path':p.relative_to(delivery).as_posix(),'bytes':p.stat().st_size,'sha256':digest_file(p,'sha256',budget)} for p in output]
+    return {'class_entries':names,'class_inputs':[{'path':p.relative_to(source).as_posix(),'sha256':digest_file(p,'sha256',budget)} for p in inputs],'dependency_paths':OWNER_DEPS,'jars':rows,'classpath_order':[r['path'] for r in rows]}
+
+def copy_junit(source,delivery,junit,budget):
+    folder=fresh_dir(delivery/'junit'); records=[]
+    for label,rel in [('root','target/surefire-reports'),('module','integrations/swarm-product-test/target/surefire-reports')]:
+        dest=fresh_dir(folder/label)
+        for report in junit[label]['reports']:
+            budget.check(); src=source/rel/report['file']; target=dest/report['file']; shutil.copyfile(src,target)
+            if target.stat().st_size!=report['bytes'] or digest_file(target,'sha256',budget)!=report['sha256']: raise BuildError('JUNIT: copied report mismatch')
+            records.append({'path':target.relative_to(delivery).as_posix(),'bytes':report['bytes'],'sha256':report['sha256']}); budget.check_storage()
+    return records
+
+def collect_diagnostics(source,work,budget,reason):
+    folder=fresh_dir(work/'diagnostics'); rows=[]; omitted=[]; total=0
+    for label,rel,expected in [('root','target/surefire-reports',ROOT_TESTS),('module','integrations/swarm-product-test/target/surefire-reports',MODULE_TESTS)]:
+        dest=fresh_dir(folder/label); report_root=source/rel
+        if any(x.is_symlink() for x in [report_root,*report_root.parents] if x!=source.parent): omitted.append(label+': unsafe directory'); continue
+        for cls in expected:
+            budget.check(); name='TEST-'+cls+'.xml'; p=report_root/name
+            if not p.exists() and not p.is_symlink(): continue
+            if p.is_symlink() or not p.is_file() or p.stat().st_size>512*1024: omitted.append(label+'/'+name); continue
+            data=p.read_bytes()
+            if len(data)>512*1024 or total+len(data)>4*MIB: omitted.append(label+'/'+name); continue
+            total+=len(data); (dest/name).write_bytes(data); rows.append({'path':label+'/'+name,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}); budget.check_storage()
+    record={'status':'FAILED_DIAGNOSTICS_ONLY','reason':failure_tail(reason.encode()),'reports':rows,'omitted':omitted,'jars_eligible':False}
+    data=(json.dumps(record,sort_keys=True,indent=2)+'\n').encode()
+    if len(data)>65536: raise BuildError('DIAGNOSTICS: status cap')
+    (folder/'failure.json').write_bytes(data); budget.check_storage(); return record
+
 def main():
+    global DIAGNOSTIC_CONTEXT
+    if len(SOURCE)!=40 or len(TREE)!=40: raise BuildError('SOURCE: reviewed publication binding pending')
     parser=argparse.ArgumentParser()
     parser.add_argument('--source',type=Path,required=True)
     parser.add_argument('--work',type=Path,required=True)
@@ -321,7 +404,8 @@ def main():
     source=args.source.resolve(); work=args.work.resolve()
     if source==work or source.is_relative_to(work) or work.is_relative_to(source): raise BuildError('ROOTS: must be disjoint')
     fresh_dir(work)
-    budget=Budget([source,work]); env={'PATH':os.defpath,'HOME':str(fresh_dir(work/'home')),'LANG':'C.UTF-8','CI':'true'}
+    budget=Budget([source,work,Path(__file__).resolve().parents[3]]); env={'PATH':os.defpath,'HOME':str(fresh_dir(work/'home')),'LANG':'C.UTF-8','CI':'true'}
+    DIAGNOSTIC_CONTEXT=(source,work,budget)
     before=source_identity(source,env,budget)
     for rel in ('target','integrations/swarm-product-test/target'):
         if (source/rel).exists(): raise BuildError('EXISTS: stale build output')
@@ -374,23 +458,31 @@ def main():
     for p in jars:
         budget.check(); dst=delivery/p.name; shutil.copyfile(p,dst)
         artifacts.append({'name':p.name,'bytes':dst.stat().st_size,'sha256':digest_file(dst,'sha256',budget)})
+    owner_support=package_owner(source,m2,delivery,budget)
+    junit_artifacts=copy_junit(source,delivery,junit,budget)
+    artifacts+=owner_support['jars']+junit_artifacts
+    if sum(row['bytes'] for row in artifacts)>255*MIB: raise BuildError('ARTIFACT: aggregate delivery cap')
     budget.check_storage(); budget.check()
-    manifest={'schema':'p04-focused-build.v1','status':'FOCUSED_TESTS_PASSED_BUILT','source_pre':before,'source_post':after,
+    manifest={'schema':'a01-focused-java-build.v1','status':'FOCUSED_TESTS_PASSED_BUILT','source_pre':before,'source_post':after,
       'workflow_commit':args.workflow_commit,'driver_sha256':digest_file(Path(__file__),'sha256',budget),
       'run':{k:os.environ.get(k) for k in ('GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT','ImageOS','ImageVersion')},
       'tools':{'jdk':jdk,'maven':maven},'commands':[['mvn',*cmd[1:]] for cmd in commands],
-      'process_results':records,'focused_junit':junit,'elapsed_seconds':round(time.monotonic()-budget.start,6),
+      'owner_support':owner_support,'process_results':records,'focused_junit':junit,'elapsed_seconds':round(time.monotonic()-budget.start,6),
       'resource_limits':{'driver_seconds':840,'cleanup_reserve_seconds':30,'aggregate_rss_bytes':2048*MIB,'storage_bytes':2048*MIB,'cache_bytes':1024*MIB,'per_process_output_bytes':MIB,'junit_per_report_bytes':512*1024,'junit_total_bytes':4*MIB,'failure_tail_json_bytes':8192,'delivery_bytes':256*MIB,'manifest_bytes':MIB,'entry_cap':50000},
       'observed':{'peak_process_group_rss_bytes':budget.peak_rss,'peak_logical_storage_bytes':budget.peak_storage,'cache_bytes':cache_bytes},
       'dependencies':deps,'artifacts':artifacts,'packaged_variant':metadata.strip(),
       'packaged_variant_entry':'META-INF/regression/runner-build.properties',
       'packaged_variant_sha256':hashlib.sha256(metadata.encode('utf-8')).hexdigest(),
-      'acceptance':{'framework_module':'NOT_RUN','P04':'NOT_RUN','SIT':'NOT_RUN','coverage_credit':0,'tests':'FOCUSED_UNIT_TESTS_ONLY','reproducibility_proven':False}}
+      'acceptance':{'framework_module':'NOT_RUN','P04':'NOT_RUN','A01':'NOT_RUN','SIT':'NOT_RUN','coverage_credit':0,'tests':'FOCUSED_UNIT_TESTS_ONLY','reproducibility_proven':False}}
     write_manifest(delivery,manifest)
+    budget.check_storage(); budget.check()
     print(json.dumps({'status':'FOCUSED_TESTS_PASSED_BUILT','focused_tests':{k:v['testcase_count'] for k,v in junit.items()},'artifacts':artifacts,'manifest_sha256':digest_file(delivery/'build-manifest.json','sha256',budget)}))
 
 if __name__=='__main__':
     try: main()
     except Exception as e:
+        if DIAGNOSTIC_CONTEXT is not None:
+            try: collect_diagnostics(*DIAGNOSTIC_CONTEXT,str(e))
+            except Exception as diagnostic_error: print(json.dumps({'diagnostics':'INCOMPLETE','reason':failure_tail(str(diagnostic_error).encode())}))
         print(json.dumps({'status':'FAILED_CLOSED','reason':type(e).__name__+': '+str(e)}))
         raise SystemExit(1)

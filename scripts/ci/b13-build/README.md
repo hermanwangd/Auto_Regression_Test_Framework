@@ -1,155 +1,50 @@
-# Fixed-source P04 focused tests and packaging
+# A01 focused Java/Module build preparation
 
-This is a five-file update to the existing nonproduction builder on
-`codex/b13-build-only`. Product source is the independently reviewed commit
-`173ee0ecb4212b0e0963aa3c574d6c02c30eb3aa`, tree
-`5d7c8aaa2685c02dc8855630a0457ae9bc616fef`, based on
-`b13c503cc9fadd930e11fb8adc6496308697a966`.
+SOURCE BOUND, NOT RUN: parent officially read back product commit
+6c2ba5400c7458a2409477fb7ce08ad42e3fd646, tree
+20c155097e753ea45389c7944b481192eb1bc369, parent e08cdb2b4c4aaddc8317c140058b2469ddc73c85.
+All22 source files495472B match the reviewed owner manifest. Driver/workflow/
+contract now bind those actual identities. Final exact bundle review precedes
+parent publication/CI; no build or product execution occurred locally.
 
-The workflow runs only on this builder branch. It changes no production,
-release, shared SIT or existing product execution resource contract. It uses
-`contents: read`, pinned actions, no persisted credentials, no secrets, no OIDC,
-no production environment and no external services. Source and control
-checkouts are separate. Source pre/post commit, tree and tracked cleanliness
-must match. No source branch creation is needed for this exact-commit checkout.
+Uses original Java17/Maven pins, actions,30controls,900s job/840s driver incl30s
+cleanup,2GiB sampled RSS/2GiB total disk,1GiB cache subset,256MiB delivery and1MiB
+manifest. Charges source/control/work roots and all owner/JUnit copies. The prior
+Go1500s/3GiB grant does not apply. No Go rebuild, service launch, runtime or SIT.
 
-## Fixed tests, not formal coverage
+Declared263 JUnit cases:208root+55Module across18exact reports; old149 preserved,
+new114 owner-declared. Fresh XML, exact class/count/unique testcase identities,
+zero skipped/errors/failures, original512KiB/report4MiB aggregate, and unchanged
+post-packaging report hashes are mandatory. Source annotation derivation is an
+owner/reviewer input; counts are not inferred from a successful run.
 
-On the pinned Java 17 toolchain the driver runs nine root classes:
+Package exact9owner/policy/descriptor class entries into owner/owner-support.jar;
+copy exact ordered Jackson annotations2.22/core2.22.0/databind2.22.0 and
+protobuf-java4.33.4. This five-JAR closure stays≤8JARs/32MiB, with no external
+Manifest Class-Path, unsafe paths, duplicate ZIP entries, symlinks or undeclared
+nested class expansions. Whole-JAR hashes and compiled class input hashes appear
+in manifest. Nothing runs this owner in build. Runtime launch identity is frozen
+later against actual outputs, not synthetic values or local compilation receipts.
 
-- P04DescriptorAdmissionTest: 2 JUnit testcases
-- ReviewedGrpcCapabilityTest: 3 JUnit testcases
-- ReviewedGrpcIntegrationTest: 31 JUnit testcases
-- RouteGuideProfileTest: 32 JUnit testcases
-- GrpcClientExternalEndpointSupportTest: 2 JUnit testcases
-- GrpcMetadataDeadlineContractTest: 8 JUnit testcases
-- ReviewedGrpcProofIdentityTest: 62 JUnit testcases
-- P04OwnedStreamingTest: 1 JUnit testcases
-- P04FourCardinalityTest: 1 JUnit testcases
+Success uploads exact2application JARs+5owner/support/dependency JARs+18XML+manifest.
+Combined artifact bytes≤255MiB plus manifest≤1MiB. Full XML is copied only after
+strict validation and checked again against accepted fingerprints. Failure-only
+diagnostics use a separate artifact and contain only expected XML paths≤512KiB
+each/4MiB total and failure.json≤64KiB. Partial/malformed XML is explicitly
+FAILED_DIAGNOSTICS_ONLY, never admission or JAR success. Collection cannot turn
+failure into success; deadline cleanup reserve can prevent diagnostic collection.
 
-The root total is 142. Four Module classes total seven cases:
+Local evidence: original30 baseline PASS; new10 first RED1failure+9errors against
+unmodified driver; implemented controls44PASS (original30+14),0.662s,23072KiB
+parent RSS under256MiB virtual ceiling. Python fixture children only; no Maven,
+Java, Go, network or product execution. Original RED/green receipts retained.
+These mechanical tests do not claim native Swarm-agent acceptance.
 
-- GrpcDescriptorAdmissionProofTest: 1 JUnit testcases
-- GrpcBindingTest: 1 JUnit testcases
-- GrpcOwnedStreamingProofTest: 1 JUnit testcases
-- GrpcFourCardinalityProofTest: 4 JUnit testcases
+Parent alone publishes against expected builder head
+12c62d3f37cee7ba2bc82ab522942156b91f5816 after final bound-byte review. Historical
+P04source173ee/CI42681020126 and GoCI42715816478 remain unchanged. After build,
+artifact intake and owner/process/normal+NOT_FOUND runtime plans remain separate;
+263unit PASS would not establish A01/runtime/SIT acceptance.
 
-Their exact fully-qualified names are frozen in the driver and contract.
-Both Maven test commands require nonempty matching tests. The root uses
-`-Pno-ibm-mq`. They are followed by the original two serial `package` commands
-with `-Dmaven.test.skip=true`, so packaging does not rerun tests.
-
-All target directories must initially be absent. Each Surefire report directory
-must also be absent immediately before its test command. After exit 0, the
-parser requires exactly the expected report files and classes, the exact
-number of actual testcase nodes, unique `(classname, name)` identities, and
-zero failure, error or skipped nodes. XML counters must agree with the nodes.
-It rejects DTD/entities, malformed XML, nested cases, symlinks and foreign
-classes. One XML file is limited to 512 KiB, all thirteen reports to 4 MiB.
-The same report summaries and hashes must remain unchanged through packaging.
-
-The manifest records every testcase identity, report byte count and SHA-256,
-class totals, process exit/output hashes, source and workflow pins, tool and
-resolved dependency hashes, resource observations, and binary hashes. The XML
-and raw logs are not uploaded. A nonzero process exit includes only a JSON-safe
-tail of its already-capped output, at most 8 KiB after the final error JSON encoding. Child environments
-exclude credentials.
-
-This is focused unit/regression validation. It is not a complete packaged
-Module-to-Framework execution, a SIT run, or acceptance of the original P04
-row. The new descriptor-only capability does not turn the original live-lease
-`grpc_client` row into an accepted case. Formal coverage credit stays zero
-for this build. The many assertions within individual tests are not additional
-JUnit cases or catalog rows.
-
-## Tools, bounds and artifacts
-
-Tool and action pins are unchanged from the successful original b13 builder:
-Eclipse Temurin 17.0.21+9 Linux x64 and Maven 3.9.11, both hash-checked before
-extraction; checkout and artifact actions are immutable commit pins. Maven
-uses fresh settings and a fresh local repository, with official Maven Central
-as the sole repository mirror. Recorded resolved dependency hashes do not
-prove fully reproducible dependency resolution.
-
-All commands share the existing 840-second driver deadline including a
-30-second cleanup reserve, inside a 900-second GitHub job. Limits remain:
-2 GiB logical owned storage, 50,000 entries, 1 GiB dependency cache,
-2 GiB sampled process-group RSS, Maven heap 1 GiB, metaspace 384 MiB,
-code cache 128 MiB, output 1 MiB per process, delivery 256 MiB and manifest
-1 MiB. RSS/storage are sampled, not kernel-enforced hard limits. Normal
-process-group descendants receive bounded termination and cleanup. Nothing
-raises the historical Main/DB/P09 caps or moves old evidence. No automatic
-retry, broader tests, downloads beyond the pinned tools/dependencies,
-import, deployment or release is introduced.
-
-After all checks pass, the workflow retains exactly:
-
-- spec-driven-auto-regression-0.3.2.jar
-- swarm-product-test-1.0.0-cli.jar
-- build-manifest.json
-
-The Framework must have the exact root entry
-`META-INF/regression/runner-build.properties`, schema `runner-build.v1`,
-variant `no-ibm-mq`, and `ibm_mq=unsupported`. Duplicates, a conflicting
-BOOT-INF entry, malformed metadata and IBM MQ allclient payload are rejected.
-No artifact is uploaded from a failed job. Retention is seven days.
-
-## Evidence and activation
-
-The successful prior focused run 42665015387 validated the unchanged original
-140 Framework plus two Module JUnit cases and produced separately retained
-artifacts. Its prior count-mismatch failure 42663421700 remains preserved.
-The incorrect expected 27 for ReviewedGrpcIntegrationTest was corrected to
-31 from its exact annotations; that correction is retained, not changed here.
-
-The merged candidate additionally retains the server-only checkpoint tests
-(one root and one Module case), then adds one four-cardinality root test and
-four parameterized Module cases. These are 142 root plus seven Module cases,
-149 total. Internal assertion counts are not JUnit testcases or catalog rows.
-
-The local source-overlay four-case attempt completed once: real unary RPC
-succeeded, three streaming modes produced the exact shared-guard rejection
-without channel creation. The independent Module consumer checked each same
-retained result. This was JDK21 with source/target17, not the new packaged
-Module or Java17 execution. Original public-project SG02 and SIT remain
-NOT_ACCEPTED / NOT_RUN. No formal coverage credit is claimed.
-
-The original 25 standard-library driver controls are retained unchanged.
-Five targeted controls were added, and all 30 passed in 0.663 seconds against
-the same finalized source bindings. An initial
-isolated-mode launcher omitted the local module path and failed to import
-build_driver before any test; the corrected exact-path launcher is recorded. No local Maven,
-Java, tool download or product test is part of this control-plane preparation.
-
-Publication remains limited to the existing nonproduction builder branch,
-using an expected-head fast-forward lease. The merged 19-file source passed the existing final technical review. Its
-commit object and tree were created and independently read back; the exact
-pins above are now fixed. The final five-file CI package requires only its
-existing finite hash/control confirmation before normal publication. No source
-branch is created, and no production or plug-in-module pipeline changes.
-
-## Minimal post-exit process snapshot repair
-
-Run 42678590545 failed closed with `CLEANUP: descendant after parent exit`;
-no artifact was produced. The actual CI child state was not retained, so
-this repair does not claim to have proven that run's root cause.
-
-The old loop sampled its process group before selecting output and polling
-the parent. A deterministic regression reproduces rejection from a stale
-pre-exit snapshot even when a fresh post-exit snapshot is empty. The repair
-refreshes the group only after observing parent exit, reapplies the same RSS
-cap, and still rejects every freshly observed surviving descendant. It adds
-no grace period and leaves the existing cleanup and resource guards intact.
-The bounded diagnostic includes the process label, returncode, fresh count,
-at most three PIDs and the existing encoded output tail (at most 8 KiB).
-
-The five focused controls were RED against the untouched old driver (10
-failures including subcases); all 30 controls pass against the repair. The
-real synthetic descendant is still rejected and cleaned. Unknown process
-state is never accepted. Product source, fixed 142+7 selectors, JDK/Maven
-and action pins, XML validation, all caps and the three outputs are unchanged.
-
-A corrected CI run has not started at this preparation stage. The failed
-run and original source, driver and evidence remain preserved. Publication
-uses expected head 66d7d80e229c6f678db600b9d568f1b1ac01c53b on the same
-nonproduction builder, never force or another ref.
+Preparation note: initial metadata generation had a syntax error before writing
+workflow/contract; corrected generation succeeded. No build/test failure hidden.
