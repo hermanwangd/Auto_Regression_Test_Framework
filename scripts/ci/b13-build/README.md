@@ -2,8 +2,8 @@
 
 This is a five-file update to the existing nonproduction builder on
 `codex/b13-build-only`. Product source is the independently reviewed commit
-`c20829f9b574e753ecb6258aac8f4ba22a9e0b59`, tree
-`fab39f4a4d297967a5bdb56217948839d46fa68e`, based on
+`173ee0ecb4212b0e0963aa3c574d6c02c30eb3aa`, tree
+`5d7c8aaa2685c02dc8855630a0457ae9bc616fef`, based on
 `b13c503cc9fadd930e11fb8adc6496308697a966`.
 
 The workflow runs only on this builder branch. It changes no production,
@@ -15,18 +15,25 @@ must match. No source branch creation is needed for this exact-commit checkout.
 
 ## Fixed tests, not formal coverage
 
-On the pinned Java 17 toolchain the driver runs these seven root classes:
+On the pinned Java 17 toolchain the driver runs nine root classes:
 
 - P04DescriptorAdmissionTest: 2 JUnit testcases
-- ReviewedGrpcCapabilityTest: 3
-- ReviewedGrpcIntegrationTest: 31
-- RouteGuideProfileTest: 32
-- GrpcClientExternalEndpointSupportTest: 2
-- GrpcMetadataDeadlineContractTest: 8
-- ReviewedGrpcProofIdentityTest: 62
+- ReviewedGrpcCapabilityTest: 3 JUnit testcases
+- ReviewedGrpcIntegrationTest: 31 JUnit testcases
+- RouteGuideProfileTest: 32 JUnit testcases
+- GrpcClientExternalEndpointSupportTest: 2 JUnit testcases
+- GrpcMetadataDeadlineContractTest: 8 JUnit testcases
+- ReviewedGrpcProofIdentityTest: 62 JUnit testcases
+- P04OwnedStreamingTest: 1 JUnit testcases
+- P04FourCardinalityTest: 1 JUnit testcases
 
-The root total is 140. The Module classes are
-GrpcDescriptorAdmissionProofTest and GrpcBindingTest, one testcase each.
+The root total is 142. Four Module classes total seven cases:
+
+- GrpcDescriptorAdmissionProofTest: 1 JUnit testcases
+- GrpcBindingTest: 1 JUnit testcases
+- GrpcOwnedStreamingProofTest: 1 JUnit testcases
+- GrpcFourCardinalityProofTest: 4 JUnit testcases
+
 Their exact fully-qualified names are frozen in the driver and contract.
 Both Maven test commands require nonempty matching tests. The root uses
 `-Pno-ibm-mq`. They are followed by the original two serial `package` commands
@@ -38,7 +45,7 @@ parser requires exactly the expected report files and classes, the exact
 number of actual testcase nodes, unique `(classname, name)` identities, and
 zero failure, error or skipped nodes. XML counters must agree with the nodes.
 It rejects DTD/entities, malformed XML, nested cases, symlinks and foreign
-classes. One XML file is limited to 512 KiB, all nine reports to 4 MiB.
+classes. One XML file is limited to 512 KiB, all thirteen reports to 4 MiB.
 The same report summaries and hashes must remain unchanged through packaging.
 
 The manifest records every testcase identity, report byte count and SHA-256,
@@ -89,28 +96,33 @@ No artifact is uploaded from a failed job. Retention is seven days.
 
 ## Evidence and activation
 
-The prior fixed b13 build succeeded in
-[run 42653127637](https://github.com/hermanwangd/Auto_Regression_Test_Framework/actions/runs/42653127637).
-Its binaries remain separate from this candidate. The first historical failed
-run is preserved; no previous evidence is relabeled.
+The successful prior focused run 42665015387 validated the unchanged original
+140 Framework plus two Module JUnit cases and produced separately retained
+artifacts. Its prior count-mismatch failure 42663421700 remains preserved.
+The incorrect expected 27 for ReviewedGrpcIntegrationTest was corrected to
+31 from its exact annotations; that correction is retained, not changed here.
 
-Local Python standard-library driver controls: 25 passed in 0.577 seconds.
-These comprise the prior 19 controls and six focused JUnit/tail tests, including
-negative subcases. They did not execute Maven, Java or product code.
-The new real focused CI and packaged Module execution are still NOT_RUN at
-preparation. Normal publication must preserve the current builder branch
-history and use an expected-head lease. It must not create another source
-branch or write to production/main/plug-in-module as part of this CI update.
+The merged candidate additionally retains the server-only checkpoint tests
+(one root and one Module case), then adds one four-cardinality root test and
+four parameterized Module cases. These are 142 root plus seven Module cases,
+149 total. Internal assertion counts are not JUnit testcases or catalog rows.
 
-## Exact parameterized-count correction
+The local source-overlay four-case attempt completed once: real unary RPC
+succeeded, three streaming modes produced the exact shared-guard rejection
+without channel creation. The independent Module consumer checked each same
+retained result. This was JDK21 with source/target17, not the new packaged
+Module or Java17 execution. Original public-project SG02 and SIT remain
+NOT_ACCEPTED / NOT_RUN. No formal coverage credit is claimed.
 
-[First focused run 42663421700](https://github.com/hermanwangd/Auto_Regression_Test_Framework/actions/runs/42663421700)
-failed closed after the root Maven process exited 0, because the frozen expected
-JUnit count was wrong. No artifact was produced. Exact source review of all
-seven root classes establishes counts 2/3/31/32/2/8/62, total 140, plus the two
-Module cases. ReviewedGrpcIntegrationTest has two plain @Test methods and
-ValueSource groups 5/6/14/2/2. The earlier expected 27 omitted the last two groups
-of two. No product source or tests have changed, and no validator has been
-relaxed. The driver now includes classname, expected and actual counts in a
-count-mismatch error. A negative fixture verifies that exact diagnostic.
-The corrected 142-case CI remains NOT_RUN until the next authorized run.
+All 25 standard-library driver controls are retained unchanged and passed
+in 0.588 seconds against the finalized fixed source bindings. An initial
+isolated-mode launcher omitted the local module path and failed to import
+build_driver before any test; the corrected exact-path launcher is recorded. No local Maven,
+Java, tool download or product test is part of this control-plane preparation.
+
+Publication remains limited to the existing nonproduction builder branch,
+using an expected-head fast-forward lease. The merged 19-file source passed the existing final technical review. Its
+commit object and tree were created and independently read back; the exact
+pins above are now fixed. The final five-file CI package requires only its
+existing finite hash/control confirmation before normal publication. No source
+branch is created, and no production or plug-in-module pipeline changes.

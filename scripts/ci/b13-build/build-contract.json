@@ -1,11 +1,13 @@
 {
   "schema": "p04-focused-build-contract.v1",
-  "status": "FOCUSED_CI_CANDIDATE_NOT_RUN",
+  "status": "FOUR_CARDINALITY_FOCUSED_CI_CANDIDATE_NOT_RUN",
   "source": {
     "repository": "hermanwangd/Auto_Regression_Test_Framework",
-    "commit": "c20829f9b574e753ecb6258aac8f4ba22a9e0b59",
-    "tree": "fab39f4a4d297967a5bdb56217948839d46fa68e",
-    "base_commit": "b13c503cc9fadd930e11fb8adc6496308697a966"
+    "commit": "173ee0ecb4212b0e0963aa3c574d6c02c30eb3aa",
+    "tree": "5d7c8aaa2685c02dc8855630a0457ae9bc616fef",
+    "base_commit": "c20829f9b574e753ecb6258aac8f4ba22a9e0b59",
+    "original_b13_commit": "b13c503cc9fadd930e11fb8adc6496308697a966",
+    "candidate_manifest_sha256": "0616fa3d14f40782904c2613d1992d11aad71787b46b8f119dc52b7874de6630"
   },
   "activation": {
     "event": "push",
@@ -34,7 +36,7 @@
   },
   "driver": {
     "path": "scripts/ci/b13-build/build_driver.py",
-    "sha256": "ea39746b51eddb49d978936c51283365a052c6749e8d47c8565ee622d770dd2e",
+    "sha256": "aee5d331f4bd09c80b9b29cec43c5701c93284fd045ae9d49db3b3e5836ec6d9",
     "implementation": "Python standard library; no bootstrap dependency install"
   },
   "limits": {
@@ -68,10 +70,12 @@
     "build-manifest.json"
   ],
   "current_evidence": {
-    "driver_synthetic_tests": "25 PASS; 0.577s; Python 3.12.14 Linux",
-    "prior_b13_build_run": 42653127637,
-    "current_focused_CI": "Corrected source-derived count candidate NOT_RUN; first run 42663421700 failed closed at JUnit count validation with no artifact",
-    "full_packaged_Framework_Module": "NOT_RUN",
+    "driver_synthetic_tests": "25 PASS, 0.588s, Python isolated mode with only the exact implementation directory explicitly added for local import",
+    "prior_focused_run": 42665015387,
+    "prior_focused_cases": "140 Framework + 2 Module passed",
+    "local_source_overlay": "one four-case attempt, 156 internal checks; independent Module consumer 48 checks per same actual result; JDK21, not packaged or JDK17",
+    "current_focused_CI": "NOT_RUN",
+    "full_packaged_original_Framework_Module": "NOT_RUN",
     "original_P04": "NOT_ACCEPTED",
     "SIT": "NOT_RUN",
     "formal_coverage_credit": 0
@@ -99,13 +103,17 @@
       "com.specdriven.regression.provider.grpc.RouteGuideProfileTest": 32,
       "com.specdriven.regression.provider.grpc.GrpcClientExternalEndpointSupportTest": 2,
       "com.specdriven.regression.provider.grpc.GrpcMetadataDeadlineContractTest": 8,
-      "com.specdriven.regression.evidence.ReviewedGrpcProofIdentityTest": 62
+      "com.specdriven.regression.evidence.ReviewedGrpcProofIdentityTest": 62,
+      "com.specdriven.regression.provider.grpc.P04OwnedStreamingTest": 1,
+      "com.specdriven.regression.provider.grpc.P04FourCardinalityTest": 1
     },
     "module": {
       "com.featuredeliveryintelligence.fdi.producttest.GrpcDescriptorAdmissionProofTest": 1,
-      "com.featuredeliveryintelligence.fdi.producttest.GrpcBindingTest": 1
+      "com.featuredeliveryintelligence.fdi.producttest.GrpcBindingTest": 1,
+      "com.featuredeliveryintelligence.fdi.producttest.GrpcOwnedStreamingProofTest": 1,
+      "com.featuredeliveryintelligence.fdi.producttest.GrpcFourCardinalityProofTest": 4
     },
-    "expected_total": 142,
+    "expected_total": 149,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
@@ -121,5 +129,6 @@
     "derivation": "2 @Test methods + @ValueSource entries 5+6+14+2+2",
     "product_source_changed": false,
     "validator_weakened": false
-  }
+  },
+  "count_derivation": "Existing140+2 source counts retained; checkpoint adds1+1 @Test; extension adds1 @Test and one @ParameterizedTest with4 literal @ValueSource strings. Internal assertions are not JUnit cases."
 }

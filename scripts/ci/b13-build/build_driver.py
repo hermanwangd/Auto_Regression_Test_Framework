@@ -16,8 +16,8 @@ import urllib.request
 import zipfile
 import xml.etree.ElementTree as ET
 
-SOURCE = 'c20829f9b574e753ecb6258aac8f4ba22a9e0b59'
-TREE = 'fab39f4a4d297967a5bdb56217948839d46fa68e'
+SOURCE = '173ee0ecb4212b0e0963aa3c574d6c02c30eb3aa'
+TREE = '5d7c8aaa2685c02dc8855630a0457ae9bc616fef'
 JDK_URL = 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.21%2B9/OpenJDK17U-jdk_x64_linux_hotspot_17.0.21_9.tar.gz'
 JDK_SHA256 = '8b9b611d917e3dfd8419d3566b5949226f69b052fed7e109c1368add1dfe8711'
 MAVEN_URL = 'https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.tar.gz'
@@ -32,10 +32,14 @@ ROOT_TESTS = {
     'com.specdriven.regression.provider.grpc.GrpcClientExternalEndpointSupportTest': 2,
     'com.specdriven.regression.provider.grpc.GrpcMetadataDeadlineContractTest': 8,
     'com.specdriven.regression.evidence.ReviewedGrpcProofIdentityTest': 62,
+    'com.specdriven.regression.provider.grpc.P04OwnedStreamingTest': 1,
+    'com.specdriven.regression.provider.grpc.P04FourCardinalityTest': 1,
 }
 MODULE_TESTS = {
     'com.featuredeliveryintelligence.fdi.producttest.GrpcDescriptorAdmissionProofTest': 1,
     'com.featuredeliveryintelligence.fdi.producttest.GrpcBindingTest': 1,
+    'com.featuredeliveryintelligence.fdi.producttest.GrpcOwnedStreamingProofTest': 1,
+    'com.featuredeliveryintelligence.fdi.producttest.GrpcFourCardinalityProofTest': 4,
 }
 
 class BuildError(RuntimeError): pass

@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: hermanwangd/Auto_Regression_Test_Framework
-          ref: c20829f9b574e753ecb6258aac8f4ba22a9e0b59
+          ref: 173ee0ecb4212b0e0963aa3c574d6c02c30eb3aa
           path: source
           fetch-depth: 1
           persist-credentials: false
@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s  %s\n' 'ea39746b51eddb49d978936c51283365a052c6749e8d47c8565ee622d770dd2e' 'control/scripts/ci/b13-build/build_driver.py' | sha256sum --check --strict
+          printf '%s  %s\n' 'aee5d331f4bd09c80b9b29cec43c5701c93284fd045ae9d49db3b3e5836ec6d9' 'control/scripts/ci/b13-build/build_driver.py' | sha256sum --check --strict
           python3 -I -B control/scripts/ci/b13-build/build_driver.py \
             --source "$GITHUB_WORKSPACE/source" --work "$RUNNER_TEMP/b13-build-only" \
             --workflow-commit "$GITHUB_SHA"
