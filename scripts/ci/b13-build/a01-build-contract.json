@@ -1,0 +1,131 @@
+{
+  "compiler": {
+    "autodownload": "disabled",
+    "environment": {
+      "CGO_ENABLED": "0",
+      "GOARCH": "amd64",
+      "GOOS": "linux",
+      "GOTOOLCHAIN": "local"
+    },
+    "flags": [
+      "-mod=readonly",
+      "-trimpath",
+      "-buildvcs=false"
+    ],
+    "requested": "go1.27.1",
+    "verified_executable_sha256": null
+  },
+  "descriptor": {
+    "base64_bytes": 5868,
+    "base64_sha256": "285bd375bc4bff89d44ed51a0ddaf205670b35ff070860311b1fc0f4bdab1921",
+    "fdp_sha256": "8f6b5761a04e7d699c0e40c2776d94900581f2706a112544fa80ba71169f5d54",
+    "fds_bytes": 4399,
+    "fds_sha256": "b448856ccf1a0415e009fb841e8168db7d7e861938b573f280d9fdb644fc353d",
+    "provenance": "exact rawDesc from checked-in demo.pb.go; no protoc invocation"
+  },
+  "loopback_patch": {
+    "expected_occurrences": 1,
+    "file": "server.go",
+    "new": "fmt.Sprintf(\"127.0.0.1:%s\", port)",
+    "old": "fmt.Sprintf(\":%s\", port)",
+    "result_bytes": 5504,
+    "result_sha256": "db5cfbb858f0d9b94c5d3b3e6334e1d2821f2e740edf925aee1f58d76c9de530"
+  },
+  "positive_oracle": {
+    "sha256": "f1f19786961687923636d01653f48936692b57d9df93b0eabab52363a3b63a81",
+    "value": {
+      "categories": [
+        "accessories"
+      ],
+      "description": "Add a modern touch to your outfits with these sleek aviator sunglasses.",
+      "id": "OLJCESPC7Z",
+      "name": "Sunglasses",
+      "picture": "/static/img/products/sunglasses.jpg",
+      "priceUsd": {
+        "currencyCode": "USD",
+        "nanos": 990000000,
+        "units": "19"
+      }
+    }
+  },
+  "requests": [
+    {
+      "sha256": "079ffb4c48534e807f1bf07060f840290751bd4f011a94542d3b4f42eb8b98f7",
+      "text": "{\"id\":\"OLJCESPC7Z\"}\n"
+    },
+    {
+      "sha256": "ac6b8a0d364523bd13a27b5fdb894ede0b3fec3f6cce891b8ccaaae3f2424dbf",
+      "text": "{\"id\":\"A01-NO-SUCH-PRODUCT\"}\n"
+    }
+  ],
+  "required_artifacts": [
+    "server binary",
+    "source manifest original+loopback patch hashes",
+    "compiler origin/version/hash",
+    "dependency resolution/go.sum verification receipt",
+    "go version -m build identity",
+    "descriptor extraction artifact+hash",
+    "product data",
+    "build logs/status/resource accounting"
+  ],
+  "runtime_env": {
+    "DISABLE_PROFILER": "1",
+    "ENABLE_TRACING": "0",
+    "GOTRACEBACK": "single",
+    "PORT": "owned ephemeral port from supervisor"
+  },
+  "runtime_environment_policy": "clear inherited environment; ALLOYDB_CLUSTER_NAME and other AlloyDB/Cloud credentials absent",
+  "schema": "a01-proposed-build-contract.v1",
+  "source_files": [
+    {
+      "bytes": 5495,
+      "destination": "server.go",
+      "git_blob": "3243b92426aea3b88c3388c353077626e1be3591",
+      "sha256": "2d52d47db2a00c743470b94b1f7b970b190e9d45f9e4b76d0a345f5d00272b5a"
+    },
+    {
+      "bytes": 2624,
+      "destination": "product_catalog.go",
+      "git_blob": "bbc364cf191d00b379235a904573960f97042797",
+      "sha256": "045a50900ba49382d920c644a6bee04c6372073761b2867ecf202428ce0c6545"
+    },
+    {
+      "bytes": 4770,
+      "destination": "catalog_loader.go",
+      "git_blob": "75d3c72ea6a75009cbc5957d972e03094f927691",
+      "sha256": "c37a169b74faf6be29f1ae9999ea2a22daf8f2d7dd676b4706459b36cf95a4a4"
+    },
+    {
+      "bytes": 3160,
+      "destination": "go.mod",
+      "git_blob": "069b4a404eeadb1c8457ddfe7cfb0da1b8581289",
+      "sha256": "b891e7545c990ad13307d416678a9719e5f667f45e1b11bcf3e367b2713a6e8d"
+    },
+    {
+      "bytes": 33346,
+      "destination": "go.sum",
+      "git_blob": "58a224f1092c153e970f6b6dcc54fa47a843c338",
+      "sha256": "68f514d3a43c025b8c6abd1979bcb3ef6794d7b66cb866a317f35dded082c8c2"
+    },
+    {
+      "bytes": 3847,
+      "destination": "products.json",
+      "git_blob": "d5dd59194de4cefc788037677578e0a12cf2eb18",
+      "sha256": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa"
+    },
+    {
+      "bytes": 89615,
+      "destination": "genproto/demo.pb.go",
+      "git_blob": "332cb9cb2ff648c130c40896ecc4e87012dce4c4",
+      "sha256": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af"
+    },
+    {
+      "bytes": 47595,
+      "destination": "genproto/demo_grpc.pb.go",
+      "git_blob": "e99e6d6bc85499f678b67ba5af9b99390f60fa83",
+      "sha256": "70bb93b42e93399bf30d9971b6568244d0fa2eb1cb4757f967354810601dc916"
+    }
+  ],
+  "source_revision": "c7cb6d5bfd6ea3aed768634ebbcb98cb7a523712",
+  "status": "FROZEN_FIXTURE_BUILD_ONLY_NOT_RUN"
+}
