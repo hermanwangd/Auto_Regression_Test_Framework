@@ -1,143 +1,103 @@
-# Fixed b13 build-only CI
+# Fixed-source P04 focused tests and packaging
 
-This candidate packages two binaries from the exact public commit
-`b13c503cc9fadd930e11fb8adc6496308697a966`, tree
-`a912fc45e68cf1dd31f7e4b16a795338eaec054f`. It does not run product tests,
-claim coverage, deploy, import images, or publish a release.
+This is a five-file update to the existing nonproduction builder on
+`codex/b13-build-only`. Product source is the independently reviewed commit
+`c20829f9b574e753ecb6258aac8f4ba22a9e0b59`, tree
+`fab39f4a4d297967a5bdb56217948839d46fa68e`, based on
+`b13c503cc9fadd930e11fb8adc6496308697a966`.
 
-## Isolated trigger and outputs
+The workflow runs only on this builder branch. It changes no production,
+release, shared SIT or existing product execution resource contract. It uses
+`contents: read`, pinned actions, no persisted credentials, no secrets, no OIDC,
+no production environment and no external services. Source and control
+checkouts are separate. Source pre/post commit, tree and tracked cleanliness
+must match. No source branch creation is needed for this exact-commit checkout.
 
-The new workflow listens only to pushes to `codex/b13-build-only`. It leaves the
-existing CI, local-product, release and SIT workflows unchanged. The inspected
-existing branch/tag filters do not match this branch; this is not a guarantee
-about every repository-level automation. No default-branch change is required.
-Publishing or updating the branch may start a workflow run.
+## Fixed tests, not formal coverage
 
-The workflow checks out its own commit into `control` and the fixed b13 source
-into `source`. Credentials are not persisted. Permissions are `contents: read`;
-no secrets, OIDC, production environment, services, user-selected ref or token
-setup is requested. The workflow commit and build-source commit are distinct.
+On the pinned Java 17 toolchain the driver runs these seven root classes:
 
-Exactly three delivery members are allowed:
+- P04DescriptorAdmissionTest: 2 JUnit testcases
+- ReviewedGrpcCapabilityTest: 3
+- ReviewedGrpcIntegrationTest: 27
+- RouteGuideProfileTest: 32
+- GrpcClientExternalEndpointSupportTest: 2
+- GrpcMetadataDeadlineContractTest: 8
+- ReviewedGrpcProofIdentityTest: 62
 
-- `spec-driven-auto-regression-0.3.2.jar`
-- `swarm-product-test-1.0.0-cli.jar`
-- `build-manifest.json`
+The root total is 136. The Module classes are
+GrpcDescriptorAdmissionProofTest and GrpcBindingTest, one testcase each.
+Their exact fully-qualified names are frozen in the driver and contract.
+Both Maven test commands require nonempty matching tests. The root uses
+`-Pno-ibm-mq`. They are followed by the original two serial `package` commands
+with `-Dmaven.test.skip=true`, so packaging does not rerun tests.
 
-The manifest records source pre/post identity, actual workflow/run identity,
-tool archive checksums, resolved dependency sizes/hashes, process outcomes,
-resource observations, both JAR hashes and the embedded no-MQ variant.
-Its own hash is reported separately, avoiding a self-referential manifest.
-No settings, dependency cache, raw logs, earlier evidence or credentials are
-included in the delivery artifact. A failed job does not run the upload step.
+All target directories must initially be absent. Each Surefire report directory
+must also be absent immediately before its test command. After exit 0, the
+parser requires exactly the expected report files and classes, the exact
+number of actual testcase nodes, unique `(classname, name)` identities, and
+zero failure, error or skipped nodes. XML counters must agree with the nodes.
+It rejects DTD/entities, malformed XML, nested cases, symlinks and foreign
+classes. One XML file is limited to 512 KiB, all nine reports to 4 MiB.
+The same report summaries and hashes must remain unchanged through packaging.
 
-## Tool and build bindings
+The manifest records every testcase identity, report byte count and SHA-256,
+class totals, process exit/output hashes, source and workflow pins, tool and
+resolved dependency hashes, resource observations, and binary hashes. The XML
+and raw logs are not uploaded. A nonzero process exit includes only a JSON-safe
+tail of its already-capped output, at most 8 KiB after the final error JSON encoding. Child environments
+exclude credentials.
 
-`build-contract.json` identifies the immutable checkout/upload action commits.
-The driver downloads Eclipse Temurin JDK 17.0.21+9 Linux x64 and Maven 3.9.11
-from official sources, verifies their frozen SHA256/SHA512 before extraction,
-and checks their reported versions. Maven uses a fresh job-owned repository
-and explicit settings mirroring all repositories to official Maven Central.
-No existing cache is presumed compatible. Resolved hashes are recorded after
-this build; this is not a claim of dependency-level reproducibility.
+This is focused unit/regression validation. It is not a complete packaged
+Module-to-Framework execution, a SIT run, or acceptance of the original P04
+row. The new descriptor-only capability does not turn the original live-lease
+`grpc_client` row into an accepted case. Formal coverage credit stays zero
+for this build. The many assertions within individual tests are not additional
+JUnit cases or catalog rows.
 
-The root and Module POMs both target Java 17. The serial commands are:
+## Tools, bounds and artifacts
 
-```
-mvn -B -ntp -s <isolated-settings> -Dmaven.repo.local=<fresh-m2> \
-  -Dmaven.test.skip=true -DskipITs -Djacoco.skip=true -Pno-ibm-mq package
-mvn -B -ntp -s <isolated-settings> -Dmaven.repo.local=<fresh-m2> \
-  -Dmaven.test.skip=true -DskipITs -Djacoco.skip=true \
-  -f integrations/swarm-product-test/pom.xml package
-```
+Tool and action pins are unchanged from the successful original b13 builder:
+Eclipse Temurin 17.0.21+9 Linux x64 and Maven 3.9.11, both hash-checked before
+extraction; checkout and artifact actions are immutable commit pins. Maven
+uses fresh settings and a fresh local repository, with official Maven Central
+as the sole repository mirror. Recorded resolved dependency hashes do not
+prove fully reproducible dependency resolution.
 
-The no-IBM-MQ profile excludes IBM's library from the Framework JAR and embeds
-`variant=no-ibm-mq` / `ibm_mq=unsupported`. A provided IBM compile dependency may
-still be acquired. The driver checks the packaging metadata and rejects a JAR
-containing `com.ibm.mq.allclient`. It never executes the JARs.
+All commands share the existing 840-second driver deadline including a
+30-second cleanup reserve, inside a 900-second GitHub job. Limits remain:
+2 GiB logical owned storage, 50,000 entries, 1 GiB dependency cache,
+2 GiB sampled process-group RSS, Maven heap 1 GiB, metaspace 384 MiB,
+code cache 128 MiB, output 1 MiB per process, delivery 256 MiB and manifest
+1 MiB. RSS/storage are sampled, not kernel-enforced hard limits. Normal
+process-group descendants receive bounded termination and cleanup. Nothing
+raises the historical Main/DB/P09 caps or moves old evidence. No automatic
+retry, broader tests, downloads beyond the pinned tools/dependencies,
+import, deployment or release is introduced.
 
-## Bounded execution
+After all checks pass, the workflow retains exactly:
 
-The GitHub job has a 900-second timeout. The driver has an 840-second total
-budget including a 30-second cleanup reserve. The remaining job time is for
-checkout and artifact upload; it is not an automatic extension if those steps
-are slow. Every subprocess shares the same deadline. Failure, timeout,
-nonzero exit, stale output, source mismatch or any observed limit violation
-stops the job. No automatic retry or cap increase is implemented.
+- spec-driven-auto-regression-0.3.2.jar
+- swarm-product-test-1.0.0-cli.jar
+- build-manifest.json
 
-Maven heap is 1024 MiB, metaspace 384 MiB and reserved code cache 128 MiB. The
-driver samples aggregate process-group RSS and rejects observations over
-2048 MiB. This is not a cgroup hard limit or protection against a hostile
-program deliberately escaping its process group. The official, pinned build
-tools and reviewed public source are the trust boundary. Normal descendants
-are terminated and boundedly reaped; surviving group members fail cleanup.
+The Framework must have the exact root entry
+`META-INF/regression/runner-build.properties`, schema `runner-build.v1`,
+variant `no-ibm-mq`, and `ibm_mq=unsupported`. Duplicates, a conflicting
+BOOT-INF entry, malformed metadata and IBM MQ allclient payload are rejected.
+No artifact is uploaded from a failed job. Retention is seven days.
 
-The two fresh owned roots (source checkout and build work) have a 2048 MiB
-logical storage guard and 50,000-entry bound. The fresh dependency cache has
-its own 1024 MiB guard. Process output is capped at 1 MiB; delivery at 256 MiB;
-the manifest at 1 MiB. Storage and RSS are sampled during commands, so transient
-usage between observations is not described as a proven absolute bound.
-Download/extraction limits and checksum checks precede tool execution.
+## Evidence and activation
 
-This independent build-only resource profile does not revise limits or move
-historical data from any existing test execution. Build success permits no
-subsequent product test by itself.
+The prior fixed b13 build succeeded in
+[run 42653127637](https://github.com/hermanwangd/Auto_Regression_Test_Framework/actions/runs/42653127637).
+Its binaries remain separate from this candidate. The first historical failed
+run is preserved; no previous evidence is relabeled.
 
-## Local control tests and current state
-
-The stdlib test suite runs without Maven, Java, a network or another agent:
-
-```
-python3 -B -m unittest discover -s scripts/ci/b13-build -p 'test_*.py' -v
-```
-
-It covers successful fake-process completion, nonzero exit, timeout/descendant
-cleanup, output and RSS rejection, storage/cache limits, stale outputs, source
-mismatch, wrong digest, unsafe archive paths and manifest publication limits.
-These are driver controls, not Framework/Module or native-agent behavior tests.
-
-Current local result: 19 controls passed on Linux/Python 3.12.14 in 0.615 s.
-The first real build run progressed through packaging but failed ZIP validation
-because this driver incorrectly expected the descriptor under BOOT-INF/classes.
-No artifact was delivered. The corrected build candidate has not run. No P04/SIT
-result or formal coverage credit is claimed. The initial missing-driver baseline and the first
-mock-related test failure remain in local development records, not this
-publication subset.
-
-The initial technical candidate and its activation change were reviewed.
-The focused descriptor-path repair is now subject to its exact-diff check.
-The disabled-job and failing-step guards have been removed; the workflow is
-ready for authorized publication but remains NOT_RUN. Tool pins and the
-resource driver are implemented. Before any push, recheck branch ownership
-and current ref and use normal non-force publication. The proposed branch was absent and repository rulesets returned
-an empty list at preparation time; neither observation grants extra rights or
-predicts the result of a later write.
-
-## Sources
-
-- [Exact build source](https://github.com/hermanwangd/Auto_Regression_Test_Framework/tree/b13c503cc9fadd930e11fb8adc6496308697a966)
-- [Pinned checkout action](https://github.com/actions/checkout/tree/11d5960a326750d5838078e36cf38b85af677262)
-- [Pinned artifact action](https://github.com/actions/upload-artifact/tree/ea165f8d65b6e75b540449e92b4886f43607fa02)
-- [Temurin release](https://github.com/adoptium/temurin17-binaries/releases/tag/jdk-17.0.21%2B9)
-- [Official Maven checksum](https://archive.apache.org/dist/maven/maven-3/3.9.11/binaries/apache-maven-3.9.11-bin.tar.gz.sha512)
-
-## Descriptor-path correction
-
-[First failed run](https://github.com/hermanwangd/Auto_Regression_Test_Framework/actions/runs/42651409017)
-is preserved. The POM generates `META-INF/regression/runner-build.properties`.
-The b13 `RunnerBuildVariant` reader uses exactly that classpath resource and
-requires exactly the schema/variant/ibm_mq keys. Spring Boot 3.5.16's
-`Packager.RepackagingEntryTransformer` leaves this META-INF resource at the
-archive root. It relocates only specified META-INF exceptions, not this file.
-
-The repair reads only that exact root entry, rejects missing or duplicate root
-resources and a conflicting BOOT-INF copy, strictly matches the b13 descriptor
-shape, and keeps the IBM payload and size checks. It does not accept arbitrary
-fallback locations or weaken the no-MQ requirement. Six new ZIP controls cover
-the valid root, wrong location, duplicates, invalid values, missing/oversized
-metadata and IBM payload; the prior 13 controls still pass. The real corrected
-JAR layout will be confirmed by the next build's binding and artifact readback,
-not inferred to have passed from these synthetic fixtures.
-
-- [b13 runtime reader](https://github.com/hermanwangd/Auto_Regression_Test_Framework/blob/b13c503cc9fadd930e11fb8adc6496308697a966/src/main/java/com/specdriven/regression/build/RunnerBuildVariant.java)
-- [Spring Boot 3.5.16 packaging rules](https://github.com/spring-projects/spring-boot/blob/v3.5.16/spring-boot-project/spring-boot-tools/spring-boot-loader-tools/src/main/java/org/springframework/boot/loader/tools/Packager.java)
+Local Python standard-library driver controls: 25 passed in 0.607 seconds.
+These comprise the prior 19 controls and six focused JUnit/tail tests, including
+negative subcases. They did not execute Maven, Java or product code.
+The new real focused CI and packaged Module execution are still NOT_RUN at
+preparation. Normal publication must preserve the current builder branch
+history and use an expected-head lease. It must not create another source
+branch or write to production/main/plug-in-module as part of this CI update.

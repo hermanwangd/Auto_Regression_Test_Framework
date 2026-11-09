@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded, fixed-source packaging only. No product execution or deployment."""
+"""Bounded fixed-source focused unit tests and packaging; no deployment."""
 import argparse
 import hashlib
 import json
@@ -14,16 +14,86 @@ import tarfile
 import time
 import urllib.request
 import zipfile
+import xml.etree.ElementTree as ET
 
-SOURCE = 'b13c503cc9fadd930e11fb8adc6496308697a966'
-TREE = 'a912fc45e68cf1dd31f7e4b16a795338eaec054f'
+SOURCE = 'c20829f9b574e753ecb6258aac8f4ba22a9e0b59'
+TREE = 'fab39f4a4d297967a5bdb56217948839d46fa68e'
 JDK_URL = 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.21%2B9/OpenJDK17U-jdk_x64_linux_hotspot_17.0.21_9.tar.gz'
 JDK_SHA256 = '8b9b611d917e3dfd8419d3566b5949226f69b052fed7e109c1368add1dfe8711'
 MAVEN_URL = 'https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.tar.gz'
 MAVEN_SHA512 = 'bcfe4fe305c962ace56ac7b5fc7a08b87d5abd8b7e89027ab251069faebee516b0ded8961445d6d91ec1985dfe30f8153268843c89aa392733d1a3ec956c9978'
 MIB = 1024 * 1024
 
+ROOT_TESTS = {
+    'com.specdriven.regression.producttest.P04DescriptorAdmissionTest': 2,
+    'com.specdriven.regression.producttest.ReviewedGrpcCapabilityTest': 3,
+    'com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest': 27,
+    'com.specdriven.regression.provider.grpc.RouteGuideProfileTest': 32,
+    'com.specdriven.regression.provider.grpc.GrpcClientExternalEndpointSupportTest': 2,
+    'com.specdriven.regression.provider.grpc.GrpcMetadataDeadlineContractTest': 8,
+    'com.specdriven.regression.evidence.ReviewedGrpcProofIdentityTest': 62,
+}
+MODULE_TESTS = {
+    'com.featuredeliveryintelligence.fdi.producttest.GrpcDescriptorAdmissionProofTest': 1,
+    'com.featuredeliveryintelligence.fdi.producttest.GrpcBindingTest': 1,
+}
+
 class BuildError(RuntimeError): pass
+
+def failure_tail(output):
+    text = bytes(output[-8192:]).decode('utf-8', 'replace')
+    encoded = json.dumps(text, ensure_ascii=True)
+    # This quoted tail is embedded in reason, which main JSON-serializes again.
+    while len(json.dumps(encoded, ensure_ascii=True).encode('utf-8')) > 8192:
+        text = text[max(1, len(text)//4):]
+        encoded = json.dumps(text, ensure_ascii=True)
+    return encoded
+
+def validate_junit(folder, expected, budget, max_bytes=4*MIB):
+    folder = Path(folder)
+    if not folder.is_dir() or folder.is_symlink(): raise BuildError('JUNIT: report directory missing/unsafe')
+    paths = []
+    for p in folder.iterdir():
+        budget.check()
+        if p.name.startswith('TEST-') and p.suffix == '.xml':
+            paths.append(p)
+            if len(paths) > len(expected): raise BuildError('JUNIT: excess XML reports')
+    wanted = {'TEST-'+name+'.xml' for name in expected}
+    if {p.name for p in paths} != wanted: raise BuildError('JUNIT: missing/foreign report class')
+    reports = []; identities = set(); total_bytes = 0; counts = {}
+    for path in sorted(paths):
+        budget.check()
+        if path.is_symlink() or not path.is_file(): raise BuildError('JUNIT: unsafe report type')
+        if path.stat().st_size > 512*1024: raise BuildError('JUNIT: report byte cap')
+        with path.open('rb') as handle: data = handle.read(512*1024+1)
+        total_bytes += len(data)
+        if len(data) > 512*1024 or total_bytes > max_bytes: raise BuildError('JUNIT: aggregate/report byte cap')
+        try: text = data.decode('utf-8')
+        except UnicodeDecodeError as error: raise BuildError('JUNIT: non-UTF8 report') from error
+        if '<!DOCTYPE' in text.upper() or '<!ENTITY' in text.upper(): raise BuildError('JUNIT: forbidden XML declaration')
+        try: suite = ET.fromstring(text)
+        except ET.ParseError as error: raise BuildError('JUNIT: invalid XML') from error
+        if suite.tag != 'testsuite': raise BuildError('JUNIT: testsuite root required')
+        classname = path.name[len('TEST-'):-len('.xml')]
+        if suite.get('name') not in (None, classname): raise BuildError('JUNIT: suite identity mismatch')
+        cases = suite.findall('testcase')
+        if len(list(suite.iter('testcase'))) != len(cases): raise BuildError('JUNIT: nested testcase')
+        if any(list(suite.iter(tag)) for tag in ('failure', 'error', 'skipped')): raise BuildError('JUNIT: nonpassing node')
+        for key, value in {'tests': len(cases), 'failures': 0, 'errors': 0, 'skipped': 0}.items():
+            if suite.get(key) != str(value): raise BuildError('JUNIT: counter mismatch')
+        if len(cases) != expected[classname]: raise BuildError('JUNIT: unexpected testcase count')
+        names = []
+        for case in cases:
+            name = case.get('name'); identity = (case.get('classname'), name)
+            if identity[0] != classname or not name or identity in identities:
+                raise BuildError('JUNIT: foreign/duplicate testcase identity')
+            identities.add(identity); names.append(name)
+        counts[classname] = len(cases)
+        reports.append({'file': path.name, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(),
+                        'classname': classname, 'testcases': names, 'tests': len(cases),
+                        'failures': 0, 'errors': 0, 'skipped': 0})
+    return {'status': 'PASS', 'testcase_count': len(identities), 'class_counts': counts,
+            'xml_bytes': total_bytes, 'reports': reports}
 
 def fresh_dir(path):
     path = Path(path)
@@ -112,7 +182,7 @@ def run_process(argv,cwd,env,budget,label):
             if proc.poll() is not None:
                 if live and any(pid!=proc.pid for pid in live): raise BuildError('CLEANUP: descendant after parent exit')
                 if not sel.get_map(): break
-        if proc.returncode: raise BuildError('EXIT: %s=%s' % (label,proc.returncode))
+        if proc.returncode: raise BuildError('EXIT: %s=%s; output_tail=%s' % (label,proc.returncode,failure_tail(output)))
         return {'label':label,'exit_code':proc.returncode,'seconds':round(time.monotonic()-started,6),
                 'output_bytes':len(output),'output_sha256':hashlib.sha256(output).hexdigest(),
                 'stdout':output.decode('utf-8','replace')}
@@ -261,10 +331,28 @@ def main():
         r=run_process(command,source,env,budget,label)
         if token not in r['stdout']: raise BuildError('TOOLS: unexpected version')
         records.append({k:v for k,v in r.items() if k!='stdout'})
-    base=[str(maven_home/'bin/mvn'),'-B','-ntp','-s',str(settings),'-Dmaven.repo.local='+str(m2),'-Dmaven.test.skip=true','-DskipITs','-Djacoco.skip=true']
-    commands=[base+['-Pno-ibm-mq','package'],base+['-f','integrations/swarm-product-test/pom.xml','package']]
-    for i,cmd in enumerate(commands):
+    base=[str(maven_home/'bin/mvn'),'-B','-ntp','-s',str(settings),'-Dmaven.repo.local='+str(m2),'-DskipITs','-Djacoco.skip=true']
+    test_base=base+['-DfailIfNoTests=true','-Dsurefire.failIfNoSpecifiedTests=true']
+    test_specs=[('root', ROOT_TESTS, source/'target/surefire-reports', ['-Pno-ibm-mq']),
+                ('module', MODULE_TESTS, source/'integrations/swarm-product-test/target/surefire-reports',
+                 ['-f','integrations/swarm-product-test/pom.xml'])]
+    commands=[]; junit={}
+    for label, expected, report_dir, options in test_specs:
+        # The entire target was absent before any Maven command; also refuse a stale report directory.
+        if report_dir.exists() or report_dir.is_symlink(): raise BuildError('JUNIT: stale report directory')
+        selector=','.join(expected)
+        cmd=test_base+options+['-Dtest='+selector,'test']; commands.append(cmd)
+        r=run_process(cmd,source,env,budget,'focused-tests-'+label)
+        records.append({k:v for k,v in r.items() if k!='stdout'})
+        junit[label]=validate_junit(report_dir,expected,budget,4*MIB-sum(v['xml_bytes'] for v in junit.values()))
+    package_commands=[base+['-Dmaven.test.skip=true','-Pno-ibm-mq','package'],
+                      base+['-Dmaven.test.skip=true','-f','integrations/swarm-product-test/pom.xml','package']]
+    for i,cmd in enumerate(package_commands):
+        commands.append(cmd)
         r=run_process(cmd,source,env,budget,'package-'+str(i+1)); records.append({k:v for k,v in r.items() if k!='stdout'})
+    # Preserve the exact accepted test reports through packaging.
+    for label, expected, report_dir, _ in test_specs:
+        if validate_junit(report_dir,expected,budget) != junit[label]: raise BuildError('JUNIT: reports changed after validation')
     after=source_identity(source,env,budget)
     jars=[source/'target/spec-driven-auto-regression-0.3.2.jar',source/'integrations/swarm-product-test/target/swarm-product-test-1.0.0-cli.jar']
     for p in jars:
@@ -277,19 +365,19 @@ def main():
         budget.check(); dst=delivery/p.name; shutil.copyfile(p,dst)
         artifacts.append({'name':p.name,'bytes':dst.stat().st_size,'sha256':digest_file(dst,'sha256',budget)})
     budget.check_storage(); budget.check()
-    manifest={'schema':'b13-build-only.v1','status':'BUILT_NOT_TESTED','source_pre':before,'source_post':after,
+    manifest={'schema':'p04-focused-build.v1','status':'FOCUSED_TESTS_PASSED_BUILT','source_pre':before,'source_post':after,
       'workflow_commit':args.workflow_commit,'driver_sha256':digest_file(Path(__file__),'sha256',budget),
       'run':{k:os.environ.get(k) for k in ('GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT','ImageOS','ImageVersion')},
       'tools':{'jdk':jdk,'maven':maven},'commands':[['mvn',*cmd[1:]] for cmd in commands],
-      'process_results':records,'elapsed_seconds':round(time.monotonic()-budget.start,6),
-      'resource_limits':{'driver_seconds':840,'cleanup_reserve_seconds':30,'aggregate_rss_bytes':2048*MIB,'storage_bytes':2048*MIB,'cache_bytes':1024*MIB,'per_process_output_bytes':MIB,'delivery_bytes':256*MIB,'manifest_bytes':MIB,'entry_cap':50000},
+      'process_results':records,'focused_junit':junit,'elapsed_seconds':round(time.monotonic()-budget.start,6),
+      'resource_limits':{'driver_seconds':840,'cleanup_reserve_seconds':30,'aggregate_rss_bytes':2048*MIB,'storage_bytes':2048*MIB,'cache_bytes':1024*MIB,'per_process_output_bytes':MIB,'junit_per_report_bytes':512*1024,'junit_total_bytes':4*MIB,'failure_tail_json_bytes':8192,'delivery_bytes':256*MIB,'manifest_bytes':MIB,'entry_cap':50000},
       'observed':{'peak_process_group_rss_bytes':budget.peak_rss,'peak_logical_storage_bytes':budget.peak_storage,'cache_bytes':cache_bytes},
       'dependencies':deps,'artifacts':artifacts,'packaged_variant':metadata.strip(),
       'packaged_variant_entry':'META-INF/regression/runner-build.properties',
       'packaged_variant_sha256':hashlib.sha256(metadata.encode('utf-8')).hexdigest(),
-      'acceptance':{'framework_module':'NOT_RUN','P04':'NOT_RUN','SIT':'NOT_RUN','coverage_credit':0,'tests':'SKIPPED','reproducibility_proven':False}}
+      'acceptance':{'framework_module':'NOT_RUN','P04':'NOT_RUN','SIT':'NOT_RUN','coverage_credit':0,'tests':'FOCUSED_UNIT_TESTS_ONLY','reproducibility_proven':False}}
     write_manifest(delivery,manifest)
-    print(json.dumps({'status':'BUILT_NOT_TESTED','artifacts':artifacts,'manifest_sha256':digest_file(delivery/'build-manifest.json','sha256',budget)}))
+    print(json.dumps({'status':'FOCUSED_TESTS_PASSED_BUILT','focused_tests':{k:v['testcase_count'] for k,v in junit.items()},'artifacts':artifacts,'manifest_sha256':digest_file(delivery/'build-manifest.json','sha256',budget)}))
 
 if __name__=='__main__':
     try: main()

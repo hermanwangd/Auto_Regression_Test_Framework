@@ -115,4 +115,45 @@ class DriverTests(unittest.TestCase):
         p=self.jar_fixture([('META-INF/regression/runner-build.properties',body),('BOOT-INF/lib/com.ibm.mq.allclient-10.0.0.0.jar',b'fixture')])
         with self.assertRaisesRegex(d.BuildError,'IBM'): d.read_framework_metadata(p)
 
+    def junit_fixture(self, text, name='example.Case'):
+        folder=self.root/'reports'; folder.mkdir(exist_ok=True)
+        (folder/('TEST-'+name+'.xml')).write_text(text)
+        return folder
+    def test_junit_exact_nodes_and_counts_pass(self):
+        p=self.junit_fixture('<testsuite tests="1" failures="0" errors="0" skipped="0"><testcase classname="example.Case" name="caseOne"/></testsuite>')
+        result=d.validate_junit(p,{'example.Case':1},self.budget())
+        self.assertEqual(result['testcase_count'],1)
+        with self.assertRaisesRegex(d.BuildError,'JUNIT'):
+            d.validate_junit(p,{'example.Case':1},self.budget(),max_bytes=1)
+    def test_junit_absent_class_fails(self):
+        folder=self.root/'reports'; folder.mkdir()
+        with self.assertRaisesRegex(d.BuildError,'JUNIT'): d.validate_junit(folder,{'example.Case':1},self.budget())
+    def test_junit_bad_counter_or_duplicate_fails(self):
+        for text in ('<testsuite tests="2" failures="0" errors="0" skipped="0"><testcase classname="example.Case" name="caseOne"/></testsuite>',
+                     '<testsuite tests="2" failures="0" errors="0" skipped="0"><testcase classname="example.Case" name="caseOne"/><testcase classname="example.Case" name="caseOne"/></testsuite>'):
+            with self.subTest(text=text):
+                with self.assertRaisesRegex(d.BuildError,'JUNIT'): d.validate_junit(self.junit_fixture(text),{'example.Case':1},self.budget())
+    def test_junit_failure_error_or_skip_fails(self):
+        for kind in ('failure','error','skipped'):
+            text='<testsuite tests="1" failures="0" errors="0" skipped="0"><testcase classname="example.Case" name="caseOne"><'+kind+'/></testcase></testsuite>'
+            with self.subTest(kind=kind):
+                with self.assertRaisesRegex(d.BuildError,'JUNIT'): d.validate_junit(self.junit_fixture(text),{'example.Case':1},self.budget())
+    def test_junit_entities_and_foreign_class_fail(self):
+        for text in ('<!DOCTYPE testsuite [<!ENTITY x "fake">]><testsuite tests="0" failures="0" errors="0" skipped="0"/>',
+                     '<testsuite tests="1" failures="0" errors="0" skipped="0"><testcase classname="other.Case" name="caseOne"/></testsuite>'):
+            with self.subTest(text=text):
+                with self.assertRaisesRegex(d.BuildError,'JUNIT'): d.validate_junit(self.junit_fixture(text),{'example.Case':1},self.budget())
+    def test_failure_tail_is_bounded(self):
+        try: self.run_child("print('x'*10000); raise SystemExit(2)")
+        except d.BuildError as error:
+            self.assertIn('output_tail=',str(error)); self.assertLess(len(str(error)),8400)
+        else: self.fail('nonzero must fail')
+        for raw in (b'\x00'*10000, b'\xff'*10000, ('中'*10000).encode(), b'"\\'*5000):
+            tail=d.failure_tail(raw); self.assertLessEqual(len(tail.encode()),8192)
+            self.assertIsInstance(json.loads(tail),str)
+            self.assertLessEqual(len(json.dumps(tail).encode()),8192)
+            reason='BuildError: EXIT: focused-tests-root=2; output_tail='+tail
+            wire=json.dumps({'status':'FAILED_CLOSED','reason':reason})
+            self.assertLess(len(wire.encode()),8400)
+
 if __name__=='__main__': unittest.main()

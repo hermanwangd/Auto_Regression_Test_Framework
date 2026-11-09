@@ -1,5 +1,5 @@
-# Reviewed build-only candidate. No production workflow is modified.
-name: b13 nonproduction build artifacts
+# Reviewed focused-test and packaging candidate. No production workflow is modified.
+name: P04 nonproduction focused tests and artifacts
 on:
   push:
     branches:
@@ -24,28 +24,28 @@ jobs:
           persist-credentials: false
           submodules: false
           lfs: false
-      - name: Checkout exact b13 build source
+      - name: Checkout exact reviewed P04 source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: hermanwangd/Auto_Regression_Test_Framework
-          ref: b13c503cc9fadd930e11fb8adc6496308697a966
+          ref: c20829f9b574e753ecb6258aac8f4ba22a9e0b59
           path: source
           fetch-depth: 1
           persist-credentials: false
           submodules: false
           lfs: false
-      - name: Verify driver and package only
+      - name: Verify driver, run focused tests and package
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s  %s\n' '6c94e2bb8989a895884cd46701b71f48143057113b6eae2accc6346937647b94' 'control/scripts/ci/b13-build/build_driver.py' | sha256sum --check --strict
+          printf '%s  %s\n' '9e52b1d871f3b51124ae5316d8ecb807dd6605fcf71d5ff7503b3f5ede3c9e79' 'control/scripts/ci/b13-build/build_driver.py' | sha256sum --check --strict
           python3 -I -B control/scripts/ci/b13-build/build_driver.py \
             --source "$GITHUB_WORKSPACE/source" --work "$RUNNER_TEMP/b13-build-only" \
             --workflow-commit "$GITHUB_SHA"
       - name: Retain exactly two JARs and their build binding
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: b13-build-only-${{ github.run_id }}-${{ github.run_attempt }}
+          name: p04-focused-build-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
           retention-days: 7
           compression-level: 0

@@ -1,17 +1,17 @@
 {
-  "schema": "b13-build-only-contract.v1",
-  "status": "READY_FOR_AUTHORIZED_PUBLICATION_NOT_RUN",
+  "schema": "p04-focused-build-contract.v1",
+  "status": "FOCUSED_CI_CANDIDATE_NOT_RUN",
   "source": {
     "repository": "hermanwangd/Auto_Regression_Test_Framework",
-    "commit": "b13c503cc9fadd930e11fb8adc6496308697a966",
-    "tree": "a912fc45e68cf1dd31f7e4b16a795338eaec054f"
+    "commit": "c20829f9b574e753ecb6258aac8f4ba22a9e0b59",
+    "tree": "fab39f4a4d297967a5bdb56217948839d46fa68e",
+    "base_commit": "b13c503cc9fadd930e11fb8adc6496308697a966"
   },
   "activation": {
     "event": "push",
     "exact_branch": "codex/b13-build-only",
     "default_branch_change": false,
-    "production_workflow_change": false,
-    "candidate_guards_retained": false
+    "production_workflow_change": false
   },
   "action_pins": {
     "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
@@ -34,7 +34,7 @@
   },
   "driver": {
     "path": "scripts/ci/b13-build/build_driver.py",
-    "sha256": "6c94e2bb8989a895884cd46701b71f48143057113b6eae2accc6346937647b94",
+    "sha256": "9e52b1d871f3b51124ae5316d8ecb807dd6605fcf71d5ff7503b3f5ede3c9e79",
     "implementation": "Python standard library; no bootstrap dependency install"
   },
   "limits": {
@@ -49,14 +49,18 @@
     "log_bytes_per_process": 1048576,
     "delivery_mib": 256,
     "manifest_bytes": 1048576,
-    "owned_entry_cap": 50000
+    "owned_entry_cap": 50000,
+    "junit_per_report_bytes": 524288,
+    "junit_aggregate_bytes": 4194304,
+    "nonzero_exit_json_tail_bytes": 8192
   },
   "boundary": {
-    "new_independent_build_only_profile": true,
+    "new_independent_build_only_profile": false,
     "old_Main_or_DB_or_P09_caps_changed": false,
     "memory_is_sampled_not_cgroup_hard_cap": true,
     "dependencies_fresh_official_central_only": true,
-    "dependency_reproducibility_proven": false
+    "dependency_reproducibility_proven": false,
+    "existing_nonproduction_builder_extended_to_focused_unit_tests": true
   },
   "outputs": [
     "spec-driven-auto-regression-0.3.2.jar",
@@ -64,10 +68,11 @@
     "build-manifest.json"
   ],
   "current_evidence": {
-    "driver_synthetic_tests": "19 PASS; 0.615s; Python 3.12.14 Linux",
-    "Maven_Java_execution": "First run progressed through packaging to ZIP validation, but no artifact accepted",
-    "GitHub_CI": "Run 42651409017 failed at incorrect descriptor ZIP path; corrected candidate NOT_RUN",
-    "P04": "NOT_RUN",
+    "driver_synthetic_tests": "25 PASS; 0.607s; Python 3.12.14 Linux",
+    "prior_b13_build_run": 42653127637,
+    "current_focused_CI": "NOT_RUN",
+    "full_packaged_Framework_Module": "NOT_RUN",
+    "original_P04": "NOT_ACCEPTED",
     "SIT": "NOT_RUN",
     "formal_coverage_credit": 0
   },
@@ -85,5 +90,28 @@
     "ibm_mq": "unsupported",
     "runtime_parser_git_blob": "7c2fe6f650d28884960780a5380d77f9d051bdd1",
     "packager_git_blob": "dac90b1c6fb716bfeb2c0042e4d37434655e64b8"
+  },
+  "focused_tests": {
+    "root": {
+      "com.specdriven.regression.producttest.P04DescriptorAdmissionTest": 2,
+      "com.specdriven.regression.producttest.ReviewedGrpcCapabilityTest": 3,
+      "com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest": 27,
+      "com.specdriven.regression.provider.grpc.RouteGuideProfileTest": 32,
+      "com.specdriven.regression.provider.grpc.GrpcClientExternalEndpointSupportTest": 2,
+      "com.specdriven.regression.provider.grpc.GrpcMetadataDeadlineContractTest": 8,
+      "com.specdriven.regression.evidence.ReviewedGrpcProofIdentityTest": 62
+    },
+    "module": {
+      "com.featuredeliveryintelligence.fdi.producttest.GrpcDescriptorAdmissionProofTest": 1,
+      "com.featuredeliveryintelligence.fdi.producttest.GrpcBindingTest": 1
+    },
+    "expected_total": 138,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "fresh_reports": true,
+    "testcase_nodes_required": true,
+    "unique_classname_name_required": true,
+    "counter_consistency_required": true
   }
 }
