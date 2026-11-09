@@ -1,0 +1,693 @@
+{
+  "schema_version": "2.0",
+  "queue": "SWARM-CLI-01-hardening-r4-fix1",
+  "suite": "hardening",
+  "frozen_before_execution": true,
+  "native_claim": "harness integration controls only; not package, Native, or SIT PASS",
+  "existing_116_denominator_changed": false,
+  "source": {
+    "component": "scripts/run_suite.py",
+    "r2_source_zip_sha256": "d94f81ab9bc27622b3165dc5f6d7ff0cfe103c91cee83457da269c0906752416",
+    "r3_patch_sha256": "4c5c080ee599177630e2f6feb2532bb7603cbc6ed9a2794727a66d6b4858aeeb",
+    "r3_rerun_source_zip_sha256": "d6f2e499c0414cbeee88be7ce4bccd8a26dc60e3c7f57e387f5c9a21e3daf6f1",
+    "r4_base_source_zip_sha256": "9eba4937c85419c3c6f451c76dfe12d6be131a83cbd74ab5045978cd0c68abb5"
+  },
+  "execution": {
+    "test_path": "tests/hardening",
+    "node_selection": null,
+    "frozen_source_sha256": {
+      "tests/hardening/__init__.py": "ef5d0acae1fe91f0703b6c2f8d5d7ec9b6bf57d8d7cdd6d75ac717141cdc102e",
+      "tests/hardening/control_support.py": "e6ac969e7c84a8f158fcb14a1b5a38745f6103177055d90ea12ebb8e09b026a2",
+      "tests/hardening/test_acceptance_gate.py": "d76f6a6f6df935888be9a5141ddb12529ce560df5d8ef95a2a68558fa12081ff",
+      "tests/hardening/test_r4_targeted_controls.py": "e3a1748623e778dfc91cf658898b135df7df7d98730406095fdc67b551878acc",
+      "tests/hardening/test_runner_fail_closed.py": "51218ba649191fb8f2a527db618379bc402d3ee50c8011a31d173069919f19a0"
+    }
+  },
+  "cases": [
+    {
+      "case_id": "R3-301",
+      "category": "r3-original",
+      "required": true,
+      "test_name": "test_r3_301_pytest_zero_but_required_case_missing",
+      "junit_identity": {
+        "classname": "tests.hardening.test_acceptance_gate",
+        "name": "test_r3_301_pytest_zero_but_required_case_missing",
+        "file": "tests/hardening/test_acceptance_gate.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_acceptance_gate.py::test_r3_301_pytest_zero_but_required_case_missing"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R3-302",
+      "category": "r3-original",
+      "required": true,
+      "test_name": "test_r3_302_pytest_zero_but_required_case_skipped",
+      "junit_identity": {
+        "classname": "tests.hardening.test_acceptance_gate",
+        "name": "test_r3_302_pytest_zero_but_required_case_skipped",
+        "file": "tests/hardening/test_acceptance_gate.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_acceptance_gate.py::test_r3_302_pytest_zero_but_required_case_skipped"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R3-303",
+      "category": "r3-original",
+      "required": true,
+      "test_name": "test_r3_303_manifest_mutation_rejects_despite_test_pass",
+      "junit_identity": {
+        "classname": "tests.hardening.test_acceptance_gate",
+        "name": "test_r3_303_manifest_mutation_rejects_despite_test_pass",
+        "file": "tests/hardening/test_acceptance_gate.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_acceptance_gate.py::test_r3_303_manifest_mutation_rejects_despite_test_pass"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R3-304",
+      "category": "r3-original",
+      "required": true,
+      "test_name": "test_r3_304_source_mutation_rejects_despite_test_pass",
+      "junit_identity": {
+        "classname": "tests.hardening.test_acceptance_gate",
+        "name": "test_r3_304_source_mutation_rejects_despite_test_pass",
+        "file": "tests/hardening/test_acceptance_gate.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_acceptance_gate.py::test_r3_304_source_mutation_rejects_despite_test_pass"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R3-305",
+      "category": "r3-original",
+      "required": true,
+      "test_name": "test_r3_305_runtime_distribution_missing_fails_before_launch",
+      "junit_identity": {
+        "classname": "tests.hardening.test_acceptance_gate",
+        "name": "test_r3_305_runtime_distribution_missing_fails_before_launch",
+        "file": "tests/hardening/test_acceptance_gate.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_acceptance_gate.py::test_r3_305_runtime_distribution_missing_fails_before_launch"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R3-306",
+      "category": "r3-original",
+      "required": true,
+      "test_name": "test_r3_306_runtime_wrong_version_fails_before_launch",
+      "junit_identity": {
+        "classname": "tests.hardening.test_acceptance_gate",
+        "name": "test_r3_306_runtime_wrong_version_fails_before_launch",
+        "file": "tests/hardening/test_acceptance_gate.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_acceptance_gate.py::test_r3_306_runtime_wrong_version_fails_before_launch"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R3-307",
+      "category": "r3-original",
+      "required": true,
+      "test_name": "test_r3_307_external_interpreter_fallback_fails_closed",
+      "junit_identity": {
+        "classname": "tests.hardening.test_acceptance_gate",
+        "name": "test_r3_307_external_interpreter_fallback_fails_closed",
+        "file": "tests/hardening/test_acceptance_gate.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_acceptance_gate.py::test_r3_307_external_interpreter_fallback_fails_closed"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R3-308",
+      "category": "r3-original",
+      "required": true,
+      "test_name": "test_r3_308_external_distribution_fallback_fails_closed",
+      "junit_identity": {
+        "classname": "tests.hardening.test_acceptance_gate",
+        "name": "test_r3_308_external_distribution_fallback_fails_closed",
+        "file": "tests/hardening/test_acceptance_gate.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_acceptance_gate.py::test_r3_308_external_distribution_fallback_fails_closed"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R3-309",
+      "category": "r3-original",
+      "required": true,
+      "test_name": "test_r3_309_all_conditions_correct_accepts",
+      "junit_identity": {
+        "classname": "tests.hardening.test_acceptance_gate",
+        "name": "test_r3_309_all_conditions_correct_accepts",
+        "file": "tests/hardening/test_acceptance_gate.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_acceptance_gate.py::test_r3_309_all_conditions_correct_accepts"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-401",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_401_403_duplicate_raw_testcases_rejected[pass-pass-r4-401-duplicate-pass-pass]",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_401_403_duplicate_raw_testcases_rejected[pass-pass-r4-401-duplicate-pass-pass]",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_401_403_duplicate_raw_testcases_rejected[pass-pass-r4-401-duplicate-pass-pass]"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-402",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_401_403_duplicate_raw_testcases_rejected[pass-fail-r4-402-duplicate-pass-fail]",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_401_403_duplicate_raw_testcases_rejected[pass-fail-r4-402-duplicate-pass-fail]",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_401_403_duplicate_raw_testcases_rejected[pass-fail-r4-402-duplicate-pass-fail]"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-403",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_401_403_duplicate_raw_testcases_rejected[fail-pass-r4-403-duplicate-fail-pass]",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_401_403_duplicate_raw_testcases_rejected[fail-pass-r4-403-duplicate-fail-pass]",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_401_403_duplicate_raw_testcases_rejected[fail-pass-r4-403-duplicate-fail-pass]"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-404",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_404_same_name_wrong_classname_rejected",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_404_same_name_wrong_classname_rejected",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_404_same_name_wrong_classname_rejected"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-405",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_405_same_name_wrong_file_rejected",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_405_same_name_wrong_file_rejected",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_405_same_name_wrong_file_rejected"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-406",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_406_unknown_identity_rejected",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_406_unknown_identity_rejected",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_406_unknown_identity_rejected"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-407",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_407_missing_raw_identity_rejected",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_407_missing_raw_identity_rejected",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_407_missing_raw_identity_rejected"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-408",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_408_counters_mismatch_rejected",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_408_counters_mismatch_rejected",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_408_counters_mismatch_rejected"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-409",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_409_inconsistent_outcomes_rejected",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_409_inconsistent_outcomes_rejected",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_409_inconsistent_outcomes_rejected"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-410",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_410_unique_valid_testcase_accepted",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_410_unique_valid_testcase_accepted",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_410_unique_valid_testcase_accepted"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-411",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_411_external_unfrozen_test_path_rejected_before_launch",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_411_external_unfrozen_test_path_rejected_before_launch",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_411_external_unfrozen_test_path_rejected_before_launch"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-412",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_412_source_replaced_before_launch_rejected",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_412_source_replaced_before_launch_rejected",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_412_source_replaced_before_launch_rejected"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-413",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_413_unfrozen_node_selection_rejected_before_launch",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_413_unfrozen_node_selection_rejected_before_launch",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_413_unfrozen_node_selection_rejected_before_launch"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-414",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_414_exact_frozen_selection_accepted",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_414_exact_frozen_selection_accepted",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_414_exact_frozen_selection_accepted"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-415",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_415_sequential_runs_preserve_first_evidence",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_415_sequential_runs_preserve_first_evidence",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_415_sequential_runs_preserve_first_evidence"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-416",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_416_bounded_parallel_same_suite_uses_exclusive_runs",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_416_bounded_parallel_same_suite_uses_exclusive_runs",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_416_bounded_parallel_same_suite_uses_exclusive_runs"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-417",
+      "category": "r4-targeted",
+      "required": true,
+      "test_name": "test_r4_417_failed_run_cannot_borrow_successful_evidence",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_417_failed_run_cannot_borrow_successful_evidence",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_417_failed_run_cannot_borrow_successful_evidence"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "HRN-001",
+      "category": "r2-original",
+      "required": true,
+      "test_name": "test_hrn_001_old_pass_report_is_ignored_when_startup_fails",
+      "junit_identity": {
+        "classname": "tests.hardening.test_runner_fail_closed",
+        "name": "test_hrn_001_old_pass_report_is_ignored_when_startup_fails",
+        "file": "tests/hardening/test_runner_fail_closed.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_runner_fail_closed.py::test_hrn_001_old_pass_report_is_ignored_when_startup_fails"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "HRN-002",
+      "category": "r2-original",
+      "required": true,
+      "test_name": "test_hrn_002_timeout_fails_closed",
+      "junit_identity": {
+        "classname": "tests.hardening.test_runner_fail_closed",
+        "name": "test_hrn_002_timeout_fails_closed",
+        "file": "tests/hardening/test_runner_fail_closed.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_runner_fail_closed.py::test_hrn_002_timeout_fails_closed"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "HRN-003",
+      "category": "r2-original",
+      "required": true,
+      "test_name": "test_hrn_003_zero_exit_without_report_fails_closed",
+      "junit_identity": {
+        "classname": "tests.hardening.test_runner_fail_closed",
+        "name": "test_hrn_003_zero_exit_without_report_fails_closed",
+        "file": "tests/hardening/test_runner_fail_closed.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_runner_fail_closed.py::test_hrn_003_zero_exit_without_report_fails_closed"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "HRN-004",
+      "category": "r2-original",
+      "required": true,
+      "test_name": "test_hrn_004_invalid_report_fails_closed",
+      "junit_identity": {
+        "classname": "tests.hardening.test_runner_fail_closed",
+        "name": "test_hrn_004_invalid_report_fails_closed",
+        "file": "tests/hardening/test_runner_fail_closed.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_runner_fail_closed.py::test_hrn_004_invalid_report_fails_closed"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "HRN-005",
+      "category": "r2-original",
+      "required": true,
+      "test_name": "test_hrn_005_preexisting_unique_report_is_rejected_before_launch",
+      "junit_identity": {
+        "classname": "tests.hardening.test_runner_fail_closed",
+        "name": "test_hrn_005_preexisting_unique_report_is_rejected_before_launch",
+        "file": "tests/hardening/test_runner_fail_closed.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_runner_fail_closed.py::test_hrn_005_preexisting_unique_report_is_rejected_before_launch"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "HRN-006",
+      "category": "r2-original",
+      "required": true,
+      "test_name": "test_hrn_006_current_valid_report_is_used_normally",
+      "junit_identity": {
+        "classname": "tests.hardening.test_runner_fail_closed",
+        "name": "test_hrn_006_current_valid_report_is_used_normally",
+        "file": "tests/hardening/test_runner_fail_closed.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_runner_fail_closed.py::test_hrn_006_current_valid_report_is_used_normally"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-418",
+      "category": "fix1-targeted",
+      "required": true,
+      "test_name": "test_r4_418_duplicate_manifest_case_id_rejected_before_launch",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_418_duplicate_manifest_case_id_rejected_before_launch",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_418_duplicate_manifest_case_id_rejected_before_launch"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-419",
+      "category": "fix1-targeted",
+      "required": true,
+      "test_name": "test_r4_419_420_effective_runtime_file_mutation_rejected[runtime-config-r4-419-runtime-config-mutation]",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_419_420_effective_runtime_file_mutation_rejected[runtime-config-r4-419-runtime-config-mutation]",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_419_420_effective_runtime_file_mutation_rejected[runtime-config-r4-419-runtime-config-mutation]"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    },
+    {
+      "case_id": "R4-420",
+      "category": "fix1-targeted",
+      "required": true,
+      "test_name": "test_r4_419_420_effective_runtime_file_mutation_rejected[requirements-lock-r4-420-requirements-lock-mutation]",
+      "junit_identity": {
+        "classname": "tests.hardening.test_r4_targeted_controls",
+        "name": "test_r4_419_420_effective_runtime_file_mutation_rejected[requirements-lock-r4-420-requirements-lock-mutation]",
+        "file": "tests/hardening/test_r4_targeted_controls.py"
+      },
+      "fixed_input": {
+        "collected_nodeid": "tests/hardening/test_r4_targeted_controls.py::test_r4_419_420_effective_runtime_file_mutation_rejected[requirements-lock-r4-420-requirements-lock-mutation]"
+      },
+      "expected": {
+        "outer_runner_exit": 0,
+        "accepted": true,
+        "observed_case": "passed"
+      }
+    }
+  ]
+}
