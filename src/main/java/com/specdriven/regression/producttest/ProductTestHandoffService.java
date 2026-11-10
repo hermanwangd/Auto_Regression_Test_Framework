@@ -358,6 +358,7 @@ public final class ProductTestHandoffService {
         Set<String> testPaths = new LinkedHashSet<>();
         ParserAssertions parserAssertions=new ParserAssertions();
         int nativeRequests = 0;
+        boolean a01SourceProvenance = false;
         for (Object raw : list(s.suite.get("tests"), "tests", false)) {
             Map<String,Object> ref = object(raw, "test_ref"); only(ref, Set.of("ref"), "test_ref");
             String path = relativePath(text(ref.get("ref"), "test_ref"));
@@ -439,8 +440,10 @@ public final class ProductTestHandoffService {
                                 equal("fixtures/request.json",request,"grpc_request_path");
                                 need(needed,descriptor,"fixture"); need(needed,request,"fixture"); need(needed,"fixtures/lease.json","fixture");
                                 if(com.specdriven.regression.provider.grpc.ReviewedLoopbackGrpcPolicy.profile(input).isP04())need(needed,"fixtures/service.proto","fixture");
-                                if(com.specdriven.regression.provider.grpc.ReviewedLoopbackGrpcPolicy.profile(input)==com.specdriven.regression.provider.grpc.ReviewedLoopbackGrpcPolicy.Profile.A01_CATALOG)
+                                if(com.specdriven.regression.provider.grpc.ReviewedLoopbackGrpcPolicy.profile(input)==com.specdriven.regression.provider.grpc.ReviewedLoopbackGrpcPolicy.Profile.A01_CATALOG) {
+                                    a01SourceProvenance = true;
                                     for(String fixture:com.specdriven.regression.provider.grpc.ReviewedA01CatalogPolicy.EXTRA_FILES)need(needed,fixture,"fixture");
+                                }
                             }
                             stepOps.put(sid, op);
                             continue;
@@ -480,6 +483,19 @@ public final class ProductTestHandoffService {
             FileEntry file = files.get(entry.getKey());
             equal(entry.getValue(), file.role, "reviewed_file_role_mismatch");
             if (Set.of("fixture", "oracle").contains(file.role)) {
+                // These two fixed upstream source artifacts are provenance bytes, not YAML inputs.
+                // The finite operation, role, path and independent upstream digest must all match.
+                if (a01SourceProvenance && "fixture".equals(file.role)) {
+                    String sourcePin = switch (entry.getKey()) {
+                        case "fixtures/demo.proto" -> com.specdriven.regression.provider.grpc.ReviewedA01CatalogPolicy.PROTO_SHA;
+                        case "fixtures/generated-demo.pb.go" -> com.specdriven.regression.provider.grpc.ReviewedA01CatalogPolicy.GENERATED_SHA;
+                        default -> null;
+                    };
+                    if (sourcePin != null) {
+                        equal(sourcePin, digest(file.bytes), "a01_source_digest");
+                        continue;
+                    }
+                }
                 Object value = yamlValue(file.bytes, "static_input");
                 staticValue(value);
             }

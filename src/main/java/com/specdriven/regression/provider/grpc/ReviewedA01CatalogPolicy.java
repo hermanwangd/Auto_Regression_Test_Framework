@@ -48,7 +48,7 @@ public final class ReviewedA01CatalogPolicy {
             JsonNode launch=JSON.readTree(launchBytes);
             require(Arrays.equals(launchBytes,ReviewedA01CatalogProof.launchBytes(launch)),"launch manifest must use exact compact JSON bytes");
             require(launch.equals(lease.path("owner_launch"))&&hash(launchBytes).equals(lease.path("owner_launch_sha256").asText()),"launch fixture identity differs");
-            require(root.toRealPath().toString().equals(launch.path("suite_root").asText()),"launch suite differs");
+            validateExecutionCopy(root, launch);
             byte[] request = read(root,"fixtures/request.json",65536);
             ReviewedA01CatalogProof.validateLease(lease,source,runtime,hash(sourceBytes),hash(runtimeBytes),hash(request));
             require(bindings.get("target").equals(lease.path("endpoint").textValue()) && bindings.get("owner_run_id").equals(lease.path("owner_run_id").textValue()),"binding identity mismatch");
@@ -69,6 +69,29 @@ public final class ReviewedA01CatalogPolicy {
             @SuppressWarnings("unchecked") Map<String,Object> values=JSON.convertValue(lease,Map.class);
             return new ReviewedLoopbackGrpcPolicy.Fixture(method,new String(request,StandardCharsets.UTF_8),Map.copyOf(values),hash(leaseBytes));
         } catch(IOException e) {throw new IllegalArgumentException("reviewed_a01: bounded fixture unavailable",e);}
+    }
+
+    /** Preserve the original owner suite identity while permitting its byte-identical private execution copy. */
+    private static void validateExecutionCopy(Path root, JsonNode launch) throws IOException {
+        Path sourceRoot = absolute(launch.path("suite_root").asText());
+        require(Files.isDirectory(sourceRoot, LinkOption.NOFOLLOW_LINKS)
+                && sourceRoot.toRealPath().equals(sourceRoot), "source root is not an existing canonical directory");
+        require(root.isAbsolute() && root.normalize().equals(root)
+                && Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)
+                && root.toRealPath().equals(root), "execution root is not an existing canonical directory");
+        if (root.equals(sourceRoot)) return;
+        // Fixed provenance inputs only; no extension/path-prefix trust or caller-supplied file list.
+        Map<String,Integer> inputs = Map.of(
+                "fixtures/demo.proto", 16384, "fixtures/generated-demo.pb.go", 128*1024,
+                "fixtures/products.json", 16384, "fixtures/catalog-source.json", 32768,
+                "fixtures/catalog-runtime.json", 32768, "fixtures/catalog-owner-launch.json", 16384,
+                "fixtures/lease.json", 16384, "fixtures/request.json", 65536,
+                "fixtures/catalog.desc.b64", 8192);
+        for (var entry : inputs.entrySet()) {
+            byte[] original = read(sourceRoot, entry.getKey(), entry.getValue());
+            byte[] execution = read(root, entry.getKey(), entry.getValue());
+            require(Arrays.equals(original, execution), "execution copy differs: " + entry.getKey());
+        }
     }
 
     /** Called again immediately before RPC. This method observes the OS; no supplied observation is trusted. */
