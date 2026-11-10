@@ -43,12 +43,7 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
             String a01Pin=System.getProperty("swarm.grpc.a01.owner_launch_sha256");
             boolean a01Declared=request.repositoryRevisions().containsKey("microservices-demo");
             if(a01Declared||a01Pin!=null) {
-                require(binding.fixtureLeaseSha256()!=null&&binding.fixtureLeaseSha256().matches("[a-f0-9]{64}"),"A01 independent fixture lease pin missing");
-                Path leaseFile=LocalFiles.contained(suite.getParent(),Path.of("fixtures/lease.json"));
-                byte[] leaseBytes=LocalFiles.read(leaseFile,16384);
-                require(binding.fixtureLeaseSha256().equals(LocalFiles.sha256(leaseBytes)),"A01 independent fixture lease digest mismatch");
-                var lease=Json.MAPPER.readTree(leaseBytes);
-                a01LaunchArguments=a01JavaArguments(a01Pin,binding.fixtureLeaseSha256(),lease.path("profile").asText(),lease.path("owner_launch_sha256").asText());
+                a01LaunchArguments=reviewedA01JavaArguments(suite,a01Pin,binding.fixtureLeaseSha256());
             }
             if(JdbcProcessChannel.selected(request)){jdbcSelected=true;jdbc=JdbcProcessChannel.prepare(binding,request,invocation);}
             Path parent = LocalFiles.real(binding.outputParent());
@@ -111,6 +106,16 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
         } catch (Exception e) {
             return Receipts.failure(request, invocation, ProductTestReceipt.Outcome.INVALID_EVIDENCE, jdbc==null?message(e):"Protected JDBC invocation failed at "+jdbcConsumerStage+"; inspect typed parent/child observations", output.toString(), runExit);
         } finally {if(jdbc!=null)jdbc.close();}
+    }
+
+    static List<String> reviewedA01JavaArguments(Path suiteManifest,String launchPin,String independentLeasePin) throws IOException {
+        require(independentLeasePin!=null&&independentLeasePin.matches("[a-f0-9]{64}"),"A01 independent fixture lease pin missing");
+        Path suiteBase=LocalFiles.real(suiteManifest).getParent();
+        Path leaseFile=LocalFiles.contained(suiteBase,suiteBase.resolve("fixtures/lease.json"));
+        byte[] leaseBytes=LocalFiles.read(leaseFile,16384);
+        require(independentLeasePin.equals(LocalFiles.sha256(leaseBytes)),"A01 independent fixture lease digest mismatch");
+        var lease=Json.MAPPER.readTree(leaseBytes);
+        return a01JavaArguments(launchPin,independentLeasePin,lease.path("profile").asText(),lease.path("owner_launch_sha256").asText());
     }
 
     static List<String> a01JavaArguments(String pin,String fixtureLeasePin,String profile,String leaseLaunchPin) {
