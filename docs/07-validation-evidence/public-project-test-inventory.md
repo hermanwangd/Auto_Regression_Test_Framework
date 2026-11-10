@@ -1,10 +1,10 @@
 # Public-project test inventory
 
-Version: `planning-v1` · metadata revision: `a01-sg05-failure-acceptance-2026-11-10-r1` · framework reference: [`b95f6b76`](https://github.com/hermanwangd/Auto_Regression_Test_Framework/commit/b95f6b76f5e54fe9b93f99aad78d17a8568e52f7)
+Version: `planning-v1` · metadata revision: `p06-sg01-keyed-source-cli-acceptance-2026-11-10-r1` · framework reference: [`b95f6b76`](https://github.com/hermanwangd/Auto_Regression_Test_Framework/commit/b95f6b76f5e54fe9b93f99aad78d17a8568e52f7)
 
 **20 repositories / 116 proposed scenario groups**: 11 selected client/test-source repositories (62 groups) and 9 application candidates (54 groups). These are planning denominators. They are not approved executable-case counts or product requirement coverage.
 
-Full product requirements/AC denominator and global approved executable-case/layer denominators remain **UNKNOWN**. Bounded accepted groups are P04-SG02, A01-SG01, A01-SG05 and A01-SG06. Current planned-group acceptance is **4/116 (3.45%) in each of the Framework/provider and Module layers**, not requirement coverage. Across these groups, Framework has 13 applicable bounded cases and Module has 14; the SG06 cross-lease rejection occurs before Framework execution. The 116 groups remain a planning denominator.
+Full product requirements/AC denominator and global approved executable-case/layer denominators remain **UNKNOWN**. Bounded accepted groups are P04-SG02, P06-SG01, A01-SG01, A01-SG05 and A01-SG06. Current planned-group acceptance is **5/116 (4.31%) in each of the Framework/provider and Module layers**, not requirement coverage. Across these groups, Framework has 19 applicable bounded cases and Module has 20; the SG06 cross-lease rejection occurs before Framework execution. The 116 groups remain a planning denominator.
 
 A01-SG05's separate **UNAVAILABLE** run now completes its bounded deadline/unavailable scope. Its prior three-case deadline/recovery slice remains unchanged and was not rerun. Both layers are **ACCEPTED**, supported by four named cases: baseline, deadline, recovery and unavailable. The two expected-negative product results remain failed; their independent expected-behavior grades are PASS. Bounded-case totals are not global approved-case denominators or requirement coverage.
 
@@ -152,12 +152,16 @@ This adds **one accepted group record in each of two layers**, supported by four
 
 | Group | Planned behavior | Upstream | Framework provider | Module | Native agent | SIT |
 | --- | --- | --- | --- | --- | --- | --- |
-| P06-SG01 | keyed partition vectors | NOT_RECONCILED | NOT_RECONCILED | BLOCKED | NOT_RUN | BLOCKED |
+| P06-SG01 | keyed partition vectors | NOT_RECONCILED | ACCEPTED | ACCEPTED | NOT_RUN | BLOCKED |
 | P06-SG02 | 相同 key 穩定 routing | NOT_RECONCILED | NOT_RECONCILED | BLOCKED | NOT_RUN | BLOCKED |
 | P06-SG03 | null／empty／binary key 區別 | NOT_RECONCILED | NOT_RECONCILED | BLOCKED | NOT_RUN | BLOCKED |
 | P06-SG04 | unknown topic 的負向契約 | NOT_RECONCILED | NOT_RECONCILED | BLOCKED | NOT_RUN | BLOCKED |
 | P06-SG05 | sticky partition 與 batch rotation | NOT_RECONCILED | NOT_RECONCILED | BLOCKED | NOT_RUN | BLOCKED |
 | P06-SG06 | stale batch／metadata 更新恢復 | NOT_RECONCILED | NOT_RECONCILED | BLOCKED | NOT_RUN | BLOCKED |
+
+**P06-SG01 bounded keyed-source acceptance, 2026-11-10:** [Public evidence index](p06-sg01-keyed-source-cli-evidence.json) binds six frozen source-owned vectors to current product source `357bd3b51b02b2fbb75f7f121dc6ebf7118ee67a`, the existing CI 42738823849 packaged artifacts, and upstream `3fa6acf1931e0beb4b3af9e8859d08a80897a63b`. Six distinct Module invocations and canonical runs each execute one CLI operation and three passed assertions. Exact stdout values are 681, 524, 434, 107, 566 and 742 followed by newline; stderr is empty and both product exits are zero. Receipts are COMPLETED/validated and all reviewed cleanup/pin checks passed.
+
+This is a broker-free partitioner source-module slice through the CLI bridge, not the full upstream suite, native Kafka provider/broker, native Swarm-agent or shared SIT acceptance. The provider pins only its executable; a separately reviewed deployment seal binds the adapter and unchanged upstream files. Prior monitor failures and the test-recorder FAIL remain retained, add no accepted cases and were not retroactively rewritten. Monitoring is sampled, not a hard kernel quota or lossless process trace. Accepted V01 was retained without rerun; the later round executed only V02–V06. Raw evidence is retained by hash, not offered as public download links.
 
 ### P07 — aio-libs/aiokafka
 
@@ -273,7 +277,7 @@ This adds **one accepted group record in each of two layers**, supported by four
 
 Deadline, guard failure, TERM and KILL cleanup controls were checked. KILL retains UNKNOWN_NON_GRACEFUL with external cleanup evidence only. Earlier failures remain retained; the prior missing native file remains UNKNOWN and no native admission event was observed. This is not upstream-suite, native Swarm-agent, SIT, full catalog, Java17 packaged-runtime or release acceptance. The index gives original byte hashes; retained raw artifacts are not public downloads.
 
-Together with P04-SG02 and A01-SG06, **Framework/provider and Module each have 3 accepted groups out of 116 planned (2.59%)**. Framework has nine applicable bounded cases, Module ten; native-agent and SIT acceptance remain 0. Requirement/AC and global approved-case coverage remain UNKNOWN. The 16 historical records remain excluded.
+**Historical SG01/SG06 snapshot:** Together with P04-SG02 and A01-SG06, **Framework/provider and Module each had 3 accepted groups out of 116 planned (2.59%)**. Framework has nine applicable bounded cases, Module ten; native-agent and SIT acceptance remain 0. Requirement/AC and global approved-case coverage remain UNKNOWN. The 16 historical records remain excluded.
 
 **A01-SG06 bounded isolation acceptance, 2026-11-10:** [Public evidence index](a01-sg06-owned-go-isolation-acceptance.json) records simultaneous source-built Go sessions A/B. A and B each complete a validated GetProduct RPC; A is gracefully stopped and independently verified empty/socket-gone, then the same B owner completes a fresh RPC. Both owners finish gracefully with no cleanup errors. Framework applicability is 3 positive cases; Module applicability is 4 expected behaviors, including the exact independent lease/launch mismatch rejection before Framework spawn. That negative remains Module REJECTED, Framework NOT_INVOKED and canonical ABSENT_NOT_PASSED. No native-agent/SIT/upstream-suite credit or measured server-call count is claimed. The prior SG06 attempt failed because its harness expected the wrong rejection layer; that failure and its non-graceful cleanup remain retained.
 
@@ -484,7 +488,7 @@ Capability-level execution assessment remains **UNKNOWN**. The bounded P04-SG02,
 | --- | ---: | --- | --- | --- | --- | --- |
 | C01 | 54 | NOT_RUN: 54 | NOT_RUN: 51; ACCEPTED: 3 | NOT_RUN: 51; ACCEPTED: 3 | NOT_RUN: 54 | BLOCKED: 54 |
 | C02 | 30 | NOT_RECONCILED: 24; NOT_RUN: 6 | NOT_RECONCILED: 23; NOT_RUN: 3; ACCEPTED: 4 | NOT_RECONCILED: 13; BLOCKED: 10; NOT_RUN: 3; ACCEPTED: 4 | NOT_RUN: 30 | BLOCKED: 30 |
-| C03 | 18 | NOT_RECONCILED: 12; NOT_RUN: 6 | NOT_RECONCILED: 12; NOT_RUN: 6 | BLOCKED: 12; NOT_RUN: 6 | NOT_RUN: 18 | BLOCKED: 18 |
+| C03 | 18 | NOT_RECONCILED: 12; NOT_RUN: 6 | ACCEPTED: 1; NOT_RECONCILED: 11; NOT_RUN: 6 | ACCEPTED: 1; BLOCKED: 11; NOT_RUN: 6 | NOT_RUN: 18 | BLOCKED: 18 |
 | C04 | 6 | NOT_RECONCILED: 6 | NOT_RECONCILED: 6 | NOT_RECONCILED: 6 | NOT_RUN: 6 | BLOCKED: 6 |
 | C05 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
 | C06 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
