@@ -1,49 +1,15 @@
-# A01 focused Java/Module build preparation
+# A01 source admission and execution copy regression CI
 
-LEASE-PATH REPAIR SOURCE-BOUND CANDIDATE: repaired source commit 6d65b300a673adac70821fd53206dde96b399dfe
-and tree 38952890ac9d97e25315a69a6bef982c42b73a1c have been published. Prior CI42723117890 and all original
-source/bundle/intake/failure receipts remain unchanged. This sibling changes
-only source bindings, Module forwarder count10 to14, joined counts and hashes.
-Exact reviewed source pins are now bound. New 267-case CI and A01 product runtime remain NOT_RUN.
+This source-bound nonproduction candidate tests commit 357bd3b51b02b2fbb75f7f121dc6ebf7118ee67a, tree 3b032dbc43506e6c4bc20ffdffe14837804aa38f. It adds the fixed A01 raw-source admission and byte-identical private execution copy checks. The original launch suite, source hashes, lease bytes and live owner checks remain bound. All earlier sources, CI42733402337, artifact intake and failed runtime receipts are retained.
 
-Uses original Java17/Maven pins, actions,30controls,900s job/840s driver incl30s
-cleanup,2GiB sampled RSS/2GiB total disk,1GiB cache subset,256MiB delivery and1MiB
-manifest. Charges source/control/work roots and all owner/JUnit copies. The prior
-Go1500s/3GiB grant does not apply. No Go rebuild, service launch, runtime or SIT.
+The exact expected tests are 307: 248 Framework and 59 Module across 20 XML reports. Existing 267 cases remain selected. The additions are 16 A01SourceAdmissionTest cases and the existing 24 ProductTestHandoffServiceTest cases. Counts come from source annotations and were frozen before CI, not inferred from successful results. Fresh exact reports, unique classname/name identities, matching counters and zero failures/errors/skips remain mandatory. XML bounds remain 512 KiB per report and 4 MiB aggregate, including failure diagnostics.
 
-Declared267 JUnit cases:208root+59Module across18exact reports; old149 preserved,
-new118 owner-declared. Fresh XML, exact class/count/unique testcase identities,
-zero skipped/errors/failures, original512KiB/report4MiB aggregate, and unchanged
-post-packaging report hashes are mandatory. Source annotation derivation is an
-owner/reviewer input; counts are not inferred from a successful run.
+Java 17.0.21+9, Maven 3.9.11, pinned Actions, 900-second job / 840-second driver including 30-second cleanup reserve, 2 GiB sampled process RSS, 2 GiB owned storage, 1 GiB dependency-cache subset, 256 MiB delivery and 1 MiB manifest limits are unchanged. Official Maven Central remains the sole dependency mirror. No Go build, owner launch, provider RPC, deployment or SIT runs in this workflow.
 
-Package exact9owner/policy/descriptor class entries into owner/owner-support.jar;
-copy exact ordered Jackson annotations2.22/core2.22.0/databind2.22.0 and
-protobuf-java4.33.4. This five-JAR closure stays≤8JARs/32MiB, with no external
-Manifest Class-Path, unsafe paths, duplicate ZIP entries, symlinks or undeclared
-nested class expansions. Whole-JAR hashes and compiled class input hashes appear
-in manifest. Nothing runs this owner in build. Runtime launch identity is frozen
-later against actual outputs, not synthetic values or local compilation receipts.
+Owner packaging remains exactly 9 compiled class entries and four ordered dependency GAVs: Jackson annotations 2.22, core/databind 2.22.0 and protobuf-java 4.33.4. Classpath, ZIP, path, byte-count and nested-class guards are unchanged. The changed A01 policy means the new owner-support JAR requires new runtime identity binding; earlier identical-JAR exemptions cannot be reused.
 
-Success uploads exact2application JARs+5owner/support/dependency JARs+18XML+manifest.
-Combined artifact bytes≤255MiB plus manifest≤1MiB. Full XML is copied only after
-strict validation and checked again against accepted fingerprints. Failure-only
-diagnostics use a separate artifact and contain only expected XML paths≤512KiB
-each/4MiB total and failure.json≤64KiB. Partial/malformed XML is explicitly
-FAILED_DIAGNOSTICS_ONLY, never admission or JAR success. Collection cannot turn
-failure into success; deadline cleanup reserve can prevent diagnostic collection.
+The success artifact contains the two application JARs, five owner/dependency JARs, 20 XML reports and a build manifest. Failure diagnostics have their own bounded artifact and never qualify as success or coverage. Packaging rechecks accepted report hashes.
 
-Local evidence: original30 baseline PASS; new10 first RED1failure+9errors against
-unmodified driver; implemented controls44PASS (original30+14),0.662s,23072KiB
-parent RSS under256MiB virtual ceiling. Python fixture children only; no Maven,
-Java, Go, network or product execution. Original RED/green receipts retained.
-These mechanical tests do not claim native Swarm-agent acceptance.
+Local Java/JUnit tests were NOT_RUN because a verified Maven/JUnit project classpath is unavailable. The actual prior Framework admission failure and the same-parser 9-fixture diagnostic are retained as behavioral RED. Existing 44 standard-library builder controls are rerun for this exact source-bound bundle; their result is recorded separately and does not prove Java or native-agent behavior.
 
-Parent alone publishes against expected builder head
-02d6cc96ed8e8fdd811868d845ad710d477cceaf after final bound-byte review. Historical
-P04source173ee/CI42681020126 and GoCI42715816478 remain unchanged. After build,
-artifact intake and owner/process/normal+NOT_FOUND runtime plans remain separate;
-267unit PASS would not establish A01/runtime/SIT acceptance.
-
-Preparation note: initial metadata generation had a syntax error before writing
-workflow/contract; corrected generation succeeded. No build/test failure hidden.
+Publish only to the existing codex/b13-build-only branch using expected head d7b787ce43d783ba77998d237d08cfca774d3a3d after final exact-bundle review. This workflow does not move plug-in-module or modify production pipelines. After CI, artifacts and the changed owner JAR must be verified. A01 product reentry uses a new finite grant, current prelaunch/no-RPC controls and preserved cumulative resource history. Unit success alone does not establish A01 group, native-agent or SIT coverage.

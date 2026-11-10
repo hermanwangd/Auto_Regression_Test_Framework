@@ -1,13 +1,13 @@
 {
   "schema": "a01-focused-java-contract.v1",
-  "status": "FROZEN_LEASE_PATH_REPAIR_NOT_RUN",
+  "status": "FROZEN_SOURCE_ADMISSION_REPAIR_NOT_RUN",
   "source": {
     "repository": "hermanwangd/Auto_Regression_Test_Framework",
-    "commit": "6d65b300a673adac70821fd53206dde96b399dfe",
-    "tree": "38952890ac9d97e25315a69a6bef982c42b73a1c",
-    "development_base": "6c2ba5400c7458a2409477fb7ce08ad42e3fd646",
-    "candidate_manifest_sha256": "38047c2c02ebf6ff60a28490c2480d0003fe270d8ac255ba91f49947859eccc6",
-    "candidate_patch_sha256": "ee82ee46679d4f8e364a8303d9649c96d6a3d915017044eeaf31eb01169d382b"
+    "commit": "357bd3b51b02b2fbb75f7f121dc6ebf7118ee67a",
+    "tree": "3b032dbc43506e6c4bc20ffdffe14837804aa38f",
+    "development_base": "6d65b300a673adac70821fd53206dde96b399dfe",
+    "candidate_manifest_sha256": "ad746b1f4473e39eb4c58a7ca325d3e55df20e4a666f48a9b5007bc8c29c8f17",
+    "candidate_patch_sha256": "e6d68d225fe322f427e0a4cdaf2bd86d11b25304fe251e4b30a7e0479610bdc6"
   },
   "activation": {
     "event": "push",
@@ -36,7 +36,7 @@
   },
   "driver": {
     "path": "scripts/ci/b13-build/build_driver.py",
-    "sha256": "8091fac78aef26f149a7a27b0d409e6944bf11c6377f38589dd120931b5a3661",
+    "sha256": "adaa2ad0eb3642814e65c7e2618782f944b2a50410be9f9d4f871d34989c22a1",
     "implementation": "Python standard library; no bootstrap dependency install"
   },
   "limits": {
@@ -90,7 +90,9 @@
     "junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcDescriptorAdmissionProofTest.xml",
     "junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcBindingTest.xml",
     "junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcOwnedStreamingProofTest.xml",
-    "junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcFourCardinalityProofTest.xml"
+    "junit/module/TEST-com.featuredeliveryintelligence.fdi.producttest.GrpcFourCardinalityProofTest.xml",
+    "junit/root/TEST-com.specdriven.regression.producttest.A01SourceAdmissionTest.xml",
+    "junit/root/TEST-com.specdriven.regression.producttest.ProductTestHandoffServiceTest.xml"
   ],
   "current_evidence": {
     "historical_Java_CI": 42681020126,
@@ -100,7 +102,8 @@
     "runtime": "NOT_RUN",
     "SIT": "NOT_RUN",
     "coverage_credit": 0,
-    "candidate_267_JUnit": "NOT_RUN"
+    "candidate_267_JUnit": "CI42733402337 PASS 267/267, preserved unchanged",
+    "candidate_307_JUnit": "NOT_RUN"
   },
   "publication_allowlist": {
     ".github/workflows/b13-build-artifacts.yml": "b13-build-artifacts.yml",
@@ -131,7 +134,9 @@
       "com.specdriven.regression.provider.grpc.GrpcMetadataDeadlineContractTest": 8,
       "com.specdriven.regression.evidence.ReviewedGrpcProofIdentityTest": 62,
       "com.specdriven.regression.provider.grpc.P04OwnedStreamingTest": 1,
-      "com.specdriven.regression.provider.grpc.P04FourCardinalityTest": 1
+      "com.specdriven.regression.provider.grpc.P04FourCardinalityTest": 1,
+      "com.specdriven.regression.producttest.A01SourceAdmissionTest": 16,
+      "com.specdriven.regression.producttest.ProductTestHandoffServiceTest": 24
     },
     "module": {
       "com.featuredeliveryintelligence.fdi.producttest.A01CatalogProofTest": 38,
@@ -141,7 +146,7 @@
       "com.featuredeliveryintelligence.fdi.producttest.GrpcOwnedStreamingProofTest": 1,
       "com.featuredeliveryintelligence.fdi.producttest.GrpcFourCardinalityProofTest": 4
     },
-    "expected_total": 267,
+    "expected_total": 307,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
@@ -149,7 +154,7 @@
     "testcase_nodes_required": true,
     "unique_classname_name_required": true,
     "counter_consistency_required": true,
-    "expected_reports": 18
+    "expected_reports": 20
   },
   "count_correction": {
     "class": "com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest",
@@ -159,7 +164,7 @@
     "product_source_changed": false,
     "validator_weakened": false
   },
-  "count_derivation": "Original149 + prior114 + four lease-path regressions =267: root208 Module59,18XML. Owner actual A01LaunchArgumentsTest annotations:10 @Test plus4 parameterized values=14.",
+  "count_derivation": "Prior267 + A01SourceAdmissionTest16 (9 @Test + ValueSource2+3+2) + existing ProductTestHandoffServiceTest24 @Test =307. Framework248, Module59,20XML. Frozen before execution.",
   "post_exit_snapshot_repair": {
     "refresh_process_group_after_observed_parent_exit": true,
     "fresh_surviving_descendant_still_rejected": true,
@@ -222,6 +227,6 @@
     "xml_total_bytes": 4194304,
     "xml_per_file_bytes": 524288,
     "failure_json_bytes": 65536,
-    "report_count_max": 18
+    "report_count_max": 20
   }
 }

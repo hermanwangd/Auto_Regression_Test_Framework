@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: hermanwangd/Auto_Regression_Test_Framework
-          ref: 6d65b300a673adac70821fd53206dde96b399dfe
+          ref: 357bd3b51b02b2fbb75f7f121dc6ebf7118ee67a
           path: source
           fetch-depth: 1
           persist-credentials: false
@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s  %s\n' '8091fac78aef26f149a7a27b0d409e6944bf11c6377f38589dd120931b5a3661' 'control/scripts/ci/b13-build/build_driver.py' | sha256sum --check --strict
+          printf '%s  %s\n' 'adaa2ad0eb3642814e65c7e2618782f944b2a50410be9f9d4f871d34989c22a1' 'control/scripts/ci/b13-build/build_driver.py' | sha256sum --check --strict
           python3 -I -B control/scripts/ci/b13-build/build_driver.py \
             --source "$GITHUB_WORKSPACE/source" --work "$RUNNER_TEMP/b13-build-only" \
             --workflow-commit "$GITHUB_SHA"
@@ -63,6 +63,8 @@ jobs:
             ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.provider.grpc.A01CatalogOwnerTest.xml
             ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.producttest.P04DescriptorAdmissionTest.xml
             ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.producttest.ReviewedGrpcCapabilityTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.producttest.A01SourceAdmissionTest.xml
+            ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.producttest.ProductTestHandoffServiceTest.xml
             ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest.xml
             ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.provider.grpc.RouteGuideProfileTest.xml
             ${{ runner.temp }}/b13-build-only/delivery/junit/root/TEST-com.specdriven.regression.provider.grpc.GrpcClientExternalEndpointSupportTest.xml
@@ -99,6 +101,8 @@ jobs:
             ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.provider.grpc.A01CatalogOwnerTest.xml
             ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.producttest.P04DescriptorAdmissionTest.xml
             ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.producttest.ReviewedGrpcCapabilityTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.producttest.A01SourceAdmissionTest.xml
+            ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.producttest.ProductTestHandoffServiceTest.xml
             ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.contract.v03.ReviewedGrpcIntegrationTest.xml
             ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.provider.grpc.RouteGuideProfileTest.xml
             ${{ runner.temp }}/b13-build-only/diagnostics/root/TEST-com.specdriven.regression.provider.grpc.GrpcClientExternalEndpointSupportTest.xml

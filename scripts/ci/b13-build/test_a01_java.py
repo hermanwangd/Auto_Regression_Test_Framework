@@ -7,8 +7,8 @@ class A01JavaControls(unittest.TestCase):
  def tearDown(self): self.tmp.cleanup()
  def budget(self): return d.Budget([self.root],total=5,reserve=.2)
  def test_counts(self):
-  self.assertEqual(sum(d.ROOT_TESTS.values()),208); self.assertEqual(sum(d.MODULE_TESTS.values()),59)
-  self.assertEqual(len(d.ROOT_TESTS)+len(d.MODULE_TESTS),18)
+  self.assertEqual(sum(d.ROOT_TESTS.values()),248); self.assertEqual(sum(d.MODULE_TESTS.values()),59)
+  self.assertEqual(len(d.ROOT_TESTS)+len(d.MODULE_TESTS),20)
  def test_classpath_rejected(self):
   for content in ('Manifest-Version: 1.0\nClass-Path: x.jar\n','Manifest-Version: 1.0\r\nclass-path: x.jar\r\n y.jar\r\n'):
    p=self.root/'bad.jar'
