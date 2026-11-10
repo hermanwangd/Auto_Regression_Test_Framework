@@ -1,12 +1,12 @@
 # Public-project test inventory
 
-Version: `planning-v1` · metadata revision: `a01-sg05-timeout-slice-2026-11-10-r1` · framework reference: [`b95f6b76`](https://github.com/hermanwangd/Auto_Regression_Test_Framework/commit/b95f6b76f5e54fe9b93f99aad78d17a8568e52f7)
+Version: `planning-v1` · metadata revision: `a01-sg05-failure-acceptance-2026-11-10-r1` · framework reference: [`b95f6b76`](https://github.com/hermanwangd/Auto_Regression_Test_Framework/commit/b95f6b76f5e54fe9b93f99aad78d17a8568e52f7)
 
 **20 repositories / 116 proposed scenario groups**: 11 selected client/test-source repositories (62 groups) and 9 application candidates (54 groups). These are planning denominators. They are not approved executable-case counts or product requirement coverage.
 
-Full product requirements/AC denominator and global approved executable-case/layer denominators remain **UNKNOWN**. Bounded accepted groups are P04-SG02, A01-SG01 and A01-SG06. Current planned-group acceptance is **3/116 (2.59%) in each of the Framework/provider and Module layers**, not requirement coverage. Across these groups, Framework has nine applicable bounded cases and Module has ten; the SG06 cross-lease rejection occurs before Framework execution. The 116 groups remain a planning denominator.
+Full product requirements/AC denominator and global approved executable-case/layer denominators remain **UNKNOWN**. Bounded accepted groups are P04-SG02, A01-SG01, A01-SG05 and A01-SG06. Current planned-group acceptance is **4/116 (3.45%) in each of the Framework/provider and Module layers**, not requirement coverage. Across these groups, Framework has 13 applicable bounded cases and Module has 14; the SG06 cross-lease rejection occurs before Framework execution. The 116 groups remain a planning denominator.
 
-A01-SG05 now has an independently accepted **three-case deadline/recovery slice in each layer**, but its UNAVAILABLE branch remains NOT_RUN. Its Framework/provider and Module states are **PARTIAL**, contributing **zero additional ACCEPTED groups**. Full accepted groups still have 9 Framework / 10 Module applicable cases; the separate partial slice adds 3 / 3, so evidence-backed bounded cases total 12 / 13. These totals are not global approved-case denominators or requirement coverage.
+A01-SG05's separate **UNAVAILABLE** run now completes its bounded deadline/unavailable scope. Its prior three-case deadline/recovery slice remains unchanged and was not rerun. Both layers are **ACCEPTED**, supported by four named cases: baseline, deadline, recovery and unavailable. The two expected-negative product results remain failed; their independent expected-behavior grades are PASS. Bounded-case totals are not global approved-case denominators or requirement coverage.
 
 Authoritative machine-readable snapshot: [public-project-test-inventory.json](public-project-test-inventory.json). Original proposal project IDs, ordering, complete commits, titles and notes are preserved; its 13,829 bytes were verified against SHA256 `d98ea460034ab3b3b10a15c075378d61e264324e4672f5dd4f3194e83f0e14f3`.
 
@@ -266,7 +266,7 @@ This adds **one accepted group record in each of two layers**, supported by four
 | A01-SG02 | cart 新增／修改／讀回與 Redis 一致 | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | BLOCKED |
 | A01-SG03 | checkout→payment→shipping→email 的跨服務成功路徑 | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | BLOCKED |
 | A01-SG04 | 不合法 checkout 不產生成功訂單 | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | BLOCKED |
-| A01-SG05 | 依賴服務 timeout／unavailable 的有界失敗 | NOT_RUN | PARTIAL | PARTIAL | NOT_RUN | BLOCKED |
+| A01-SG05 | 依賴服務 timeout／unavailable 的有界失敗 | NOT_RUN | ACCEPTED | ACCEPTED | NOT_RUN | BLOCKED |
 | A01-SG06 | 隔離 session 與 teardown | NOT_RUN | ACCEPTED | ACCEPTED | NOT_RUN | BLOCKED |
 
 **A01-SG01 bounded acceptance, 2026-11-10:** [Public evidence index](a01-sg01-owned-go-acceptance.json) binds two source-built Go GetProduct cases to [source 357bd3b5](https://github.com/hermanwangd/Auto_Regression_Test_Framework/commit/357bd3b51b02b2fbb75f7f121dc6ebf7118ee67a) and [CI 42738823849](https://github.com/hermanwangd/Auto_Regression_Test_Framework/actions/runs/42738823849) (307 focused unit tests, zero failures/errors/skips). The actual normal case is passed/OK with Module/Framework exit 0/0; unknown product is canonically failed/NOT_FOUND with exits 1/1, independently accepted as the expected negative. Both have validated receipts and owned-loopback RPC evidence.
@@ -279,7 +279,9 @@ Together with P04-SG02 and A01-SG06, **Framework/provider and Module each have 3
 
 **A01-SG05 bounded deadline/recovery slice, 2026-11-10:** [Public evidence index](a01-sg05-owned-go-timeout-slice.json) binds three fresh calls to the same source-built owned Go catalog: baseline passed/OK, deadline canonically failed/DEADLINE_EXCEEDED with PROVIDER_TIMEOUT, then recovery passed/OK. Module/Framework exits remain 0/0, 1/1 and 0/0; all receipts are COMPLETED/validated. The timeout provider duration is 5035ms. Its blocking client RPC finishes before CONT_REQUEST, and recovery begins after CONT_CONFIRMED. The raw timeout detail says waiting_for_connection, so server receipt/handling is not asserted and server_request_count remains NOT_MEASURED. Owner cleanup is graceful/reaped/empty-session/socket-gone with no errors. The outer PTY final exit was not retained; no exit 0 is inferred from the summary.
 
-`PARTIAL` means a bounded slice has independently accepted evidence while a required branch remains unexecuted or unaccepted. SG05's UNAVAILABLE branch is NOT_RUN, so **the group is not ACCEPTED and contributes zero group credit**. Its three accepted cases per layer remain separate from the existing fully accepted groups. No upstream test-suite, native Swarm-agent, SIT or release credit is added. Earlier failures and all original verdicts remain retained.
+**A01-SG05 bounded failure-branch acceptance, 2026-11-10:** [Combined acceptance index](a01-sg05-owned-go-failure-acceptance.json) retains the preceding [timeout-slice index](a01-sg05-owned-go-timeout-slice.json) unchanged and adds one fresh UNAVAILABLE case. Its Module/Framework exits are 1/1, outcome is COMPLETED/validated, and the canonical result remains failed/UNAVAILABLE with OPERATION_FAILED. The actual provider duration is 2532ms. The exact Module-owned Framework JVM's mapped-loopback client FD is observed connected to the owned listener before one 5-byte owner-stop command; the RPC interval encloses both observations. This proves client transport/failure behavior, not that Go received or handled a request. Owner exit 0, exact child death/reap, pidfd exit, empty session and socket-gone discharge the resume obligation; raw owner graceful=true does not establish a graceful Go exit. The new invocation has retained controller_exit=0 and no cleanup errors.
+
+Both required bounded failure branches are now accepted, so SG05 moves PARTIAL→ACCEPTED in Framework/provider and Module with four cases each. The old partial-history document and every original product verdict remain unchanged. No upstream test-suite, native Swarm-agent, SIT or release credit is added. `PARTIAL` remains available for other incomplete slices but contributes no ACCEPTED group credit.
 
 ### A02 — GoogleCloudPlatform/bank-of-anthos
 
@@ -480,8 +482,8 @@ Capability-level execution assessment remains **UNKNOWN**. The bounded P04-SG02,
 
 | Capability | Linked groups | Upstream | Framework provider | Module | Native agent | SIT |
 | --- | ---: | --- | --- | --- | --- | --- |
-| C01 | 54 | NOT_RUN: 54 | NOT_RUN: 51; PARTIAL: 1; ACCEPTED: 2 | NOT_RUN: 51; PARTIAL: 1; ACCEPTED: 2 | NOT_RUN: 54 | BLOCKED: 54 |
-| C02 | 30 | NOT_RECONCILED: 24; NOT_RUN: 6 | NOT_RECONCILED: 23; NOT_RUN: 3; PARTIAL: 1; ACCEPTED: 3 | NOT_RECONCILED: 13; BLOCKED: 10; NOT_RUN: 3; PARTIAL: 1; ACCEPTED: 3 | NOT_RUN: 30 | BLOCKED: 30 |
+| C01 | 54 | NOT_RUN: 54 | NOT_RUN: 51; ACCEPTED: 3 | NOT_RUN: 51; ACCEPTED: 3 | NOT_RUN: 54 | BLOCKED: 54 |
+| C02 | 30 | NOT_RECONCILED: 24; NOT_RUN: 6 | NOT_RECONCILED: 23; NOT_RUN: 3; ACCEPTED: 4 | NOT_RECONCILED: 13; BLOCKED: 10; NOT_RUN: 3; ACCEPTED: 4 | NOT_RUN: 30 | BLOCKED: 30 |
 | C03 | 18 | NOT_RECONCILED: 12; NOT_RUN: 6 | NOT_RECONCILED: 12; NOT_RUN: 6 | BLOCKED: 12; NOT_RUN: 6 | NOT_RUN: 18 | BLOCKED: 18 |
 | C04 | 6 | NOT_RECONCILED: 6 | NOT_RECONCILED: 6 | NOT_RECONCILED: 6 | NOT_RUN: 6 | BLOCKED: 6 |
 | C05 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
@@ -490,13 +492,13 @@ Capability-level execution assessment remains **UNKNOWN**. The bounded P04-SG02,
 | C08 | 13 | NOT_RECONCILED: 13 | BLOCKED: 13 | BLOCKED: 13 | NOT_RUN: 13 | BLOCKED: 13 |
 | C09 | 7 | NOT_RECONCILED: 7 | BLOCKED: 7 | BLOCKED: 7 | NOT_RUN: 7 | BLOCKED: 7 |
 | C10 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
-| C11 | 12 | NOT_RUN: 12 | NOT_RUN: 9; PARTIAL: 1; ACCEPTED: 2 | NOT_RUN: 9; PARTIAL: 1; ACCEPTED: 2 | NOT_RUN: 12 | BLOCKED: 12 |
-| C12 | 18 | NOT_RUN: 18 | NOT_RUN: 15; PARTIAL: 1; ACCEPTED: 2 | NOT_RUN: 15; PARTIAL: 1; ACCEPTED: 2 | NOT_RUN: 18 | BLOCKED: 18 |
+| C11 | 12 | NOT_RUN: 12 | NOT_RUN: 9; ACCEPTED: 3 | NOT_RUN: 9; ACCEPTED: 3 | NOT_RUN: 12 | BLOCKED: 12 |
+| C12 | 18 | NOT_RUN: 18 | NOT_RUN: 15; ACCEPTED: 3 | NOT_RUN: 15; ACCEPTED: 3 | NOT_RUN: 18 | BLOCKED: 18 |
 | C13 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
 | C14 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
 | C15 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
-| C16 | 54 | NOT_RUN: 54 | NOT_RUN: 51; PARTIAL: 1; ACCEPTED: 2 | NOT_RUN: 51; PARTIAL: 1; ACCEPTED: 2 | NOT_RUN: 54 | BLOCKED: 54 |
-| C17 | 44 | NOT_RECONCILED: 20; NOT_RUN: 24 | BLOCKED: 20; NOT_RUN: 21; PARTIAL: 1; ACCEPTED: 2 | BLOCKED: 20; NOT_RUN: 21; PARTIAL: 1; ACCEPTED: 2 | NOT_RUN: 44 | BLOCKED: 44 |
+| C16 | 54 | NOT_RUN: 54 | NOT_RUN: 51; ACCEPTED: 3 | NOT_RUN: 51; ACCEPTED: 3 | NOT_RUN: 54 | BLOCKED: 54 |
+| C17 | 44 | NOT_RECONCILED: 20; NOT_RUN: 24 | BLOCKED: 20; NOT_RUN: 21; ACCEPTED: 3 | BLOCKED: 20; NOT_RUN: 21; ACCEPTED: 3 | NOT_RUN: 44 | BLOCKED: 44 |
 
 ## Helm / Ansible component plan
 
