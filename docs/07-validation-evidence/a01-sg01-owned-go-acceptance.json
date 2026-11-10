@@ -1,0 +1,365 @@
+{
+  "schema": "a01-owned-go-acceptance.v1",
+  "group_id": "A01-SG01",
+  "review_ref": "a01-sg01-owned-go-postrun.v1",
+  "reviewed_at_utc": "2026-11-10T02:25:28Z",
+  "decision": "TECHNICAL_ACCEPT",
+  "scope": "Two source-built Go GetProduct owned-loopback cases via grpc_client.v0.3 Framework/provider and packaged Swarm product-test Module. Not original upstream test-suite, native Swarm-agent, SIT, full catalog acceptance or a reproducible-build claim.",
+  "accepted_layers": [
+    "framework_provider",
+    "swarm_module"
+  ],
+  "source_commit": "357bd3b51b02b2fbb75f7f121dc6ebf7118ee67a",
+  "source_tree": "3b032dbc43506e6c4bc20ffdffe14837804aa38f",
+  "source_url": "https://github.com/hermanwangd/Auto_Regression_Test_Framework/commit/357bd3b51b02b2fbb75f7f121dc6ebf7118ee67a",
+  "upstream_repository": "GoogleCloudPlatform/microservices-demo",
+  "upstream_revision": "c7cb6d5bfd6ea3aed768634ebbcb98cb7a523712",
+  "fixture_pins": {
+    "version": "a01-catalog-source.v1",
+    "upstream_revision": "c7cb6d5bfd6ea3aed768634ebbcb98cb7a523712",
+    "canonical_proto_sha256": "b1f2fa42c0a9305211bf51fba7d8b5832cd3defd7b8855c327ebd5b1f0f86884",
+    "generated_proto_sha256": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af",
+    "data_sha256": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa",
+    "descriptor_fdp_sha256": "8f6b5761a04e7d699c0e40c2776d94900581f2706a112544fa80ba71169f5d54",
+    "descriptor_sha256": "285bd375bc4bff89d44ed51a0ddaf205670b35ff070860311b1fc0f4bdab1921",
+    "loopback_source_sha256": "db5cfbb858f0d9b94c5d3b3e6334e1d2821f2e740edf925aee1f58d76c9de530",
+    "source_files": {
+      "server.go": "2d52d47db2a00c743470b94b1f7b970b190e9d45f9e4b76d0a345f5d00272b5a",
+      "product_catalog.go": "045a50900ba49382d920c644a6bee04c6372073761b2867ecf202428ce0c6545",
+      "catalog_loader.go": "c37a169b74faf6be29f1ae9999ea2a22daf8f2d7dd676b4706459b36cf95a4a4",
+      "go.mod": "b891e7545c990ad13307d416678a9719e5f667f45e1b11bcf3e367b2713a6e8d",
+      "go.sum": "68f514d3a43c025b8c6abd1979bcb3ef6794d7b66cb866a317f35dded082c8c2",
+      "products.json": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa",
+      "genproto/demo.pb.go": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af",
+      "genproto/demo_grpc.pb.go": "70bb93b42e93399bf30d9971b6568244d0fa2eb1cb4757f967354810601dc916"
+    }
+  },
+  "go_binary": {
+    "bytes": 38013650,
+    "sha256": "9f016a33bf35f28ba04e7f8d59dba42b0d332203f1296080086c3aee0e694549"
+  },
+  "go_build_manifest_sha256": "d90c4145bb4cd099b4305801f93940dd270bdfbb19e9f5f37da4ef2de9cbc9b2",
+  "artifacts": {
+    "framework": {
+      "bytes": 88829233,
+      "sha256": "bfcdf481f54a7d79cc8a57067f64f11a15828a9e534bf974b2e8bc24d8c5d036"
+    },
+    "module": {
+      "bytes": 3188074,
+      "sha256": "4b9c521e4dc977edec2b4cc385b5d40552a83f1a3bd5bda389fa2786dfbfcb7e"
+    },
+    "owner_support": {
+      "bytes": 117603,
+      "sha256": "3ff2a3eb2a56c7645654a840fd9d4b792ea1beac26d78512478db818e030a306"
+    }
+  },
+  "ci": {
+    "run_id": 42738823849,
+    "url": "https://github.com/hermanwangd/Auto_Regression_Test_Framework/actions/runs/42738823849",
+    "builder_commit": "07abdb9e616543f80aeb3a79fc40d4c70c567753",
+    "artifact_id": 13727729252,
+    "zip_sha256": "864376e1603c17202d5f5be24420f3f8fbb386dd5db8307cc35d50a7931f1499",
+    "root_tests": 248,
+    "module_tests": 59,
+    "reports": 20,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "scope": "FOCUSED_UNIT_TESTS_ONLY, not 307 product coverage groups"
+  },
+  "runtime": {
+    "java": "OpenJDK21.0.13+9-1-deb13u2-Debian",
+    "java_executable_sha256": "1a7e0b17c39003c75b457d686775ccb032e56fa9c8afe3c492d8eb3715e8951a",
+    "ci_java_version": "17.0.21+9",
+    "java17_packaged_runtime": "NOT_RUN",
+    "environment": "isolated cloud Linux x86_64, owned loopback"
+  },
+  "oracle_sha256": "328f07f337b4238b250667de4783c8e6f0208a7f4458227526339fd75935fd50",
+  "cases": [
+    {
+      "case_id": "TC-A01-SG01-NORMAL",
+      "run_id": "RUN-V03-c81c1050-38c9-497f-8598-7a1b142191d8",
+      "case": "normal",
+      "request": {
+        "retained_location": "a01-catalog-runtime-v3/normal/request.json",
+        "bytes": 1069,
+        "sha256": "12563e11bcf25bddc7bf54ba166822b0316f413500fe1a42c902cce99281097d",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "suite_manifest": {
+        "retained_location": "a01-catalog-runtime-v3/normal/suite/suite_manifest.yaml",
+        "bytes": 269,
+        "sha256": "17eb0fd88a65e74ff799d17714f48edef8dfadaf81aa9b68abb7b47463d5790b",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "test_definition": {
+        "retained_location": "a01-catalog-runtime-v3/normal/suite/test_cases/case.yaml",
+        "bytes": 542,
+        "sha256": "7fcffc40333d15c87ed270cc8967aaa244ff0bd1c619667adc964acd16f9a12c",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "input_request": {
+        "retained_location": "a01-catalog-runtime-v3/normal/suite/fixtures/request.json",
+        "bytes": 20,
+        "sha256": "079ffb4c48534e807f1bf07060f840290751bd4f011a94542d3b4f42eb8b98f7",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "reviewed_handoff": {
+        "retained_location": "a01-catalog-runtime-v3/normal/suite/handoff/reviewed.json",
+        "bytes": 3176,
+        "sha256": "6c2b5dc22095f9a04b169b366768d4683c525f528579ec05ce3a7fabed96d7be",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "lease": {
+        "retained_location": "a01-catalog-runtime-v3/normal/suite/fixtures/lease.json",
+        "bytes": 3287,
+        "sha256": "2cb7fbac6c0bae241ef6757ca94895f470a917aeec21e0e0cec97210c3b463b1",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "receipt": {
+        "retained_location": "a01-catalog-runtime-v3/normal/module.stdout",
+        "bytes": 7877,
+        "sha256": "c9927b482542ac877a31d59a6658392aa717805f426d6bce0b5b0daa27422128",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "canonical_result": {
+        "retained_location": "a01-catalog-runtime-v3/normal/output/product-test-20324afb-e7ef-4a02-b8c0-b36bdded2649-6169130091897823862/target/regression/A01/BATCH-STANDALONE-20261110020353010-1/RUN-V03-c81c1050-38c9-497f-8598-7a1b142191d8/result.json",
+        "bytes": 4586,
+        "sha256": "b5b5697fb00dcd6a608830c883f16a6347766071296e23431552394377dac220",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "proof": {
+        "retained_location": "a01-catalog-runtime-v3/normal/output/product-test-20324afb-e7ef-4a02-b8c0-b36bdded2649-6169130091897823862/target/regression/A01/BATCH-STANDALONE-20261110020353010-1/RUN-V03-c81c1050-38c9-497f-8598-7a1b142191d8/provider-evidence/grpc-client/reviewed-unary.json",
+        "bytes": 4418,
+        "sha256": "c6eb6e37039c70a1632b2bcfeab12ace84cadcfe9a4ea388743e1aa387ed6a3e",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "independent_grade": {
+        "retained_location": "a01-catalog-runtime-v3/normal/independent-grade.json",
+        "bytes": 2641,
+        "sha256": "8861f04126827e0a579e07d4586a5620af44eb5fc621807e542dd1cdd29203c7",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "cleanup": {
+        "retained_location": "a01-catalog-runtime-v3/normal/owner/owner-teardown.json",
+        "bytes": 1091,
+        "sha256": "51fbce758197956546189686242acffdffab2d5f7caabcaa8587137139bdb2ca",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "product_status": "OK",
+      "product_verdict": "passed",
+      "module_outcome": "COMPLETED",
+      "evidence_validation": "validated",
+      "module_exit": 0,
+      "framework_exit": 0,
+      "independent_expected_behavior_grade": "PASS",
+      "expected_negative": false,
+      "channel_created": true,
+      "rpc_invoked": true,
+      "server_request_count": "NOT_MEASURED",
+      "owner_exit": 0,
+      "owner_graceful": true,
+      "owned_socket_gone": true,
+      "release_evidence_eligible": false
+    },
+    {
+      "case_id": "TC-A01-SG01-UNKNOWN",
+      "run_id": "RUN-V03-9703d5a8-b338-4416-b92b-239427574c5e",
+      "case": "unknown",
+      "request": {
+        "retained_location": "a01-catalog-runtime-v4/unknown/request.json",
+        "bytes": 1074,
+        "sha256": "9f2e0a3b55899fe985737aea3820df031e434ef284904d74db980b223880d055",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "suite_manifest": {
+        "retained_location": "a01-catalog-runtime-v4/unknown/suite/suite_manifest.yaml",
+        "bytes": 269,
+        "sha256": "17eb0fd88a65e74ff799d17714f48edef8dfadaf81aa9b68abb7b47463d5790b",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "test_definition": {
+        "retained_location": "a01-catalog-runtime-v4/unknown/suite/test_cases/case.yaml",
+        "bytes": 551,
+        "sha256": "1c532e0eeb3292b77438574751797defc0ba739554b7aae76ebe48cb192fedd7",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "input_request": {
+        "retained_location": "a01-catalog-runtime-v4/unknown/suite/fixtures/request.json",
+        "bytes": 29,
+        "sha256": "ac6b8a0d364523bd13a27b5fdb894ede0b3fec3f6cce891b8ccaaae3f2424dbf",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "reviewed_handoff": {
+        "retained_location": "a01-catalog-runtime-v4/unknown/suite/handoff/reviewed.json",
+        "bytes": 3259,
+        "sha256": "1b9f63774395b36dfe5a0c18a0d3d414726496920c858ce5f181f681fbfac4e9",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "lease": {
+        "retained_location": "a01-catalog-runtime-v4/unknown/suite/fixtures/lease.json",
+        "bytes": 3288,
+        "sha256": "76d7fafb264959bd414615522ab698f66ede22eff3cf08f61a67857764a86fe3",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "receipt": {
+        "retained_location": "a01-catalog-runtime-v4/unknown/module.stdout",
+        "bytes": 7460,
+        "sha256": "ceed282500d97d1318724cd1dde84c5d5c2477ccec5927887bece0c7f3ad9fe2",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "canonical_result": {
+        "retained_location": "a01-catalog-runtime-v4/unknown/output/product-test-909edec3-ac7b-47aa-a2c6-ea7e2698ef0d-7935318005381601701/target/regression/A01/BATCH-STANDALONE-20261110021855175-1/RUN-V03-9703d5a8-b338-4416-b92b-239427574c5e/result.json",
+        "bytes": 3710,
+        "sha256": "10f3dc5e4be382fac3b0db1b66de028833f9d683f2dbf34a83f0f2b3d0336840",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "proof": {
+        "retained_location": "a01-catalog-runtime-v4/unknown/output/product-test-909edec3-ac7b-47aa-a2c6-ea7e2698ef0d-7935318005381601701/target/regression/A01/BATCH-STANDALONE-20261110021855175-1/RUN-V03-9703d5a8-b338-4416-b92b-239427574c5e/provider-evidence/grpc-client/reviewed-unary.json",
+        "bytes": 4287,
+        "sha256": "503e4a3fe67d1b94565542808965ded821e3529e43d8fe09ab036ab1eb60578f",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "independent_grade": {
+        "retained_location": "a01-catalog-runtime-v4/unknown/independent-grade.json",
+        "bytes": 2515,
+        "sha256": "25fb5020e2b10fc3bf99add142c543826c8a145b022fc830dc658384492904c8",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "cleanup": {
+        "retained_location": "a01-catalog-runtime-v4/unknown/owner/owner-teardown.json",
+        "bytes": 1091,
+        "sha256": "9957a81669c665f9639d6cdaf58198f6bdc4a8a15d4d8c729e9a36bae9f67e57",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      },
+      "product_status": "NOT_FOUND",
+      "product_verdict": "failed",
+      "module_outcome": "COMPLETED",
+      "evidence_validation": "validated",
+      "module_exit": 1,
+      "framework_exit": 1,
+      "independent_expected_behavior_grade": "PASS",
+      "expected_negative": true,
+      "channel_created": true,
+      "rpc_invoked": true,
+      "server_request_count": "NOT_MEASURED",
+      "owner_exit": 0,
+      "owner_graceful": true,
+      "owned_socket_gone": true,
+      "release_evidence_eligible": false
+    }
+  ],
+  "lifecycle_controls": {
+    "deadline": {
+      "error": null,
+      "owner_exit": 1,
+      "cleanup_errors": [],
+      "cleanup_states": [],
+      "capture_complete": true,
+      "sigkill_state": null,
+      "teardown": {
+        "terminated": true,
+        "reaped": true,
+        "owned_socket_gone": true,
+        "graceful": false,
+        "guard_failure": true,
+        "failure_reason": "MAIN: java.lang.IllegalArgumentException: reviewed_a01: absolute owner deadline exceeded"
+      },
+      "receipt": {
+        "retained_location": "a01-catalog-runtime-v4/deadline/controller-receipt.json",
+        "bytes": 3779,
+        "sha256": "4efa81ec3b8e45caeeb238786c9de0233fc62a227ce9bfe0dae13abc8e355442",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      }
+    },
+    "guard": {
+      "error": null,
+      "owner_exit": 1,
+      "cleanup_errors": [],
+      "cleanup_states": [],
+      "capture_complete": true,
+      "sigkill_state": null,
+      "teardown": {
+        "terminated": true,
+        "reaped": true,
+        "owned_socket_gone": true,
+        "graceful": false,
+        "guard_failure": true,
+        "failure_reason": "GUARD: java.nio.file.NoSuchFileException: <owned-runtime>/guard/owner/catalog-child.log",
+        "failure_reason_is_sanitized": true
+      },
+      "receipt": {
+        "retained_location": "a01-catalog-runtime-v4/guard/controller-receipt.json",
+        "bytes": 3774,
+        "sha256": "bcb394fb27ee4ae2ef6d3e4225c6f43c1badcfc50702f5432bc65407fb43c120",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      }
+    },
+    "sigterm": {
+      "error": null,
+      "owner_exit": 143,
+      "cleanup_errors": [],
+      "cleanup_states": [],
+      "capture_complete": true,
+      "sigkill_state": null,
+      "teardown": {
+        "terminated": true,
+        "reaped": true,
+        "owned_socket_gone": true,
+        "graceful": false,
+        "guard_failure": true,
+        "failure_reason": "JVM_SHUTDOWN"
+      },
+      "receipt": {
+        "retained_location": "a01-catalog-runtime-v4/sigterm/controller-receipt.json",
+        "bytes": 3779,
+        "sha256": "888eadfb6f22281c9bee4ee67cd68915556186fcd5f6d95ae7806eff6f276ba9",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      }
+    },
+    "sigkill": {
+      "error": null,
+      "owner_exit": -9,
+      "cleanup_errors": [],
+      "cleanup_states": [],
+      "capture_complete": true,
+      "sigkill_state": "UNKNOWN_NON_GRACEFUL",
+      "receipt": {
+        "retained_location": "a01-catalog-runtime-v4/sigkill/controller-receipt.json",
+        "bytes": 3784,
+        "sha256": "002251471216aacf05c77c50d67f1776062f3c31358445d6fff0ca448fcd72e1",
+        "availability": "LOCAL_RETAINED_NOT_PUBLIC_DOWNLOAD"
+      }
+    }
+  },
+  "native_observation": {
+    "candidate_source_count": 4,
+    "mock_controls_passed": 33,
+    "actual_admission_events": 0,
+    "observed_lower_bound_bytes": 0,
+    "reserve_bytes": 16777216,
+    "prior_missing_native_identity": "UNKNOWN",
+    "does_not_establish_no_native_usage": true
+  },
+  "resources": {
+    "all_history_charged_bytes": 362281417,
+    "allocation_bytes": 390070272,
+    "sampled_rss_peak_bytes": 401821696,
+    "old_failures_preserved": true
+  },
+  "retained_failures": [
+    "Original launcher attempt failed before product execution.",
+    "Runtime v1 Module lease-path failure.",
+    "Runtime v2 raw Go provenance rejected as YAML.",
+    "Runtime v3 unknown interrupted by native-output guard; original missing native identity remains UNKNOWN. Its completed normal case is retained, not rerun."
+  ],
+  "remaining_gaps": [
+    "No independent upstream test-suite credit.",
+    "Native Swarm-agent and SIT remain unaccepted.",
+    "No full multi-service/catalog or cross-repository acceptance.",
+    "Actual native admission was not observed; candidate policy is source-pin and mock verified only.",
+    "Server request count is NOT_MEASURED.",
+    "SIGKILL preserves UNKNOWN_NON_GRACEFUL, with external cleanup evidence only."
+  ],
+  "artifact_policy": "This is a public factual index, not raw evidence or a download link. Original records remain retained with exact byte hashes. Canonical failed/NOT_FOUND stays failed; expected-negative grading is separate."
+}
