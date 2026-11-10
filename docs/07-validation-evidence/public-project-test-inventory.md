@@ -1,10 +1,10 @@
 # Public-project test inventory
 
-Version: `planning-v1` · metadata revision: `a01-sg01-reconciliation-2026-11-10-r1` · framework reference: [`b95f6b76`](https://github.com/hermanwangd/Auto_Regression_Test_Framework/commit/b95f6b76f5e54fe9b93f99aad78d17a8568e52f7)
+Version: `planning-v1` · metadata revision: `a01-sg06-reconciliation-2026-11-10-r1` · framework reference: [`b95f6b76`](https://github.com/hermanwangd/Auto_Regression_Test_Framework/commit/b95f6b76f5e54fe9b93f99aad78d17a8568e52f7)
 
 **20 repositories / 116 proposed scenario groups**: 11 selected client/test-source repositories (62 groups) and 9 application candidates (54 groups). These are planning denominators. They are not approved executable-case counts or product requirement coverage.
 
-Full product requirements/AC denominator and global approved executable-case/layer denominators remain **UNKNOWN**. P04-SG02 has four frozen cases and A01-SG01 has two frozen cases accepted in bounded Framework-provider/Module scopes below. Current planned-group acceptance is **2/116 (1.72%) in each of these two layers**, not requirement coverage. This does not define a portfolio-wide execution rate. The 116 groups remain a planning denominator.
+Full product requirements/AC denominator and global approved executable-case/layer denominators remain **UNKNOWN**. Bounded accepted groups are P04-SG02, A01-SG01 and A01-SG06. Current planned-group acceptance is **3/116 (2.59%) in each of the Framework/provider and Module layers**, not requirement coverage. Across these groups, Framework has nine applicable bounded cases and Module has ten; the SG06 cross-lease rejection occurs before Framework execution. The 116 groups remain a planning denominator.
 
 Authoritative machine-readable snapshot: [public-project-test-inventory.json](public-project-test-inventory.json). Original proposal project IDs, ordering, complete commits, titles and notes are preserved; its 13,829 bytes were verified against SHA256 `d98ea460034ab3b3b10a15c075378d61e264324e4672f5dd4f3194e83f0e14f3`.
 
@@ -265,13 +265,15 @@ This adds **one accepted group record in each of two layers**, supported by four
 | A01-SG03 | checkout→payment→shipping→email 的跨服務成功路徑 | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | BLOCKED |
 | A01-SG04 | 不合法 checkout 不產生成功訂單 | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | BLOCKED |
 | A01-SG05 | 依賴服務 timeout／unavailable 的有界失敗 | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | BLOCKED |
-| A01-SG06 | 隔離 session 與 teardown | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN | BLOCKED |
+| A01-SG06 | 隔離 session 與 teardown | NOT_RUN | ACCEPTED | ACCEPTED | NOT_RUN | BLOCKED |
 
 **A01-SG01 bounded acceptance, 2026-11-10:** [Public evidence index](a01-sg01-owned-go-acceptance.json) binds two source-built Go GetProduct cases to [source 357bd3b5](https://github.com/hermanwangd/Auto_Regression_Test_Framework/commit/357bd3b51b02b2fbb75f7f121dc6ebf7118ee67a) and [CI 42738823849](https://github.com/hermanwangd/Auto_Regression_Test_Framework/actions/runs/42738823849) (307 focused unit tests, zero failures/errors/skips). The actual normal case is passed/OK with Module/Framework exit 0/0; unknown product is canonically failed/NOT_FOUND with exits 1/1, independently accepted as the expected negative. Both have validated receipts and owned-loopback RPC evidence.
 
 Deadline, guard failure, TERM and KILL cleanup controls were checked. KILL retains UNKNOWN_NON_GRACEFUL with external cleanup evidence only. Earlier failures remain retained; the prior missing native file remains UNKNOWN and no native admission event was observed. This is not upstream-suite, native Swarm-agent, SIT, full catalog, Java17 packaged-runtime or release acceptance. The index gives original byte hashes; retained raw artifacts are not public downloads.
 
-Together with P04-SG02, **Framework/provider and Module each have 2 accepted groups out of 116 planned (1.72%)**, backed by six bounded cases; native-agent and SIT acceptance remain 0. Requirement/AC and global approved-case coverage remain UNKNOWN. The 16 historical records remain excluded.
+Together with P04-SG02 and A01-SG06, **Framework/provider and Module each have 3 accepted groups out of 116 planned (2.59%)**. Framework has nine applicable bounded cases, Module ten; native-agent and SIT acceptance remain 0. Requirement/AC and global approved-case coverage remain UNKNOWN. The 16 historical records remain excluded.
+
+**A01-SG06 bounded isolation acceptance, 2026-11-10:** [Public evidence index](a01-sg06-owned-go-isolation-acceptance.json) records simultaneous source-built Go sessions A/B. A and B each complete a validated GetProduct RPC; A is gracefully stopped and independently verified empty/socket-gone, then the same B owner completes a fresh RPC. Both owners finish gracefully with no cleanup errors. Framework applicability is 3 positive cases; Module applicability is 4 expected behaviors, including the exact independent lease/launch mismatch rejection before Framework spawn. That negative remains Module REJECTED, Framework NOT_INVOKED and canonical ABSENT_NOT_PASSED. No native-agent/SIT/upstream-suite credit or measured server-call count is claimed. The prior SG06 attempt failed because its harness expected the wrong rejection layer; that failure and its non-graceful cleanup remain retained.
 
 ### A02 — GoogleCloudPlatform/bank-of-anthos
 
@@ -468,12 +470,12 @@ Rows require capability → exact case → input/oracle → run → evidence, bo
 
 `NOT_RECONCILED` on a capability is a reconciliation state: no approved capability-to-case/run binding is established. The counts below describe the existing scenario states reached through **proposed project links**, not capability verdicts, approved case mappings, readiness or a new coverage denominator. A group is counted once per capability/layer; groups can occur under multiple capabilities, so do not sum rows.
 
-Capability-level execution assessment remains **UNKNOWN**. The bounded P04-SG02 and A01-SG01 executions are established separately and do not establish complete linked-capability acceptance. A declared `BLOCKED` or `NOT_RUN` state alone does not establish whether an attempt occurred. Project blocker references are retained in the JSON and describe those projects, not independently graded capability blockers.
+Capability-level execution assessment remains **UNKNOWN**. The bounded P04-SG02, A01-SG01 and A01-SG06 executions are established separately and do not establish complete linked-capability acceptance. A declared `BLOCKED` or `NOT_RUN` state alone does not establish whether an attempt occurred. Project blocker references are retained in the JSON and describe those projects, not independently graded capability blockers.
 
 | Capability | Linked groups | Upstream | Framework provider | Module | Native agent | SIT |
 | --- | ---: | --- | --- | --- | --- | --- |
-| C01 | 54 | NOT_RUN: 54 | NOT_RUN: 53; ACCEPTED: 1 | NOT_RUN: 53; ACCEPTED: 1 | NOT_RUN: 54 | BLOCKED: 54 |
-| C02 | 30 | NOT_RECONCILED: 24; NOT_RUN: 6 | NOT_RECONCILED: 23; NOT_RUN: 5; ACCEPTED: 2 | NOT_RECONCILED: 13; BLOCKED: 10; NOT_RUN: 5; ACCEPTED: 2 | NOT_RUN: 30 | BLOCKED: 30 |
+| C01 | 54 | NOT_RUN: 54 | NOT_RUN: 52; ACCEPTED: 2 | NOT_RUN: 52; ACCEPTED: 2 | NOT_RUN: 54 | BLOCKED: 54 |
+| C02 | 30 | NOT_RECONCILED: 24; NOT_RUN: 6 | NOT_RECONCILED: 23; NOT_RUN: 4; ACCEPTED: 3 | NOT_RECONCILED: 13; BLOCKED: 10; NOT_RUN: 4; ACCEPTED: 3 | NOT_RUN: 30 | BLOCKED: 30 |
 | C03 | 18 | NOT_RECONCILED: 12; NOT_RUN: 6 | NOT_RECONCILED: 12; NOT_RUN: 6 | BLOCKED: 12; NOT_RUN: 6 | NOT_RUN: 18 | BLOCKED: 18 |
 | C04 | 6 | NOT_RECONCILED: 6 | NOT_RECONCILED: 6 | NOT_RECONCILED: 6 | NOT_RUN: 6 | BLOCKED: 6 |
 | C05 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
@@ -482,13 +484,13 @@ Capability-level execution assessment remains **UNKNOWN**. The bounded P04-SG02 
 | C08 | 13 | NOT_RECONCILED: 13 | BLOCKED: 13 | BLOCKED: 13 | NOT_RUN: 13 | BLOCKED: 13 |
 | C09 | 7 | NOT_RECONCILED: 7 | BLOCKED: 7 | BLOCKED: 7 | NOT_RUN: 7 | BLOCKED: 7 |
 | C10 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
-| C11 | 12 | NOT_RUN: 12 | NOT_RUN: 11; ACCEPTED: 1 | NOT_RUN: 11; ACCEPTED: 1 | NOT_RUN: 12 | BLOCKED: 12 |
-| C12 | 18 | NOT_RUN: 18 | NOT_RUN: 17; ACCEPTED: 1 | NOT_RUN: 17; ACCEPTED: 1 | NOT_RUN: 18 | BLOCKED: 18 |
+| C11 | 12 | NOT_RUN: 12 | NOT_RUN: 10; ACCEPTED: 2 | NOT_RUN: 10; ACCEPTED: 2 | NOT_RUN: 12 | BLOCKED: 12 |
+| C12 | 18 | NOT_RUN: 18 | NOT_RUN: 16; ACCEPTED: 2 | NOT_RUN: 16; ACCEPTED: 2 | NOT_RUN: 18 | BLOCKED: 18 |
 | C13 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
 | C14 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
 | C15 | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups | No proposed linked groups |
-| C16 | 54 | NOT_RUN: 54 | NOT_RUN: 53; ACCEPTED: 1 | NOT_RUN: 53; ACCEPTED: 1 | NOT_RUN: 54 | BLOCKED: 54 |
-| C17 | 44 | NOT_RECONCILED: 20; NOT_RUN: 24 | BLOCKED: 20; NOT_RUN: 23; ACCEPTED: 1 | BLOCKED: 20; NOT_RUN: 23; ACCEPTED: 1 | NOT_RUN: 44 | BLOCKED: 44 |
+| C16 | 54 | NOT_RUN: 54 | NOT_RUN: 52; ACCEPTED: 2 | NOT_RUN: 52; ACCEPTED: 2 | NOT_RUN: 54 | BLOCKED: 54 |
+| C17 | 44 | NOT_RECONCILED: 20; NOT_RUN: 24 | BLOCKED: 20; NOT_RUN: 22; ACCEPTED: 2 | BLOCKED: 20; NOT_RUN: 22; ACCEPTED: 2 | NOT_RUN: 44 | BLOCKED: 44 |
 
 ## Helm / Ansible component plan
 
