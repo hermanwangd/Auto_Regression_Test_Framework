@@ -1,19 +1,18 @@
 # A01 focused Java/Module build preparation
 
-SOURCE BOUND, NOT RUN: parent officially read back product commit
-6c2ba5400c7458a2409477fb7ce08ad42e3fd646, tree
-20c155097e753ea45389c7944b481192eb1bc369, parent e08cdb2b4c4aaddc8317c140058b2469ddc73c85.
-All22 source files495472B match the reviewed owner manifest. Driver/workflow/
-contract now bind those actual identities. Final exact bundle review precedes
-parent publication/CI; no build or product execution occurred locally.
+LEASE-PATH REPAIR SOURCE-BOUND CANDIDATE: repaired source commit 6d65b300a673adac70821fd53206dde96b399dfe
+and tree 38952890ac9d97e25315a69a6bef982c42b73a1c have been published. Prior CI42723117890 and all original
+source/bundle/intake/failure receipts remain unchanged. This sibling changes
+only source bindings, Module forwarder count10 to14, joined counts and hashes.
+Exact reviewed source pins are now bound. New 267-case CI and A01 product runtime remain NOT_RUN.
 
 Uses original Java17/Maven pins, actions,30controls,900s job/840s driver incl30s
 cleanup,2GiB sampled RSS/2GiB total disk,1GiB cache subset,256MiB delivery and1MiB
 manifest. Charges source/control/work roots and all owner/JUnit copies. The prior
 Go1500s/3GiB grant does not apply. No Go rebuild, service launch, runtime or SIT.
 
-Declared263 JUnit cases:208root+55Module across18exact reports; old149 preserved,
-new114 owner-declared. Fresh XML, exact class/count/unique testcase identities,
+Declared267 JUnit cases:208root+59Module across18exact reports; old149 preserved,
+new118 owner-declared. Fresh XML, exact class/count/unique testcase identities,
 zero skipped/errors/failures, original512KiB/report4MiB aggregate, and unchanged
 post-packaging report hashes are mandatory. Source annotation derivation is an
 owner/reviewer input; counts are not inferred from a successful run.
@@ -41,10 +40,10 @@ Java, Go, network or product execution. Original RED/green receipts retained.
 These mechanical tests do not claim native Swarm-agent acceptance.
 
 Parent alone publishes against expected builder head
-12c62d3f37cee7ba2bc82ab522942156b91f5816 after final bound-byte review. Historical
+02d6cc96ed8e8fdd811868d845ad710d477cceaf after final bound-byte review. Historical
 P04source173ee/CI42681020126 and GoCI42715816478 remain unchanged. After build,
 artifact intake and owner/process/normal+NOT_FOUND runtime plans remain separate;
-263unit PASS would not establish A01/runtime/SIT acceptance.
+267unit PASS would not establish A01/runtime/SIT acceptance.
 
 Preparation note: initial metadata generation had a syntax error before writing
 workflow/contract; corrected generation succeeded. No build/test failure hidden.

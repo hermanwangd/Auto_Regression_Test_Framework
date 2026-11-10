@@ -16,9 +16,9 @@ import urllib.request
 import zipfile
 import xml.etree.ElementTree as ET
 
-SOURCE = '6c2ba5400c7458a2409477fb7ce08ad42e3fd646'
+SOURCE = '6d65b300a673adac70821fd53206dde96b399dfe'
 DIAGNOSTIC_CONTEXT = None
-TREE = '20c155097e753ea45389c7944b481192eb1bc369'
+TREE = '38952890ac9d97e25315a69a6bef982c42b73a1c'
 JDK_URL = 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.21%2B9/OpenJDK17U-jdk_x64_linux_hotspot_17.0.21_9.tar.gz'
 JDK_SHA256 = '8b9b611d917e3dfd8419d3566b5949226f69b052fed7e109c1368add1dfe8711'
 MAVEN_URL = 'https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.tar.gz'
@@ -41,7 +41,7 @@ ROOT_TESTS = {
 }
 MODULE_TESTS = {
     'com.featuredeliveryintelligence.fdi.producttest.A01CatalogProofTest': 38,
-    'com.featuredeliveryintelligence.fdi.producttest.A01LaunchArgumentsTest': 10,
+    'com.featuredeliveryintelligence.fdi.producttest.A01LaunchArgumentsTest': 14,
     'com.featuredeliveryintelligence.fdi.producttest.GrpcDescriptorAdmissionProofTest': 1,
     'com.featuredeliveryintelligence.fdi.producttest.GrpcBindingTest': 1,
     'com.featuredeliveryintelligence.fdi.producttest.GrpcOwnedStreamingProofTest': 1,

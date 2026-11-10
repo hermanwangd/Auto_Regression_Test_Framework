@@ -1,13 +1,13 @@
 {
   "schema": "a01-focused-java-contract.v1",
-  "status": "FROZEN_SOURCE_BOUND_NOT_RUN",
+  "status": "FROZEN_LEASE_PATH_REPAIR_NOT_RUN",
   "source": {
     "repository": "hermanwangd/Auto_Regression_Test_Framework",
-    "commit": "6c2ba5400c7458a2409477fb7ce08ad42e3fd646",
-    "tree": "20c155097e753ea45389c7944b481192eb1bc369",
-    "development_base": "e08cdb2b4c4aaddc8317c140058b2469ddc73c85",
-    "candidate_manifest_sha256": "ffd97b87f8853107614bcc2900b9119e72daab366b3aab54b1abbc6ef5b55e09",
-    "candidate_patch_sha256": "2a94bff4dfe5971a460923d19b92fb3d30e9bba2e1825b0e34334d415ef67a6d"
+    "commit": "6d65b300a673adac70821fd53206dde96b399dfe",
+    "tree": "38952890ac9d97e25315a69a6bef982c42b73a1c",
+    "development_base": "6c2ba5400c7458a2409477fb7ce08ad42e3fd646",
+    "candidate_manifest_sha256": "38047c2c02ebf6ff60a28490c2480d0003fe270d8ac255ba91f49947859eccc6",
+    "candidate_patch_sha256": "ee82ee46679d4f8e364a8303d9649c96d6a3d915017044eeaf31eb01169d382b"
   },
   "activation": {
     "event": "push",
@@ -36,7 +36,7 @@
   },
   "driver": {
     "path": "scripts/ci/b13-build/build_driver.py",
-    "sha256": "9550803fa05eae97572893f454fc3725d01700db3436356bbf3db16ee4a0d629",
+    "sha256": "8091fac78aef26f149a7a27b0d409e6944bf11c6377f38589dd120931b5a3661",
     "implementation": "Python standard library; no bootstrap dependency install"
   },
   "limits": {
@@ -95,11 +95,12 @@
   "current_evidence": {
     "historical_Java_CI": 42681020126,
     "historical_Go_CI": 42715816478,
-    "candidate_263_JUnit": "NOT_RUN",
+    "candidate_263_JUnit": "Prior CI42723117890 PASS, preserved unchanged",
     "stdlib": "44 PASS; original30 plus14 packaging/diagnostic controls",
     "runtime": "NOT_RUN",
     "SIT": "NOT_RUN",
-    "coverage_credit": 0
+    "coverage_credit": 0,
+    "candidate_267_JUnit": "NOT_RUN"
   },
   "publication_allowlist": {
     ".github/workflows/b13-build-artifacts.yml": "b13-build-artifacts.yml",
@@ -134,13 +135,13 @@
     },
     "module": {
       "com.featuredeliveryintelligence.fdi.producttest.A01CatalogProofTest": 38,
-      "com.featuredeliveryintelligence.fdi.producttest.A01LaunchArgumentsTest": 10,
+      "com.featuredeliveryintelligence.fdi.producttest.A01LaunchArgumentsTest": 14,
       "com.featuredeliveryintelligence.fdi.producttest.GrpcDescriptorAdmissionProofTest": 1,
       "com.featuredeliveryintelligence.fdi.producttest.GrpcBindingTest": 1,
       "com.featuredeliveryintelligence.fdi.producttest.GrpcOwnedStreamingProofTest": 1,
       "com.featuredeliveryintelligence.fdi.producttest.GrpcFourCardinalityProofTest": 4
     },
-    "expected_total": 263,
+    "expected_total": 267,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
@@ -158,7 +159,7 @@
     "product_source_changed": false,
     "validator_weakened": false
   },
-  "count_derivation": "Original149 retained; final owner-declared profile23+Frameworkproof38+owner5+Moduleproof38+launcharguments10=114, total263; actual execution NOT_RUN.",
+  "count_derivation": "Original149 + prior114 + four lease-path regressions =267: root208 Module59,18XML. Owner actual A01LaunchArgumentsTest annotations:10 @Test plus4 parameterized values=14.",
   "post_exit_snapshot_repair": {
     "refresh_process_group_after_observed_parent_exit": true,
     "fresh_surviving_descendant_still_rejected": true,
