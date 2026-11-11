@@ -71,6 +71,17 @@ provider_types:
     required_binding_keys: [target]
     supported_operations: [unary_call]
     evidence_outputs: [grpc_request_response, request, response, status, metadata, timing, error]
+  grpc_descriptor_admission:
+    contract_ref: provider-contracts/grpc_descriptor_admission_v0_3.yaml
+    support_status: contract_only
+    supported_contract_versions: [v0.3]
+    supported_runtime_modes: []
+    contract_runtime_modes: [native]
+    contract_only_runtime_modes: [native]
+    required_binding_keys: [admission_mode, source_revision]
+    supported_operations: []
+    evidence_outputs: [grpc_request_response]
+    support_scope: reviewed_offline_descriptor_admission_only_no_rpc
   http_mock:
     contract_ref: provider-contracts/http_mock_v0_3.yaml
     provider_role: mock_server

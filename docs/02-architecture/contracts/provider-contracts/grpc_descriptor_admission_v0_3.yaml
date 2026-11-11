@@ -38,6 +38,9 @@ operations:
       grpc.message: {required: true}
     outputs:
       response.status: {}
+    allowed_inputs: [grpc.service, grpc.method, grpc.descriptor_ref, grpc.message]
+    required_inputs: [grpc.service, grpc.method, grpc.descriptor_ref, grpc.message]
+    output_refs: [response.status]
 evidence:
   outputs: [grpc_request_response]
   redact: []

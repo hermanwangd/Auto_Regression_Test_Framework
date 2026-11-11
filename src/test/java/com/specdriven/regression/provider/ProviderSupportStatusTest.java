@@ -1,6 +1,7 @@
 package com.specdriven.regression.provider;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -119,6 +120,37 @@ class ProviderSupportStatusTest {
                 .doesNotContain("message_selector");
         assertThat(strings(map(map(ibmMq.get("operations")).get("mq_payload_match")).get("allowed_inputs")))
                 .doesNotContain("message_selector");
+    }
+
+    @Test
+    void descriptorAdmissionIsContractOnlyWithoutGeneralDispatch() throws Exception {
+        Map<?, ?> providerTypes = map(map(loadYaml(REGISTRY)).get("provider_types"));
+        Map<?, ?> admission = map(providerTypes.get("grpc_descriptor_admission"));
+
+        assertThat(admission).isNotEmpty();
+        assertThat(keys(admission)).contains("contract_ref", "support_status", "supported_contract_versions",
+                "supported_runtime_modes", "contract_runtime_modes", "contract_only_runtime_modes",
+                "required_binding_keys", "supported_operations", "evidence_outputs");
+        assertThat(String.valueOf(admission.get("contract_ref")))
+                .isEqualTo("provider-contracts/grpc_descriptor_admission_v0_3.yaml");
+        assertThat(String.valueOf(admission.get("support_status"))).isEqualTo("contract_only");
+        assertThat(strings(admission.get("supported_contract_versions"))).containsExactly("v0.3");
+        assertThat(strings(admission.get("supported_runtime_modes"))).isEmpty();
+        assertThat(strings(admission.get("contract_runtime_modes"))).containsExactly("native");
+        assertThat(strings(admission.get("contract_only_runtime_modes"))).containsExactly("native");
+        assertThat(strings(admission.get("required_binding_keys")))
+                .containsExactly("admission_mode", "source_revision");
+        assertThat(strings(admission.get("supported_operations"))).isEmpty();
+        assertThat(strings(admission.get("evidence_outputs"))).containsExactly("grpc_request_response");
+    }
+
+    @Test
+    void descriptorAdmissionStillRequiresReviewedHandoff() {
+        var adapter = new com.specdriven.regression.contract.v03.adapter.GrpcDescriptorAdmissionV03Adapter();
+
+        assertThatThrownBy(() -> adapter.execute(null, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Descriptor admission requires a reviewed handoff");
     }
 
     private String supportStatus(Map<?, ?> providerTypes, String providerType) {

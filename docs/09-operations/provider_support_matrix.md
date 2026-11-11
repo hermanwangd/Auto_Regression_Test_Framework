@@ -24,6 +24,7 @@ Server or dependency lifecycle words such as native, mock, ephemeral, framework-
 | `common_verify` | `supported` | not_applicable | `samples/20-provider-capability-p0/verification/common_verify/` | JSON/schema/file assertion-only verifier contract. |
 | `external_runner` | `contract_only` | not_applicable | n/a | Contract is documented, but general command execution is not a supported public release path. |
 | `grpc_client` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/rpc/grpc_mock/` | Unary client stimulus for checked-in gRPC mock capability samples; external native evidence uses `grpc_client_external/`. |
+| `grpc_descriptor_admission` | `contract_only` | not_applicable | n/a | Reviewed offline descriptor admission only; general dispatch is unavailable. Never creates a channel or authorizes RPC execution. |
 | `grpc_mock` | `supported` | not_applicable | `samples/20-provider-capability-p0/rpc/grpc_mock/` | WireMock gRPC extension, unary only. |
 | `http_mock` | `supported` | not_applicable | `samples/20-provider-capability-p0/http/rest_client_with_wiremock/` | v0.3 protocol-level HTTP mock runtime backed by WireMock internals. |
 | `ibm_mq` | `supported` | caller_verified | `samples/20-provider-capability-p0/messaging/ibm_mq/` | Local mock/client sample is release-verifiable. Native external execution runs only when queue-manager bindings are configured; the framework does not start IBM MQ. |
