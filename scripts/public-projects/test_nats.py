@@ -1,6 +1,8 @@
 """Offline regression checks for the public harness authorization boundary."""
 import copy
 import datetime as dt
+import hashlib
+import json
 import importlib.util
 from pathlib import Path
 import shutil
@@ -95,6 +97,61 @@ class NatsHarnessBoundaryTest(unittest.TestCase):
         with mock.patch.object(nats.shutil, "disk_usage", return_value=SimpleNamespace(free=nats.MIN_FREE - 1)):
             with self.assertRaisesRegex(ValueError, "5 GiB"):
                 nats.require_free_space(self.root)
+
+    def policy_fixture(self):
+        root = self.root / "policy-source-fixture"
+        root.mkdir()
+        policy = copy.deepcopy(nats.read_json(nats.POLICY))
+        self.assertEqual(set(policy["source_files"]), set(policy["required_source_files"]))
+        for relative in policy["required_source_files"]:
+            self.assertFalse(Path(relative).is_absolute())
+            self.assertNotIn("..", Path(relative).parts)
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = b"synthetic-policy-source:" + relative.encode("utf-8")
+            target.write_bytes(source)
+            policy["source_files"][relative] = hashlib.sha256(source).hexdigest()
+        policy_path = root / "policy.json"
+        encoded = (json.dumps(policy, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        policy_path.write_bytes(encoded)
+        return root, policy_path, policy, hashlib.sha256(encoded).hexdigest()
+
+    def assert_policy_rejected_before_execution(self, expected_pin, output, message):
+        artifact = self.root / "synthetic-unused-artifact.jar"
+        artifact.write_bytes(b"synthetic artifact; policy must reject before use")
+        artifact_pin = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        args = SimpleNamespace(ci_policy_sha256=expected_pin, framework_jar=artifact,
+                               framework_sha256=artifact_pin, module_cli=artifact,
+                               module_sha256=artifact_pin, asset_dir=self.root / "unused-assets")
+        with mock.patch.object(nats, "download_asset") as download, \
+                mock.patch.object(nats.Broker, "start") as start, \
+                mock.patch.object(nats.subprocess, "run") as child:
+            with self.assertRaisesRegex(ValueError, message):
+                nats.prepare(args, output)
+            download.assert_not_called()
+            start.assert_not_called()
+            child.assert_not_called()
+        self.assertFalse(output.exists())
+
+    def test_wrong_policy_digest_stops_before_download_or_start(self):
+        root, policy_path, policy, pin = self.policy_fixture()
+        with mock.patch.object(nats, "ROOT", root), mock.patch.object(nats, "POLICY", policy_path), \
+                mock.patch.object(nats, "CONTRACT", root / "docs/02-architecture/contracts/provider-contracts/nats_v0_3.yaml"):
+            self.assertEqual(nats.validate_policy(pin), policy)
+            wrong_pin = ("0" if pin[0] != "0" else "1") + pin[1:]
+            self.assert_policy_rejected_before_execution(
+                wrong_pin, self.root / "wrong-policy-output", "^Independent CI policy digest mismatch$")
+
+    def test_source_tamper_stops_before_download_or_start(self):
+        root, policy_path, policy, pin = self.policy_fixture()
+        with mock.patch.object(nats, "ROOT", root), mock.patch.object(nats, "POLICY", policy_path), \
+                mock.patch.object(nats, "CONTRACT", root / "docs/02-architecture/contracts/provider-contracts/nats_v0_3.yaml"):
+            self.assertEqual(nats.validate_policy(pin), policy)
+            changed = root / "scripts/public-projects/nats.py"
+            changed.write_bytes(changed.read_bytes() + b"x")
+            self.assert_policy_rejected_before_execution(
+                pin, self.root / "source-tamper-output",
+                "^CI policy source digest mismatch: scripts/public-projects/nats\\.py$")
 
 
 if __name__ == "__main__":
