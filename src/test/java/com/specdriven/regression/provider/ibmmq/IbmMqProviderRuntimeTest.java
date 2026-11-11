@@ -252,6 +252,45 @@ class IbmMqProviderRuntimeTest {
         }
     }
 
+
+    @Test
+    void correlationSelectorMissDoesNotConsumeAndCorrectSelectorRecovers() throws Exception {
+        Path suiteRoot = tempDir.resolve("suite");
+        Files.createDirectories(suiteRoot);
+        IbmMqProviderRuntime runtime = new IbmMqProviderRuntime();
+        ProviderExecutionContext context = context(suiteRoot);
+        ProviderOperationResult put = runtime.execute(context, new ProviderOperationRequest(
+                "mq_put", List.of(Map.of("bind_as", "correlation_id", "ref", "CORR-A"),
+                        Map.of("bind_as", "payload", "value", "{\"orderId\":\"MQ-SELECTOR\"}")),
+                Map.of("_operation_id", "selector_put")));
+        assertThat(put.passed()).isTrue();
+        assertThat(put.outputs().get("message_id")).isInstanceOf(String.class);
+        String messageId = (String) put.outputs().get("message_id");
+        assertThat(messageId).isNotBlank().isNotEqualTo("null");
+        for (String id : List.of("selector_miss", "selector_recover", "selector_repeat")) {
+            boolean miss = "selector_miss".equals(id);
+            ProviderOperationResult result = runtime.execute(context, new ProviderOperationRequest(
+                    "mq_message_exists", List.of(
+                            Map.of("bind_as", "correlation_id", "ref", miss ? "CORR-B" : "CORR-A"),
+                            Map.of("bind_as", "timeout", "value", "PT0S"),
+                            Map.of("bind_as", "poll_interval", "value", "PT0S")),
+                    Map.of("_operation_id", id)));
+            assertThat(result.passed()).as(id).isEqualTo(!miss);
+            assertThat(result.outputs()).containsEntry("browse_count", miss ? 0 : 1)
+                    .containsEntry("matched", !miss)
+                    .containsEntry("last_observed_message_id", miss ? "" : messageId);
+            if (miss) assertThat(result.failure().code()).isEqualTo("MQ_TIMEOUT");
+            else assertThat(result.failure()).isNull();
+            String evidence = Files.readString(tempDir.resolve("run/provider-evidence/ibm_mq/" + id + ".yaml"));
+            assertThat(evidence).contains("browse_only: true").contains("raw_secret_found: false")
+                    .contains("status: " + (miss ? "failed" : "passed"));
+            if (miss) assertThat(evidence).contains("failure_code: MQ_TIMEOUT");
+            System.out.println("MQ_SELECTOR_RESULT " + id + " passed=" + result.passed()
+                    + " count=" + result.outputs().get("browse_count") + " matched=" + result.outputs().get("matched")
+                    + " failure=" + (result.failure() == null ? "NONE" : result.failure().code()));
+        }
+    }
+
     private ProviderExecutionContext context(Path suiteRoot) {
         return new ProviderExecutionContext(
                 "payment-mq",
