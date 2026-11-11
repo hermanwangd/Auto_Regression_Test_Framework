@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, 'release/**']
   push:
-    branches: [main, codex/sit-readiness]
+    branches: [main, codex/sit-readiness, plug-in-module]
   workflow_dispatch:
 
 permissions:
