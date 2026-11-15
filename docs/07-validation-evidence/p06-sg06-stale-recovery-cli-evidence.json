@@ -1,0 +1,80 @@
+{
+  "schema": "public-source-cli-evidence.v1",
+  "project": "P06",
+  "scenario_group": "P06-SG06",
+  "case_id": "TC-P06-SG06-STALE-RECOVERY-001",
+  "source": {
+    "upstream_repository": "dpkp/kafka-python",
+    "upstream_commit": "3fa6acf1931e0beb4b3af9e8859d08a80897a63b",
+    "framework_repository": "hermanwangd/Auto_Regression_Test_Framework",
+    "framework_module_commit": "173ee0ecb4212b0e0963aa3c574d6c02c30eb3aa",
+    "framework_jar_sha256": "94a9f1c4e700f622e64297612dc5a8652e372b47d8569a9ffac140aecb3410d5",
+    "module_jar_sha256": "03c08e828ee56e50ca19270818d020366ca8686e9c0fc9347faf9acbec76ade0",
+    "python_executable_sha256": "fa67443527ed9647f760d807e2a38f26340757123e643c4639cf273ed15d5ea7",
+    "partitioner_source_sha256": {
+      "sticky": "037a5f0ab165fa3866a6a4c036545c4398b177f7be1772bcf9de36ba0684dfbf",
+      "abc": "3975c512f45fd6ca80b1e6c0da6292589ea374a232360aa8593223f3899effbf",
+      "default": "643f127937df2423ec363a38199ef2e1c5955ba886e8dc9b459b966ee976df58",
+      "__init__": "c4417452d6b8c12d152ec387b0e6659299c1d3de696afb60301b7541526e13f4"
+    }
+  },
+  "input": {
+    "test_definition_sha256": "6be635db668900ebc9d2333c282d535990df73747144480cb851b97c9391e86b",
+    "stdin_sha256": "9998e2539e5f662e3025e3bc9431b1a3df424aa12023d0637fc12a357a69d7fc",
+    "stdin_bytes": 15657,
+    "argv_sha256": "a6de33224a1b0cac4adeb7305f5d4458c7f48898990224f54f2b30f66bfac7bb",
+    "handoff_sha256": "5dfc0c6875f50b1aa9ca1dcf15fe87c5ccb18eee622ec31b683dfa0d3488839d",
+    "scope": "One stale batch + metadata unavailable recovery local double case. Not true broker, native Kafka or SIT."
+  },
+  "oracle": {
+    "origin": "Pinned upstream tests on_new_batch_ignores_stale_prev_partition and unavailable_sticky_partition_repicks; public-hook rotation establishes stale event without direct internal mutation. Relational oracle frozen before execution.",
+    "expected": {
+      "exit_ok": 0,
+      "stdout_ok": "{\"case_id\":\"TC-P06-SG06-STALE-RECOVERY-001\",\"following_count\":10,\"following_stable\":true,\"initial_rotated\":true,\"recovered_available\":true,\"stale_event_ignored\":true,\"unavailable_repicked\":true}\n",
+      "stderr_ok": ""
+    },
+    "independence": "Expected values frozen before execution; upstream-derived semantics, not independent implementation."
+  },
+  "execution": {
+    "run_id": "RUN-V03-fbcbce9c-f6a8-4863-8f14-5f74dcbcf39b",
+    "invocation_id": "3b685fae-2bc7-4a12-a24c-0a90e87e2cb5",
+    "module_outcome": "COMPLETED",
+    "framework_verdict": "passed",
+    "evidence_validation": "validated",
+    "module_exit": 0,
+    "framework_exit": 0,
+    "observed": {
+      "stdout": "{\"case_id\":\"TC-P06-SG06-STALE-RECOVERY-001\",\"following_count\":10,\"following_stable\":true,\"initial_rotated\":true,\"recovered_available\":true,\"stale_event_ignored\":true,\"unavailable_repicked\":true}\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    "assertions_passed": 3,
+    "cleanup_status": "complete",
+    "tracked_descendant_count": 0,
+    "child_pid_absent_at_postrun_review": true
+  },
+  "technical_review": {
+    "decision": "ACCEPTED_BOUNDED_COMPONENT_CLI_BRIDGE",
+    "reference": "p06-sg06-stale-recovery-postrun.v1",
+    "independent_pre_run_and_post_run_review": true
+  },
+  "retained_artifact_hashes": {
+    "receipt_sha256": "a9d63c5e51d4f57eb02bc9df00e161d95e0a9e0e3987aa084b3edd8ee47c89cc",
+    "canonical_result_sha256": "03f375650b4cf01a9fe65d846b66310aca9cefcaf668d07213abaee1fc3ca903",
+    "provider_proof_sha256": "a4bbae40e8619aa04aa4cca5d2e8333f9974980e8e4cf9f5da1b77a7ecde2b48"
+  },
+  "retention": "Raw artifacts are retained non-publicly. These hashes are identity checks, not public download links. This sanitized index is not a replacement for raw signed/run artifacts.",
+  "accepted_layers": [
+    "framework_provider",
+    "swarm_module"
+  ],
+  "case_count": 1,
+  "release_evidence_eligible": false,
+  "limits": [
+    "Local source-partitioner CLI bridge with owned metadata double; not real Kafka broker or native Kafka provider.",
+    "No native Swarm-agent, shared SIT, upstream full-suite or release acceptance.",
+    "One case regardless of internal partition-call count.",
+    "New package revision differs from historical P06 SG01/SG03; not a same-candidate campaign.",
+    "No original failed control verdict is changed or counted as a pass."
+  ]
+}

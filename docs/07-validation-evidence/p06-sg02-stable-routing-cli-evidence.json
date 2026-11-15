@@ -1,0 +1,80 @@
+{
+  "schema": "public-source-cli-evidence.v1",
+  "project": "P06",
+  "scenario_group": "P06-SG02",
+  "case_id": "TC-P06-SG02-STABLE-050",
+  "source": {
+    "upstream_repository": "dpkp/kafka-python",
+    "upstream_commit": "3fa6acf1931e0beb4b3af9e8859d08a80897a63b",
+    "framework_repository": "hermanwangd/Auto_Regression_Test_Framework",
+    "framework_module_commit": "173ee0ecb4212b0e0963aa3c574d6c02c30eb3aa",
+    "framework_jar_sha256": "94a9f1c4e700f622e64297612dc5a8652e372b47d8569a9ffac140aecb3410d5",
+    "module_jar_sha256": "03c08e828ee56e50ca19270818d020366ca8686e9c0fc9347faf9acbec76ade0",
+    "python_executable_sha256": "fa67443527ed9647f760d807e2a38f26340757123e643c4639cf273ed15d5ea7",
+    "partitioner_source_sha256": {
+      "sticky": "037a5f0ab165fa3866a6a4c036545c4398b177f7be1772bcf9de36ba0684dfbf",
+      "abc": "3975c512f45fd6ca80b1e6c0da6292589ea374a232360aa8593223f3899effbf",
+      "default": "643f127937df2423ec363a38199ef2e1c5955ba886e8dc9b459b966ee976df58",
+      "__init__": "c4417452d6b8c12d152ec387b0e6659299c1d3de696afb60301b7541526e13f4"
+    }
+  },
+  "input": {
+    "test_definition_sha256": "a3cb9642bbe4da7a9839389e92d9a4dea289aabfb56adf11d37cbe5e7fa1f357",
+    "stdin_sha256": "100bc85cf153f0c1990ef02a875c634974462f1df15c2dbde08d1022e5a23e82",
+    "stdin_bytes": 15112,
+    "argv_sha256": "a6de33224a1b0cac4adeb7305f5d4458c7f48898990224f54f2b30f66bfac7bb",
+    "handoff_sha256": "f7cdbb9a8cbd93cc81ba42fbe7c5022e25adfb44dfb6c0ee5e2243d0c22b7747",
+    "scope": "Source-derived Python partitioner via local CLI/Module; no broker, native-agent or SIT claim"
+  },
+  "oracle": {
+    "origin": "Existing frozen upstream abc vector gives 107; repetition invariance specifies 50 exact 107 outputs. No runtime output used. Upstream-derived, not independent implementation.",
+    "expected": {
+      "exit_ok": 0,
+      "stdout_ok": "{\"call_count\":50,\"case_id\":\"TC-P06-SG02-STABLE-050\",\"partitions\":[107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107]}\n",
+      "stderr_ok": ""
+    },
+    "independence": "Expected values frozen before execution; upstream-derived semantics, not independent implementation."
+  },
+  "execution": {
+    "run_id": "RUN-V03-51bf1e11-700e-4873-b9d0-bc40ab30379a",
+    "invocation_id": "00c8f768-b582-4b1f-8072-926017abd0aa",
+    "module_outcome": "COMPLETED",
+    "framework_verdict": "passed",
+    "evidence_validation": "validated",
+    "module_exit": 0,
+    "framework_exit": 0,
+    "observed": {
+      "stdout": "{\"call_count\":50,\"case_id\":\"TC-P06-SG02-STABLE-050\",\"partitions\":[107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107,107]}\n",
+      "stderr": "",
+      "exit_code": 0
+    },
+    "assertions_passed": 3,
+    "cleanup_status": "complete",
+    "tracked_descendant_count": 0,
+    "child_pid_absent_at_postrun_review": true
+  },
+  "technical_review": {
+    "decision": "ACCEPTED_BOUNDED_COMPONENT_CLI_BRIDGE",
+    "reference": "p06-sg02-stable050-postrun.v1",
+    "independent_pre_run_and_post_run_review": true
+  },
+  "retained_artifact_hashes": {
+    "receipt_sha256": "2ec205feac2e232f40439384e7b4bb81c4c2f7b57e77cc817fa956e543c63d8f",
+    "canonical_result_sha256": "2121d03086b21b0f522ee719a3f9531b4e33bc344fabda88f7673a842615be0d",
+    "provider_proof_sha256": "70b08156fd833b6d3b611c17754a654844871ae572e63d847286a411e116fe8b"
+  },
+  "retention": "Raw artifacts are retained non-publicly. These hashes are identity checks, not public download links. This sanitized index is not a replacement for raw signed/run artifacts.",
+  "accepted_layers": [
+    "framework_provider",
+    "swarm_module"
+  ],
+  "case_count": 1,
+  "release_evidence_eligible": false,
+  "limits": [
+    "Local source-partitioner CLI bridge with owned metadata double; not real Kafka broker or native Kafka provider.",
+    "No native Swarm-agent, shared SIT, upstream full-suite or release acceptance.",
+    "One case regardless of internal partition-call count.",
+    "New package revision differs from historical P06 SG01/SG03; not a same-candidate campaign.",
+    "No original failed control verdict is changed or counted as a pass."
+  ]
+}
