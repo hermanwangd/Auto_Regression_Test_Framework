@@ -21,11 +21,17 @@ This is an independently buildable Java 17 Maven module and a candidate for its 
 
 ## Migration to a truly independent GitHub repository
 
-Create a private empty repository for the company and push this **standalone tree**, not the entire framework repository history. For example, in a Git worktree with this extraction branch checked out:
+Create a private empty repository for the company and export **only the current standalone tree**, into a fresh directory with a new unrelated Git history. Do **not** push this staging branch directly: its ancestors contain the entire framework repository even though its HEAD tree does not.
 
 ```bash
-git remote add company-module https://github.com/<company-org>/<test-module-repo>.git
-git push company-module HEAD:main
+mkdir -p /tmp/company-swarm-test-module
+git archive shipping/test-module-standalone-20261121 | tar -x -C /tmp/company-swarm-test-module
+cd /tmp/company-swarm-test-module
+git init -b main
+git add .
+git commit -m "feat: import standalone Swarm test module"
+git remote add origin https://github.com/<company-org>/<test-module-repo>.git
+git push -u origin main
 ```
 
-Do **not** run the push command until the intended organization, permissions and repository are confirmed. Keep the current framework main branch unchanged. Change Maven coordinates only as a deliberate compatibility/versioning change.
+Run `git archive` from a checkout that has fetched the extraction branch, and only after selecting an approved **private** target repo/organization. Verify the fresh repo's `git log --oneline` contains only the new import commit. This must not accidentally expose framework ancestry. Keep the framework's `main` branch unchanged. Change Maven coordinates only as an explicit compatibility/versioning change.
