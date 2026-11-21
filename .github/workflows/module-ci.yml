@@ -1,0 +1,74 @@
+name: Standalone Test Module CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: standalone-test-module-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  standalone-and-consumer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      MAVEN_OPTS: -Xmx1024m -XX:MaxMetaspaceSize=384m
+    steps:
+      - name: Checkout standalone module source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17 and Maven cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Verify the existing standalone module tests
+        run: mvn -B -ntp verify
+
+      - name: Install a pinned local Maven artifact for consumer testing
+        run: mvn -B -ntp -DskipTests install
+
+      - name: Clean external Swarm consumer import and ServiceLoader smoke
+        run: mvn -B -ntp -f examples/company-swarm-consumer/pom.xml test
+
+      - name: Check complete distributions and executable CLI startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suffix in '' '-host' '-provider' '-cli'; do
+            test -s "target/swarm-product-test-1.0.0${suffix}.jar"
+          done
+          set +e
+          java -jar target/swarm-product-test-1.0.0-cli.jar product-test > target/cli-smoke.out 2> target/cli-smoke.err
+          rc=$?
+          set -e
+          test "$rc" -eq 2
+          grep -q 'usage: product-test run' target/cli-smoke.err
+
+      - name: Record hashes for all modular and CLI distributions
+        shell: bash
+        run: |
+          set -euo pipefail
+          find target -maxdepth 1 -type f -name 'swarm-product-test-*.jar' -print0 |
+            sort -z | xargs -0 -r sha256sum | tee target/module-checksums.sha256
+          test -s target/module-checksums.sha256
+
+      - name: Retain importable packages and test evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: standalone-test-module-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            target/swarm-product-test-*.jar
+            target/module-checksums.sha256
+            target/surefire-reports/
+            target/site/jacoco/
+            examples/company-swarm-consumer/target/surefire-reports/
