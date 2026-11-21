@@ -1,7 +1,0 @@
-env_profile_id: local_verify
-execution_mode: local
-providers:
-  local-common-verifier:
-    runtime_mode: stub
-    bindings:
-      workspace_ref: samples/20-provider-capability-p0/verification/common_verify

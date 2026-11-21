@@ -1,7 +1,0 @@
-env_profile_id: local_dummy
-execution_mode: local
-providers:
-  dummy-rest-client:
-    runtime_mode: native
-    bindings:
-      base_url: local://framework-demo-server

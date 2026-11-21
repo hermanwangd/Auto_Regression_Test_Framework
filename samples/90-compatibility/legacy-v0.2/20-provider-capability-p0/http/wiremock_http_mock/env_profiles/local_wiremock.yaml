@@ -1,9 +1,0 @@
-env_profile_id: local_wiremock
-execution_mode: local
-providers:
-  wiremock-payment-api:
-    runtime_mode: mock
-    bindings:
-      port_strategy: dynamic
-      mappings_ref:
-        ref: fixtures/

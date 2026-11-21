@@ -1,1 +1,0 @@
-DELETE FROM ORDERS WHERE ORDER_ID = :order_id;

@@ -1,14 +1,1 @@
-.DS_Store
-**/.DS_Store
-
-.env
-.env.*
-!.env.example
-
-*.log
-tmp/
-temp/
-target/
-.dependency-check-data/
-.mvn/wrapper/apache-maven-*/
-.mvn/wrapper/apache-maven-*.zip
+/target/

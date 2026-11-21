@@ -1,8 +1,0 @@
-env_profile_id: local_golden
-execution_mode: local
-providers:
-  sample-fake-runtime:
-    runtime_mode: stub
-    bindings:
-      workspace_ref: local://golden-e2e-workspace
-      clock_ref: fixed://2026-06-29T00:00:00Z

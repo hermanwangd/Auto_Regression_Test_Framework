@@ -1,7 +1,0 @@
-tools/ansible-venv/
-tools/wheels/
-tools/helm/
-tools/cache/
-reports/
-__pycache__/
-*.pyc
