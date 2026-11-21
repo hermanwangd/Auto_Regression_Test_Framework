@@ -38,6 +38,20 @@ jobs:
       - name: Clean external Swarm consumer import and ServiceLoader smoke
         run: mvn -B -ntp -f examples/company-swarm-consumer/pom.xml test
 
+      - name: Check complete distributions and executable CLI startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suffix in '' '-host' '-provider' '-cli'; do
+            test -s "target/swarm-product-test-1.0.0${suffix}.jar"
+          done
+          set +e
+          java -jar target/swarm-product-test-1.0.0-cli.jar product-test > target/cli-smoke.out 2> target/cli-smoke.err
+          rc=$?
+          set -e
+          test "$rc" -eq 2
+          grep -q 'usage: product-test run' target/cli-smoke.err
+
       - name: Record hashes for all modular and CLI distributions
         shell: bash
         run: |
