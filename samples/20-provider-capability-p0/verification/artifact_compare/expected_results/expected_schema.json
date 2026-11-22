@@ -1,16 +1,19 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["id", "status", "items"],
+  "required": [
+    "order_id",
+    "status",
+    "items"
+  ],
   "properties": {
-    "id": { "type": "string" },
-    "status": { "const": "OK" },
+    "order_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
     "items": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["name", "value"]
-      }
+      "type": "array"
     }
   }
 }

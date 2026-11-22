@@ -462,10 +462,15 @@ public class IbmMqProviderRuntime implements ProviderRuntime {
     }
 
     private ProviderFailure mqConnectionFailure(Exception e) {
+        String cause = "Cause type: " + e.getClass().getSimpleName() + ".";
+        if (e instanceof MQException mqException) {
+            cause += " completion_code=" + mqException.completionCode
+                    + ", reason_code=" + mqException.reasonCode + ".";
+        }
         return failure(
                 "MQ_CONNECTION_FAILED",
                 "MQ_CONNECTION_FAILED",
-                "IBM MQ client operation failed. Cause type: " + e.getClass().getSimpleName() + ".",
+                "IBM MQ client operation failed. " + cause,
                 "Verify the execution profile supplies a reachable external queue manager and valid IBM MQ bindings.");
     }
 
@@ -939,6 +944,7 @@ public class IbmMqProviderRuntime implements ProviderRuntime {
             }
             if (!credential.password().isBlank()) {
                 properties.put(MQConstants.PASSWORD_PROPERTY, credential.password());
+                properties.put(MQConstants.USE_MQCSP_AUTHENTICATION_PROPERTY, Boolean.TRUE);
             }
             return properties;
         }

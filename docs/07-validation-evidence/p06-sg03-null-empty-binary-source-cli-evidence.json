@@ -1,0 +1,501 @@
+{
+  "schema_version": "p06-sg03-null-empty-binary-source-cli-evidence.v1",
+  "status": "ACCEPTED_BOUNDED_COMPONENT",
+  "scenario_group_id": "P06-SG03",
+  "title": "null／empty／binary key 區別",
+  "review": {
+    "reviewer": "independent-validation-reviewer",
+    "review_ref": "p06-sg03-nullable-source-cli-fourcase-postrun.v1@2026-11-10T09:19:00Z",
+    "reviewed_at_utc": "2026-11-10T09:19:00Z"
+  },
+  "scope": "Unmodified kafka-python DefaultPartitioner source slice through nullable-key metadata adapter and packaged Module → Framework cli_process.v0.3",
+  "upstream": {
+    "repository": "dpkp/kafka-python",
+    "commit": "3fa6acf1931e0beb4b3af9e8859d08a80897a63b",
+    "source_test_url": "https://github.com/dpkp/kafka-python/blob/3fa6acf1931e0beb4b3af9e8859d08a80897a63b/test/producer/test_partitioner.py",
+    "abc_sha256": "3975c512f45fd6ca80b1e6c0da6292589ea374a232360aa8593223f3899effbf",
+    "default_sha256": "643f127937df2423ec363a38199ef2e1c5955ba886e8dc9b459b966ee976df58",
+    "test_sha256": "a04daae2ca5e998644174d527a5798c543b298bf25c4573c4d6d4057886150cb"
+  },
+  "product": {
+    "repository": "hermanwangd/Auto_Regression_Test_Framework",
+    "source_commit": "357bd3b51b02b2fbb75f7f121dc6ebf7118ee67a",
+    "ci_run_url": "https://github.com/hermanwangd/Auto_Regression_Test_Framework/actions/runs/42738823849",
+    "framework_version": "0.3.2",
+    "module_version": "1.0.0-cli",
+    "framework_jar_sha256": "bfcdf481f54a7d79cc8a57067f64f11a15828a9e534bf974b2e8bc24d8c5d036",
+    "module_jar_sha256": "4b9c521e4dc977edec2b4cc385b5d40552a83f1a3bd5bda389fa2786dfbfcb7e",
+    "ci_focused_tests": 307,
+    "ci_tests_are_not_new_scenario_case_credit": true
+  },
+  "runtime": {
+    "python": "3.12.14",
+    "python_sha256": "fa67443527ed9647f760d807e2a38f26340757123e643c4639cf273ed15d5ea7",
+    "java": "21.0.13",
+    "java_sha256": "1a7e0b17c39003c75b457d686775ccb032e56fa9c8afe3c492d8eb3715e8951a",
+    "adapter_sha256": "e7dfbd1ec1ee9c4cececfc6bc506e9734b75be9aa67a41795e10daec78d73392",
+    "accepted_normalizer_sha256": "d80cfa700254d5518cdc2a1d91b9d1452bebd1fec909248e8d50d47f797d46fd"
+  },
+  "counting": {
+    "framework_provider_product_cases": 4,
+    "swarm_module_product_cases": 4,
+    "accepted_group_units_per_layer": 1,
+    "actual_module_invocations": 5,
+    "wrong_oracle_controls": 1,
+    "wrong_oracle_product_case_credit": 0,
+    "approved_global_case_denominator": null,
+    "planning_groups_unchanged": 116
+  },
+  "artifact_availability": "Retained original raw artifacts are referenced by SHA256 only. Hashes are identities, not download links or independently sufficient semantic proof. This index is public; private execution locations and credentials are not published.",
+  "cases": [
+    {
+      "case_id": "TC-P06-SG03-N01",
+      "product_case_credit": 1,
+      "invocation_id": "4cb6a692-bf9a-406c-aec3-487170fdf903",
+      "run_id": "RUN-V03-c930add7-c5f6-4d52-b9ff-64431d047745",
+      "module_exit": 0,
+      "module_outcome": "COMPLETED",
+      "framework_exit": 0,
+      "framework_verdict": "passed",
+      "evidence_validation": "validated",
+      "cli_outputs": {
+        "exit_code": 0,
+        "stdout": "999\n",
+        "stderr": "",
+        "duration_ms": 90
+      },
+      "provider_status": "passed",
+      "assertions": [
+        {
+          "id": "exit_ok",
+          "status": "passed",
+          "failure_code": null
+        },
+        {
+          "id": "stdout_ok",
+          "status": "passed",
+          "failure_code": null
+        },
+        {
+          "id": "stderr_ok",
+          "status": "passed",
+          "failure_code": null
+        }
+      ],
+      "canonical_failure": {
+        "code": null,
+        "classification": null,
+        "reason": null,
+        "owner_action": null,
+        "cleanup_failures": []
+      },
+      "receipt_sha256": "5341a0f3b63fb582be1b9a120a892362b1115439b947365ac75f478d4d780687",
+      "result_sha256": "7799d14198c19057cec7b13172f2633a414bd3d533e19b6029485130e748a8e3",
+      "provider_sha256": "7ba16bd719981cfe877f909a5cb6f1a2f5bf10f7fb425fdead577df955656f79",
+      "capture_sha256": "387199c9a752ef6f8b0fec1229c6a8c3b44214962e574f0c0919490237eeb811",
+      "capture_errors": [],
+      "peak_rss_sampled": 297127936,
+      "peak_storage_sampled": 77483,
+      "advertised_hash_count": 19,
+      "all_artifact_hashes_match": true,
+      "source_input": {
+        "topic": "t",
+        "serialized_key_hex": null,
+        "all_partitions_inclusive": [
+          0,
+          999
+        ],
+        "available_partitions": [
+          999
+        ],
+        "metadata": "Owned exact three-method metadata fixture, not broker metadata"
+      },
+      "oracle": {
+        "source_partition_output": "999\n",
+        "declared_stdout_assertion": "999\n",
+        "source_cli_exit": 0,
+        "source_cli_stderr": ""
+      },
+      "input_identity": {
+        "suite_manifest_sha256": "fad440a3867f15730845c008f2ff0b53aa16a8351c444cdf08cc71955940e254",
+        "test_sha256": "da48a649a5677d71fe1b9e707875abc70977bf379cc92e77b4814300bb08cb46",
+        "request_sha256": "2cb1f65a8da53cb9d5747798dc60d5bac7b93c71e8c5db76667ba6c1e09d1bb4",
+        "reviewed_handoff_sha256": "616fa5bd5a2946f9c24c8a283706b1c39f6fcada218224a654fa19c19df69321",
+        "deployment_seal_sha256": "18c3b1f0560f35e90c7ca3118fdd99f7665debd170934c95ac18b38806f5f918"
+      },
+      "cleanup": {
+        "complete": true,
+        "errors": [],
+        "remaining": [],
+        "direct_reaped": true
+      },
+      "process_observation": "Exact pinned Python observed; sampled, not lossless"
+    },
+    {
+      "case_id": "TC-P06-SG03-N02",
+      "product_case_credit": 1,
+      "invocation_id": "d8991876-1a74-442d-aaa1-48872d8db60e",
+      "run_id": "RUN-V03-6b7fd268-4d06-4b2c-b9b8-fccc3591f2ae",
+      "module_exit": 0,
+      "module_outcome": "COMPLETED",
+      "framework_exit": 0,
+      "framework_verdict": "passed",
+      "evidence_validation": "validated",
+      "cli_outputs": {
+        "stderr": "",
+        "duration_ms": 91,
+        "exit_code": 0,
+        "stdout": "681\n"
+      },
+      "provider_status": "passed",
+      "assertions": [
+        {
+          "id": "exit_ok",
+          "status": "passed",
+          "failure_code": null
+        },
+        {
+          "id": "stdout_ok",
+          "status": "passed",
+          "failure_code": null
+        },
+        {
+          "id": "stderr_ok",
+          "status": "passed",
+          "failure_code": null
+        }
+      ],
+      "canonical_failure": {
+        "code": null,
+        "classification": null,
+        "reason": null,
+        "owner_action": null,
+        "cleanup_failures": []
+      },
+      "receipt_sha256": "72a7d9faea3ac2e1ab01292cc295f0f6ca3a67d15717c8f2cb07a82514e3cb1c",
+      "result_sha256": "08d5a9375b84316c5014ed9c2a906b9d940d91456c7a2cda6822f407730ea3cf",
+      "provider_sha256": "594909086e4b669e8cbd33f92da68530fb611a3a024e212e6361eb8dcaabed4f",
+      "capture_sha256": "20db56e1a323d1ed1efc0fee59250bd0ef6d304d503158fb160f6e7c068473cd",
+      "capture_errors": [],
+      "peak_rss_sampled": 295550976,
+      "peak_storage_sampled": 183005,
+      "advertised_hash_count": 19,
+      "all_artifact_hashes_match": true,
+      "source_input": {
+        "topic": "t",
+        "serialized_key_hex": "",
+        "all_partitions_inclusive": [
+          0,
+          999
+        ],
+        "available_partitions": [
+          999
+        ],
+        "metadata": "Owned exact three-method metadata fixture, not broker metadata"
+      },
+      "oracle": {
+        "source_partition_output": "681\n",
+        "declared_stdout_assertion": "681\n",
+        "source_cli_exit": 0,
+        "source_cli_stderr": ""
+      },
+      "input_identity": {
+        "suite_manifest_sha256": "02a74e05f2e2343e9fcc2c3085f9e68fd198336a4911f7e6023cc3903fe7bb91",
+        "test_sha256": "f4407a4a472981fb4a8a0815683348e107e338273021317b7ccc44154cded5b5",
+        "request_sha256": "783974ecc6beb39fff1ff2a15b0d6ee41943d96e9ca4ff814db21f0efc133713",
+        "reviewed_handoff_sha256": "aceb6366182e187f4cf31123faf899229923cc4d6ee2fb6808fb1e324c6d16ef",
+        "deployment_seal_sha256": "e2087a8d69bd1fc0551f429a32eeb325fdd53f70b97bf31eefd81674638c907c"
+      },
+      "cleanup": {
+        "complete": true,
+        "errors": [],
+        "remaining": [],
+        "direct_reaped": true
+      },
+      "process_observation": "Exact pinned Python observed; sampled, not lossless"
+    },
+    {
+      "case_id": "TC-P06-SG03-N03",
+      "product_case_credit": 1,
+      "invocation_id": "db697a2c-e2d6-48d2-826e-4b4b407660a9",
+      "run_id": "RUN-V03-8d0ca5af-1a1c-4c0b-ba95-d393452110e3",
+      "module_exit": 0,
+      "module_outcome": "COMPLETED",
+      "framework_exit": 0,
+      "framework_verdict": "passed",
+      "evidence_validation": "validated",
+      "cli_outputs": {
+        "stdout": "742\n",
+        "stderr": "",
+        "duration_ms": 90,
+        "exit_code": 0
+      },
+      "provider_status": "passed",
+      "assertions": [
+        {
+          "id": "exit_ok",
+          "status": "passed",
+          "failure_code": null
+        },
+        {
+          "id": "stdout_ok",
+          "status": "passed",
+          "failure_code": null
+        },
+        {
+          "id": "stderr_ok",
+          "status": "passed",
+          "failure_code": null
+        }
+      ],
+      "canonical_failure": {
+        "code": null,
+        "classification": null,
+        "reason": null,
+        "owner_action": null,
+        "cleanup_failures": []
+      },
+      "receipt_sha256": "2a71c30a6282c570a547fc53b496b06e7d214b690e1fb2c3f3cebef1687efcc6",
+      "result_sha256": "ddf00ceb0d327a5f5970dbecea6d61cd9d4894da6356bfdbd8c4ecc7061f41af",
+      "provider_sha256": "28f3055dee0ca53bf3e7e9e72e285aba7aef0f05eb0ad2819c798fcb18a942ab",
+      "capture_sha256": "84f9a23bf4353880358150b45bc26468cfe1bfcce686943dfa3f77255182cca0",
+      "capture_errors": [],
+      "peak_rss_sampled": 293289984,
+      "peak_storage_sampled": 288251,
+      "advertised_hash_count": 19,
+      "all_artifact_hashes_match": true,
+      "source_input": {
+        "topic": "t",
+        "serialized_key_hex": "0020",
+        "all_partitions_inclusive": [
+          0,
+          999
+        ],
+        "available_partitions": [
+          999
+        ],
+        "metadata": "Owned exact three-method metadata fixture, not broker metadata"
+      },
+      "oracle": {
+        "source_partition_output": "742\n",
+        "declared_stdout_assertion": "742\n",
+        "source_cli_exit": 0,
+        "source_cli_stderr": ""
+      },
+      "input_identity": {
+        "suite_manifest_sha256": "098622daed13de9bc1eed6a095a665bff4d4e6c552c94965b751d5f359a0c68e",
+        "test_sha256": "01d6782b71e7d27c9f21374122102fcbdee633cf3f824d65e4254e476ae60727",
+        "request_sha256": "4068388b7fcf24ee7cf15b7996fb6e3fa91f3991b2f24f6e75bd7395c10eef3d",
+        "reviewed_handoff_sha256": "22d011d0200396c6de3720ef0001336cd51fcbf21de291cb4af1631a8c67d85f",
+        "deployment_seal_sha256": "e2087a8d69bd1fc0551f429a32eeb325fdd53f70b97bf31eefd81674638c907c"
+      },
+      "cleanup": {
+        "complete": true,
+        "errors": [],
+        "remaining": [],
+        "direct_reaped": true
+      },
+      "process_observation": "Exact pinned Python observed; sampled, not lossless"
+    },
+    {
+      "case_id": "TC-P06-SG03-N04",
+      "product_case_credit": 1,
+      "invocation_id": "85a67096-cd23-4034-a7ea-d9b65dbddfc5",
+      "run_id": "RUN-V03-1a9b3247-242e-4ac4-ab57-e68364940102",
+      "module_exit": 0,
+      "module_outcome": "COMPLETED",
+      "framework_exit": 0,
+      "framework_verdict": "passed",
+      "evidence_validation": "validated",
+      "cli_outputs": {
+        "stdout": "17\n",
+        "exit_code": 0,
+        "duration_ms": 80,
+        "stderr": ""
+      },
+      "provider_status": "passed",
+      "assertions": [
+        {
+          "id": "exit_ok",
+          "status": "passed",
+          "failure_code": null
+        },
+        {
+          "id": "stdout_ok",
+          "status": "passed",
+          "failure_code": null
+        },
+        {
+          "id": "stderr_ok",
+          "status": "passed",
+          "failure_code": null
+        }
+      ],
+      "canonical_failure": {
+        "code": null,
+        "classification": null,
+        "reason": null,
+        "owner_action": null,
+        "cleanup_failures": []
+      },
+      "receipt_sha256": "b714cfff99a937faaaaef053fa662c754fde5fc7a6c2a40d70652c7f25320251",
+      "result_sha256": "3bd7f2d22ac521d702bfa596c8a31f587238626fc808983f0cb85ae71ee088a1",
+      "provider_sha256": "b3e8c4767e757db374f2ed7c7ec60aa1b2c29ec8b12cda4ee58aed7937f15d6c",
+      "capture_sha256": "b55c8731143b17910ea22500b5d1aaada094c82f5d48faba578686a856bad193",
+      "capture_errors": [],
+      "peak_rss_sampled": 296386560,
+      "peak_storage_sampled": 393365,
+      "advertised_hash_count": 19,
+      "all_artifact_hashes_match": true,
+      "source_input": {
+        "topic": "t",
+        "serialized_key_hex": null,
+        "all_partitions_inclusive": [
+          17,
+          17
+        ],
+        "available_partitions": [],
+        "metadata": "Owned exact three-method metadata fixture, not broker metadata"
+      },
+      "oracle": {
+        "source_partition_output": "17\n",
+        "declared_stdout_assertion": "17\n",
+        "source_cli_exit": 0,
+        "source_cli_stderr": ""
+      },
+      "input_identity": {
+        "suite_manifest_sha256": "f85c6442260e70d463ac0070b899c075120012122c8f771500f8827a496a84f8",
+        "test_sha256": "94b1892725591e6e317ae280ed778483361208a10f5237a42fb7c0df0de4dc4b",
+        "request_sha256": "7b2272ef67b3c088502379940a0d10496e4501466ab6ac55775e467c58c59f04",
+        "reviewed_handoff_sha256": "5a174955acc80f55bbd4d27fba262fb9431bd7a4661dcd3e2ed9584106b9fe0b",
+        "deployment_seal_sha256": "e2087a8d69bd1fc0551f429a32eeb325fdd53f70b97bf31eefd81674638c907c"
+      },
+      "cleanup": {
+        "complete": true,
+        "errors": [],
+        "remaining": [],
+        "direct_reaped": true
+      },
+      "process_observation": "Exact pinned Python observed; sampled, not lossless"
+    }
+  ],
+  "controls": [
+    {
+      "case_id": "CTRL-P06-SG03-N05",
+      "product_case_credit": 0,
+      "invocation_id": "8384248e-c38f-407e-9127-55f127454adb",
+      "run_id": "RUN-V03-8053fc3d-8d15-40f0-b235-a6ac530ee1b0",
+      "module_exit": 1,
+      "module_outcome": "COMPLETED",
+      "framework_exit": 1,
+      "framework_verdict": "failed",
+      "evidence_validation": "validated",
+      "cli_outputs": {
+        "exit_code": 0,
+        "stdout": "999\n",
+        "stderr": "",
+        "duration_ms": 81
+      },
+      "provider_status": "passed",
+      "assertions": [
+        {
+          "id": "exit_ok",
+          "status": "passed",
+          "failure_code": null
+        },
+        {
+          "id": "stdout_ok",
+          "status": "failed",
+          "failure_code": "ASSERTION_FAILED"
+        }
+      ],
+      "canonical_failure": {
+        "code": "ASSERTION_FAILED",
+        "classification": "VERIFICATION_FAILED",
+        "reason": "Assertion `stdout_ok` failed.",
+        "owner_action": "Review assertion evidence.",
+        "cleanup_failures": []
+      },
+      "receipt_sha256": "7217088f7d65a74fea881c938abf10a2a4020bc1d843149ff5ea1660dcb2398f",
+      "result_sha256": "767fa6ed81039d54f2daef357cccb43af9600a0b7af9e057946d8f97683b1347",
+      "provider_sha256": "b980536d58ec716e127e7af1cc48649b17aec90be846057f0690354bc9b50bd0",
+      "capture_sha256": "37d8f50fd909e5769a66dea5aebde1fc119067aec77c5c231f28ad56b70a1b88",
+      "capture_errors": [],
+      "peak_rss_sampled": 298270720,
+      "peak_storage_sampled": 497893,
+      "advertised_hash_count": 18,
+      "all_artifact_hashes_match": true,
+      "source_input": {
+        "topic": "t",
+        "serialized_key_hex": null,
+        "all_partitions_inclusive": [
+          0,
+          999
+        ],
+        "available_partitions": [
+          999
+        ],
+        "metadata": "Owned exact three-method metadata fixture, not broker metadata"
+      },
+      "oracle": {
+        "source_partition_output": "999\n",
+        "declared_stdout_assertion": "681\n",
+        "source_cli_exit": 0,
+        "source_cli_stderr": ""
+      },
+      "input_identity": {
+        "suite_manifest_sha256": "f5e0ac81581a2d57acdc562c50c1d487c883d2228a8953b05486727ac7b92a81",
+        "test_sha256": "c5e0795a4589c72d6ea506812e01bc7b852e87bf1eae48f968b8ea82df50ca50",
+        "request_sha256": "55c162c8becd8603a4ef5b2b76dd020fb388dff7826fcd4e27d0347d7bf17bbf",
+        "reviewed_handoff_sha256": "db62c95ef68df7ab09afd8af6fc74f0313c90aca48be30ce25bc5a32a3f22a12",
+        "deployment_seal_sha256": "e2087a8d69bd1fc0551f429a32eeb325fdd53f70b97bf31eefd81674638c907c"
+      },
+      "cleanup": {
+        "complete": true,
+        "errors": [],
+        "remaining": [],
+        "direct_reaped": true
+      },
+      "process_observation": "Exact pinned Python observed; sampled, not lossless"
+    }
+  ],
+  "preserved_history": {
+    "original_round_outer_exit": 1,
+    "original_round_reason": "Independent grader assumed pre-sanitization empty YAML scalars; canonical N01 had passed. Original summary and raw files remain unchanged.",
+    "original_round_summary_sha256": "3d426f06709bd77782c1a493894c149a4cdb10a4014cb67d14c072bb0185c702",
+    "source_confirmed_correction": "V03RuntimeExecutionService sanitizeEvidence parses YAML then emits BLOCK YAML; empty assertion scalars canonicalize to literal null. Provider stderr remains the exact empty string.",
+    "corrected_offline_receipt_sha256": "00b29c9f9df36f08b78fa7eaf2314ee48398c8d657b99d726b3eb5205d377ffd",
+    "remaining_round_outer_exit": 0,
+    "remaining_round_summary_sha256": "49c91a7cf1ddf2b03f7a852ab8467c763750efb8a2e88b497637db4498b96221",
+    "N01_was_not_rerun": true,
+    "initial_adapter_baseline": "Existing keyed-only adapter rejected null; its passing empty-key behavior was preserved.",
+    "synthetic_fixture_correction": "Original fixture path-order failure retained; corrected full raw fixtures and rejection controls are tooling evidence only.",
+    "internal_output_protocol_deviations": "Selection output-size deviations were recorded and retained; no claim of full output-cap compliance.",
+    "failed_attempts_and_controls_add_product_cases": false
+  },
+  "independent_checks": {
+    "advertised_artifact_aliases": 94,
+    "unique_artifact_paths": 74,
+    "all_artifact_hashes_match": true,
+    "distinct_current_input_runtime_pins": 71,
+    "original_round_files_preserved": 25,
+    "runtime_files": 126,
+    "runtime_retained_bytes": 528545,
+    "sampled_peak_rss_bytes": 298270720,
+    "all_five_cleanup_complete": true,
+    "all_five_exact_python_observed": true,
+    "monitoring": "Sampled process/RSS/storage observations, not hard kernel quotas or lossless transient capture."
+  },
+  "limits": [
+    "source DefaultPartitioner slice with owned metadata adapter, not full kafka installation or broker",
+    "CLI provider path, not native Kafka provider",
+    "no native Swarm agent adoption or SIT",
+    "sampled resource/process measurements are not kernel quotas or lossless traces",
+    "source-key vector oracle numbers reused with new availability metadata contrast, old SG01 evidence not relabeled",
+    "N05 failed canonical verdict remains failed and adds zero product case credit"
+  ],
+  "release_evidence_eligible": false,
+  "native_swarm_agent_acceptance": false,
+  "sit_acceptance": false,
+  "upstream_full_suite_acceptance": false
+}

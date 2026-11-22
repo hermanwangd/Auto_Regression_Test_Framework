@@ -13,7 +13,7 @@
 
     <groupId>com.specdriven</groupId>
     <artifactId>spec-driven-auto-regression</artifactId>
-    <version>0.2.7</version>
+    <version>0.3.2</version>
     <name>Spec Driven Auto Regression</name>
     <description>Spec-driven auto regression test framework for suite-mode provider execution.</description>
     <url>https://github.com/hermanwangd/Auto_Regression_Test_Framework</url>
@@ -48,6 +48,8 @@
 
     <properties>
         <java.version>17</java.version>
+        <runner.build.variant>full</runner.build.variant>
+        <runner.build.ibm-mq>available</runner.build.ibm-mq>
         <jacoco.version>0.8.12</jacoco.version>
         <grpc.version>1.78.0</grpc.version>
         <protobuf.version>4.33.4</protobuf.version>
@@ -60,7 +62,7 @@
         <log4j2.version>2.26.1</log4j2.version>
         <netty.version>4.1.135.Final</netty.version>
         <handlebars.version>4.5.3</handlebars.version>
-        <httpclient5.version>5.6.2</httpclient5.version>
+        <httpclient5.version>5.6.4</httpclient5.version>
         <httpcore5.version>5.4.3</httpcore5.version>
     </properties>
 
@@ -179,6 +181,22 @@
     <build>
         <resources>
             <resource>
+                <directory>schemas</directory>
+                <targetPath>schemas</targetPath>
+                <filtering>false</filtering>
+                <includes>
+                    <include>dependencies_lock.v1.schema.yaml</include>
+                    <include>source_bindings.v1.schema.yaml</include>
+                    <include>runner_bundle.v1.schema.yaml</include>
+                    <include>runner_collection.v1.schema.yaml</include>
+                    <include>runner_runtime_binding.v1.schema.yaml</include>
+                    <include>shared_sit_data.v1.schema.yaml</include>
+                    <include>coverage_authority.v1.schema.yaml</include>
+                    <include>knowledge_selection_proof.v1.schema.yaml</include>
+                    <include>product_test_reviewed_handoff.v2.schema.yaml</include>
+                </includes>
+            </resource>
+            <resource>
                 <directory>src/main/resources</directory>
                 <filtering>false</filtering>
             </resource>
@@ -194,6 +212,10 @@
                 <directory>${project.build.directory}/generated-resources/provider-contract-index</directory>
                 <filtering>false</filtering>
             </resource>
+            <resource>
+                <directory>${project.build.directory}/generated-resources/runner-build</directory>
+                <filtering>false</filtering>
+            </resource>
         </resources>
         <plugins>
             <plugin>
@@ -201,6 +223,15 @@
                 <artifactId>maven-antrun-plugin</artifactId>
                 <version>3.2.0</version>
                 <executions>
+                    <execution>
+                        <id>generate-runner-build-descriptor</id>
+                        <phase>generate-resources</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration><target>
+                            <mkdir dir="${project.build.directory}/generated-resources/runner-build/META-INF/regression"/>
+                            <echo file="${project.build.directory}/generated-resources/runner-build/META-INF/regression/runner-build.properties">schema=runner-build.v1${line.separator}variant=${runner.build.variant}${line.separator}ibm_mq=${runner.build.ibm-mq}${line.separator}</echo>
+                        </target></configuration>
+                    </execution>
                     <execution>
                         <id>generate-provider-contract-index</id>
                         <phase>generate-resources</phase>
@@ -269,6 +300,54 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>no-ibm-mq</id>
+            <properties>
+                <runner.build.variant>no-ibm-mq</runner.build.variant>
+                <runner.build.ibm-mq>unsupported</runner.build.ibm-mq>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>com.ibm.mq</groupId><artifactId>com.ibm.mq.allclient</artifactId>
+                    <version>${ibm.mq.version}</version><scope>provided</scope>
+                </dependency>
+            </dependencies>
+            <build><plugins><plugin>
+                <groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration><excludes><exclude>
+                    <groupId>com.ibm.mq</groupId><artifactId>com.ibm.mq.allclient</artifactId>
+                </exclude></excludes></configuration>
+            </plugin></plugins></build>
+        </profile>
+        <profile>
+            <id>v03-release-gate</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <executions>
+                            <execution>
+                                <id>verify-v03-release-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <exec executable="bash" failonerror="true">
+                                            <arg value="${project.basedir}/scripts/release/verify-v0-3-release-gate.sh"/>
+                                            <env key="REGRESS_JAR" value="${project.build.directory}/${project.build.finalName}.jar"/>
+                                        </exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>v02-delivery-coverage</id>
             <build>

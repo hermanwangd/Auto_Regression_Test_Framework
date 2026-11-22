@@ -296,7 +296,7 @@ samples/provider_capability/
   result/
 ```
 
-Track C may implement only the P0 capability runtime represented by those samples: WireMock HTTP mock, WireMock plus `rest_client` HTTP request, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and provider evidence. Non-P0 providers and release governance remain outside this artifact contract unless a decision log moves them into P0.
+Track C may implement only the P0 capability runtime represented by those samples: WireMock-backed HTTP/SOAP/gRPC mock providers, `rest_client` HTTP request, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and provider evidence. Non-P0 providers and release governance remain outside this artifact contract unless a decision log moves them into P0.
 
 ### 6.4A Framework-Owned Schemas and Catalogs
 
@@ -322,7 +322,7 @@ Framework-owned catalogs:
 
 - Provider type catalog: `shell_command`, `rest_client`, `grpc_client`, `wiremock_http_mock`, `jdbc`, `kafka`, `ibm_mq`, `nats`, `kubernetes_runtime`, `vm_runtime`, `external_runner`, `artifact_compare`, and `polling_observer`. `kafka_messaging` is a deprecated compatibility alias for older v0.2 artifacts.
 - Provider capability registry: supported `provider_type` values, required binding keys, supported operations, public `support_status`, evidence outputs, and safety constraints.
-- Operation catalog: Provider Contract-backed operations, including `run_batch`, `execute_command`, `http_request`, `unary_call`, `db_seed`, `db_cleanup`, `db_query`, `db_record_exists`, `kafka_publish`, `kafka_observe`, `kafka_payload_match`, `mq_put`, `mq_browse`, `mq_message_exists`, `mq_payload_match`, legacy `publish_message`, legacy `consume_message`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match`, `check_deployment_ready`, `check_pod_ready`, `get_logs`, `wait_rollout`, `exec_command`, `check_host_ready`, `run_command`, `collect_file`, `collect_logs`, `check_process`, `run`, `run_and_collect`, `check_status`, `start_mock`, `connect_mock`, `load_stubs`, `verify_requests`, `read_artifact`, and `observe_condition`.
+- Operation catalog: Provider Contract-backed operations, including `run_batch`, `execute_command`, `http_request`, `unary_call`, `db_seed`, `db_cleanup`, `db_query`, `db_record_exists`, `kafka_publish`, `kafka_observe`, `kafka_payload_match`, `mq_put`, `mq_browse`, `mq_message_exists`, `mq_payload_match`, legacy `publish_message`, legacy `consume_message`, `nats_publish`, `nats_observe`, `event_published`, `event_payload_match`, `check_deployment_ready`, `check_pod_ready`, `get_logs`, `wait_rollout`, `exec_command`, `check_host_ready`, `run_command`, `collect_file`, `collect_logs`, `check_process`, `run`, `run_and_collect`, `check_status`, `start_mock`, `load_stubs`, `verify_requests`, `read_artifact`, and `observe_condition`.
 - Verify catalog: `equals`, `not_equals`, `exists`, `not_exists`, `contains`, `regex_match`, `json_match`, `schema_match`, `list_size_equals`, `unordered_list_equals`, `subset_match`, `partial_match`, `numeric_tolerance`, `greater_than`, `less_than`, `between`, `timestamp_tolerance`, `file_exists`, `file_not_empty`, `file_diff`, `json_diff`, `yaml_diff`, `csv_row_count_equals`, `csv_diff`, `db_record_exists`, `db_field_equals`, `db_row_count_equals`, `event_published`, `event_payload_match`, `event_not_published`, `http_mock_called`, `http_mock_request_body_match`, `http_mock_request_count`, `http_mock_not_called`, and `custom_verify`.
 - Fixture and setup catalog: DSL `data` catalog, operation `inputs`, `database_seed`, `database_cleanup`, `db_seed`, `db_cleanup`, `http_stub`, `event_seed`, `event_expectation`, `file_seed`, `file_cleanup`, `config_injection`, `env_injection`, `mock_config`, `message_seed`, `container_dependency`, `environment_variable`, and `test_data_namespace`.
 
@@ -718,7 +718,6 @@ Legacy v1 artifacts may still be read through an explicit compatibility path dur
 - `run_and_collect`
 - `check_status`
 - `start_mock`
-- `connect_mock`
 - `load_stubs`
 - `verify_requests`
 

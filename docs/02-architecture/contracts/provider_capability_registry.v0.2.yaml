@@ -40,6 +40,16 @@ runtime_mode_semantics:
   contract_runtime_modes: optional runtime modes named by the Provider Contract vocabulary when broader than supported_runtime_modes
   contract_only_runtime_modes: optional runtime modes reserved for later implementation and blocked before dispatch today
 provider_types:
+  cli_process:
+    contract_ref: provider-contracts/cli_process_v0_3.yaml
+    support_status: supported
+    supported_contract_versions: [v0.3]
+    supported_runtime_modes: [native]
+    required_binding_keys: [executable, executable_sha256]
+    supported_operations: [run_command]
+    evidence_outputs: [cli_process, exit_code, stdout, stderr, duration_ms]
+    support_scope: trusted_local_direct_argv_with_finite_io_and_executable_pin
+    sample_ref: samples/20-provider-capability-p0/cli/cli_process/suite_manifest.yaml
   shell_command:
     contract_ref: provider-contracts/shell_command.yaml
     support_status: contract_only
@@ -61,15 +71,44 @@ provider_types:
     required_binding_keys: [target]
     supported_operations: [unary_call]
     evidence_outputs: [grpc_request_response, request, response, status, metadata, timing, error]
-  wiremock_http_mock:
-    contract_ref: provider-contracts/wiremock_http_mock.yaml
+  grpc_descriptor_admission:
+    contract_ref: provider-contracts/grpc_descriptor_admission_v0_3.yaml
+    support_status: contract_only
+    supported_contract_versions: [v0.3]
+    supported_runtime_modes: []
+    contract_runtime_modes: [native]
+    contract_only_runtime_modes: [native]
+    required_binding_keys: [admission_mode, source_revision]
+    supported_operations: []
+    evidence_outputs: [grpc_request_response]
+    support_scope: reviewed_offline_descriptor_admission_only_no_rpc
+  http_mock:
+    contract_ref: provider-contracts/http_mock_v0_3.yaml
+    provider_role: mock_server
+    protocol: http
+    runtime_implementation: wiremock
     support_status: supported
     supported_runtime_modes: [mock]
     required_binding_keys: []
-    supported_operations: [start_mock, connect_mock, load_stubs, verify_requests]
+    supported_operations: [load_stubs, verify_requests, reset_mock]
+    evidence_outputs: [base_url, request_journal, server_log, timing, error]
+  wiremock_http_mock:
+    contract_ref: provider-contracts/wiremock_http_mock.yaml
+    canonical_provider_type: http_mock
+    compatibility_aliases: [wiremock_http_mock]
+    provider_role: mock_server
+    protocol: http
+    runtime_implementation: wiremock
+    support_status: deprecated
+    supported_runtime_modes: [mock]
+    required_binding_keys: []
+    supported_operations: [start_mock, load_stubs, verify_requests]
     evidence_outputs: [base_url, request_journal, server_log, timing, error]
   soap_mock:
     contract_ref: provider-contracts/soap_mock.yaml
+    provider_role: mock_server
+    protocol: soap
+    runtime_implementation: wiremock
     support_status: supported
     supported_runtime_modes: [mock]
     required_binding_keys: []
@@ -77,6 +116,9 @@ provider_types:
     evidence_outputs: [endpoint_url, request_journal, server_log, xml_diff, timing, error]
   grpc_mock:
     contract_ref: provider-contracts/grpc_mock.yaml
+    provider_role: mock_server
+    protocol: grpc
+    runtime_implementation: wiremock
     support_status: supported
     supported_runtime_modes: [mock]
     required_binding_keys: [descriptor_ref, service_name]

@@ -1,0 +1,11 @@
+--- a/src/main/java/com/featuredeliveryintelligence/fdi/application/FdiApplication.java
++++ b/src/main/java/com/featuredeliveryintelligence/fdi/application/FdiApplication.java
+@@ -6,6 +6,8 @@
+ @SpringBootApplication(scanBasePackages = "com.featuredeliveryintelligence.fdi")
+ public class FdiApplication {
+     public static void main(String[] args) {
++        if (args.length > 0 && "product-test".equals(args[0]))
++            if (com.featuredeliveryintelligence.fdi.producttest.ProductTestCli.handles(args)) return;
+         if (Dev204Cli.handles(args)) return;
+         SpringApplication.run(FdiApplication.class, args);
+     }

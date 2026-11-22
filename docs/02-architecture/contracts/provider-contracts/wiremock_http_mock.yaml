@@ -1,7 +1,26 @@
 provider_contract_version: v0.2
 provider_type: wiremock_http_mock
-runtime_modes: [mock]
+canonical_provider_type: http_mock
+compatibility_aliases: [wiremock_http_mock]
+provider_role: mock_server
+protocol: http
+runtime_implementation: wiremock
+runtime_modes: [mock, external]
 binding_keys:
+  base_url:
+    # Public boundary:
+    # - Use only when the target is an owner-provisioned WireMock-compatible
+    #   mock server exposing WireMock Admin API under this HTTP(S) root URL.
+    # - Do not use for a generic external REST/SUT endpoint; those belong to
+    #   rest_client.base_url.
+    # - When present, the framework connects to the external mock server and
+    #   must not start or stop the WireMock process.
+    required: false
+    value_type: uri
+    allowed_value_kinds: [value, secret_ref]
+    allowed_schemes: [http, https]
+    prohibited_parts: [userinfo]
+    prohibited_query_keys: [password, token, access_token, authorization, api_key, secret]
   mappings_ref:
     required: false
     value_type: string
@@ -15,13 +34,6 @@ binding_keys:
     required: false
     value_type: integer
     allowed_value_kinds: [value]
-  base_url:
-    required: false
-    value_type: uri
-    allowed_value_kinds: [value, generated_ref]
-    allowed_schemes: [http, https]
-    prohibited_parts: [userinfo]
-    prohibited_query_keys: [password, token, access_token, authorization, api_key, secret]
 bindable_outputs:
   base_url:
     value_type: uri
@@ -39,9 +51,10 @@ operations:
     required_inputs: []
     output_refs: [base_url, server_log]
   connect_mock:
-    allowed_inputs: [mock.base_url]
+    semantics: connect to an owner-provisioned WireMock-compatible Admin API endpoint from binding_keys.base_url; do not start a server process
+    allowed_inputs: []
     required_inputs: []
-    output_refs: [base_url]
+    output_refs: [base_url, server_log]
   load_stubs:
     allowed_inputs: [mock.mappings_ref, mock.reset_before_load]
     required_inputs: [mock.mappings_ref]
@@ -70,6 +83,3 @@ failure_mapping:
     - ASSERTION_FAILED
     - EVIDENCE_INVALID
     - SECRET_RESOLUTION_ERROR
-    - WIREMOCK_EXTERNAL_BASE_URL_MISSING
-    - WIREMOCK_EXTERNAL_BASE_URL_INVALID
-    - WIREMOCK_EXTERNAL_BASE_URL_SECRET_LEAK

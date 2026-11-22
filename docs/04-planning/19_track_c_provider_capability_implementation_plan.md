@@ -4,7 +4,7 @@
 
 ## 1. Summary
 
-Track C implements the selected v0.2 P0 provider and verification capabilities needed for practical framework execution: WireMock HTTP mock plus `rest_client` HTTP request samples, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and provider evidence integration. PR-008 extends Track C with WireMock-backed SOAP and unary gRPC mock capability after the current P0 lifecycle is stable.
+Track C implements the selected v0.2 P0 provider and verification capabilities needed for practical framework execution: WireMock-backed mock providers for HTTP/SOAP/gRPC surfaces, `rest_client` HTTP request samples, JDBC Oracle/DB2-style verification, NATS event verification, JSON/schema/file diff, polling, and provider evidence integration. PR-008 extends Track C with WireMock-backed SOAP and unary gRPC mock capability after the current P0 lifecycle is stable.
 
 Track C is not all providers. It must not add product topology interpretation, Phase 2 Agent Skill behavior, release governance, or non-P0 providers.
 

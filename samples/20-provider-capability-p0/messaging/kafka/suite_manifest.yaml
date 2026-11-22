@@ -1,18 +1,20 @@
-contract_version: v0.2
-suite_id: KAFKA-CAPABILITY-v0.2
-purpose: Framework-owned Kafka client provider capability verification sample.
-profile: local_kafka
-profiles: [local_kafka, ci_kafka_external]
-selection:
-  mode: suite
-  suite: provider-capability-kafka
-tests:
-  - test_case.yaml
+manifest_version: v0.3
+suite_id: KAFKA-v0.3
+default_profile: local_v03
+
 artifact_roots:
-  provider_instances: provider_instances/
-  env_profiles: env_profiles/
-  expected_results: expected_results/
   fixtures: fixtures/
-evidence_policy:
-  evidence_classification: framework_provider_capability_only
-  downstream_release_evidence: false
+  expected_results: expected_results/
+
+targets:
+  order_events:
+    provider_contract: kafka.v0.3
+
+env_profiles:
+  local_v03:
+    ref: env_profiles/local_v03.yaml
+  external_kafka:
+    ref: env_profiles/external_kafka.yaml
+
+tests:
+  - ref: test_cases/event_payload_success.yaml

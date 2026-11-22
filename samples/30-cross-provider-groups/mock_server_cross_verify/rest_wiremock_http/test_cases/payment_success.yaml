@@ -1,0 +1,40 @@
+dsl_version: v0.3
+test_case_id: HTTP-MOCK-REST-CLIENT-V03-TC-001
+title: HTTP mock target is consumed by REST client target without Provider Instance
+
+setup:
+  - id: load_payment_stub
+    target: payment_mock
+    op: load_stubs
+    with:
+      mock.mappings_ref: artifact://fixtures/wiremock/payment_success_stub.json
+      mock.reset_before_load: true
+
+execute:
+  - id: call_payment_api
+    target: payment_api
+    op: http_request
+    with:
+      request.method: POST
+      request.path: /payments
+      request.body_ref: artifact://fixtures/payment_request.json
+
+verify:
+  - id: payment_response_status
+    type: assertion
+    assert:
+      actual: step://call_payment_api/response.status
+      operator: equals
+      expected: 200
+  - id: payment_response_body
+    type: assertion
+    assert:
+      actual: step://call_payment_api/response.body
+      operator: json_match
+      expected_ref: artifact://expected_results/payment_response.json
+
+cleanup:
+  - id: reset_payment_mock
+    target: payment_mock
+    op: reset_mock
+    with: {}

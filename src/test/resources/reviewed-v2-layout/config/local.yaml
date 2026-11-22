@@ -1,0 +1,27 @@
+{
+  "downstream_release_evidence": false,
+  "evidence_classification": "framework_verification_only",
+  "execution_mode": "local",
+  "isolation": "per_run",
+  "product_test": {
+    "contract_version": "product-test.v1",
+    "dependency_modes": {},
+    "environment_stage": "local",
+    "knowledge_mode": "required",
+    "provider_modes": {
+      "public_api": "real"
+    },
+    "reviewed_handoff_ref": "handoff/reviewed-tests.json",
+    "test_level": "integration",
+    "test_type": "regression"
+  },
+  "profile_id": "local",
+  "targets": {
+    "public_api": {
+      "bindings": {
+        "base_url": "http://127.0.0.1:44667"
+      },
+      "runtime_mode": "native"
+    }
+  }
+}

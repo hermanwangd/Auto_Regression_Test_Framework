@@ -1,17 +1,18 @@
-contract_version: v0.2
-suite_id: PROVIDER-CAPABILITY-COMPARE-v0.2
-purpose: Executable artifact comparison sample for json_match, schema_match, and file_diff.
-profile: local_compare
-selection:
-  mode: suite
-  suite: provider-capability-compare
-tests:
-  - test_case.yaml
+manifest_version: v0.3
+suite_id: ARTIFACT-COMPARE-v0.3
+default_profile: local_v03
+
 artifact_roots:
-  provider_instances: provider_instances/
-  env_profiles: env_profiles/
   expected_results: expected_results/
   actual_samples: actual_samples/
-evidence_policy:
-  evidence_classification: framework_provider_capability_only
-  downstream_release_evidence: false
+
+targets:
+  artifact_compare:
+    provider_contract: artifact_compare.v0.3
+
+env_profiles:
+  local_v03:
+    ref: env_profiles/local_v03.yaml
+
+tests:
+  - ref: test_cases/artifact_compare_success.yaml

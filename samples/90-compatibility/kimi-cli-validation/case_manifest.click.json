@@ -1,0 +1,180 @@
+{
+  "schema_version": "1.0",
+  "queue": "SWARM-CLI-01",
+  "suite": "click",
+  "frozen_before_execution": true,
+  "native_claim": "package/harness runtime only; not Swarm Native PASS or SIT PASS",
+  "existing_116_denominator_changed": false,
+  "source": {
+    "repository_url": "https://github.com/pallets/click",
+    "installed_version": "8.5.1",
+    "distribution": "click==8.5.1",
+    "license_spdx": "BSD-3-Clause",
+    "license_evidence": "licenses/click-LICENSE.txt"
+  },
+  "cases": [
+    {
+      "case_id": "CLK-001",
+      "category": "normal",
+      "test_name": "test_clk_001_cli_overrides_env_and_writes_file",
+      "title": "CLI 參數覆寫 env var，並在隔離目錄寫檔",
+      "fixed_input": {
+        "args": [
+          "--count",
+          "3",
+          "--upper",
+          "result.txt"
+        ],
+        "env": {
+          "SWARM_NAME": "env-bot",
+          "SWARM_COUNT": "2"
+        }
+      },
+      "expected": {
+        "exit_code": 0,
+        "stdout": "wrote=result.txt;count=3;upper=true\n",
+        "stderr": "",
+        "output_text": "ENV-BOT\nENV-BOT\nENV-BOT\n"
+      }
+    },
+    {
+      "case_id": "CLK-002",
+      "category": "normal",
+      "test_name": "test_clk_002_explicit_name_and_default_count",
+      "title": "必要參數由 CLI 提供且 count 使用預設值",
+      "fixed_input": {
+        "args": [
+          "--name",
+          "default-bot",
+          "default.txt"
+        ],
+        "env": {
+          "SWARM_NAME": null,
+          "SWARM_COUNT": null
+        }
+      },
+      "expected": {
+        "exit_code": 0,
+        "stdout": "wrote=default.txt;count=1;upper=false\n",
+        "stderr": "",
+        "output_text": "default-bot\n"
+      }
+    },
+    {
+      "case_id": "CLK-003",
+      "category": "negative",
+      "test_name": "test_clk_003_missing_required_option_is_rejected",
+      "title": "缺少必要 --name 時以 usage error 拒絕",
+      "fixed_input": {
+        "args": [
+          "missing.txt"
+        ],
+        "env": {
+          "SWARM_NAME": null,
+          "SWARM_COUNT": null
+        }
+      },
+      "expected": {
+        "exit_code": 2,
+        "stdout": "",
+        "stderr_contains": "Missing option '--name'.",
+        "output_exists": false
+      }
+    },
+    {
+      "case_id": "CLK-004",
+      "category": "negative",
+      "test_name": "test_clk_004_unknown_option_is_rejected",
+      "title": "非法 option 被拒絕且不建立輸出檔",
+      "fixed_input": {
+        "args": [
+          "--name",
+          "n",
+          "--bogus",
+          "x",
+          "bad.txt"
+        ],
+        "env": {
+          "SWARM_NAME": null,
+          "SWARM_COUNT": null
+        }
+      },
+      "expected": {
+        "exit_code": 2,
+        "stdout": "",
+        "stderr_contains": "No such option '--bogus'.",
+        "output_exists": false
+      }
+    },
+    {
+      "case_id": "CLK-005",
+      "category": "recovery",
+      "test_name": "test_clk_005_file_error_then_next_invocation_succeeds",
+      "title": "寫檔失敗後，下一次正常 invocation 成功",
+      "fixed_input": {
+        "first": {
+          "args": [
+            "--name",
+            "recovery",
+            "missing/out.txt"
+          ],
+          "env": {
+            "SWARM_NAME": null,
+            "SWARM_COUNT": null
+          }
+        },
+        "second": {
+          "args": [
+            "--name",
+            "recovery",
+            "out.txt"
+          ],
+          "env": {
+            "SWARM_NAME": null,
+            "SWARM_COUNT": null
+          }
+        }
+      },
+      "expected": {
+        "first": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr_contains": "Error: cannot write out.txt:",
+          "output_exists": false
+        },
+        "second": {
+          "exit_code": 0,
+          "stdout": "wrote=out.txt;count=1;upper=false\n",
+          "stderr": "",
+          "output_text": "recovery\n"
+        }
+      }
+    },
+    {
+      "case_id": "CLK-006",
+      "category": "normal",
+      "test_name": "test_clk_006_real_subprocess_invocation",
+      "title": "真实 Python subprocess 執行 module 並寫檔",
+      "fixed_input": {
+        "module": "swarm_cli01.click_app",
+        "args": [
+          "--name",
+          "process",
+          "--count",
+          "2",
+          "process.txt"
+        ],
+        "env_removed": [
+          "SWARM_NAME",
+          "SWARM_COUNT"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "stdout": "wrote=process.txt;count=2;upper=false\n",
+        "stderr": "",
+        "output_text": "process\nprocess\n"
+      }
+    }
+  ]
+}

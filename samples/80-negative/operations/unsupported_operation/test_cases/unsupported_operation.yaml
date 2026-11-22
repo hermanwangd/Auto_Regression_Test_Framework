@@ -1,0 +1,10 @@
+dsl_version: v0.3
+test_case_id: NEG-UNSUPPORTED-OPERATION-TC-001
+setup:
+  - id: unsupported_operation
+    target: common_verifier
+    op: not_supported
+    with: {}
+execute: []
+verify: []
+cleanup: []

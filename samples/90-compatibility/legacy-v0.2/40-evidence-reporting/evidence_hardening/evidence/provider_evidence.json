@@ -1,0 +1,20 @@
+{
+  "provider_runtime": "masked",
+  "wiremock": {
+    "request_journal": [],
+    "server_log": "Authorization: ***MASKED***"
+  },
+  "jdbc": {
+    "seed": "seed executed",
+    "query": [{"id": "ORDER-100", "token": "***MASKED***"}],
+    "cleanup": "cleanup executed",
+    "connection": {"secret_ref": "secret://jdbc/sample"}
+  },
+  "nats": {
+    "event": {"subject": "orders.ready", "credential": "***MASKED***"}
+  },
+  "polling": {
+    "attempts": 2,
+    "last_observed_value": {"published": true}
+  }
+}

@@ -1,0 +1,43 @@
+package com.specdriven.regression.evidence;
+
+import static org.assertj.core.api.Assertions.*;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.node.*;
+import com.specdriven.regression.producttest.KnowledgeSelectionProof;
+import java.lang.reflect.*;
+import java.nio.file.Path;
+import java.security.*;
+import java.time.*;
+import java.util.*;
+import java.util.function.Function;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+/** Calls the actual predispatch importer directly; no EHS/version routing, filesystem sources or provider. */
+class KnowledgeSelectionPrelaunchTest {
+    @TempDir Path root;
+    @ParameterizedTest @ValueSource(strings={"pk","artifact_a"}) void admitsExactFrozenSourceAuthorityWithoutFlatteningCompositionX(String source)throws Exception {assertThatCode(()->validate(source)).doesNotThrowAnyException();}
+    @ParameterizedTest @ValueSource(strings={"wrong_pk","composition_x","wrong_artifact","wrong_artifact_owner"}) void rejectsResealedQualifiedSourceAtWrongAuthorityDirectly(String source)throws Exception {assertThatThrownBy(()->validate(source)).isInstanceOf(IllegalArgumentException.class);}
+    @SuppressWarnings({"unchecked","rawtypes"}) private void validate(String mode)throws Exception {
+        var fixture=new ReviewedGrpcProofIdentityTest();fixture.root=root;fixture.validHistoricalFixture();KnowledgeV2Fixture.augment(fixture);ObjectNode p=fixture.provenance;
+        String ref=switch(mode){case "pk","wrong_artifact","wrong_artifact_owner"->KnowledgeV2Fixture.SOURCE;case "artifact_a"->KnowledgeV2Fixture.REPO+"@"+KnowledgeV2Fixture.A+":knowledge.md#PK1";case "composition_x"->KnowledgeV2Fixture.REPO+"@"+KnowledgeV2Fixture.X+":knowledge.md#PK1";default->KnowledgeV2Fixture.PK+"@"+"d".repeat(40)+":knowledge.md#PK1";};
+        if(mode.equals("wrong_artifact")||mode.equals("wrong_artifact_owner"))for(JsonNode raw:p.path("executed_source_bindings"))if(raw.path("role").asText().equals("case")){
+            ObjectNode a=(ObjectNode)raw;if(mode.equals("wrong_artifact_owner"))a.put("source_owner_ref","fixture:wrong-source-owner");else {String bad=KnowledgeV2Fixture.CASE.replace(KnowledgeV2Fixture.A,"d".repeat(40));a.put("source_commit","d".repeat(40)).put("source_testrepo_version","d".repeat(40)).put("artifact_id",bad);((ObjectNode)p.path("knowledge_trace").get(0)).put("qualified_case_ref",bad);}
+        }
+        ObjectNode selected=(ObjectNode)p.path("knowledge_sources").get(0).deepCopy();selected.put("qualified_source_ref",ref);
+        ObjectNode proof=KnowledgeV2Fixture.obj("schema_version","knowledge-selection-proof.v1","private_original_receipt_sha256",p.path("private_original_receipt_sha256"),"selection_receipt_sha256",p.path("selection_receipt_sha256"),"source_snapshot_sha256",p.path("source_snapshot_sha256"),"candidate_search_sha256",p.path("candidate_search_sha256"),"query_sha256",p.path("query_sha256"),"context_sha256",p.path("context_sha256"),"provider_version","UNVERIFIED_BY_HTTP_CLIENT","scope",p.path("knowledge_context_scope"),"fetched_at",p.path("knowledge_fetched_at"),"evaluated_at",p.path("knowledge_evaluated_at"),"valid_until",p.path("knowledge_valid_until"));proof.putArray("selected").add(selected);proof.putArray("excluded");
+        ObjectNode metadata=KnowledgeV2Fixture.obj("schema_version","runner-source-bindings.v1","binding_id","00000000-0000-4000-8000-000000000001","source_binding_state","ADMITTED","execution_binding_state","NOT_EVALUATED","trusted_root_binding_sha256","7".repeat(64),"lock",p.path("source_lock"),"validator",KnowledgeV2Fixture.obj("version",null,"identity_state","JAR_OBSERVED","artifact_sha256","8".repeat(64),"schema_sha256","9".repeat(64),"source_commit",null,"source_tree",null),"repositories",p.path("source_repository_versions"),"relations",List.of(),"snapshot",Map.of(),"gaps",List.of(),"sut_expectations",List.of(Map.of("sut_id","fixture:sut","owner_ref","fixture:sut-owner","cleanup_owner_ref","fixture:cleanup-owner","expected_deployed_revision","fixture-deployed-v1","readiness_binding_ref","fixture:observed-readiness")));
+        ArrayNode artifacts=metadata.putArray("artifacts");for(JsonNode raw:p.path("executed_source_bindings")){ObjectNode artifact=(ObjectNode)raw.deepCopy();artifact.remove("reviewed_path");artifacts.add(artifact);}
+        ObjectNode runtime=KnowledgeV2Fixture.obj("schema_version","runner-runtime-binding.v1","binding_id","fixture:runtime","runtime_type","contract_test","owner_nonce","fixture:owner-nonce","run_id","fixture:sut-run","correlation_id","fixture:request","evidence_classification","framework_verification_only","collection_spec_sha256","a".repeat(64),"bundle_sha256","b".repeat(64),"expected_sut_revision","fixture-deployed-v1","observed_sut_revision","fixture-deployed-v1","readiness_evidence_sha256","c".repeat(64),"runtime_identity","fixture:owned-sut","maximum_run_ms",30000);
+        var bytes=new HashMap<String,byte[]>();bytes.put("handoff/proof.json",KnowledgeV2Fixture.JSON.writeValueAsBytes(proof));bytes.put("handoff/sources.json",KnowledgeV2Fixture.JSON.writeValueAsBytes(metadata));bytes.put("handoff/runtime.json",KnowledgeV2Fixture.JSON.writeValueAsBytes(runtime));
+        ObjectNode h=KnowledgeV2Fixture.obj("workspace_ref",p.path("workspace_ref"),"project_ref",p.path("project_ref"),"reviewed_at",p.path("reviewed_at"),"valid_until",p.path("valid_until"),"requirement_mapping",p.path("requirement_mapping"),"preparation_provenance",KnowledgeV2Fixture.obj("mission_ref","fixture:mission","request_ref","fixture:request","sut_run_ref","fixture:sut-run","private_original_receipt_sha256",p.path("private_original_receipt_sha256"),"context_sha256",p.path("context_sha256"),"proposal_sha256",p.path("proposal_sha256"),"source_binding_version","runner-source-bindings.v1","classification","framework_verification_only"),"knowledge_selection_proof",Map.of("path","handoff/proof.json","sha256",sha(bytes.get("handoff/proof.json"))),"sut_revision_evidence",Map.of("path","handoff/runtime.json","sha256",sha(bytes.get("handoff/runtime.json")),"sut_id","fixture:sut"),"expected_sut_revisions",Map.of("fixture:sut","fixture-deployed-v1"));
+        ObjectNode external=KnowledgeV2Fixture.obj("path","handoff/sources.json","sha256",sha(bytes.get("handoff/sources.json")),"producer_jar_sha256","8".repeat(64),"producer_schema_sha256","9".repeat(64),"lock_sha256",p.path("source_lock").path("sha256"),"trusted_roots_sha256","7".repeat(64));ArrayNode bindings=external.putArray("file_bindings");var inputs=new LinkedHashMap<String,KnowledgeSelectionProof.ReviewedInput>();
+        for(JsonNode raw:p.path("executed_source_bindings")){String path=raw.path("reviewed_path").asText();bindings.add(KnowledgeV2Fixture.obj("reviewed_path",path,"artifact_id",raw.path("artifact_id")));String role=switch(raw.path("role").asText()){case "suite"->"manifest";case "config_template"->"profile";case "case"->"test";case "sanitized_data"->"fixture";case "provider_contract"->"contract";default->"oracle";};inputs.put(path,new KnowledgeSelectionProof.ReviewedInput(role,raw.path("sha256").asText()));}h.set("external_artifact_bindings",external);
+        JsonNode trace=p.path("knowledge_trace").get(0);ObjectNode proposed=KnowledgeV2Fixture.obj("test_case_id","TC-1","qualified_case_ref",trace.path("qualified_case_ref"),"case_sha256","8".repeat(64),"requirement_refs",trace.path("requirement_refs"),"acceptance_refs",trace.path("acceptance_refs"),"risk_refs",trace.path("risk_refs"),"api_refs",trace.path("api_refs"),"code_refs",trace.path("code_refs"),"oracle",trace.path("oracle"));proposed.putArray("citations").add(KnowledgeV2Fixture.obj("qualified_source_ref",ref,"content_sha256",selected.path("content_sha256")));h.putArray("proposal_trace").add(proposed);
+        Method importer=KnowledgeSelectionProof.class.getDeclaredMethod("validate",Map.class,Map.class,Set.class,Map.class,Function.class,Instant.class,String.class);importer.setAccessible(true);
+        try{importer.invoke(null,KnowledgeV2Fixture.JSON.convertValue(h,Map.class),KnowledgeV2Fixture.JSON.convertValue(p.path("repository_revisions"),Map.class),Set.of("TC-1"),inputs,(Function<String,byte[]>)bytes::get,Instant.parse("2000-01-01T00:00:01Z"),sha(bytes.get("handoff/runtime.json")));}catch(InvocationTargetException wrapped){if(wrapped.getCause() instanceof Exception ex)throw ex;throw wrapped;}
+    }
+    private static String sha(byte[] bytes)throws Exception{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));}
+}

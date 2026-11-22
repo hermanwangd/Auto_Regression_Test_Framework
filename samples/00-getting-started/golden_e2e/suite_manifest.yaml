@@ -1,17 +1,18 @@
-contract_version: v0.2
-suite_id: GOLDEN-E2E-v0.2
-purpose: Framework-owned Golden E2E verification sample.
-profile: local_golden
-selection:
-  mode: suite
-  suite: golden-e2e
-tests:
-  - test_case.yaml
+manifest_version: v0.3
+suite_id: GOLDEN-E2E-v0.3
+default_profile: local_v03
+
 artifact_roots:
-  provider_instances: provider_instances/
-  env_profiles: env_profiles/
-  expected_results: expected_results/
   fixtures: fixtures/
-evidence_policy:
-  evidence_classification: framework_verification_only
-  downstream_release_evidence: false
+  expected_results: expected_results/
+
+targets:
+  sample_runtime:
+    provider_contract: sample_fake_provider.v0.3
+
+env_profiles:
+  local_v03:
+    ref: env_profiles/local_v03.yaml
+
+tests:
+  - ref: test_cases/golden_success.yaml

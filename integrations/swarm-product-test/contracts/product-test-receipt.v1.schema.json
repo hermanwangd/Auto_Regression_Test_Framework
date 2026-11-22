@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "product-test-receipt.v1.schema.json",
+  "title": "Swarm product testing receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "module_id",
+    "module_version",
+    "invocation_id",
+    "request",
+    "outcome",
+    "framework_verdict",
+    "evidence_validation",
+    "framework_exit_code",
+    "run_id",
+    "output_directory",
+    "artifacts",
+    "release_evidence_eligible",
+    "evidence_classification",
+    "diagnostic"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "product-test-receipt.v1"
+    },
+    "module_id": {
+      "const": "product-test"
+    },
+    "module_version": {
+      "const": "1"
+    },
+    "invocation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "request": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "The exact parsed request, including rejected values. Completed receipts require a valid v1 request."
+    },
+    "outcome": {
+      "enum": [
+        "COMPLETED",
+        "REJECTED",
+        "FAILED_TO_LAUNCH",
+        "TIMED_OUT",
+        "OUTPUT_LIMIT",
+        "INVALID_EVIDENCE",
+        "FRAMEWORK_REJECTED"
+      ]
+    },
+    "framework_verdict": {
+      "enum": [
+        "",
+        "passed",
+        "failed",
+        "blocked",
+        "skipped"
+      ]
+    },
+    "evidence_validation": {
+      "enum": [
+        "validated",
+        "not_validated"
+      ]
+    },
+    "framework_exit_code": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "output_directory": {
+      "type": "string"
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^/",
+            "maxLength": 4096
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      }
+    },
+    "release_evidence_eligible": {
+      "const": false
+    },
+    "evidence_classification": {
+      "enum": [
+        "",
+        "framework_verification_only"
+      ]
+    },
+    "diagnostic": {
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "COMPLETED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "framework_verdict": {
+            "enum": [
+              "passed",
+              "failed",
+              "blocked",
+              "skipped"
+            ]
+          },
+          "evidence_validation": {
+            "const": "validated"
+          },
+          "evidence_classification": {
+            "const": "framework_verification_only"
+          },
+          "artifacts": {
+            "required": [
+              "result",
+              "suite_summary",
+              "evidence_index",
+              "reviewed_handoff",
+              "framework_report"
+            ]
+          },
+          "request": {
+            "$ref": "product-test-request.v1.schema.json"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "framework_verdict": {
+            "const": ""
+          },
+          "evidence_validation": {
+            "const": "not_validated"
+          }
+        }
+      }
+    }
+  ],
+  "$comment": "Invocation facts are distinct from Swarm VerificationResult and Human DONE. A completed framework assertion failure remains failed. Receipt does not authorize closure."
+}

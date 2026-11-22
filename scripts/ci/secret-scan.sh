@@ -26,6 +26,8 @@ ALLOWLIST_GLOBS=(
   -g '!scripts/ci/secret-scan.sh'
   -g '!src/test/**'
   -g '!samples/40-evidence-reporting/evidence_hardening/invalid_secret_leak_result.json'
+  -g '!samples/90-compatibility/legacy-v0.2/40-evidence-reporting/evidence_hardening/invalid_secret_leak_result.json'
+  -g '!samples/80-negative/secrets/**'
 )
 
 SECRET_FIELD_PATTERN='(?i)\b(password|token|api_key|authorization|credential)\b[[:space:]]*[:=][[:space:]]*["'\'']?(?!\*\*\*MASKED\*\*\*|masked|secret://|vault://|generated://|env://|\$\{|true|false|null|[A-Za-z0-9_.-]*ref\b|refs\b|reference\b|required\b|optional\b|allowed\b|policy\b|guardrail\b|field\b|key\b|value\b|values\b)[A-Za-z0-9_./+=:@-]{8,}'
@@ -50,8 +52,9 @@ config_suffixes = {".yaml", ".yml", ".json", ".properties", ".md", ".txt", ".env
 excluded_exact = {
     Path("scripts/ci/secret-scan.sh"),
     Path("samples/40-evidence-reporting/evidence_hardening/invalid_secret_leak_result.json"),
+    Path("samples/90-compatibility/legacy-v0.2/40-evidence-reporting/evidence_hardening/invalid_secret_leak_result.json"),
 }
-excluded_prefixes = (Path(".git"), Path("target"), Path("src/test"))
+excluded_prefixes = (Path(".git"), Path("target"), Path("src/test"), Path("samples/80-negative/secrets"))
 
 secret_field_pattern = re.compile(
     r"""\b(password|token|api_key|authorization|credential)\b\s*[:=]\s*["']?"""

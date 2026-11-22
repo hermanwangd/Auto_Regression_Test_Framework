@@ -1,0 +1,302 @@
+{
+  "schema": "p06-sg01-keyed-source-cli-evidence.v1",
+  "project": "P06",
+  "group": "P06-SG01",
+  "definition": "Six keyed partition vectors frozen from test_murmur2_java_compatibility; one real CLI operation and three assertions per independent Module invocation.",
+  "review": {
+    "reviewer": "independent technical reviewer",
+    "decision": "ACCEPTED_BOUNDED_COMPONENT_AND_CLI_BRIDGE",
+    "reference": "p06-sg01-keyed-source-cli-sixcase-postrun.v1@2026-11-10T07:36:46Z"
+  },
+  "product_source_commit": "357bd3b51b02b2fbb75f7f121dc6ebf7118ee67a",
+  "upstream": {
+    "repository": "dpkp/kafka-python",
+    "commit": "3fa6acf1931e0beb4b3af9e8859d08a80897a63b",
+    "paths": [
+      "kafka/partitioner/abc.py",
+      "kafka/partitioner/default.py",
+      "test/producer/test_partitioner.py"
+    ],
+    "official_exact_commit_bytes_verified": true,
+    "provenance_receipt_sha256": "55016f90b5ff646c3c1bd5c2331799001af82c403be2491a290edf1d1f0f51ef",
+    "original_full_suite_status": "NOT_RUN"
+  },
+  "producer_artifacts": [
+    {
+      "name": "spec-driven-auto-regression-0.3.2.jar",
+      "bytes": 88829233,
+      "sha256": "bfcdf481f54a7d79cc8a57067f64f11a15828a9e534bf974b2e8bc24d8c5d036"
+    },
+    {
+      "name": "swarm-product-test-1.0.0-cli.jar",
+      "bytes": 3188074,
+      "sha256": "4b9c521e4dc977edec2b4cc385b5d40552a83f1a3bd5bda389fa2786dfbfcb7e"
+    },
+    {
+      "name": "verification-receipt.json",
+      "bytes": 10702,
+      "sha256": "bf6405d015ceddd2a4e7e23760a6f355fbd1c72bce9bf20956a19ca990fa71bb"
+    }
+  ],
+  "runtime": {
+    "python_executable_sha256": "fa67443527ed9647f760d807e2a38f26340757123e643c4639cf273ed15d5ea7",
+    "java_executable_sha256": "1a7e0b17c39003c75b457d686775ccb032e56fa9c8afe3c492d8eb3715e8951a",
+    "jspawnhelper_sha256": "669b8273df7c125ca3d4fdb35f2f958db3710212df75211d3920fa390dde20b8"
+  },
+  "deployment_programs": [
+    {
+      "name": "adapter.py",
+      "sha256": "35a7d8804e98293d7a83c470ea61b40bf80dbe4b29c659f27716fea0ca250a72"
+    },
+    {
+      "name": "abc.py",
+      "sha256": "3975c512f45fd6ca80b1e6c0da6292589ea374a232360aa8593223f3899effbf"
+    },
+    {
+      "name": "default.py",
+      "sha256": "643f127937df2423ec363a38199ef2e1c5955ba886e8dc9b459b966ee976df58"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "TC-P06-SG01-V01",
+      "suite_id": "P06-SG01-V01",
+      "serialized_key_hex": "",
+      "expected": {
+        "exit_code": 0,
+        "stdout": "681\n",
+        "stderr": ""
+      },
+      "invocation_id": "57118a27-e576-4562-b288-082ca7c5ab4d",
+      "run_id": "RUN-V03-482f25b7-016b-4a38-9a51-eb3f9736079f",
+      "status": "ACCEPTED",
+      "module_outcome": "COMPLETED",
+      "evidence_validation": "validated",
+      "framework_exit": 0,
+      "module_exit": 0,
+      "assertions_passed": 3,
+      "final_seal_sha256": "ed93ef994c94185fec569165055b864503ebc165cfc43ed07520ed32adf69a2a",
+      "request_sha256": "3fcb999993ffb3f2778e8f8545f021b2364013a5e4423362ba3866fb1cdc32a7",
+      "handoff_sha256": "1a53386bbf5444bbf9b3b2ae9269738d4ccf9b19025874429f17aeb45a7c8752",
+      "test_input_sha256": "810bfc2d77be6050cf08913946a3e053110465a3224d4f1ae8dca2af7962489b",
+      "module_receipt_sha256": "9df8f9ef97f701dcceab3ee45da3c7f7f58b6c5df20d0beb3d202e992092d2fd",
+      "canonical_result_sha256": "f444ac397a4d2cc3902bd24282094987e542fcc8035f335b951ecd52f210c3b9",
+      "provider_proof_sha256": "ea8662e79402077167407add70de994fbf19596cc5bd2c22a480002107718e49",
+      "independent_grade_sha256": "1e8eac9b2a42c5d47504b79516c1f30806a4e84ef6192c78522e357e42a06623",
+      "capture_sha256": "e8ba4fb19d7c27af86dce90346c24ce486faa06b981f9469d5ac4a5229f1778d",
+      "python_observation": "OBSERVED_EXACT",
+      "cleanup_complete": true,
+      "raw_evidence_reference": "sha256:9df8f9ef97f701dcceab3ee45da3c7f7f58b6c5df20d0beb3d202e992092d2fd"
+    },
+    {
+      "case_id": "TC-P06-SG01-V02",
+      "suite_id": "P06-SG01-V02",
+      "serialized_key_hex": "61",
+      "expected": {
+        "exit_code": 0,
+        "stdout": "524\n",
+        "stderr": ""
+      },
+      "invocation_id": "bbeb7f99-dfbe-4a71-8f8d-4634452c5d43",
+      "run_id": "RUN-V03-9f76926a-4a55-40a5-b7c8-6419cdf20a2b",
+      "status": "ACCEPTED",
+      "module_outcome": "COMPLETED",
+      "evidence_validation": "validated",
+      "framework_exit": 0,
+      "module_exit": 0,
+      "assertions_passed": 3,
+      "final_seal_sha256": "5959ec143f110dbaf6ef110993ebd54c722aa4c4d39432c0768873fc6db9c273",
+      "request_sha256": "38ccd675c16d1a836b915f33d1c347b5f335ab4a66fad2f0c81b684c0d2812b5",
+      "handoff_sha256": "8a5163b194a51b63ca27c4da47c4f884ec2a610cdcb130a08b2146822962c93b",
+      "test_input_sha256": "555fe86f02d7678b87c4752d43e5b5bd3987b9e5cc23aa5dbc923fcfa878a559",
+      "module_receipt_sha256": "bc5af0713c452ab93b57f2692fafeec66da544e32c143b3a20f05e36e0b5ea26",
+      "canonical_result_sha256": "5b9bebd07a46003e6ef55138377272a5ccf4bdf8e7a691ad99434260fdf9bc7a",
+      "provider_proof_sha256": "d034fc2e0fdc8d04e048777d1aba259952aa502133d55e4ffa4d9f011492b823",
+      "independent_grade_sha256": "45feeb56fdc6b519f32fccb2ebf5ae4c416fc5e825d28eda2f614d17f6f7c04a",
+      "capture_sha256": "91d8d48e47042202785d9a18b9616708fd6cdd148242b47d6238628bab27fc05",
+      "python_observation": "OBSERVED_EXACT",
+      "cleanup_complete": true,
+      "raw_evidence_reference": "sha256:bc5af0713c452ab93b57f2692fafeec66da544e32c143b3a20f05e36e0b5ea26"
+    },
+    {
+      "case_id": "TC-P06-SG01-V03",
+      "suite_id": "P06-SG01-V03",
+      "serialized_key_hex": "6162",
+      "expected": {
+        "exit_code": 0,
+        "stdout": "434\n",
+        "stderr": ""
+      },
+      "invocation_id": "60482783-f337-4efe-b6ff-b47f0b04e790",
+      "run_id": "RUN-V03-40a996cb-1a59-4d6c-b9aa-4a287063ef8d",
+      "status": "ACCEPTED",
+      "module_outcome": "COMPLETED",
+      "evidence_validation": "validated",
+      "framework_exit": 0,
+      "module_exit": 0,
+      "assertions_passed": 3,
+      "final_seal_sha256": "5959ec143f110dbaf6ef110993ebd54c722aa4c4d39432c0768873fc6db9c273",
+      "request_sha256": "68d7d6cf12e6959753d84f35c3bbf5e60131631546e2ef86bb2e4b2a3e5405ef",
+      "handoff_sha256": "924d98b9e1f1374bfd0b1195ff65ff242d84265a8b2c52805c3911e6400249a1",
+      "test_input_sha256": "4193aa335b019f1598849bcff2bce60543ea0cd695c705992abd6feaa90e8eee",
+      "module_receipt_sha256": "2b09616791b370ce656742ef5455ea277fef09871f6d1d084c5585c14287f464",
+      "canonical_result_sha256": "dd6d7a00e1cf36458810c3ab1c1f201baa54017707a31290bd89af5b5a8ec7c5",
+      "provider_proof_sha256": "ae28c36d3131128c4769635efc73f8778d603f336fc4071b35b8fb43170de615",
+      "independent_grade_sha256": "2243d970807df11b4b916a9bb7dc2e2a72a6917068c469909e5d80f53f589e31",
+      "capture_sha256": "0a977cdb134289731ae93155c6dd5e9b14bdafa33724c26dbc29baa3c44df716",
+      "python_observation": "OBSERVED_EXACT",
+      "cleanup_complete": true,
+      "raw_evidence_reference": "sha256:2b09616791b370ce656742ef5455ea277fef09871f6d1d084c5585c14287f464"
+    },
+    {
+      "case_id": "TC-P06-SG01-V04",
+      "suite_id": "P06-SG01-V04",
+      "serialized_key_hex": "616263",
+      "expected": {
+        "exit_code": 0,
+        "stdout": "107\n",
+        "stderr": ""
+      },
+      "invocation_id": "a8980136-de97-4b03-94a0-80f6aad68345",
+      "run_id": "RUN-V03-8eac142a-eff5-4e6d-a298-e697d5d6936a",
+      "status": "ACCEPTED",
+      "module_outcome": "COMPLETED",
+      "evidence_validation": "validated",
+      "framework_exit": 0,
+      "module_exit": 0,
+      "assertions_passed": 3,
+      "final_seal_sha256": "5959ec143f110dbaf6ef110993ebd54c722aa4c4d39432c0768873fc6db9c273",
+      "request_sha256": "e5c6190c8876a21f17372e5503d33dc9846f0d05df5ad54e0030e343414a087d",
+      "handoff_sha256": "265666f0945bbfa74cb6f4f76b78759d24257a9300889278bca26a5da2b9d033",
+      "test_input_sha256": "f5c7be1cbfdd9a01fb98ef887390d839e695191a72dcd03527e2d6cec40bc554",
+      "module_receipt_sha256": "1e8aba040105ec20afdb42061920eec8bd3798db61face3d9e7bd0afc8d5e7cc",
+      "canonical_result_sha256": "1cde538dabe8ed9e1ddcf7713a41ab39c89bb752fe5b3e3a7c378fbb018208c4",
+      "provider_proof_sha256": "77aab5859371ae7439ef6f17ac3900d25594e4ae3e13f5f85fa62af9fe7b6a5b",
+      "independent_grade_sha256": "00a322f71a626223593c015004f56474e3ae63e271002310605b392a30321fb4",
+      "capture_sha256": "b1558db5314c72cd5d85cc524ad2f8b3a75db603f54f85b1e57efae63b3d4546",
+      "python_observation": "OBSERVED_EXACT",
+      "cleanup_complete": true,
+      "raw_evidence_reference": "sha256:1e8aba040105ec20afdb42061920eec8bd3798db61face3d9e7bd0afc8d5e7cc"
+    },
+    {
+      "case_id": "TC-P06-SG01-V05",
+      "suite_id": "P06-SG01-V05",
+      "serialized_key_hex": "313233343536373839",
+      "expected": {
+        "exit_code": 0,
+        "stdout": "566\n",
+        "stderr": ""
+      },
+      "invocation_id": "4bb048c9-1037-4840-82ae-623b75a967be",
+      "run_id": "RUN-V03-7516472a-7843-4b65-b78d-390e1683ef34",
+      "status": "ACCEPTED",
+      "module_outcome": "COMPLETED",
+      "evidence_validation": "validated",
+      "framework_exit": 0,
+      "module_exit": 0,
+      "assertions_passed": 3,
+      "final_seal_sha256": "5959ec143f110dbaf6ef110993ebd54c722aa4c4d39432c0768873fc6db9c273",
+      "request_sha256": "03224a51fc1511848da7d1e3f362b64fe6ad17496e9cec2a61c8ff8716cb7c55",
+      "handoff_sha256": "5337d462772ffc84363e444e889808214176a5169484e2cdb03206793ae5c44f",
+      "test_input_sha256": "bc81f6303a721c76ee9e4234b2c9ff8948472b3bba1839fb5538d62086e26b45",
+      "module_receipt_sha256": "ea3a38dd1577e38adbb3125eb6eb749a859e71e9dd5332528d0fbd4cda4fee32",
+      "canonical_result_sha256": "150adcb6ba67db00a53659ad98b4a0a9d9f456454d42ba920481190bb2ca2853",
+      "provider_proof_sha256": "56eba667eb7d610bbc1a872501e8ece1b57725e706061c6d850cffcdf8071998",
+      "independent_grade_sha256": "ffdc35f3cf11923269c7751f8c8b8923b595e79361a714aed537d764d39de016",
+      "capture_sha256": "5c82573c8541a22312b63f2059ecc1d45d45d35a2e745f5e71f1d3952913f535",
+      "python_observation": "OBSERVED_EXACT",
+      "cleanup_complete": true,
+      "raw_evidence_reference": "sha256:ea3a38dd1577e38adbb3125eb6eb749a859e71e9dd5332528d0fbd4cda4fee32"
+    },
+    {
+      "case_id": "TC-P06-SG01-V06",
+      "suite_id": "P06-SG01-V06",
+      "serialized_key_hex": "0020",
+      "expected": {
+        "exit_code": 0,
+        "stdout": "742\n",
+        "stderr": ""
+      },
+      "invocation_id": "63637092-6763-4bcc-b85a-541c3006f3f6",
+      "run_id": "RUN-V03-5b1ae4b4-764a-448b-868a-b97c8512348b",
+      "status": "ACCEPTED",
+      "module_outcome": "COMPLETED",
+      "evidence_validation": "validated",
+      "framework_exit": 0,
+      "module_exit": 0,
+      "assertions_passed": 3,
+      "final_seal_sha256": "5959ec143f110dbaf6ef110993ebd54c722aa4c4d39432c0768873fc6db9c273",
+      "request_sha256": "d1327d08b853716f7ea554f858b84f1c03026e454b492346f626dda840a8b81b",
+      "handoff_sha256": "394e0d24ccbfe3b2d01e5d225995185b8d6e11f71afecff27a2221b195cadc6a",
+      "test_input_sha256": "420327f5800514fec906c0016d8b87600340e4437b9d9d30debbd1108eb7162a",
+      "module_receipt_sha256": "5539495dd71ff32865cee0d52169e192bf2b0bb4d4083f22e482750c8f82efdb",
+      "canonical_result_sha256": "8cfe973579777c79875115c1bdd239e7612cb95c3954ded1ec9fac87d7188cfe",
+      "provider_proof_sha256": "6ef90b367a60e6526522d1667c4801922add2ef835de35949d4f1d31558cccc6",
+      "independent_grade_sha256": "f9fb69ae270b6f8d14747c696d548ebc1d6c2b1957be7f12d938a62d08a1dc4f",
+      "capture_sha256": "93888aeea445166926edd0c037598d5e5d260aac8764dcce997a2b2b048fd2b4",
+      "python_observation": "OBSERVED_EXACT",
+      "cleanup_complete": true,
+      "raw_evidence_reference": "sha256:5539495dd71ff32865cee0d52169e192bf2b0bb4d4083f22e482750c8f82efdb"
+    }
+  ],
+  "accepted_cases": 6,
+  "accepted_assertions": 18,
+  "preserved_nonacceptance_history": [
+    {
+      "round": "v5",
+      "case": "V01",
+      "status": "MONITOR_REJECTED_UNKNOWN_PROCESS",
+      "module_exit": -9,
+      "outer_exit": 1,
+      "subsequent_cases": "NOT_RUN",
+      "receipt_sha256": "2e8099750731449d3d27df3beaf64a5f861f3e62e26b1535d365f77c32678f32"
+    },
+    {
+      "round": "v6",
+      "case": "V02",
+      "status": "REJECTED_CAPTURE",
+      "module_fact": "COMPLETED validated passed exit0",
+      "reason": "Known direct Module running-to-zombie sampling race; frozen monitor rejection preserved",
+      "outer_exit": 1,
+      "receipt_sha256": "f065b207a22b154187e6924956bcd59794b10b57ed541c3ff973799f66bb36f0"
+    },
+    {
+      "round": "v7",
+      "case": "V02",
+      "status": "MONITOR_REJECTED_IDENTITY_VANISHED",
+      "module_exit": 143,
+      "outer_exit": 1,
+      "reason": "Previously authorized Framework validation child observed zombie then absent before re-read",
+      "receipt_sha256": "a4f99dfc9c44ab552e79c59ec48d29dd7c98b6034ef3782b8cf7d4523bd31806"
+    },
+    {
+      "kind": "v7_control_recorder",
+      "status": "FAIL_PRESERVED",
+      "reason": "Mutable test observation alias; separately approved snapshot-only correction passed",
+      "original_receipt_sha256": "2605b18fb971c0e6f9c40d30a6e53f8283d39d2ea11e61e3a4ee4bb0c356935e",
+      "corrected_receipt_sha256": "7e7b7d7e43d2d57b59ee3679b253aec7b736f2c02710c5ee918c5e89dc965662"
+    }
+  ],
+  "limits": [
+    "Broker-free source module slice, not full kafka-python package installation, native Kafka broker, Swarm agent or shared SIT acceptance.",
+    "CLI provider pins the executable only; independently reviewed deployment-program closure pins adapter and unmodified upstream modules.",
+    "Process, RSS and storage monitoring is sampled, not a hard kernel quota or lossless process trace.",
+    "Controls, previous producer KP observations and failed attempts do not add accepted product cases.",
+    "116 is a planning-group count, approved global case denominator remains null, historical16 remains excluded."
+  ],
+  "final_round": {
+    "outer_exit": 0,
+    "wall_seconds": 30.163543200003915,
+    "postrun_receipt_sha256": "2b5cf2d20c01102b000435258b41ff2a31e9cf0919987a28c452302cfcfb0c2f",
+    "output_manifest_sha256": "9f439c08b02ceb10e5cb56cb7c05ad3034a1ae54636f4d81c0d53e7d8eb1c37e",
+    "retained_all_round_output_bytes": 823459
+  },
+  "group_layer_verdicts": {
+    "framework": "ACCEPTED",
+    "module": "ACCEPTED",
+    "native_agent": "NOT_RUN",
+    "shared_sit": "BLOCKED",
+    "native_kafka_broker": "NOT_RUN"
+  },
+  "independent_frozen_oracle_sha256": "38f98a33e549fa0a253e51bb450e8534ac5de86d6d0219c99c0ee290bd93f5d1"
+}

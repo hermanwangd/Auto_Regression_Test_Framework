@@ -1,0 +1,7 @@
+{
+  "published": true,
+  "subject": "orders.ready",
+  "payload": {
+    "id": "ORDER-200"
+  }
+}

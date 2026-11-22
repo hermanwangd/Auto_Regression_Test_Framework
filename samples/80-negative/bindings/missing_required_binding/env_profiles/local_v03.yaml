@@ -1,0 +1,6 @@
+profile_id: local_v03
+execution_mode: local
+targets:
+  order_db:
+    runtime_mode: ephemeral
+    bindings: {}

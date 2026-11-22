@@ -2,12 +2,15 @@ package com.specdriven.regression.provider.ibmmq;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.ibm.mq.constants.MQConstants;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderOperationRequest;
 import com.specdriven.regression.provider.runtime.ProviderOperationResult;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -17,6 +20,24 @@ class IbmMqProviderRuntimeTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void nativeClientUsesMqCspAuthenticationWhenCredentialHasPassword() throws Exception {
+        Class<?> transport = Class.forName(
+                "com.specdriven.regression.provider.ibmmq.IbmMqProviderRuntime$DefaultIbmMqClientTransport");
+        Method propertiesMethod = transport.getDeclaredMethod(
+                "connectionProperties", IbmMqProviderRuntime.MqConnection.class);
+        propertiesMethod.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        Hashtable<String, Object> properties = (Hashtable<String, Object>) propertiesMethod.invoke(
+                null,
+                new IbmMqProviderRuntime.MqConnection(
+                        "QM1", "DEV.APP.SVRCONN", "localhost(1414)", "PAYMENTS.V03", "app:password"));
+
+        assertThat(properties)
+                .containsEntry(MQConstants.USE_MQCSP_AUTHENTICATION_PROPERTY, Boolean.TRUE);
+    }
 
     @Test
     void mqPayloadMatchBrowsesEnvProfileQueueAndWritesEvidence() throws Exception {
@@ -228,6 +249,45 @@ class IbmMqProviderRuntimeTest {
         } finally {
             System.clearProperty("IBM_MQ_CONN_NAME");
             System.clearProperty("IBM_MQ_CREDENTIAL");
+        }
+    }
+
+
+    @Test
+    void correlationSelectorMissDoesNotConsumeAndCorrectSelectorRecovers() throws Exception {
+        Path suiteRoot = tempDir.resolve("suite");
+        Files.createDirectories(suiteRoot);
+        IbmMqProviderRuntime runtime = new IbmMqProviderRuntime();
+        ProviderExecutionContext context = context(suiteRoot);
+        ProviderOperationResult put = runtime.execute(context, new ProviderOperationRequest(
+                "mq_put", List.of(Map.of("bind_as", "correlation_id", "ref", "CORR-A"),
+                        Map.of("bind_as", "payload", "value", "{\"orderId\":\"MQ-SELECTOR\"}")),
+                Map.of("_operation_id", "selector_put")));
+        assertThat(put.passed()).isTrue();
+        assertThat(put.outputs().get("message_id")).isInstanceOf(String.class);
+        String messageId = (String) put.outputs().get("message_id");
+        assertThat(messageId).isNotBlank().isNotEqualTo("null");
+        for (String id : List.of("selector_miss", "selector_recover", "selector_repeat")) {
+            boolean miss = "selector_miss".equals(id);
+            ProviderOperationResult result = runtime.execute(context, new ProviderOperationRequest(
+                    "mq_message_exists", List.of(
+                            Map.of("bind_as", "correlation_id", "ref", miss ? "CORR-B" : "CORR-A"),
+                            Map.of("bind_as", "timeout", "value", "PT0S"),
+                            Map.of("bind_as", "poll_interval", "value", "PT0S")),
+                    Map.of("_operation_id", id)));
+            assertThat(result.passed()).as(id).isEqualTo(!miss);
+            assertThat(result.outputs()).containsEntry("browse_count", miss ? 0 : 1)
+                    .containsEntry("matched", !miss)
+                    .containsEntry("last_observed_message_id", miss ? "" : messageId);
+            if (miss) assertThat(result.failure().code()).isEqualTo("MQ_TIMEOUT");
+            else assertThat(result.failure()).isNull();
+            String evidence = Files.readString(tempDir.resolve("run/provider-evidence/ibm_mq/" + id + ".yaml"));
+            assertThat(evidence).contains("browse_only: true").contains("raw_secret_found: false")
+                    .contains("status: " + (miss ? "failed" : "passed"));
+            if (miss) assertThat(evidence).contains("failure_code: MQ_TIMEOUT");
+            System.out.println("MQ_SELECTOR_RESULT " + id + " passed=" + result.passed()
+                    + " count=" + result.outputs().get("browse_count") + " matched=" + result.outputs().get("matched")
+                    + " failure=" + (result.failure() == null ? "NONE" : result.failure().code()));
         }
     }
 

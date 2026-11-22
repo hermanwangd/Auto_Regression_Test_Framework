@@ -1,0 +1,16 @@
+profile_id: external_ibm_mq
+execution_mode: external
+isolation: shared
+evidence_classification: project_environment_evidence
+
+targets:
+  payment_queue:
+    runtime_mode: native
+    bindings:
+      queue_manager: QM1
+      channel: DEV.APP.SVRCONN
+      conn_name: env://IBM_MQ_CONN_NAME
+      queue: PAYMENTS.V03
+      credential.secret_ref: env://IBM_MQ_CREDENTIAL
+      timeout: PT5S
+      poll_interval: PT0.05S

@@ -1,0 +1,827 @@
+{
+  "schema": "a01-sg05-owned-go-failure-acceptance.v1",
+  "recorded_at_utc": "2026-11-10T04:39:47Z",
+  "group_id": "A01-SG05",
+  "title": "依賴服務 timeout／unavailable 的有界失敗",
+  "review": {
+    "ref": "a01-sg05-owned-go-failure-branches-postrun.v1",
+    "reviewed_at_utc": "2026-11-10T04:39:47Z",
+    "decision": "ACCEPT_BOUNDED",
+    "scope": "Four source-built owned Go GetProduct baseline, deadline, recovery and transport UNAVAILABLE cases through Framework/provider and packaged Swarm product-test Module."
+  },
+  "scope": {
+    "group_state": "ACCEPTED",
+    "group_credit_unit": 1,
+    "accepted_layers": [
+      "framework_provider",
+      "swarm_module"
+    ],
+    "applicable_case_count_per_layer": 4,
+    "required_bounded_branches": {
+      "DEADLINE_EXCEEDED": "ACCEPTED",
+      "UNAVAILABLE": "ACCEPTED"
+    },
+    "upstream_original_test_suite": "NOT_RUN",
+    "native_swarm_agent": "NOT_RUN",
+    "sit": "NOT_RUN",
+    "server_request_count": "NOT_MEASURED",
+    "release_evidence_eligible": false,
+    "requirements_coverage": "UNKNOWN",
+    "global_approved_case_denominator": null
+  },
+  "provenance": {
+    "source_repository": "hermanwangd/Auto_Regression_Test_Framework",
+    "source_commit": "357bd3b51b02b2fbb75f7f121dc6ebf7118ee67a",
+    "source_tree": "3b032dbc43506e6c4bc20ffdffe14837804aa38f",
+    "upstream_repository": "GoogleCloudPlatform/microservices-demo",
+    "upstream_revision": "c7cb6d5bfd6ea3aed768634ebbcb98cb7a523712",
+    "go_build_manifest_sha256": "d90c4145bb4cd099b4305801f93940dd270bdfbb19e9f5f37da4ef2de9cbc9b2",
+    "source_fixture": {
+      "version": "a01-catalog-source.v1",
+      "upstream_revision": "c7cb6d5bfd6ea3aed768634ebbcb98cb7a523712",
+      "canonical_proto_sha256": "b1f2fa42c0a9305211bf51fba7d8b5832cd3defd7b8855c327ebd5b1f0f86884",
+      "generated_proto_sha256": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af",
+      "data_sha256": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa",
+      "descriptor_fdp_sha256": "8f6b5761a04e7d699c0e40c2776d94900581f2706a112544fa80ba71169f5d54",
+      "descriptor_sha256": "285bd375bc4bff89d44ed51a0ddaf205670b35ff070860311b1fc0f4bdab1921",
+      "loopback_source_sha256": "db5cfbb858f0d9b94c5d3b3e6334e1d2821f2e740edf925aee1f58d76c9de530",
+      "source_files": {
+        "server.go": "2d52d47db2a00c743470b94b1f7b970b190e9d45f9e4b76d0a345f5d00272b5a",
+        "product_catalog.go": "045a50900ba49382d920c644a6bee04c6372073761b2867ecf202428ce0c6545",
+        "catalog_loader.go": "c37a169b74faf6be29f1ae9999ea2a22daf8f2d7dd676b4706459b36cf95a4a4",
+        "go.mod": "b891e7545c990ad13307d416678a9719e5f667f45e1b11bcf3e367b2713a6e8d",
+        "go.sum": "68f514d3a43c025b8c6abd1979bcb3ef6794d7b66cb866a317f35dded082c8c2",
+        "products.json": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa",
+        "genproto/demo.pb.go": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af",
+        "genproto/demo_grpc.pb.go": "70bb93b42e93399bf30d9971b6568244d0fa2eb1cb4757f967354810601dc916"
+      }
+    },
+    "not_reproducible_build_claim": true
+  },
+  "ci": {
+    "url": "https://github.com/hermanwangd/Auto_Regression_Test_Framework/actions/runs/42738823849",
+    "run": 42738823849,
+    "artifact": 13727729252,
+    "tests": 307,
+    "framework_tests": 248,
+    "module_tests": 59,
+    "xml_reports": 20,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "verification_receipt": {
+      "bytes": 10702,
+      "sha256": "bf6405d015ceddd2a4e7e23760a6f355fbd1c72bce9bf20956a19ca990fa71bb"
+    },
+    "scope": "Existing unit/build evidence, not 307 product cases or group coverage."
+  },
+  "artifacts": {
+    "framework": {
+      "bytes": 88829233,
+      "sha256": "bfcdf481f54a7d79cc8a57067f64f11a15828a9e534bf974b2e8bc24d8c5d036"
+    },
+    "module": {
+      "bytes": 3188074,
+      "sha256": "4b9c521e4dc977edec2b4cc385b5d40552a83f1a3bd5bda389fa2786dfbfcb7e"
+    },
+    "owner_support": {
+      "bytes": 117603,
+      "sha256": "3ff2a3eb2a56c7645654a840fd9d4b792ea1beac26d78512478db818e030a306"
+    },
+    "go_binary": {
+      "bytes": 38013650,
+      "sha256": "9f016a33bf35f28ba04e7f8d59dba42b0d332203f1296080086c3aee0e694549"
+    },
+    "java": {
+      "bytes": 14384,
+      "sha256": "1a7e0b17c39003c75b457d686775ccb032e56fa9c8afe3c492d8eb3715e8951a"
+    },
+    "python": {
+      "bytes": 30894944,
+      "sha256": "fa67443527ed9647f760d807e2a38f26340757123e643c4639cf273ed15d5ea7"
+    }
+  },
+  "prior_slice": {
+    "path": "a01-sg05-owned-go-timeout-slice.json",
+    "bytes": 26735,
+    "sha256": "c31602000e2b37f4987f274eb60cdc2172c3b0c3455330f49180fbe65ac9ab4a",
+    "commit": "dbd9aed65c6ccf2983897753a813f556d5526b2e",
+    "review": {
+      "ref": "a01-sg05-owned-go-timeout-postrun.v1",
+      "reviewed_at_utc": "2026-11-10T04:10:46Z",
+      "decision": "LIMITED_ACCEPT",
+      "scope": "Three source-built owned Go GetProduct cases in Framework/provider and packaged Swarm product-test Module. Entire SG05 remains incomplete because UNAVAILABLE was not run."
+    },
+    "retention": "Published partial history is unchanged. Its three accepted cases are reused, not rerun.",
+    "runtime_ref": "a01-sg05-owned-go-timeout-slice.json#/runtime",
+    "raw_artifacts_ref": "a01-sg05-owned-go-timeout-slice.json#/raw_artifacts"
+  },
+  "runtime": {
+    "unavailable": {
+      "method": "hipstershop.ProductCatalogService/GetProduct",
+      "ownership": "Fresh source-built owned Go child and independent owner; the new case runs through packaged Module and Framework using the same source/JAR identities as the prior slice.",
+      "fault": {
+        "signal_route": "pidfd_send_signal_ONLY",
+        "pause_events": [
+          {
+            "event": "STOP_REQUEST",
+            "epoch": 1794285277.6093936
+          },
+          {
+            "event": "STOP_CONFIRMED",
+            "epoch": 1794285277.6297488,
+            "state": "T"
+          }
+        ],
+        "pause_sample_count": 76,
+        "connection_observed_epoch": 1794285280.1259174,
+        "client_socket_family": "ipv4-mapped-ipv6",
+        "framework_pid": 86,
+        "owned_client_socket_fd": "50",
+        "owned_client_socket_inode": "279233",
+        "namespace": "net:[4026532301]",
+        "owner_stop": {
+          "attempts": 1,
+          "requested_epoch": 1794285280.127422,
+          "requested_monotonic": 48653.325749564,
+          "written_bytes": 5,
+          "flushed": true,
+          "closed": true,
+          "completed_epoch": 1794285280.1274471
+        },
+        "child_death_confirmed_epoch": 1794285282.1502423,
+        "resume_required": false,
+        "resume_attempted": false,
+        "resume_discharged_by": "pidfd exit plus exact owner terminal, reaped, empty session, socket gone; not ESRCH alone"
+      },
+      "owner_cleanup": {
+        "owner_exit": 0,
+        "raw_owner_graceful": true,
+        "go_graceful_exit": "NOT_INFERRED",
+        "terminated": true,
+        "reaped": true,
+        "fresh_session_empty": true,
+        "owned_socket_gone": true,
+        "errors": []
+      },
+      "module_cleanup": {
+        "states": [],
+        "errors": [],
+        "capture_complete": true,
+        "actual_returncode": 1,
+        "known_identities": [
+          {
+            "pid": 63,
+            "state": "Z",
+            "ppid": 6,
+            "group": 63,
+            "session": 63,
+            "start_ticks": 4865082,
+            "rss": 0
+          },
+          {
+            "pid": 86,
+            "state": "S",
+            "ppid": 63,
+            "group": 63,
+            "session": 63,
+            "start_ticks": 4865147,
+            "rss": 197521408
+          },
+          {
+            "pid": 137,
+            "state": "Z",
+            "ppid": 63,
+            "group": 63,
+            "session": 63,
+            "start_ticks": 4865590,
+            "rss": 0
+          },
+          {
+            "pid": 171,
+            "state": "S",
+            "ppid": 63,
+            "group": 63,
+            "session": 63,
+            "start_ticks": 4865722,
+            "rss": 196317184
+          }
+        ]
+      },
+      "controller_exit": 0,
+      "controller_summary_error": null,
+      "controller_cleanup_errors": [],
+      "invocations": 1,
+      "automatic_retries": 0,
+      "setup_case_executed": false,
+      "transport_proof": "An exact Module-owned Framework JVM FD held an ESTABLISHED mapped-loopback connection to the independently pinned owned listener in the same network namespace before the one-shot existing owner stop. This does not establish Go request receipt or processing.",
+      "remaining_rpc_budget_before_fault": "UNKNOWN; acceptance uses actual postrun chronology, not an invented pre-fault budget.",
+      "native": {
+        "observed_lower_bound_bytes": 0,
+        "admission_events": 0,
+        "charged_reserve_bytes": 16777216,
+        "old_missing_v3_native_identity": "UNKNOWN"
+      }
+    },
+    "prior_timeout_recovery_ref": "a01-sg05-owned-go-timeout-slice.json#/runtime"
+  },
+  "cases": [
+    {
+      "case_id": "TC-A01-SG05-BASELINE",
+      "run_id": "RUN-V03-eac83717-3910-4a4b-a368-ab19e8d6a375",
+      "outcome": "COMPLETED",
+      "evidence_validation": "validated",
+      "canonical_status": "passed",
+      "module_exit": 0,
+      "framework_exit": 0,
+      "grpc_status": "OK",
+      "failure_code": "",
+      "duration_ms": 588,
+      "rpc_started_at": "2026-11-10T04:05:51.882670689Z",
+      "rpc_finished_at": "2026-11-10T04:05:52.088219833Z",
+      "channel_created": true,
+      "rpc_attempted": true,
+      "cleanup_confirmed": true,
+      "independent_grade": "PASS",
+      "expected_negative": false,
+      "original_canonical_status_preserved": true,
+      "applicable_layers": [
+        "framework_provider",
+        "swarm_module"
+      ],
+      "input_pins": {
+        "contracts/grpc.yaml": {
+          "bytes": 2869,
+          "sha256": "4b607c65b0db76f706ed5743b5a29f859b774ac89b5e4163be5de704771d84fb"
+        },
+        "env_profiles/a01.yaml": {
+          "bytes": 571,
+          "sha256": "183010959f202935ee50ede481719dc4d8b169bd12da162f35ed575cc7c6c05b"
+        },
+        "fixtures/catalog-owner-launch.json": {
+          "bytes": 1271,
+          "sha256": "b23a036e6b9203e1791ed0c77304cc98b84baa0100721d1bc9ea01c3d19dff7f"
+        },
+        "fixtures/catalog-runtime.json": {
+          "bytes": 818,
+          "sha256": "8490320a897414d4767ff0ef34659d5d200d4c12ed250b52f5353ff0825e7e9e"
+        },
+        "fixtures/catalog-source.json": {
+          "bytes": 1322,
+          "sha256": "f5eec4f92e52f3f3aa83cfb6c1ad48203680327e2c390ffd714c59b4d933949e"
+        },
+        "fixtures/catalog.desc.b64": {
+          "bytes": 5868,
+          "sha256": "285bd375bc4bff89d44ed51a0ddaf205670b35ff070860311b1fc0f4bdab1921"
+        },
+        "fixtures/demo.proto": {
+          "bytes": 6155,
+          "sha256": "b1f2fa42c0a9305211bf51fba7d8b5832cd3defd7b8855c327ebd5b1f0f86884"
+        },
+        "fixtures/generated-demo.pb.go": {
+          "bytes": 89615,
+          "sha256": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af"
+        },
+        "fixtures/lease.json": {
+          "bytes": 3261,
+          "sha256": "ded69bcb915efcefee565d50e6a56e62ee7b75ab96533bce6f00d2497a6ef8cf"
+        },
+        "fixtures/products.json": {
+          "bytes": 3847,
+          "sha256": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa"
+        },
+        "fixtures/request.json": {
+          "bytes": 20,
+          "sha256": "079ffb4c48534e807f1bf07060f840290751bd4f011a94542d3b4f42eb8b98f7"
+        },
+        "handoff/reviewed.json": {
+          "bytes": 3288,
+          "sha256": "3907464f2296358b9da7372b4d81b837ff5a154dc5e68df30285967c6723da54"
+        },
+        "suite_manifest.yaml": {
+          "bytes": 269,
+          "sha256": "17eb0fd88a65e74ff799d17714f48edef8dfadaf81aa9b68abb7b47463d5790b"
+        },
+        "test_cases/case.yaml": {
+          "bytes": 539,
+          "sha256": "1347ef0a17933c30ca7da2b74aa0e7e228af8ed968788b038a7c068fd120e26f"
+        }
+      },
+      "evidence_ids": [
+        "a/module_receipt",
+        "a/module_process",
+        "a/input_manifest",
+        "a/request",
+        "a/grade",
+        "a/result",
+        "a/proof",
+        "a/framework_report"
+      ],
+      "raw_artifact_index": "a01-sg05-owned-go-timeout-slice.json#/raw_artifacts",
+      "original_case_ref": "a01-sg05-owned-go-timeout-slice.json#/cases/0",
+      "source_oracle_id": "timeout_recovery"
+    },
+    {
+      "case_id": "TC-A01-SG05-TIMEOUT",
+      "run_id": "RUN-V03-034d3c52-c43f-44fe-9e09-9dac5badd5cf",
+      "outcome": "COMPLETED",
+      "evidence_validation": "validated",
+      "canonical_status": "failed",
+      "module_exit": 1,
+      "framework_exit": 1,
+      "grpc_status": "DEADLINE_EXCEEDED",
+      "failure_code": "PROVIDER_TIMEOUT",
+      "duration_ms": 5035,
+      "rpc_started_at": "2026-11-10T04:05:57.967525671Z",
+      "rpc_finished_at": "2026-11-10T04:06:02.635531772Z",
+      "channel_created": true,
+      "rpc_attempted": true,
+      "cleanup_confirmed": true,
+      "independent_grade": "PASS",
+      "expected_negative": true,
+      "original_canonical_status_preserved": true,
+      "applicable_layers": [
+        "framework_provider",
+        "swarm_module"
+      ],
+      "input_pins": {
+        "contracts/grpc.yaml": {
+          "bytes": 2869,
+          "sha256": "4b607c65b0db76f706ed5743b5a29f859b774ac89b5e4163be5de704771d84fb"
+        },
+        "env_profiles/a01.yaml": {
+          "bytes": 571,
+          "sha256": "183010959f202935ee50ede481719dc4d8b169bd12da162f35ed575cc7c6c05b"
+        },
+        "fixtures/catalog-owner-launch.json": {
+          "bytes": 1271,
+          "sha256": "b23a036e6b9203e1791ed0c77304cc98b84baa0100721d1bc9ea01c3d19dff7f"
+        },
+        "fixtures/catalog-runtime.json": {
+          "bytes": 818,
+          "sha256": "8490320a897414d4767ff0ef34659d5d200d4c12ed250b52f5353ff0825e7e9e"
+        },
+        "fixtures/catalog-source.json": {
+          "bytes": 1322,
+          "sha256": "f5eec4f92e52f3f3aa83cfb6c1ad48203680327e2c390ffd714c59b4d933949e"
+        },
+        "fixtures/catalog.desc.b64": {
+          "bytes": 5868,
+          "sha256": "285bd375bc4bff89d44ed51a0ddaf205670b35ff070860311b1fc0f4bdab1921"
+        },
+        "fixtures/demo.proto": {
+          "bytes": 6155,
+          "sha256": "b1f2fa42c0a9305211bf51fba7d8b5832cd3defd7b8855c327ebd5b1f0f86884"
+        },
+        "fixtures/generated-demo.pb.go": {
+          "bytes": 89615,
+          "sha256": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af"
+        },
+        "fixtures/lease.json": {
+          "bytes": 3261,
+          "sha256": "ded69bcb915efcefee565d50e6a56e62ee7b75ab96533bce6f00d2497a6ef8cf"
+        },
+        "fixtures/products.json": {
+          "bytes": 3847,
+          "sha256": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa"
+        },
+        "fixtures/request.json": {
+          "bytes": 20,
+          "sha256": "079ffb4c48534e807f1bf07060f840290751bd4f011a94542d3b4f42eb8b98f7"
+        },
+        "handoff/reviewed.json": {
+          "bytes": 3287,
+          "sha256": "e0a36ebc1391fbd501ce94cb8302e013c4fcb4162167e0e0379576b5cfea1307"
+        },
+        "suite_manifest.yaml": {
+          "bytes": 269,
+          "sha256": "17eb0fd88a65e74ff799d17714f48edef8dfadaf81aa9b68abb7b47463d5790b"
+        },
+        "test_cases/case.yaml": {
+          "bytes": 559,
+          "sha256": "bff98b3a7f3e97baf73a428f0a827480711a89ce8cdb6bed5f98b058540a38e7"
+        }
+      },
+      "evidence_ids": [
+        "timeout/module_receipt",
+        "timeout/module_process",
+        "timeout/input_manifest",
+        "timeout/request",
+        "timeout/grade",
+        "timeout/result",
+        "timeout/proof",
+        "timeout/framework_report"
+      ],
+      "raw_artifact_index": "a01-sg05-owned-go-timeout-slice.json#/raw_artifacts",
+      "original_case_ref": "a01-sg05-owned-go-timeout-slice.json#/cases/1",
+      "source_oracle_id": "timeout_recovery"
+    },
+    {
+      "case_id": "TC-A01-SG05-RECOVERY",
+      "run_id": "RUN-V03-0fe0de83-5c5c-4b61-9f67-b186c10ab221",
+      "outcome": "COMPLETED",
+      "evidence_validation": "validated",
+      "canonical_status": "passed",
+      "module_exit": 0,
+      "framework_exit": 0,
+      "grpc_status": "OK",
+      "failure_code": "",
+      "duration_ms": 607,
+      "rpc_started_at": "2026-11-10T04:06:08.831982819Z",
+      "rpc_finished_at": "2026-11-10T04:06:09.058658098Z",
+      "channel_created": true,
+      "rpc_attempted": true,
+      "cleanup_confirmed": true,
+      "independent_grade": "PASS",
+      "expected_negative": false,
+      "original_canonical_status_preserved": true,
+      "applicable_layers": [
+        "framework_provider",
+        "swarm_module"
+      ],
+      "input_pins": {
+        "contracts/grpc.yaml": {
+          "bytes": 2869,
+          "sha256": "4b607c65b0db76f706ed5743b5a29f859b774ac89b5e4163be5de704771d84fb"
+        },
+        "env_profiles/a01.yaml": {
+          "bytes": 571,
+          "sha256": "183010959f202935ee50ede481719dc4d8b169bd12da162f35ed575cc7c6c05b"
+        },
+        "fixtures/catalog-owner-launch.json": {
+          "bytes": 1271,
+          "sha256": "b23a036e6b9203e1791ed0c77304cc98b84baa0100721d1bc9ea01c3d19dff7f"
+        },
+        "fixtures/catalog-runtime.json": {
+          "bytes": 818,
+          "sha256": "8490320a897414d4767ff0ef34659d5d200d4c12ed250b52f5353ff0825e7e9e"
+        },
+        "fixtures/catalog-source.json": {
+          "bytes": 1322,
+          "sha256": "f5eec4f92e52f3f3aa83cfb6c1ad48203680327e2c390ffd714c59b4d933949e"
+        },
+        "fixtures/catalog.desc.b64": {
+          "bytes": 5868,
+          "sha256": "285bd375bc4bff89d44ed51a0ddaf205670b35ff070860311b1fc0f4bdab1921"
+        },
+        "fixtures/demo.proto": {
+          "bytes": 6155,
+          "sha256": "b1f2fa42c0a9305211bf51fba7d8b5832cd3defd7b8855c327ebd5b1f0f86884"
+        },
+        "fixtures/generated-demo.pb.go": {
+          "bytes": 89615,
+          "sha256": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af"
+        },
+        "fixtures/lease.json": {
+          "bytes": 3261,
+          "sha256": "ded69bcb915efcefee565d50e6a56e62ee7b75ab96533bce6f00d2497a6ef8cf"
+        },
+        "fixtures/products.json": {
+          "bytes": 3847,
+          "sha256": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa"
+        },
+        "fixtures/request.json": {
+          "bytes": 20,
+          "sha256": "079ffb4c48534e807f1bf07060f840290751bd4f011a94542d3b4f42eb8b98f7"
+        },
+        "handoff/reviewed.json": {
+          "bytes": 3288,
+          "sha256": "f67b69e8608e7e4975e230045180f0d536ad06b8310870b2c8b80240fb7bf6f9"
+        },
+        "suite_manifest.yaml": {
+          "bytes": 269,
+          "sha256": "17eb0fd88a65e74ff799d17714f48edef8dfadaf81aa9b68abb7b47463d5790b"
+        },
+        "test_cases/case.yaml": {
+          "bytes": 546,
+          "sha256": "75e90d583b67d62e437a382457518fa34f34a0223bdc83dfe9d18c7fba667ce8"
+        }
+      },
+      "evidence_ids": [
+        "recovery/module_receipt",
+        "recovery/module_process",
+        "recovery/input_manifest",
+        "recovery/request",
+        "recovery/grade",
+        "recovery/result",
+        "recovery/proof",
+        "recovery/framework_report"
+      ],
+      "raw_artifact_index": "a01-sg05-owned-go-timeout-slice.json#/raw_artifacts",
+      "original_case_ref": "a01-sg05-owned-go-timeout-slice.json#/cases/2",
+      "source_oracle_id": "timeout_recovery"
+    },
+    {
+      "case_id": "TC-A01-SG05-UNAVAILABLE",
+      "run_id": "RUN-V03-77737ec4-5c2e-4670-8de9-1a5663523da1",
+      "outcome": "COMPLETED",
+      "evidence_validation": "validated",
+      "canonical_status": "failed",
+      "module_exit": 1,
+      "framework_exit": 1,
+      "grpc_status": "UNAVAILABLE",
+      "failure_code": "OPERATION_FAILED",
+      "duration_ms": 2532,
+      "rpc_started_at": "2026-11-10T04:34:39.976361127Z",
+      "rpc_finished_at": "2026-11-10T04:34:42.135091083Z",
+      "channel_created": true,
+      "rpc_attempted": true,
+      "cleanup_confirmed": true,
+      "independent_grade": "PASS",
+      "expected_negative": true,
+      "original_canonical_status_preserved": true,
+      "applicable_layers": [
+        "framework_provider",
+        "swarm_module"
+      ],
+      "input_pins": {
+        "contracts/grpc.yaml": {
+          "bytes": 2869,
+          "sha256": "4b607c65b0db76f706ed5743b5a29f859b774ac89b5e4163be5de704771d84fb"
+        },
+        "env_profiles/a01.yaml": {
+          "bytes": 571,
+          "sha256": "8b3f0847ceb2786c8a69ffa271820bc4060bf0081875b7fd37c0e97b3d8f5733"
+        },
+        "fixtures/catalog-owner-launch.json": {
+          "bytes": 1283,
+          "sha256": "375da2c4c7460f2f5402c804fc99a5f0385157ee725ab0741108e2c66bd3732b"
+        },
+        "fixtures/catalog-runtime.json": {
+          "bytes": 842,
+          "sha256": "9effc361b5f474412619ffc7d2956a1c488ceb4e2c3d6318bd876b294108a029"
+        },
+        "fixtures/catalog-source.json": {
+          "bytes": 1322,
+          "sha256": "f5eec4f92e52f3f3aa83cfb6c1ad48203680327e2c390ffd714c59b4d933949e"
+        },
+        "fixtures/catalog.desc.b64": {
+          "bytes": 5868,
+          "sha256": "285bd375bc4bff89d44ed51a0ddaf205670b35ff070860311b1fc0f4bdab1921"
+        },
+        "fixtures/demo.proto": {
+          "bytes": 6155,
+          "sha256": "b1f2fa42c0a9305211bf51fba7d8b5832cd3defd7b8855c327ebd5b1f0f86884"
+        },
+        "fixtures/generated-demo.pb.go": {
+          "bytes": 89615,
+          "sha256": "799971d468d1e66e0d7fce8930ce74f8f1c894bf8425c50cad44c2a9b40cd9af"
+        },
+        "fixtures/lease.json": {
+          "bytes": 3297,
+          "sha256": "02fa68edaedfb4ff029adce34bfab3642277410eb34ce3cccb1614a2a9a07a62"
+        },
+        "fixtures/products.json": {
+          "bytes": 3847,
+          "sha256": "766cd816fb1721ec0ce8d9261214fb5e10f6b89ce70600e2d20f149c7b5afffa"
+        },
+        "fixtures/request.json": {
+          "bytes": 20,
+          "sha256": "079ffb4c48534e807f1bf07060f840290751bd4f011a94542d3b4f42eb8b98f7"
+        },
+        "handoff/reviewed.json": {
+          "bytes": 3301,
+          "sha256": "c784aebe93a7514362559c75aa790a0d9e4ca5ad39a3d289d16e6cbba0db83ad"
+        },
+        "suite_manifest.yaml": {
+          "bytes": 269,
+          "sha256": "17eb0fd88a65e74ff799d17714f48edef8dfadaf81aa9b68abb7b47463d5790b"
+        },
+        "test_cases/case.yaml": {
+          "bytes": 561,
+          "sha256": "dda0b4b1a982e6be8381d87ec838049221b273adaf25ebd75d26e784d7664915"
+        }
+      },
+      "evidence_ids": [
+        "module_receipt",
+        "module_process",
+        "input_manifest",
+        "request",
+        "case_grade",
+        "result",
+        "proof",
+        "framework_report"
+      ],
+      "source_oracle_id": "unavailable"
+    }
+  ],
+  "oracles": {
+    "timeout_recovery": {
+      "ref": "a01-sg05-owned-go-timeout-slice.json#/oracles",
+      "source_oracles_sha256": "0318c40de0f6f58e5d8382f6ab58a7cb6f44496c25ccd271bb7a044dad8f344e",
+      "authorized_seal": {
+        "bytes": 19112,
+        "sha256": "a310b35ce755bf313142733e80808704f2aaa87357d21d01d0f44f3f0569c942",
+        "retention": "Original bytes retained; not a public download link."
+      }
+    },
+    "unavailable": {
+      "source_oracles_sha256": "e5b22e9cf88552347d6b284725cba8bdbe48b2aa1af7aa88f0efc1e0cb862099",
+      "authorized_seal": {
+        "bytes": 23136,
+        "sha256": "6f576d9e190e1d8f948952dc8ae3d6f5b3616b597778d96add270dc8096cdb71"
+      },
+      "helper_pins": {
+        "common.py": {
+          "bytes": 3468,
+          "sha256": "85b3d264869983d2dda518578798d5840d4e27cf92db6fcbb6e2d80dcf669ac5"
+        },
+        "controller.py": {
+          "bytes": 26182,
+          "sha256": "96cadc99d40c7ae73735f7113aed25b7704bf225b3c513605e9bba00878954c8"
+        },
+        "generate.py": {
+          "bytes": 8499,
+          "sha256": "63c6975c5963ead15829a2bb16a0382a5b5effc6128253f5e81c854503aecfaf"
+        },
+        "grade.py": {
+          "bytes": 8338,
+          "sha256": "0651232939dcbccfb72bab32ae23689a831f0d2af0b5746e6dcc5b54e9dfc677"
+        },
+        "isolation.py": {
+          "bytes": 12669,
+          "sha256": "66f23e4fbd6c554dcb74b854f1f81d2d88467fb03aacbbddb6fab05f5ba4fe4b"
+        },
+        "native_observer.py": {
+          "bytes": 2573,
+          "sha256": "388dda0fc408ba4832f0714f68125fed8a82fd851bcbd2715d92f5686c1a972f"
+        },
+        "deadline.py": {
+          "bytes": 13834,
+          "sha256": "2e00d4c5a356325cedaa7ddf2cbfdb2f831e779f7b8285571bfb656b2e0cc2f7"
+        },
+        "unavailable.py": {
+          "bytes": 14748,
+          "sha256": "5ca39b07e283de8a799e2dd158311855b8e05d495348a7c7b6780d6e9f60110c"
+        }
+      },
+      "expected": {
+        "grpc_status": "UNAVAILABLE",
+        "failure_code": "OPERATION_FAILED",
+        "canonical_status": "failed",
+        "module_exit": 1,
+        "framework_exit": 1,
+        "outcome": "COMPLETED",
+        "evidence_validation": "validated",
+        "body": "empty",
+        "rpc_attempted": true,
+        "channel_created": true,
+        "cleanup_confirmed": true
+      },
+      "timing_contract": "rpc_started <= actual client-connection observation < one-shot stop request <= rpc_finished; actual proof bound and retained exact owned-process/socket identities required.",
+      "operation_duration_ms_bound": [
+        0,
+        8000
+      ],
+      "actual_artifact_reference_hash_checks": 16,
+      "actual_unique_artifact_paths": 12
+    },
+    "independent_expected_behavior_accept_count": 4,
+    "product_verdict_counts": {
+      "passed": 2,
+      "failed": 2
+    },
+    "failure_is_not_rewritten_as_product_pass": true
+  },
+  "accounting": {
+    "unavailable_postrun": {
+      "before_this_receipt_ordinary_bytes": 576860269,
+      "before_this_receipt_files": 1158,
+      "categories_before_this_receipt": {
+        "go": 570262455,
+        "cp": 573852,
+        "metadata": 4713449,
+        "evidence": 1310513
+      },
+      "classes_bytes": 5724,
+      "native_reserve_bytes": 16777216,
+      "runtime_cap_bytes": 671088640,
+      "source_cap_bytes": 7340032,
+      "source_upper_bound_including_separate_reviewer_reserve_bytes": 7045647,
+      "sampled_peak_rss_bytes": 409436160,
+      "reviewer_separate_temp_and_logs_bytes": 97260,
+      "this_receipt_bytes": 7082,
+      "all_history_ordinary_bytes": 576867351,
+      "all_history_files": 1159,
+      "cumulative_with_classes_and_native_reserve": 593650291
+    },
+    "prospective_maintenance_cap_bytes": 98304,
+    "source_cap_bytes": 7340032,
+    "source_upper_bound_including_maintenance_and_postrun_and_reviewer_reserve_bytes": 7156239,
+    "all_history_retained": true,
+    "single_native_pool_not_reset": true
+  },
+  "limitations": [
+    "Acceptance is limited to source-built owned Go GetProduct bounded deadline and unavailable failure behavior through Framework/provider and packaged Swarm Module, with baseline and recovery. It does not establish full application, all catalog methods, upstream test-suite, native Swarm-agent, remote SIT or release acceptance.",
+    "Both expected-negative canonical results remain failed; expected-behavior grades PASS are separate.",
+    "The timeout detail was waiting_for_connection. The new UNAVAILABLE proof establishes a real client attempt and exact client transport ownership, not Go receipt or processing. Server request count remains NOT_MEASURED.",
+    "The timeout invocation's outer PTY exit was not retained and remains unknown. The separate UNAVAILABLE invocation has a retained shell controller_exit=0 receipt.",
+    "Raw owner graceful=true concerns the owner control path, not proof that the stopped Go child exited gracefully. Exact death/reap/pidfd/session/socket cleanup is retained.",
+    "Native admission events and observed bytes are zero lower bounds; the old missing native file identity remains UNKNOWN.",
+    "Four source-pinned native candidate hashes and fake controls do not constitute real native-loading acceptance. CI unit counts are not new product scenario counts."
+  ],
+  "retained_history": {
+    "prior_slice_unchanged": true,
+    "prior_runtime_failures_retained": true,
+    "global_approved_case_denominator": null,
+    "planned_groups": 116,
+    "excluded_historical_records": 16
+  },
+  "raw_artifacts": {
+    "module_receipt": {
+      "bytes": 7728,
+      "sha256": "f012476f05bad6f20c6058199908844816777c943a686cce0ed332ba79a1117c",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "module_process": {
+      "bytes": 515,
+      "sha256": "3c5dc7945d842ff7802dc219e8bc77f119ede05887838b4785c83c21bf8c072b",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "input_manifest": {
+      "bytes": 1638,
+      "sha256": "efedadb8c94f5b7e564267ac3b64da57a2238da2188e1ed27eb9d787e15f68ca",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "request": {
+      "bytes": 1121,
+      "sha256": "035cc870ea5cdd4159ffc3a20cae5f4ba2939ef1dbc94f4df407d2f32d28f438",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "case_grade": {
+      "bytes": 2532,
+      "sha256": "696f4e1135188f1d445000d21df902ff55e9d90f94ac58b06de16fd37d93d456",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "result": {
+      "bytes": 3722,
+      "sha256": "ce5fffa5e5ceae25108de7fd9bf144d73afa5460f17aff3000ad1bd1376707ec",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "proof": {
+      "bytes": 4248,
+      "sha256": "f677b1797e0898a9fdc724e8e68bb004281a781d2ff0912e8654cb27896edbf3",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "framework_report": {
+      "bytes": 3480,
+      "sha256": "4bf58246a16e90a9813d6ee969fc935c651ffba65360a41d6d4fb010c5c44091",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "run_summary": {
+      "bytes": 463,
+      "sha256": "6f7a5ef04be4b6a41f3bcfbb6e6381f80e03d1e1c171eb9692378126858a0c41",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "fault_events": {
+      "bytes": 4224,
+      "sha256": "ff686c1bea8699667af99167d7f41913815b127db42c82fe3068ef4990f29595",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "fault_grade": {
+      "bytes": 349,
+      "sha256": "d6d243e716759fcc120e902da4fbb0c150be0ac74a491fbe83b37179285f57f9",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "owner_stop": {
+      "bytes": 1582,
+      "sha256": "37856a5490b3bde687f57ec038c8dca41275d407e5d748824094c6c841dad2ff",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "authorized_seal": {
+      "bytes": 23136,
+      "sha256": "6f576d9e190e1d8f948952dc8ae3d6f5b3616b597778d96add270dc8096cdb71",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "projection": {
+      "bytes": 3168,
+      "sha256": "fa525913d88ae2a3632e34085a72d9d2a3fffab9c040edfafa8858a4e0fe5c16",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "package_manifest": {
+      "bytes": 8910,
+      "sha256": "043a3c9c338e04577e8bbdc0642f9db07f67e8ddfefca733d504b94b647f3448",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "controller_exit": {
+      "bytes": 22,
+      "sha256": "7c470c7918e1936ef3305561b1837cd50f2ca0985f0720c25dc1043ecf334646",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "controller_stdout": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retention": "Original bytes retained; not a public download link."
+    },
+    "controller_stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retention": "Original bytes retained; not a public download link."
+    }
+  },
+  "postrun_receipt": {
+    "bytes": 7082,
+    "sha256": "078b8a33ccb13f27e152c753555f112b407f7efb6eb68c5ca1708186df85b74d",
+    "retention": "Original receipt retained. This public index summarizes selected facts and omits path-sensitive raw fields; original raw byte/hash pins are retained unchanged."
+  }
+}

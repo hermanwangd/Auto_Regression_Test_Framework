@@ -1,0 +1,118 @@
+{
+  "phase": "selection",
+  "status": "ELIGIBLE_CONTEXT",
+  "sourceSnapshotSha256": "c7f61c5b210b4e303f844673143d64d08df442c9281ba6379da465e54afa6858",
+  "selectionReceiptSha256": "1100aa8ba42a668454505a9abe3fe7d7f1110c9e55487424c8ded9f074ba9ce6",
+  "context": {
+    "request": {
+      "missionRef": "synthetic-mission",
+      "workspaceRef": "synthetic-workspace",
+      "knowledgeProjectRef": "synthetic-knowledge",
+      "consumerProjectRef": "synthetic-consumer",
+      "currentRepositoryRevisions": {
+        "synthetic-product": "1111111111111111111111111111111111111111"
+      }
+    },
+    "readWorkspaceRef": "synthetic-workspace",
+    "readProjectRef": "synthetic-knowledge",
+    "fetchedAt": "2026-11-01T00:00:01Z",
+    "evaluatedAt": "2026-11-01T00:00:02Z",
+    "selected": [
+      {
+        "knowledgeRef": "synthetic://knowledge/source-001",
+        "providerRevision": "synthetic-provider-r1",
+        "recordKey": "synthetic-source-001",
+        "recordVersion": 1,
+        "proposal": {
+          "proposalRef": "synthetic-source-001",
+          "workspaceRef": "synthetic-workspace",
+          "sourceRefs": [
+            "synthetic://requirement/status-ok"
+          ],
+          "knowledgeType": "SEMANTIC",
+          "statement": "Synthetic demonstration only; response status is OK.",
+          "scope": "synthetic product tests",
+          "applicability": "synthetic-consumer",
+          "limitations": [
+            "No deployed Cognee verification."
+          ],
+          "evidenceRefs": [
+            "synthetic://evidence/requirements"
+          ],
+          "conflictRefs": []
+        },
+        "governance": {
+          "proposal": {
+            "proposalRef": "synthetic-source-001",
+            "workspaceRef": "synthetic-workspace",
+            "sourceRefs": [
+              "synthetic://requirement/status-ok"
+            ],
+            "knowledgeType": "SEMANTIC",
+            "statement": "Synthetic demonstration only; response status is OK.",
+            "scope": "synthetic product tests",
+            "applicability": "synthetic-consumer",
+            "limitations": [
+              "No deployed Cognee verification."
+            ],
+            "evidenceRefs": [
+              "synthetic://evidence/requirements"
+            ],
+            "conflictRefs": []
+          },
+          "decision": "APPROVED",
+          "decisionRef": "synthetic://governance/demo-decision",
+          "decidedBy": "synthetic-reviewer",
+          "policyRef": "synthetic://policy/local",
+          "decisionEvidenceRefs": [
+            "synthetic://evidence/review"
+          ],
+          "decidedAt": "2026-11-01T00:00:00Z"
+        },
+        "proposalDigest": "b312aa69272960df6fb549e195ab7e46715ecf54468937040e9cfcc405857358",
+        "decisionRecordKey": "synthetic-source-001",
+        "decisionRecordVersion": 1,
+        "decisionProposalDigest": "b312aa69272960df6fb549e195ab7e46715ecf54468937040e9cfcc405857358",
+        "lifecycle": "CURRENT",
+        "observedAt": "2026-11-01T00:00:00Z",
+        "validUntil": "2099-01-01T00:00:00Z",
+        "repositoryRevisions": {
+          "synthetic-product": "1111111111111111111111111111111111111111"
+        },
+        "applicableProjectRefs": [
+          "synthetic-consumer"
+        ],
+        "visibility": "WORKSPACE_AUTHORIZED"
+      }
+    ],
+    "excluded": [],
+    "mayProceedWithoutKnowledge": false
+  },
+  "cogneeSelection": {
+    "datasetId": "11111111-1111-4111-8111-111111111111",
+    "querySha256": "509563cb56e8c5e77aae23992164355faebe7fc52998c1d0bd144bcd7649bf0b",
+    "topK": 10,
+    "searchType": "CHUNKS",
+    "searchStatus": "SEARCHED",
+    "providerVersion": "UNVERIFIED_BY_HTTP_CLIENT",
+    "candidateSearch": {
+      "candidates": [
+        {
+          "datasetId": "11111111-1111-4111-8111-111111111111",
+          "documentId": "synthetic-document-001",
+          "sourceId": "synthetic-source-001",
+          "sourceRevision": 1,
+          "providerRevision": "synthetic-provider-r1",
+          "sourceRef": "synthetic://requirement/status-ok",
+          "workspaceRef": "synthetic-workspace",
+          "projectRef": "synthetic-knowledge",
+          "contentSha256": "e0c76ce5af4641cc4d644b1efa8c2bda1e2004209ffd9d3732fa8d20a699aa71",
+          "chunkCount": 1
+        }
+      ],
+      "rejections": []
+    },
+    "candidateSearchSha256": "8557c1b9d6dca6f9c44e1e8f32d33c6b20049765c4a9df9d3e440cf7526b6518"
+  },
+  "claimBoundary": "COGNEE_CANDIDATES_NARROW_FULL_GOVERNED_READ_NO_WRITE_NO_SEMANTIC_AUTHORITY"
+}

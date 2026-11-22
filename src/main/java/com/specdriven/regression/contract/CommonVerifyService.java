@@ -1,5 +1,7 @@
 package com.specdriven.regression.contract;
 
+import com.specdriven.regression.summary.SuiteExecutionContext;
+
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.evidence.EvidenceIndexFormatter;
@@ -34,6 +36,12 @@ public class CommonVerifyService {
     private final Yaml yaml = new Yaml();
 
     public CommonVerifyRunResult run(Path suiteManifest, String requestedProfile, Path outputBase) {
+        return run(suiteManifest, requestedProfile, SuiteExecutionContext.standalone(requestedProfile, outputBase, "COMMON"));
+    }
+
+    public CommonVerifyRunResult run(
+            Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
+        requireMatchingProfile(requestedProfile, executionContext);
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {
             return CommonVerifyRunResult.blocked(validation.suiteId(), requestedProfile, validation.findings());
@@ -100,8 +108,8 @@ public class CommonVerifyService {
             return CommonVerifyRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, preflightFindings);
         }
 
-        RunIds ids = runIds("COMMON");
-        Path runDir = outputBase.resolve(safe(stringValue(suite.get("suite_id")))).resolve(ids.batchId()).resolve(ids.runId());
+        RunIds ids = new RunIds(executionContext.parentBatchId(), executionContext.newRunId("COMMON"));
+        Path runDir = executionContext.childRunRoot(stringValue(suite.get("suite_id")), ids.runId());
         recreateDirectory(runDir);
         Instant startedAt = Instant.now();
         List<Map<String, Object>> stepResults = new ArrayList<>();
@@ -186,6 +194,12 @@ public class CommonVerifyService {
                 PROVIDER_TYPE,
                 firstSelection.selection().providerId(),
                 List.of());
+    }
+
+    private void requireMatchingProfile(String profile, SuiteExecutionContext context) {
+        if (!context.matchesRequestedProfile(profile)) {
+            throw new IllegalArgumentException("Execution context profile does not match requested profile: " + profile);
+        }
     }
 
     private VerifyOutcome evaluateVerifier(Path suiteRoot, Path runDir, Map<String, Object> verify) {

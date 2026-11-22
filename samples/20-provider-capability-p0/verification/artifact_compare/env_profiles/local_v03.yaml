@@ -1,0 +1,9 @@
+profile_id: local_v03
+execution_mode: local
+isolation: per_run
+evidence_classification: framework_verification_only
+
+targets:
+  artifact_compare:
+    runtime_mode: framework
+    bindings: {}

@@ -24,6 +24,7 @@ evidence_types:
   - event_payload
   - event_evidence
   - http_request_response
+  - cli_process
   - mock_request_journal
   - server_log
   - screenshot

@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package com.example.customer;
+
+service CustomerService {
+  rpc GetCustomer (GetCustomerRequest) returns (GetCustomerResponse);
+  rpc Ping (PingRequest) returns (PingResponse);
+}
+
+message GetCustomerRequest {
+  string customer_id = 1;
+}
+
+message GetCustomerResponse {
+  string customer_id = 1;
+  string status = 2;
+}
+
+message PingRequest {
+  string message = 1;
+}
+
+message PingResponse {
+  string message = 1;
+}

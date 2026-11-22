@@ -1,0 +1,12 @@
+profile_id: external_db2
+execution_mode: external
+isolation: shared
+evidence_classification: project_environment_evidence
+
+targets:
+  order_db:
+    runtime_mode: native
+    bindings:
+      dialect: db2
+      connection.secret_ref: env://JDBC_CONNECTION
+      strict_params: true

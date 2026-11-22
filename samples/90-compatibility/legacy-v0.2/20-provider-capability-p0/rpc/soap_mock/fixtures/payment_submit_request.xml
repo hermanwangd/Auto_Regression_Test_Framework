@@ -1,0 +1,9 @@
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:pay="urn:payment">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <pay:SubmitPaymentRequest>
+      <pay:PaymentId>P-1001</pay:PaymentId>
+      <pay:Amount>125.50</pay:Amount>
+    </pay:SubmitPaymentRequest>
+  </soapenv:Body>
+</soapenv:Envelope>

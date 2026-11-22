@@ -10,6 +10,7 @@ on:
       - main
       - 'release/**'
       - 'codex/release-*'
+      - plug-in-module
 
 permissions:
   contents: read

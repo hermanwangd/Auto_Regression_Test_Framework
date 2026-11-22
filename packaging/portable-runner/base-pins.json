@@ -1,0 +1,83 @@
+{
+  "schema": "local-image-base-pins.v1",
+  "bases": [
+    {
+      "name": "python",
+      "metadata_tag": "docker.io/library/python:3.12-slim-bookworm",
+      "pinned_ref": "docker.io/library/python@sha256:0f086103b026048cc50cb5da25ec435c023c5241a83fc44daea593377abc61c4",
+      "platform": "linux/amd64",
+      "manifest_sha256": "sha256:0f086103b026048cc50cb5da25ec435c023c5241a83fc44daea593377abc61c4",
+      "config_sha256": "sha256:313cf8f190a1abab00472c1f0c950c10486c22114bcd8aef2a8198fb587a6d18",
+      "layers": [
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:dd051e1b8c92ff101fa3071ab97ea4924885942f15644e01c3dc095764e863e3",
+          "size": 28247982
+        },
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:a47be7bff94f52aefb243d8b245b01c74976150bb88de60875c5eb7ac964f91e",
+          "size": 3341518
+        },
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:8691b22c22a3e005c632ab6bc07b085b98dae9cc02d1d84de175849f997439c7",
+          "size": 13679755
+        },
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:88d15687540999237909e04714b1393c610db9dc2e13d82acd6356fa9bf8f092",
+          "size": 249
+        }
+      ],
+      "compressed_layer_bytes": 45269504,
+      "source": "https://github.com/docker-library/python",
+      "license": "PSF-2.0 plus Debian base notices",
+      "digest_verification": "descriptor selected from official index; daemon content verification required at authorized pull"
+    },
+    {
+      "name": "jre",
+      "metadata_tag": "docker.io/library/eclipse-temurin:17-jre-jammy",
+      "pinned_ref": "docker.io/library/eclipse-temurin@sha256:887199eb587bda85fcbc40379beccc9f13016bd63db008ad64239edc89a10bea",
+      "platform": "linux/amd64",
+      "manifest_sha256": "sha256:887199eb587bda85fcbc40379beccc9f13016bd63db008ad64239edc89a10bea",
+      "config_sha256": "sha256:fa83532f28507998dee7426528b6d821dc06dcc21ead8d86e0d69f896fb46c5a",
+      "layers": [
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:0626d3cc316c9fea3d4891e2ec19b8f371fe22ffb915622f6072a2ee2ca9017f",
+          "size": 29752488
+        },
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:a8a9b45adb05e917b80ab5abd5c187026187bc006b7c6c5b783f5fcdde83d413",
+          "size": 16115606
+        },
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:c1410acbf831134b8ca9cf23b943107f1112778cc5351a3cac675334c22ef8c8",
+          "size": 47620329
+        },
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:499aa3ede4f6a87e30986e3c47249cbba26653b2a877dac6f2ea03efb26d17aa",
+          "size": 159
+        },
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:00ddeaac5320f3c95ef9b6493e7f76656f34392570fac1f1eca2e7505e686c53",
+          "size": 2464
+        }
+      ],
+      "compressed_layer_bytes": 93491046,
+      "source": "https://github.com/adoptium/containers",
+      "license": "GPL-2.0 WITH Classpath-exception-2.0 plus Ubuntu base notices",
+      "digest_verification": "descriptor selected from official index; daemon content verification required at authorized pull"
+    }
+  ],
+  "compressed_total_bytes": 138760550,
+  "estimated_unpacked_limit_bytes": 1610612736,
+  "pull_performed": false,
+  "platform": "linux/amd64",
+  "registry_login_or_credentials_created": false
+}

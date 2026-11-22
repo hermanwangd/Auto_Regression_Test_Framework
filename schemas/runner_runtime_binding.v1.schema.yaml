@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:regress:runner_runtime_binding.v1.schema.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "binding_id",
+    "runtime_type",
+    "owner_nonce",
+    "run_id",
+    "correlation_id",
+    "evidence_classification",
+    "collection_spec_sha256",
+    "bundle_sha256",
+    "expected_sut_revision",
+    "observed_sut_revision",
+    "readiness_evidence_sha256",
+    "runtime_identity",
+    "maximum_run_ms"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "runner-runtime-binding.v1"
+    },
+    "binding_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "runtime_type": {
+      "enum": [
+        "container",
+        "kubernetes",
+        "vm",
+        "contract_test"
+      ]
+    },
+    "owner_nonce": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "evidence_classification": {
+      "const": "framework_verification_only"
+    },
+    "collection_spec_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "bundle_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "expected_sut_revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "observed_sut_revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "readiness_evidence_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "runtime_identity": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "maximum_run_ms": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 300000
+    }
+  },
+  "$comment": "Protected invocation binding, independent expected SHA. contract_test is injected offline only, never selected by public CLI as native. Actual image/context/secretref/TLS/runtime/SUT bindings remain BLOCKED until independently authorized; public trio contract_only unchanged."
+}

@@ -1,0 +1,6 @@
+profile_id: local_v03
+execution_mode: local
+targets:
+  common_verifier:
+    runtime_mode: impossible
+    bindings: {}

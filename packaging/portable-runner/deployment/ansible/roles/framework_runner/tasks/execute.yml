@@ -1,0 +1,64 @@
+- name: Require explicitly bound composition invocation
+  ansible.builtin.assert:
+    that:
+      - framework_runner_local_fixture | bool
+      - inventory_hostname == 'localhost'
+      - ansible_connection == 'local'
+      - not (ansible_become | default(false) | bool)
+      - framework_runner_binding_sha256 is match('^[0-9a-f]{64}$')
+      - framework_runner_helper_sha256 is match('^[0-9a-f]{64}$')
+      - framework_runner_composition_sha256 is match('^[0-9a-f]{64}$')
+      - framework_runner_supervision_sha256 is match('^[0-9a-f]{64}$')
+    fail_msg: Protected native VM transport identity has not been observed; no SSH is performed
+- name: Inspect the exact package entrypoint and imported source
+  ansible.builtin.stat:
+    path: '{{ role_path }}/../../../scripts/{{ item.name }}'
+    checksum_algorithm: sha256
+    follow: false
+  loop:
+    - {name: deployment.py, expected: '{{ framework_runner_helper_sha256 }}'}
+    - {name: composition.py, expected: '{{ framework_runner_composition_sha256 }}'}
+    - {name: supervision.py, expected: '{{ framework_runner_supervision_sha256 }}'}
+  register: framework_runner_runtime_sources
+- name: Reject changed source before import or launch
+  ansible.builtin.assert:
+    that:
+      - item.stat.isreg | default(false)
+      - not (item.stat.islnk | default(true))
+      - item.stat.nlink == 1
+      - item.stat.checksum == item.item.expected
+  loop: '{{ framework_runner_runtime_sources.results }}'
+- name: Invoke only the finite pinned package action
+  ansible.builtin.command:
+    argv:
+      - '{{ ansible_playbook_python }}'
+      - -B
+      - '{{ role_path }}/../../../scripts/deployment.py'
+      - '{{ framework_runner_action }}'
+      - --binding
+      - '{{ framework_runner_binding }}'
+      - --expected-sha256
+      - '{{ framework_runner_binding_sha256 }}'
+  register: framework_runner_composition_result
+  changed_when: framework_runner_composition_result.rc == 0
+  failed_when: framework_runner_composition_result.rc != 0
+  when: framework_runner_action in ['execute', 'collect', 'receive']
+- name: Invoke exact stopped owned cleanup only with external ACK
+  ansible.builtin.command:
+    argv:
+      - '{{ ansible_playbook_python }}'
+      - -B
+      - '{{ role_path }}/../../../scripts/deployment.py'
+      - cleanup
+      - --binding
+      - '{{ framework_runner_binding }}'
+      - --expected-sha256
+      - '{{ framework_runner_binding_sha256 }}'
+      - --ack
+      - '{{ framework_runner_ack }}'
+      - --expected-ack-sha256
+      - '{{ framework_runner_ack_sha256 }}'
+  register: framework_runner_cleanup_result
+  changed_when: framework_runner_cleanup_result.rc == 0
+  failed_when: framework_runner_cleanup_result.rc != 0
+  when: framework_runner_action == 'cleanup'

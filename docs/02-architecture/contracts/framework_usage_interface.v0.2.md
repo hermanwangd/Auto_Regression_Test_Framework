@@ -16,7 +16,7 @@ DSL target
   -> Env_Profile.providers.<provider_id>.bindings
 ```
 
-New v0.2 documentation and generated artifacts must use Provider Contract, Provider Instance, Env_Profile, DSL Test Case, CLI, and Evidence Contract terminology. Existing `execution_profile` and `environment_binding` artifacts are compatibility inputs only; they are not the public authoring model for v0.2.7 samples or usage-kit examples. Internal implementation packages may keep legacy names temporarily, but those names are not public runtime interfaces.
+New v0.3 documentation and generated artifacts must use Provider Contract, Env_Profile, DSL Test Case, CLI, and Evidence Contract terminology. Existing `execution_profile`, `environment_binding`, and Provider Instance artifacts are compatibility inputs only; they are not the public authoring model for v0.3 samples or usage-kit examples. Internal implementation packages may keep legacy names temporarily, but those names are not public runtime interfaces.
 
 ## Controlled Interface Change Rules
 
@@ -35,7 +35,7 @@ New v0.2 documentation and generated artifacts must use Provider Contract, Provi
 | Env_Profile | `env_profile.v0.2.schema.yaml`; compatibility inputs: `execution_profile.v0.2.schema.yaml`, `environment_binding.v0.2.schema.yaml` | Environment selection, execution mode, provider runtime modes, target environment values, secret refs, readiness refs, dependency model, constraints, and provider binding keys. |
 | Provider Runtime Configuration | `provider_contract.v0.2.schema.yaml`, `provider_instance.v0.2.schema.yaml`, `provider_capability_registry.v0.2.yaml`, `provider_plugin_contract.md`, `verify_plugin_contract.md` | Provider type, provider ID, valid instance shape, runtime modes, executable runtime modes, public `support_status`, allowed operations, allowed input keys, required inputs, required binding keys, defaults, output refs, evidence outputs, and failure codes. |
 | Result and Evidence Output | `result.v0.2.schema.yaml`, `evidence.v0.2.schema.yaml`, `evidence_folder_structure.v0.2.md`, `validation_error_taxonomy.v0.2.yaml`, `secret_guardrails.v0.2.yaml` | Standard result shape, deterministic validation errors, failure classification, batch/run evidence locations, assertion evidence, cleanup evidence, report evidence, and masking rules. |
-| P0/P1 Contract Catalog | `p0_provider_verify_catalog.v0.2.md` plus provider contract files | Contract and provider capability baseline for WireMock HTTP mock, `rest_client` HTTP request samples, PR-008 WireMock-backed SOAP/gRPC mock contracts, JDBC, NATS/event, P1 Kafka and IBM MQ client providers, polling, JSON/schema/file, fixture injection, reporting, and dry-run readiness. |
+| P0/P1 Contract Catalog | `p0_provider_verify_catalog.v0.2.md` plus provider contract files | Contract and provider capability baseline for WireMock-backed HTTP/SOAP/gRPC mock providers, `rest_client` HTTP request samples, JDBC, NATS/event, P1 Kafka and IBM MQ client providers, polling, JSON/schema/file, fixture injection, reporting, and dry-run readiness. |
 
 ## Invocation Interface: Runtime Commands
 
@@ -48,10 +48,10 @@ New v0.2 documentation and generated artifacts must use Provider Contract, Provi
 
 Non-runtime boundary:
 
-- Product/RP orchestration wrappers, repo initialization, readiness checks, test generation, and expected-result drafting are outside the v0.2.7 framework runtime public interface.
+- Product/RP orchestration wrappers, repo initialization, readiness checks, test generation, and expected-result drafting are outside the v0.3 framework runtime public interface.
 - Product/RP tooling may generate suite-mode artifacts, then invoke the canonical runtime commands above.
 - Any remaining compatibility command in implementation code is not a release gate and must not appear in usage-kit release verification.
-- `regress report --format json` is a v0.2.7 public report contract for suite-mode result JSON. It must validate result/evidence guardrails before returning success.
+- `regress report --format json` is a v0.3 public report contract for suite-mode result JSON. It must validate result/evidence guardrails before returning success.
 
 ## Stable Exit Codes
 
@@ -101,6 +101,12 @@ regress report --result <generated_result_json> [--format text|yaml|json]
 ```
 
 Evidence validation and report read standard result JSON and evidence indexes only. They fail with exit code `1` when required evidence is missing, raw secret masking failed, result schema validation failed, the result JSON path is missing, the result JSON is invalid, declared `test_count` and `test_results[]` are inconsistent, or coverage is not review-ready.
+
+### v0.3 Suite Result and Summary Contract
+
+Every execution-started v0.3 leaf or aggregation suite writes a complete `result.json` and a referenced `suite_summary.json`. One parent execution owns one `batch_id`; every child keeps that batch ID, receives a unique `run_id`, and writes beneath the parent run root. A leaf summary reports `self_summary`; an aggregation summary sets `self_summary` to zero and totals only immediate-child `total_summary` snapshots.
+
+Canonical aggregation output also includes a merged evidence index, suite-path-prefixed test/evidence identities, `completion_status`, and nullable `termination_reason`. `regress report --result <result.json>` is canonical and validates result, summary, evidence, masking, identity, and count consistency. Unversioned suite summaries are accepted only through the v0.3.x compatibility reader.
 
 ## Invocation Output Keys
 
@@ -212,6 +218,22 @@ These suite group artifacts summarize framework provider capability tests only. 
 
 ## Non-Runtime Support Boundary
 
-Product Repo and Phase 2 Agent Skill workflows may initialize folders, perform owner-readiness checks, draft tests, or draft expected results outside the framework runtime. Those workflows are not current-stage framework runtime gates and are not v0.2.7 release-verification commands.
+Product Repo and Phase 2 Agent Skill workflows may initialize folders, perform owner-readiness checks, draft tests, or draft expected results outside the framework runtime. Those workflows are not current-stage framework runtime gates and are not v0.3 release-verification commands.
 
 Phase 2 Product Repo translation must emit suite-mode artifacts and invoke `regress validate --suite <suite_manifest_path>`, `regress run --suite <suite_manifest_path> --profile <env_profile_id>`, `regress report --result <generated_result_json>`, and `regress validate-evidence --result <generated_result_json>`.
+
+## Typed coverage artifacts
+
+Suite `report --result` additionally writes `coverage.json` and `coverage.md` outside the canonical run tree and returns their paths. Optional `--coverage-dir <fresh-dir>`, `--coverage-catalog <json>` and `--coverage-selection <json>` control output, reviewed inventory and explicit multi-run selection. Without an explicit directory, a fresh invocation directory is created under `target/coverage`. Existing RP report/YAML and text `coverage_percent` values remain compatible; that legacy suite value is labeled `test_pass_rate_percent`, not requirement or code coverage.
+
+The [coverage contract](coverage_report.v1.schema.yaml) defines scope/revision-bound inputs and nullable metrics. Absent authoritative catalog means UNKNOWN full denominator; explicitly reviewed empty means zero denominator with null percentages. Mapped, executed and satisfied entities are distinct. Partial automation never satisfies the full AC from automated PASS alone. Newest identity-compatible evidence is selected before eligibility checks, so a newer missing/tampered/failed run cannot fall back to an older PASS. Expected-negative detection stays separate from canonical outcome.
+
+Code artifact pins may be supplied in catalog or selection (both sources together are rejected), so instrumented coverage can be measured while requirement inventory remains unknown. Only actual pinned JaCoCo LINE/BRANCH counters are measured. XML aggregates default to artifact-local scope with unknown completeness; whole-project/selected-class claims require additional pinned provenance and exclusions. Invalid evidence/report generation returns nonzero. An honestly incomplete inventory report may be published with INCOMPLETE status. Generation/publication do not change the canonical verdict.
+
+Known v0.2 results and recognized unversioned legacy suite summaries retain their default report behavior, including sibling evidence directories. They receive typed projection only when a `--coverage-*` option explicitly requests it, and that projection still enforces canonical containment. New/reviewed result markers never use this compatibility exception: DSL v0.3 or `product_test` requires the v0.3 result contract. Legacy text pass-rate values and metric/deprecation labels remain available independently of projection.
+
+A catalog domain must match the product-test domain established by the framework result contract. A framework/native-fixture run cannot establish native Swarm, module or framework-unit requirement coverage by changing a catalog label. Repository maps are compared structurally when selecting cases; JSON key order cannot retain an older PASS. Framework/module code artifacts bind specifically to `repository_revisions.framework`, with output `repository: framework`; other domains without a reviewed binding remain STALE with null counters.
+
+Risk authority was not supplied. `risk_inventory` explicitly records UNKNOWN state, null authority/revision/denominator and `risk_inventory_missing`, independently of requirement/AC inventory (including known-empty inventories). Markdown displays the same unknown risk state and gap. Missing risk authority keeps completeness INCOMPLETE. No risk denominator or risk coverage engine is inferred. Strict 4096-character catalog/selection metadata limits are separate from bounded canonical payload parsing (8 MiB result file, 1 MiB decoded string limit); supported provider payloads do not become metadata merely because they appear in result JSON.
+
+All result-only report/evidence consumers share the bounded strict JSON reader, including initial contract validation, evidence-index detection, evidence validation, the legacy probe and result-to-summary lookup. Large escaped provider output is not parsed through YAML metadata budgets. Index, summary, configuration, request and recognized legacy YAML readers retain their existing limits; malformed modern JSON cannot fall back to a legacy parse. An evidence-reference parse failure fails closed rather than becoming an absent index.

@@ -1,9 +1,12 @@
 package com.specdriven.regression.contract;
 
+import com.specdriven.regression.summary.SuiteExecutionContext;
+
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.evidence.EvidenceIndexFormatter;
-import com.specdriven.regression.provider.ibmmq.IbmMqProviderRuntime;
+import com.specdriven.regression.provider.ibmmq.IbmMqRuntimeFactory;
+import com.specdriven.regression.build.RunnerBuildVariant;
 import com.specdriven.regression.provider.kafka.KafkaProviderRuntime;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderFailure;
@@ -42,12 +45,24 @@ public class MessagingClientProviderCapabilityService {
     private final Yaml yaml = new Yaml();
 
     public MessagingClientRunResult run(Path suiteManifest, String requestedProfile, Path outputBase) {
+        return run(suiteManifest, requestedProfile, SuiteExecutionContext.standalone(requestedProfile, outputBase, "MESSAGING"));
+    }
+
+    public MessagingClientRunResult run(
+            Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
+        requireMatchingProfile(requestedProfile, executionContext);
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {
             return MessagingClientRunResult.blocked(validation.suiteId(), requestedProfile, "", validation.findings());
         }
         List<String> providerTypes = validation.providerTypesUsed();
         String providerTypeLabel = providerTypeLabel(providerTypes);
+        if (providerTypes.contains("ibm_mq") && !RunnerBuildVariant.ibmMqAvailable()) {
+            return MessagingClientRunResult.blocked(validation.suiteId(), requestedProfile, providerTypeLabel,
+                    List.of(new ContractFinding(suiteManifest.toString(), "provider_type", "unsupported_suite_runtime",
+                            "", "ibm_mq", requestedProfile == null ? "" : requestedProfile, "",
+                            RunnerBuildVariant.mqUnsupportedReason())));
+        }
         if (providerTypes.isEmpty() || providerTypes.stream().anyMatch(providerType -> !SUPPORTED_PROVIDER_TYPES.contains(providerType))) {
             return MessagingClientRunResult.blocked(validation.suiteId(), requestedProfile, "", List.of(new ContractFinding(
                     suiteManifest.toString(),
@@ -79,7 +94,7 @@ public class MessagingClientProviderCapabilityService {
             return MessagingClientRunResult.blocked(validation.suiteId(), requestedProfile, providerTypeLabel, suiteShapeFindings);
         }
 
-        List<RuntimeSelection> selections = selectRuntimes(suiteManifest, requestedProfile, outputBase, providerTypes);
+        List<RuntimeSelection> selections = selectRuntimes(suiteManifest, requestedProfile, executionContext, providerTypes);
         if (selections.isEmpty()) {
             return MessagingClientRunResult.blocked(validation.suiteId(), requestedProfile, providerTypeLabel, List.of(new ContractFinding(
                     suiteManifest.toString(),
@@ -97,7 +112,7 @@ public class MessagingClientProviderCapabilityService {
         ProviderRuntimeResolver resolver = new ProviderRuntimeResolver(
                 new ProviderRuntimeRegistry(Map.of(
                         "kafka", new KafkaProviderRuntime(),
-                        "ibm_mq", new IbmMqProviderRuntime())));
+                        "ibm_mq", IbmMqRuntimeFactory.create())));
 
         Instant startedAt = Instant.now();
         String status = "passed";
@@ -297,7 +312,7 @@ public class MessagingClientProviderCapabilityService {
     private List<RuntimeSelection> selectRuntimes(
             Path suiteManifest,
             String requestedProfile,
-            Path outputBase,
+            SuiteExecutionContext executionContext,
             List<String> expectedProviderTypes) {
         Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
         Map<String, Object> suite = readMap(suiteManifest);
@@ -305,12 +320,9 @@ public class MessagingClientProviderCapabilityService {
                 readDirectoryByField(suiteRoot.resolve("provider_instances"), "provider_id");
         Map<String, Map<String, Object>> contractsByType =
                 readDirectoryByField(frameworkProviderContractsDirectory(suiteRoot), "provider_type");
-        RunIds runIds = newRunIds(providerOutputLabel(expectedProviderTypes));
-        Path runDir = outputBase
-                .resolve(providerOutputLabel(expectedProviderTypes))
-                .resolve(safe(stringValue(suite.get("suite_id"))))
-                .resolve(runIds.batchId())
-                .resolve(runIds.runId());
+        RunIds runIds = new RunIds(executionContext.parentBatchId(),
+                executionContext.newRunId(providerOutputLabel(expectedProviderTypes)));
+        Path runDir = executionContext.childRunRoot(stringValue(suite.get("suite_id")), runIds.runId());
         List<RuntimeSelection> selections = new ArrayList<>();
         for (Object testRef : listValue(suite.get("tests"))) {
             Map<String, Object> testCase = readMap(suiteRoot.resolve(stringValue(testRef)).normalize());
@@ -416,6 +428,12 @@ public class MessagingClientProviderCapabilityService {
             }
         }
         return false;
+    }
+
+    private void requireMatchingProfile(String profile, SuiteExecutionContext context) {
+        if (!context.matchesRequestedProfile(profile)) throw new IllegalArgumentException(
+                "Execution context profile mismatch: context=" + context.profile() + ", requested=" + profile
+                        + ". Use the parent suite profile for all child runtimes.");
     }
 
     private RunIds newRunIds(String providerType) {

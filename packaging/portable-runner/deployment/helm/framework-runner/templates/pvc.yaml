@@ -1,0 +1,3 @@
+{{/* Both claims are preprovisioned and explicitly owned. No PVC creation/chown/delete.
+Output claim must retain report/log/evidence/coverage until independent receiver ACK.
+*/}}

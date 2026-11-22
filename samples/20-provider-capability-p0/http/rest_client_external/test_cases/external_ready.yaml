@@ -1,0 +1,26 @@
+dsl_version: v0.3
+test_case_id: REST-CLIENT-EXTERNAL-V03-TC-001
+title: External REST endpoint is consumed through the selected v0.3 Env_Profile
+
+execute:
+  - id: request_ready
+    target: external_api
+    op: http_request
+    with:
+      request.method: GET
+      request.path: /ready
+      request.headers.X-Regression-Trace: rest-client-external-v03
+
+verify:
+  - id: ready_status
+    type: assertion
+    assert:
+      actual: step://request_ready/response.status
+      operator: equals
+      expected: 200
+  - id: ready_body
+    type: assertion
+    assert:
+      actual: step://request_ready/response.body
+      operator: json_match
+      expected_ref: artifact://expected_results/ready_response.json

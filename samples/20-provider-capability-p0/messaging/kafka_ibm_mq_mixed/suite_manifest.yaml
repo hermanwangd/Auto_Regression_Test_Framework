@@ -1,18 +1,20 @@
-contract_version: v0.2
-suite_id: MIXED-MESSAGING-CAPABILITY-v0.2
-purpose: Framework-owned mixed Kafka and IBM MQ client provider capability verification sample.
-profile: local_messaging
-selection:
-  mode: suite
-  suite: provider-capability-mixed-messaging
-tests:
-  - kafka_test_case.yaml
-  - ibm_mq_test_case.yaml
+manifest_version: v0.3
+suite_id: KAFKA-IBM-MQ-MIXED-v0.3
+default_profile: local_v03
+
 artifact_roots:
-  provider_instances: provider_instances/
-  env_profiles: env_profiles/
-  expected_results: expected_results/
   fixtures: fixtures/
-evidence_policy:
-  evidence_classification: framework_provider_capability_only
-  downstream_release_evidence: false
+  expected_results: expected_results/
+
+targets:
+  order_events:
+    provider_contract: kafka.v0.3
+  payment_queue:
+    provider_contract: ibm_mq.v0.3
+
+env_profiles:
+  local_v03:
+    ref: env_profiles/local_v03.yaml
+
+tests:
+  - ref: test_cases/mixed_messaging_success.yaml

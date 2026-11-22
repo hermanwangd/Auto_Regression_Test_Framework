@@ -1,0 +1,47 @@
+dsl_version: v0.3
+test_case_id: GRPC-MOCK-V03-TC-001
+title: gRPC mock receives unary customer request through gRPC client stimulus
+
+setup:
+  - id: load_get_customer_stub
+    target: customer_grpc_mock
+    op: load_grpc_stub
+    with:
+      grpc.service: com.example.customer.CustomerService
+      grpc.method: GetCustomer
+      grpc.request_json: artifact://fixtures/get_customer_request.json
+      grpc.response_ref: artifact://fixtures/get_customer_response.json
+      mock.reset_before_load: true
+
+execute:
+  - id: get_customer
+    target: customer_grpc_client
+    op: unary_call
+    with:
+      grpc.service: com.example.customer.CustomerService
+      grpc.method: GetCustomer
+      grpc.message: artifact://fixtures/get_customer_request.json
+      grpc.descriptor_ref: artifact://proto/customer.desc.b64
+      grpc.timeout: PT10S
+
+verify:
+  - id: get_customer_grpc_status
+    type: assertion
+    assert:
+      actual: step://get_customer/response.status
+      operator: equals
+      expected: OK
+  - id: get_customer_grpc_request_count
+    type: provider_check
+    target: customer_grpc_mock
+    op: grpc_request_received
+    with:
+      grpc.service: com.example.customer.CustomerService
+      grpc.method: GetCustomer
+      grpc.expected_count: 1
+
+cleanup:
+  - id: reset_customer_grpc_mock
+    target: customer_grpc_mock
+    op: reset_mock
+    with: {}

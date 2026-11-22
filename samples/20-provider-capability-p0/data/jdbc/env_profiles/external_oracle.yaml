@@ -1,0 +1,12 @@
+profile_id: external_oracle
+execution_mode: external
+isolation: shared
+evidence_classification: project_environment_evidence
+
+targets:
+  order_db:
+    runtime_mode: native
+    bindings:
+      dialect: oracle
+      connection.secret_ref: env://JDBC_CONNECTION
+      strict_params: true

@@ -14,7 +14,7 @@ import java.util.Map;
 
 final class ProviderCapabilityResultWriter {
 
-    static final String FRAMEWORK_VERSION = "0.2.7";
+    static final String FRAMEWORK_VERSION = "0.3.2";
 
     private ProviderCapabilityResultWriter() {
     }
@@ -50,6 +50,8 @@ final class ProviderCapabilityResultWriter {
         }
         Map<String, Object> provider = providerResults.get(0);
         Map<String, Object> rootFields = new LinkedHashMap<>();
+        putIfPresent(rootFields, "target", provider.get("target"));
+        putIfPresent(rootFields, "provider_contract", provider.get("provider_contract"));
         putIfPresent(rootFields, "provider_type", provider.get("provider_type"));
         putIfPresent(rootFields, "provider_id", provider.get("provider_id"));
         putIfPresent(rootFields, "runtime_mode", provider.get("runtime_mode"));
@@ -84,6 +86,8 @@ final class ProviderCapabilityResultWriter {
 
     private static Map<String, Object> providerSummaryEntry(Map<String, Object> provider) {
         Map<String, Object> summary = new LinkedHashMap<>();
+        putIfPresent(summary, "target", provider.get("target"));
+        putIfPresent(summary, "provider_contract", provider.get("provider_contract"));
         putIfPresent(summary, "provider_id", provider.get("provider_id"));
         putIfPresent(summary, "provider_type", provider.get("provider_type"));
         putIfPresent(summary, "runtime_mode", provider.get("runtime_mode"));
@@ -133,6 +137,7 @@ final class ProviderCapabilityResultWriter {
         return containsEvidenceSegment(normalized, "provider-evidence/")
                 || containsEvidenceSegment(normalized, "query-evidence/")
                 || containsEvidenceSegment(normalized, "event-evidence/")
+                || containsEvidenceSegment(normalized, "polling/")
                 || containsEvidenceSegment(normalized, "fixture/")
                 || containsEvidenceSegment(normalized, "actual/")
                 || hasProviderEvidenceIdPrefix(normalized);
@@ -154,6 +159,7 @@ final class ProviderCapabilityResultWriter {
                         "nats-event",
                         "kafka-event",
                         "ibm-mq-event",
+                        "polling-observation",
                         "http-request-response",
                         "grpc-request-response")
                 .stream()

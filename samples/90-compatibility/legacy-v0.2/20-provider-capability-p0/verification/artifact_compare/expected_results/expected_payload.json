@@ -1,0 +1,15 @@
+{
+  "id": "CMP-001",
+  "status": "OK",
+  "items": [
+    {
+      "name": "alpha",
+      "value": 1
+    },
+    {
+      "name": "beta",
+      "value": 2
+    }
+  ],
+  "generatedAt": "ignored"
+}

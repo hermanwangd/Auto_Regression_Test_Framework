@@ -1,0 +1,145 @@
+{
+  "schema_version": "1.0",
+  "queue": "SWARM-CLI-01-hardening-r2",
+  "suite": "hardening-controls",
+  "frozen_before_execution": true,
+  "native_claim": "harness regression controls only; not package, Native, or SIT PASS",
+  "existing_116_denominator_changed": false,
+  "source": {
+    "component": "scripts/run_suite.py",
+    "derived_from_sha256": "b743263154e302ef5bb7f2ec3b293af722858d18bb8306c1b68069f07624142b"
+  },
+  "cases": [
+    {
+      "case_id": "HRN-001",
+      "category": "harness-control",
+      "test_name": "test_hrn_001_old_pass_report_is_ignored_when_startup_fails",
+      "fixed_input": {
+        "preexisting": "valid old junit.xml PASS",
+        "subprocess": "OSError"
+      },
+      "expected": {
+        "runner_exit": 3,
+        "status": "harness_error",
+        "case_status": "NOT RUN",
+        "passed": 0,
+        "old_report_unchanged": true
+      },
+      "junit_identity": {
+        "classname": "tests.hardening.test_runner_fail_closed",
+        "name": "test_hrn_001_old_pass_report_is_ignored_when_startup_fails",
+        "file": "tests/hardening/test_runner_fail_closed.py"
+      }
+    },
+    {
+      "case_id": "HRN-002",
+      "category": "harness-control",
+      "test_name": "test_hrn_002_timeout_fails_closed",
+      "fixed_input": {
+        "subprocess": "TimeoutExpired",
+        "partial_stdout": "partial",
+        "partial_stderr": "late"
+      },
+      "expected": {
+        "runner_exit": 3,
+        "status": "harness_error",
+        "case_status": "NOT RUN",
+        "passed": 0
+      },
+      "junit_identity": {
+        "classname": "tests.hardening.test_runner_fail_closed",
+        "name": "test_hrn_002_timeout_fails_closed",
+        "file": "tests/hardening/test_runner_fail_closed.py"
+      }
+    },
+    {
+      "case_id": "HRN-003",
+      "category": "harness-control",
+      "test_name": "test_hrn_003_zero_exit_without_report_fails_closed",
+      "fixed_input": {
+        "subprocess_exit": 0,
+        "report": "missing"
+      },
+      "expected": {
+        "runner_exit": 3,
+        "status": "harness_error",
+        "case_status": "NOT RUN",
+        "passed": 0
+      },
+      "junit_identity": {
+        "classname": "tests.hardening.test_runner_fail_closed",
+        "name": "test_hrn_003_zero_exit_without_report_fails_closed",
+        "file": "tests/hardening/test_runner_fail_closed.py"
+      }
+    },
+    {
+      "case_id": "HRN-004",
+      "category": "harness-control",
+      "test_name": "test_hrn_004_invalid_report_fails_closed",
+      "fixed_input": {
+        "subprocess_exit": 0,
+        "report": "invalid XML"
+      },
+      "expected": {
+        "runner_exit": 3,
+        "status": "harness_error",
+        "case_status": "NOT RUN",
+        "passed": 0
+      },
+      "junit_identity": {
+        "classname": "tests.hardening.test_runner_fail_closed",
+        "name": "test_hrn_004_invalid_report_fails_closed",
+        "file": "tests/hardening/test_runner_fail_closed.py"
+      }
+    },
+    {
+      "case_id": "HRN-005",
+      "category": "harness-control",
+      "test_name": "test_hrn_005_preexisting_unique_report_is_rejected_before_launch",
+      "fixed_input": {
+        "preexisting": "valid PASS at forced unique run path",
+        "subprocess": "must not launch"
+      },
+      "expected": {
+        "runner_exit": 3,
+        "status": "harness_error",
+        "case_status": "NOT RUN",
+        "passed": 0,
+        "subprocess_launched": false
+      },
+      "junit_identity": {
+        "classname": "tests.hardening.test_runner_fail_closed",
+        "name": "test_hrn_005_preexisting_unique_report_is_rejected_before_launch",
+        "file": "tests/hardening/test_runner_fail_closed.py"
+      }
+    },
+    {
+      "case_id": "HRN-006",
+      "category": "harness-control",
+      "test_name": "test_hrn_006_current_valid_report_is_used_normally",
+      "fixed_input": {
+        "subprocess": "real pytest",
+        "report": "new unique valid JUnit"
+      },
+      "expected": {
+        "runner_exit": 0,
+        "status": "accepted",
+        "case_status": "passed",
+        "passed": 1,
+        "not_run": 0
+      },
+      "junit_identity": {
+        "classname": "tests.hardening.test_runner_fail_closed",
+        "name": "test_hrn_006_current_valid_report_is_used_normally",
+        "file": "tests/hardening/test_runner_fail_closed.py"
+      }
+    }
+  ],
+  "execution": {
+    "test_path": "tests/hardening/test_runner_fail_closed.py",
+    "node_selection": null,
+    "frozen_source_sha256": {
+      "tests/hardening/test_runner_fail_closed.py": "51218ba649191fb8f2a527db618379bc402d3ee50c8011a31d173069919f19a0"
+    }
+  }
+}

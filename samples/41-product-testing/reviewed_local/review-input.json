@@ -1,0 +1,73 @@
+{
+  "contract_version": "product-test-reviewed-handoff.v1",
+  "suite_id": "PRODUCT-REVIEWED-LOCAL-v0.3",
+  "profile": "local_v03",
+  "knowledge_mode": "not_used",
+  "review_ref": "synthetic://review/local-001",
+  "reviewed_by": "synthetic-demo-reviewer",
+  "reviewed_at": "2026-11-01T00:00:00Z",
+  "valid_until": "2099-01-01T00:00:00Z",
+  "framework_baseline": "0.3.2",
+  "repository_revisions": {
+    "synthetic-product": "1111111111111111111111111111111111111111"
+  },
+  "swarm_source": {
+    "base_revision": "fe80374f740ed3c604836431daca5c32e92cf844",
+    "files": {
+      "Dev204Cli.java": "ff0669763d5070e834ffba893a2ebe681a20e868c85fc0b9b595256e468069b8",
+      "CogneeSearchClient.java": "506f163a5294f68881996d38f06de47ae6aa7ee2321954f77535db5c0cfc4878",
+      "SwarmKnowledgeGateway.java": "d2fb8408676d4de60d0f38528756558c0f669c61168b107ed1ea46aee23018d0"
+    }
+  },
+  "reviewed_files": [
+    {
+      "path": "suite_manifest.yaml",
+      "role": "manifest"
+    },
+    {
+      "path": "env_profiles/local_v03.yaml",
+      "role": "profile"
+    },
+    {
+      "path": "test_cases/golden_success.yaml",
+      "role": "test"
+    },
+    {
+      "path": "fixtures/setup_fixture.yaml",
+      "role": "fixture"
+    },
+    {
+      "path": "fixtures/input.json",
+      "role": "fixture"
+    },
+    {
+      "path": "fixtures/cleanup_fixture.yaml",
+      "role": "fixture"
+    },
+    {
+      "path": "expected_results/expected_output.json",
+      "role": "oracle"
+    }
+  ],
+  "reviewed_contracts": [
+    {
+      "provider_contract": "sample_fake_provider.v0.3",
+      "path": "contracts/sample_fake_provider_v0_3.yaml"
+    }
+  ],
+  "requirement_mapping": [
+    {
+      "requirement_ref": "synthetic://requirement/status-ok",
+      "test_case_ids": [
+        "PRODUCT-LOCAL-TC-001"
+      ],
+      "oracle_refs": [
+        "expected_results/expected_output.json",
+        "test_cases/golden_success.yaml#status_is_ok"
+      ],
+      "review_ref": "synthetic://review/local-001"
+    }
+  ],
+  "workspace_ref": "synthetic-workspace",
+  "project_ref": "synthetic-consumer"
+}

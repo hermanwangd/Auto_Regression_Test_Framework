@@ -1,5 +1,8 @@
 provider_contract_version: v0.2
 provider_type: soap_mock
+provider_role: mock_server
+protocol: soap
+runtime_implementation: wiremock
 runtime_modes: [mock]
 binding_keys:
   endpoint_url:
