@@ -3,6 +3,21 @@
               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
               xsi:schemaLocation="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.4.xsd
                                   https://dependency-check.github.io/DependencyCheck/dependency-suppression.1.4.xsd">
+    <suppress until="2027-02-23Z">
+        <notes><![CDATA[
+        Owner: Framework maintainer. The HTTP/SOAP/gRPC mock provider uses WireMock's
+        Apache5 adapter. Its five class files belong to WireMock; Apache HttpClient
+        is a separate scanned JAR (5.6.4). Dependency-Check incorrectly assigns the
+        adapter the Apache HttpClient 4.0.0.44 CPE. Both CVEs concern Apache's library.
+        Verify or remove on the next WireMock upgrade or by 2027-02-23.
+        https://repo.maven.apache.org/maven2/org/wiremock/wiremock-httpclient-apache5/4.0.0-beta.44/wiremock-httpclient-apache5-4.0.0-beta.44.pom
+        https://nvd.nist.gov/vuln/detail/CVE-2014-3577
+        https://nvd.nist.gov/vuln/detail/CVE-2020-13956
+        ]]></notes>
+        <sha1>3b01cb2992ab1ab6660e2a2430f912f0c8ca4a87</sha1>
+        <cve>CVE-2014-3577</cve>
+        <cve>CVE-2020-13956</cve>
+    </suppress>
     <suppress until="2026-10-01Z">
         <notes><![CDATA[
         Dependency-Check maps WireMock gRPC extension artifacts 1.0.0-beta.5 to the old WireMock

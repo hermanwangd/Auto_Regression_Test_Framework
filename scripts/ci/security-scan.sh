@@ -118,6 +118,9 @@ def is_accepted_finding(dependency, vulnerability):
 
 findings = []
 accepted_findings = []
+unscored_findings = []
+# Qualitative bands are used only when the source supplies no numeric CVSS.
+severity_floors = {"LOW": 0.1, "MEDIUM": 4.0, "HIGH": 7.0, "CRITICAL": 9.0}
 for dependency in report.get("dependencies", []):
     file_name = dependency.get("fileName") or dependency.get("filePath") or "unknown-dependency"
     for vulnerability in dependency.get("vulnerabilities", []) or []:
@@ -128,7 +131,15 @@ for dependency in report.get("dependencies", []):
                 scores.append(float(value["baseScore"]))
         if isinstance(vulnerability.get("cvssScore"), (int, float)):
             scores.append(float(vulnerability["cvssScore"]))
-        score = max(scores) if scores else 0.0
+        if not scores:
+            severity = str(vulnerability.get("severity") or "UNKNOWN").upper()
+            floor = severity_floors.get(severity)
+            unscored_findings.append((
+                file_name, vulnerability.get("name") or "unknown-vulnerability",
+                severity, floor is not None and floor >= threshold,
+            ))
+            continue
+        score = max(scores)
         if score >= threshold:
             if is_accepted_finding(dependency, vulnerability):
                 accepted_findings.append({
@@ -165,7 +176,14 @@ for item in findings[:10]:
 if len(findings) > 10:
     print(f"- ... {len(findings) - 10} more vulnerabilities above threshold")
 
-sys.exit(1 if findings else 0)
+unscored_blocking = sum(blocks for _, _, _, blocks in unscored_findings)
+print(f"unscored_vulnerability_count: {len(unscored_findings)}")
+print(f"unscored_blocking_vulnerability_count: {unscored_blocking}")
+for dependency, name, severity, blocks in sorted(unscored_findings):
+    disposition = "blocking" if blocks else "reported"
+    print(f"- {disposition}: {dependency} | {name} | severity={severity} | cvss=unscored")
+
+sys.exit(1 if findings or unscored_blocking else 0)
 PY
 }
 
