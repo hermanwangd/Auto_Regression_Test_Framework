@@ -1,0 +1,8 @@
+apiVersion: v2
+name: framework-runner
+description: External SIT bundle producer and local evidence collector; full transport unimplemented
+type: application
+version: 0.1.0
+appVersion: "UNBOUND"
+kubeVersion: ">=1.29.0-0 <1.33.0-0"
+# No dependencies: this chart does not install the SUT.

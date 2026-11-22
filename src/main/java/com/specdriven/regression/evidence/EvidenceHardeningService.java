@@ -2,6 +2,7 @@ package com.specdriven.regression.evidence;
 
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ResultContractValidator;
+import com.specdriven.regression.contract.ResultDocumentReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,6 +20,9 @@ import org.yaml.snakeyaml.Yaml;
 public class EvidenceHardeningService {
 
     private static final Set<String> APPROVED_EVIDENCE_TYPES = Set.of(
+            "sit_readiness",
+            "reviewed_handoff",
+            "product_test_policy",
             "execution_log",
             "batch_summary",
             "fixture_setup",
@@ -32,6 +36,7 @@ public class EvidenceHardeningService {
             "kafka_event",
             "ibm_mq_event",
             "http_request_response",
+            "cli_process",
             "grpc_request_response",
             "assertion_diff",
             "polling_observation");
@@ -47,6 +52,7 @@ public class EvidenceHardeningService {
             "kafka_event",
             "ibm_mq_event",
             "http_request_response",
+            "cli_process",
             "grpc_request_response");
     private static final List<String> ENTRY_REQUIRED_FIELDS = List.of(
             "evidence_id",
@@ -63,12 +69,12 @@ public class EvidenceHardeningService {
             "linked_result_field");
     private static final Pattern JSON_SECRET_FIELD = Pattern.compile(
             "(?i)\"(?:password|token|secret|credential|api_key|authorization)\"\\s*:\\s*\""
-                    + "(?!\\*\\*\\*MASKED\\*\\*\\*|masked|secret://|vault://|generated://|\\$\\{)[^\"]{4,}\"");
+                    + "(?!\\*\\*\\*MASKED\\*\\*\\*|\\[MASKED\\](?=\")|masked|secret://|vault://|generated://|\\$\\{)[^\"]{4,}\"");
     private static final Pattern TEXT_SECRET_FIELD = Pattern.compile(
             "(?i)(?:password|token|secret|credential|api_key)\\b\\s*(?:=|:(?!//))\\s*"
-                    + "(?!\\*\\*\\*MASKED\\*\\*\\*|masked|secret://|vault://|generated://|\\$\\{|true|false|null)[^\\s,}\\]]{4,}");
+                    + "(?!\\*\\*\\*MASKED\\*\\*\\*|\\[MASKED\\](?=$|[\\s,}\\]\"'])|masked|secret://|vault://|generated://|\\$\\{|true|false|null)[^\\s,}\\]]{4,}");
     private static final Pattern AUTHORIZATION_HEADER = Pattern.compile(
-            "(?i)authorization\\s*[:=]\\s*(?!\\*\\*\\*MASKED\\*\\*\\*|masked|\\$\\{|secret://|vault://)[^\\s,}\\]]{6,}");
+            "(?i)authorization\\s*[:=]\\s*(?!\\*\\*\\*MASKED\\*\\*\\*|\\[MASKED\\](?=$|[\\s,}\\]\"'])|masked|\\$\\{|secret://|vault://)[^\\s,}\\]]{6,}");
     private static final Pattern JDBC_URL = Pattern.compile("(?i)\\bjdbc:[a-z0-9_+.-]+:[^\\s\"']+");
     private static final Pattern MONGO_URI = Pattern.compile("(?i)mongodb(?:\\+srv)?://[^\\s\"']+");
     private static final Pattern NATS_CREDENTIAL = Pattern.compile("(?i)nats://[^\\s/@:]+:[^\\s/@]+@[^\\s\"']+");
@@ -89,8 +95,9 @@ public class EvidenceHardeningService {
         String resultText;
         Map<String, Object> result;
         try {
-            resultText = Files.readString(resultJson);
-            result = mapValue(yaml.load(resultText));
+            var document = ResultDocumentReader.read(resultJson);
+            resultText = document.text();
+            result = document.fields();
         } catch (IOException | RuntimeException e) {
             findings.add(finding(resultJson, "result", "invalid_result_json",
                     "Fix malformed result JSON before validating evidence."));
@@ -119,7 +126,315 @@ public class EvidenceHardeningService {
         validatePollingEvidence(resultJson, result, findings);
         validateCleanupEvidence(resultJson, result, evidenceEntries, findings);
         validateEvidenceFiles(indexPath, evidenceEntries, findings);
+        validateReviewedEvidence(resultJson, result, index, evidenceEntries, findings);
         return result(resultJson, result, indexPath, evidenceEntries, findings);
+    }
+
+    /** Narrow semantic validation of this framework's reviewed local evidence, also for direct CLI callers. */
+    private void validateReviewedEvidence(Path resultJson, Map<String,Object> result, Map<String,Object> index,
+            List<EvidenceEntry> entries, List<ContractFinding> findings) {
+        boolean reviewed = result.containsKey("product_test") || entries.stream().anyMatch(entry ->
+                Set.of("reviewed_handoff", "product_test_policy").contains(entry.evidenceType())
+                        || entry.filePath().startsWith("product-test/"));
+        if (!reviewed) return;
+        try {
+            Path root = resultJson.toAbsolutePath().normalize().getParent().toRealPath();
+            EvidenceEntry handoffEntry = uniqueReviewedEntry(entries, "product-test/reviewed-handoff.json", "reviewed_handoff");
+            EvidenceEntry policyEntry = uniqueReviewedEntry(entries, "product-test/policy.json", "product_test_policy");
+            Map<String,Object> binding = mapValue(result.get("product_test"));
+            List<String> boundFields = List.of("contract_version", "handoff_sha256", "knowledge_mode", "test_level", "test_type", "environment_stage", "workspace_ref", "project_ref",
+                    "repository_revisions", "provider_modes", "dependency_modes");
+            requireReviewed(binding.keySet().containsAll(boundFields) && binding.containsKey("provenance_sha256"), "missing canonical reviewed binding");
+            byte[] bytes = reviewedBytes(root.resolve(handoffEntry.filePath()), root);
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper(com.fasterxml.jackson.core.JsonFactory.builder()
+                    .enable(com.fasterxml.jackson.core.StreamReadFeature.STRICT_DUPLICATE_DETECTION).build())
+                    .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+            Map<String,Object> handoff = mapper.readValue(bytes, new com.fasterxml.jackson.core.type.TypeReference<>() {});
+            Map<String,Object> policy = mapper.readValue(reviewedBytes(root.resolve(policyEntry.filePath()), root),
+                    new com.fasterxml.jackson.core.type.TypeReference<>() {});
+            String actualSha = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+            requireReviewed(actualSha.equals(binding.get("provenance_sha256")), "provenance bytes differ from canonical result binding");
+            for (String field : boundFields) requireReviewed(binding.get(field) != null
+                    && binding.get(field).equals(handoff.get(field)), "reviewed binding mismatch: " + field);
+            boolean reviewedV2="product-test-reviewed-handoff.v2".equals(handoff.get("contract_version"));
+            requireReviewed(reviewedV2||"product-test-reviewed-handoff.v1".equals(handoff.get("contract_version")),"unsupported reviewed evidence version");
+            requireReviewed(stringValue(handoff.get("handoff_sha256")).matches("[a-f0-9]{64}"), "invalid handoff digest");
+            for (String field : List.of("suite_id", "profile", "batch_id", "run_id", "plan_digest")) {
+                requireReviewed(!stringValue(result.get(field)).isBlank() && result.get(field).equals(handoff.get(field)), "result identity mismatch: " + field);
+                if (!"plan_digest".equals(field)) requireReviewed(result.get(field).equals(index.get(field)), "index identity mismatch: " + field);
+            }
+            for (String field : List.of("suite_id", "profile", "batch_id", "run_id"))
+                requireReviewed(result.get(field).equals(policy.get(field)), "policy identity mismatch: " + field);
+            for (EvidenceEntry entry : List.of(handoffEntry,policyEntry)) {
+                requireReviewed(result.get("run_id").equals(entry.runId()) && result.get("batch_id").equals(entry.batchId()), "entry identity mismatch");
+                requireReviewed(evidenceRefs(result).contains(entry.filePath()), "reviewed evidence must remain linked from result");
+            }
+            Map<String,Object> labels = mapValue(result.get("labels"));
+            requireReviewed("framework_verification_only".equals(labels.get("evidence_classification"))
+                    && Boolean.FALSE.equals(labels.get("downstream_release_evidence"))
+                    && "framework_verification_only".equals(handoff.get("evidence_classification"))
+                    && Boolean.FALSE.equals(handoff.get("downstream_release_evidence")), "reviewed fake evidence cannot become release evidence");
+            boolean passed = "passed".equals(result.get("status"));
+            String testLevel = stringValue(handoff.get("test_level"));
+            boolean nativeExecution = "integration".equals(testLevel);
+            requireReviewed(Set.of("component", "integration").contains(testLevel)
+                    && "regression".equals(handoff.get("test_type")) && "local".equals(handoff.get("environment_stage")),
+                    "unsupported reviewed capability tuple");
+            boolean nativeRequiredV2=reviewedV2&&nativeExecution&&"required".equals(handoff.get("knowledge_mode"));
+            requireReviewed(!reviewedV2||nativeRequiredV2,"v2 requires native required knowledge");
+            if (nativeExecution) requireReviewed(("not_used".equals(handoff.get("knowledge_mode"))||nativeRequiredV2)
+                    && mapValue(handoff.get("provider_modes")).size() == 1 && mapValue(handoff.get("dependency_modes")).isEmpty(),
+                    "native capability must remain one selected operation without dependencies");
+            for (String field : List.of("provider_modes", "dependency_modes")) {
+                requireReviewed(handoff.get(field) instanceof Map<?,?> && handoff.get("observed_" + field) instanceof Map<?,?>,
+                        "required mode maps are missing");
+                Map<String,Object> declared = mapValue(handoff.get(field));
+                Map<String,Object> observed = mapValue(handoff.get("observed_" + field));
+                requireReviewed(!"provider_modes".equals(field) || !declared.isEmpty(), "provider mode coverage is empty");
+                requireReviewed(declared.size() <= 32 && declared.values().stream().allMatch(mode ->
+                        "provider_modes".equals(field) ? (nativeExecution ? "real" : "simulated").equals(mode)
+                                : Set.of("real", "simulated").contains(mode)), "unsupported declared modes");
+                requireReviewed(declared.keySet().containsAll(observed.keySet()) && observed.entrySet().stream()
+                        .allMatch(entry -> entry.getValue().equals(declared.get(entry.getKey()))), "observed modes differ from declaration");
+                requireReviewed(!passed || observed.equals(declared), "successful result lacks complete observed modes");
+            }
+            Map<String,Object> observedProviders = mapValue(handoff.get("observed_provider_modes"));
+            for (String field : List.of("provider_results", "step_results")) {
+                for (Map<String,Object> invoked : mapList(result.get(field))) {
+                    String target = stringValue(invoked.get("target"));
+                    requireReviewed(!target.isBlank() && observedProviders.containsKey(target),
+                            "invoked provider lacks an observed mode: " + target);
+                }
+            }
+            com.specdriven.regression.producttest.ReviewedNativeCapability nativeCapability = null;
+            if (nativeExecution) {
+                var contracts = mapList(handoff.get("reviewed_contracts"));
+                requireReviewed(contracts.size() == 1, "native capability requires one reviewed contract");
+                nativeCapability = com.specdriven.regression.producttest.ReviewedNativeCapability.fromContract(
+                        stringValue(contracts.get(0).get("provider_contract")));
+            }
+            for (Map<String,Object> provider : mapList(result.get("provider_results")))
+                requireReviewed((nativeExecution ? nativeCapability.providerType() : "sample_fake_provider").equals(provider.get("provider_type"))
+                        && (nativeExecution ? nativeCapability.contract() : "sample_fake_provider.v0.3").equals(provider.get("provider_contract"))
+                        && (nativeExecution ? "native" : "stub").equals(provider.get("runtime_mode")), "provider metadata differs from reviewed capability");
+            if (nativeExecution) {
+                var steps = mapList(result.get("step_results"));
+                requireReviewed(steps.size() <= 1 && mapList(result.get("provider_results")).size() <= 1
+                        && (!passed || steps.size() == 1 && mapList(result.get("provider_results")).size() == 1),
+                        "native evidence must describe one selected operation");
+                for (var step : steps) requireReviewed("execute".equals(step.get("phase"))
+                        && nativeCapability.operation().equals(step.get("operation")), "native evidence contains unsupported operation");
+                for (var provider : mapList(result.get("provider_results"))) {
+                    requireReviewed(nativeCapability.operation().equals(provider.get("operation"))
+                            && List.of(nativeCapability.operation()).equals(provider.get("operations")),
+                            "native provider operation differs from selected contract");
+                    var operations = mapList(provider.get("resolved_operation_results"));
+                    requireReviewed(operations.size() <= 1 && (!passed || operations.size() == 1),
+                            "native resolved operation count differs from selected capability");
+                    for (var operation : operations) requireReviewed(nativeCapability.operation().equals(operation.get("operation")),
+                            "native resolved operation differs from selected contract");
+                }
+                if ("kafka.v0.3".equals(nativeCapability.contract()))
+                    validateReviewedKafkaProof(root,result,handoff,entries);
+                if ("grpc_descriptor_admission.v0.3".equals(nativeCapability.contract()))
+                    validateReviewedDescriptorProof(root,result,handoff,entries);
+                if ("grpc_client.v0.3".equals(nativeCapability.contract()))
+                    validateReviewedGrpcProof(root, result, handoff, entries, passed);
+                if ("jdbc.v0.3".equals(nativeCapability.contract()))
+                    validateReviewedJdbcProof(root,result,handoff,entries,passed);
+            }
+            Map<String,Object> observedDependencies = mapValue(handoff.get("observed_dependency_modes"));
+            boolean readinessPresent = entries.stream().anyMatch(entry -> "sit_readiness".equals(entry.evidenceType())
+                    || "readiness/sit-readiness.json".equals(entry.filePath()));
+            boolean readinessRequired = !mapValue(handoff.get("dependency_modes")).isEmpty()
+                    && "passed".equals(policy.get("status"));
+            requireReviewed(!readinessRequired || readinessPresent, "reviewed dependencies lack readiness evidence");
+            if (readinessPresent) {
+                EvidenceEntry readinessEntry = uniqueReviewedEntry(entries, "readiness/sit-readiness.json", "sit_readiness");
+                Map<String,Object> readiness = mapper.readValue(reviewedBytes(root.resolve(readinessEntry.filePath()), root),
+                        new com.fasterxml.jackson.core.type.TypeReference<>() {});
+                requireReviewed("sit-readiness.v1".equals(readiness.get("contract_version"))
+                        && readiness.get("checks") instanceof List<?>, "invalid readiness evidence");
+                requireReviewed(((List<?>)readiness.get("checks")).stream().allMatch(check -> check instanceof Map<?,?>),
+                        "readiness checks must be objects");
+                for (String field : List.of("suite_id", "profile", "batch_id", "run_id", "plan_digest"))
+                    requireReviewed(result.get(field).equals(readiness.get(field)), "readiness identity mismatch: " + field);
+                requireReviewed(result.get("run_id").equals(readinessEntry.runId())
+                        && result.get("batch_id").equals(readinessEntry.batchId())
+                        && evidenceRefs(result).contains(readinessEntry.filePath()), "readiness entry is not bound to the result");
+                Map<String,Object> resolvedDependencies = new LinkedHashMap<>();
+                Set<String> checkIds = new LinkedHashSet<>();
+                for (Map<String,Object> check : mapList(readiness.get("checks"))) {
+                    String id = stringValue(check.get("id"));
+                    requireReviewed(!id.isBlank() && checkIds.add(id), "ambiguous readiness check identity");
+                    if (!stringValue(check.get("adapter_version")).isBlank()) {
+                        requireReviewed(check.get("simulated") instanceof Boolean, "readiness adapter mode is missing");
+                        resolvedDependencies.put(id, Boolean.TRUE.equals(check.get("simulated")) ? "simulated" : "real");
+                    }
+                }
+                requireReviewed(checkIds.equals(mapValue(handoff.get("dependency_modes")).keySet()),
+                        "readiness evidence omits declared checks");
+                requireReviewed(observedDependencies.equals(resolvedDependencies),
+                        "resolved or attempted readiness adapters lack matching observed modes");
+            } else requireReviewed(observedDependencies.isEmpty(), "dependency modes lack readiness evidence");
+            String knowledge = stringValue(handoff.get("knowledge_mode"));
+            requireReviewed(Set.of("required", "not_used").contains(knowledge), "unknown knowledge mode");
+            if(nativeRequiredV2)com.specdriven.regression.producttest.KnowledgeSelectionProof.validateProvenance(handoff,result);
+            else if ("required".equals(knowledge)) {
+                for (String field : List.of("selection_receipt_raw_sha256", "selection_receipt_sha256", "source_snapshot_sha256",
+                        "candidate_search_sha256", "query_sha256"))
+                    requireReviewed(stringValue(handoff.get(field)).matches("[a-f0-9]{64}"), "required knowledge digest is missing");
+                requireReviewed(!mapList(handoff.get("knowledge_sources")).isEmpty()
+                        && "UNVERIFIED_BY_HTTP_CLIENT".equals(handoff.get("provider_version"))
+                        && Boolean.FALSE.equals(mapValue(handoff.get("cognee_source")).get("runtime_version_verified")), "required knowledge provenance is invalid");
+            } else requireReviewed(!handoff.containsKey("knowledge_sources") && !handoff.containsKey("selection_receipt_sha256"),
+                    "not_used cannot claim selected knowledge");
+            requireReviewed(Set.of("passed", "blocked").contains(policy.get("status"))
+                    && policy.get("status").equals(policyEntry.status()) && (!passed || "passed".equals(policy.get("status"))),
+                    "policy outcome cannot produce successful verification");
+        } catch (Exception error) {
+            findings.add(finding(resultJson, "product_test", "reviewed_evidence_invalid",
+                    "Restore matching canonical reviewed provenance, modes and local-only evidence: " + error.getMessage()));
+        }
+    }
+
+    /** Kafka-specific historical validation. No live broker, owner, clock or source-tree lookup. */
+    private void validateReviewedKafkaProof(Path root,Map<String,Object> result,Map<String,Object> handoff,List<EvidenceEntry> entries)throws IOException {
+        requireReviewed("not_used".equals(handoff.get("knowledge_mode")),"Kafka requires not_used knowledge");
+        var json=new com.fasterxml.jackson.databind.ObjectMapper();
+        var provenance=json.valueToTree(handoff);
+        var lease=com.specdriven.regression.provider.kafka.ReviewedKafkaPublishProof.frozenLease(provenance);
+        com.specdriven.regression.provider.kafka.ReviewedKafkaPublishProof.verifyInvocation(lease,json.valueToTree(result));
+        String pin=provenance.path("fixture_lease_sha256").asText();
+        var closures=mapList(handoff.get("reviewed_files")).stream().filter(f->"fixtures/lease.json".equals(f.get("path"))).toList();
+        requireReviewed(closures.size()==1&&"fixture".equals(closures.get(0).get("role"))&&pin.equals(closures.get(0).get("sha256")),"Kafka lease closure mismatch");
+        var payloads=mapList(handoff.get("reviewed_files")).stream().filter(f->"fixtures/payload.json".equals(f.get("path"))).toList();
+        requireReviewed(payloads.size()==1&&"fixture".equals(payloads.get(0).get("role"))&&lease.path("payload_sha256").asText().equals(payloads.get(0).get("sha256")),"Kafka payload closure mismatch");
+        if(mapList(result.get("provider_results")).isEmpty())return;
+        String path=com.specdriven.regression.provider.kafka.ReviewedKafkaPublishProof.PATH;
+        var entry=uniqueReviewedEntry(entries,path,"kafka_event");
+        requireReviewed(entries.stream().filter(e->path.equals(e.filePath())).count()==1&&result.get("run_id").equals(entry.runId())&&result.get("batch_id").equals(entry.batchId())&&evidenceRefs(result).contains(path),"Kafka proof index mismatch");
+        byte[] raw=reviewedBytes(root.resolve(path),root);requireReviewed(raw.length<=16384,"Kafka proof byte bound");
+        com.specdriven.regression.provider.kafka.ReviewedKafkaPublishProof.verify(com.specdriven.regression.provider.kafka.ReviewedLoopbackKafkaPolicy.parse(raw),lease,pin,json.valueToTree(result));
+    }
+
+    /** Historical JDBC identity only; live ownership and the independent operator binding belong to execution. */
+    private void validateReviewedJdbcProof(Path root,Map<String,Object> result,Map<String,Object> handoff,List<EvidenceEntry> entries,boolean passed)throws IOException {
+        var mapper=new com.fasterxml.jackson.databind.ObjectMapper(com.fasterxml.jackson.core.JsonFactory.builder()
+                .enable(com.fasterxml.jackson.core.StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+                .streamReadConstraints(com.fasterxml.jackson.core.StreamReadConstraints.builder().maxStringLength(16384).maxNestingDepth(32).build()).build())
+                .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+        var parsedLease=mapper.valueToTree(handoff.get("fixture_lease"));
+        String pin=reviewedText(handoff.get("fixture_lease_sha256"),"JDBC lease digest");requireReviewed(pin.matches("[a-f0-9]{64}"),"JDBC lease digest invalid");
+        var lease=com.specdriven.regression.provider.jdbc.ReviewedJdbcProof.boundLease(parsedLease,handoff.get("fixture_lease_raw_base64") instanceof String raw?raw:null,pin);
+        var closures=mapList(handoff.get("reviewed_files")).stream().filter(f->"fixtures/lease.json".equals(f.get("path"))).toList();
+        requireReviewed(closures.size()==1&&"fixture".equals(closures.get(0).get("role"))&&pin.equals(closures.get(0).get("sha256")),"JDBC lease closure mismatch");
+        if(mapList(result.get("provider_results")).isEmpty())return;
+        String path=com.specdriven.regression.provider.jdbc.ReviewedJdbcProof.PATH;
+        var entry=uniqueReviewedEntry(entries,path,"jdbc_query");
+        requireReviewed(entries.stream().filter(e->path.equals(e.filePath())).count()==1&&result.get("run_id").equals(entry.runId())&&result.get("batch_id").equals(entry.batchId())&&evidenceRefs(result).contains(path),"JDBC proof is not uniquely bound to canonical run");
+        requireReviewed(Files.size(root.resolve(path))<=65536,"JDBC proof exceeds64KiB");byte[] bytes=reviewedBytes(root.resolve(path),root);requireReviewed(bytes.length<=65536,"JDBC proof exceeds64KiB");
+        var proof=mapper.readTree(bytes);
+        var operations=mapList(mapList(result.get("provider_results")).get(0).get("resolved_operation_results"));
+        requireReviewed(operations.size()==1&&"db_query".equals(operations.get(0).get("operation")),"JDBC proof requires its single canonical resolved operation");
+        Object payload=operations.isEmpty()?null:mapValue(operations.get(0).get("outputs")).get("result");
+        var provider=mapList(result.get("provider_results")).get(0);
+        com.specdriven.regression.provider.jdbc.ReviewedJdbcProof.validate(lease,pin,proof,passed,payload instanceof String str?str:null,stringValue(provider.get("provider_id")),stringValue(provider.get("operation")),java.time.Instant.parse(stringValue(result.get("start_time"))),java.time.Instant.parse(stringValue(result.get("end_time"))));
+    }
+
+    /** Historical joins only: the owner may be reaped and the invocation lease expired. */
+    private void validateReviewedDescriptorProof(Path root, Map<String,Object> result, Map<String,Object> handoff,
+            List<EvidenceEntry> entries) throws IOException {
+        String path=com.specdriven.regression.provider.grpc.ReviewedGrpcDescriptorProof.PATH;
+        EvidenceEntry entry=uniqueReviewedEntry(entries,path,"grpc_request_response");
+        requireReviewed(entries.stream().filter(e->path.equals(e.filePath())).count()==1
+                &&result.get("run_id").equals(entry.runId())&&result.get("batch_id").equals(entry.batchId())
+                &&evidenceRefs(result).contains(path),"descriptor proof must have one indexed run binding");
+        var mapper=new com.fasterxml.jackson.databind.ObjectMapper(com.fasterxml.jackson.core.JsonFactory.builder()
+                .enable(com.fasterxml.jackson.core.StreamReadFeature.STRICT_DUPLICATE_DETECTION).build())
+                .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+        byte[] bytes=reviewedBytes(root.resolve(path),root);requireReviewed(bytes.length<=16384,"descriptor proof exceeds bound");
+        com.specdriven.regression.provider.grpc.ReviewedGrpcDescriptorProof.validate(mapper.readTree(bytes),mapper.valueToTree(result),mapper.valueToTree(handoff));
+    }
+
+    private void validateReviewedGrpcProof(Path root, Map<String,Object> result, Map<String,Object> handoff,
+            List<EvidenceEntry> entries, boolean passed) throws IOException {
+        Map<String,Object> lease = mapValue(handoff.get("fixture_lease"));
+        requireReviewed("reviewed-grpc-lease.v1".equals(lease.get("version")) || com.specdriven.regression.provider.grpc.ReviewedA01CatalogProof.PROFILE.equals(lease.get("profile")) && com.specdriven.regression.provider.grpc.ReviewedA01CatalogProof.LEASE_VERSION.equals(lease.get("version")), "unsupported gRPC lease version");
+        String profile = reviewedText(lease.get("profile"), "gRPC lease profile");
+        requireReviewed(Set.of("microservices-demo.getproduct.v1", "echo.v1", "greeter.v1", "routeguide.getfeature.v1", "betterproto.getthingversions-reject.v1","betterproto.dothing-unary.v1","betterproto.domanythings-reject.v1","betterproto.getdifferentthings-reject.v1").contains(profile), "unsupported gRPC lease profile");
+        String owner = reviewedText(lease.get("owner_run_id"), "gRPC lease owner");
+        String endpoint = reviewedText(lease.get("endpoint"), "gRPC lease endpoint");
+        String leaseSha = reviewedText(handoff.get("fixture_lease_sha256"), "gRPC lease digest");
+        requireReviewed(leaseSha.matches("[a-f0-9]{64}"), "invalid gRPC lease digest");
+        var closures = mapList(handoff.get("reviewed_files")).stream()
+                .filter(file -> "fixtures/lease.json".equals(file.get("path"))).toList();
+        requireReviewed(closures.size() == 1 && "fixture".equals(closures.get(0).get("role"))
+                && leaseSha.equals(closures.get(0).get("sha256")), "missing or ambiguous gRPC lease closure");
+        // Failed preflight can stop before a provider invocation produces a proof.
+        if (mapList(result.get("provider_results")).isEmpty()) return;
+
+        String path = "provider-evidence/grpc-client/reviewed-unary.json";
+        EvidenceEntry proofEntry = uniqueReviewedEntry(entries, path, "grpc_request_response");
+        requireReviewed(entries.stream().filter(entry -> path.equals(entry.filePath())).count() == 1,
+                "ambiguous gRPC proof path");
+        requireReviewed(result.get("run_id").equals(proofEntry.runId())
+                && result.get("batch_id").equals(proofEntry.batchId()) && evidenceRefs(result).contains(path),
+                "gRPC proof is not bound to the result");
+        var proofMapper = new com.fasterxml.jackson.databind.ObjectMapper(com.fasterxml.jackson.core.JsonFactory.builder()
+                .enable(com.fasterxml.jackson.core.StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+                .streamReadConstraints(com.fasterxml.jackson.core.StreamReadConstraints.builder()
+                        .maxStringLength(1024 * 1024).maxNestingDepth(100).build()).build())
+                .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+        byte[] proofBytes=reviewedBytes(root.resolve(path), root);
+        requireReviewed(!com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.ownsProfile(profile)||proofBytes.length<=16384,"owned streaming proof exceeds bound");
+        Map<String,Object> proof = proofMapper.readValue(proofBytes,
+                new com.fasterxml.jackson.core.type.TypeReference<>() {});
+        requireReviewed(leaseSha.equals(proof.get("fixture_lease_sha256")) && owner.equals(proof.get("owner_run_id"))
+                && endpoint.equals(proof.get("endpoint")), "gRPC proof differs from frozen lease identity");
+        String expectedService=Map.of("microservices-demo.getproduct.v1","hipstershop.ProductCatalogService","echo.v1","swarm.producttest.EchoService","greeter.v1","helloworld.Greeter",
+                "routeguide.getfeature.v1","routeguide.RouteGuide","betterproto.getthingversions-reject.v1","service.Test","betterproto.dothing-unary.v1","service.Test","betterproto.domanythings-reject.v1","service.Test","betterproto.getdifferentthings-reject.v1","service.Test").get(profile);
+        String expectedMethod=Map.of("microservices-demo.getproduct.v1","GetProduct","echo.v1","Echo","greeter.v1","SayHello",
+                "routeguide.getfeature.v1","GetFeature","betterproto.getthingversions-reject.v1","GetThingVersions","betterproto.dothing-unary.v1","DoThing","betterproto.domanythings-reject.v1","DoManyThings","betterproto.getdifferentthings-reject.v1","GetDifferentThings").get(profile);
+        requireReviewed(expectedService.equals(proof.get("service")) && expectedMethod.equals(proof.get("method")),
+                "gRPC proof differs from reviewed service/method");
+        if(com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.ownsProfile(profile)) {
+            if(com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.UNARY_PROFILE.equals(profile)) com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.validateUnary(proofMapper.valueToTree(proof),proofMapper.valueToTree(result),proofMapper.valueToTree(handoff));
+            else com.specdriven.regression.provider.grpc.ReviewedGrpcStreamingRejectionProof.validate(proofMapper.valueToTree(proof),proofMapper.valueToTree(result),proofMapper.valueToTree(handoff));
+        }
+        if(com.specdriven.regression.provider.grpc.ReviewedA01CatalogProof.owns(profile)) {
+            requireReviewed(proofBytes.length<=32768,"A01 proof exceeds bound");
+            com.specdriven.regression.provider.grpc.ReviewedA01CatalogProof.validate(proofMapper.valueToTree(proof),proofMapper.valueToTree(result),proofMapper.valueToTree(handoff));
+        }
+        requireReviewed(proof.get("rpc_attempted") instanceof Boolean && proof.get("cleanup_confirmed") instanceof Boolean,
+                "gRPC proof attempt/cleanup flags must be boolean");
+        requireReviewed(!passed || Boolean.TRUE.equals(proof.get("rpc_attempted"))
+                && Boolean.TRUE.equals(proof.get("cleanup_confirmed")) && "OK".equals(proof.get("status")),
+                "passed gRPC result requires an attempted, cleaned-up OK operation");
+    }
+
+    private String reviewedText(Object value, String field) {
+        requireReviewed(value instanceof String && !((String)value).isBlank(), "missing or nontext " + field);
+        return (String)value;
+    }
+
+    private EvidenceEntry uniqueReviewedEntry(List<EvidenceEntry> entries, String path, String type) {
+        var matches = entries.stream().filter(entry -> path.equals(entry.filePath()) && type.equals(entry.evidenceType())).toList();
+        requireReviewed(matches.size() == 1, "missing or ambiguous reviewed evidence entry: " + path);
+        return matches.get(0);
+    }
+
+    private byte[] reviewedBytes(Path path, Path root) throws IOException {
+        requireReviewed(Files.isRegularFile(path, java.nio.file.LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(path)
+                && path.toRealPath().startsWith(root) && Files.size(path) <= 2 * 1024 * 1024, "unsafe or oversized reviewed evidence");
+        try (var input = Files.newInputStream(path)) {
+            byte[] bytes = input.readNBytes(2 * 1024 * 1024 + 1);
+            requireReviewed(bytes.length <= 2 * 1024 * 1024, "oversized reviewed evidence"); return bytes;
+        }
+    }
+
+    private static void requireReviewed(boolean condition, String message) {
+        if (!condition) throw new IllegalArgumentException(message);
     }
 
     public boolean hasEvidenceIndexReference(Path resultJson) {
@@ -127,10 +442,10 @@ public class EvidenceHardeningService {
             return false;
         }
         try {
-            Map<String, Object> result = mapValue(yaml.load(Files.readString(resultJson)));
+            Map<String, Object> result = ResultDocumentReader.read(resultJson).fields();
             return evidenceIndexPath(resultJson, result) != null;
         } catch (IOException | RuntimeException e) {
-            return false;
+            throw new IllegalArgumentException("Cannot inspect result evidence references", e);
         }
     }
 
@@ -232,6 +547,7 @@ public class EvidenceHardeningService {
         }
         for (EvidenceEntry entry : entries) {
             knownRefs.add(entry.evidenceId());
+            knownRefs.add("evidence://" + entry.evidenceId());
             knownRefs.add(entry.filePath());
             Path evidencePath = resolveEvidencePath(indexPath, entry.filePath());
             knownRefs.add(evidencePath.toString());
@@ -270,19 +586,18 @@ public class EvidenceHardeningService {
                     requiredTypes.add("wiremock_server_log");
                 }
                 case "jdbc", "jdbc_database" -> {
-                    requiredTypes.add("jdbc_seed");
-                    requiredTypes.add("jdbc_query");
-                    requiredTypes.add("jdbc_cleanup");
+                    requireJdbcEvidenceForExecutedOperations(providerResult, requiredTypes);
                 }
                 case "nats" -> requiredTypes.add("nats_event");
                 case "kafka" -> requiredTypes.add("kafka_event");
                 case "ibm_mq" -> requiredTypes.add("ibm_mq_event");
                 case "rest_client" -> requiredTypes.add("http_request_response");
+                case "cli_process" -> requiredTypes.add("cli_process");
                 case "grpc_mock" -> {
                     requiredTypes.add("wiremock_request_journal");
                     requiredTypes.add("wiremock_server_log");
                 }
-                case "grpc_client" -> requiredTypes.add("grpc_request_response");
+                case "grpc_client", "grpc_descriptor_admission" -> requiredTypes.add("grpc_request_response");
                 default -> {
                 }
             }
@@ -300,6 +615,41 @@ public class EvidenceHardeningService {
             if (!presentTypes.contains(requiredType)) {
                 findings.add(finding(resultJson, "evidence_index.entries", "missing_required_evidence",
                         "Add required evidence entry type `" + requiredType + "` for this result."));
+            }
+        }
+    }
+
+    private void requireJdbcEvidenceForExecutedOperations(
+            Map<String, Object> providerResult,
+            Set<String> requiredTypes) {
+        List<String> operations = new ArrayList<>();
+        for (String operation : stringList(providerResult.get("operations"))) {
+            if (operation.contains(",")) {
+                for (String item : operation.split(",")) {
+                    if (!item.isBlank()) {
+                        operations.add(item.trim());
+                    }
+                }
+            } else if (!operation.isBlank()) {
+                operations.add(operation);
+            }
+        }
+        if (operations.isEmpty()) {
+            operations.addAll(stringList(providerResult.get("operation")));
+        }
+        if (operations.isEmpty()) {
+            requiredTypes.add("jdbc_seed");
+            requiredTypes.add("jdbc_query");
+            requiredTypes.add("jdbc_cleanup");
+            return;
+        }
+        for (String operation : operations) {
+            switch (operation) {
+                case "db_seed" -> requiredTypes.add("jdbc_seed");
+                case "db_query", "db_record_exists" -> requiredTypes.add("jdbc_query");
+                case "db_cleanup" -> requiredTypes.add("jdbc_cleanup");
+                default -> {
+                }
             }
         }
     }
@@ -466,8 +816,14 @@ public class EvidenceHardeningService {
                         .filter(testResult -> "passed".equals(stringValue(testResult.get("status"))))
                         .count();
         int failCount = testResults.isEmpty()
-                ? (result.isEmpty() || "passed".equals(stringValue(result.get("status"))) ? 0 : 1)
-                : testCount - passCount;
+                ? ("failed".equals(stringValue(result.get("status"))) ? 1 : 0)
+                : countStatus(testResults, "failed");
+        int blockedCount = testResults.isEmpty()
+                ? ("blocked".equals(stringValue(result.get("status"))) ? 1 : 0)
+                : countStatus(testResults, "blocked");
+        int skippedCount = testResults.isEmpty()
+                ? ("skipped".equals(stringValue(result.get("status"))) ? 1 : 0)
+                : countStatus(testResults, "skipped");
         return new EvidenceValidationResult(
                 findings.isEmpty(),
                 stringValue(result.get("suite_id")),
@@ -476,6 +832,8 @@ public class EvidenceHardeningService {
                 testCount,
                 passCount,
                 failCount,
+                blockedCount,
+                skippedCount,
                 indexPath == null ? resultJson.getParent() : indexPath.getParent(),
                 missingEvidenceCount,
                 failedEvidenceSummary.size(),
@@ -491,6 +849,8 @@ public class EvidenceHardeningService {
                 "",
                 "",
                 "",
+                0,
+                0,
                 0,
                 0,
                 0,
@@ -684,6 +1044,12 @@ public class EvidenceHardeningService {
         return value == null ? "" : String.valueOf(value);
     }
 
+    private int countStatus(List<Map<String, Object>> testResults, String status) {
+        return (int) testResults.stream()
+                .filter(testResult -> status.equals(stringValue(testResult.get("status"))))
+                .count();
+    }
+
     private boolean boolValue(Object value) {
         if (value instanceof Boolean bool) {
             return bool;
@@ -699,6 +1065,8 @@ public class EvidenceHardeningService {
             int testCount,
             int passCount,
             int failCount,
+            int blockedCount,
+            int skippedCount,
             Path evidenceDir,
             int missingEvidenceCount,
             int failedEvidenceCount,

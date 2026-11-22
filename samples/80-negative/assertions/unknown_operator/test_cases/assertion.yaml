@@ -1,0 +1,12 @@
+dsl_version: v0.3
+test_case_id: NEG-UNKNOWN-ASSERTION-OPERATOR-TC-001
+title: Unknown assertion operator must fail closed
+execute: []
+verify:
+  - id: malformed_assertion
+    type: assertion
+    assert:
+      actual: 1
+      operator: equlas
+      expected: 1
+cleanup: []

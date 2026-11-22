@@ -18,7 +18,7 @@ class PackagedCliSmokeIT {
 
     @Test
     void packagedJarDelegatesCheckReadinessCommand() throws Exception {
-        Path jar = Path.of("target/spec-driven-auto-regression-0.2.7.jar").toAbsolutePath().normalize();
+        Path jar = Path.of("target/spec-driven-auto-regression-0.3.2.jar").toAbsolutePath().normalize();
         assertThat(Files.isRegularFile(jar)).isTrue();
 
         Process process = new ProcessBuilder(
@@ -48,7 +48,7 @@ class PackagedCliSmokeIT {
 
     @Test
     void packagedJarUsesBundledProviderContractsOutsideRepositoryCwd() throws Exception {
-        Path jar = Path.of("target/spec-driven-auto-regression-0.2.7.jar").toAbsolutePath().normalize();
+        Path jar = Path.of("target/spec-driven-auto-regression-0.3.2.jar").toAbsolutePath().normalize();
         assertThat(Files.isRegularFile(jar)).isTrue();
         Path copiedSuite = tempDir.resolve("usage-kit").resolve("nats");
         copyDirectory(Path.of("samples/20-provider-capability-p0/messaging/nats"), copiedSuite);
@@ -75,8 +75,9 @@ class PackagedCliSmokeIT {
         assertThat(process.exitValue()).as(output).isZero();
         assertThat(output)
                 .contains("validation_status: passed")
-                .contains("suite_id: NATS-CAPABILITY-v0.2")
-                .contains("nats");
+                .contains("suite_id: NATS-v0.3")
+                .contains("provider_contracts_used:")
+                .contains("nats.v0.3");
     }
 
     private String javaBinary() {

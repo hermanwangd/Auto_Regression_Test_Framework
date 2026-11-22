@@ -1,0 +1,11 @@
+contract_version: v0.2
+suite_id: POLLING-CAPABILITY-v0.2
+selection:
+  mode: suite
+  suite: polling-p0
+tests:
+  - test_case.yaml
+profiles:
+  - local_polling
+coverage_source_ref: docs/03-acceptance/polling.md
+traceability_map_ref: generated-framework/traceability_map.yaml

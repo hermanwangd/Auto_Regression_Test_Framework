@@ -1,0 +1,10 @@
+profile_id: external_native
+execution_mode: ci
+isolation: per_run
+evidence_classification: project_environment_evidence
+
+targets:
+  external_api:
+    runtime_mode: native
+    bindings:
+      base_url: env://REST_BASE_URL

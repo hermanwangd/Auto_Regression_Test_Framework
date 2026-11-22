@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "python_version": "3.12.12",
+  "require_isolated_venv": true,
+  "require_distributions_inside_venv": true,
+  "hash_lock_file": "requirements-click-hashes.txt",
+  "hash_lock_must_match_requirements": true
+}

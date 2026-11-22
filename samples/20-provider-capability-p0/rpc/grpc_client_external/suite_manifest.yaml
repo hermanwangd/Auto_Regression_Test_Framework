@@ -1,0 +1,19 @@
+manifest_version: v0.3
+suite_id: GRPC-CLIENT-EXTERNAL-v0.3
+default_profile: external_native
+
+artifact_roots:
+  fixtures: fixtures/
+  expected_results: expected_results/
+  proto: proto/
+
+targets:
+  external_customer_service:
+    provider_contract: grpc_client.v0.3
+
+env_profiles:
+  external_native:
+    ref: env_profiles/external_native.yaml
+
+tests:
+  - ref: test_cases/external_customer.yaml

@@ -1,0 +1,11 @@
+profile_id: external_native
+execution_mode: ci
+isolation: per_run
+evidence_classification: project_environment_evidence
+
+targets:
+  external_customer_service:
+    runtime_mode: native
+    bindings:
+      target: env://GRPC_TARGET
+      descriptor_ref: proto/customer.desc.b64

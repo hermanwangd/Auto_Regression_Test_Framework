@@ -1,10 +1,21 @@
 package com.specdriven.regression.contract;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.specdriven.regression.contract.v03.V03ExecutionPlan;
+import com.specdriven.regression.contract.v03.V03ExecutionPlanBuilder;
+import com.specdriven.regression.contract.v03.assertion.V03AssertionValidator;
+import com.specdriven.regression.contract.v03.ref.V03ReferenceParser;
+import com.specdriven.regression.report.LegacySuiteSummaryReportAdapter;
+import com.specdriven.regression.summary.SuiteSummaryDocument;
+import com.specdriven.regression.summary.SuiteSummaryValidator;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -21,6 +32,12 @@ import java.util.regex.Pattern;
 import org.yaml.snakeyaml.Yaml;
 
 public class ContractBaselineService {
+    private final LegacySuiteSummaryReportAdapter legacySummaryAdapter = new LegacySuiteSummaryReportAdapter();
+    private final SuiteSummaryValidator suiteSummaryValidator = new SuiteSummaryValidator();
+    private final V03AssertionValidator v03AssertionValidator = new V03AssertionValidator();
+    private final V03ReferenceParser v03ReferenceParser = new V03ReferenceParser();
+    private final ObjectMapper summaryMapper = new ObjectMapper().findAndRegisterModules()
+            .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
 
     private static final Path FRAMEWORK_PROVIDER_CONTRACTS =
             Path.of("docs/02-architecture/contracts/provider-contracts");
@@ -41,6 +58,20 @@ public class ContractBaselineService {
             "db_seed",
             "db_cleanup",
             "mock_stubs");
+    private static final Set<String> PROHIBITED_V03_TEST_FIELDS = Set.of(
+            "uses",
+            "targets",
+            "provider_id",
+            "provider_instance",
+            "data_binding",
+            "datasets",
+            "fixtures",
+            "expected_results",
+            "db_seed",
+            "db_cleanup",
+            "mock_stubs",
+            "parameters",
+            "bind_as");
     private static final Set<String> PROHIBITED_SOURCE_REF_KEYS = Set.of(
             "expected_result",
             "expected_results",
@@ -100,16 +131,62 @@ public class ContractBaselineService {
     private static final Pattern BEARER_TOKEN = Pattern.compile("(?i)\\bbearer\\s+[a-z0-9._~+/=-]{8,}");
     private static final Pattern CONNECTION_URI =
             Pattern.compile("(?i)\\b[a-z][a-z0-9+.-]*://[^\\s/@:]+:[^\\s/@]+@[^\\s\"']+");
+    private static final Pattern WINDOWS_DRIVE_PATH = Pattern.compile("^[A-Za-z]:.*$");
+    private static final int MAX_JSON_POINTER_DEPTH = 32;
+    private static final Object MISSING_JSON_POINTER_FRAGMENT = new Object();
 
     private final Yaml yaml = new Yaml();
+    private final Path verifiedContractDirectory;
+    private final com.specdriven.regression.producttest.ProductTestHandoffService.Snapshot reviewedSnapshot;
+
+    public ContractBaselineService() { this.verifiedContractDirectory = null; this.reviewedSnapshot=null; }
+
+    /** Explicit catalog entry point for reviewed input snapshots. */
+    public ContractBaselineService(Path verifiedContractDirectory) {
+        this.verifiedContractDirectory = java.util.Objects.requireNonNull(verifiedContractDirectory)
+                .toAbsolutePath().normalize();
+        this.reviewedSnapshot=null;
+    }
+
+    private ContractBaselineService(com.specdriven.regression.producttest.ProductTestHandoffService.Snapshot snapshot) {
+        this.reviewedSnapshot=java.util.Objects.requireNonNull(snapshot);
+        snapshot.verifiedSelectedEnvProfiles(snapshot.suiteManifest());
+        this.verifiedContractDirectory=snapshot.contractDirectory().toAbsolutePath().normalize();
+    }
+
+    /** Only the opaque, open, verified v2 native-required snapshot supplies alternate profile location. */
+    public static ContractBaselineService fromReviewedSnapshot(com.specdriven.regression.producttest.ProductTestHandoffService.Snapshot snapshot) {
+        return new ContractBaselineService(snapshot);
+    }
 
     public ValidationResult validateSuite(Path suiteManifest) {
         ContractGraph graph = loadGraph(suiteManifest);
         List<ContractFinding> findings = new ArrayList<>(graph.loadFindings());
         validateProhibitedSuiteFields(graph, findings);
         if (graph.loadBlocked()) {
-            return new ValidationResult(false, graph.suiteId(), List.of(), List.of(), List.of(), List.copyOf(findings));
+            return new ValidationResult(false, graph.suiteId(), List.of(), List.of(), List.of(), List.of(), List.of(), List.copyOf(findings));
         }
+        if (graph.v03()) {
+            validateV03RequiredFields(graph, findings);
+            validateV03ProhibitedFields(graph, findings);
+            validateRawSecrets(graph, findings);
+            validateV03SuiteTargets(graph, findings);
+            validateV03TargetRefsAndOperations(graph, findings);
+            validateV03ReferenceSyntax(graph, findings);
+            return validationResult(graph, findings);
+        }
+        java.util.stream.Stream.of(graph.envProfiles(), graph.executionProfiles(), graph.environmentBindings())
+                .flatMap(profiles -> profiles.entrySet().stream())
+                .filter(entry -> entry.getValue().containsKey("sit_readiness"))
+                .map(Map.Entry::getKey).distinct().forEach(path -> findings.add(finding(path,
+                        "sit_readiness", "unsupported_sit_readiness_version",
+                        "Migrate this suite to v0.3 before configuring the SIT readiness gate; legacy execution does not evaluate it.")));
+        java.util.stream.Stream.of(graph.envProfiles(), graph.executionProfiles(), graph.environmentBindings())
+                .flatMap(profiles -> profiles.entrySet().stream())
+                .filter(entry -> entry.getValue().containsKey("product_test"))
+                .map(Map.Entry::getKey).distinct().forEach(path -> findings.add(finding(path,
+                        "product_test", "unsupported_product_test_version",
+                        "Reviewed product testing requires a v0.3 leaf suite; legacy execution cannot ignore this policy.")));
         validateRequiredFields(graph, findings);
         validateProhibitedFields(graph, findings);
         validateDataBindingCategories(graph, findings);
@@ -133,6 +210,10 @@ public class ContractBaselineService {
         return new DryRunResult(validation.valid(), validation, validation.valid() ? validation.plan() : List.of());
     }
 
+    public V03ExecutionPlan buildV03ExecutionPlan(Path suiteManifest, String profile) {
+        return new V03ExecutionPlanBuilder(this).build(suiteManifest, profile);
+    }
+
     public ReportResult report(Path resultJson) {
         if (!Files.isRegularFile(resultJson)) {
             return new ReportResult(false, false, "", "", "", "", "", "", 0, 0, false, List.of(), List.of(
@@ -148,8 +229,7 @@ public class ContractBaselineService {
         }
         Map<String, Object> result;
         try {
-            Object loaded = yaml.load(Files.readString(resultJson));
-            result = mapValue(loaded);
+            result = ResultDocumentReader.read(resultJson).fields();
         } catch (IOException | RuntimeException e) {
             return new ReportResult(false, false, "", "", "", "", "", "", 0, 0, false, List.of(), List.of(
                     new ContractFinding(
@@ -174,9 +254,27 @@ public class ContractBaselineService {
                             "",
                             "Use a JSON object as the standard result.")));
         }
+        boolean legacySummary = legacySummaryAdapter.supports(result);
+        if (legacySummary) {
+            try {
+                result = legacySummaryAdapter.adapt(result);
+            } catch (IllegalArgumentException error) {
+                return new ReportResult(false, true, "", "", "", "", "", "", 0, 0, false, List.of(), List.of(
+                        new ContractFinding(
+                                resultJson.toString(), "result", "invalid_legacy_suite_summary", "", "", "", "",
+                                "Repair the legacy summary or report from a canonical v0.3 result.json.")));
+            }
+        }
         List<ContractFinding> findings = new ArrayList<>();
         for (String field : RESULT_REQUIRED_FIELDS) {
-            if (isMissingResultField(result.get(field))) {
+            if ("failure".equals(field)
+                    && !"v0.3".equals(stringValue(result.get("result_contract_version")))) {
+                continue;
+            }
+            boolean missing = "failure".equals(field)
+                    ? !result.containsKey(field)
+                    : isMissingResultField(result.get(field));
+            if (missing) {
                 findings.add(new ContractFinding(
                         resultJson.toString(),
                         field,
@@ -225,6 +323,9 @@ public class ContractBaselineService {
             }
         }
         findings.addAll(ResultContractValidator.validate(resultJson, result));
+        if (!legacySummary && "v0.3".equals(stringValue(result.get("result_contract_version")))) {
+            findings.addAll(validateSuiteSummaryForReport(resultJson, result));
+        }
         detectRawSecrets(resultJson.toString(), result, findings);
         List<Map<String, Object>> providerResults = mapList(result.get("provider_results"));
         List<String> failedVerifySummary = mapList(result.get("verify_results")).stream()
@@ -266,8 +367,47 @@ public class ContractBaselineService {
                 List.copyOf(findings));
     }
 
+    private List<ContractFinding> validateSuiteSummaryForReport(Path resultJson, Map<String, Object> result) {
+        String ref = stringValue(result.get("suite_summary_ref"));
+        if (ref.isBlank()) return List.of();
+        try {
+            Path summaryPath = resultJson.toRealPath().getParent().resolve(ref).normalize().toRealPath();
+            SuiteSummaryDocument summary = summaryMapper.readValue(summaryPath.toFile(), SuiteSummaryDocument.class);
+            List<ContractFinding> findings = new ArrayList<>(suiteSummaryValidator.validate(summary, summaryPath.getParent()));
+            for (String field : List.of("suite_id", "batch_id", "run_id")) {
+                String resultValue = stringValue(result.get(field));
+                String summaryValue = switch (field) {
+                    case "suite_id" -> summary.suiteId();
+                    case "batch_id" -> summary.batchId();
+                    default -> summary.runId();
+                };
+                if (!resultValue.equals(summaryValue)) {
+                    findings.add(new ContractFinding(
+                            summaryPath.toString(), field, "result_summary_identity_mismatch", "", "",
+                            stringValue(result.get("profile")), "",
+                            "Regenerate result.json and suite_summary.json from the same suite run."));
+                }
+            }
+            if (!stringValue(result.get("status")).equals(summary.status())) {
+                findings.add(new ContractFinding(
+                        summaryPath.toString(), "status", "result_summary_status_mismatch", "", "",
+                        stringValue(result.get("profile")), "",
+                        "Regenerate result.json and suite_summary.json from the same final status."));
+            }
+            return List.copyOf(findings);
+        } catch (IOException | RuntimeException error) {
+            return List.of(new ContractFinding(
+                    resultJson.toString(), "suite_summary_ref", "invalid_suite_summary", "", "",
+                    stringValue(result.get("profile")), "",
+                    "Restore a schema-valid contained suite summary and rerun report."));
+        }
+    }
+
     private boolean looksLikeFileRef(String ref) {
         if (ref == null || ref.isBlank()) {
+            return false;
+        }
+        if (ref.startsWith("evidence://")) {
             return false;
         }
         return ref.contains("/") || ref.endsWith(".yaml") || ref.endsWith(".yml") || ref.endsWith(".json")
@@ -289,9 +429,14 @@ public class ContractBaselineService {
         }
         for (Map.Entry<Path, Map<String, Object>> entry : graph.providerContractsByPath().entrySet()) {
             Map<String, Object> contract = entry.getValue();
-            for (String field : List.of(
-                    "provider_contract_version", "provider_type", "runtime_modes", "binding_keys",
-                    "operations", "evidence", "failure_mapping")) {
+            List<String> requiredContractFields = "v0.3".equals(contractVersion(contract))
+                    ? List.of(
+                            "contract_version", "provider_contract", "provider_type", "runtime_modes",
+                            "binding_keys", "operations", "evidence", "failure_mapping")
+                    : List.of(
+                            "provider_contract_version", "provider_type", "runtime_modes", "binding_keys",
+                            "operations", "evidence", "failure_mapping");
+            for (String field : requiredContractFields) {
                 require(entry.getKey(), contract, field, findings);
             }
         }
@@ -320,6 +465,34 @@ public class ContractBaselineService {
             Map<String, Object> binding = entry.getValue();
             for (String field : List.of("environment_id", "profile", "provider_bindings")) {
                 require(entry.getKey(), binding, field, findings);
+            }
+        }
+    }
+
+    private void validateV03RequiredFields(ContractGraph graph, List<ContractFinding> findings) {
+        require(graph.suitePath(), graph.suite(), "manifest_version", findings);
+        require(graph.suitePath(), graph.suite(), "suite_id", findings);
+        require(graph.suitePath(), graph.suite(), "targets", findings);
+        require(graph.suitePath(), graph.suite(), "env_profiles", findings);
+        require(graph.suitePath(), graph.suite(), "tests", findings);
+        if (graph.usedProfiles().isEmpty()) {
+            findings.add(finding(graph.suitePath(), "default_profile", "missing_selected_profile",
+                    "Select a profile through `default_profile`, `profile`, or CLI --profile before execution."));
+        }
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.testCases().entrySet()) {
+            Map<String, Object> testCase = entry.getValue();
+            for (String field : List.of("dsl_version", "test_case_id", "title", "execute", "verify")) {
+                require(entry.getKey(), testCase, field, findings);
+            }
+            if (testCase.containsKey("status") && !"active".equals(testCase.get("status"))) {
+                findings.add(finding(entry.getKey(), "status", "lifecycle_not_execution_eligible",
+                        "Submit the case for owner review before promoting it to active."));
+            }
+        }
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.envProfiles().entrySet()) {
+            Map<String, Object> profile = entry.getValue();
+            for (String field : List.of("profile_id", "execution_mode", "targets")) {
+                require(entry.getKey(), profile, field, findings);
             }
         }
     }
@@ -375,6 +548,679 @@ public class ContractBaselineService {
         }
     }
 
+    private void validateV03ProhibitedFields(ContractGraph graph, List<ContractFinding> findings) {
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.testCases().entrySet()) {
+            validateV03ProhibitedKeys(entry.getKey(), "", entry.getValue(), findings);
+            for (String field : GOVERNANCE_FIELDS) {
+                if (entry.getValue().containsKey(field)) {
+                    findings.add(finding(entry.getKey(), field, "prohibited_governance_field",
+                            "Remove governance field `" + field + "` from framework runtime DSL."));
+                }
+            }
+        }
+    }
+
+    private void validateV03ProhibitedKeys(
+            Path testCasePath,
+            String fieldPath,
+            Object value,
+            List<ContractFinding> findings) {
+        if (value instanceof Map<?, ?> map) {
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String key = stringValue(entry.getKey());
+                String childPath = fieldPath.isBlank() ? key : fieldPath + "." + key;
+                if (PROHIBITED_V03_TEST_FIELDS.contains(key)) {
+                    findings.add(finding(testCasePath, childPath, "prohibited_legacy_field",
+                            "Remove `" + key + "` from DSL v0.3; use suite manifest targets, Env_Profile targets, `with`, and typed refs."));
+                }
+                validateV03ProhibitedKeys(testCasePath, childPath, entry.getValue(), findings);
+            }
+            return;
+        }
+        if (value instanceof List<?> list) {
+            for (int i = 0; i < list.size(); i++) {
+                validateV03ProhibitedKeys(testCasePath, fieldPath + "[" + i + "]", list.get(i), findings);
+            }
+        }
+    }
+
+    private void validateV03SuiteTargets(ContractGraph graph, List<ContractFinding> findings) {
+        Map<String, Object> suiteTargets = mapValue(graph.suite().get("targets"));
+        for (Map.Entry<String, Object> targetEntry : suiteTargets.entrySet()) {
+            Map<String, Object> target = mapValue(targetEntry.getValue());
+            String providerContract = stringValue(target.get("provider_contract"));
+            if (providerContract.isBlank()) {
+                findings.add(finding(graph.suitePath(), "targets." + targetEntry.getKey() + ".provider_contract",
+                        "missing_required_field",
+                        "Declare provider_contract for suite target `" + targetEntry.getKey() + "`."));
+                continue;
+            }
+            if (providerContract(graph, providerContract).isEmpty()) {
+                findings.add(new ContractFinding(
+                        graph.suitePath().toString(),
+                        "targets." + targetEntry.getKey() + ".provider_contract",
+                        "missing_provider_contract",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "Use a Provider Contract from the framework catalog or --contract-root. Missing `" + providerContract + "`."));
+                continue;
+            }
+            Map<String, Object> contract = providerContract(graph, providerContract);
+            if (!isExplicitV03ProviderContract(providerContract, contract)) {
+                findings.add(new ContractFinding(
+                        graph.suitePath().toString(),
+                        "targets." + targetEntry.getKey() + ".provider_contract",
+                        "invalid_provider_contract_version",
+                        "",
+                        stringValue(contract.get("provider_type")),
+                        selectedProfile(graph, target),
+                        "",
+                        "Use an explicit DSL v0.3 Provider Contract id. Synthetic provider_type aliases are not valid v0.3 contracts."));
+            }
+        }
+    }
+
+    private void validateV03TargetRefsAndOperations(ContractGraph graph, List<ContractFinding> findings) {
+        Map<String, Object> suiteTargets = mapValue(graph.suite().get("targets"));
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.testCases().entrySet()) {
+            Map<String, Object> testCase = entry.getValue();
+            validateV03StepShape(entry.getKey(), testCase, findings);
+            Set<String> priorSteps = new LinkedHashSet<>();
+            for (V03OperationRef operationRef : v03OperationRefs(testCase)) {
+                if ("assertion".equals(operationRef.kind())) {
+                    validateV03AssertionRefs(entry.getKey(), operationRef, priorSteps, findings);
+                    rememberV03PriorStep(priorSteps, operationRef);
+                    continue;
+                }
+                String targetName = operationRef.target();
+                if (targetName.isBlank() || !suiteTargets.containsKey(targetName)) {
+                    findings.add(new ContractFinding(
+                            entry.getKey().toString(),
+                            operationRef.fieldPath() + ".target",
+                            "invalid_target_ref",
+                            "",
+                            "",
+                            "",
+                            operationRef.operation(),
+                            "Use a target declared in suite_manifest.targets. Unknown target `" + targetName + "`."));
+                    rememberV03PriorStep(priorSteps, operationRef);
+                    continue;
+                }
+                TargetResolution targetResolution = resolveV03Target(graph, targetName);
+                if (!targetResolution.resolved()) {
+                    findings.add(new ContractFinding(
+                            entry.getKey().toString(),
+                            operationRef.fieldPath() + ".target",
+                            "missing_provider_contract",
+                            "",
+                            "",
+                            selectedProfile(graph, Map.of()),
+                            operationRef.operation(),
+                            "Fix suite target `" + targetName + "` provider_contract before validating operations."));
+                    rememberV03PriorStep(priorSteps, operationRef);
+                    continue;
+                }
+                validateV03EnvProfileTarget(graph, entry.getKey(), operationRef, targetName, targetResolution, findings);
+                Map<String, Object> operation = targetResolution.operation(operationRef.operation());
+                if (operation.isEmpty()) {
+                    findings.add(new ContractFinding(
+                            entry.getKey().toString(),
+                            operationRef.fieldPath() + ".op",
+                            "unsupported_operation",
+                            "",
+                            targetResolution.providerType(),
+                            targetResolution.profile(),
+                            operationRef.operation(),
+                            "Use an operation declared by Provider Contract `" + targetResolution.providerType() + "`."));
+                    rememberV03PriorStep(priorSteps, operationRef);
+                    continue;
+                }
+                validateV03Inputs(graph, entry.getKey(), operationRef, targetResolution, operation, findings);
+                rememberV03PriorStep(priorSteps, operationRef);
+            }
+        }
+    }
+
+    private void validateV03ReferenceSyntax(ContractGraph graph, List<ContractFinding> findings) {
+        for (Map.Entry<Path, Map<String, Object>> entry : graph.testCases().entrySet()) {
+            validateV03ReferenceSyntax(entry.getKey(), "", entry.getValue(), findings);
+        }
+    }
+
+    private void validateV03ReferenceSyntax(
+            Path path, String fieldPath, Object value, List<ContractFinding> findings) {
+        if (value instanceof Map<?, ?> map) {
+            boolean providerContractBindingDefinition = fieldPath.contains("binding_keys.")
+                    && map.containsKey("required") && map.containsKey("source");
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String key = stringValue(entry.getKey());
+                validateV03ReferenceSyntax(path, fieldPath.isBlank() ? key : fieldPath + "." + key,
+                        entry.getValue(), findings);
+            }
+            return;
+        }
+        if (value instanceof List<?> list) {
+            for (int index = 0; index < list.size(); index++) {
+                validateV03ReferenceSyntax(path, fieldPath + "[" + index + "]", list.get(index), findings);
+            }
+            return;
+        }
+        String reference = stringValue(value);
+        if (!(reference.startsWith("artifact://")
+                || reference.startsWith("step://")
+                || reference.startsWith("generated://")
+                || reference.startsWith("env://"))) {
+            return;
+        }
+        try {
+            v03ReferenceParser.parse(reference);
+        } catch (IllegalArgumentException error) {
+            String code = error.getMessage().split(":", 2)[0];
+            findings.add(finding(path, fieldPath, code,
+                    "Use the frozen DSL v0.3 typed-reference syntax."));
+            return;
+        }
+        if (reference.startsWith("generated://") || reference.startsWith("env://")) {
+            findings.add(finding(path, fieldPath, "invalid_reference_scope",
+                    "Use generated:// and env:// values only in Env_Profile bindings, not in DSL test cases."));
+        }
+    }
+
+    private void validateV03StepShape(Path testCasePath, Map<String, Object> testCase, List<ContractFinding> findings) {
+        Set<String> seenIds = new LinkedHashSet<>();
+        validateV03StepIds(testCasePath, "setup", listValue(testCase.get("setup")), seenIds, findings);
+        validateV03StepIds(testCasePath, "execute", listValue(testCase.get("execute")), seenIds, findings);
+        int verifyIndex = 0;
+        for (Object value : listValue(testCase.get("verify"))) {
+            Map<String, Object> verify = mapValue(value);
+            String id = stringValue(verify.get("id"));
+            String fieldPath = id.isBlank() ? "verify[" + verifyIndex + "]" : "verify." + id;
+            validateV03StepId(testCasePath, fieldPath, id, seenIds, findings);
+            for (V03AssertionValidator.Issue issue : v03AssertionValidator.validate(verify)) {
+                findings.add(finding(
+                        testCasePath,
+                        fieldPath + issue.fieldSuffix(),
+                        issue.code(),
+                        issue.remediation()));
+            }
+            verifyIndex++;
+        }
+        validateV03StepIds(testCasePath, "cleanup", listValue(testCase.get("cleanup")), seenIds, findings);
+    }
+
+    private void validateV03StepIds(
+            Path testCasePath,
+            String phase,
+            List<Object> steps,
+            Set<String> seenIds,
+            List<ContractFinding> findings) {
+        int index = 0;
+        for (Object value : steps) {
+            Map<String, Object> step = mapValue(value);
+            String id = stringValue(step.get("id"));
+            String fieldPath = id.isBlank() ? phase + "[" + index + "]" : phase + "." + id;
+            validateV03StepId(testCasePath, fieldPath, id, seenIds, findings);
+            index++;
+        }
+    }
+
+    private void validateV03StepId(
+            Path testCasePath,
+            String fieldPath,
+            String id,
+            Set<String> seenIds,
+            List<ContractFinding> findings) {
+        if (id.isBlank()) {
+            return;
+        }
+        if (!seenIds.add(id)) {
+            findings.add(finding(testCasePath, fieldPath + ".id", "duplicate_step_id",
+                    "Use unique step ids within one DSL v0.3 test case."));
+        }
+    }
+
+    private void rememberV03PriorStep(Set<String> priorSteps, V03OperationRef operationRef) {
+        if (!operationRef.id().isBlank()) {
+            priorSteps.add(operationRef.id());
+        }
+    }
+
+    private void validateV03EnvProfileTarget(
+            ContractGraph graph,
+            Path testCasePath,
+            V03OperationRef operationRef,
+            String targetName,
+            TargetResolution targetResolution,
+            List<ContractFinding> findings) {
+        for (String profile : graph.usedProfiles()) {
+            EnvironmentBindingDoc bindingDoc = graph.environmentBindingsByProfile().get(profile);
+            if (bindingDoc == null) {
+                findings.add(new ContractFinding(
+                        testCasePath.toString(),
+                        "env_profiles." + profile,
+                        "missing_env_profile",
+                        "",
+                        targetResolution.providerType(),
+                        profile,
+                        operationRef.operation(),
+                        "Add Env_Profile for profile `" + profile + "`."));
+                continue;
+            }
+            Map<String, Object> envTarget = mapValue(mapValue(bindingDoc.document().get("targets")).get(targetName));
+            if (envTarget.isEmpty()) {
+                findings.add(new ContractFinding(
+                        bindingDoc.path().toString(),
+                        "targets." + targetName,
+                        "missing_env_profile_provider_binding",
+                        "",
+                        targetResolution.providerType(),
+                        profile,
+                        operationRef.operation(),
+                        "Add Env_Profile target binding for suite target `" + targetName + "`."));
+                continue;
+            }
+            String runtimeMode = stringValue(envTarget.get("runtime_mode"));
+            validateRuntimeModeAllowed(bindingDoc.path(), "targets." + targetName + ".runtime_mode",
+                    "", targetResolution.providerType(), profile, runtimeMode,
+                    stringList(targetResolution.contract().get("runtime_modes")), "Provider Contract", findings);
+            Map<String, Object> bindingValues = mapValue(envTarget.get("bindings"));
+            Map<String, Object> contractBindingKeys = mapValue(targetResolution.contract().get("binding_keys"));
+            for (String bindingKey : bindingValues.keySet()) {
+                if (!contractBindingKeys.containsKey(bindingKey)) {
+                    findings.add(new ContractFinding(
+                            bindingDoc.path().toString(),
+                            "targets." + targetName + ".bindings." + bindingKey,
+                            "unknown_binding_key",
+                            "",
+                            targetResolution.providerType(),
+                            profile,
+                            operationRef.operation(),
+                            "Use a binding key declared by Provider Contract `" + targetResolution.providerType()
+                                    + "`. Unknown key `" + bindingKey + "`."));
+                }
+            }
+            for (String requiredKey : requiredBindingKeys(targetResolution.contract())) {
+                if (isMissing(valueAtPath(bindingValues, requiredKey))) {
+                    findings.add(new ContractFinding(
+                            bindingDoc.path().toString(),
+                            "targets." + targetName + ".bindings." + requiredKey,
+                            "missing_required_binding_key",
+                            "",
+                            targetResolution.providerType(),
+                            profile,
+                            operationRef.operation(),
+                            "Supply binding key `" + requiredKey + "` for target `" + targetName + "`."));
+                }
+            }
+        }
+    }
+
+    private void validateV03Inputs(
+            ContractGraph graph,
+            Path testCasePath,
+            V03OperationRef operationRef,
+            TargetResolution targetResolution,
+            Map<String, Object> operation,
+            List<ContractFinding> findings) {
+        List<String> allowedInputs = v03InputNames(operation);
+        for (String inputName : operationRef.inputs().keySet()) {
+            if (!allowedBindAs(allowedInputs, inputName)) {
+                findings.add(new ContractFinding(
+                        testCasePath.toString(),
+                        operationRef.fieldPath() + ".with." + inputName,
+                        "unsupported_input",
+                        "",
+                        targetResolution.providerType(),
+                        targetResolution.profile(),
+                        operationRef.operation(),
+                        "Use an input name allowed by Provider Contract `" + targetResolution.providerType()
+                                + "` for operation `" + operationRef.operation() + "`. input: " + inputName));
+                continue;
+            }
+            validateV03ArtifactRef(graph, testCasePath, operationRef, inputName, operationRef.inputs().get(inputName),
+                    targetResolution, findings);
+        }
+        for (String requiredInput : v03RequiredInputNames(operation)) {
+            if (!providedInput(new ArrayList<>(operationRef.inputs().keySet()), requiredInput)) {
+                findings.add(new ContractFinding(
+                        testCasePath.toString(),
+                        operationRef.fieldPath() + ".with",
+                        "missing_required_input",
+                        "",
+                        targetResolution.providerType(),
+                        targetResolution.profile(),
+                        operationRef.operation(),
+                        "Add required input `" + requiredInput + "` for operation `"
+                                + operationRef.operation() + "`."));
+            }
+        }
+    }
+
+    private void validateV03ArtifactRef(
+            ContractGraph graph,
+            Path testCasePath,
+            V03OperationRef operationRef,
+            String inputName,
+            Object value,
+            TargetResolution targetResolution,
+            List<ContractFinding> findings) {
+        String ref = stringValue(value);
+        if (!ref.startsWith("artifact://")) {
+            return;
+        }
+        String refBody = ref.substring("artifact://".length());
+        String[] refParts = refBody.split("#", 2);
+        String filePart = refParts[0];
+        if (refParts.length == 2 && !validJsonPointer(refParts[1])) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "invalid_json_pointer",
+                    "Use RFC 6901 JSON pointer syntax after `#`, for example `#/status`.");
+            return;
+        }
+        int separator = filePart.indexOf('/');
+        if (separator < 1) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "invalid_artifact_ref",
+                    "Use artifact refs as `artifact://<root>/<path>`.");
+            return;
+        }
+        String rootName = filePart.substring(0, separator);
+        String relativePath = filePart.substring(separator + 1);
+        if (invalidV03ArtifactPath(relativePath)) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "invalid_artifact_ref",
+                    "Use a relative artifact path under the declared artifact root; absolute, home, encoded traversal, and `..` paths are blocked.");
+            return;
+        }
+        String rootDir = stringValue(mapValue(graph.suite().get("artifact_roots")).get(rootName));
+        if (rootDir.isBlank()) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "unknown_artifact_root",
+                    "Declare artifact root `" + rootName + "` in suite_manifest.artifact_roots.");
+            return;
+        }
+        Path suiteRoot = graph.suitePath().toAbsolutePath().normalize().getParent();
+        Path root = suiteRoot.resolve(rootDir).normalize();
+        if (!root.startsWith(suiteRoot)) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "ref_outside_suite_root",
+                    "Keep artifact refs under the declared suite artifact root.");
+            return;
+        }
+        Path resolved;
+        try {
+            resolved = root.resolve(Path.of(relativePath)).normalize();
+        } catch (InvalidPathException e) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "invalid_artifact_ref",
+                    "Use a valid relative artifact path under the declared artifact root.");
+            return;
+        }
+        if (!resolved.startsWith(root)) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "ref_outside_suite_root",
+                    "Keep artifact refs under the declared suite artifact root.");
+            return;
+        }
+        if (!Files.exists(resolved, LinkOption.NOFOLLOW_LINKS)) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "unresolved_artifact_ref",
+                    "Restore runtime-critical artifact ref `" + ref + "`.");
+            return;
+        }
+        try {
+            Path realSuiteRoot = suiteRoot.toRealPath();
+            Path realRoot = root.toRealPath();
+            Path realResolved = resolved.toRealPath();
+            if (!realRoot.startsWith(realSuiteRoot) || !realResolved.startsWith(realRoot)) {
+                addV03ArtifactFinding(
+                        testCasePath,
+                        operationRef,
+                        inputName,
+                        findings,
+                        targetResolution,
+                        "ref_outside_suite_root",
+                        "Keep artifact refs under the declared suite artifact root; symlinks must not escape it.");
+                return;
+            }
+            if (!Files.isRegularFile(realResolved)) {
+                addV03ArtifactFinding(
+                        testCasePath,
+                        operationRef,
+                        inputName,
+                        findings,
+                        targetResolution,
+                        "unresolved_artifact_ref",
+                        "Restore runtime-critical artifact ref `" + ref + "`.");
+                return;
+            }
+            if (refParts.length == 2 && !jsonPointerFragmentExists(realResolved, refParts[1])) {
+                addV03ArtifactFinding(
+                        testCasePath,
+                        operationRef,
+                        inputName,
+                        findings,
+                        targetResolution,
+                        "missing_json_pointer_fragment",
+                        "Use a JSON Pointer fragment that exists in artifact ref `" + ref + "`.");
+            }
+        } catch (IOException e) {
+            addV03ArtifactFinding(
+                    testCasePath,
+                    operationRef,
+                    inputName,
+                    findings,
+                    targetResolution,
+                    "unresolved_artifact_ref",
+                    "Restore runtime-critical artifact ref `" + ref + "`.");
+        }
+    }
+
+    private void addV03ArtifactFinding(
+            Path testCasePath,
+            V03OperationRef operationRef,
+            String inputName,
+            List<ContractFinding> findings,
+            TargetResolution targetResolution,
+            String reason,
+            String ownerAction) {
+        findings.add(new ContractFinding(
+                testCasePath.toString(),
+                operationRef.fieldPath() + ".with." + inputName,
+                reason,
+                "",
+                targetResolution.providerType(),
+                targetResolution.profile(),
+                operationRef.operation(),
+                ownerAction));
+    }
+
+    private boolean validJsonPointer(String pointer) {
+        if (pointer.isEmpty()) {
+            return true;
+        }
+        if (!pointer.startsWith("/")) {
+            return false;
+        }
+        int depth = pointer.split("/", -1).length - 1;
+        if (depth > MAX_JSON_POINTER_DEPTH) {
+            return false;
+        }
+        for (int i = 0; i < pointer.length(); i++) {
+            if (pointer.charAt(i) == '~') {
+                if (i + 1 >= pointer.length()) {
+                    return false;
+                }
+                char escaped = pointer.charAt(i + 1);
+                if (escaped != '0' && escaped != '1') {
+                    return false;
+                }
+                i++;
+            }
+        }
+        return true;
+    }
+
+    private boolean jsonPointerFragmentExists(Path artifact, String pointer) {
+        if (pointer.isEmpty()) {
+            return true;
+        }
+        try {
+            Object loaded = yaml.load(Files.readString(artifact));
+            return resolveJsonPointerFragment(loaded, pointer) != MISSING_JSON_POINTER_FRAGMENT;
+        } catch (IOException | RuntimeException e) {
+            return false;
+        }
+    }
+
+    private Object resolveJsonPointerFragment(Object value, String pointer) {
+        Object current = value;
+        String[] segments = pointer.substring(1).split("/", -1);
+        for (String rawSegment : segments) {
+            String segment = rawSegment.replace("~1", "/").replace("~0", "~");
+            if (current instanceof Map<?, ?> map) {
+                if (!map.containsKey(segment)) {
+                    return MISSING_JSON_POINTER_FRAGMENT;
+                }
+                current = map.get(segment);
+            } else if (current instanceof List<?> list) {
+                if (!isArrayIndex(segment)) {
+                    return MISSING_JSON_POINTER_FRAGMENT;
+                }
+                try {
+                    int index = Integer.parseInt(segment);
+                    if (index < 0 || index >= list.size()) {
+                        return MISSING_JSON_POINTER_FRAGMENT;
+                    }
+                    current = list.get(index);
+                } catch (NumberFormatException e) {
+                    return MISSING_JSON_POINTER_FRAGMENT;
+                }
+            } else {
+                return MISSING_JSON_POINTER_FRAGMENT;
+            }
+        }
+        return current;
+    }
+
+    private boolean isArrayIndex(String value) {
+        if (value.isBlank()) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            if (!Character.isDigit(value.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean invalidV03ArtifactPath(String relativePath) {
+        if (relativePath.isBlank()
+                || relativePath.startsWith("~")
+                || relativePath.contains("\\")
+                || WINDOWS_DRIVE_PATH.matcher(relativePath).matches()
+                || containsEncodedPathControl(relativePath)) {
+            return true;
+        }
+        try {
+            Path path = Path.of(relativePath);
+            if (path.isAbsolute()) {
+                return true;
+            }
+            for (Path segment : path) {
+                if ("..".equals(segment.toString())) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (InvalidPathException e) {
+            return true;
+        }
+    }
+
+    private boolean containsEncodedPathControl(String path) {
+        String lower = path.toLowerCase(Locale.ROOT);
+        return lower.contains("%2e") || lower.contains("%2f") || lower.contains("%5c");
+    }
+
+    private void validateV03AssertionRefs(
+            Path testCasePath,
+            V03OperationRef operationRef,
+            Set<String> priorSteps,
+            List<ContractFinding> findings) {
+        for (String operand : List.of("actual", "actual_ref", "expected", "expected_ref")) {
+            String reference = stringValue(operationRef.inputs().get(operand));
+            if (!reference.startsWith("step://")) {
+                continue;
+            }
+            String refBody = reference.substring("step://".length());
+            int slash = refBody.indexOf('/');
+            if (slash < 1 || slash == refBody.length() - 1) {
+                findings.add(finding(
+                        testCasePath,
+                        operationRef.fieldPath() + ".assert." + operand,
+                        "invalid_step_ref",
+                        "Use `step://<prior-step-id>/<output-path>` for v0.3 step references."));
+                continue;
+            }
+            String stepId = refBody.substring(0, slash);
+            if (!priorSteps.contains(stepId)) {
+                findings.add(new ContractFinding(
+                        testCasePath.toString(),
+                        operationRef.fieldPath() + ".assert." + operand,
+                        "invalid_step_ref",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "Reference only prior steps in the same v0.3 test case. Unknown or forward step `" + stepId + "`."));
+            }
+        }
+    }
+
     private void validateDataBindingCategories(ContractGraph graph, List<ContractFinding> findings) {
         for (Map.Entry<Path, Map<String, Object>> entry : graph.testCases().entrySet()) {
             for (String category : mapValue(entry.getValue().get("data_binding")).keySet()) {
@@ -391,9 +1237,42 @@ public class ContractBaselineService {
         graph.providerContractsByPath().forEach((path, document) -> scanAll(path, document, findings));
         graph.providerInstancesByPath().forEach((path, document) -> scanAll(path, document, findings));
         graph.executionProfiles().forEach((path, document) -> scanAll(path, document, findings));
-        graph.envProfiles().forEach((path, document) -> scanAll(path, document, findings));
+        graph.envProfiles().forEach((path, document) -> detectRawSecrets(path.toString(),"",document,findings,false,ownedJdbcMarkerPointers(graph,document),""));
         graph.environmentBindings().forEach((path, document) -> scanAll(path, document, findings));
     }
+
+    /** Classifies one exact nonsecret marker, only in an actual graph env-profile's masked JDBC slot. */
+    private Set<String> ownedJdbcMarkerPointers(ContractGraph graph,Map<String,Object> profile) {
+        try {
+            if(!graph.v03())return Set.of();
+            var suiteTargets=mapValue(graph.suite().get("targets"));var targets=mapValue(profile.get("targets"));
+            if(suiteTargets.size()!=1||targets.size()!=1||!suiteTargets.keySet().equals(targets.keySet()))return Set.of();
+            String name=suiteTargets.keySet().iterator().next();
+            if(!"jdbc.v0.3".equals(mapValue(suiteTargets.get(name)).get("provider_contract")))return Set.of();
+            var target=mapValue(targets.get(name));if(!"native".equals(target.get("runtime_mode")))return Set.of();
+            com.specdriven.regression.provider.jdbc.ReviewedOwnedMariaDbPolicy.validateBindings(mapValue(target.get("bindings")));
+            var policy=com.specdriven.regression.producttest.ProductTestPolicy.parse(profile.get("product_test"));
+            if(!policy.nativeExecution()||!"not_used".equals(policy.knowledgeMode())||policy.sharedState()!=null||!policy.dependencyModes().isEmpty()||!policy.providerModes().equals(Map.of(name,"real")))return Set.of();
+            var contracts=graph.providerContractsByPath().values().stream().filter(c->"v0.3".equals(c.get("contract_version"))&&"jdbc.v0.3".equals(c.get("provider_contract"))).toList();
+            if(contracts.size()!=1||!"jdbc".equals(contracts.get(0).get("provider_type"))||!scopedOwnedMemoryDeclarations(contracts.get(0),""))return Set.of();
+            var definition=mapValue(mapValue(contracts.get(0).get("binding_keys")).get("connection.secret_ref"));
+            var kinds=stringList(definition.get("reference_kinds"));
+            if(!"masked".equals(definition.get("sensitivity"))||!"string".equals(definition.get("value_type"))||!"env_profile_secret_ref".equals(definition.get("source"))||kinds.size()!=2||!Set.copyOf(kinds).equals(Set.of("env","owned_memory")))return Set.of();
+            return Set.of("/targets/"+pointerSegment(name)+"/bindings/connection.secret_ref");
+        } catch(RuntimeException unavailable){return Set.of();}
+    }
+    private boolean scopedOwnedMemoryDeclarations(Object value,String pointer) {
+        if(value instanceof Map<?,?> fields){for(var field:fields.entrySet()){
+            String child=pointer+"/"+pointerSegment(stringValue(field.getKey()));
+            if("reference_kinds".equals(field.getKey())){
+                if(!(field.getValue() instanceof Collection<?> kinds))return false;
+                for(Object kind:kinds){if(!(kind instanceof String text))return false;if(text.trim().equalsIgnoreCase("owned_memory")&&!child.equals("/binding_keys/connection.secret_ref/reference_kinds"))return false;}
+            }
+            if(!scopedOwnedMemoryDeclarations(field.getValue(),child))return false;
+        }}else if(value instanceof Collection<?> values){int i=0;for(Object item:values)if(!scopedOwnedMemoryDeclarations(item,pointer+"/"+i++))return false;}
+        return true;
+    }
+    private String pointerSegment(String key){return key.replace("~","~0").replace("/","~1");}
 
     private void scanAll(Path path, Map<String, Object> document, List<ContractFinding> findings) {
         detectRawSecrets(path.toString(), document, findings);
@@ -708,7 +1587,7 @@ public class ContractBaselineService {
                 if (operation.isEmpty()) {
                     continue;
                 }
-                List<String> outputRefs = stringList(operation.get("output_refs"));
+                List<String> outputRefs = v03OutputNames(operation);
                 for (String output : operationRef.outputs().keySet()) {
                     if (!outputRefs.contains(output)) {
                         findings.add(new ContractFinding(
@@ -1007,14 +1886,6 @@ public class ContractBaselineService {
                 EnvironmentBindingDoc bindingDoc = graph.environmentBindingsByProfile().get(profile);
                 Path bindingPath = bindingDoc.path();
                 if (bindingDoc.envProfile()) {
-                    validateProjectProvidedWireMockBaseUrl(
-                            bindingPath,
-                            bindingDoc.document(),
-                            providerId,
-                            providerType,
-                            profile,
-                            mapValue(mapValue(bindingDoc.document().get("providers")).get(providerId)),
-                            findings);
                     validateEnvProfileProviderBinding(
                             graph,
                             bindingPath,
@@ -1064,38 +1935,6 @@ public class ContractBaselineService {
                 }
             }
         }
-    }
-
-    private void validateProjectProvidedWireMockBaseUrl(
-            Path bindingPath,
-            Map<String, Object> envProfile,
-            String providerId,
-            String providerType,
-            String profile,
-            Map<String, Object> provider,
-            List<ContractFinding> findings) {
-        if (!"wiremock_http_mock".equals(providerType) || !projectProvidedDependencyProvisioning(envProfile)) {
-            return;
-        }
-        Map<String, Object> bindingValues = normalizeEnvProfileBindings(provider);
-        if (!isMissing(valueAtPath(bindingValues, "base_url"))) {
-            return;
-        }
-        findings.add(new ContractFinding(
-                bindingPath.toString(),
-                "providers." + providerId + "." + envProfileBindingField(provider) + ".base_url",
-                "wiremock_external_base_url_missing",
-                providerId,
-                providerType,
-                profile,
-                "",
-                "Supply `base_url` for project-provisioned WireMock."));
-    }
-
-    private boolean projectProvidedDependencyProvisioning(Map<String, Object> envProfile) {
-        List<String> provisioners = stringList(mapValue(envProfile.get("dependency_provisioning_policy"))
-                .get("allowed_provisioners"));
-        return provisioners.contains("project_provided") || provisioners.contains("external_ci_pre_step");
     }
 
     private void validateEnvProfileProviderBinding(
@@ -1253,16 +2092,10 @@ public class ContractBaselineService {
     }
 
     private String uriInvalidReason(String providerType, String rawKey) {
-        if ("wiremock_http_mock".equals(providerType) && "base_url".equals(rawKey)) {
-            return "wiremock_external_base_url_invalid";
-        }
         return "invalid_binding_key_uri";
     }
 
     private String uriSecretLeakReason(String providerType, String rawKey) {
-        if ("wiremock_http_mock".equals(providerType) && "base_url".equals(rawKey)) {
-            return "wiremock_external_base_url_secret_leak";
-        }
         return "raw_secret";
     }
 
@@ -1585,15 +2418,38 @@ public class ContractBaselineService {
 
     private ContractGraph loadGraph(Path suiteManifest) {
         List<ContractFinding> findings = new ArrayList<>();
+        Map<Path,Map<String,Object>> verifiedProfiles=reviewedSnapshot==null?null:reviewedSnapshot.verifiedSelectedEnvProfiles(suiteManifest);
         Map<String, Object> suite = readYamlMap(suiteManifest, findings);
         if (suite.isEmpty()) {
             return ContractGraph.blocked(suiteManifest, suite, findings);
         }
         Path root = suiteManifest.toAbsolutePath().normalize().getParent();
         List<Path> testPaths = listValue(suite.get("tests")).stream()
-                .map(value -> root.resolve(stringValue(value)).normalize())
+                .map(value -> root.resolve(suiteTestRef(value)).normalize())
                 .toList();
         Map<Path, Map<String, Object>> testCases = readAll(testPaths, findings);
+        String manifestVersion = stringValue(suite.get("manifest_version"));
+        String legacyContractVersion = stringValue(suite.get("contract_version"));
+        boolean manifestV03 = "v0.3".equals(manifestVersion);
+        boolean anyV03Test = testCases.values().stream()
+                .anyMatch(testCase -> "v0.3".equals(stringValue(testCase.get("dsl_version"))));
+        boolean anyNonV03Test = testCases.values().stream()
+                .anyMatch(testCase -> !"v0.3".equals(stringValue(testCase.get("dsl_version"))));
+        validateLeafVersionRouting(
+                suiteManifest,
+                manifestVersion,
+                legacyContractVersion,
+                testCases,
+                findings);
+        if ((manifestV03 && anyNonV03Test) || (!manifestV03 && anyV03Test)) {
+            findings.add(finding(
+                    suiteManifest,
+                    "manifest_version",
+                    "mixed_dsl_versions",
+                    "A leaf suite must use one DSL version: align manifest_version and every referenced test case dsl_version."));
+        }
+        // Leaf routing is selected exclusively by the validated manifest; test case versions only validate it.
+        boolean v03 = manifestV03;
         Map<Path, Map<String, Object>> frameworkContractsByPath =
                 readDirectory(frameworkProviderContractsDirectory(root), findings);
         Map<Path, Map<String, Object>> suiteLocalContractsByPath =
@@ -1601,10 +2457,12 @@ public class ContractBaselineService {
         Map<Path, Map<String, Object>> contractsByPath = new LinkedHashMap<>();
         contractsByPath.putAll(frameworkContractsByPath);
         contractsByPath.putAll(suiteLocalContractsByPath);
-        Map<Path, Map<String, Object>> instancesByPath = readDirectory(root.resolve("provider_instances"), findings);
+        Map<Path, Map<String, Object>> instancesByPath = v03
+                ? Map.of()
+                : readDirectory(root.resolve("provider_instances"), findings);
         Path envProfilesRoot = root.resolve("env_profiles");
-        Map<Path, Map<String, Object>> envProfiles = withEnvProfileDefaults(readOptionalDirectory(envProfilesRoot, findings));
-        boolean envProfileMode = Files.isDirectory(envProfilesRoot);
+        Map<Path, Map<String, Object>> envProfiles = withEnvProfileDefaults(verifiedProfiles==null?readOptionalDirectory(envProfilesRoot, findings):verifiedProfiles);
+        boolean envProfileMode = verifiedProfiles!=null||Files.isDirectory(envProfilesRoot);
         Map<Path, Map<String, Object>> profiles = envProfileMode
                 ? Map.of()
                 : readDirectory(root.resolve("execution_profiles"), findings);
@@ -1613,10 +2471,40 @@ public class ContractBaselineService {
                 : readDirectory(root.resolve("environment_bindings"), findings);
 
         Map<String, Map<String, Object>> contracts = new LinkedHashMap<>();
-        for (Map<String, Object> contract : contractsByPath.values()) {
+        Map<String, Map<String, Object>> contractsById = new LinkedHashMap<>();
+        Map<String, Path> providerContractPathsById = new LinkedHashMap<>();
+        for (Map.Entry<Path, Map<String, Object>> entry : contractsByPath.entrySet()) {
+            Map<String, Object> contract = entry.getValue();
             String providerType = stringValue(contract.get("provider_type"));
+            String contractVersion = contractVersion(contract);
             if (!providerType.isBlank()) {
-                contracts.put(providerType, contract);
+                if (!contracts.containsKey(providerType) || "v0.2".equals(contractVersion)) {
+                    contracts.put(providerType, contract);
+                }
+                if (!contractsById.containsKey(providerType) || "v0.2".equals(contractVersion)) {
+                    contractsById.put(providerType, contract);
+                }
+                if ("v0.2".equals(contractVersion)) {
+                    contractsById.put(providerType + ".v0.2", contract);
+                }
+            }
+            String providerContract = stringValue(contract.get("provider_contract"));
+            if (!providerContract.isBlank()) {
+                Path existingPath = providerContractPathsById.putIfAbsent(providerContract, entry.getKey());
+                if (existingPath != null) {
+                    findings.add(new ContractFinding(
+                            entry.getKey().toString(),
+                            "provider_contract",
+                            "duplicate_provider_contract",
+                            "",
+                            providerType,
+                            "",
+                            "",
+                            "Provider Contract id `" + providerContract + "` is already declared by `"
+                                    + existingPath + "`. Use a unique v0.3 provider_contract id."));
+                    continue;
+                }
+                contractsById.put(providerContract, contract);
             }
         }
         Map<String, Map<String, Object>> instances = new LinkedHashMap<>();
@@ -1629,7 +2517,9 @@ public class ContractBaselineService {
         Map<String, EnvironmentBindingDoc> bindingsByProfile = new LinkedHashMap<>();
         if (envProfileMode) {
             for (Map.Entry<Path, Map<String, Object>> entry : envProfiles.entrySet()) {
-                String profile = stringValue(entry.getValue().get("env_profile_id"));
+                String profile = firstNonBlank(
+                        stringValue(entry.getValue().get("env_profile_id")),
+                        stringValue(entry.getValue().get("profile_id")));
                 if (!profile.isBlank()) {
                     bindingsByProfile.put(profile, new EnvironmentBindingDoc(entry.getKey(), entry.getValue(), true));
                 }
@@ -1650,6 +2540,7 @@ public class ContractBaselineService {
                 testCases,
                 contractsByPath,
                 contracts,
+                contractsById,
                 instancesByPath,
                 instances,
                 profiles,
@@ -1659,10 +2550,68 @@ public class ContractBaselineService {
                 bindingsByProfile,
                 new LinkedHashSet<>(usedProfiles),
                 allowedProviderTypes(suite, frameworkContractsByPath),
+                v03,
                 List.copyOf(findings));
     }
 
+    private void validateLeafVersionRouting(
+            Path suiteManifest,
+            String manifestVersion,
+            String legacyContractVersion,
+            Map<Path, Map<String, Object>> testCases,
+            List<ContractFinding> findings) {
+        if (testCases.isEmpty()) {
+            return;
+        }
+        String expectedDslVersion;
+        if ("v0.3".equals(manifestVersion)) {
+            expectedDslVersion = "v0.3";
+        } else if (manifestVersion.isBlank() && "v0.2".equals(legacyContractVersion)) {
+            expectedDslVersion = "v0.2";
+        } else if (manifestVersion.isBlank()) {
+            findings.add(finding(
+                    suiteManifest,
+                    "manifest_version",
+                    "missing_manifest_version",
+                    "Set leaf suite manifest_version to `v0.3`, or retain explicit contract_version `v0.2` for compatibility suites."));
+            return;
+        } else {
+            findings.add(finding(
+                    suiteManifest,
+                    "manifest_version",
+                    "unsupported_manifest_version",
+                    "Use supported leaf manifest_version `v0.3`, or use the explicit v0.2 compatibility manifest shape."));
+            return;
+        }
+        for (Map.Entry<Path, Map<String, Object>> entry : testCases.entrySet()) {
+            String dslVersion = stringValue(entry.getValue().get("dsl_version"));
+            if (dslVersion.isBlank()) {
+                findings.add(finding(
+                        entry.getKey(),
+                        "dsl_version",
+                        "missing_required_field",
+                        "Declare dsl_version matching the leaf suite manifest before execution."));
+            } else if (!expectedDslVersion.equals(dslVersion)) {
+                findings.add(finding(
+                        entry.getKey(),
+                        "dsl_version",
+                        "mixed_dsl_versions",
+                        "Set every test case dsl_version to `" + expectedDslVersion
+                                + "` for this leaf suite; mixed DSL versions are not routed."));
+            }
+        }
+    }
+
+    private String suiteTestRef(Object value) {
+        Map<String, Object> map = mapValue(value);
+        if (!map.isEmpty() || value instanceof Map<?, ?>) {
+            return stringValue(map.get("ref"));
+        }
+        return stringValue(value);
+    }
+
     private Path frameworkProviderContractsDirectory(Path suiteRoot) {
+        if (verifiedContractDirectory != null) return verifiedContractDirectory;
         return FrameworkProviderContractCatalog.resolveDirectory(suiteRoot, FRAMEWORK_PROVIDER_CONTRACTS);
     }
 
@@ -1722,6 +2671,7 @@ public class ContractBaselineService {
 
     private Set<String> suiteSelectedProfiles(Map<String, Object> suite) {
         Set<String> profiles = new LinkedHashSet<>();
+        addIfPresent(profiles, stringValue(suite.get("default_profile")));
         addIfPresent(profiles, stringValue(suite.get("profile")));
         for (Object profile : listValue(suite.get("profiles"))) {
             addIfPresent(profiles, stringValue(profile));
@@ -1826,7 +2776,7 @@ public class ContractBaselineService {
     }
 
     private void require(Path path, Map<String, Object> document, String field, List<ContractFinding> findings) {
-        if ("execute".equals(field) && document.containsKey(field)) {
+        if (("execute".equals(field) || "verify".equals(field)) && document.containsKey(field)) {
             return;
         }
         if (isMissingRequiredField(field, document.get(field))) {
@@ -2251,6 +3201,56 @@ public class ContractBaselineService {
         return operations;
     }
 
+    private List<V03OperationRef> v03OperationRefs(Map<String, Object> testCase) {
+        List<V03OperationRef> operations = new ArrayList<>();
+        addV03ProviderOperations(operations, "setup", listValue(testCase.get("setup")));
+        addV03ProviderOperations(operations, "execute", listValue(testCase.get("execute")));
+        int verifyIndex = 0;
+        for (Object value : listValue(testCase.get("verify"))) {
+            Map<String, Object> verify = mapValue(value);
+            String id = stringValue(verify.get("id"));
+            String path = id.isBlank() ? "verify[" + verifyIndex + "]" : "verify." + id;
+            String type = stringValue(verify.get("type"));
+            if ("assertion".equals(type)) {
+                operations.add(new V03OperationRef(
+                        path,
+                        id,
+                        "assertion",
+                        "",
+                        "",
+                        mapValue(verify.get("assert"))));
+            } else if ("provider_check".equals(type)) {
+                operations.add(new V03OperationRef(
+                        path,
+                        id,
+                        "provider_check",
+                        stringValue(verify.get("target")),
+                        stringValue(verify.get("op")),
+                        mapValue(verify.get("with"))));
+            }
+            verifyIndex++;
+        }
+        addV03ProviderOperations(operations, "cleanup", listValue(testCase.get("cleanup")));
+        return List.copyOf(operations);
+    }
+
+    private void addV03ProviderOperations(List<V03OperationRef> operations, String phase, List<Object> values) {
+        int index = 0;
+        for (Object value : values) {
+            Map<String, Object> operation = mapValue(value);
+            String id = stringValue(operation.get("id"));
+            String path = id.isBlank() ? phase + "[" + index + "]" : phase + "." + id;
+            operations.add(new V03OperationRef(
+                    path,
+                    id,
+                    phase,
+                    stringValue(operation.get("target")),
+                    stringValue(operation.get("op")),
+                    mapValue(operation.get("with"))));
+            index++;
+        }
+    }
+
     private List<Object> executeOperations(Map<String, Object> testCase) {
         Object execute = testCase.get("execute");
         if (execute instanceof Map<?, ?> executeMap) {
@@ -2299,6 +3299,32 @@ public class ContractBaselineService {
         return new TargetResolution(providerId, profile, providerType, contract);
     }
 
+    private TargetResolution resolveV03Target(ContractGraph graph, String targetName) {
+        Map<String, Object> suiteTarget = mapValue(mapValue(graph.suite().get("targets")).get(targetName));
+        String providerContract = stringValue(suiteTarget.get("provider_contract"));
+        Map<String, Object> contract = providerContract(graph, providerContract);
+        if (contract.isEmpty() || !isExplicitV03ProviderContract(providerContract, contract)) {
+            return TargetResolution.unresolved("", selectedProfile(graph, Map.of()));
+        }
+        return new TargetResolution(targetName, selectedProfile(graph, Map.of()), stringValue(contract.get("provider_type")), contract);
+    }
+
+    private Map<String, Object> providerContract(ContractGraph graph, String providerContract) {
+        Map<String, Object> contract = graph.providerContractsById().get(providerContract);
+        return contract == null ? Map.of() : contract;
+    }
+
+    private boolean isExplicitV03ProviderContract(String requestedId, Map<String, Object> contract) {
+        return "v0.3".equals(contractVersion(contract))
+                && requestedId.equals(stringValue(contract.get("provider_contract")));
+    }
+
+    private String contractVersion(Map<String, Object> contract) {
+        return firstNonBlank(
+                stringValue(contract.get("contract_version")),
+                stringValue(contract.get("provider_contract_version")));
+    }
+
     private ValidationResult validationResult(ContractGraph graph, List<ContractFinding> findings) {
         List<ResolvedTarget> plan = findings.isEmpty() ? resolvedPlan(graph) : List.of();
         return new ValidationResult(
@@ -2306,11 +3332,16 @@ public class ContractBaselineService {
                 graph.suiteId(),
                 providerIds(graph),
                 providerTypes(graph),
+                targetNames(graph),
+                providerContractIds(graph),
                 plan,
                 List.copyOf(findings));
     }
 
     private List<String> providerIds(ContractGraph graph) {
+        if (graph.v03()) {
+            return List.of();
+        }
         Set<String> providerIds = new LinkedHashSet<>();
         for (Map<String, Object> testCase : graph.testCases().values()) {
             for (Object targetValue : mapValue(testCase.get("targets")).values()) {
@@ -2322,6 +3353,13 @@ public class ContractBaselineService {
 
     private List<String> providerTypes(ContractGraph graph) {
         Set<String> providerTypes = new LinkedHashSet<>();
+        if (graph.v03()) {
+            for (Object targetValue : mapValue(graph.suite().get("targets")).values()) {
+                Map<String, Object> contract = providerContract(graph, stringValue(mapValue(targetValue).get("provider_contract")));
+                addIfPresent(providerTypes, stringValue(contract.get("provider_type")));
+            }
+            return providerTypes.stream().sorted().toList();
+        }
         for (Map<String, Object> testCase : graph.testCases().values()) {
             for (Object targetValue : mapValue(testCase.get("targets")).values()) {
                 String providerId = stringValue(mapValue(targetValue).get("provider_id"));
@@ -2334,8 +3372,55 @@ public class ContractBaselineService {
         return providerTypes.stream().sorted().toList();
     }
 
+    private List<String> targetNames(ContractGraph graph) {
+        if (graph.v03()) {
+            return mapValue(graph.suite().get("targets")).keySet().stream().sorted().toList();
+        }
+        Set<String> targets = new LinkedHashSet<>();
+        for (Map<String, Object> testCase : graph.testCases().values()) {
+            targets.addAll(mapValue(testCase.get("targets")).keySet());
+        }
+        return targets.stream().sorted().toList();
+    }
+
+    private List<String> providerContractIds(ContractGraph graph) {
+        if (!graph.v03()) {
+            return List.of();
+        }
+        Set<String> ids = new LinkedHashSet<>();
+        for (Object targetValue : mapValue(graph.suite().get("targets")).values()) {
+            addIfPresent(ids, stringValue(mapValue(targetValue).get("provider_contract")));
+        }
+        return ids.stream().sorted().toList();
+    }
+
     private List<ResolvedTarget> resolvedPlan(ContractGraph graph) {
         List<ResolvedTarget> plan = new ArrayList<>();
+        if (graph.v03()) {
+            for (Map<String, Object> testCase : graph.testCases().values()) {
+                String testCaseId = stringValue(testCase.get("test_case_id"));
+                Set<String> seenTargets = new LinkedHashSet<>();
+                for (V03OperationRef operationRef : v03OperationRefs(testCase)) {
+                    if ("assertion".equals(operationRef.kind()) || operationRef.target().isBlank()
+                            || !seenTargets.add(operationRef.target())) {
+                        continue;
+                    }
+                    TargetResolution targetResolution = resolveV03Target(graph, operationRef.target());
+                    Map<String, Object> envTarget = v03EnvTarget(graph, targetResolution.profile(), operationRef.target());
+                    String providerContract = stringValue(mapValue(mapValue(graph.suite().get("targets"))
+                            .get(operationRef.target())).get("provider_contract"));
+                    plan.add(new ResolvedTarget(
+                            testCaseId,
+                            operationRef.target(),
+                            "",
+                            targetResolution.providerType(),
+                            targetResolution.profile(),
+                            stringValue(envTarget.get("runtime_mode")),
+                            providerContract));
+                }
+            }
+            return List.copyOf(plan);
+        }
         for (Map<String, Object> testCase : graph.testCases().values()) {
             String testCaseId = stringValue(testCase.get("test_case_id"));
             for (Map.Entry<String, Object> entry : mapValue(testCase.get("targets")).entrySet()) {
@@ -2354,11 +3439,20 @@ public class ContractBaselineService {
                             providerId,
                             providerType,
                             profile,
-                            stringValue(providerBinding.get("runtime_mode"))));
+                            stringValue(providerBinding.get("runtime_mode")),
+                            ""));
                 }
             }
         }
         return List.copyOf(plan);
+    }
+
+    private Map<String, Object> v03EnvTarget(ContractGraph graph, String profile, String targetName) {
+        EnvironmentBindingDoc bindingDoc = graph.environmentBindingsByProfile().get(profile);
+        if (bindingDoc == null) {
+            return Map.of();
+        }
+        return mapValue(mapValue(bindingDoc.document().get("targets")).get(targetName));
     }
 
     private String selectedProfile(ContractGraph graph, Map<String, Object> target) {
@@ -2383,6 +3477,24 @@ public class ContractBaselineService {
     private List<String> operationInputs(Map<String, Object> operation, String preferredField, String legacyField) {
         List<String> inputs = stringList(operation.get(preferredField));
         return inputs.isEmpty() ? stringList(operation.get(legacyField)) : inputs;
+    }
+
+    private List<String> v03InputNames(Map<String, Object> operation) {
+        Map<String, Object> inputs = mapValue(operation.get("inputs"));
+        return inputs.isEmpty() ? operationInputs(operation, "allowed_inputs", "allowed_bind_as") : List.copyOf(inputs.keySet());
+    }
+
+    private List<String> v03RequiredInputNames(Map<String, Object> operation) {
+        Map<String, Object> inputs = mapValue(operation.get("inputs"));
+        if (inputs.isEmpty()) return operationInputs(operation, "required_inputs", "required_parameters");
+        return inputs.entrySet().stream()
+                .filter(entry -> Boolean.parseBoolean(stringValue(mapValue(entry.getValue()).get("required"))))
+                .map(Map.Entry::getKey).toList();
+    }
+
+    private List<String> v03OutputNames(Map<String, Object> operation) {
+        Map<String, Object> outputs = mapValue(operation.get("outputs"));
+        return outputs.isEmpty() ? stringList(operation.get("output_refs")) : List.copyOf(outputs.keySet());
     }
 
     private boolean providedInput(List<String> providedInputs, String requiredInput) {
@@ -2424,7 +3536,13 @@ public class ContractBaselineService {
             Object value,
             List<ContractFinding> findings,
             boolean secretContext) {
+        detectRawSecrets(filePath,fieldPath,value,findings,secretContext,Set.of(),"");
+    }
+    private void detectRawSecrets(String filePath,String fieldPath,Object value,List<ContractFinding> findings,boolean secretContext,Set<String> ownedPointers,String pointer) {
+        if(value instanceof String marker&&marker.equals("memory://owned-mariadb")&&ownedPointers.contains(pointer))return;
         if (value instanceof Map<?, ?> map) {
+            boolean providerContractBindingDefinition = fieldPath.contains("binding_keys.")
+                    && map.containsKey("required") && map.containsKey("source");
             if (Boolean.TRUE.equals(map.get("sensitive")) && map.containsKey("value")) {
                 findings.add(new ContractFinding(
                         filePath,
@@ -2471,9 +3589,11 @@ public class ContractBaselineService {
             for (Map.Entry<?, ?> entry : map.entrySet()) {
                 String key = stringValue(entry.getKey());
                 String childPath = fieldPath.isBlank() ? key : fieldPath + "." + key;
-                boolean childSecretContext = secretContext || secretKey(key);
+                boolean ordinaryConnectionHeader = ordinaryHttpConnectionHeader(fieldPath, key, entry.getValue());
+                boolean childSecretContext = !providerContractBindingDefinition
+                        && (secretContext || (secretKey(key) && !ordinaryConnectionHeader));
                 if (!"secret_ref".equals(key)) {
-                    detectRawSecrets(filePath, childPath, entry.getValue(), findings, childSecretContext);
+                    detectRawSecrets(filePath, childPath, entry.getValue(), findings, childSecretContext,ownedPointers,pointer+"/"+pointerSegment(key));
                 }
             }
             return;
@@ -2481,7 +3601,7 @@ public class ContractBaselineService {
         if (value instanceof Collection<?> collection) {
             int index = 0;
             for (Object item : collection) {
-                detectRawSecrets(filePath, fieldPath + "[" + index++ + "]", item, findings, secretContext);
+                detectRawSecrets(filePath,fieldPath+"["+index+"]",item,findings,secretContext,ownedPointers,pointer+"/"+index);index++;
             }
             return;
         }
@@ -2509,6 +3629,18 @@ public class ContractBaselineService {
                     "",
                     "Replace raw secret value with `secret_ref`."));
         }
+    }
+
+    private boolean ordinaryHttpConnectionHeader(String parentPath, String key, Object value) {
+        if (!"connection".equalsIgnoreCase(key)
+                || !parentPath.matches("(?:steps\\[\\d+\\]|step_results\\[\\d+\\]"
+                        + "|provider_results\\[\\d+\\]\\.resolved_operation_results\\[\\d+\\])"
+                        + "\\.outputs\\.response\\.headers")
+                || !(value instanceof List<?> values) || values.isEmpty()) {
+            return false;
+        }
+        return values.stream().allMatch(item -> item instanceof String text
+                && text.matches("(?i)[ \\t]*(?:close|keep-alive)[ \\t]*(?:,[ \\t]*(?:close|keep-alive)[ \\t]*)*"));
     }
 
     private boolean secretKey(String key) {
@@ -2625,6 +3757,8 @@ public class ContractBaselineService {
             String suiteId,
             List<String> providerInstancesUsed,
             List<String> providerTypesUsed,
+            List<String> targetsUsed,
+            List<String> providerContractsUsed,
             List<ResolvedTarget> plan,
             List<ContractFinding> findings) {
     }
@@ -2657,7 +3791,8 @@ public class ContractBaselineService {
             String providerId,
             String providerType,
             String profile,
-            String runtimeMode) {
+            String runtimeMode,
+            String providerContract) {
     }
 
     public record ContractFinding(
@@ -2700,15 +3835,6 @@ public class ContractBaselineService {
             if ("unresolved_generated_ref".equals(reason)) {
                 return "CONFIGURATION_UNRESOLVED_GENERATED_REF";
             }
-            if ("wiremock_external_base_url_missing".equals(reason)) {
-                return "WIREMOCK_EXTERNAL_BASE_URL_MISSING";
-            }
-            if ("wiremock_external_base_url_invalid".equals(reason)) {
-                return "WIREMOCK_EXTERNAL_BASE_URL_INVALID";
-            }
-            if ("wiremock_external_base_url_secret_leak".equals(reason)) {
-                return "WIREMOCK_EXTERNAL_BASE_URL_SECRET_LEAK";
-            }
             String normalized = reason == null || reason.isBlank()
                     ? "UNKNOWN"
                     : reason.toUpperCase().replaceAll("[^A-Z0-9]+", "_").replaceAll("(^_|_$)", "");
@@ -2717,7 +3843,7 @@ public class ContractBaselineService {
 
         private static String categoryFor(String reason) {
             return switch (reason == null ? "" : reason) {
-                case "raw_secret", "wiremock_external_base_url_secret_leak" -> "SECRET_GUARDRAIL_ERROR";
+                case "raw_secret" -> "SECRET_GUARDRAIL_ERROR";
                 case "missing_evidence_index", "missing_evidence_file", "unknown_evidence_ref",
                         "missing_required_evidence", "missing_failure_evidence",
                         "missing_polling_last_observed_evidence", "invalid_evidence_path",
@@ -2733,9 +3859,7 @@ public class ContractBaselineService {
                         "unsupported_local_ref", "missing_jdbc_target", "missing_nats_target",
                         "profile_mismatch", "conflicting_profile_selection",
                         "invalid_generated_ref", "unresolved_generated_ref",
-                        "invalid_binding_key_uri",
-                        "wiremock_external_base_url_missing",
-                        "wiremock_external_base_url_invalid" -> "CONFIGURATION_ERROR";
+                        "invalid_binding_key_uri" -> "CONFIGURATION_ERROR";
                 case "unknown_provider_type", "unsupported_operation", "unsupported_bind_as",
                         "unsupported_input",
                         "unsupported_dialect", "missing_output_ref", "missing_supported_dialect",
@@ -2744,7 +3868,8 @@ public class ContractBaselineService {
                         "unsupported_suite_runtime", "unsupported_suite_shape",
                         "unsupported_provider_instance_field",
                         "unsupported_provider_instance_binding_key", "unknown_binding_key",
-                        "invalid_binding_key_value_kind", "unknown_bindable_output" -> "CONTRACT_ERROR";
+                        "invalid_binding_key_value_kind", "unknown_bindable_output",
+                        "invalid_provider_contract_version", "duplicate_provider_contract" -> "CONTRACT_ERROR";
                 case "invalid_result_json", "missing_result_json", "invalid_yaml",
                         "missing_required_file", "missing_required_directory",
                         "missing_required_field", "prohibited_legacy_field",
@@ -2752,7 +3877,9 @@ public class ContractBaselineService {
                         "prohibited_governance_field", "prohibited_deprecated_field",
                         "prohibited_data_binding_category", "prohibited_source_ref", "invalid_source_refs",
                         "invalid_duration", "invalid_status", "invalid_test_count", "invalid_test_results",
-                        "invalid_instant", "invalid_polling_config" -> "VALIDATION_ERROR";
+                        "invalid_instant", "invalid_polling_config",
+                        "invalid_artifact_ref", "invalid_json_pointer",
+                        "missing_json_pointer_fragment", "ref_outside_suite_root" -> "VALIDATION_ERROR";
                 default -> "VALIDATION_ERROR";
             };
         }
@@ -2765,6 +3892,7 @@ public class ContractBaselineService {
             Map<Path, Map<String, Object>> testCases,
             Map<Path, Map<String, Object>> providerContractsByPath,
             Map<String, Map<String, Object>> providerContracts,
+            Map<String, Map<String, Object>> providerContractsById,
             Map<Path, Map<String, Object>> providerInstancesByPath,
             Map<String, Map<String, Object>> providerInstances,
             Map<Path, Map<String, Object>> executionProfiles,
@@ -2774,6 +3902,7 @@ public class ContractBaselineService {
             Map<String, EnvironmentBindingDoc> environmentBindingsByProfile,
             Set<String> usedProfiles,
             Set<String> allowedProviderTypes,
+            boolean v03,
             List<ContractFinding> loadFindings) {
 
         static ContractGraph blocked(Path suitePath, Map<String, Object> suite, List<ContractFinding> findings) {
@@ -2788,11 +3917,13 @@ public class ContractBaselineService {
                     Map.of(),
                     Map.of(),
                     Map.of(),
+                    Map.of(),
                     false,
                     Map.of(),
                     Map.of(),
                     Set.of(),
                     Set.of(),
+                    false,
                     List.copyOf(findings));
         }
 
@@ -2811,6 +3942,15 @@ public class ContractBaselineService {
             List<Map<String, Object>> parameters,
             Map<String, Object> outputs,
             boolean modernInputs) {
+    }
+
+    private record V03OperationRef(
+            String fieldPath,
+            String id,
+            String kind,
+            String target,
+            String operation,
+            Map<String, Object> inputs) {
     }
 
     private record TargetResolution(

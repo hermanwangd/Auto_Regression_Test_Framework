@@ -1,12 +1,4 @@
 {
-  "requestId": "GOLDEN-E2E-001",
   "status": "OK",
-  "message": "hello framework",
-  "items": [
-    {
-      "name": "sample",
-      "result": "verified"
-    }
-  ],
-  "generatedAt": "2026-06-29T00:00:00Z"
+  "requestId": "golden-v03-001"
 }

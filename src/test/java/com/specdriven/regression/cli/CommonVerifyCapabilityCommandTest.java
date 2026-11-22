@@ -15,8 +15,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 class CommonVerifyCapabilityCommandTest {
 
-    private static final Path COMMON_VERIFY_SUITE = Path.of("samples/20-provider-capability-p0/verification/common_verify/suite_manifest.yaml");
-    private static final Path POLLING_SUITE = Path.of("samples/20-provider-capability-p0/verification/polling_observer/suite_manifest.yaml");
+    private static final Path COMMON_VERIFY_SUITE = Path.of("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/common_verify/suite_manifest.yaml");
+    private static final Path POLLING_SUITE = Path.of("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/polling_observer/suite_manifest.yaml");
 
     @TempDir
     Path tempDir;
@@ -24,22 +24,22 @@ class CommonVerifyCapabilityCommandTest {
     @Test
     void commonVerifySampleArtifactsAreCheckedInAtRequiredPaths() {
         List<String> requiredPaths = List.of(
-                "samples/20-provider-capability-p0/verification/common_verify/suite_manifest.yaml",
-                "samples/20-provider-capability-p0/verification/common_verify/test_case.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/common_verify/suite_manifest.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/common_verify/test_case.yaml",
                 "docs/02-architecture/contracts/provider-contracts/common_verify.yaml",
-                "samples/20-provider-capability-p0/verification/common_verify/provider_instances/local_verify.yaml",
-                "samples/20-provider-capability-p0/verification/common_verify/expected_results/expected_payload.json",
-                "samples/20-provider-capability-p0/verification/common_verify/expected_results/expected_schema.json",
-                "samples/20-provider-capability-p0/verification/common_verify/expected_results/expected_file.txt",
-                "samples/20-provider-capability-p0/verification/common_verify/actual_samples/actual_payload.json",
-                "samples/20-provider-capability-p0/verification/common_verify/actual_samples/actual_file.txt",
-                "samples/20-provider-capability-p0/verification/polling_observer/suite_manifest.yaml",
-                "samples/20-provider-capability-p0/verification/polling_observer/test_case.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/common_verify/provider_instances/local_verify.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/common_verify/expected_results/expected_payload.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/common_verify/expected_results/expected_schema.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/common_verify/expected_results/expected_file.txt",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/common_verify/actual_samples/actual_payload.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/common_verify/actual_samples/actual_file.txt",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/polling_observer/suite_manifest.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/polling_observer/test_case.yaml",
                 "docs/02-architecture/contracts/provider-contracts/common_verify.yaml",
-                "samples/20-provider-capability-p0/verification/polling_observer/provider_instances/local_polling.yaml",
-                "samples/20-provider-capability-p0/verification/polling_observer/provider_instances/runtime_mode_sample__local_polling_observer_ephemeral.yaml",
-                "samples/20-provider-capability-p0/verification/polling_observer/expected_results/expected_timeout_result.json",
-                "samples/20-provider-capability-p0/verification/polling_observer/actual_samples/observed_event.json");
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/polling_observer/provider_instances/local_polling.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/polling_observer/provider_instances/runtime_mode_sample__local_polling_observer_ephemeral.yaml",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/polling_observer/expected_results/expected_timeout_result.json",
+                "samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/polling_observer/actual_samples/observed_event.json");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -391,13 +391,13 @@ class CommonVerifyCapabilityCommandTest {
 
     private Path mutableCommonVerify(String name) throws IOException {
         Path target = tempDir.resolve(name);
-        copyDirectory(Path.of("samples/20-provider-capability-p0/verification/common_verify"), target);
+        copyDirectory(Path.of("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/common_verify"), target);
         return target.resolve("suite_manifest.yaml");
     }
 
     private Path mutablePolling(String name) throws IOException {
         Path target = tempDir.resolve(name);
-        copyDirectory(Path.of("samples/20-provider-capability-p0/verification/polling_observer"), target);
+        copyDirectory(Path.of("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/verification/polling_observer"), target);
         return target.resolve("suite_manifest.yaml");
     }
 

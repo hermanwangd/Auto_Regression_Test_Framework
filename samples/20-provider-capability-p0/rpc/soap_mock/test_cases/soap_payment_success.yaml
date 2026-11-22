@@ -1,0 +1,50 @@
+dsl_version: v0.3
+test_case_id: SOAP-MOCK-V03-TC-001
+title: SOAP mock receives payment request through REST client stimulus
+
+setup:
+  - id: load_submit_payment_stub
+    target: payment_soap_mock
+    op: load_soap_stub
+    with:
+      soap.path: /PaymentService
+      soap.operation: SubmitPayment
+      soap.action: SubmitPayment
+      soap.request_xpath: "//*[local-name()='PaymentId' and text()='P-1001']"
+      soap.response_ref: artifact://fixtures/payment_submit_response.xml
+      soap.status: 200
+      mock.reset_before_load: true
+
+execute:
+  - id: submit_payment
+    target: payment_soap_client
+    op: http_request
+    with:
+      request.method: POST
+      request.path: /PaymentService
+      request.headers.content-type: text/xml; charset=utf-8
+      request.headers.SOAPAction: SubmitPayment
+      request.body_ref: artifact://fixtures/payment_submit_request.xml
+
+verify:
+  - id: payment_soap_status
+    type: assertion
+    assert:
+      actual: step://submit_payment/response.status
+      operator: equals
+      expected: 200
+  - id: payment_soap_request_count
+    type: provider_check
+    target: payment_soap_mock
+    op: soap_request_received
+    with:
+      soap.path: /PaymentService
+      soap.operation: SubmitPayment
+      soap.action: SubmitPayment
+      soap.expected_count: 1
+
+cleanup:
+  - id: reset_payment_soap_mock
+    target: payment_soap_mock
+    op: reset_mock
+    with: {}

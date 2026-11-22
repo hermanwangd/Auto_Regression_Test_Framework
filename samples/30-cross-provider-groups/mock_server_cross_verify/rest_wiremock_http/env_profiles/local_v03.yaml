@@ -1,0 +1,14 @@
+profile_id: local_v03
+execution_mode: local
+isolation: per_run
+evidence_classification: framework_verification_only
+
+targets:
+  payment_mock:
+    runtime_mode: mock
+    bindings:
+      port_strategy: dynamic
+  payment_api:
+    runtime_mode: mock
+    bindings:
+      base_url: generated://payment_mock/base_url

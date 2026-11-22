@@ -1,0 +1,12 @@
+dsl_version: v0.3
+test_case_id: NEG-INVALID-ARTIFACT-REF-TC-001
+setup:
+  - id: invalid_artifact
+    target: common_verifier
+    op: json_match
+    with:
+      expected_ref: artifact://expected/../outside.json
+      actual_ref: artifact://actual/missing.json
+execute: []
+verify: []
+cleanup: []

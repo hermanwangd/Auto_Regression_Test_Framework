@@ -1,0 +1,11 @@
+dsl_version: v0.3
+test_case_id: NEG-MISSING-BINDING-TC-001
+setup: []
+execute:
+  - id: query_order
+    target: order_db
+    op: db_query
+    with:
+      query_ref: artifact://queries/find_order.sql
+verify: []
+cleanup: []

@@ -48,6 +48,44 @@ public class KafkaProviderRuntime implements ProviderRuntime {
         this.kafkaClientTransport = kafkaClientTransport;
     }
 
+    private java.util.function.Supplier<String> reviewedLeasePin=()->System.getenv("REGRESS_REVIEWED_FIXTURE_LEASE_SHA256");
+    private java.util.function.Consumer<ReviewedLoopbackKafkaPolicy.Fixture> reviewedFence=f->{throw new IllegalArgumentException("reviewed_kafka: runtime_network_fence_unbound");};
+    private java.time.Clock reviewedClock=java.time.Clock.systemUTC();
+    KafkaProviderRuntime(KafkaClientTransport transport,java.util.function.Supplier<String> pin,
+            java.util.function.Consumer<ReviewedLoopbackKafkaPolicy.Fixture> fence,java.time.Clock clock){
+        this(transport);reviewedLeasePin=java.util.Objects.requireNonNull(pin);reviewedFence=java.util.Objects.requireNonNull(fence);reviewedClock=java.util.Objects.requireNonNull(clock);
+    }
+
+    KafkaProviderRuntime(KafkaClientTransport transport,java.util.function.Supplier<String> pin,java.time.Clock clock){this(transport);reviewedLeasePin=java.util.Objects.requireNonNull(pin);reviewedClock=java.util.Objects.requireNonNull(clock);}
+
+    /** Default live fence is deliberately UNBOUND until an independent controller/route binder is admitted. */
+    public ProviderOperationResult executeReviewedPublish(ProviderExecutionContext context,ProviderOperationRequest request){
+        ReviewedLoopbackKafkaPolicy.require("native".equals(context.runtimeMode())&&"kafka_publish".equals(request.operation()),"reviewed_operation");
+        Map<String,Object> inputs=new LinkedHashMap<>();
+        for(var p:request.parameters()){
+            Object key=p.get("bind_as");ReviewedLoopbackKafkaPolicy.require(key instanceof String&&!inputs.containsKey(key),"resolved_input");
+            inputs.put((String)key,p.get("ref"));
+        }
+        ReviewedLoopbackKafkaPolicy.require("fixtures/payload.json".equals(inputs.get("payload_ref")),"resolved_payload");inputs.put("payload_ref",ReviewedLoopbackKafkaPolicy.PAYLOAD_REF);
+        var fixture=ReviewedLoopbackKafkaPolicy.admit(context.suiteRoot(),context.bindingValues(),inputs,reviewedLeasePin.get(),reviewedClock.instant());
+        Object rawStep=request.outputs().get("_operation_id");ReviewedLoopbackKafkaPolicy.require(rawStep instanceof String&&((String)rawStep).matches("[A-Za-z0-9_.-]{1,128}"),"step_identity");String step=(String)rawStep;
+        var run=context.runDir();ReviewedLoopbackKafkaPolicy.require(run.getFileName()!=null&&run.getParent()!=null&&run.getParent().getFileName()!=null,"run_identity");
+        Instant started=reviewedClock.instant();ReviewedKafkaProducer.Outcome outcome=null;
+        try{reviewedFence.accept(fixture);}catch(IllegalArgumentException failure){outcome=new ReviewedKafkaProducer.Outcome(false,false,true,"PREFLIGHT_BLOCKED",-1,-1);}
+        // An unstructured transport exception cannot fabricate zero operations or confirmed cleanup.
+        if(outcome==null)outcome=kafkaClientTransport.reviewedPublish(new KafkaConnection((String)fixture.lease().get("endpoint"),(String)fixture.lease().get("topic"),(String)fixture.lease().get("consumer_group")),(String)inputs.get("key"),fixture.payloadJson(),ReviewedLoopbackKafkaPolicy.timeout(inputs.get("timeout")));
+        var proof=ReviewedKafkaPublishProof.create(fixture,run.getFileName().toString(),run.getParent().getFileName().toString(),step,context.providerId(),outcome,started,reviewedClock.instant());
+        try{byte[] raw=ReviewedLoopbackKafkaPolicy.JSON.writeValueAsBytes(proof);ReviewedLoopbackKafkaPolicy.require(raw.length<=16384,"proof_byte_bound");Path file=run.resolve(ReviewedKafkaPublishProof.PATH);Files.createDirectories(file.getParent());Files.write(file,raw,java.nio.file.StandardOpenOption.CREATE_NEW);}catch(IOException e){throw new UncheckedIOException(e);}
+        Map<String,Object> outputs=new LinkedHashMap<>();outputs.put("topic",fixture.lease().get("topic"));outputs.put("key",fixture.lease().get("key"));outputs.put("partition",outcome.partition());outputs.put("offset",outcome.offset());outputs.put("event_evidence_ref",ReviewedKafkaPublishProof.PATH);
+        var evidence=List.of(new ProviderEvidence("kafka_event",ReviewedKafkaPublishProof.PATH,true));
+        boolean completeFreshAck=outcome.status().equals("ACK")&&outcome.attempted()&&outcome.acknowledged()
+                &&outcome.cleanupConfirmed()&&outcome.partition()==0&&outcome.offset()==0;
+        if(completeFreshAck)return ProviderOperationResult.passed(outputs,evidence);
+        String failureCode=outcome.status().equals("DEADLINE_EXCEEDED")?"KAFKA_TIMEOUT":"KAFKA_PUBLISH_FAILED";
+        var failure=ProviderFailure.of(failureCode,"PROVIDER_EXECUTION_FAILED","Reviewed Kafka publish did not complete with a confirmed ACK and cleanup.","Inspect bounded reviewed publish evidence; retain owned resources until collection completes.");
+        return outcome.status().equals("PREFLIGHT_BLOCKED")?ProviderOperationResult.blocked(outputs,evidence,failure):ProviderOperationResult.failed(outputs,evidence,failure);
+    }
+
     @Override
     public ProviderOperationResult execute(ProviderExecutionContext context, ProviderOperationRequest request) {
         ConnectionSelection connection = connection(context);
@@ -786,6 +824,10 @@ public class KafkaProviderRuntime implements ProviderRuntime {
     }
 
     interface KafkaClientTransport {
+        default ReviewedKafkaProducer.Outcome reviewedPublish(KafkaConnection connection,String key,String payload,Duration timeout){
+            throw new IllegalArgumentException("reviewed_kafka: transport_not_admitted");
+        }
+
 
         KafkaPublishResult publish(KafkaConnection connection, String key, Object payload, Duration timeout)
                 throws Exception;
@@ -813,6 +855,10 @@ public class KafkaProviderRuntime implements ProviderRuntime {
 
     private static final class DefaultKafkaClientTransport implements KafkaClientTransport {
         private final Yaml yaml = new Yaml();
+        @Override public ReviewedKafkaProducer.Outcome reviewedPublish(KafkaConnection connection,String key,String payload,Duration timeout){
+            return ReviewedKafkaProducer.send(KafkaProducer::new,connection,key,payload,timeout,System::nanoTime);
+        }
+
 
         @Override
         public KafkaPublishResult publish(KafkaConnection connection, String key, Object payload, Duration timeout)

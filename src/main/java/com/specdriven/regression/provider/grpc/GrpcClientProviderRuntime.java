@@ -12,6 +12,10 @@ import com.specdriven.regression.provider.runtime.ProviderOperationResult;
 import com.specdriven.regression.provider.runtime.ProviderRuntime;
 import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
+import io.grpc.ClientInterceptors;
+import io.grpc.stub.MetadataUtils;
+import java.util.concurrent.atomic.AtomicReference;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -49,6 +53,132 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
         };
     }
 
+    /** Protected reviewed entry; generic execute remains compatible with existing external gRPC suites. */
+    public ProviderOperationResult executeReviewedUnary(ProviderExecutionContext context, ProviderOperationRequest request) {
+        long started=System.nanoTime();
+        Map<String,Object> inputs=new LinkedHashMap<>();
+        if(!"native".equals(context.runtimeMode()) || !"unary_call".equals(request.operation()))
+            throw new IllegalArgumentException("reviewed_grpc: only native unary_call is supported");
+        for (var parameter:request.parameters()) {
+            if(inputs.putIfAbsent(stringValue(parameter.get("bind_as")),parameter.get("ref"))!=null)
+                throw new IllegalArgumentException("reviewed_grpc: duplicate unary input");
+        }
+        if(!java.util.Set.of("fixtures/echo.desc.b64","fixtures/greeter.desc.b64","fixtures/routeguide.desc.b64","fixtures/service.desc.b64","fixtures/catalog.desc.b64").contains(inputs.get("grpc.descriptor_ref")) || !"fixtures/request.json".equals(inputs.get("grpc.message")))
+            throw new IllegalArgumentException("reviewed_grpc: resolved fixtures differ from reviewed fixed paths");
+        inputs.put("grpc.descriptor_ref","artifact://"+inputs.get("grpc.descriptor_ref"));
+        inputs.put("grpc.message",ReviewedLoopbackGrpcPolicy.REQUEST_REF);
+        ReviewedLoopbackGrpcPolicy.validateInputs(inputs);
+        long end=started+ReviewedLoopbackGrpcPolicy.timeout(inputs.get("grpc.timeout")).toNanos();
+        var fixture=ReviewedLoopbackGrpcPolicy.fixture(context.suiteRoot(),context.bindingValues(),true);
+        if(!fixture.method().getService().getFullName().equals(inputs.get("grpc.service")) || !fixture.method().getName().equals(inputs.get("grpc.method")))
+            throw new IllegalArgumentException("reviewed_grpc: lease profile differs from reviewed operation");
+        ManagedChannel channel=null;
+        ProviderOperationResult result;
+        String status="UNKNOWN", body="", error="";
+        boolean attempted=false, cleaned=true, streamingRejected=false;
+        var selectedProfile=ReviewedLoopbackGrpcPolicy.profile(inputs);
+        boolean rejectionOnly=selectedProfile.rejectionOnly();
+        String leaseCheckedAt=java.time.Instant.now().toString();
+        String rpcStartedAt="",rpcFinishedAt="";
+        try {
+            if(rejectionOnly) requireRejectionOnly(fixture.method(),GrpcDescriptorSupport::requireUnary);
+            else GrpcDescriptorSupport.requireUnary(fixture.method());
+            DynamicMessage.Builder message=DynamicMessage.newBuilder(fixture.method().getInputType());
+            JsonFormat.parser().merge(fixture.requestJson(),message);
+            channel=ManagedChannelBuilder.forTarget(stripGrpcScheme(stringValue(context.bindingValues().get("target"))))
+                    .usePlaintext().maxInboundMessageSize(ReviewedLoopbackGrpcPolicy.MAX_RESPONSE_BYTES).build();
+            // Validate the frozen lease again immediately before the actual RPC, without a network preflight.
+            fixture=ReviewedLoopbackGrpcPolicy.fixture(context.suiteRoot(),context.bindingValues(),true);
+            leaseCheckedAt=java.time.Instant.now().toString();
+            long remaining=end-System.nanoTime();
+            if(remaining<=0) throw Status.DEADLINE_EXCEEDED.withDescription("whole operation budget exhausted before RPC").asRuntimeException();
+            attempted=true;
+            rpcStartedAt=java.time.Instant.now().toString();
+            DynamicMessage response=ClientCalls.blockingUnaryCall(channel,grpcMethod(fixture.method()),
+                    CallOptions.DEFAULT.withDeadlineAfter(remaining,TimeUnit.NANOSECONDS),message.build());
+            if(System.nanoTime()>=end) throw Status.DEADLINE_EXCEEDED.withDescription("whole operation budget exhausted").asRuntimeException();
+            body=JsonFormat.printer().omittingInsignificantWhitespace().print(response);
+            if(body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>ReviewedLoopbackGrpcPolicy.MAX_RESPONSE_BYTES)
+                throw Status.RESOURCE_EXHAUSTED.withDescription("serialized JSON exceeds 1 MiB").asRuntimeException();
+            if(System.nanoTime()>=end) throw Status.DEADLINE_EXCEEDED.withDescription("serialization exceeded operation budget").asRuntimeException();
+            status="OK";
+        } catch(GrpcDescriptorSupport.StreamingDescriptorException e) {
+            streamingRejected=rejectionOnly; error=maskSensitiveText(safeMessage(e)); body="";
+        } catch(StatusRuntimeException e) { status=e.getStatus().getCode().name(); error=maskSensitiveText(safeMessage(e)); body=""; }
+        catch(Exception e) { error=maskSensitiveText(safeMessage(e)); body=""; }
+        finally {
+            if(attempted)rpcFinishedAt=java.time.Instant.now().toString();
+            if(channel!=null) {
+                channel.shutdownNow();
+                try { cleaned=channel.awaitTermination(2,TimeUnit.SECONDS); }
+                catch(InterruptedException e) {Thread.currentThread().interrupt();cleaned=false;}
+            }
+        }
+        if(!cleaned) {status="CLEANUP_UNCONFIRMED";body="";error="gRPC channel termination not confirmed within 2s";}
+        long duration=Duration.ofNanos(System.nanoTime()-started).toMillis();
+        writeReviewedEvidence(context,request,fixture,status,body,error,duration,attempted,cleaned,streamingRejected,channel!=null,leaseCheckedAt,rpcStartedAt,rpcFinishedAt);
+        var proof=evidence("grpc_request_response","provider-evidence/grpc-client/reviewed-unary.json");
+        if(status.equals("OK")) return ProviderOperationResult.passed(Map.of("response.message",body,"response.status",status,"response.duration_ms",duration),proof);
+        return ProviderOperationResult.failed(Map.of("response.status",status,"response.duration_ms",duration),proof,
+                ProviderFailure.of(status.equals("DEADLINE_EXCEEDED")?"PROVIDER_TIMEOUT":"OPERATION_FAILED",
+                        status.equals("DEADLINE_EXCEEDED")?"PROVIDER_TIMEOUT":"FRAMEWORK_ERROR",
+                        reviewedFailureReason(streamingRejected,status,error),"Inspect bounded reviewed-unary evidence."));
+    }
+
+    static void requireRejectionOnly(Descriptors.MethodDescriptor method,java.util.function.Consumer<Descriptors.MethodDescriptor> guard) {
+        guard.accept(method);
+        throw new IllegalStateException("reviewed_grpc: rejection-only cardinality guard returned without rejecting");
+    }
+    static String reviewedFailureReason(boolean streamingRejected,String status,String error) {
+        return streamingRejected ? "gRPC unary_call failed: "+error : "Reviewed gRPC unary failed: "+status+" "+error;
+    }
+    private void writeReviewedEvidence(ProviderExecutionContext context,ProviderOperationRequest request, ReviewedLoopbackGrpcPolicy.Fixture fixture,
+            String status,String body,String error,long duration,boolean attempted,boolean cleaned,boolean streamingRejected,boolean channelCreated,String leaseCheckedAt,String rpcStartedAt,String rpcFinishedAt) {
+        Map<String,Object> evidence=new LinkedHashMap<>();
+        evidence.put("evidence_type","grpc_request_response"); evidence.put("provider_type",PROVIDER_TYPE);
+        evidence.put("provider_id",context.providerId()); evidence.put("service",fixture.method().getService().getFullName());
+        evidence.put("method",fixture.method().getName()); evidence.put("fixture_lease_sha256",fixture.leaseSha256());
+        evidence.put("owner_run_id",fixture.lease().get("owner_run_id")); evidence.put("endpoint",fixture.lease().get("endpoint"));
+        evidence.put("rpc_attempted",attempted); evidence.put("cleanup_confirmed",cleaned);
+        evidence.put("request",fixture.requestJson()); evidence.put("status",status); evidence.put("body",maskSensitiveText(body));
+        evidence.put("duration_ms",duration); evidence.put("error",error); evidence.put("masking_applied",true);
+        if(ReviewedGrpcStreamingRejectionProof.ownsProfile(String.valueOf(fixture.lease().get("profile")))) {
+            boolean unaryProfile=ReviewedLoopbackGrpcPolicy.Profile.P04_UNARY.id.equals(fixture.lease().get("profile"));
+            evidence.put("schema",unaryProfile?"reviewed-grpc-owned-unary.v1":"reviewed-grpc-owned-streaming-rejection.v1");evidence.put("operation","unary_call");
+            evidence.put("run_id",context.runDir().getFileName().toString());
+            evidence.put("test_case_id",request.outputs().get("_test_case_id"));evidence.put("step_id",request.outputs().get("_operation_id"));
+            evidence.put("source_revision",ReviewedGrpcDescriptorPolicy.SOURCE_REVISION);evidence.put("source_sha256",ReviewedGrpcDescriptorPolicy.SOURCE_SHA);
+            evidence.put("descriptor_sha256",ReviewedGrpcDescriptorPolicy.DESCRIPTOR_SHA);evidence.put("request_sha256",ReviewedGrpcDescriptorPolicy.REQUEST_SHA);
+            evidence.put("input_type",fixture.method().getInputType().getFullName());evidence.put("output_type",fixture.method().getOutputType().getFullName());
+            evidence.put("client_streaming",fixture.method().isClientStreaming());evidence.put("server_streaming",fixture.method().isServerStreaming());
+            evidence.put("operation_status",status.equals("OK")?"passed":"failed");evidence.put("failure_code",status.equals("OK")?"":"OPERATION_FAILED");
+            evidence.put("diagnostic",status.equals("OK")?"":reviewedFailureReason(streamingRejected,status,error));evidence.put("guard_rejection_observed",streamingRejected);
+            evidence.put("channel_created",channelCreated);evidence.put("lease_checked_at",leaseCheckedAt);
+            evidence.put("descriptor_generation","reviewed_descriptor_assembly");evidence.put("compiler",null);
+        }
+        if(ReviewedA01CatalogPolicy.PROFILE.equals(fixture.lease().get("profile"))) {
+            String runId=context.runDir().getFileName().toString();
+            String batchId=context.runDir().getParent().getFileName().toString();
+            if(!runId.matches("RUN-(?:[A-Za-z0-9]+-)?[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}") || !batchId.matches("[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"))
+                throw new IllegalArgumentException("reviewed_a01: invalid canonical run directory identity");
+            evidence.put("version",ReviewedA01CatalogProof.VERSION);evidence.put("profile",ReviewedA01CatalogPolicy.PROFILE);
+            evidence.put("operation","unary_call");evidence.put("run_id",runId);evidence.put("batch_id",batchId);
+            evidence.put("test_case_id",request.outputs().get("_test_case_id"));evidence.put("step_id",request.outputs().get("_operation_id"));
+            evidence.put("input_type",fixture.method().getInputType().getFullName());evidence.put("output_type",fixture.method().getOutputType().getFullName());
+            for(String key:java.util.Set.of("upstream_revision","source_manifest_sha256","runtime_manifest_sha256","build_manifest_sha256","owner_launch_sha256","owner_launch","canonical_proto_sha256","generated_proto_sha256","descriptor_fdp_sha256","descriptor_sha256","request_sha256","data_sha256","supervisor","child","listener"))evidence.put(key,fixture.lease().get(key));
+            evidence.put("live_checked_at",leaseCheckedAt);evidence.put("rpc_started_at",rpcStartedAt);evidence.put("rpc_finished_at",rpcFinishedAt);
+            evidence.put("channel_created",channelCreated);evidence.put("operation_status",status.equals("OK")?"passed":"failed");
+            evidence.put("failure_code",status.equals("OK")?"":status.equals("DEADLINE_EXCEEDED")?"PROVIDER_TIMEOUT":"OPERATION_FAILED");
+            evidence.put("diagnostic",status.equals("OK")?"":reviewedFailureReason(false,status,error));
+        }
+        try {
+            String serialized=new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(evidence);
+            if(serialized.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>2*1024*1024)
+                throw new IllegalStateException("reviewed gRPC evidence exceeds 2 MiB");
+            write(context.runDir().resolve("provider-evidence/grpc-client/reviewed-unary.json"),serialized);
+        } catch(IOException e) {throw new UncheckedIOException(e);}
+    }
+
     private ProviderOperationResult unaryCall(ProviderExecutionContext context, ProviderOperationRequest request) {
         String target = stringValue(context.bindingValues().get("target"));
         if (target.isBlank() || target.startsWith("generated://")) {
@@ -68,34 +198,42 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
                 stringValue(context.bindingValues().get("descriptor_ref")));
         long started = System.nanoTime();
         ManagedChannel channel = null;
+        Path runtimeWorkDir = null;
         try {
+            runtimeWorkDir = Files.createTempDirectory("regress-v03-grpc-client-");
             Path descriptorPath = GrpcDescriptorMaterializer.materialize(
                     context.suiteRoot(),
-                    context.runDir().resolve("grpc-client-descriptors"),
+                    runtimeWorkDir,
                     descriptorRef);
             String payload = requestPayload(context.suiteRoot(), parameterValue(request, "grpc.message", ""));
-            int timeoutSeconds = timeoutSeconds(parameterValue(request, "grpc.timeout", ""), 10);
+            long timeoutNanos = timeoutNanos(parameterValue(request, "grpc.timeout", ""), 10);
+            Metadata outgoingMetadata = requestMetadata(request);
+            AtomicReference<Metadata> initialMetadata = new AtomicReference<>();
+            Descriptors.MethodDescriptor method = GrpcDescriptorSupport.method(descriptorPath, service, methodName);
+            GrpcDescriptorSupport.requireUnary(method);
             channel = ManagedChannelBuilder.forTarget(stripGrpcScheme(target))
                     .usePlaintext()
                     .build();
-            Descriptors.MethodDescriptor method = descriptorMethod(descriptorPath, service, methodName);
             DynamicMessage.Builder requestMessage = DynamicMessage.newBuilder(method.getInputType());
             JsonFormat.parser().merge(payload, requestMessage);
             DynamicMessage response = ClientCalls.blockingUnaryCall(
-                    channel,
+                    ClientInterceptors.intercept(channel,
+                            MetadataUtils.newAttachHeadersInterceptor(outgoingMetadata),
+                            MetadataUtils.newCaptureMetadataInterceptor(initialMetadata, new AtomicReference<>())),
                     grpcMethod(method),
-                    CallOptions.DEFAULT.withDeadlineAfter(Math.max(1, timeoutSeconds), TimeUnit.SECONDS),
+                    CallOptions.DEFAULT.withDeadlineAfter(timeoutNanos, TimeUnit.NANOSECONDS),
                     requestMessage.build());
             long durationMs = Duration.ofNanos(System.nanoTime() - started).toMillis();
             String responseJson = JsonFormat.printer().omittingInsignificantWhitespace().print(response);
             String maskedResponseJson = maskSensitiveText(responseJson);
             writeRequestEvidence(context, service, methodName, payload);
-            writeResponseEvidence(context, "OK", maskedResponseJson, durationMs, "passed", "");
+            Map<String, String> responseMetadata = responseMetadata(initialMetadata.get());
+            writeResponseEvidence(context, "OK", maskedResponseJson, durationMs, "passed", "", responseMetadata);
             return ProviderOperationResult.passed(
                     Map.of(
                             "response.message", maskedResponseJson,
                             "response.status", "OK",
-                            "response.metadata", Map.of(),
+                            "response.metadata", responseMetadata,
                             "response.duration_ms", durationMs),
                     evidence(
                             "grpc_request", "provider-evidence/grpc-client/request.json",
@@ -134,6 +272,18 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
                     Thread.currentThread().interrupt();
                 }
             }
+            deleteRuntimeWorkDir(runtimeWorkDir);
+        }
+    }
+
+    private void deleteRuntimeWorkDir(Path runtimeWorkDir) {
+        if (runtimeWorkDir == null) return;
+        try (var paths = Files.walk(runtimeWorkDir)) {
+            for (Path path : paths.sorted((left, right) -> right.compareTo(left)).toList()) {
+                Files.deleteIfExists(path);
+            }
+        } catch (IOException ignored) {
+            // Working files are outside the evidence directory and never become release artifacts.
         }
     }
 
@@ -148,72 +298,6 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
                 .setResponseMarshaller(ProtoUtils.marshaller(
                         DynamicMessage.getDefaultInstance(method.getOutputType())))
                 .build();
-    }
-
-    private Descriptors.MethodDescriptor descriptorMethod(Path descriptorPath, String serviceName, String methodName)
-            throws IOException {
-        Map<String, DescriptorProtos.FileDescriptorProto> protos = descriptorProtos(descriptorPath);
-        Map<String, Descriptors.FileDescriptor> descriptors = new LinkedHashMap<>();
-        for (DescriptorProtos.FileDescriptorProto proto : protos.values()) {
-            buildDescriptor(proto, protos, descriptors);
-        }
-        Descriptors.ServiceDescriptor service = findService(descriptors, serviceName);
-        Descriptors.MethodDescriptor method = service.findMethodByName(methodName);
-        if (method == null) {
-            throw new IOException("gRPC method `" + methodName + "` not found in service `" + serviceName + "`.");
-        }
-        return method;
-    }
-
-    private Map<String, DescriptorProtos.FileDescriptorProto> descriptorProtos(Path descriptorPath) throws IOException {
-        try (InputStream input = Files.newInputStream(descriptorPath)) {
-            DescriptorProtos.FileDescriptorSet descriptorSet = DescriptorProtos.FileDescriptorSet.parseFrom(input);
-            Map<String, DescriptorProtos.FileDescriptorProto> protos = new LinkedHashMap<>();
-            for (DescriptorProtos.FileDescriptorProto proto : descriptorSet.getFileList()) {
-                protos.put(proto.getName(), proto);
-            }
-            return protos;
-        }
-    }
-
-    private Descriptors.FileDescriptor buildDescriptor(
-            DescriptorProtos.FileDescriptorProto proto,
-            Map<String, DescriptorProtos.FileDescriptorProto> protos,
-            Map<String, Descriptors.FileDescriptor> descriptors) throws IOException {
-        Descriptors.FileDescriptor existing = descriptors.get(proto.getName());
-        if (existing != null) {
-            return existing;
-        }
-        List<Descriptors.FileDescriptor> dependencies = new ArrayList<>();
-        for (String dependencyName : proto.getDependencyList()) {
-            DescriptorProtos.FileDescriptorProto dependency = protos.get(dependencyName);
-            if (dependency == null) {
-                throw new IOException("Descriptor dependency `" + dependencyName + "` is missing.");
-            }
-            dependencies.add(buildDescriptor(dependency, protos, descriptors));
-        }
-        try {
-            Descriptors.FileDescriptor descriptor = Descriptors.FileDescriptor.buildFrom(
-                    proto,
-                    dependencies.toArray(Descriptors.FileDescriptor[]::new));
-            descriptors.put(proto.getName(), descriptor);
-            return descriptor;
-        } catch (Descriptors.DescriptorValidationException e) {
-            throw new IOException("Invalid gRPC descriptor `" + proto.getName() + "`.", e);
-        }
-    }
-
-    private Descriptors.ServiceDescriptor findService(
-            Map<String, Descriptors.FileDescriptor> descriptors,
-            String serviceName) throws IOException {
-        for (Descriptors.FileDescriptor descriptor : descriptors.values()) {
-            for (Descriptors.ServiceDescriptor service : descriptor.getServices()) {
-                if (service.getFullName().equals(serviceName) || service.getName().equals(serviceName)) {
-                    return service;
-                }
-            }
-        }
-        throw new IOException("gRPC service `" + serviceName + "` not found in descriptor set.");
     }
 
     private String requestPayload(Path suiteRoot, String refOrValue) {
@@ -235,15 +319,42 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
         return target.startsWith("grpc://") ? target.substring("grpc://".length()) : target;
     }
 
-    private int timeoutSeconds(String timeout, int fallback) {
-        if (timeout == null || timeout.isBlank()) {
-            return fallback;
-        }
+    private long timeoutNanos(String timeout, int fallbackSeconds) {
+        long fallback = TimeUnit.SECONDS.toNanos(fallbackSeconds);
+        if (timeout == null || timeout.isBlank()) return fallback;
         try {
-            return (int) Math.max(1, Duration.parse(timeout).toSeconds());
+            Duration duration = Duration.parse(timeout);
+            if (duration.isZero() || duration.isNegative()) return TimeUnit.SECONDS.toNanos(1);
+            return duration.toNanos();
         } catch (RuntimeException e) {
             return fallback;
         }
+    }
+
+    private Metadata requestMetadata(ProviderOperationRequest request) {
+        Metadata metadata = new Metadata();
+        for (Map<String, Object> parameter : request.parameters()) {
+            String binding = stringValue(parameter.get("bind_as"));
+            if (!binding.startsWith("grpc.metadata.")) continue;
+            String name = binding.substring("grpc.metadata.".length()).toLowerCase(java.util.Locale.ROOT);
+            if (name.endsWith(Metadata.BINARY_HEADER_SUFFIX))
+                throw new IllegalArgumentException("Binary gRPC metadata is unsupported; use ASCII metadata inputs.");
+            metadata.put(Metadata.Key.of(name, Metadata.ASCII_STRING_MARSHALLER), stringValue(parameter.get("ref")));
+        }
+        return metadata;
+    }
+
+    /** Single-valued initial ASCII headers; binary metadata and trailers are not exposed. */
+    private Map<String, String> responseMetadata(Metadata headers) {
+        Map<String, String> values = new LinkedHashMap<>();
+        if (headers == null) return values;
+        for (String name : headers.keys()) {
+            if (name.endsWith(Metadata.BINARY_HEADER_SUFFIX)) continue;
+            String value = headers.get(Metadata.Key.of(name, Metadata.ASCII_STRING_MARSHALLER));
+            boolean sensitive = name.matches("(?i).*(?:authorization|password|token|secret|credential|cookie|api[_-]?key).*");
+            values.put(name, sensitive ? "***MASKED***" : maskSensitiveText(value));
+        }
+        return values;
     }
 
     private String parameterValue(ProviderOperationRequest request, String bindAs, String fallback) {
@@ -285,6 +396,15 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
             long durationMs,
             String operationStatus,
             String error) {
+        writeResponseEvidence(context, status, body, durationMs, operationStatus, error, Map.of());
+    }
+
+    private void writeResponseEvidence(
+            ProviderExecutionContext context, String status, String body, long durationMs,
+            String operationStatus, String error, Map<String, String> metadata) {
+        String metadataJson;
+        try { metadataJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(metadata); }
+        catch (IOException e) { throw new UncheckedIOException(e); }
         write(context.runDir().resolve("provider-evidence/grpc-client/response.json"), """
                 {
                   "evidence_type": "grpc_request_response",
@@ -293,6 +413,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
                   "status": "%s",
                   "body": %s,
                   "duration_ms": %s,
+                  "metadata": %s,
                   "operation_status": "%s",
                   "error": %s,
                   "masking_applied": true
@@ -303,6 +424,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
                         escape(status),
                         toJson(body),
                         durationMs,
+                        metadataJson,
                         escape(operationStatus),
                         toJson(error)));
     }

@@ -1,0 +1,17 @@
+{
+  "id": "ORDER-MULTI-001",
+  "status": "READY",
+  "items": [
+    {
+      "sku": "A-1",
+      "qty": 2
+    },
+    {
+      "sku": "B-2",
+      "qty": 1
+    }
+  ],
+  "metadata": {
+    "generated_at": "2026-06-30T00:00:00Z"
+  }
+}

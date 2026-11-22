@@ -16,8 +16,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 class ContractBaselineCommandTest {
 
-    private static final Path BASELINE_SUITE = Path.of("samples/10-contract-baseline/mixed_wiremock_jdbc_nats/suite_manifest.yaml");
-    private static final Path BASELINE_RESULT = Path.of("samples/10-contract-baseline/mixed_wiremock_jdbc_nats/result/sample_result.json");
+    private static final Path BASELINE_SUITE = Path.of("samples/90-compatibility/legacy-v0.2/10-contract-baseline/mixed_wiremock_jdbc_nats/suite_manifest.yaml");
+    private static final Path BASELINE_RESULT = Path.of("samples/90-compatibility/legacy-v0.2/10-contract-baseline/mixed_wiremock_jdbc_nats/result/sample_result.json");
 
     @TempDir
     Path tempDir;
@@ -33,19 +33,19 @@ class ContractBaselineCommandTest {
                 "schemas/environment_binding.v0.2.schema.yaml",
                 "schemas/suite_manifest.v0.2.schema.yaml",
                 "schemas/result.v0.2.schema.yaml",
-                "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/suite_manifest.yaml",
-                "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/test_case.yaml",
+                "samples/90-compatibility/legacy-v0.2/10-contract-baseline/mixed_wiremock_jdbc_nats/suite_manifest.yaml",
+                "samples/90-compatibility/legacy-v0.2/10-contract-baseline/mixed_wiremock_jdbc_nats/test_case.yaml",
                 "docs/02-architecture/contracts/provider-contracts/wiremock_http_mock.yaml",
                 "docs/02-architecture/contracts/provider-contracts/jdbc.yaml",
                 "docs/02-architecture/contracts/provider-contracts/nats.yaml",
-                "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/provider_instances/wiremock_payment_api.yaml",
-                "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/provider_instances/oracle_database.yaml",
-                "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/provider_instances/nats_event_bus.yaml",
-                "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/env_profiles/ci.yaml",
-                "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/env_profiles/sit.yaml",
-                "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/result/sample_result.json",
-                "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/evidence/evidence_index.yaml",
-                "samples/10-contract-baseline/mixed_wiremock_jdbc_nats/evidence/runs/RUN-CONTRACT-001/logs/execution.txt");
+                "samples/90-compatibility/legacy-v0.2/10-contract-baseline/mixed_wiremock_jdbc_nats/provider_instances/wiremock_payment_api.yaml",
+                "samples/90-compatibility/legacy-v0.2/10-contract-baseline/mixed_wiremock_jdbc_nats/provider_instances/oracle_database.yaml",
+                "samples/90-compatibility/legacy-v0.2/10-contract-baseline/mixed_wiremock_jdbc_nats/provider_instances/nats_event_bus.yaml",
+                "samples/90-compatibility/legacy-v0.2/10-contract-baseline/mixed_wiremock_jdbc_nats/env_profiles/ci.yaml",
+                "samples/90-compatibility/legacy-v0.2/10-contract-baseline/mixed_wiremock_jdbc_nats/env_profiles/sit.yaml",
+                "samples/90-compatibility/legacy-v0.2/10-contract-baseline/mixed_wiremock_jdbc_nats/result/sample_result.json",
+                "samples/90-compatibility/legacy-v0.2/10-contract-baseline/mixed_wiremock_jdbc_nats/evidence/evidence_index.yaml",
+                "samples/90-compatibility/legacy-v0.2/10-contract-baseline/mixed_wiremock_jdbc_nats/evidence/runs/RUN-CONTRACT-001/logs/execution.txt");
 
         assertThat(requiredPaths).allSatisfy(path -> assertThat(Files.exists(Path.of(path)))
                 .as(path + " should be checked in")
@@ -837,7 +837,7 @@ class ContractBaselineCommandTest {
 
     private Path mutableBaseline(String name) throws IOException {
         Path target = tempDir.resolve(name);
-        copyDirectory(Path.of("samples/10-contract-baseline/mixed_wiremock_jdbc_nats"), target);
+        copyDirectory(Path.of("samples/90-compatibility/legacy-v0.2/10-contract-baseline/mixed_wiremock_jdbc_nats"), target);
         return target.resolve("suite_manifest.yaml");
     }
 

@@ -1,0 +1,55 @@
+name: CD SIT Post-deployment Gate
+
+# The deployment owner calls this only after its own protected deployment and review.
+# This workflow never deploys and has no automatic push or local-ci-policy trigger.
+on:
+  workflow_call:
+    inputs:
+      deployment_artifact:
+        description: Artifact from this workflow run containing the independently approved CD bundle
+        required: true
+        type: string
+      handoff_sha256:
+        description: Protected independent SHA-256 of deployment.json; never computed from the downloaded bundle
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sit-postdeploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download approved deployment handoff and pinned inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.deployment_artifact }}
+          path: target/cd-sit-input
+
+      - name: Gate and execute through the existing framework
+        env:
+          CD_SIT_HANDOFF_SHA256: ${{ inputs.handoff_sha256 }}
+        run: >-
+          python3 scripts/cd/run-sit-postdeploy.py --bundle target/cd-sit-input
+          --expected-handoff-sha256 "$CD_SIT_HANDOFF_SHA256"
+          --output target/cd-sit-evidence --java-home "$JAVA_HOME"
+
+      - name: Retain sanitized gate and canonical framework evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cd-sit-gate-${{ github.run_id }}
+          if-no-files-found: ignore
+          path: |
+            target/cd-sit-evidence/gate-result.json
+            target/cd-sit-evidence/runtime/target/regression/

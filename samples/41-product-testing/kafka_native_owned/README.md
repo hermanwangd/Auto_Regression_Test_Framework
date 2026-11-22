@@ -1,0 +1,9 @@
+# Public Kafka publish source template
+
+TEMPLATE_UNBOUND / NOT_RUN. This is tool-owned public testware, not company product SSOT or a broker deployment. No approved handoff, fixtures/lease.json or runtime authority is supplied. Preparation/invocation must remain blocked until missing concrete bindings are admitted. Null template fields must never be treated as ready. The fixed illustrative namespace is not owned; an independent later controller must generate a fresh owner/topic/group/key and pin the resulting immutable inputs.
+
+The finite leaf is integration/regression/local/not_used, one kafka.v0.3 kafka_publish operation and typed partition/offset scalar oracles. Correct expectation0 for each applies only to an independently provisioned fresh single-partition topic. A separately reviewed wrong-offset1 case expects canonical FAIL after an ACK. No consumer-delivery, remote, auth/TLS, SIT or native Swarm claim follows.
+
+The provider contract preserves the repository Kafka contract values as alias-free JSON (valid YAML), because reviewed YAML prohibits aliases. No generic validator was relaxed. The review input is a template, never an approval. fixtures/lease.template.json is outside the execution closure; only a later controller-produced fixtures/lease.json can fill it. Do not rename the null template into a live lease. Missing official broker/image/config pins and a real current network fence remain unresolved.
+
+The default reviewed runtime rejects with PREFLIGHT_BLOCKED before client acquisition while live network-fence authority is unbound. No CLI command, setup script, credential, container operation or automatic acquisition is provided. See docs/02-architecture/contracts/reviewed_kafka_publish.v1.interface.md. Existing product-owned tests/sit remains the executable product SSOT; immutable stage copies are derived execution inputs, and PK stores metadata/references only.

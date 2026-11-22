@@ -14,7 +14,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 
-final class FrameworkProviderContractCatalog {
+public final class FrameworkProviderContractCatalog {
 
     private static final String INDEX_FILE = "provider-contracts.index";
 
@@ -23,7 +23,7 @@ final class FrameworkProviderContractCatalog {
     private FrameworkProviderContractCatalog() {
     }
 
-    static Path resolveDirectory(Path suiteRoot, Path frameworkProviderContracts) {
+    public static Path resolveDirectory(Path suiteRoot, Path frameworkProviderContracts) {
         Path cwdCandidate = Path.of("").toAbsolutePath().normalize().resolve(frameworkProviderContracts);
         if (Files.isDirectory(cwdCandidate)) {
             return cwdCandidate;

@@ -7,6 +7,7 @@ import com.specdriven.regression.binding.BindingResolutionReport;
 import com.specdriven.regression.binding.BindingResolver;
 import com.specdriven.regression.binding.ResolvedBinding;
 import com.specdriven.regression.contract.ContractBaselineService;
+import com.specdriven.regression.contract.ResultDocumentReader;
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.DryRunResult;
 import com.specdriven.regression.contract.ContractBaselineService.ReportResult;
@@ -34,6 +35,11 @@ import com.specdriven.regression.contract.WireMockProviderCapabilityService;
 import com.specdriven.regression.contract.WireMockProviderCapabilityService.WireMockRunResult;
 import com.specdriven.regression.contract.WireMockHttpRequestCapabilityService;
 import com.specdriven.regression.contract.WireMockHttpRequestCapabilityService.MixedRunResult;
+import com.specdriven.regression.contract.v03.V03RuntimeExecutionService;
+import com.specdriven.regression.contract.v03.V03RuntimeExecutionService.V03RuntimeRunResult;
+import com.specdriven.regression.contract.v03.V03ExecutionPlanBuilder;
+import com.specdriven.regression.contract.v03.V03ExecutionPlan;
+import com.specdriven.regression.contract.v03.V03DryRunRenderer;
 import com.specdriven.regression.discovery.ReleasePackageCompletenessReport;
 import com.specdriven.regression.discovery.ReleasePackageGap;
 import com.specdriven.regression.discovery.ReleasePackageResult;
@@ -51,6 +57,9 @@ import com.specdriven.regression.evidence.EvidenceHardeningService;
 import com.specdriven.regression.evidence.EvidenceHardeningService.EvidenceValidationResult;
 import com.specdriven.regression.evidence.EvidenceHardeningService.ProviderEvidenceSummary;
 import com.specdriven.regression.evidence.EvidenceWriter;
+import com.specdriven.regression.summary.SuiteExecutionContext;
+import com.specdriven.regression.summary.SuiteArtifactFinalizer;
+import com.specdriven.regression.summary.SuiteAggregationService;
 import com.specdriven.regression.expectedresult.ExpectedResultDraftResult;
 import com.specdriven.regression.expectedresult.ExpectedResultEligibilityReport;
 import com.specdriven.regression.expectedresult.ExpectedResultGap;
@@ -90,6 +99,8 @@ import com.specdriven.regression.schema.ArtifactValidationError;
 import com.specdriven.regression.testcase.ExecutionContextReadiness;
 import com.specdriven.regression.testcase.TestCaseDraftResult;
 import com.specdriven.regression.testcase.TestCaseLifecycleService;
+import com.specdriven.regression.producttest.ProductTestHandoffService;
+import com.specdriven.regression.producttest.ProductTestHandoffService.InvocationRequirement;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
@@ -132,7 +143,7 @@ public class RegressionCommand {
             "--result",
             "--suite",
             "--tag",
-            "--test-case");
+            "--test-case", "--review-input", "--selection-receipt", "--out");
 
     private final ProductRepoService productRepoService;
     private final ReleasePackageService releasePackageService;
@@ -173,8 +184,13 @@ public class RegressionCommand {
             new SoapMockCapabilityService();
     private final GrpcMockCapabilityService grpcMockCapabilityService =
             new GrpcMockCapabilityService();
+    private final V03RuntimeExecutionService v03RuntimeExecutionService = new V03RuntimeExecutionService();
+    private final V03DryRunRenderer v03DryRunRenderer = new V03DryRunRenderer();
+    private final SuiteArtifactFinalizer suiteArtifactFinalizer = new SuiteArtifactFinalizer();
+    private final SuiteAggregationService suiteAggregationService = new SuiteAggregationService();
     private final SuiteRuntimeDispatcher suiteRuntimeDispatcher = new SuiteRuntimeDispatcher();
     private boolean legacyRpModeEnabledForCompatibilityTests;
+    private final InvocationRequirement invocationRequirement;
 
     public RegressionCommand(ProductRepoService productRepoService, ReleasePackageService releasePackageService) {
         this(
@@ -194,6 +210,15 @@ public class RegressionCommand {
                 new CoverageReportService());
     }
 
+    public RegressionCommand(ProductRepoService productRepoService, ReleasePackageService releasePackageService,
+            Map<String, String> invocationEnvironment) {
+        this(productRepoService, releasePackageService, new AcIntakeService(), new RpRuMappingService(),
+                new TestCaseLifecycleService(), new ExpectedResultService(), new ExecutionEnvironmentResolver(),
+                new BindingResolver(), new ProviderContractResolver(), new FixtureLifecycleService(),
+                new ExecutionEngine(), new OracleReadinessService(), new EvidenceWriter(), new CoverageReportService(),
+                InvocationRequirement.fromEnvironment(invocationEnvironment));
+    }
+
     public RegressionCommand(
             ProductRepoService productRepoService,
             ReleasePackageService releasePackageService,
@@ -209,6 +234,21 @@ public class RegressionCommand {
             OracleReadinessService oracleReadinessService,
             EvidenceWriter evidenceWriter,
             CoverageReportService coverageReportService) {
+        this(productRepoService, releasePackageService, acIntakeService, rpRuMappingService, testCaseLifecycleService,
+                expectedResultService, executionEnvironmentResolver, bindingResolver, providerContractResolver,
+                fixtureLifecycleService, executionEngine, oracleReadinessService, evidenceWriter, coverageReportService,
+                InvocationRequirement.fromEnvironment(System.getenv()));
+    }
+
+    private RegressionCommand(ProductRepoService productRepoService, ReleasePackageService releasePackageService,
+            AcIntakeService acIntakeService, RpRuMappingService rpRuMappingService,
+            TestCaseLifecycleService testCaseLifecycleService, ExpectedResultService expectedResultService,
+            ExecutionEnvironmentResolver executionEnvironmentResolver, BindingResolver bindingResolver,
+            ProviderContractResolver providerContractResolver, FixtureLifecycleService fixtureLifecycleService,
+            ExecutionEngine executionEngine, OracleReadinessService oracleReadinessService,
+            EvidenceWriter evidenceWriter, CoverageReportService coverageReportService,
+            InvocationRequirement invocationRequirement) {
+        this.invocationRequirement = java.util.Objects.requireNonNull(invocationRequirement);
         this.productRepoService = productRepoService;
         this.releasePackageService = releasePackageService;
         this.acIntakeService = acIntakeService;
@@ -235,6 +275,13 @@ public class RegressionCommand {
             return 0;
         }
         String command = args[0];
+        if ("build-info".equals(command)) {
+            var info = com.specdriven.regression.build.RunnerBuildVariant.describe();
+            try { out.println(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(info)); }
+            catch (java.io.IOException error) { err.println("Cannot render runner build information."); return 2; }
+            return "VALID".equals(info.get("descriptor_status")) ? 0 : 2;
+        }
+        if (command.startsWith("runner-")) return new com.specdriven.regression.runner.RunnerCommand().execute(args, out, err);
         Map<String, String> options = parseOptions(args);
         Path root = Path.of(options.getOrDefault("--root", "."));
 
@@ -256,6 +303,7 @@ public class RegressionCommand {
             case "draft-expected-results" -> draftExpectedResults(root, options, out, err);
             case "validate" -> validate(root, options, out, err);
             case "validate-evidence" -> validateEvidence(root, options, out, err);
+            case "prepare-product-test-handoff" -> prepareProductTestHandoff(root, options, out, err);
             case "run" -> runRegression(root, options, out, err);
             case "report" -> report(root, options, out, err);
             case "doctor" -> doctor(args, root, options, out, err);
@@ -269,12 +317,14 @@ public class RegressionCommand {
     private void printGeneralUsage(PrintStream out) {
         out.println("usage: regress <command> [options]");
         out.println("commands:");
+        out.println("  build-info --format json");
         out.println("  validate --suite <suite_manifest> [--profile <profile>]");
         out.println("  run --suite <suite_manifest> --profile <profile>");
         out.println("  run --suite <suite_manifest> --dry-run [--profile <profile>]");
-        out.println("  report --result <result_json> [--format text|yaml|json]");
+        out.println("  report --result <result_json> [--format text|yaml|json] [--coverage-dir <dir>] [--coverage-catalog <json>] [--coverage-selection <json>] [--coverage-authority <json> --expected-coverage-authority-sha256 <sha256>]");
         out.println("  validate-evidence --result <result_json>");
         out.println("  doctor drivers [--driver-path <jar>] [--driver-dir <dir>]");
+        out.println("  prepare-product-test-handoff --suite <manifest> --profile <id> --review-input <json> --out <json> [--selection-receipt <json>]");
     }
 
     private void printCommandUsage(String command, PrintStream out) {
@@ -284,7 +334,7 @@ public class RegressionCommand {
                 out.println("       regress run --suite <suite_manifest> --dry-run [--profile <profile>]");
             }
             case "validate" -> out.println("usage: regress validate --suite <suite_manifest> [--profile <profile>]");
-            case "report" -> out.println("usage: regress report --result <result_json> [--format text|yaml|json]");
+            case "report" -> out.println("usage: regress report --result <result_json> [--format text|yaml|json] [--coverage-dir <dir>] [--coverage-catalog <json>] [--coverage-selection <json>] [--coverage-authority <json> --expected-coverage-authority-sha256 <sha256>]");
             case "validate-evidence" -> out.println("usage: regress validate-evidence --result <result_json>");
             case "doctor" -> out.println("usage: regress doctor drivers [--driver-path <jar>] [--driver-dir <dir>]");
             default -> printGeneralUsage(out);
@@ -348,19 +398,33 @@ public class RegressionCommand {
         }
         ValidationResult result = contractBaselineService.validateSuite(suiteManifest);
         List<ContractFinding> profileFindings = suiteProfileFindings(suiteManifest, options.get("--profile"));
-        boolean valid = result.valid() && profileFindings.isEmpty();
+        List<ContractFinding> findings = new ArrayList<>(result.findings());
+        findings.addAll(profileFindings);
+        V03ExecutionPlan compiled = compileV03IfReady(suiteManifest, options.get("--profile"), result, findings);
+        boolean valid = findings.isEmpty();
         out.println("validation_status: " + (valid ? "passed" : "failed"));
         out.println("suite_id: " + result.suiteId());
-        out.println("provider_instances_used:");
-        for (String providerId : result.providerInstancesUsed()) {
-            out.println("  - " + providerId);
+        if (compiled != null) {
+            out.println("plan_digest: " + compiled.planDigest());
+        }
+        if (!isV03Validation(result)) {
+            out.println("provider_instances_used:");
+            for (String providerId : result.providerInstancesUsed()) {
+                out.println("  - " + providerId);
+            }
         }
         out.println("provider_types_used:");
         for (String providerType : result.providerTypesUsed()) {
             out.println("  - " + providerType);
         }
-        List<ContractFinding> findings = new ArrayList<>(result.findings());
-        findings.addAll(profileFindings);
+        out.println("targets_used:");
+        for (String target : result.targetsUsed()) {
+            out.println("  - " + target);
+        }
+        out.println("provider_contracts_used:");
+        for (String providerContract : result.providerContractsUsed()) {
+            out.println("  - " + providerContract);
+        }
         printContractFindings(out, findings);
         return valid ? 0 : 1;
     }
@@ -457,11 +521,63 @@ public class RegressionCommand {
         EvidenceValidationResult evidenceResult = evidenceHardeningService.hasEvidenceIndexReference(resolvedResult)
                 ? evidenceHardeningService.validateResult(resolvedResult)
                 : null;
-        if ("json".equals(format)) {
-            int exitCode = evidenceResult == null || evidenceResult.valid() ? 0 : 1;
-            return printReportJson(out, err, jsonReport(result, evidenceResult)) ? exitCode : 1;
+        com.specdriven.regression.report.CanonicalCoverageReportResult coverage = null;
+        boolean explicitCoverage = options.containsKey("--coverage-dir") || options.containsKey("--coverage-catalog")
+                || options.containsKey("--coverage-selection") || options.containsKey("--coverage-authority") || options.containsKey("--expected-coverage-authority-sha256");
+        Map<String, Object> coverageSource = readResultMap(resolvedResult);
+        boolean legacyMarkersAbsent = !coverageSource.containsKey("result_contract_version")
+                && !coverageSource.containsKey("product_test");
+        boolean knownLegacyCoverage = legacyMarkersAbsent && ("v0.2".equals(stringValue(coverageSource.get("dsl_version")))
+                || (!coverageSource.containsKey("dsl_version")
+                        && new com.specdriven.regression.report.LegacySuiteSummaryReportAdapter().supports(coverageSource)));
+        if (!result.suiteId().isBlank() && (explicitCoverage || !knownLegacyCoverage)) {
+            try {
+                Path coverageDir = options.containsKey("--coverage-dir")
+                        ? root.resolve(options.get("--coverage-dir")).normalize()
+                        : root.resolve("target/coverage")
+                                .resolve(result.suiteId().replaceAll("[^A-Za-z0-9._-]", "_"))
+                                .resolve(result.batchId().replaceAll("[^A-Za-z0-9._-]", "_"))
+                                .resolve(result.runId().replaceAll("[^A-Za-z0-9._-]", "_"))
+                                .resolve("report-" + java.util.UUID.randomUUID());
+                Path catalog = options.containsKey("--coverage-catalog") ? root.resolve(options.get("--coverage-catalog")) : null;
+                Path selection = options.containsKey("--coverage-selection") ? root.resolve(options.get("--coverage-selection")) : null;
+                Path authority;
+                try {authority=options.containsKey("--coverage-authority")?root.resolve(options.get("--coverage-authority")):null;}
+                catch(java.nio.file.InvalidPathException invalid){throw new IllegalArgumentException("COVERAGE_AUTHORITY_INVALID_REFERENCE");}
+                coverage = coverageReportService.projectCanonical(resolvedResult, coverageDir, catalog, selection,authority,options.get("--expected-coverage-authority-sha256"));
+            } catch (RuntimeException failure) {
+                if ("json".equals(format)) printReportJson(out, err, jsonFailure("COVERAGE_GENERATION_FAILED", "EVIDENCE_ERROR", failure.getMessage(), List.of()));
+                else err.println(failure.getMessage());
+                return 1;
+            }
         }
-        boolean evidenceInvalid = evidenceResult != null && !evidenceResult.valid();
+        if ("json".equals(format)) {
+            int exitCode = (evidenceResult == null || evidenceResult.valid()) && (coverage == null || coverage.valid()) ? 0 : 1;
+            Map<String, Object> report = jsonReport(result, evidenceResult);
+            addSuiteSummaryReportFields(report, resolvedResult);
+            if (coverage != null) {
+                report.put("coverage_json", coverage.json().toString());
+                report.put("coverage_md", coverage.markdown().toString());
+                report.put("coverage_report_status", coverage.status());
+                report.put("coverage_json_sha256", coverage.jsonSha256());
+                report.put("coverage_md_sha256", coverage.markdownSha256());
+                report.put("requirement_coverage_percent", coverage.document().at("/metrics/requirements/satisfied_percent"));
+                report.put("ac_coverage_percent", coverage.document().at("/metrics/acceptance_criteria/satisfied_percent"));
+            }
+            report.put("coverage_percent_metric", "test_pass_rate_percent");
+            report.put("coverage_percent_deprecation", "Use typed requirement/AC metrics; the legacy field is a test pass rate.");
+            return printReportJson(out, err, report) ? exitCode : 1;
+        }
+        if (coverage != null) {
+            out.println("coverage_json: " + coverage.json());
+            out.println("coverage_md: " + coverage.markdown());
+            out.println("coverage_report_status: " + coverage.status());
+            out.println("requirement_coverage_percent: " + coverage.document().at("/metrics/requirements/satisfied_percent"));
+            out.println("ac_coverage_percent: " + coverage.document().at("/metrics/acceptance_criteria/satisfied_percent"));
+        }
+        out.println("coverage_percent_metric: test_pass_rate_percent");
+        out.println("coverage_percent_deprecation: Use typed requirement/AC metrics; the legacy field is a test pass rate.");
+        boolean evidenceInvalid = (evidenceResult != null && !evidenceResult.valid()) || (coverage != null && !coverage.valid());
         if (result.suiteId().isBlank()) {
             out.println("report_status: " + (evidenceInvalid ? "invalid" : result.status()));
         } else {
@@ -476,6 +592,7 @@ public class RegressionCommand {
         }
         out.println("test_case_id: " + result.testCaseId());
         out.println("profile: " + result.profile());
+        printSuiteSummaryReportSections(out, resolvedResult);
         out.println("provider_results_count: " + result.providerResultsCount());
         out.println("verify_results_count: " + result.verifyResultsCount());
         if (!result.failedVerifySummary().isEmpty()) {
@@ -489,10 +606,66 @@ public class RegressionCommand {
             out.println("coverage_percent: " + coveragePercent(evidenceResult));
             printEvidenceReportSummary(out, evidenceResult);
             printContractFindings(out, evidenceResult.findings());
-            return evidenceResult.valid() ? 0 : 1;
+            return !evidenceInvalid ? 0 : 1;
         }
         out.println("coverage_percent: " + ("passed".equals(result.status()) ? "100.0" : "0.0"));
-        return 0;
+        return evidenceInvalid ? 1 : 0;
+    }
+
+    private void addSuiteSummaryReportFields(Map<String, Object> report, Path resultJson) {
+        Map<String, Object> summary = suiteSummaryForReport(resultJson);
+        if (summary.isEmpty()) return;
+        report.put("suite_summary_version", summary.get("suite_summary_version"));
+        report.put("completion_status", summary.get("completion_status"));
+        report.put("termination_reason", summary.get("termination_reason"));
+        report.put("start_time", summary.get("start_time"));
+        report.put("end_time", summary.get("end_time"));
+        report.put("duration_ms", summary.get("duration_ms"));
+        report.put("self_summary", summary.get("self_summary"));
+        report.put("child_aggregate_summary", summary.get("child_aggregate_summary"));
+        report.put("total_summary", summary.get("total_summary"));
+        report.put("failure_summary", summary.get("failure_summary"));
+        report.put("children", summary.get("children"));
+        report.put("aggregation_errors", summary.get("aggregation_errors"));
+        report.put("report_compatibility_source", "canonical_result");
+    }
+
+    private void printSuiteSummaryReportSections(PrintStream out, Path resultJson) {
+        Map<String, Object> summary = suiteSummaryForReport(resultJson);
+        if (summary.isEmpty()) return;
+        out.println("completion_status: " + stringValue(summary.get("completion_status")));
+        out.println("termination_reason: " + stringValue(summary.get("termination_reason")));
+        out.println("duration_ms: " + stringValue(summary.get("duration_ms")));
+        for (String section : List.of("self_summary", "child_aggregate_summary", "total_summary")) {
+            out.println(section + ":");
+            mapValue(summary.get(section)).forEach((key, value) -> out.println("  " + key + ": " + stringValue(value)));
+        }
+        out.println("children:");
+        for (Object value : objectList(summary.get("children"))) {
+            Map<String, Object> child = mapValue(value);
+            out.println("  - child_suite_id: " + stringValue(child.get("child_suite_id")));
+            out.println("    status: " + stringValue(child.get("status")));
+            out.println("    run_id: " + stringValue(child.get("run_id")));
+        }
+        out.println("aggregation_errors:");
+        for (Object value : objectList(summary.get("aggregation_errors"))) {
+            Map<String, Object> error = mapValue(value);
+            out.println("  - child_suite_id: " + stringValue(error.get("child_suite_id")));
+            out.println("    failure_code: " + stringValue(error.get("failure_code")));
+            out.println("    owner_action: " + stringValue(error.get("owner_action")));
+        }
+    }
+
+    private Map<String, Object> suiteSummaryForReport(Path resultJson) {
+        try {
+            Map<String, Object> result = readResultMap(resultJson);
+            if (!"v0.3".equals(stringValue(result.get("result_contract_version")))) return Map.of();
+            String ref = stringValue(result.get("suite_summary_ref"));
+            if (ref.isBlank()) return Map.of();
+            return readYamlMap(resultJson.toRealPath().getParent().resolve(ref).normalize().toRealPath());
+        } catch (IOException | RuntimeException error) {
+            return Map.of();
+        }
     }
 
     private Map<String, Object> jsonReport(ReportResult result, EvidenceValidationResult evidenceResult) {
@@ -878,7 +1051,51 @@ public class RegressionCommand {
                 : "Complete RP/RU mapping execution context before executable test generation."));
     }
 
+    private boolean reviewedRouteAllowed(Path root, Map<String,String> options) {
+        if (invocationRequirement.expectedSha256() == null
+                || !invocationRequirement.expectedSha256().matches("[a-f0-9]{64}")
+                || !options.containsKey("--suite") || !options.containsKey("--profile")
+                || options.containsKey("--rp-id") || options.containsKey("--dry-run")) return false;
+        try {
+            Path manifest = root.resolve(options.get("--suite")).normalize();
+            return "v0.3".equals(readYamlMap(manifest).get("manifest_version"))
+                    && !isSuiteGroupManifest(manifest)
+                    && ProductTestHandoffService.configured(manifest, options.get("--profile"));
+        } catch (RuntimeException error) { return false; }
+    }
+
+    private void printReviewedRouteBlocked(PrintStream out) {
+        out.println("run_status: blocked");
+        out.println("provider_runtime_invoked: false");
+        out.println("failure_code: REVIEWED_HANDOFF_REQUIRED");
+        out.println("owner_action: A present invocation pin requires its reviewed v0.3 leaf, selected profile and product_test policy; groups, legacy and package routes are unsupported.");
+    }
+
+    private int prepareProductTestHandoff(Path root, Map<String,String> options, PrintStream out, PrintStream err) {
+        for (String key : List.of("--suite", "--profile", "--review-input", "--out")) {
+            if (requiredOption(options, key, err) == null) return 2;
+        }
+        try {
+            Map<String,Object> prepared = new ProductTestHandoffService().prepare(
+                    root.resolve(options.get("--suite")), options.get("--profile"),
+                    root.resolve(options.get("--review-input")), options.containsKey("--selection-receipt")
+                            ? root.resolve(options.get("--selection-receipt")) : null,
+                    root.resolve(options.get("--out")));
+            out.println("preparation_status: prepared");
+            out.println("approval_status: not_approved");
+            prepared.forEach((key,value) -> out.println(key + ": " + value));
+            return 0;
+        } catch (RuntimeException error) {
+            err.println("preparation_status: blocked");
+            err.println("owner_action: Correct the reviewed input bundle: " + error.getMessage());
+            return 1;
+        }
+    }
+
     private int runRegression(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
+        if (invocationRequirement.required() && !reviewedRouteAllowed(root, options)) {
+            printReviewedRouteBlocked(out); return 1;
+        }
         if (options.containsKey("--suite") && !options.containsKey("--rp-id")) {
             return runSuite(root, options, out, err);
         }
@@ -1023,6 +1240,9 @@ public class RegressionCommand {
     }
 
     private int runSuite(Path root, Map<String, String> options, PrintStream out, PrintStream err) {
+        if (invocationRequirement.required() && !reviewedRouteAllowed(root, options)) {
+            printReviewedRouteBlocked(out); return 1;
+        }
         String suite = requiredOption(options, "--suite", err);
         if (suite == null) {
             return 2;
@@ -1033,12 +1253,13 @@ public class RegressionCommand {
             if (profile == null) {
                 return 2;
             }
-            JdbcDriverDiscovery.DiscoveryResult driverDiscovery = jdbcDriverDiscovery(root, options);
+            boolean reviewed = invocationRequirement.required() || ProductTestHandoffService.configured(suiteManifest, profile);
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery = reviewed ? null : jdbcDriverDiscovery(root, options);
             if (isSuiteGroupManifest(suiteManifest)) {
                 return runSuiteGroup(
                         suiteManifest,
                         profile,
-                        root.resolve("target/suite-groups").normalize(),
+                        root.resolve("target/regression").normalize(),
                         driverDiscovery,
                         out);
             }
@@ -1046,7 +1267,7 @@ public class RegressionCommand {
                     suiteManifest,
                     suite,
                     profile,
-                    root.resolve("target/provider-capability").normalize(),
+                    root.resolve("target/regression").normalize(),
                     driverDiscovery);
             printSuiteRuntimeResult(out, result);
             return result.passed() ? 0 : 1;
@@ -1054,23 +1275,34 @@ public class RegressionCommand {
         if (isSuiteGroupManifest(suiteManifest)) {
             return dryRunSuiteGroup(suiteManifest, options.get("--profile"), out);
         }
-        DryRunResult result = contractBaselineService.dryRun(suiteManifest);
+        ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         List<ContractFinding> profileFindings = suiteProfileFindings(suiteManifest, options.get("--profile"));
-        boolean ready = result.ready() && profileFindings.isEmpty();
+        List<ContractFinding> findings = new ArrayList<>(validation.findings());
+        findings.addAll(profileFindings);
+        V03ExecutionPlan compiled = compileV03IfReady(suiteManifest, options.get("--profile"), validation, findings);
+        boolean ready = findings.isEmpty();
         out.println("provider_runtime_invoked: false");
         out.println("run_status: " + (ready ? "dry_run_ready" : "blocked"));
-        out.println("suite_id: " + result.validation().suiteId());
-        out.println("resolved_execution_plan:");
-        for (ResolvedTarget target : result.plan()) {
-            out.println("  - test_case_id: " + target.testCaseId());
-            out.println("    target: " + target.target());
-            out.println("    provider_id: " + target.providerId());
-            out.println("    provider_type: " + target.providerType());
-            out.println("    profile: " + target.profile());
-            out.println("    runtime_mode: " + target.runtimeMode());
+        if (compiled != null) {
+            v03DryRunRenderer.render(out, compiled);
+        } else {
+            DryRunResult result = contractBaselineService.dryRun(suiteManifest);
+            out.println("suite_id: " + result.validation().suiteId());
+            out.println("resolved_execution_plan:");
+            for (ResolvedTarget target : result.plan()) {
+                out.println("  - test_case_id: " + target.testCaseId());
+                out.println("    target: " + target.target());
+                if (!target.providerId().isBlank()) {
+                    out.println("    provider_id: " + target.providerId());
+                }
+                if (!target.providerContract().isBlank()) {
+                    out.println("    provider_contract: " + target.providerContract());
+                }
+                out.println("    provider_type: " + target.providerType());
+                out.println("    profile: " + target.profile());
+                out.println("    runtime_mode: " + target.runtimeMode());
+            }
         }
-        List<ContractFinding> findings = new ArrayList<>(result.validation().findings());
-        findings.addAll(profileFindings);
         printContractFindings(out, findings);
         return ready ? 0 : 1;
     }
@@ -1081,66 +1313,131 @@ public class RegressionCommand {
             String profile,
             Path outputRoot,
             JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
+        return dispatchSuiteRuntimeInternal(suiteManifest, suiteRef, profile, outputRoot, driverDiscovery, null);
+    }
+
+    private SuiteRuntimeResult dispatchSuiteRuntimeInternal(
+            Path suiteManifest,
+            String suiteRef,
+            String profile,
+            Path outputRoot,
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery,
+            SuiteExecutionContext parentContext) {
+        SuiteRuntimeResult result = dispatchSuiteRuntimeUnfinalized(
+                suiteManifest, suiteRef, profile, outputRoot, driverDiscovery, parentContext);
+        if (result.resultJson() == null) {
+            return result;
+        }
+        if (Files.isRegularFile(result.resultJson().getParent().resolve("product-test/reviewed-handoff.json"))) {
+            // Reviewed execution already finalized against its private snapshot before closing it.
+            return result.withSummaryJson(result.resultJson().getParent().resolve("suite_summary.json"));
+        }
+        SuiteArtifactFinalizer.FinalizedArtifacts finalized =
+                suiteArtifactFinalizer.finalizeLeaf(suiteManifest, result.resultJson());
+        return result.withSummaryJson(finalized.summaryJson());
+    }
+
+    private SuiteRuntimeResult dispatchSuiteRuntimeUnfinalized(
+            Path suiteManifest,
+            String suiteRef,
+            String profile,
+            Path outputRoot,
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery,
+            SuiteExecutionContext parentContext) {
+        if (parentContext != null && !parentContext.matchesRequestedProfile(profile)) {
+            return SuiteRuntimeResult.blocked("", profile, List.of(new ContractFinding(
+                    suiteManifest.toString(),
+                    "profile",
+                    "profile_mismatch",
+                    "",
+                    "",
+                    profile == null ? "" : profile,
+                    "",
+                    "Use the suite-group parent profile `" + parentContext.profile()
+                            + "` for the child suite or split it into a separate batch.")));
+        }
+        try {
+            if (invocationRequirement.required() || ProductTestHandoffService.configured(suiteManifest, profile)) {
+                if (parentContext != null) {
+                    return SuiteRuntimeResult.blocked("", profile, List.of(new ContractFinding(suiteManifest.toString(),
+                            "product_test", "REVIEWED_HANDOFF_REQUIRED", "", "", profile, "",
+                            "Run a reviewed v0.3 leaf separately; reviewed group execution is unsupported.")));
+                }
+                return SuiteRuntimeResult.fromV03(v03RuntimeExecutionService.runReviewed(suiteManifest, profile,
+                        runtimeContext(null, outputRoot, profile), invocationRequirement));
+            }
+        } catch (IllegalArgumentException | IllegalStateException | UncheckedIOException error) {
+            return SuiteRuntimeResult.blocked("", profile, List.of(new ContractFinding(suiteManifest.toString(),
+                    "product_test", "REVIEWED_HANDOFF_REQUIRED", "", "", profile, "",
+                    "Correct the reviewed leaf/profile handoff: " + error.getMessage())));
+        }
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {
             return SuiteRuntimeResult.blocked(validation.suiteId(), profile, validation.findings());
         }
         List<String> providerTypes = validation.providerTypesUsed();
+        if (supportsV03RuntimeService(validation)) {
+            return SuiteRuntimeResult.fromV03(v03RuntimeExecutionService.run(
+                    suiteManifest,
+                    profile,
+                    runtimeContext(parentContext, outputRoot, profile),
+                    validation));
+        }
         if (supportsWireMockHttpRequestSample(providerTypes)) {
             return SuiteRuntimeResult.fromMixed(wireMockHttpRequestCapabilityService.run(
                     suiteManifest,
                     profile,
-                    outputRoot.resolve("wiremock_http_request").normalize()));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (supportsContractBaselineMixedSample(providerTypes)) {
             return SuiteRuntimeResult.fromContractBaseline(contractBaselineRuntimeService.run(
                     suiteManifest,
                     profile,
-                    outputRoot.resolve("contract_baseline").normalize(),
+                    runtimeContext(parentContext, outputRoot, profile),
                     driverDiscovery));
         }
         if (supportsSoapMockSample(providerTypes)) {
             return SuiteRuntimeResult.fromSoap(soapMockCapabilityService.run(
                     suiteManifest,
                     profile,
-                    outputRoot.resolve("soap_mock").normalize()));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (supportsGrpcMockSample(providerTypes)) {
             return SuiteRuntimeResult.fromGrpc(grpcMockCapabilityService.run(
                     suiteManifest,
                     profile,
-                    outputRoot.resolve("grpc_mock").normalize()));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (providerTypes.equals(List.of("rest_client"))) {
             return SuiteRuntimeResult.fromRest(restClientCapabilityService.run(
                     suiteManifest,
                     profile,
-                    outputRoot.resolve("rest_client").normalize()));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (providerTypes.equals(List.of("wiremock_http_mock"))) {
             return SuiteRuntimeResult.fromWireMock(wireMockProviderCapabilityService.run(
                     suiteManifest,
                     profile,
-                    outputRoot.resolve("wiremock").normalize()));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (providerTypes.equals(List.of("jdbc")) || suiteRef.contains("provider_capability/jdbc")) {
             return SuiteRuntimeResult.fromJdbc(jdbcProviderCapabilityService.run(
                     suiteManifest,
                     profile,
-                    outputRoot.resolve("jdbc").normalize(),
+                    runtimeContext(parentContext, outputRoot, profile),
                     driverDiscovery));
         }
         if (supportsMessagingClientSample(providerTypes, suiteRef)) {
             return SuiteRuntimeResult.fromMessaging(messagingClientProviderCapabilityService.run(
                     suiteManifest,
                     profile,
-                    outputRoot.resolve("messaging-client").normalize()));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (providerTypes.equals(List.of("nats")) || suiteRef.contains("provider_capability/nats")) {
             return SuiteRuntimeResult.fromNats(natsProviderCapabilityService.run(
                     suiteManifest,
                     profile,
-                    outputRoot.resolve("nats").normalize()));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (providerTypes.equals(List.of("common_verify"))
                 || suiteRef.contains("provider_capability/common_verify")
@@ -1148,7 +1445,7 @@ public class RegressionCommand {
             return SuiteRuntimeResult.fromCommonVerify(commonVerifyService.run(
                     suiteManifest,
                     profile,
-                    outputRoot.resolve("common_verify").normalize()));
+                    runtimeContext(parentContext, outputRoot, profile)));
         }
         if (!providerTypes.equals(List.of("sample_fake_provider"))) {
             return SuiteRuntimeResult.blocked(validation.suiteId(), profile, List.of(new ContractFinding(
@@ -1164,7 +1461,34 @@ public class RegressionCommand {
         return SuiteRuntimeResult.fromGolden(goldenE2eService.run(
                 suiteManifest,
                 profile,
-                outputRoot.resolve("golden-e2e").normalize()));
+                runtimeContext(parentContext, outputRoot, profile)));
+    }
+
+    private SuiteExecutionContext runtimeContext(
+            SuiteExecutionContext parentContext, Path runtimeOutputRoot, String profile) {
+        if (parentContext != null) {
+            return parentContext.withOutputRoot(runtimeOutputRoot);
+        }
+        String runtime = runtimeOutputRoot.getFileName().toString();
+        if ("golden-e2e".equals(runtime)) {
+            return SuiteExecutionContext.standaloneWithBatchId(
+                    profile, runtimeOutputRoot, "BATCH-GOLDEN-E2E-001");
+        }
+        String label = switch (runtime) {
+            case "v03-runtime" -> "V03";
+            case "wiremock_http_request" -> "WIREMOCK-HTTP";
+            case "contract_baseline" -> "CONTRACT";
+            case "soap_mock" -> "SOAP";
+            case "grpc_mock" -> "GRPC";
+            case "rest_client" -> "REST";
+            case "wiremock" -> "WIREMOCK";
+            case "jdbc" -> "JDBC";
+            case "messaging-client" -> "MESSAGING";
+            case "nats" -> "NATS";
+            case "common_verify" -> "COMMON";
+            default -> "STANDALONE";
+        };
+        return SuiteExecutionContext.standalone(profile, runtimeOutputRoot, label);
     }
 
     private void printSuiteRuntimeResult(PrintStream out, SuiteRuntimeResult result) {
@@ -1183,6 +1507,9 @@ public class RegressionCommand {
             result.outputLines().forEach(out::println);
             out.println("evidence_classification: " + result.evidenceClassification());
             out.println("result_json: " + result.resultJson());
+            if (result.summaryJson() != null) {
+                out.println("suite_summary_json: " + result.summaryJson());
+            }
             out.println("evidence_dir: " + result.evidenceDir());
             printRuntimeFailure(out, result);
         } else {
@@ -1459,9 +1786,14 @@ public class RegressionCommand {
                 .resolve(runId)
                 .normalize();
         Path childOutputRoot = runDir.resolve("children");
+        SuiteExecutionContext parentContext = new SuiteExecutionContext(
+                batchId,
+                requestedProfile,
+                java.time.Instant.ofEpochMilli(startedAt),
+                childOutputRoot);
         List<SuiteGroupChildResult> childResults = new ArrayList<>();
         for (SuiteGroupChild child : definition.children()) {
-            childResults.add(runSuiteGroupChild(child, childOutputRoot, driverDiscovery));
+            childResults.add(runSuiteGroupChild(child, childOutputRoot, driverDiscovery, parentContext));
         }
         for (SuiteGroupChildResult childResult : childResults) {
             findings.addAll(childResult.findings());
@@ -1476,7 +1808,8 @@ public class RegressionCommand {
                 .filter(result -> "expected_failed_observed".equals(result.statusTaxonomy()))
                 .count();
         String status = failedCount == 0 ? "passed" : "failed";
-        SuiteGroupOutput output = writeSuiteGroupOutput(
+        boolean canonicalV03 = "v0.3".equals(stringValue(readYamlMap(suiteManifest).get("manifest_version")));
+        SuiteGroupOutput compatibilityOutput = writeSuiteGroupOutput(
                 definition,
                 requestedProfile,
                 batchId,
@@ -1487,7 +1820,26 @@ public class RegressionCommand {
                 runDir,
                 childResults,
                 expectedFailureCount,
-                expectedFailedObservedCount);
+                expectedFailedObservedCount,
+                canonicalV03);
+        SuiteGroupOutput output = compatibilityOutput;
+        if (canonicalV03) {
+            SuiteAggregationService.AggregatedArtifacts aggregated = suiteAggregationService.aggregate(
+                    suiteManifest,
+                    runDir,
+                    definition.suiteId(),
+                    batchId,
+                    runId,
+                    requestedProfile,
+                    java.time.Instant.ofEpochMilli(startedAt),
+                    java.time.Instant.now(),
+                    childResults.stream().map(child -> new SuiteAggregationService.ChildArtifact(
+                            child.id(), child.ref(), child.resultJson(), child.summaryJson())).toList());
+            status = aggregated.status();
+            output = new SuiteGroupOutput(
+                    aggregated.resultJson(), aggregated.summaryJson(), aggregated.summaryYaml(),
+                    compatibilityOutput.allureResultsDir());
+        }
 
         out.println("run_status: " + status);
         out.println("suite_id: " + definition.suiteId());
@@ -1499,6 +1851,9 @@ public class RegressionCommand {
         out.println("failed_count: " + failedCount);
         out.println("expected_failure_count: " + expectedFailureCount);
         out.println("expected_failed_observed_count: " + expectedFailedObservedCount);
+        if (output.resultJson() != null) {
+            out.println("result_json: " + output.resultJson());
+        }
         out.println("suite_summary_json: " + output.summaryJson());
         out.println("suite_summary_yaml: " + output.summaryYaml());
         out.println("allure_results_dir: " + output.allureResultsDir());
@@ -1509,7 +1864,8 @@ public class RegressionCommand {
     private SuiteGroupChildResult runSuiteGroupChild(
             SuiteGroupChild child,
             Path childOutputRoot,
-            JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery,
+            SuiteExecutionContext parentContext) {
         ValidationResult validation = contractBaselineService.validateSuite(child.suiteManifest());
         if (!validation.valid()) {
             return SuiteGroupChildResult.fromBlocked(child, validation.suiteId(), validation.findings());
@@ -1519,7 +1875,8 @@ public class RegressionCommand {
                 child.ref(),
                 child.profile(),
                 childOutputRoot,
-                driverDiscovery);
+                driverDiscovery,
+                parentContext.forChildProfile(child.profile()));
         return SuiteGroupChildResult.fromSuiteRuntime(child, result);
     }
 
@@ -1532,6 +1889,17 @@ public class RegressionCommand {
                 Path outputRoot,
                 JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
             return dispatchSuiteRuntimeInternal(suiteManifest, suiteRef, profile, outputRoot, driverDiscovery);
+        }
+
+        SuiteRuntimeResult dispatch(
+                Path suiteManifest,
+                String suiteRef,
+                String profile,
+                Path outputRoot,
+                JdbcDriverDiscovery.DiscoveryResult driverDiscovery,
+                SuiteExecutionContext parentContext) {
+            return dispatchSuiteRuntimeInternal(
+                    suiteManifest, suiteRef, profile, outputRoot, driverDiscovery, parentContext);
         }
     }
 
@@ -1546,7 +1914,8 @@ public class RegressionCommand {
             Path runDir,
             List<SuiteGroupChildResult> childResults,
             int expectedFailureCount,
-            int expectedFailedObservedCount) {
+            int expectedFailedObservedCount,
+            boolean canonicalV03) {
         try {
             Files.createDirectories(runDir);
             Path allureResultsDir = runDir.resolve("allure-results");
@@ -1580,11 +1949,13 @@ public class RegressionCommand {
             summary.put("allure_results_dir", allureResultsDir.toString());
             summary.put("children", childResults.stream().map(SuiteGroupChildResult::toSummary).toList());
 
-            Path summaryJson = runDir.resolve("suite_summary.json");
-            Path summaryYaml = runDir.resolve("suite_summary.yaml");
+            Path summaryJson = runDir.resolve(canonicalV03
+                    ? "suite_summary.compatibility.json" : "suite_summary.json");
+            Path summaryYaml = runDir.resolve(canonicalV03
+                    ? "suite_summary.compatibility.yaml" : "suite_summary.yaml");
             Files.writeString(summaryJson, toJson(summary));
             Files.writeString(summaryYaml, new Yaml().dump(summary));
-            return new SuiteGroupOutput(summaryJson, summaryYaml, allureResultsDir);
+            return new SuiteGroupOutput(null, summaryJson, summaryYaml, allureResultsDir);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write suite group output: " + runDir, e);
         }
@@ -1783,6 +2154,34 @@ public class RegressionCommand {
         return providerTypes.size() == 2
                 && providerTypes.contains("wiremock_http_mock")
                 && providerTypes.contains("rest_client");
+    }
+
+    private boolean supportsV03RuntimeService(ValidationResult validation) {
+        return isV03Validation(validation);
+    }
+
+    private boolean isV03Validation(ValidationResult validation) {
+        return validation.providerContractsUsed().stream().anyMatch(contract -> contract.endsWith(".v0.3"));
+    }
+
+    private V03ExecutionPlan compileV03IfReady(
+            Path suiteManifest,
+            String profile,
+            ValidationResult validation,
+            List<ContractFinding> findings) {
+        if (!validation.valid() || !isV03Validation(validation) || !findings.isEmpty()) {
+            return null;
+        }
+        try {
+            return new V03ExecutionPlanBuilder(contractBaselineService).build(suiteManifest, profile, validation);
+        } catch (IllegalArgumentException | IllegalStateException error) {
+            findings.add(finding(
+                    suiteManifest,
+                    "execution_plan",
+                    "v03_plan_compilation_failed",
+                    "Correct the v0.3 target bindings or Provider Contract metadata: " + error.getMessage()));
+            return null;
+        }
     }
 
     private boolean supportsContractBaselineMixedSample(List<String> providerTypes) {
@@ -2890,6 +3289,11 @@ public class RegressionCommand {
                 .toList();
     }
 
+    private Map<String, Object> readResultMap(Path path) {
+        try { return ResultDocumentReader.read(path).fields(); }
+        catch (IOException error) { throw new UncheckedIOException("Failed to read bounded result JSON: " + path, error); }
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> readYamlMap(Path path) {
         try {
@@ -3050,7 +3454,7 @@ public class RegressionCommand {
             String fieldPath) {
     }
 
-    private record SuiteGroupOutput(Path summaryJson, Path summaryYaml, Path allureResultsDir) {
+    private record SuiteGroupOutput(Path resultJson, Path summaryJson, Path summaryYaml, Path allureResultsDir) {
     }
 
     private record StatusCounts(int passedCount, int failedCount) {
@@ -3069,6 +3473,7 @@ public class RegressionCommand {
             List<String> providerIds,
             List<String> providerTypes,
             Path resultJson,
+            Path summaryJson,
             Path evidenceDir,
             String evidenceClassification,
             List<String> outputLines,
@@ -3087,6 +3492,7 @@ public class RegressionCommand {
                     false,
                     List.of(),
                     List.of(),
+                    null,
                     null,
                     null,
                     "framework_provider_capability_only",
@@ -3108,6 +3514,7 @@ public class RegressionCommand {
                     result.providerIds(),
                     result.providerTypes(),
                     result.resultJson(),
+                    null,
                     result.evidenceDir(),
                     "framework_provider_capability_only",
                     List.of(
@@ -3130,6 +3537,7 @@ public class RegressionCommand {
                     result.providerIds(),
                     result.providerTypes(),
                     result.resultJson(),
+                    null,
                     result.evidenceDir(),
                     result.evidenceClassification(),
                     List.of(
@@ -3152,6 +3560,7 @@ public class RegressionCommand {
                     result.providerIds(),
                     result.providerTypes(),
                     result.resultJson(),
+                    null,
                     result.evidenceDir(),
                     "framework_provider_capability_only",
                     List.of(
@@ -3174,6 +3583,7 @@ public class RegressionCommand {
                     result.providerIds(),
                     result.providerTypes(),
                     result.resultJson(),
+                    null,
                     result.evidenceDir(),
                     "framework_provider_capability_only",
                     List.of(
@@ -3196,6 +3606,7 @@ public class RegressionCommand {
                     blankListFiltered(result.providerId()),
                     blankListFiltered(result.providerType()),
                     result.resultJson(),
+                    null,
                     result.evidenceDir(),
                     "product_release_evidence_candidate",
                     List.of(
@@ -3224,6 +3635,7 @@ public class RegressionCommand {
                     blankListFiltered(result.providerId()),
                     blankListFiltered(result.providerType()),
                     result.resultJson(),
+                    null,
                     result.evidenceDir(),
                     "framework_provider_capability_only",
                     outputLines,
@@ -3244,6 +3656,7 @@ public class RegressionCommand {
                     blankListFiltered(result.providerId()),
                     blankListFiltered(result.providerType()),
                     result.resultJson(),
+                    null,
                     result.evidenceDir(),
                     "framework_provider_capability_only",
                     List.of(
@@ -3268,6 +3681,7 @@ public class RegressionCommand {
                     blankListFiltered(result.providerId()),
                     blankListFiltered(result.providerType()),
                     result.resultJson(),
+                    null,
                     result.evidenceDir(),
                     "framework_provider_capability_only",
                     result.providerOutputLines(),
@@ -3288,6 +3702,7 @@ public class RegressionCommand {
                     blankListFiltered(result.providerId()),
                     blankListFiltered(result.providerType()),
                     result.resultJson(),
+                    null,
                     result.evidenceDir(),
                     result.evidenceClassification(),
                     List.of(
@@ -3312,11 +3727,38 @@ public class RegressionCommand {
                     blankListFiltered(result.providerId()),
                     blankListFiltered(result.providerType()),
                     result.resultJson(),
+                    null,
                     result.evidenceDir(),
                     "framework_provider_capability_only",
                     List.of(
                             "provider_type: " + result.providerType(),
                             "provider_id: " + result.providerId()),
+                    result.findings());
+        }
+
+        static SuiteRuntimeResult fromV03(V03RuntimeRunResult result) {
+            List<String> outputLines = new ArrayList<>();
+            result.providerTypes().forEach(providerType -> outputLines.add("provider_type: " + providerType));
+            if (!result.targets().isEmpty()) {
+                outputLines.add("targets: " + String.join(",", result.targets()));
+            }
+            return new SuiteRuntimeResult(
+                    result.passed(),
+                    result.status(),
+                    result.suiteId(),
+                    result.batchId(),
+                    result.runId(),
+                    result.testCaseId(),
+                    result.testCount(),
+                    result.profile(),
+                    result.providerRuntimeExecuted(),
+                    result.targets(),
+                    result.providerTypes(),
+                    result.resultJson(),
+                    null,
+                    result.evidenceDir(),
+                    result.evidenceClassification(),
+                    outputLines,
                     result.findings());
         }
 
@@ -3334,10 +3776,18 @@ public class RegressionCommand {
                     result.fakeProviderExecuted() ? List.of("sample-fake-runtime") : List.of(),
                     List.of("sample_fake_provider"),
                     result.resultJson(),
+                    null,
                     result.evidenceDir(),
                     "framework_verification_only",
                     List.of("fake_provider_executed: " + result.fakeProviderExecuted()),
                     result.findings());
+        }
+
+        SuiteRuntimeResult withSummaryJson(Path summaryJson) {
+            return new SuiteRuntimeResult(
+                    passed, status, suiteId, batchId, runId, testCaseId, testCount, profile,
+                    providerRuntimeExecuted, providerIds, providerTypes, resultJson, summaryJson,
+                    evidenceDir, evidenceClassification, outputLines, findings);
         }
 
         private static List<String> blankListFiltered(String value) {
@@ -3353,9 +3803,12 @@ public class RegressionCommand {
             String expectedStatus,
             String observedStatus,
             boolean passed,
+            String batchId,
+            String runId,
             List<String> providerIds,
             List<String> providerTypes,
             Path resultJson,
+            Path summaryJson,
             Path evidenceDir,
             List<ContractFinding> findings) {
 
@@ -3368,9 +3821,12 @@ public class RegressionCommand {
                     child.expectedStatus(),
                     result.status(),
                     child.expectedStatus().equals(result.status()),
+                    result.batchId(),
+                    result.runId(),
                     result.providerIds(),
                     result.providerTypes(),
                     result.resultJson(),
+                    result.summaryJson(),
                     result.evidenceDir(),
                     result.findings());
         }
@@ -3387,8 +3843,11 @@ public class RegressionCommand {
                     child.expectedStatus(),
                     "blocked",
                     false,
+                    "",
+                    "",
                     List.of(),
                     List.of(),
+                    null,
                     null,
                     null,
                     List.copyOf(findings));
@@ -3404,6 +3863,8 @@ public class RegressionCommand {
             summary.put("observed_status", observedStatus);
             summary.put("status_taxonomy", statusTaxonomy());
             summary.put("status", passed ? "passed" : "failed");
+            summary.put("batch_id", batchId);
+            summary.put("run_id", runId);
             summary.put("provider_ids", providerIds);
             summary.put("provider_types", providerTypes);
             summary.put("result_json", resultJson == null ? "" : resultJson.toString());

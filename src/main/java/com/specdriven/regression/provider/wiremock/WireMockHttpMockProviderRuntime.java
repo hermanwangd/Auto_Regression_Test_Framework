@@ -18,13 +18,13 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.yaml.snakeyaml.Yaml;
 
 public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
@@ -39,7 +39,7 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
     @Override
     public ProviderOperationResult execute(ProviderExecutionContext context, ProviderOperationRequest request) {
         return switch (request.operation()) {
-            case "connect_mock" -> connectMock(context, request);
+            case "connect_mock" -> connectMock(context);
             case "load_stubs" -> loadStubs(context, request);
             case "send_http_request" -> sendHttpRequest(context, request);
             case "reset_mock" -> resetMock(context);
@@ -54,49 +54,46 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
         };
     }
 
-    private ProviderOperationResult connectMock(ProviderExecutionContext context, ProviderOperationRequest request) {
-        String configuredBaseUrl = firstText(
-                parameterValue(request, "mock.base_url", ""),
-                stringValue(context.bindingValues().get("base_url")));
-        BaseUrlValidation validation = validateExternalBaseUrl(configuredBaseUrl);
-        if (!validation.valid()) {
-            writeFailureDetail(context, validation.reason());
+    private ProviderOperationResult connectMock(ProviderExecutionContext context) {
+        try {
+            connectOrStartServer(context);
+            writeServerLog(context, """
+                    evidence_type: wiremock_server_log
+                    evidence_classification: %s
+                    downstream_release_evidence: false
+                    provider_id: %s
+                    provider_type: wiremock_http_mock
+                    base_url: %s
+                    framework_started_wiremock: %s
+                    """.formatted(
+                    evidenceClassification(context),
+                    context.providerId(),
+                    baseUrl,
+                    frameworkStartedWireMock()));
+            return ProviderOperationResult.passed(
+                    Map.of(
+                            "base_url", baseUrl,
+                            "server_log", "provider-evidence/wiremock/server_log.txt",
+                            "framework_started_wiremock", frameworkStartedWireMock()),
+                    evidence("server_log", "provider-evidence/wiremock/server_log.txt"));
+        } catch (Exception e) {
+            writeFailureDetail(context, "provider unavailable: " + e.getMessage());
             return ProviderOperationResult.failed(
-                    Map.of(),
+                    Map.of("base_url", baseUrl == null ? "" : baseUrl),
                     evidence("failure_detail", "provider-evidence/wiremock/failure_detail.yaml"),
                     ProviderFailure.of(
-                            validation.failureCode(),
-                            validation.classification(),
-                            validation.reason(),
-                            validation.ownerAction()));
+                            "PROVIDER_UNAVAILABLE",
+                            "PROVIDER_UNAVAILABLE",
+                            "WireMock is unavailable: " + e.getMessage(),
+                            "Check configured WireMock base_url or use framework-managed mock mode."));
         }
-        baseUrl = validation.normalizedBaseUrl();
-        writeServerLog(context, """
-                evidence_type: wiremock_server_log
-                evidence_classification: %s
-                downstream_release_evidence: false
-                provider_id: %s
-                provider_type: wiremock_http_mock
-                base_url: %s
-                framework_started_wiremock: false
-                external_base_url_consumed: true
-                consumed_binding_keys: [base_url]
-                """.formatted(evidenceClassification(context), context.providerId(), baseUrl));
-        return ProviderOperationResult.passed(
-                Map.of(
-                        "base_url", baseUrl,
-                        "server_log", "provider-evidence/wiremock/server_log.txt",
-                        "framework_started_wiremock", false,
-                        "external_base_url_consumed", true,
-                        "consumed_binding_keys", List.of("base_url")),
-                evidence("server_log", "provider-evidence/wiremock/server_log.txt"));
     }
 
     private ProviderOperationResult loadStubs(ProviderExecutionContext context, ProviderOperationRequest request) {
         try {
-            startServer(context);
+            connectOrStartServer(context);
             if (Boolean.parseBoolean(parameterValue(request, "mock.reset_before_load", "true"))) {
-                server.resetAll();
+                resetMappings();
             }
             Path stub = context.suiteRoot().resolve(parameterValue(request, "mock.mappings_ref", "")).normalize();
             if (!Files.isRegularFile(stub)) {
@@ -121,16 +118,35 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
                     stub_ref: %s
                     loaded_stub_count: 1
                     base_url: %s
-                    """.formatted(evidenceClassification(context), context.providerId(), stub, baseUrl));
-            writeServerLog(context, "started WireMock at " + baseUrl + "\ninjected stub " + stub + "\n");
+                    framework_started_wiremock: %s
+                    """.formatted(
+                            evidenceClassification(context),
+                            context.providerId(),
+                            stub,
+                            baseUrl,
+                            frameworkStartedWireMock()));
+            writeServerLog(context, """
+                    evidence_type: wiremock_server_log
+                    evidence_classification: %s
+                    downstream_release_evidence: false
+                    provider_id: %s
+                    provider_type: wiremock_http_mock
+                    base_url: %s
+                    framework_started_wiremock: %s
+                    injected_stub: %s
+                    """.formatted(
+                    evidenceClassification(context),
+                    context.providerId(),
+                    baseUrl,
+                    frameworkStartedWireMock(),
+                    stub));
             return ProviderOperationResult.passed(
                     Map.of(
                             "base_url", baseUrl,
                             "loaded_stub_count", 1,
                             "injected_stub", "provider-evidence/wiremock/injected_stubs.yaml",
                             "server_log", "provider-evidence/wiremock/server_log.txt",
-                            "framework_started_wiremock", true,
-                            "external_base_url_consumed", false),
+                            "framework_started_wiremock", frameworkStartedWireMock()),
                     evidence(
                             "injected_stub", "provider-evidence/wiremock/injected_stubs.yaml",
                             "server_log", "provider-evidence/wiremock/server_log.txt"));
@@ -143,13 +159,13 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
                             "PROVIDER_UNAVAILABLE",
                             "PROVIDER_UNAVAILABLE",
                             "WireMock is unavailable: " + e.getMessage(),
-                            "Use dynamic port strategy or free the configured WireMock port."));
+                            "Use dynamic port strategy, free the configured WireMock port, or check external base_url."));
         }
     }
 
     private ProviderOperationResult sendHttpRequest(ProviderExecutionContext context, ProviderOperationRequest request) {
         try {
-            if (server == null || !server.isRunning()) {
+            if ((server == null || !server.isRunning()) && stringValue(baseUrl).isBlank()) {
                 return ProviderOperationResult.failed(
                         Map.of(),
                         List.of(),
@@ -253,68 +269,26 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
         baseUrl = "http://localhost:" + server.port();
     }
 
-    private BaseUrlValidation validateExternalBaseUrl(String candidate) {
-        if (candidate.isBlank()) {
-            return BaseUrlValidation.invalid(
-                    "WIREMOCK_EXTERNAL_BASE_URL_MISSING",
-                    "CONFIGURATION_ERROR",
-                    "External WireMock base_url is missing.",
-                    "Set providers.<provider_id>.binding_keys.base_url.value to an http or https URL.");
+    private void connectOrStartServer(ProviderExecutionContext context) throws IOException, InterruptedException {
+        String externalBaseUrl = stringValue(context.bindingValues().get("base_url"));
+        if (!externalBaseUrl.isBlank()) {
+            baseUrl = externalBaseUrl;
+            get(baseUrl + "/__admin/mappings");
+            return;
         }
-        if (candidate.contains("secret_ref=") || candidate.contains("secret_ref:")) {
-            return BaseUrlValidation.invalid(
-                    "WIREMOCK_EXTERNAL_BASE_URL_SECRET_LEAK",
-                    "SECRET_GUARDRAIL_ERROR",
-                    "External WireMock base_url must not be supplied as a raw or unresolved secret.",
-                    "Use a non-secret project-provided WireMock URL.");
-        }
-        try {
-            URI uri = URI.create(candidate);
-            String scheme = stringValue(uri.getScheme()).toLowerCase(java.util.Locale.ROOT);
-            if (!Set.of("http", "https").contains(scheme) || stringValue(uri.getHost()).isBlank()) {
-                return BaseUrlValidation.invalid(
-                        "WIREMOCK_EXTERNAL_BASE_URL_INVALID",
-                        "CONFIGURATION_ERROR",
-                        "External WireMock base_url must be an http or https URL with a host.",
-                        "Provide base_url such as http://127.0.0.1:<port>.");
-            }
-            if (uri.getUserInfo() != null || hasSecretQueryKey(uri.getRawQuery())) {
-                return BaseUrlValidation.invalid(
-                        "WIREMOCK_EXTERNAL_BASE_URL_SECRET_LEAK",
-                        "SECRET_GUARDRAIL_ERROR",
-                        "External WireMock base_url must not contain credentials or secret-like query parameters.",
-                        "Remove userinfo, password, token, authorization, api_key, or secret query values from base_url.");
-            }
-            String normalized = uri.toString();
-            while (normalized.endsWith("/")) {
-                normalized = normalized.substring(0, normalized.length() - 1);
-            }
-            return BaseUrlValidation.valid(normalized);
-        } catch (RuntimeException e) {
-            return BaseUrlValidation.invalid(
-                    "WIREMOCK_EXTERNAL_BASE_URL_INVALID",
-                    "CONFIGURATION_ERROR",
-                    "External WireMock base_url is malformed: " + e.getMessage(),
-                    "Provide a valid http or https URL.");
-        }
+        startServer(context);
     }
 
-    private boolean hasSecretQueryKey(String rawQuery) {
-        if (rawQuery == null || rawQuery.isBlank()) {
-            return false;
+    private void resetMappings() throws IOException, InterruptedException {
+        if (server != null && server.isRunning()) {
+            server.resetAll();
+            return;
         }
-        Set<String> prohibited = Set.of("password", "token", "access_token", "authorization", "api_key", "secret");
-        for (String pair : rawQuery.split("&")) {
-            String key = pair;
-            int equals = key.indexOf('=');
-            if (equals >= 0) {
-                key = key.substring(0, equals);
-            }
-            if (prohibited.contains(key.toLowerCase(java.util.Locale.ROOT))) {
-                return true;
-            }
-        }
-        return false;
+        postJson(baseUrl + "/__admin/reset", "{}");
+    }
+
+    private boolean frameworkStartedWireMock() {
+        return server != null && server.isRunning();
     }
 
     private int countExpectedRequests(String journal, Map<String, Object> expectedRequest) {
@@ -413,7 +387,7 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
         Path log = context.runDir().resolve("provider-evidence/wiremock/server_log.txt");
         try {
             Files.createDirectories(log.getParent());
-            Files.writeString(log, content);
+            Files.writeString(log, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write WireMock server log", e);
         }
@@ -451,10 +425,6 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
 
     private Object firstNonNull(Object first, Object second) {
         return first != null ? first : second;
-    }
-
-    private String firstText(String first, String second) {
-        return first == null || first.isBlank() ? stringValue(second) : first;
     }
 
     private String stringValue(Object value) {
@@ -503,24 +473,4 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
         return toJson(String.valueOf(value));
     }
 
-    private record BaseUrlValidation(
-            boolean valid,
-            String normalizedBaseUrl,
-            String failureCode,
-            String classification,
-            String reason,
-            String ownerAction) {
-
-        static BaseUrlValidation valid(String normalizedBaseUrl) {
-            return new BaseUrlValidation(true, normalizedBaseUrl, "", "", "", "");
-        }
-
-        static BaseUrlValidation invalid(
-                String failureCode,
-                String classification,
-                String reason,
-                String ownerAction) {
-            return new BaseUrlValidation(false, "", failureCode, classification, reason, ownerAction);
-        }
-    }
 }

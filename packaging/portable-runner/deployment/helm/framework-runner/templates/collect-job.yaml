@@ -1,0 +1,1 @@
+{{/* Collect is selected in job.yaml with deployment.phase=collect, never auto-chained. */}}

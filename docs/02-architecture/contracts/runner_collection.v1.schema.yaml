@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:regress:runner_collection.v1.schema.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "correlation_id",
+    "payload_profile",
+    "deadline_ms",
+    "canonical_result",
+    "artifact_versions",
+    "files"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "runner-collection.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "payload_profile": {
+      "enum": [
+        "standard",
+        "reviewed_grpc"
+      ]
+    },
+    "deadline_ms": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 30000
+    },
+    "canonical_result": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "artifact_versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runner",
+        "framework",
+        "provider",
+        "source",
+        "bundle",
+        "sut"
+      ],
+      "properties": {
+        "runner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "framework": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "bundle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "sut": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "bytes",
+          "sha256",
+          "required",
+          "role"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8388608
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "role": {
+            "enum": [
+              "canonical",
+              "index",
+              "summary",
+              "evidence",
+              "report",
+              "coverage_json",
+              "coverage_md",
+              "code_coverage",
+              "log",
+              "runtime_status"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "$comment": "Finite file/role allowlist only; source private/config paths excluded. Ordinary file4MiB; exact reviewed grpc canonical8MiB; total64MiB; logs1MiB/stream,4MiB total,2000lines. Original canonical immutable, derived logs separately hashed. SAVE durable before owned cleanup. Receipt/exit/product verdict separate."
+}

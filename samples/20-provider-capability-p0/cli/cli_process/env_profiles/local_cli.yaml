@@ -1,0 +1,28 @@
+{
+  "profile_id": "local_cli",
+  "execution_mode": "local",
+  "isolation": "per_run",
+  "evidence_classification": "framework_verification_only",
+  "downstream_release_evidence": false,
+  "targets": {
+    "cli": {
+      "runtime_mode": "native",
+      "bindings": {
+        "executable": "/absolute/path/to/reviewed/jq",
+        "executable_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  },
+  "product_test": {
+    "contract_version": "product-test.v1",
+    "test_level": "integration",
+    "test_type": "regression",
+    "environment_stage": "local",
+    "knowledge_mode": "not_used",
+    "provider_modes": {
+      "cli": "real"
+    },
+    "dependency_modes": {},
+    "reviewed_handoff_ref": "handoff/reviewed-tests.json"
+  }
+}

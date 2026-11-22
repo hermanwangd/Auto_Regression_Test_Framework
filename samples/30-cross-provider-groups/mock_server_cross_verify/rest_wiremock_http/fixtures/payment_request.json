@@ -1,5 +1,5 @@
 {
-  "paymentId": "PAY-HTTP-001",
-  "amount": 100,
+  "payment_id": "PAY-V03-001",
+  "amount": 128.5,
   "currency": "USD"
 }

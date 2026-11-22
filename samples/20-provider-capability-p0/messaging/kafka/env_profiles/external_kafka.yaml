@@ -1,0 +1,14 @@
+profile_id: external_kafka
+execution_mode: external
+isolation: shared
+evidence_classification: project_environment_evidence
+
+targets:
+  order_events:
+    runtime_mode: native
+    bindings:
+      bootstrap_servers: env://KAFKA_BOOTSTRAP_SERVERS
+      topic: orders.v03
+      consumer_group: regress-v03-external
+      timeout: PT5S
+      poll_interval: PT0.05S

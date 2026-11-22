@@ -1,5 +1,7 @@
 package com.specdriven.regression.contract;
 
+import com.specdriven.regression.summary.SuiteExecutionContext;
+
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.provider.http.RestClientProviderRuntime;
@@ -43,6 +45,11 @@ public class SoapMockCapabilityService {
     private final Yaml yaml = new Yaml();
 
     public SoapRunResult run(Path suiteManifest, String requestedProfile, Path outputBase) {
+        return run(suiteManifest, requestedProfile, SuiteExecutionContext.standalone(requestedProfile, outputBase, "SOAP"));
+    }
+
+    public SoapRunResult run(Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
+        requireMatchingProfile(requestedProfile, executionContext);
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {
             return SoapRunResult.blocked(validation.suiteId(), requestedProfile, validation.findings());
@@ -74,7 +81,7 @@ public class SoapMockCapabilityService {
             return SoapRunResult.blocked(validation.suiteId(), requestedProfile, profileFindings);
         }
 
-        List<RuntimeSelection> selections = selectRuntimes(suiteManifest, requestedProfile, outputBase);
+        List<RuntimeSelection> selections = selectRuntimes(suiteManifest, requestedProfile, executionContext);
         if (selections.isEmpty()) {
             return SoapRunResult.blocked(validation.suiteId(), requestedProfile, List.of(new ContractFinding(
                     suiteManifest.toString(),
@@ -411,18 +418,16 @@ public class SoapMockCapabilityService {
                 .toList());
     }
 
-    private List<RuntimeSelection> selectRuntimes(Path suiteManifest, String requestedProfile, Path outputBase) {
+    private List<RuntimeSelection> selectRuntimes(
+            Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
         Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
         Map<String, Object> suite = readMap(suiteManifest);
         Map<String, Map<String, Object>> instancesById =
                 readDirectoryByField(suiteRoot.resolve("provider_instances"), "provider_id");
         Map<String, Map<String, Object>> contractsByType =
                 readDirectoryByField(frameworkProviderContractsDirectory(suiteRoot), "provider_type");
-        RunIds runIds = newRunIds();
-        Path suiteRunDir = outputBase
-                .resolve(safe(stringValue(suite.get("suite_id"))))
-                .resolve(runIds.batchId())
-                .resolve(runIds.runId());
+        RunIds runIds = new RunIds(executionContext.parentBatchId(), executionContext.newRunId("SOAP"));
+        Path suiteRunDir = executionContext.childRunRoot(stringValue(suite.get("suite_id")), runIds.runId());
         List<RuntimeSelection> selections = new ArrayList<>();
         List<Object> testRefs = listValue(suite.get("tests"));
         boolean multiTestSuite = testRefs.size() > 1;
@@ -859,6 +864,12 @@ public class SoapMockCapabilityService {
         assertion.put("type", type);
         assertion.put("status", status);
         return assertion;
+    }
+
+    private void requireMatchingProfile(String profile, SuiteExecutionContext context) {
+        if (!context.matchesRequestedProfile(profile)) {
+            throw new IllegalArgumentException("Execution context profile does not match requested profile: " + profile);
+        }
     }
 
     private RunIds newRunIds() {

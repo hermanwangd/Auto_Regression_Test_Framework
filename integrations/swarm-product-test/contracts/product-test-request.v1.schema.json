@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "product-test-request.v1.schema.json",
+  "title": "Swarm product testing request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "module_id",
+    "module_version",
+    "mission_ref",
+    "request_ref",
+    "execution_revision",
+    "workspace_ref",
+    "project_ref",
+    "repository_revisions",
+    "requirement_test_mapping",
+    "test_level",
+    "test_type",
+    "environment_stage",
+    "knowledge_mode",
+    "artifact_root",
+    "suite_manifest",
+    "suite_id",
+    "profile",
+    "reviewed_handoff",
+    "expected_handoff_sha256"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "product-test-request.v1"
+    },
+    "module_id": {
+      "const": "product-test"
+    },
+    "module_version": {
+      "const": "1"
+    },
+    "mission_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "request_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "execution_revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "workspace_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "project_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "repository_revisions": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 64,
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+      }
+    },
+    "requirement_test_mapping": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 512,
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 512,
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "test_level": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "test_type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "environment_stage": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "knowledge_mode": {
+      "enum": [
+        "required",
+        "not_used"
+      ]
+    },
+    "artifact_root": {
+      "type": "string",
+      "pattern": "^/",
+      "maxLength": 4096
+    },
+    "suite_manifest": {
+      "type": "string",
+      "pattern": "^/",
+      "maxLength": 4096
+    },
+    "suite_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "profile": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "reviewed_handoff": {
+      "type": "string",
+      "pattern": "^/",
+      "maxLength": 4096
+    },
+    "expected_handoff_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "$comment": "Execution supports component/regression/local and one native loopback HTTP read for integration/regression/local with not_used knowledge. The request tuple must match the digest-verified reviewed profile. Unsupported requests are rejected. Deployment independently supplies allowed roots, Java/framework artifact, approved handoff pin and bounds."
+}

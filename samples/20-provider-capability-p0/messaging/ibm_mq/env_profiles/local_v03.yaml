@@ -1,0 +1,16 @@
+profile_id: local_v03
+execution_mode: local
+isolation: per_run
+evidence_classification: framework_verification_only
+
+targets:
+  payment_queue:
+    runtime_mode: mock
+    bindings:
+      queue_manager: QM.V03.LOCAL
+      channel: DEV.APP.SVRCONN
+      conn_name: mock.local(1414)
+      queue: PAYMENTS.V03
+      credential.secret_ref: env://IBM_MQ_MOCK_CREDENTIAL_REF
+      timeout: PT2S
+      poll_interval: PT0.01S

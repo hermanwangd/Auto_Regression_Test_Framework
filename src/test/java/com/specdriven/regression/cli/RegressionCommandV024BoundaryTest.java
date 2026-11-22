@@ -90,7 +90,7 @@ class RegressionCommandV024BoundaryTest {
         RegressionCommand command = command();
         ByteArrayOutputStream error = new ByteArrayOutputStream();
 
-        int exit = command.execute(new String[] {"project-run", "--suite", "samples/00-getting-started/golden_e2e/suite_manifest.yaml"},
+        int exit = command.execute(new String[] {"project-run", "--suite", "samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e/suite_manifest.yaml"},
                 print(new ByteArrayOutputStream()), print(error));
 
         assertThat(exit).isEqualTo(2);

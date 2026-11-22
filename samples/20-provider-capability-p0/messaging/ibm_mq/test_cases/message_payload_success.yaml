@@ -1,0 +1,26 @@
+dsl_version: v0.3
+test_case_id: IBM-MQ-V03-TC-001
+title: IBM MQ put and payload observation through v0.3 target contract
+
+setup: []
+
+execute:
+  - id: put_payment_message
+    target: payment_queue
+    op: mq_put
+    with:
+      payload_ref: artifact://fixtures/payment_message.json
+      correlation_id: CORR-IBM-MQ-V03-001
+
+verify:
+  - id: mq_payload_matches
+    type: provider_check
+    target: payment_queue
+    op: mq_payload_match
+    with:
+      expected_ref: artifact://expected_results/payment_message.json
+      correlation_id: CORR-IBM-MQ-V03-001
+      timeout: PT2S
+      poll_interval: PT0.01S
+
+cleanup: []

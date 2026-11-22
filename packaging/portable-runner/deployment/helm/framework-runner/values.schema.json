@@ -1,0 +1,181 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "phase": {
+          "enum": [
+            "produce",
+            "collect"
+          ]
+        }
+      },
+      "required": [
+        "enabled",
+        "phase"
+      ]
+    },
+    "image": {
+      "type": "string",
+      "pattern": "^$|^[a-z0-9][a-z0-9./:_-]*@sha256:[0-9a-f]{64}$"
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9][a-z0-9-]{0,39}$"
+        },
+        "correlationId": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9][a-z0-9-]{0,39}$"
+        },
+        "nonce": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9][a-z0-9-]{0,39}$"
+        }
+      },
+      "required": [
+        "id",
+        "correlationId",
+        "nonce"
+      ]
+    },
+    "pins": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "frameworkSha256": {
+          "type": "string",
+          "pattern": "^$|^[0-9a-f]{64}$"
+        },
+        "handoffSha256": {
+          "type": "string",
+          "pattern": "^$|^[0-9a-f]{64}$"
+        },
+        "collectionSpecSha256": {
+          "type": "string",
+          "pattern": "^$|^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "frameworkSha256",
+        "handoffSha256",
+        "collectionSpecSha256"
+      ]
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inputClaim": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9][a-z0-9-]{0,39}$"
+        },
+        "outputClaim": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9][a-z0-9-]{0,39}$"
+        },
+        "exclusive": {
+          "type": "boolean"
+        },
+        "writableUid": {
+          "const": 65532
+        }
+      },
+      "required": [
+        "inputClaim",
+        "outputClaim",
+        "exclusive",
+        "writableUid"
+      ]
+    },
+    "transport": {
+      "enum": [
+        "UNBOUND",
+        "retained_source_only"
+      ]
+    },
+    "secretRefs": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "secretMaterializer": {
+      "enum": [
+        "UNBOUND",
+        "none"
+      ]
+    },
+    "deadlineSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 600
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requests": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cpu": {
+              "type": "string",
+              "pattern": "^[0-9]+m?$"
+            },
+            "memory": {
+              "type": "string",
+              "pattern": "^[0-9]+(Mi|Gi)$"
+            }
+          },
+          "required": [
+            "cpu",
+            "memory"
+          ]
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cpu": {
+              "type": "string",
+              "pattern": "^[0-9]+m?$"
+            },
+            "memory": {
+              "type": "string",
+              "pattern": "^[0-9]+(Mi|Gi)$"
+            }
+          },
+          "required": [
+            "cpu",
+            "memory"
+          ]
+        }
+      },
+      "required": [
+        "requests",
+        "limits"
+      ]
+    }
+  },
+  "required": [
+    "deployment",
+    "image",
+    "run",
+    "pins",
+    "storage",
+    "transport",
+    "secretRefs",
+    "secretMaterializer",
+    "deadlineSeconds",
+    "resources"
+  ],
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

@@ -1,5 +1,7 @@
 package com.specdriven.regression.contract;
 
+import com.specdriven.regression.summary.SuiteExecutionContext;
+
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.evidence.EvidenceIndexFormatter;
@@ -41,6 +43,11 @@ public class WireMockProviderCapabilityService {
     private final Yaml yaml = new Yaml();
 
     public WireMockRunResult run(Path suiteManifest, String requestedProfile, Path outputBase) {
+        return run(suiteManifest, requestedProfile, SuiteExecutionContext.standalone(requestedProfile, outputBase, "WIREMOCK"));
+    }
+
+    public WireMockRunResult run(Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
+        requireMatchingProfile(requestedProfile, executionContext);
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {
             return WireMockRunResult.blocked(validation.suiteId(), requestedProfile, validation.findings());
@@ -72,7 +79,7 @@ public class WireMockProviderCapabilityService {
             return WireMockRunResult.blocked(validation.suiteId(), requestedProfile, profileFindings);
         }
 
-        List<RuntimeSelection> selections = selectWireMockRuntimes(suiteManifest, requestedProfile, outputBase);
+        List<RuntimeSelection> selections = selectWireMockRuntimes(suiteManifest, requestedProfile, executionContext);
         if (selections.isEmpty()) {
             return WireMockRunResult.blocked(validation.suiteId(), requestedProfile, List.of(new ContractFinding(
                     suiteManifest.toString(),
@@ -306,18 +313,16 @@ public class WireMockProviderCapabilityService {
                 "");
     }
 
-    private List<RuntimeSelection> selectWireMockRuntimes(Path suiteManifest, String requestedProfile, Path outputBase) {
+    private List<RuntimeSelection> selectWireMockRuntimes(
+            Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
         Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
         Map<String, Object> suite = readMap(suiteManifest);
         Map<String, Map<String, Object>> instancesById =
                 readDirectoryByField(suiteRoot.resolve("provider_instances"), "provider_id");
         Map<String, Map<String, Object>> contractsByType =
                 readDirectoryByField(frameworkProviderContractsDirectory(suiteRoot), "provider_type");
-        RunIds runIds = newRunIds();
-        Path suiteRunDir = outputBase
-                .resolve(safe(stringValue(suite.get("suite_id"))))
-                .resolve(runIds.batchId())
-                .resolve(runIds.runId());
+        RunIds runIds = new RunIds(executionContext.parentBatchId(), executionContext.newRunId("WIREMOCK"));
+        Path suiteRunDir = executionContext.childRunRoot(stringValue(suite.get("suite_id")), runIds.runId());
         List<Object> testRefs = listValue(suite.get("tests"));
         boolean multiTestSuite = testRefs.size() > 1;
         List<RuntimeSelection> selections = new ArrayList<>();
@@ -377,6 +382,12 @@ public class WireMockProviderCapabilityService {
 
     private Path frameworkProviderContractsDirectory(Path suiteRoot) {
         return FrameworkProviderContractCatalog.resolveDirectory(suiteRoot, FRAMEWORK_PROVIDER_CONTRACTS);
+    }
+
+    private void requireMatchingProfile(String profile, SuiteExecutionContext context) {
+        if (!context.matchesRequestedProfile(profile)) throw new IllegalArgumentException(
+                "Execution context profile mismatch: context=" + context.profile() + ", requested=" + profile
+                        + ". Use the parent suite profile for all child runtimes.");
     }
 
     private RunIds newRunIds() {

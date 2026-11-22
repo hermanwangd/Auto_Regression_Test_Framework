@@ -1,0 +1,2 @@
+{{/* No ConfigMap is emitted: metadata remains in values and testware stays external.
+No script, JAR, secret or arbitrary bundle payload is embedded in this chart. */}}

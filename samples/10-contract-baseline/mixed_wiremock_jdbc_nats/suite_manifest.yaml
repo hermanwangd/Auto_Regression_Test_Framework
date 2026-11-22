@@ -1,12 +1,27 @@
-contract_version: v0.2
-suite_id: RP-FWK-CONTRACT-SAMPLE-regression
-selection:
-  mode: suite
-  suite: contract-smoke
+manifest_version: v0.3
+suite_id: MIXED-CONTRACT-BASELINE-v0.3
+default_profile: local_v03
+
+artifact_roots:
+  fixtures: fixtures/
+  queries: queries/
+  expected_results: expected_results/
+
+targets:
+  payment_mock:
+    provider_contract: http_mock.v0.3
+  payment_api:
+    provider_contract: rest_client.v0.3
+  order_db:
+    provider_contract: jdbc.v0.3
+  event_bus:
+    provider_contract: nats.v0.3
+
+env_profiles:
+  local_v03:
+    ref: env_profiles/local_v03.yaml
+
 tests:
-  - test_case.yaml
-profiles:
-  - ci
-  - sit
-coverage_source_ref: docs/08-release/release-packages/RP-FWK-CONTRACT-SAMPLE/acceptance_criteria.md
-traceability_map_ref: generated-framework/traceability_map.yaml
+  - ref: test_cases/payment_success.yaml
+  - ref: test_cases/order_query_success.yaml
+  - ref: test_cases/event_payload_success.yaml

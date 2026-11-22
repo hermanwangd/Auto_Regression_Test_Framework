@@ -1,0 +1,17 @@
+{
+  "metadata": {
+    "generated_at": "2026-06-30T00:00:05Z"
+  },
+  "items": [
+    {
+      "qty": 1,
+      "sku": "B-2"
+    },
+    {
+      "qty": 2,
+      "sku": "A-1"
+    }
+  ],
+  "status": "READY",
+  "id": "ORDER-100"
+}

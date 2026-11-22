@@ -8,6 +8,14 @@ CANONICAL_DIR="docs/02-architecture/contracts"
 RUNTIME_DIR="schemas"
 
 required=(
+  dependencies_lock.v1.schema.yaml
+  source_bindings.v1.schema.yaml
+  runner_collection.v1.schema.yaml
+  runner_bundle.v1.schema.yaml
+  runner_runtime_binding.v1.schema.yaml
+  shared_sit_data.v1.schema.yaml
+  coverage_report.v1.schema.yaml
+  coverage_authority.v1.schema.yaml
   env_profile.v0.2.schema.yaml
   environment_binding.v0.2.schema.yaml
   evidence_index.v0.2.schema.yaml
@@ -17,6 +25,15 @@ required=(
   result.v0.2.schema.yaml
   suite_manifest.v0.2.schema.yaml
   test_case_dsl.v0.2.schema.yaml
+  env_profile.v0.3.schema.yaml
+  product_test_reviewed_handoff.v1.schema.yaml
+  knowledge_selection_proof.v1.schema.yaml
+  product_test_reviewed_handoff.v2.schema.yaml
+  provider_contract.v0.3.schema.yaml
+  result.v0.3.schema.yaml
+  suite_summary.v0.3.schema.yaml
+  suite_manifest.v0.3.schema.yaml
+  test_case_dsl.v0.3.schema.yaml
 )
 
 legacy_docs=(

@@ -4,6 +4,16 @@ These criteria validate Auto Regression Test Framework v0.2 as a feature-complet
 
 Current-stage maturity is measured by framework AC-001 through AC-018 only. Phase 2 Agent Skill support acceptance is intentionally next-stage and must not lower or block the framework maturity score unless a missing framework contract prevents generic validation, execution, evidence, or reporting.
 
+## AC-019 - Canonical Suite Summary and Recursive Aggregation
+
+Happy path: Every executed v0.3 leaf writes matching `result.json` and `suite_summary.json`. A v0.3 aggregation run reuses one parent `batch_id`, assigns unique child `run_id` values, copies each immediate child's materialized results once, merges evidence metadata with suite-path identities, and reports exact self, child, and total counts and rates.
+
+Failure path: A structurally invalid aggregation manifest blocks before run IDs or output artifacts exist. If an entered child later has a missing, malformed, escaped, or identity-mismatched result/summary, the parent preserves valid children and writes a partial blocked result/summary with `termination_reason: aggregation_error` and owner-actionable `aggregation_errors`.
+
+Boundary path: Passed plus skipped resolves to passed; all skipped resolves to skipped; any blocked child or partial completion resolves to blocked. Empty denominators produce null rates. Nested parents consume only the immediate child's summary and materialized result lists, never grandchildren directly.
+
+Report acceptance: canonical report input is `result.json`; report validates summary/evidence references and returns only `review_ready`, `review_ready_with_failures`, `failed`, or `invalid`. Legacy unversioned summaries remain compatibility input and cannot claim canonical evidence validation.
+
 v0.2 acceptance follows this boundary:
 
 ```text
@@ -192,7 +202,7 @@ Happy path: CLI supports the invocation portion of the documented v0.2 public in
 
 Failure path: Missing suite, unknown tag, missing profile, missing option value, unsupported report format, incompatible profile, empty selection, child-suite aggregation refs that escape the aggregation manifest directory, duplicate child suite ids, or missing child suite manifests block with actionable output and usage errors returning exit code `2` where appropriate.
 
-Boundary path: Test, suite, suite group, and tag selection choose framework-readable checked-in approved tests only; they do not infer RP/RU membership. Suite group runs write aggregation output under `target/suite-groups/<suite_id>/<batch_id>/<run_id>/` with `suite_summary_json`, `suite_summary_yaml`, and `allure_results_dir`, and expected failure children pass only when observed status matches `expected_status`. Debug or next-stage support commands do not satisfy AC-015 unless they delegate to the documented v0.2 runtime interface.
+Boundary path: Test, suite, suite group, and tag selection choose framework-readable checked-in approved tests only; they do not infer RP/RU membership. Every entered v0.3 suite writes under `target/regression/<suite_id>/<batch_id>/<run_id>/`; a group stores child runs only under `children/<child_suite_id>/<child_run_id>/` and writes its parent `suite_summary_json`, `suite_summary_yaml`, and `allure_results_dir` in the same run directory. Expected failure children pass only when observed status matches `expected_status`. Debug or next-stage support commands do not satisfy AC-015 unless they delegate to the documented v0.2 runtime interface.
 
 ## AC-016 Validate Provider Contract, Provider Instance, and Provider Capability Contracts
 

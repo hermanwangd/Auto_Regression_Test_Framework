@@ -1,0 +1,34 @@
+contract_version: knowledge-selection-proof.v1
+artifact: governed_knowledge_metadata_projection
+format: strict_utf8_json
+wire_discriminator: {field: schema_version, value: knowledge-selection-proof.v1}
+required_fields: [schema_version, private_original_receipt_sha256, selection_receipt_sha256, source_snapshot_sha256, candidate_search_sha256, query_sha256, context_sha256, provider_version, scope, fetched_at, evaluated_at, valid_until, selected, excluded]
+unknown_fields: prohibited
+explicit_nulls: prohibited
+duplicate_keys: prohibited
+trailing_tokens: prohibited
+limits: {bytes: 262144, nesting: 50, selected: 15, excluded: 256, qualified_ref_characters: 256}
+provider_version: UNVERIFIED_BY_HTTP_CLIENT
+scope:
+  required_fields: [mission_ref, workspace_ref, knowledge_project_ref, consumer_project_ref, repository_revisions, requirement_refs]
+  repository_revisions: exact_governed_current_scope_including_composition_X_not_substituted_artifact_A
+  requirement_refs: qualified_immutable_references_exact_reviewed_requirement_set
+selected:
+  required_fields: [qualified_source_ref, governed_record_key, record_version, provider_revision, source_ref, content_sha256, owner_ref, knowledge_ref, proposal_digest, decision_ref, decision_record_key, decision_record_version, decision_proposal_digest, observed_at, valid_until, document_id, chunk_count, dataset_id]
+  source_identity: qualified_repo_at_commit_path_and_ID_separate_from_governed_record_key
+  digest_fields: lowercase_sha256_hex
+  record_version: positive_integer
+  chunk_count: positive_integer
+  dataset_id: canonical_UUID
+  source_owner: explicit_approved_non_UNBOUND_reference
+  temporal: observed_at_lte_fetched_at_lte_evaluated_at_lte_invocation_and_valid_until_strictly_after_invocation
+excluded:
+  required_fields: [record_key, knowledge_ref, reason]
+  private_references: empty_in_projection_unless_explicitly_approved_for_public_metadata
+  used_excluded_identity: prohibited
+privacy:
+  forbidden: [statement, original_receipt_body, context_body, chunk_text, query, credentials, private_URIs, raw_provider_response]
+  private_original_sha: exact_private_original_bytes_verified_during_preparation_through_host_replay
+  projection_sha: separately_pinned_raw_projection_bytes_never_relabelled_original
+  authority: acquisition_and_integrity_only_not_ACL_agent_adoption_or_inference_proof
+  runtime_retrieval: prohibited

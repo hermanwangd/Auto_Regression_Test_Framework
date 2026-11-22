@@ -1,0 +1,20 @@
+{
+  "policy_version": 1,
+  "actor": "local-ci-policy",
+  "claim": "LOCAL_CLI_INTEGRATION_NOT_SHARED_SIT_OR_RELEASE_ACCEPTANCE",
+  "review_ref": "local-test-review://public-project-review-20261107/sqlite-ci-policy",
+  "permitted_derivations": [
+    "workspace_output_cwd_paths",
+    "current_run_identifiers_and_24h_times",
+    "artifact_hashes_from_reviewed_source_inputs"
+  ],
+  "human_runtime_review": false,
+  "shared_sit_authority": false,
+  "reviewed_files": {
+    "integrations/swarm-product-test/scripts/public-cli-project.py": "57ed2c3cea4e8ab0cf3d0983df02c4d91e0be24946ca49b0924c3641f3da9c54",
+    "integrations/swarm-product-test/public-projects/sqlite/asset-lock.json": "687c0110ac2bcd9ba48ca981c95b65fab27cef181af8757f0989d22d29d8068b",
+    "integrations/swarm-product-test/public-projects/sqlite/cases.json": "eeaa6303f58dc2fdebc91da97fd5f90860c9c15caa05c19dfd9bcd109c50ddad",
+    "docs/02-architecture/contracts/provider-contracts/cli_process_v0_3.yaml": "5a8d8d9e211d741f23def255c8cf0699e9f4d3735d5f2d47ca1795d414c010be",
+    "samples/41-product-testing/reviewed_local/review-input.json": "3fd8fc6adccd10d0b4a25a2e18d293ef2bbe58cf9fd8339ad6150b5ad9a56b6f"
+  }
+}

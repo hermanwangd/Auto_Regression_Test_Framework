@@ -70,7 +70,7 @@ Samples and release verification:
 - Modify `samples/20-provider-capability-p0/messaging/ibm_mq/**`.
 - Modify `samples/20-provider-capability-p0/messaging/kafka_ibm_mq_mixed/**`.
 - Modify `samples/20-provider-capability-p0/data/jdbc/**`.
-- Modify `samples/30-cross-provider-groups/mock_server_cross_verify/**` for WireMock external `base_url` support evidence.
+- Modify external endpoint verification to prove `rest_client` consumes project-provided `base_url`; keep WireMock samples framework-managed.
 - Create or update `samples/40-evidence-reporting/**` for shared release command fixtures, expected report outputs, and evidence-validation fixtures.
 - Modify `.github/workflows/release.yml` if release verification commands are missing.
 - Modify release-note generation inputs or a checked-in release-note template. Do not edit generated `target/release-notes.md` directly.
@@ -155,43 +155,40 @@ MAVEN_OPTS="-Xmx2g" ./mvnw -q test -Dtest=ProviderSupportStatusTest,ProviderSupp
 scripts/ci/check-public-support-contract.sh
 ```
 
-### Task 3: Support Project-provisioned WireMock External `base_url`
+### Task 3: Support Project-provisioned External HTTP `base_url`
 
-Keep framework-managed `wiremock_http_mock` supported and add explicit support for project-provisioned external WireMock `base_url`. The framework does not provision the external WireMock server, but it must consume the project-provided binding and prove that requests were sent to that URL.
+Correction for the current public interface: project-provisioned generic HTTP endpoints are consumed by `rest_client` through Env_Profile `base_url`. If the project happens to use WireMock only as the implementation behind a generic REST endpoint, the framework still treats it as `rest_client`. `wiremock_http_mock.base_url` is reserved for an owner-provisioned WireMock-compatible mock server where the framework must call WireMock Admin API to load/reset stubs or inspect request journal evidence.
 
 Required behavior:
 
 - Framework-managed WireMock samples continue to pass.
-- `docs/02-architecture/contracts/provider-contracts/wiremock_http_mock.yaml` defines an optional `base_url` binding key for external connection:
+- `docs/02-architecture/contracts/provider-contracts/rest_client.yaml` defines `base_url` for external HTTP endpoint consumption:
   - `value_type: uri`
-  - `allowed_value_kinds: [value, generated_ref]`
-  - `allowed_schemes: [http, https]`
-  - raw userinfo, password, token, authorization query params, and `secret_ref` values are rejected for `base_url`.
-- `connect_mock` consumes `mock.base_url` and must not call `start_mock`.
-- Env_Profile or Environment Binding can supply `base_url` as a static value or predefined generated value.
-- When external `base_url` is supplied, the runtime must not start a framework-managed WireMock instance for that provider.
-- The paired HTTP client provider must resolve its target URL from the external `base_url`.
+  - `allowed_value_kinds: [value, secret_ref, generated_ref]`
+  - `allowed_schemes: [http, https]` for external endpoints; `local://framework-demo-server` is reserved for checked-in framework demo samples.
+  - raw userinfo, password, token, authorization query params, and other secret-like query values are rejected for `base_url`.
+- Env_Profile or Environment Binding can supply `rest_client.base_url` as a static value or predefined generated value.
+- `wiremock_http_mock` must not consume generic external `base_url`; generic external endpoint tests should target `rest_client`.
+- `wiremock_http_mock.base_url` may consume an external WireMock-compatible Admin API endpoint only when the framework owns stub/journal operations but does not own the server process.
 - Evidence must prove the consumed `base_url`, request URL, response status, and provider IDs.
 - Missing, malformed, or secret-bearing `base_url` fails validation before provider dispatch with an owner-actionable error.
-- Release verification uses a project-provisioned local WireMock process started by the verification harness before `regress run`; the framework consumes only the resulting `base_url`.
+- Release verification may use a project-provisioned local WireMock process as the external HTTP server, but the framework consumes it through `rest_client`.
 
 Failure codes:
 
 | Failure | Code |
 |---|---|
-| external WireMock selected but no `base_url` supplied | `WIREMOCK_EXTERNAL_BASE_URL_MISSING` |
-| URI is malformed or scheme is not `http` / `https` | `WIREMOCK_EXTERNAL_BASE_URL_INVALID` |
-| URI contains userinfo or secret-like query params | `WIREMOCK_EXTERNAL_BASE_URL_SECRET_LEAK` |
-| request cannot reach supplied endpoint | `WIREMOCK_EXTERNAL_CONNECTION_FAILED` |
+| external REST endpoint selected but no `base_url` supplied | `CONFIGURATION_MISSING_REQUIRED_BINDING_KEY` |
+| URI is malformed or scheme is not `http` / `https` | `CONFIGURATION_INVALID_BINDING_KEY_URI` |
+| URI contains userinfo or secret-like query params | `SECRET_GUARDRAIL_RAW_SECRET` |
+| request cannot reach supplied endpoint | `PROVIDER_UNAVAILABLE` |
 
 Required evidence:
 
 ```yaml
-provider_id: wiremock_payment_api
-provider_type: wiremock_http_mock
+provider_id: payment-api-client
+provider_type: rest_client
 support_status: supported
-framework_started_wiremock: false
-external_base_url_consumed: true
 consumed_binding_keys: [base_url]
 request_url: http://127.0.0.1:<port>/payments
 http_status: 200
@@ -471,7 +468,7 @@ public non-canonical commands: absent from help and usage-kit release verificati
 public RP-mode: removed from release interface
 provider support matrix uses support_status only
 framework-managed WireMock capability: PASS
-project-provisioned WireMock external base_url: PASS, consumed by runtime
+project-provisioned external HTTP base_url: PASS, consumed by rest_client runtime
 provider support matrix consistency: PASS
 report positive cases: PASS
 report negative cases: EXPECTED_FAIL

@@ -1,0 +1,14 @@
+manifest_version: v0.3
+suite_id: NEG-UNSUPPORTED-INPUT-v0.3
+default_profile: local_v03
+artifact_roots:
+  expected: expected/
+  actual: actual/
+targets:
+  common_verifier:
+    provider_contract: common_verify.v0.3
+env_profiles:
+  local_v03:
+    ref: env_profiles/local_v03.yaml
+tests:
+  - ref: test_cases/unsupported_input.yaml

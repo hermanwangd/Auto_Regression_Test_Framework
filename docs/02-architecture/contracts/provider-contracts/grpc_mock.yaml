@@ -1,5 +1,8 @@
 provider_contract_version: v0.2
 provider_type: grpc_mock
+provider_role: mock_server
+protocol: grpc
+runtime_implementation: wiremock
 runtime_modes: [mock]
 binding_keys:
   target_uri:

@@ -1,5 +1,7 @@
 package com.specdriven.regression.contract;
 
+import com.specdriven.regression.summary.SuiteExecutionContext;
+
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.provider.jdbc.JdbcDriverDiscovery;
@@ -48,7 +50,7 @@ public class ContractBaselineRuntimeService {
     private final Yaml yaml = new Yaml();
 
     public ContractBaselineRunResult run(Path suiteManifest, String requestedProfile, Path outputBase) {
-        return run(suiteManifest, requestedProfile, outputBase, JdbcDriverDiscovery.missing(Path.of(".")));
+        return run(suiteManifest, requestedProfile, SuiteExecutionContext.standalone(requestedProfile, outputBase, "CONTRACT"));
     }
 
     public ContractBaselineRunResult run(
@@ -56,6 +58,21 @@ public class ContractBaselineRuntimeService {
             String requestedProfile,
             Path outputBase,
             JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
+        return run(suiteManifest, requestedProfile,
+                SuiteExecutionContext.standalone(requestedProfile, outputBase, "CONTRACT"), driverDiscovery);
+    }
+
+    public ContractBaselineRunResult run(
+            Path suiteManifest, String requestedProfile, SuiteExecutionContext executionContext) {
+        return run(suiteManifest, requestedProfile, executionContext, JdbcDriverDiscovery.missing(Path.of(".")));
+    }
+
+    public ContractBaselineRunResult run(
+            Path suiteManifest,
+            String requestedProfile,
+            SuiteExecutionContext executionContext,
+            JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
+        requireMatchingProfile(requestedProfile, executionContext);
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         if (!validation.valid()) {
             return ContractBaselineRunResult.blocked(validation.suiteId(), requestedProfile, validation.findings());
@@ -93,7 +110,7 @@ public class ContractBaselineRuntimeService {
             return ContractBaselineRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, profileFindings);
         }
 
-        RuntimeModel model = runtimeModel(suiteRoot, suite, testDocuments, requestedProfile, outputBase);
+        RuntimeModel model = runtimeModel(suiteRoot, suite, testDocuments, requestedProfile, executionContext);
         if (model.selections().isEmpty()) {
             return ContractBaselineRunResult.blocked(stringValue(suite.get("suite_id")), requestedProfile, List.of(new ContractFinding(
                     suiteManifest.toString(),
@@ -392,16 +409,13 @@ public class ContractBaselineRuntimeService {
             Map<String, Object> suite,
             List<SuiteProfileGate.TestCaseDocument> testDocuments,
             String requestedProfile,
-            Path outputBase) {
+            SuiteExecutionContext executionContext) {
         Map<String, Map<String, Object>> instancesById =
                 readDirectoryByField(suiteRoot.resolve("provider_instances"), "provider_id");
         Map<String, Map<String, Object>> contractsByType =
                 readDirectoryByField(frameworkProviderContractsDirectory(suiteRoot), "provider_type");
-        RunIds runIds = newRunIds();
-        Path suiteRunDir = outputBase
-                .resolve(safe(stringValue(suite.get("suite_id"))))
-                .resolve(runIds.batchId())
-                .resolve(runIds.runId());
+        RunIds runIds = new RunIds(executionContext.parentBatchId(), executionContext.newRunId("CONTRACT"));
+        Path suiteRunDir = executionContext.childRunRoot(stringValue(suite.get("suite_id")), runIds.runId());
         boolean multiTestSuite = testDocuments.size() > 1;
         List<RuntimeSelection> selections = new ArrayList<>();
         for (SuiteProfileGate.TestCaseDocument document : testDocuments) {
@@ -1069,6 +1083,12 @@ public class ContractBaselineRuntimeService {
             String providerType,
             String providerId,
             String linkedResultField) {
+    }
+
+    private void requireMatchingProfile(String profile, SuiteExecutionContext context) {
+        if (!context.matchesRequestedProfile(profile)) throw new IllegalArgumentException(
+                "Execution context profile mismatch: context=" + context.profile() + ", requested=" + profile
+                        + ". Use the parent suite profile for all child runtimes.");
     }
 
     private RunIds newRunIds() {
