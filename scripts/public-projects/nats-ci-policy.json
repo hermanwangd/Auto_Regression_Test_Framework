@@ -65,7 +65,7 @@
     "scripts/public-projects/nats.py": "7aebf8629cf5cb757c42d792b9b4205475b3c2d4a15c3c55e0aff3b673443928",
     "scripts/public-projects/test_nats.py": "09f7b6d15e9d3375cb2b86923cea4ed12e04f38408a43400c136c8682d624844",
     "src/main/java/com/specdriven/regression/cli/RegressionCommand.java": "8dfb8974a5270ccafc58cb158cb05d961cb83f8f0da26cc335d4e1ea25600a69",
-    "src/main/java/com/specdriven/regression/contract/ContractBaselineService.java": "017d98b89c5e22c5747b781f360d46a5e2f2381b766a2fc8ae9643ffe9055246",
+    "src/main/java/com/specdriven/regression/contract/ContractBaselineService.java": "e7422a7b4e55e0df8116861c63c8326b96dbe30752cb9e597b9697ddb5776ded",
     "src/main/java/com/specdriven/regression/contract/ResultDocumentReader.java": "ce920ae467378054d15782d1945cffa900281d3bb9d0e1370f79372620998e09",
     "src/main/java/com/specdriven/regression/contract/v03/adapter/NatsV03Adapter.java": "9f10f70d3f42db7fc11499930ff42c385e8725de8ef7618735ee14f76e09b05b",
     "src/main/java/com/specdriven/regression/evidence/EvidenceHardeningService.java": "04cbacb654712ab917dad3cfaa657c5eb72e6f66efbb204e4749a2996788a67b",
