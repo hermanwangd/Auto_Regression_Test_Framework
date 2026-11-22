@@ -95,6 +95,14 @@ jobs:
           --module-cli "$CI_MODULE_JAR"
           --module-sha256 "$CI_MODULE_SHA256" --ci-policy-sha256 "$NATS_CI_POLICY_SHA256"
 
+      - name: Retain the Framework JAR tested by SQLite and NATS
+        uses: actions/upload-artifact@v4
+        with:
+          name: tested-framework-jar-${{ github.run_id }}
+          path: ${{ env.CI_FRAMEWORK_JAR }}
+          if-no-files-found: error
+          compression-level: 0
+
       - name: Retain local verification reports and canonical evidence
         if: always()
         uses: actions/upload-artifact@v4
