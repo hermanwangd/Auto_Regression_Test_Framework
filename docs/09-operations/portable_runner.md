@@ -4,6 +4,12 @@ The tool remains the existing framework runner plus an external pinned case/conf
 
 Executable cases/config/sanitized data/oracles stay in their owning product/service repositories. Cross-service SIT has one main-flow-owned root in **one existing product repository**: `tests/sit/{suite.yaml,cases/,config/,data/,dependencies.lock}`. Service cases remain in service repositories and are referenced by qualified repo/commit/path/test-ID and byte SHA. Tool unit/contract/public examples stay here. ProductKnowledge carries curated relationships and immutable source references; Cognee is an index. Neither is executable SSOT. Actual company owner/repository URLs remain unbound until supplied. Do not create a new product repository or maintain source copies in ProductKnowledge.
 
+## Filesystem support
+
+Source admission, remote-runner evidence collection and durable saves require the Java filesystem provider to implement [SecureDirectoryStream](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/nio/file/SecureDirectoryStream.html) on the filesystem root. These operations resolve children relative to open directory handles. When the capability is absent, the runner reports `secure_directory_operations_unavailable`. Use a verified Linux runner for these operations.
+
+On the macOS arm64 host tested with Homebrew OpenJDK 17.0.20.1, the provider returned `UnixDirectoryStream`. On this host, the packaged CLI, v0.3 release profile, usage kit and local Swarm module consumer were verified. Supply a physical temporary directory to tests that require canonical paths. This resolves the macOS `/var` symlink condition; the filesystem capability is a separate prerequisite.
+
 ## Source admission
 
 Use the authoritative [lock schema](../02-architecture/contracts/dependencies_lock.v1.schema.yaml) and [source binding schema](../02-architecture/contracts/source_bindings.v1.schema.yaml). A protected trusted-root binding maps only already checked-out authorized roots to exact Git commits. No fetch/clone/network/root discovery occurs. The independent expected lock/root digests come from trusted invocation configuration, outside editable test/PK requests; hashes alone are integrity, not semantic approval.

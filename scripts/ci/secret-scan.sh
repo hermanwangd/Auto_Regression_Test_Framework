@@ -30,19 +30,37 @@ ALLOWLIST_GLOBS=(
   -g '!samples/80-negative/secrets/**'
 )
 
-SECRET_FIELD_PATTERN='(?i)\b(password|token|api_key|authorization|credential)\b[[:space:]]*[:=][[:space:]]*["'\'']?(?!\*\*\*MASKED\*\*\*|masked|secret://|vault://|generated://|env://|\$\{|true|false|null|[A-Za-z0-9_.-]*ref\b|refs\b|reference\b|required\b|optional\b|allowed\b|policy\b|guardrail\b|field\b|key\b|value\b|values\b)[A-Za-z0-9_./+=:@-]{8,}'
-SECRET_URI_PATTERN='(?i)(jdbc:(oracle|postgresql|mysql|mariadb|db2|sqlserver):[^[:space:]"'\'']+|mongodb(\+srv)?://[^[:space:]"'\'']+|nats://[^[:space:]/@:]+:[^[:space:]/@]+@[^[:space:]"'\'']+|-----BEGIN [A-Z ]*PRIVATE KEY-----)'
+# Both engines consume the same expressions. Only the two contract copies may
+# declare this exact public authorization rule as a complete scalar.
+SCHEMAS=(schemas/coverage_authority.v1.schema.yaml docs/02-architecture/contracts/coverage_authority.v1.schema.yaml)
+RULE='exact_raw_artifact_sha_and_attestor_authorized_by_external_pinned_authority'
+FIELD='\b(password|token|api_key|authorization|credential)\b\s*[:=]\s*["'\'']?(?!\*\*\*MASKED\*\*\*|masked|secret://|vault://|generated://|env://|\$\{|true|false|null|[A-Za-z0-9_.-]*ref\b|refs\b|reference\b|required\b|optional\b|allowed\b|policy\b|guardrail\b|field\b|key\b|value\b|values\b)[A-Za-z0-9_./+=:@-]{8,}'
+SECRET_FIELD_PATTERN="(?i)$FIELD"
+SCHEMA_FIELD_PATTERN="(?i)(?!authorization\\s*:\\s*(?-i:$RULE)[ \t]*$)$FIELD"
+# A bare JDBC scheme carries no connection address. Scan every nonempty
+# address, including Oracle's non-URL JDBC syntax.
+SECRET_URI_PATTERN='(?i)(jdbc:(oracle|postgresql|mysql|mariadb|db2|sqlserver):(?!//(?:[\s"'\'']|$))[^\s"'\'']+|mongodb(\+srv)?://[^\s"'\'']+|nats://[^\s/@:]+:[^\s/@]+@[^\s"'\'']+|-----BEGIN [A-Z ]*PRIVATE KEY-----)'
 
 status=0
 if command -v rg >/dev/null 2>&1; then
-  if rg "${COMMON_ARGS[@]}" "${CONFIG_GLOBS[@]}" "${ALLOWLIST_GLOBS[@]}" "$SECRET_FIELD_PATTERN" .; then
-    status=1
-  fi
-  if rg "${COMMON_ARGS[@]}" "${ALLOWLIST_GLOBS[@]}" "$SECRET_URI_PATTERN" .; then
-    status=1
-  fi
+  scan_rg() {
+    local code
+    if rg "${COMMON_ARGS[@]}" "$@"; then
+      status=1
+    else
+      code=$?
+      if [[ "$code" != 1 ]]; then exit "$code"; fi
+    fi
+  }
+  schema_excludes=()
+  for schema in "${SCHEMAS[@]}"; do
+    schema_excludes+=(-g "!$schema")
+    if [[ -f "$schema" ]]; then scan_rg "$SCHEMA_FIELD_PATTERN" "$schema"; fi
+  done
+  scan_rg "${CONFIG_GLOBS[@]}" "${ALLOWLIST_GLOBS[@]}" "${schema_excludes[@]}" "$SECRET_FIELD_PATTERN" .
+  scan_rg "${ALLOWLIST_GLOBS[@]}" "$SECRET_URI_PATTERN" .
 else
-  if ! python3 - <<'PY'
+  if ! python3 - "$SECRET_FIELD_PATTERN" "$SCHEMA_FIELD_PATTERN" "$SECRET_URI_PATTERN" "${SCHEMAS[@]}" <<'PYTHON_SCAN'
 from pathlib import Path
 import re
 import sys
@@ -56,19 +74,8 @@ excluded_exact = {
 }
 excluded_prefixes = (Path(".git"), Path("target"), Path("src/test"), Path("samples/80-negative/secrets"))
 
-secret_field_pattern = re.compile(
-    r"""\b(password|token|api_key|authorization|credential)\b\s*[:=]\s*["']?"""
-    r"""(?!(\*\*\*MASKED\*\*\*|masked|secret://|vault://|generated://|env://|\$\{|true|false|null|[A-Za-z0-9_.-]*ref\b|refs\b|reference\b|required\b|optional\b|allowed\b|policy\b|guardrail\b|field\b|key\b|value\b|values\b))"""
-    r"""[A-Za-z0-9_./+=:@-]{8,}""",
-    re.IGNORECASE,
-)
-secret_uri_pattern = re.compile(
-    r"""jdbc:(oracle|postgresql|mysql|mariadb|db2|sqlserver):[^\s"']+"""
-    r"""|mongodb(\+srv)?://[^\s"']+"""
-    r"""|nats://[^\s/@:]+:[^\s/@]+@[^\s"']+"""
-    r"""|-----BEGIN [A-Z ]*PRIVATE KEY-----""",
-    re.IGNORECASE,
-)
+secret_field_pattern, schema_field_pattern, secret_uri_pattern = map(re.compile, sys.argv[1:4])
+schemas = {Path(name) for name in sys.argv[4:]}
 
 
 def excluded(path: Path) -> bool:
@@ -98,15 +105,16 @@ for path in root.rglob("*"):
     if text is None:
         continue
     scan_field = path.suffix in config_suffixes or path.name.endswith(".env")
+    field_pattern = schema_field_pattern if path in schemas else secret_field_pattern
     for line_no, line in enumerate(text.splitlines(), start=1):
-        if scan_field and secret_field_pattern.search(line):
+        if scan_field and field_pattern.search(line):
             print(f"{path}:{line_no}:{line}")
             status = 1
         if secret_uri_pattern.search(line):
             print(f"{path}:{line_no}:{line}")
             status = 1
 sys.exit(status)
-PY
+PYTHON_SCAN
   then
     status=1
   fi

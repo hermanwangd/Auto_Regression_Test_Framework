@@ -53,7 +53,9 @@ jobs:
         run: scripts/ci/check-public-support-contract.sh
 
       - name: Secret scan
-        run: scripts/ci/secret-scan.sh
+        run: |
+          python3 -m unittest discover -s scripts/ci/tests -p test_secret_scan.py -v
+          scripts/ci/secret-scan.sh
 
       - name: Generate SBOM
         run: scripts/ci/generate-sbom.sh
