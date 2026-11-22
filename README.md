@@ -1,6 +1,6 @@
 # Auto Regression Test Framework
 
-Spec Driven Auto Regression is a Spring Boot 3.x / Java 17+ test framework for executing regression suites from stable contract artifacts: Suite Manifest, DSL Test Case, Provider Contract, Provider Instance, Env_Profile, Result JSON, and Evidence Index.
+Spec Driven Auto Regression is a Spring Boot 4.0.x / Java 17+ test framework for executing regression suites from stable contract artifacts: Suite Manifest, DSL Test Case, Provider Contract, Provider Instance, Env_Profile, Result JSON, and Evidence Index.
 
 ## What This Framework Solves
 

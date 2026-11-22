@@ -55,33 +55,7 @@ threshold = float(sys.argv[2])
 with open(report_path, "r", encoding="utf-8") as handle:
     report = json.load(handle)
 
-accepted_wiremock_dompurify = {
-    "CVE-2025-15599",
-    "CVE-2025-26791",
-    "CVE-2026-0540",
-    "CVE-2026-41238",
-    "CVE-2026-41239",
-    "CVE-2026-41240",
-    "CVE-2026-49458",
-    "CVE-2026-49459",
-    "CVE-2026-49978",
-    "GHSA-39q2-94rc-95cp",
-    "GHSA-76mc-f452-cxcm",
-    "GHSA-cj63-jhhr-wcxv",
-    "GHSA-cjmm-f4jc-qw8r",
-    "GHSA-cmwh-pvxp-8882",
-    "GHSA-h8r8-wccr-v5f2",
-    "GHSA-gvmj-g25r-r7wr",
-    "GHSA-vxr8-fq34-vvx9",
-    "GHSA-x4vx-rjvf-j5p4",
-}
 accepted_findings_by_package = {
-    "pkg:maven/org.apache.commons/commons-lang3@3.17.0": {"CVE-2025-48924"},
-    "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.22.0": {"CVE-2026-54515"},
-    "pkg:maven/org.wiremock/wiremock-httpclient-apache5@4.0.0-beta.38": {
-        "CVE-2014-3577",
-        "CVE-2020-13956",
-    },
     "pkg:maven/org.wiremock/wiremock-grpc-extension@1.0.0-beta.5": {
         "CVE-2018-9116",
         "CVE-2018-9117",
@@ -99,9 +73,6 @@ accepted_findings_by_package = {
     },
 }
 accepted_findings_by_file_name = {
-    "commons-lang3-3.17.0.jar": {"CVE-2025-48924"},
-    "jackson-databind-2.22.0.jar": {"CVE-2026-54515"},
-    "wiremock-httpclient-apache5-4.0.0-beta.38.jar": {"CVE-2014-3577", "CVE-2020-13956"},
     "wiremock-grpc-extension-1.0.0-beta.5.jar": {
         "CVE-2018-9116",
         "CVE-2018-9117",
@@ -133,7 +104,6 @@ def dependency_package_ids(dependency):
 def is_accepted_finding(dependency, vulnerability):
     name = vulnerability.get("name") or vulnerability.get("source") or ""
     file_name = str(dependency.get("fileName") or "").lower()
-    file_path = str(dependency.get("filePath") or "").lower()
     package_ids = dependency_package_ids(dependency)
 
     if name in accepted_findings_by_file_name.get(file_name, set()):
@@ -142,13 +112,6 @@ def is_accepted_finding(dependency, vulnerability):
     for package_id in package_ids:
         if name in accepted_findings_by_package.get(package_id, set()):
             return True
-
-    if name in accepted_wiremock_dompurify:
-        return (
-            "pkg:javascript/dompurify@3.1.4" in package_ids
-            or ("swagger-ui" in file_path and "wiremock-4.0.0-beta.38" in file_path)
-            or ("swagger-ui" in file_name and "wiremock" in file_path)
-        )
 
     return False
 

@@ -38,7 +38,7 @@ Out of scope:
 | Test case DSL | Full pre-release package-neutral DSL v0.2 with explicit version | Different Products and RPs express regression tests through one artifact model without overfitting to one package type. |
 | Provider public interface | DSL targets resolve to Provider Instances, Provider Contracts, and Env_Profiles | Execution process is generic; product topology stays outside the framework core. |
 | Heterogeneous RP support | Agent-generated Provider Instances and Env_Profiles plus framework-owned provider contract registry validation | Different RU languages, deployments, and messaging styles are translated into logical provider targets and reusable built-in provider contracts instead of DSL changes, framework-core changes, or RP-specific scripts. External runner is a governed escape hatch only. |
-| Implementation stack | Spring Boot 3.x on Java 17+ | Provides a modern Java runtime, dependency injection, validation, configuration binding, and CLI packaging path. |
+| Implementation stack | Spring Boot 4.0.x on Java 17+ | Provides a modern Java runtime, dependency injection, validation, configuration binding, and CLI packaging path. |
 | Verification boundary | Separate framework verification from RP regression execution | Maven validates this framework; CLI `run` validates downstream Product/RP packages and writes RP release evidence. |
 
 ### Framework Verification vs RP Regression Execution
@@ -207,7 +207,7 @@ Mock-service lifecycle is suite/batch scoped. Framework-owned mock services such
 
 ## 5.4 Module Boundaries
 
-The implementation uses Spring Boot 3.x on Java 17+. Package names may be adjusted to match the final Java group ID, but these boundaries are required.
+The implementation uses Spring Boot 4.0.x on Java 17+. Package names may be adjusted to match the final Java group ID, but these boundaries are required.
 
 ```text
 src/main/java/com/specdriven/regression/
