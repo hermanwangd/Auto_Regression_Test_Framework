@@ -484,6 +484,10 @@ public class ContractBaselineService {
             for (String field : List.of("dsl_version", "test_case_id", "title", "execute", "verify")) {
                 require(entry.getKey(), testCase, field, findings);
             }
+            if (testCase.containsKey("status") && !"active".equals(testCase.get("status"))) {
+                findings.add(finding(entry.getKey(), "status", "lifecycle_not_execution_eligible",
+                        "Submit the case for owner review before promoting it to active."));
+            }
         }
         for (Map.Entry<Path, Map<String, Object>> entry : graph.envProfiles().entrySet()) {
             Map<String, Object> profile = entry.getValue();

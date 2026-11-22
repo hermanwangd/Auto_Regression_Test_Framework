@@ -7,6 +7,10 @@ required_sections:
   - title
   - execute
   - verify
+optional_fields:
+  status:
+    allowed_for_public_suite: [active]
+    confers_owner_approval: false
 phase_sections:
   setup: ordered_list_optional
   execute: ordered_list_required

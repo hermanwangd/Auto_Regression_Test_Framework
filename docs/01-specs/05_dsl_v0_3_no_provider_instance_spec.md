@@ -185,6 +185,7 @@ cleanup:
 Rules:
 
 - `setup`, `execute`, `verify`, and `cleanup` are ordered lists.
+- A case can omit the top-level `status` field. When supplied, it must equal the string `active` for public suite validation, planning, and execution. A non-active value blocks the entire suite or suite group before provider execution. Owner review and the independent pin required for a reviewed product run still apply.
 - Step IDs must be unique in one test case and match `[a-z][a-z0-9_]*`.
 - Test cases directly reference suite target names; they must not define aliases with `uses`.
 - `op`, `with`, and output refs are validated by the target Provider Contract.
