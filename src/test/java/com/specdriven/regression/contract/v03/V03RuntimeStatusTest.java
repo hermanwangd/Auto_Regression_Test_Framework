@@ -217,7 +217,9 @@ class V03RuntimeStatusTest {
                     String log = "authorization=Bearer raw-runtime-token password=raw-password"
                             + " ＭＡＳＫＥＤ－ＡＣＴＵＡＬ－ＳＡＭＰＬＥ＝'fixture, suffix' 顯示 Ａ";
                     Files.writeString(evidence, log);
-                    Files.writeString(evidence.resolveSibling("diagnostic.json"), log);
+                    Files.writeString(evidence.resolveSibling("diagnostic.yaml"), log);
+                    Files.writeString(evidence.resolveSibling("broken.json"), "{\"request\":{\"headers\":{\"cookie\":\"sample\"}");
+                    Files.writeString(evidence.resolveSibling("broken.yaml"), "request:\n  headers:\n    cookie: sample\n  incomplete: [");
                 } catch (java.io.IOException error) {
                     throw new java.io.UncheckedIOException(error);
                 }
@@ -225,7 +227,8 @@ class V03RuntimeStatusTest {
                         ? Map.of("actual_json", Map.of("token", "raw-runtime-token", "status", "OK"))
                         : Map.of();
                 return new V03StepResult(step.id(), "passed", outputs,
-                        List.of("provider-evidence/raw-runtime.txt", "provider-evidence/diagnostic.json"), "", "");
+                        List.of("provider-evidence/raw-runtime.txt", "provider-evidence/diagnostic.yaml",
+                                "provider-evidence/broken.json", "provider-evidence/broken.yaml"), "", "");
             }
         };
         V03RuntimeExecutionService service = new V03RuntimeExecutionService(
@@ -241,7 +244,11 @@ class V03RuntimeStatusTest {
                 .doesNotContain("raw-password");
         String expectedLog = "authorization=[MASKED] password=[MASKED] ＭＡＳＫＥＤ－ＡＣＴＵＡＬ－ＳＡＭＰＬＥ＝'[MASKED]' 顯示 Ａ";
         assertThat(Files.readString(run.evidenceDir().resolve("provider-evidence/raw-runtime.txt"))).isEqualTo(expectedLog);
-        assertThat(Files.readString(run.evidenceDir().resolve("provider-evidence/diagnostic.json"))).isEqualTo(expectedLog);
+        Path artifacts = run.evidenceDir().resolve("provider-evidence");
+        assertThat((Object) new Yaml().load(Files.readString(artifacts.resolve("diagnostic.yaml")))).isEqualTo(expectedLog);
+        assertThat(new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                Files.readString(artifacts.resolve("broken.json")), Object.class)).isEqualTo(V03OutputRedactor.MASKED);
+        assertThat((Object) new Yaml().load(Files.readString(artifacts.resolve("broken.yaml")))).isEqualTo(V03OutputRedactor.MASKED);
     }
 
     @Test

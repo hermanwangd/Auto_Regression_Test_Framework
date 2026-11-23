@@ -1474,7 +1474,7 @@ public class V03RuntimeExecutionService {
                 document = objectMapper.readerFor(Object.class).with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
                         .readValue(original);
             } catch (JsonProcessingException malformed) {
-                return outputRedactor.redactMessage(original, contractRedact);
+                return objectMapper.writeValueAsString(V03OutputRedactor.MASKED);
             }
             return objectMapper.writeValueAsString(outputRedactor.redactEvidenceValue(document, contractRedact));
         }
@@ -1483,7 +1483,7 @@ public class V03RuntimeExecutionService {
             try {
                 document = yaml.load(original);
             } catch (org.yaml.snakeyaml.error.YAMLException malformed) {
-                return outputRedactor.redactMessage(original, contractRedact);
+                return yaml.dump(V03OutputRedactor.MASKED);
             }
             DumperOptions options = new DumperOptions();
             options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
