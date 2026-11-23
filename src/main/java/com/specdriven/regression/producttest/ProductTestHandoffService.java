@@ -5,13 +5,12 @@ import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.ByteArrayOutputStream;
+import com.specdriven.regression.provider.SuiteAssetReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
-import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -851,16 +850,9 @@ public final class ProductTestHandoffService {
             if (before.size() > MAX_FILE_BYTES) throw fail("file_size_limit", "input exceeds 2 MiB");
             rejectHardlink(absolute);
             byte[] bytes;
-            Set<OpenOption> options = Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
-            try (SeekableByteChannel channel = Files.newByteChannel(absolute, options);
-                    ByteArrayOutputStream buffer = new ByteArrayOutputStream((int) Math.min(before.size(), 8192))) {
-                ByteBuffer chunk = ByteBuffer.allocate(8192);
-                while (channel.read(chunk) != -1) {
-                    chunk.flip();
-                    if ((long) buffer.size() + chunk.remaining() > MAX_FILE_BYTES) throw fail("file_size_limit", "input exceeds 2 MiB");
-                    buffer.write(chunk.array(), 0, chunk.remaining()); chunk.clear();
-                }
-                bytes = buffer.toByteArray();
+            try (var input = SuiteAssetReader.openPhysical(absolute)) {
+                bytes = input.readNBytes(MAX_FILE_BYTES + 1);
+                if (bytes.length > MAX_FILE_BYTES) throw fail("file_size_limit", "input exceeds 2 MiB");
             }
             noSymlinks(absolute); rejectHardlink(absolute);
             BasicFileAttributes after = Files.readAttributes(absolute, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);

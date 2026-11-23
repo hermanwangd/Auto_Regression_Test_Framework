@@ -3,6 +3,8 @@ package com.specdriven.regression.provider;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -27,6 +29,17 @@ class SuiteAssetReaderTest {
                 .isInstanceOf(java.io.IOException.class);
         Path fileAlias = Files.createSymbolicLink(root.resolve("query-link.sql"), file);
         assertThatThrownBy(() -> PosixSuiteFile.open(fileAlias)).isInstanceOf(java.io.IOException.class);
+    }
+
+    @Test
+    @EnabledOnOs(OS.LINUX)
+    void readsTheOriginalBytesOfANativeFilename(@TempDir Path directory) throws Exception {
+        Path root = directory.toRealPath();
+        Path file = Path.of(root.toUri().resolve(URI.create("query-%25-%FF.sql")));
+        Files.writeString(file, "SELECT 1");
+        try (var input = SuiteAssetReader.openPhysical(file)) {
+            assertThat(new String(input.readAllBytes(), StandardCharsets.UTF_8)).isEqualTo("SELECT 1");
+        }
     }
 
     @Test

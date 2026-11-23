@@ -3,12 +3,13 @@ package com.specdriven.regression.provider;
 import com.sun.jna.Library;
 import com.sun.jna.Native;
 import com.sun.jna.Platform;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.HexFormat;
 
 /** Opens a physical path one component at a time, keeping the final inode pinned until the stream is open. */
 final class PosixSuiteFile {
@@ -38,13 +39,13 @@ final class PosixSuiteFile {
     }
 
     private static final LibSystem LIB = Native.load(Platform.isMac() ? "/usr/lib/libSystem.B.dylib" : Platform.C_LIBRARY_NAME,
-            LibSystem.class, Map.of(Library.OPTION_STRING_ENCODING, StandardCharsets.UTF_8.name()));
+            LibSystem.class);
 
     private PosixSuiteFile() { }
 
     interface LibSystem extends Library {
         int open(String path, int flags);
-        int openat(int directory, String component, int flags);
+        int openat(int directory, byte[] component, int flags);
         int close(int descriptor);
     }
 
@@ -54,22 +55,45 @@ final class PosixSuiteFile {
             throw new IOException("Expected a canonical absolute suite asset path.");
         }
         OpenFlags flags = flags();
+        // The default Unix provider's file URI preserves the original filename bytes.
+        // A Path's display string can replace bytes that its charset cannot decode.
+        String[] components = absoluteFile.toUri().getRawPath().substring(1).split("/");
+        if (components.length != absoluteFile.getNameCount()) throw new IOException("Invalid physical suite asset path.");
         int descriptor = checked(LIB.open("/", flags.directory()));
         try {
-            for (int i = 0; i < absoluteFile.getNameCount(); i++) {
-                boolean last = i == absoluteFile.getNameCount() - 1;
+            for (int i = 0; i < components.length; i++) {
+                boolean last = i == components.length - 1;
                 int openFlags = last ? flags.leaf() : flags.directory();
-                int child = checked(LIB.openat(descriptor, absoluteFile.getName(i).toString(), openFlags));
+                int child = checked(LIB.openat(descriptor, nativeComponent(components[i]), openFlags));
                 LIB.close(descriptor);
                 descriptor = child;
             }
             // The descriptor stays live across both operations. Neither looks up the suite path again.
             Path openedFile = Path.of(flags.descriptors(), Integer.toString(descriptor));
-            if (!Files.isRegularFile(openedFile)) throw new IOException("suite asset is not a regular file.");
+            if (!Files.readAttributes(openedFile, BasicFileAttributes.class).isRegularFile()) {
+                throw new IOException("suite asset is not a regular file.");
+            }
             return Files.newInputStream(openedFile);
         } finally {
             LIB.close(descriptor);
         }
+    }
+
+    private static byte[] nativeComponent(String escaped) throws IOException {
+        var bytes = new ByteArrayOutputStream(escaped.length() + 1);
+        for (int i = 0; i < escaped.length(); i++) {
+            int value = escaped.charAt(i);
+            if (value == '%') {
+                value = HexFormat.fromHexDigits(escaped, i + 1, i + 3);
+                i += 2;
+            } else if (value > 127) {
+                throw new IOException("Expected ASCII in an escaped file URI.");
+            }
+            if (value == 0 || value == '/') throw new IOException("Invalid native filename component.");
+            bytes.write(value);
+        }
+        bytes.write(0);
+        return bytes.toByteArray();
     }
 
     private static int checked(int descriptor) throws IOException {
