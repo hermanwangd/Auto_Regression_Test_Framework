@@ -33,7 +33,7 @@ public final class ProviderEndpoints {
 
     static String natsConnectionEvidenceRef(String reference) {
         if (reference.isEmpty() || reference.matches("env://[A-Za-z_][A-Za-z0-9_]*")
-                || reference.matches("mock://[A-Za-z0-9_-]+(?:[.][A-Za-z0-9_-]+)*")) {
+                || reference.matches("mock://[A-Za-z0-9_.-]+")) {
             return reference;
         }
         try {
