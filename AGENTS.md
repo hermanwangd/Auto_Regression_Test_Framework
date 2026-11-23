@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository contains the Spring Boot 3.x / Java 17+ implementation of the Auto Regression Test Framework.
+This repository contains the Spring Boot 4.0.x / Java 17+ implementation of the Auto Regression Test Framework.
 
 - `src/main/java/` contains CLI, contract validation, provider runtimes, evidence, and reporting code.
 - `src/test/java/` contains Surefire tests for CLI behavior, provider capabilities, contracts, release scripts, and evidence validation.
