@@ -35,6 +35,9 @@ import org.apache.kafka.common.serialization.StringSerializer;
 
 class DefaultMessagingTransport implements MessagingTransport {
 
+    private static final int MAX_NATS_LINE_BYTES = 8192;
+    private static final int MAX_NATS_PAYLOAD_BYTES = 64 * 1024 * 1024;
+
     private final Function<Properties, Consumer<String, String>> kafkaConsumerFactory;
     private final Function<Properties, Producer<String, String>> kafkaProducerFactory;
     private final Function<String, String> environmentResolver;
@@ -279,6 +282,7 @@ class DefaultMessagingTransport implements MessagingTransport {
     private MessagingTransportResult natsPublish(MessagingTransportRequest request)
             throws IOException {
         URI uri = natsUri(request.connectionRef());
+        String subject = natsSubject(request.targetRef(), false);
         int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
         byte[] payload = request.payload().getBytes(StandardCharsets.UTF_8);
         try (Socket socket = new Socket()) {
@@ -288,7 +292,7 @@ class DefaultMessagingTransport implements MessagingTransport {
             OutputStream output = socket.getOutputStream();
             readNatsInfo(input);
             writeAscii(output, "CONNECT {\"verbose\":false,\"pedantic\":false}\r\n");
-            writeAscii(output, "PUB " + stripScheme(request.targetRef(), "nats") + " " + payload.length + "\r\n");
+            writeAscii(output, "PUB " + subject + " " + payload.length + "\r\n");
             output.write(payload);
             writeAscii(output, "\r\nPING\r\n");
             output.flush();
@@ -303,9 +307,9 @@ class DefaultMessagingTransport implements MessagingTransport {
     private MessagingTransportResult natsRequestReply(MessagingTransportRequest request)
             throws IOException {
         URI uri = natsUri(request.connectionRef());
+        String subject = natsSubject(request.targetRef(), false);
         int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
         byte[] payload = request.payload().getBytes(StandardCharsets.UTF_8);
-        String subject = stripScheme(request.targetRef(), "nats");
         String replySubject = natsReplySubject(request);
         try (Socket socket = new Socket()) {
             socket.connect(new InetSocketAddress(uri.getHost(), natsPort(uri)), timeoutMs);
@@ -346,6 +350,7 @@ class DefaultMessagingTransport implements MessagingTransport {
     private MessagingTransportResult natsObserve(MessagingTransportRequest request)
             throws IOException {
         URI uri = natsUri(request.connectionRef());
+        String subject = natsSubject(request.targetRef(), true);
         int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
         int expectedCount = expectedCount(request);
         List<String> observed = new ArrayList<>();
@@ -356,7 +361,7 @@ class DefaultMessagingTransport implements MessagingTransport {
             OutputStream output = socket.getOutputStream();
             readNatsInfo(input);
             writeAscii(output, "CONNECT {\"verbose\":false,\"pedantic\":false}\r\n");
-            writeAscii(output, "SUB " + stripScheme(request.targetRef(), "nats") + " 1\r\nPING\r\n");
+            writeAscii(output, "SUB " + subject + " 1\r\nPING\r\n");
             output.flush();
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Math.max(1, request.timeoutSeconds()));
             while (observed.size() < expectedCount && System.nanoTime() < deadline) {
@@ -395,6 +400,7 @@ class DefaultMessagingTransport implements MessagingTransport {
     private MessagingTransportResult natsCleanup(MessagingTransportRequest request)
             throws IOException {
         URI uri = natsUri(request.connectionRef());
+        String subject = natsSubject(request.targetRef(), true);
         int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
         int maxCount = cleanupLimit(request);
         List<String> cleaned = new ArrayList<>();
@@ -405,7 +411,7 @@ class DefaultMessagingTransport implements MessagingTransport {
             OutputStream output = socket.getOutputStream();
             readNatsInfo(input);
             writeAscii(output, "CONNECT {\"verbose\":false,\"pedantic\":false}\r\n");
-            writeAscii(output, "SUB " + stripScheme(request.targetRef(), "nats") + " 1\r\nPING\r\n");
+            writeAscii(output, "SUB " + subject + " 1\r\nPING\r\n");
             output.flush();
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Math.max(1, request.timeoutSeconds()));
             while (cleaned.size() < maxCount && System.nanoTime() < deadline) {
@@ -449,7 +455,16 @@ class DefaultMessagingTransport implements MessagingTransport {
         return uri.getPort() > 0 ? uri.getPort() : 4222;
     }
 
-    private String natsReplySubject(MessagingTransportRequest request) {
+    private String natsSubject(String ref, boolean subscription) throws IOException {
+        String subject = stripScheme(ref, "nats");
+        if (subject.isEmpty() || subject.length() > 1024 || !subject.chars().allMatch(c -> c >= 33 && c <= 126)
+                || (!subscription && (subject.indexOf('*') >= 0 || subject.indexOf('>') >= 0))) {
+            throw new IOException("Invalid NATS subject.");
+        }
+        return subject;
+    }
+
+    private String natsReplySubject(MessagingTransportRequest request) throws IOException {
         String configured = firstText(
                 request.action(),
                 "reply_subject",
@@ -457,7 +472,7 @@ class DefaultMessagingTransport implements MessagingTransport {
                 "inbox_subject",
                 "reply_inbox");
         if (!configured.isBlank()) {
-            return stripScheme(configured, "nats");
+            return natsSubject(configured, false);
         }
         return "_INBOX.spec-regression." + Long.toUnsignedString(System.nanoTime());
     }
@@ -481,29 +496,39 @@ class DefaultMessagingTransport implements MessagingTransport {
         }
     }
 
-    private String readNatsPayload(InputStream input, String header) throws IOException {
+    static String readNatsPayload(InputStream input, String header) throws IOException {
         String[] parts = header.split(" ");
-        int length = Integer.parseInt(parts[parts.length - 1]);
+        if (parts.length != 4 && parts.length != 5) throw new IOException("Invalid NATS message header.");
+        int length;
+        try {
+            length = Integer.parseInt(parts[parts.length - 1]);
+        } catch (NumberFormatException e) {
+            throw new IOException("Invalid NATS payload length.");
+        }
+        if (length < 0 || length > MAX_NATS_PAYLOAD_BYTES) throw new IOException("NATS payload exceeds bound.");
         byte[] payload = input.readNBytes(length);
-        readLine(input);
-        return new String(payload, StandardCharsets.UTF_8);
+        if (payload.length != length || input.read() != '\r' || input.read() != '\n') {
+            throw new IOException("Incomplete NATS message.");
+        }
+        return StandardCharsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(payload)).toString();
     }
 
     private String readLine(InputStream input) throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        int read;
-        while ((read = input.read()) != -1) {
-            if (read == '\n') {
-                break;
+        while (buffer.size() <= MAX_NATS_LINE_BYTES) {
+            int next = input.read();
+            if (next < 0) {
+                if (buffer.size() == 0) throw new IOException("Connection closed while reading messaging protocol response.");
+                throw new IOException("Incomplete NATS protocol line.");
             }
-            if (read != '\r') {
-                buffer.write(read);
+            if (next == '\r') {
+                if (input.read() != '\n') throw new IOException("Invalid NATS line ending.");
+                return buffer.toString(StandardCharsets.UTF_8);
             }
+            if (next < 32 && next != '\t') throw new IOException("Invalid NATS protocol line.");
+            buffer.write(next);
         }
-        if (read == -1 && buffer.size() == 0) {
-            throw new IOException("Connection closed while reading messaging protocol response.");
-        }
-        return buffer.toString(StandardCharsets.UTF_8);
+        throw new IOException("NATS protocol line exceeds bound.");
     }
 
     private void writeAscii(OutputStream output, String command) throws IOException {

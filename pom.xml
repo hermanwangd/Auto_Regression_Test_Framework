@@ -158,7 +158,12 @@
         </dependency>
         <dependency>
             <groupId>org.wiremock</groupId>
-            <artifactId>wiremock-grpc-extension</artifactId>
+            <artifactId>wiremock-grpc-extension-core</artifactId>
+            <version>${wiremock.grpc.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-grpc-extension-jetty</artifactId>
             <version>${wiremock.grpc.version}</version>
         </dependency>
         <dependency>

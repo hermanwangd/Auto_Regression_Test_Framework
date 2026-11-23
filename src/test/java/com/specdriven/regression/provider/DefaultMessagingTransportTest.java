@@ -28,6 +28,32 @@ import org.junit.jupiter.api.Test;
 class DefaultMessagingTransportTest {
 
     @Test
+    void requiresAnInRangeLengthAndACompleteNatsMessage() {
+        byte[] data = "ok\r\n".getBytes(StandardCharsets.UTF_8);
+        assertThatThrownBy(() -> DefaultMessagingTransport.readNatsPayload(
+                new java.io.ByteArrayInputStream(data), "MSG events 1 67108865"))
+                .isInstanceOf(java.io.IOException.class).hasMessage("NATS payload exceeds bound.");
+        assertThatThrownBy(() -> DefaultMessagingTransport.readNatsPayload(
+                new java.io.ByteArrayInputStream(data), "MSG events 1 4"))
+                .isInstanceOf(java.io.IOException.class).hasMessage("Incomplete NATS message.");
+    }
+
+    @Test
+    void rejectsInvalidNatsSubjectsBeforeConnecting() {
+        DefaultMessagingTransport transport = new DefaultMessagingTransport();
+        MessagingTransportRequest request = new MessagingTransportRequest(
+                "events", "nats", "nats://127.0.0.1:1", "two words", "subject_ref",
+                "publish", "publish", "", "", "fixture", 1, Map.of(), Map.of());
+        assertThatThrownBy(() -> transport.publish(request))
+                .isInstanceOf(java.io.IOException.class).hasMessage("Invalid NATS subject.");
+        MessagingTransportRequest withReply = new MessagingTransportRequest(
+                "events", "nats", "nats://127.0.0.1:1", "events.valid", "subject_ref",
+                "reply", "request_reply", "", "", "fixture", 1, Map.of(), Map.of("reply_subject", "*"));
+        assertThatThrownBy(() -> transport.execute(withReply))
+                .isInstanceOf(java.io.IOException.class).hasMessage("Invalid NATS subject.");
+    }
+
+    @Test
     void observesKafkaMessagesWithCorrelationThroughMockConsumer() throws Exception {
         TopicPartition partition = new TopicPartition("payment.events", 0);
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
