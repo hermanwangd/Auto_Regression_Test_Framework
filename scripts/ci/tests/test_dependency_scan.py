@@ -53,3 +53,16 @@ class DependencyScanTest(unittest.TestCase):
         result = self.scan([{"name": "scored", "cvssv3": {"baseScore": 7.0}}], "7")
         self.assertEqual(result.returncode, 1)
         self.assertIn("medium_high_vulnerability_count: 1", result.stdout)
+
+    def test_owasp_cvss_v2_score_takes_precedence_over_severity(self):
+        finding = {"name": "v2-only", "severity": "MEDIUM", "cvssv2": {"score": 6.8}}
+        result = self.scan([finding], "6")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("v2-only | severity=MEDIUM | cvss=6.8", result.stdout)
+        self.assertIn("unscored_vulnerability_count: 0", result.stdout)
+
+    def test_zero_threshold_blocks_a_finding_with_unknown_severity(self):
+        result = self.scan([{"name": "unrated"}], "0")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("unscored_blocking_vulnerability_count: 1", result.stdout)
+        self.assertIn("blocking: example.js | unrated | severity=UNKNOWN | cvss=unscored", result.stdout)

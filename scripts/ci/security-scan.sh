@@ -125,18 +125,19 @@ for dependency in report.get("dependencies", []):
     file_name = dependency.get("fileName") or dependency.get("filePath") or "unknown-dependency"
     for vulnerability in dependency.get("vulnerabilities", []) or []:
         scores = []
-        for key in ("cvssv4", "cvssv3", "cvssv2"):
+        for key, field in (("cvssv4", "baseScore"), ("cvssv3", "baseScore"),
+                           ("cvssv2", "score"), ("cvssv2", "baseScore")):
             value = vulnerability.get(key)
-            if isinstance(value, dict) and isinstance(value.get("baseScore"), (int, float)):
-                scores.append(float(value["baseScore"]))
+            if isinstance(value, dict) and isinstance(value.get(field), (int, float)):
+                scores.append(float(value[field]))
         if isinstance(vulnerability.get("cvssScore"), (int, float)):
             scores.append(float(vulnerability["cvssScore"]))
         if not scores:
             severity = str(vulnerability.get("severity") or "UNKNOWN").upper()
-            floor = severity_floors.get(severity)
+            floor = severity_floors.get(severity, 0.0)
             unscored_findings.append((
                 file_name, vulnerability.get("name") or "unknown-vulnerability",
-                severity, floor is not None and floor >= threshold,
+                severity, floor >= threshold,
             ))
             continue
         score = max(scores)
