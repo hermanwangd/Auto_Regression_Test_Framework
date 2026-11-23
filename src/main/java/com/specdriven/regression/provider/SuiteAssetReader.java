@@ -43,6 +43,14 @@ public final class SuiteAssetReader {
         if (!file.startsWith(realRoot)) throw new IllegalArgumentException(outsideRootMessage);
         if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new NoSuchFileException(reference);
 
+        return openPhysical(file);
+    }
+
+    /** Opens an absolute, normalized path without following aliases in any component. */
+    public static InputStream openPhysical(Path file) throws IOException {
+        if (!file.isAbsolute() || file.getNameCount() == 0 || !file.normalize().equals(file)) {
+            throw new IOException("Expected a normalized absolute suite asset path.");
+        }
         // Anchor traversal at the filesystem root so even the suite root's parents
         // are opened without following links after the canonical paths were checked.
         if (file.getFileSystem() == FileSystems.getDefault() && (com.sun.jna.Platform.isLinux() || com.sun.jna.Platform.isMac())) {
@@ -52,7 +60,7 @@ public final class SuiteAssetReader {
                 throw new IOException("Native suite file access is unavailable.", unavailable);
             }
         }
-        Path anchor = realRoot.getRoot();
+        Path anchor = file.getRoot();
         try (DirectoryStream<Path> directory = Files.newDirectoryStream(anchor)) {
             if (directory instanceof SecureDirectoryStream<Path> secure) {
                 return openRelative(secure, anchor.relativize(file));

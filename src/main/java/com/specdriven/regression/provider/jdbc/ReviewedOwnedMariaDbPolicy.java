@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.specdriven.regression.provider.SuiteAssetReader;
 import java.nio.file.*;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -58,7 +59,11 @@ public final class ReviewedOwnedMariaDbPolicy {
         Path base=root.toRealPath(),path=base.resolve(relative).normalize();require(path.startsWith(base),"outside approved root");
         Path cursor=base;for(Path part:base.relativize(path)){cursor=cursor.resolve(part);require(!Files.isSymbolicLink(cursor),"symlink fixture rejected");}
         require(Files.isRegularFile(path,LinkOption.NOFOLLOW_LINKS),"regular fixture required");
-        try(var in=Files.newInputStream(path,LinkOption.NOFOLLOW_LINKS)){byte[] bytes=in.readNBytes(max+1);require(bytes.length>0&&bytes.length<=max,"fixture bound exceeded");return bytes;}
+        try (var input = SuiteAssetReader.openPhysical(path)) {
+            byte[] bytes = input.readNBytes(max + 1);
+            require(bytes.length > 0 && bytes.length <= max, "fixture bound exceeded");
+            return bytes;
+        }
     }
     public static String digest(byte[] bytes){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));}catch(java.security.NoSuchAlgorithmException e){throw new IllegalStateException(e);}}
     static boolean privateIpv4(String s) {String[] p=s.split("\\.",-1);if(p.length!=4)return false;int[] n=new int[4];for(int i=0;i<4;i++){if(!p[i].matches("0|[1-9][0-9]{0,2}"))return false;n[i]=Integer.parseInt(p[i]);if(n[i]>255)return false;}return n[3]>0&&n[3]<255&&(n[0]==10||n[0]==172&&n[1]>=16&&n[1]<=31||n[0]==192&&n[1]==168);}
