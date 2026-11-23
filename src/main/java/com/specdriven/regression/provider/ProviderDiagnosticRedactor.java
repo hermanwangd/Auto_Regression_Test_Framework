@@ -16,7 +16,6 @@ public final class ProviderDiagnosticRedactor {
                 .replaceAll("(?i)(jdbc:[^\\s,}\\]]+)", "***MASKED***")
                 .replaceAll("(?i)(mongodb(?:\\+srv)?://[^\\s,}\\]]+)", "***MASKED***")
                 .replaceAll("(?i)(nats://[^\\s,}\\]]+)", "***MASKED***")
-                .replaceAll("(?i)((?:password|token|secret|credential|api_key)\\s*[=:]\\s*)[^\\s,}\\]]+", "$1***MASKED***")
-                .replaceAll("-----BEGIN [^-]+ PRIVATE KEY-----[\\s\\S]*?-----END [^-]+ PRIVATE KEY-----", "***MASKED***");
+                .replaceAll("(?i)((?:password|token|secret|credential|api_key)\\s*[=:]\\s*)[^\\s,}\\]]+", "$1***MASKED***");
     }
 }

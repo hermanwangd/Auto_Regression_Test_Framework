@@ -34,6 +34,20 @@ class V03OutputRedactorTest {
     }
 
     @Test
+    void masksPrivateKeyBlocksInProviderAndFinalDiagnostics() {
+        var redactor = new V03OutputRedactor();
+        for (String kind : java.util.List.of("PRIVATE KEY", "RSA PRIVATE KEY", "ENCRYPTED PRIVATE KEY")) {
+            String header = "-----BEGIN " + kind + "-----";
+            String footer = "-----END " + kind + "-----";
+            String message = "before\n" + header + "\nordinary test data\n" + footer + "\nafter";
+            assertThat(redactor.redactMessage(message)).isEqualTo("before\n[MASKED]\nafter");
+            assertThat(com.specdriven.regression.provider.ProviderDiagnosticRedactor.maskSensitiveText(message))
+                    .isEqualTo("before\n***MASKED***\nafter");
+            assertThat(redactor.redactMessage(header + "\nordinary test data")).isEqualTo("[MASKED]");
+        }
+    }
+
+    @Test
     void masksAWholeAuthorizationFieldWhenItsSchemeHasParameters() {
         var redactor = new V03OutputRedactor();
         String message = "Authorization: Example a=first, b=second\r\nNext: OK";

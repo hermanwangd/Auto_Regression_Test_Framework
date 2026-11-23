@@ -32,6 +32,8 @@ public final class V03OutputRedactor {
     private static final Pattern HEADER_LINES = Pattern.compile("[^\\r\\n]*+(?:\\r?\\n[\\t ]++[^\\r\\n]*+)*+");
     private static final Pattern RAW_VALUE = Pattern.compile("[^\\s,;\"'}]++");
     private static final Pattern RAW_ADDRESS = Pattern.compile("[^\\s,;]++");
+    private static final Pattern PRIVATE_KEY_BLOCK = Pattern.compile(
+            "-----BEGIN ((?:[A-Z0-9-]++ )*?PRIVATE KEY)-----.*?(?:-----END \\1-----|\\z)", Pattern.DOTALL);
     private static final Pattern AUTHORITY = Pattern.compile("[/／]{2}([^/\\s]++)");
 
     private static final Set<String> USER_INFO_SCHEMES = Set.of("http", "https", "grpc", "grpcs");
@@ -118,6 +120,7 @@ public final class V03OutputRedactor {
 
     private static String maskMessage(String message, ContractFields fields, String marker) {
         if (message == null) return "";
+        if (message.contains("-----BEGIN ")) message = PRIVATE_KEY_BLOCK.matcher(message).replaceAll(marker);
         Matcher labels = MESSAGE_LABEL.matcher(message);
         Matcher assignment = ASSIGNMENT.matcher(message);
         StringBuilder masked = new StringBuilder();
