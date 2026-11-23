@@ -9,6 +9,123 @@ import org.junit.jupiter.api.Test;
 
 class V03OutputRedactorTest {
     @Test
+    void masksBasicAuthorizationInDiagnosticsAndNestedTextEvidence() {
+        var redactor = new V03OutputRedactor();
+        String field = "Proxy-Ａｕｔｈｏｒｉｚａｔｉｏｎ: Ｂａｓｉｃ";
+        assertThat(redactor.redactMessage("Authorization: Basic fixtureValue= status=OK"))
+                .isEqualTo("Authorization: [MASKED] status=OK");
+        String folded = field + "\r\n\tfirstPart\r\n secondPart=\r\nNext: OK";
+        assertThat(redactor.redactEvidenceValue(Map.of("message", folded), Set.of()))
+                .isEqualTo(Map.of("message", "Proxy-Ａｕｔｈｏｒｉｚａｔｉｏｎ: [MASKED]\r\nNext: OK"));
+        assertThat(redactor.redactMessage("basic checks completed")).isEqualTo("basic checks completed");
+    }
+
+    @Test
+    void keepsPublicDiagnosticsAfterAuthorizationValues() {
+        var redactor = new V03OutputRedactor();
+        String context = "\n  status=OK\n\tat example.Work.run(Work.java:12)";
+        for (String scheme : java.util.List.of("Basic", "Bearer", "Negotiate")) {
+            String message = "Authorization: " + scheme + " exampleValue" + context;
+            assertThat(redactor.redactMessage(message)).isEqualTo("Authorization: [MASKED]" + context);
+            String providerMessage = com.specdriven.regression.provider.ProviderDiagnosticRedactor.maskSensitiveText(message);
+            assertThat(providerMessage).isEqualTo("Authorization: ***MASKED***" + context);
+            assertThat(redactor.redactMessage(providerMessage)).isEqualTo("Authorization: [MASKED]" + context);
+        }
+    }
+
+    @Test
+    void masksPrivateKeyBlocksInProviderAndFinalDiagnostics() {
+        var redactor = new V03OutputRedactor();
+        for (String kind : java.util.List.of("PRIVATE KEY", "RSA PRIVATE KEY", "ENCRYPTED PRIVATE KEY")) {
+            String header = "-----BEGIN " + kind + "-----";
+            String footer = "-----END " + kind + "-----";
+            String message = "before\n" + header + "\nordinary test data\n" + footer + "\nafter";
+            assertThat(redactor.redactMessage(message)).isEqualTo("before\n[MASKED]\nafter");
+            assertThat(com.specdriven.regression.provider.ProviderDiagnosticRedactor.maskSensitiveText(message))
+                    .isEqualTo("before\n***MASKED***\nafter");
+            assertThat(redactor.redactMessage(header + "\nordinary test data")).isEqualTo("[MASKED]");
+        }
+    }
+
+    @Test
+    void masksAWholeAuthorizationFieldWhenItsSchemeHasParameters() {
+        var redactor = new V03OutputRedactor();
+        String message = "Authorization: Example a=first, b=second\r\nNext: OK";
+        assertThat(redactor.redactMessage(message)).isEqualTo("Authorization: [MASKED]\r\nNext: OK");
+    }
+
+    @Test
+    void retainsOriginalFieldNamesAndMasksEquivalentCredentialAndContractLabels() {
+        var redactor = new V03OutputRedactor();
+        Map<String, Object> row = Map.of("ＡＰＩ-Key", "fixture value", "顯示名稱", "正常",
+                "Ｏｗｎｅｒ", "fixture owner");
+        assertThat(redactor.redactEvidenceValue(row, java.util.Set.of("Owner")))
+                .isEqualTo(Map.of("ＡＰＩ-Key", V03OutputRedactor.MASKED, "顯示名稱", "正常",
+                        "Ｏｗｎｅｒ", V03OutputRedactor.MASKED));
+        assertThat(redactor.redactMessage("ＴＯＫＥＮ=fixture")).isEqualTo("ＴＯＫＥＮ=" + V03OutputRedactor.MASKED);
+        assertThat(redactor.redactMessage("品項 Ａ")).isEqualTo("品項 Ａ");
+        assertThat(redactor.redactValue(Map.of("privateKey", "fixture value")))
+                .isEqualTo(Map.of("privateKey", V03OutputRedactor.MASKED));
+    }
+
+    @Test
+    void preservesUnicodeOutsideRawCredentialValues() {
+        var redactor = new V03OutputRedactor();
+        String log = "顯示 Ａ ① e\u0301 ＡＰＩ－Ｋｅｙ＝first，middle\u00a0last; 完成 Ｚ";
+        assertThat(redactor.redactMessage(log)).isEqualTo("顯示 Ａ ① e\u0301 ＡＰＩ－Ｋｅｙ＝[MASKED]; 完成 Ｚ");
+        assertThat(redactor.redactMessage("Ｂｅａｒｅｒ sample；suffix Ｚ"))
+                .isEqualTo("Ｂｅａｒｅｒ [MASKED] Ｚ");
+        assertThat(redactor.redactMessage("ＨＴＴＰＳ：／／test:one＠two@example.invalid/路徑 Ａ"))
+                .isEqualTo("ＨＴＴＰＳ：／／[MASKED]@example.invalid/路徑 Ａ");
+        assertThat(redactor.redactMessage("備註 Ａ ＪＤＢＣ：sample，part ＮＡＴＳ：／／sample\u00a0part 完成"))
+                .isEqualTo("備註 Ａ [MASKED] [MASKED] 完成");
+    }
+
+    @Test
+    void usesCanonicalContractKeysForPlainLogsAndMessagesInsideStructuredEvidence() {
+        var redactor = new V03OutputRedactor();
+        Set<String> fields = Set.of("request.client_trace", "review owner");
+        String log = "說明 Ａ ＲＥＱＵＥＳＴ．ＣＬＩＥＮＴ－ＴＲＡＣＥ＝'one, two' \"Ｒｅｖｉｅｗ Ｏｗｎｅｒ\"＝three";
+        String expected = "說明 Ａ ＲＥＱＵＥＳＴ．ＣＬＩＥＮＴ－ＴＲＡＣＥ＝'[MASKED]' \"Ｒｅｖｉｅｗ Ｏｗｎｅｒ\"＝[MASKED]";
+        assertThat(redactor.redactMessage(log, fields)).isEqualTo(expected);
+        assertThat(redactor.redactEvidenceValue(Map.of("描述", log, "request", Map.of("ＣＬＩＥＮＴ－ＴＲＡＣＥ", "sample")), fields))
+                .isEqualTo(Map.of("描述", expected, "request", Map.of("ＣＬＩＥＮＴ－ＴＲＡＣＥ", "[MASKED]")));
+    }
+
+    @Test
+    void preservesUnquotedContractLabelsWithSpacesAndPunctuation() {
+        var redactor = new V03OutputRedactor();
+        String log = "公開 Ａ Ｒｅｖｉｅｗ　Ｏｗｎｅｒ=sample；suffix, route/ＩＤ＋＝'one two' review:ID=third";
+        assertThat(redactor.redactMessage(log, Set.of("review owner", "route/id+", "review:id")))
+                .isEqualTo("公開 Ａ Ｒｅｖｉｅｗ　Ｏｗｎｅｒ=[MASKED], route/ＩＤ＋＝'[MASKED]' review:ID=[MASKED]");
+        assertThat(redactor.redactMessage("tokenized=資料Ａ")).isEqualTo("tokenized=資料Ａ");
+    }
+
+    @Test
+    void respectsQuotedAndEmptyValueBoundaries() {
+        var redactor = new V03OutputRedactor();
+        assertThat(redactor.redactMessage("token=\"one, \\\"two\\\"; three\" status=ＯＫ"))
+                .isEqualTo("token=\"[MASKED]\" status=ＯＫ");
+        assertThat(redactor.redactMessage("token='' status=ＯＫ\npassword=\n狀態=Ａ"))
+                .isEqualTo("token='' status=ＯＫ\npassword=\n[MASKED]");
+        assertThat(redactor.redactMessage("authorization=Bearer 'one two' code=Ａ"))
+                .isEqualTo("authorization=[MASKED] code=Ａ");
+    }
+
+    @Test
+    void masksCredentialsAcrossLineBreaksWithoutSplittingUnicodeValueContent() {
+        var redactor = new V03OutputRedactor();
+        assertThat(redactor.redactMessage("\"ＴＯＫＥＮ\"\r\n＝\nfirst\u00a0last，tail\r\n完成 Ａ"))
+                .isEqualTo("\"ＴＯＫＥＮ\"\r\n＝\n[MASKED]\r\n完成 Ａ");
+        assertThat(redactor.redactMessage("authorization:\nBearer\r\n'first second'\n完成 Ａ"))
+                .isEqualTo("authorization:\n[MASKED]\n完成 Ａ");
+        assertThat(redactor.redactMessage("Ｂｅａｒｅｒ\r\nfirst\u00a0last；tail\n完成 Ａ"))
+                .isEqualTo("Ｂｅａｒｅｒ\r\n[MASKED]\n完成 Ａ");
+        assertThat(redactor.redactMessage("Review Owner\n:\r\nfixture\n完成 Ａ", Set.of("review owner")))
+                .isEqualTo("Review Owner\n:\r\n[MASKED]\n完成 Ａ");
+    }
+
+    @Test
     void masksContractSensitiveOutputsAndNestedSecretLikeValues() {
         V03ProviderContract.V03OperationDefinition operation = new V03ProviderContract.V03OperationDefinition(
                 Set.of(), Set.of(), Set.of("session", "response"), Map.of(), Map.of(

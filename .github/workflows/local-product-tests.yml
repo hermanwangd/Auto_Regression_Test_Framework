@@ -23,11 +23,11 @@ jobs:
       MAVEN_OPTS: -Xmx1024m -XX:MaxMetaspaceSize=384m
       PYTHONDONTWRITEBYTECODE: '1'
       SQLITE_CI_POLICY_SHA256: e70903e08139a1a2c4b27666cf310a47fcf0626e94be8b5b5420b6b039e79353
-      NATS_CI_POLICY_SHA256: fb741791b76413a20e420fc099caf6a6f67ff892e99571acf0af255f0ccaacf9
+      NATS_CI_POLICY_SHA256: f765708762510df04b339d18fba31b0f044877d232846081988d6bdadb018673
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: '17'
@@ -96,7 +96,7 @@ jobs:
           --module-sha256 "$CI_MODULE_SHA256" --ci-policy-sha256 "$NATS_CI_POLICY_SHA256"
 
       - name: Retain the Framework JAR tested by SQLite and NATS
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: tested-framework-jar-${{ github.run_id }}
           path: ${{ env.CI_FRAMEWORK_JAR }}
@@ -105,7 +105,7 @@ jobs:
 
       - name: Retain local verification reports and canonical evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: local-product-tests-${{ github.run_id }}
           if-no-files-found: ignore

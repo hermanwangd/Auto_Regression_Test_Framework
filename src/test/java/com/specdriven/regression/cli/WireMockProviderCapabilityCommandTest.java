@@ -10,6 +10,7 @@ import com.specdriven.regression.productrepo.ProductRepoService;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -102,7 +103,7 @@ class WireMockProviderCapabilityCommandTest {
     void wireMockSuiteConsumesExternalBaseUrlBinding() throws Exception {
         Path suite = mutableWireMock();
         Path envProfile = suite.getParent().resolve("env_profiles/local_wiremock.yaml");
-        WireMockServer externalWireMock = new WireMockServer(options().dynamicPort());
+        WireMockServer externalWireMock = new WireMockServer(options().bindAddress("127.0.0.1").dynamicPort());
         externalWireMock.start();
         try {
             String originalEnvProfile = read(envProfile);
@@ -395,7 +396,7 @@ class WireMockProviderCapabilityCommandTest {
     @Test
     void wireMockUnavailableMapsToTechnicalFailureClassification() throws Exception {
         Path suite = mutableWireMock();
-        try (ServerSocket occupied = new ServerSocket(0)) {
+        try (ServerSocket occupied = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
             Path binding = suite.getParent().resolve("env_profiles/local_wiremock.yaml");
             Files.writeString(binding, read(binding)
                     .replace("""

@@ -182,6 +182,61 @@ class DefaultDeploymentReadinessProbeTest {
                 .hasMessageContaining("Environment variable `SPEC_DRIVEN_REGRESSION_UNSET_READINESS_ENV` is not set");
     }
 
+    @Test
+    void bindsBearerToTheRunnerHttpsOrigin() throws Exception {
+        String fixtureToken = java.util.UUID.randomUUID().toString();
+        Map<String, String> bindings = Map.of("K8S_API_SERVER", "https://cluster.example:6443/",
+                "K8S_BEARER_TOKEN", fixtureToken);
+        var probe = new DefaultDeploymentReadinessProbe(java.net.http.HttpClient.newHttpClient(), bindings::get);
+        var request = request("k8s", "api_deployment_available", "", "payment", "deployment/payment-api",
+                "", "", "", 0, Map.of("api_server_ref", "env://K8S_API_SERVER", "bearer_ref", "env://K8S_BEARER_TOKEN"));
+
+        var http = probe.k8sApiRequest(request);
+        assertThat(http.uri().toString()).isEqualTo("https://cluster.example:6443/apis/apps/v1/namespaces/payment/deployments/payment-api");
+        assertThat(http.headers().firstValue("Authorization")).contains("Bearer " + fixtureToken);
+    }
+
+    @Test
+    void usesDedicatedResourceBindingsForTheDeploymentApiPath() throws Exception {
+        Map<String, String> bindings = Map.of("K8S_NAMESPACE", "1payment", "K8S_DEPLOYMENT", "deploy/pay.v2");
+        var probe = new DefaultDeploymentReadinessProbe(java.net.http.HttpClient.newHttpClient(), bindings::get);
+        var request = request("k8s", "api_deployment_available", "", "env://K8S_NAMESPACE", "env://K8S_DEPLOYMENT",
+                "", "", "", 0, Map.of("api_server_ref", "http://127.0.0.1"));
+
+        assertThat(probe.k8sApiRequest(request).uri().getPath())
+                .isEqualTo("/apis/apps/v1/namespaces/1payment/deployments/pay.v2");
+    }
+
+    @Test
+    void rejectsOtherResourceBindingsWithoutReadingTheEnvironment() {
+        var probe = new DefaultDeploymentReadinessProbe(java.net.http.HttpClient.newHttpClient(), key -> {
+            throw new AssertionError("A resource path must only read its dedicated binding");
+        });
+        for (var names : List.of(List.of("env://FIXTURE_SETTING", "deploy/app"),
+                List.of("default", "env://FIXTURE_SETTING"), List.of("env://K8S_DEPLOYMENT", "app"))) {
+            var request = request("k8s", "api_deployment_available", "", names.get(0), names.get(1), "", "", "", 0,
+                    Map.of("api_server_ref", "http://127.0.0.1"));
+            assertThatThrownBy(() -> probe.k8sApiRequest(request)).isInstanceOf(IOException.class)
+                    .hasMessageContaining("dedicated").hasMessageNotContaining("FIXTURE_SETTING");
+        }
+    }
+
+    @Test
+    void validatesResourceSyntaxAndLengthForLiteralsAndDedicatedBindings() throws Exception {
+        String label = "n".repeat(63);
+        String name = String.join(".", label, label, label, "d".repeat(61));
+        assertThat(K8sApiResource.NAMESPACE.resolve(label, key -> null)).isEqualTo(label);
+        assertThat(K8sApiResource.DEPLOYMENT.resolve("deployments/" + name, key -> null)).isEqualTo(name);
+        for (String invalid : List.of("fixture.name", "Fixture", "fixture-", label + "n")) {
+            assertThatThrownBy(() -> K8sApiResource.NAMESPACE.resolve(invalid, key -> null))
+                    .isInstanceOf(IOException.class).hasMessageNotContaining(invalid);
+        }
+        for (String invalid : List.of("fixture..v2", "fixture-.v2", ".", "..", "app/fixture", name + "d")) {
+            assertThatThrownBy(() -> K8sApiResource.DEPLOYMENT.resolve("env://K8S_DEPLOYMENT", key -> invalid))
+                    .isInstanceOf(IOException.class).hasMessageContaining("K8S_DEPLOYMENT");
+        }
+    }
+
     private DeploymentReadinessProbeRequest request(
             String providerType,
             String readinessProbe,

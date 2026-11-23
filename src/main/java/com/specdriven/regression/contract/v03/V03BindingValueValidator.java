@@ -20,7 +20,7 @@ public final class V03BindingValueValidator {
                 }
             }
             case BOOLEAN -> {
-                if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
+                if (!value.matches("(?i:true|false)")) {
                     throw new IllegalArgumentException("invalid_environment_value_type: `" + location
                             + "` requires BOOLEAN.");
                 }

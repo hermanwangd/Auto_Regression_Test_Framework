@@ -17,6 +17,14 @@ import org.yaml.snakeyaml.Yaml;
 class ReleaseUsageKitVerificationTest {
 
     @Test
+    void releaseVersionEntersTheShellThroughItsEnvironment() throws Exception {
+        String workflow = Files.readString(Path.of(".github/workflows/release.yml"));
+        assertThat(workflow).contains("REQUESTED_VERSION: ${{ inputs.version }}")
+                .contains("requested=\"$REQUESTED_VERSION\"")
+                .doesNotContain("requested=\"${{");
+    }
+
+    @Test
     void releaseWorkflowRunsSupportedProviderSampleGateWithExternalMessagingOptionalByDefault() throws Exception {
         String workflow = Files.readString(Path.of(".github/workflows/release.yml"));
 

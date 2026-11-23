@@ -10,7 +10,7 @@ import org.yaml.snakeyaml.Yaml;
 
 public class SampleFakeProvider {
 
-    private final Yaml yaml = new Yaml();
+    private final Yaml yaml = ProviderDataYaml.create();
 
     public SetupResult setup(Path setupFixture, Path inputFile, Path evidenceDir) {
         return setup(setupFixture, inputFile, evidenceDir, "sample-fake-runtime");

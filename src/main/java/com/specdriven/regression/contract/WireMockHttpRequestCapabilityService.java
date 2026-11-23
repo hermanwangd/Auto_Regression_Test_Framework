@@ -1,7 +1,7 @@
 package com.specdriven.regression.contract;
 
-import com.specdriven.regression.summary.SuiteExecutionContext;
-
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.provider.http.RestClientProviderRuntime;
@@ -13,9 +13,12 @@ import com.specdriven.regression.provider.runtime.ProviderRuntimeRegistry;
 import com.specdriven.regression.provider.runtime.ProviderRuntimeResolver;
 import com.specdriven.regression.provider.runtime.ProviderRuntimeResolver.ProviderRuntimeResolution;
 import com.specdriven.regression.provider.wiremock.WireMockHttpMockProviderRuntime;
+import com.specdriven.regression.provider.wiremock.WireMockJournal;
+import com.specdriven.regression.summary.SuiteExecutionContext;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -31,13 +34,18 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import org.yaml.snakeyaml.Yaml;
 
 public class WireMockHttpRequestCapabilityService {
 
+    private static final ObjectMapper JOURNAL_JSON = new ObjectMapper()
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS, DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY);
+    private static final String JOURNAL_REF = "provider-evidence/wiremock/request_journal.json";
     private static final String WIREMOCK = "wiremock_http_mock";
     private static final String REST_CLIENT = "rest_client";
     private static final Path FRAMEWORK_PROVIDER_CONTRACTS =
@@ -198,7 +206,7 @@ public class WireMockHttpRequestCapabilityService {
                 List.of(new ContractFinding(
                         selection.suiteRoot().resolve("suite_manifest.yaml").toString(),
                         "provider_runtime",
-                        failure.code().toLowerCase(),
+                        failure.code().toLowerCase(Locale.ROOT),
                         "",
                         WIREMOCK + "," + REST_CLIENT,
                         profile,
@@ -269,10 +277,10 @@ public class WireMockHttpRequestCapabilityService {
                 if (!executeResolution.valid()) {
                     return blockedExecution(selection, requestedProfile, executeResolution.failure());
                 }
-                ProviderOperationResult executeResult = executeResolution.runtime().execute(restContext, execute.request());
+                ProviderOperationResult executeResult = executeWireMockRequest(
+                        executeResolution, restContext, execute.request(), resolvedBaseUrl);
                 capture(execute.id(), executeResult, capturedOutputs, outputs, stepResults, evidenceRefs);
-                writeWireMockRequestJournal(selection, resolvedBaseUrl);
-                evidenceRefs.add("provider-evidence/wiremock/request_journal.json");
+                evidenceRefs.add(JOURNAL_REF);
                 if (!executeResult.passed()) {
                     status = "failed";
                     failure = executeResult.failure();
@@ -669,37 +677,61 @@ public class WireMockHttpRequestCapabilityService {
                         status));
     }
 
-    private void writeWireMockRequestJournal(RuntimeSelection selection, String baseUrl) {
-        if (baseUrl.isBlank()) {
-            return;
+    private ProviderOperationResult executeWireMockRequest(ProviderRuntimeResolution resolution,
+            ProviderExecutionContext context, ProviderOperationRequest operation, String baseUrl) {
+        Path evidence = context.runDir().resolve(JOURNAL_REF);
+        String method = "GET";
+        String path = "/";
+        String correlationBinding = "request.headers." + WireMockJournal.REQUEST_ID_HEADER;
+        var inputs = new ArrayList<Map<String, Object>>();
+        for (var input : operation.parameters()) {
+            String name = stringValue(input.get("bind_as"));
+            if ("request.path".equals(name)) path = stringValue(input.get("ref"));
+            else if ("request.method".equals(name)) method = stringValue(input.get("ref"));
+            else if (!correlationBinding.equalsIgnoreCase(name)) inputs.add(input);
         }
+        URI origin = URI.create(baseUrl);
+        URI applicationUri;
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/__admin/requests"))
-                    .timeout(Duration.ofSeconds(10))
-                    .GET()
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            write(selection.runDir().resolve("provider-evidence/wiremock/request_journal.json"), response.body() + "\n");
-        } catch (IOException e) {
-            write(selection.runDir().resolve("provider-evidence/wiremock/request_journal.json"), """
-                    {
-                      "requests": [],
-                      "status": "failed",
-                      "failure_code": "WIREMOCK_JOURNAL_UNAVAILABLE",
-                      "error": "%s"
-                    }
-                    """.formatted(escape(e.getMessage() == null ? e.getClass().getName() : e.getMessage())));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            write(selection.runDir().resolve("provider-evidence/wiremock/request_journal.json"), """
-                    {
-                      "requests": [],
-                      "status": "failed",
-                      "failure_code": "WIREMOCK_JOURNAL_INTERRUPTED",
-                      "error": "interrupted"
-                    }
-                    """);
+            applicationUri = WireMockHttpMockProviderRuntime.requestUri(origin, path);
+        } catch (IllegalArgumentException | URISyntaxException invalid) {
+            return journalFailure(evidence, "WIREMOCK_REQUEST_PATH_INVALID",
+                    "Use an application path on the configured WireMock origin.");
         }
+
+        String requestId = UUID.randomUUID().toString();
+        inputs.add(Map.of("bind_as", "request.method", "ref", method));
+        inputs.add(Map.of("bind_as", "request.path", "ref", path));
+        inputs.add(Map.of("bind_as", correlationBinding, "ref", requestId));
+        var outgoing = new ProviderOperationRequest(operation.operation(), List.copyOf(inputs), operation.outputs());
+        ProviderOperationResult result = resolution.runtime().execute(context, outgoing);
+        try {
+            HttpRequest request = HttpRequest.newBuilder(origin.resolve("/__admin/requests"))
+                    .timeout(Duration.ofSeconds(10)).GET().build();
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IOException("WireMock journal request failed.");
+            }
+            var journal = JOURNAL_JSON.readTree(response.body());
+            write(evidence, WireMockJournal.evidence(journal, method, applicationUri, requestId));
+        } catch (IOException | IllegalArgumentException unavailable) {
+            var journalFailure = journalFailure(evidence, "WIREMOCK_JOURNAL_UNAVAILABLE",
+                    "Check request journal access on the configured WireMock server.");
+            return result.passed() ? journalFailure : result;
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            var journalFailure = journalFailure(evidence, "WIREMOCK_JOURNAL_INTERRUPTED",
+                    "Retry the interrupted WireMock request journal read.");
+            return result.passed() ? journalFailure : result;
+        }
+        return result;
+    }
+
+    private ProviderOperationResult journalFailure(Path evidence, String code, String action) {
+        write(evidence, JOURNAL_JSON.createObjectNode().put("status", "failed").put("failure_code", code)
+                .set("requests", JOURNAL_JSON.createArrayNode()).toPrettyString() + "\n");
+        return ProviderOperationResult.failed(Map.of(), List.of(),
+                ProviderFailure.of(code, "FRAMEWORK_ERROR", "WireMock request verification failed.", action));
     }
 
     private void writeFailureDetail(Path runDir, RuntimeSelection selection, ProviderFailure failure) {
@@ -797,7 +829,7 @@ public class WireMockHttpRequestCapabilityService {
     }
 
     private String evidenceType(String ref) {
-        String normalized = ref.toLowerCase();
+        String normalized = ref.toLowerCase(Locale.ROOT);
         if (normalized.contains("logs/execution")) {
             return "execution_log";
         }
@@ -996,7 +1028,7 @@ public class WireMockHttpRequestCapabilityService {
         if (!"assertion_diff".equals(evidenceType) && failureCode(content).isBlank()) {
             return false;
         }
-        String lower = content.toLowerCase();
+        String lower = content.toLowerCase(Locale.ROOT);
         return lower.contains("status: failed")
                 || lower.contains("\"status\": \"failed\"")
                 || lower.contains("comparison_status: failed")

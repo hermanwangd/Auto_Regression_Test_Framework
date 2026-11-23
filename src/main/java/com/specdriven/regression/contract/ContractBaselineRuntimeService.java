@@ -29,6 +29,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -772,7 +773,7 @@ public class ContractBaselineRuntimeService {
     }
 
     private EvidenceEntry evidenceEntry(RuntimeSelection selection, String ref) {
-        String normalized = ref.toLowerCase();
+        String normalized = ref.toLowerCase(Locale.ROOT);
         String evidenceType;
         String providerType = "";
         if (normalized.contains("logs/execution")) {

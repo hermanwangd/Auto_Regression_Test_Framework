@@ -50,6 +50,12 @@ external systems for these samples.
 - Evidence: publish/observe metadata and result JSON.
 - Common failures: `NATS_CONNECTION_FAILED`, `MESSAGING_TIMEOUT`.
 
+For a remote NATS broker, use `env://NATS_CONNECTION` (or `env://NATS_SERVER`) with the complete broker URI supplied by the runner. The native transport uses plaintext TCP. For a broker requiring credentials, configure a secure tunnel or TLS proxy on numeric loopback and supply its local URI through the runner environment. Direct remote bindings accept credential-free URIs. Local test bindings accept numeric loopback. The reviewed NATS profile uses its existing pinned loopback binding.
+
+## Compatibility readiness probes
+
+The operator supplies the remote targets outside the RP package. Kubernetes API probes accept `env://K8S_API_SERVER` as the origin. Supply `namespace_ref` as a Kubernetes namespace name or `env://K8S_NAMESPACE`. Supply `deployment_ref` as a Deployment name or `env://K8S_DEPLOYMENT`. Deployment names may use the `deploy/`, `deployment/`, or `deployments/` prefix. Treat both name bindings as public identifiers because they appear in the API request path. To send a bearer credential, use an HTTPS origin and `env://K8S_BEARER_TOKEN`. HTTP readiness uses `env://VM_HEALTH_URL` for the complete remote URL. For TCP readiness set `VM_TCP_ENDPOINT` to `tcp://host:port` matching the requested destination. Numeric loopback remains available for local probes without bearer credentials.
+
 ## REST Endpoint
 
 - Dependency: reachable HTTP endpoint or framework-managed WireMock sample.

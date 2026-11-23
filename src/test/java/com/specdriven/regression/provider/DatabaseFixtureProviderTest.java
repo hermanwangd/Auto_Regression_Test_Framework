@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.sql.DriverManager;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -22,6 +23,7 @@ class DatabaseFixtureProviderTest {
     @Test
     void setupAndCleanupExecuteSqlRefsAndWriteFixtureEvidence() throws Exception {
         String jdbcUrl = "jdbc:h2:mem:fixture_provider_" + System.nanoTime() + ";DB_CLOSE_DELAY=-1";
+        String fixturePassword = UUID.randomUUID().toString();
         Path packageRoot = packageRootWithSql(
                 "CREATE TABLE orders (id INT PRIMARY KEY, status VARCHAR(20));"
                         + "INSERT INTO orders VALUES (1, 'READY');",
@@ -30,6 +32,7 @@ class DatabaseFixtureProviderTest {
         Map<String, Map<String, Object>> contracts = Map.of("relational_db", Map.of(
                 "connection_ref", jdbcUrl,
                 "username", "sa",
+                "password", fixturePassword,
                 "isolation_key", "test_run_id",
                 "setup_actions", Map.of("seed_orders", Map.of("sql_ref", "fixtures/db/setup.sql")),
                         "cleanup_actions", Map.of("cleanup_orders", Map.of("sql_ref", "fixtures/db/cleanup.sql")),
@@ -58,7 +61,7 @@ class DatabaseFixtureProviderTest {
         assertThat(Files.readString(runDir.resolve("cleanup.yaml")))
                 .contains("status: passed")
                 .contains("action: cleanup_orders");
-        try (var connection = DriverManager.getConnection(jdbcUrl, "sa", "");
+        try (var connection = DriverManager.getConnection(jdbcUrl, "sa", fixturePassword);
                 var statement = connection.createStatement();
                 var result = statement.executeQuery("SELECT COUNT(*) FROM orders")) {
             result.next();

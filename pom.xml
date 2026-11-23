@@ -158,7 +158,12 @@
         </dependency>
         <dependency>
             <groupId>org.wiremock</groupId>
-            <artifactId>wiremock-grpc-extension</artifactId>
+            <artifactId>wiremock-grpc-extension-core</artifactId>
+            <version>${wiremock.grpc.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-grpc-extension-jetty</artifactId>
             <version>${wiremock.grpc.version}</version>
         </dependency>
         <dependency>
@@ -184,6 +189,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna</artifactId>
+            <version>5.19.1</version>
         </dependency>
         <dependency>
             <groupId>com.h2database</groupId>

@@ -109,6 +109,7 @@ class Handler(BaseHTTPRequestHandler):
                 "request": {
                     "method": "POST",
                     "url": "/payments",
+                    "headers": {"X-Regress-Request-Id": self.headers.get("X-Regress-Request-Id", "")},
                     "body": body,
                 }
             })

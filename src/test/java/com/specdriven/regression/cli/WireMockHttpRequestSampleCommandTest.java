@@ -2,6 +2,7 @@ package com.specdriven.regression.cli;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.specdriven.regression.discovery.ReleasePackageService;
 import com.specdriven.regression.productrepo.ProductRepoService;
 import java.io.ByteArrayOutputStream;
@@ -82,7 +83,7 @@ class WireMockHttpRequestSampleCommandTest {
     }
 
     @Test
-    void happyPathRunsWireMockAndHttpRequestProvidersAndReportConsumesResult() {
+    void happyPathRunsWireMockAndHttpRequestProvidersAndReportConsumesResult() throws IOException {
         CommandResult run = execute("run", "--suite", SUITE.toString(), "--profile", "local_wiremock_http");
 
         assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
@@ -96,7 +97,13 @@ class WireMockHttpRequestSampleCommandTest {
         Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
         assertThat(resultJson).isRegularFile();
         assertThat(evidenceDir).isDirectory();
-        assertThat(evidenceDir.resolve("provider-evidence/wiremock/request_journal.json")).isRegularFile();
+        var requests = new ObjectMapper().readTree(read(evidenceDir.resolve("provider-evidence/wiremock/request_journal.json")))
+                .path("requests");
+        assertThat(requests.size()).isOne();
+        var request = requests.get(0).get("request");
+        assertThat(request.size()).isEqualTo(2);
+        assertThat(request.path("url").asText()).isEqualTo("/payments");
+        assertThat(request.path("method").asText()).isEqualTo("POST");
         assertThat(evidenceDir.resolve("provider-evidence/http/response.json")).isRegularFile();
         assertThat(evidenceDir.resolve("assertions/payment_response_status.yaml")).isRegularFile();
         assertThat(evidenceDir.resolve("assertions/payment_response_body.json")).isRegularFile();
@@ -114,6 +121,21 @@ class WireMockHttpRequestSampleCommandTest {
                 .contains("suite_id: WIREMOCK-HTTP-REQUEST-SAMPLE-v0.2")
                 .contains("status: passed")
                 .contains("provider_results_count: 2");
+    }
+
+    @Test
+    void rejectsRelativePairedRequestBeforeRestDispatch() throws IOException {
+        Path suite = mutableWireMockHttpRequest();
+        Path testCase = suite.resolveSibling("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase).replace("value: /payments", "value: payments"));
+
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_wiremock_http");
+
+        assertThat(run.exit()).isOne();
+        Path evidence = extractPath(run.stdout(), "evidence_dir");
+        assertThat(read(evidence.resolve("provider-evidence/wiremock/request_journal.json")))
+                .contains("WIREMOCK_REQUEST_PATH_INVALID");
+        assertThat(evidence.resolve("provider-evidence/http/request.json")).doesNotExist();
     }
 
     @Test

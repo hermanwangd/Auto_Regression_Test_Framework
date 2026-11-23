@@ -1,14 +1,42 @@
 package com.specdriven.regression.contract.v03;
 
+import com.specdriven.regression.contract.SecurityFieldNames;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /** Applies Provider Contract output sensitivity before values leave runtime memory. */
 public final class V03OutputRedactor {
     public static final String MASKED = "[MASKED]";
+
+    private static final String WORD = "[\\p{L}\\p{M}\\p{N}\\p{So}\\p{Pc}.．\\-－﹣]++";
+    private static final String SEPARATOR = "[:=：＝﹕﹦]";
+    private static final String SPACING = "[\\h\\s]";
+    private static final String ASSIGN = SPACING + "*" + SEPARATOR + SPACING + "*";
+    private static final Pattern SINGLE_WORD = Pattern.compile(WORD);
+    private static final Pattern MESSAGE_LABEL = Pattern.compile(
+            "(?<quoted>\"[^\"\\r\\n]++\"|'[^'\\r\\n]++'|＂[^＂\\r\\n]++＂|＇[^＇\\r\\n]++＇)(?=" + ASSIGN
+                    + ")|(?<separator>" + SEPARATOR + ")|" + WORD);
+    private static final Pattern ASSIGNMENT = Pattern.compile(ASSIGN);
+    private static final Pattern WORD_THEN_SPACE = Pattern.compile("(" + WORD + ")" + SPACING + "++");
+    private static final Pattern SPACE = Pattern.compile(SPACING + "++");
+    private static final Pattern TOKEN_CONTINUATION = Pattern.compile(
+            "[\\t ]*\\r?\\n[\\t ]+[A-Za-z0-9._~+/-]++=*+(?=[\\t ]*(?:\\r?$)|[\\t ]+[\\w.-]+[:=])",
+            Pattern.MULTILINE);
+    private static final Pattern HEADER_LINES = Pattern.compile("[^\\r\\n]*+(?:\\r?\\n[\\t ]++[^\\r\\n]*+)*+");
+    private static final Pattern RAW_VALUE = Pattern.compile("[^\\s,;\"'}]++");
+    private static final Pattern RAW_ADDRESS = Pattern.compile("[^\\s,;]++");
+    private static final Pattern PRIVATE_KEY_BLOCK = Pattern.compile(
+            "-----BEGIN ((?:[A-Z0-9-]++ )*?PRIVATE KEY)-----.*?(?:-----END \\1-----|\\z)", Pattern.DOTALL);
+    private static final Pattern AUTHORITY = Pattern.compile("[/／]{2}([^/\\s]++)");
+
+    private static final Set<String> USER_INFO_SCHEMES = Set.of("http", "https", "grpc", "grpcs");
 
     public Map<String, Object> redact(V03ExecutionPlan plan, V03ExecutionStep step, Map<String, Object> outputs) {
         V03ProviderContract contract = plan.providerContracts().get(step.providerContract());
@@ -74,42 +102,187 @@ public final class V03OutputRedactor {
     }
 
     public String redactMessage(String message) {
+        return maskMessage(message, ContractFields.NONE);
+    }
+
+    String redactMessage(String message, Set<String> contractKeys) {
+        return maskMessage(message, ContractFields.of(contractKeys));
+    }
+
+    private static String maskMessage(String message, ContractFields fields) {
+        return maskMessage(message, fields, MASKED);
+    }
+
+    /** Uses the provider evidence marker while applying the same diagnostic field boundaries. */
+    public static String redactProviderDiagnostic(String message) {
+        return maskMessage(message, ContractFields.NONE, "***MASKED***");
+    }
+
+    private static String maskMessage(String message, ContractFields fields, String marker) {
         if (message == null) return "";
-        return message.replaceAll("(?i)([\\\"']?(?:password|token|secret|authorization|api[_-]?key|credential|private_key)[\\\"']?\\s*[:=]\\s*[\\\"']?)(?:bearer\\s+)?[^\\s,;\\\"'}]+", "$1" + MASKED)
-                .replaceAll("(?i)bearer\\s+[^\\s,;\\\"'}]+", "Bearer " + MASKED)
-                .replaceAll("(?i)(https?|grpc|grpcs)://[^/@\\s]+@", "$1://" + MASKED + "@")
-                .replaceAll("(?i)jdbc:[^\\s,;]+", MASKED)
-                .replaceAll("(?i)nats://[^\\s,;]+", MASKED);
+        if (message.contains("-----BEGIN ")) message = PRIVATE_KEY_BLOCK.matcher(message).replaceAll(marker);
+        Matcher labels = MESSAGE_LABEL.matcher(message);
+        Matcher assignment = ASSIGNMENT.matcher(message);
+        StringBuilder masked = new StringBuilder();
+        int copied = 0;
+        int lastSeparator = 0;
+        while (labels.find()) {
+            String quoted = labels.group("quoted");
+            String key = SecurityFieldNames.canonical(quoted == null ? labels.group() : quoted.substring(1, quoted.length() - 1));
+            int after = labels.end();
+            Span value = null;
+            if (labels.group("separator") != null) {
+                if (fields.matchesUnquotedSuffix(message, copied, lastSeparator, labels.start())) {
+                    value = assignmentValue(message, matchEnd(SPACE, message, after), false);
+                }
+                lastSeparator = after;
+            } else if (assignment.region(after, message.length()).lookingAt()
+                    && (SecurityFieldNames.endsWithCredentialLabel(key) || fields.paths().contains(key))) {
+                value = assignmentValue(message, assignment.end(), key.endsWith("authorization"));
+            } else if ("bearer".equals(key)) {
+                int token = matchEnd(SPACE, message, after);
+                if (token > after) value = rawValue(message, token);
+            } else if (after < message.length() && ":：﹕".indexOf(message.charAt(after)) >= 0) {
+                value = addressValue(key, message, labels.start(), after + 1);
+            }
+            if (value == null || value.start() == value.end()) continue;
+            masked.append(message, copied, value.start()).append(marker);
+            copied = value.end();
+            labels.region(copied, message.length());
+        }
+        return copied == 0 ? message : masked.append(message, copied, message.length()).toString();
+    }
+
+    private record Span(int start, int end) {}
+
+    private static Span assignmentValue(String text, int start, boolean authorization) {
+        if (authorization && start < text.length()) {
+            char first = text.charAt(start);
+            if (isQuote(first)) return rawValue(text, start);
+            if (text.startsWith("***MASKED***", start)) return new Span(start, start + "***MASKED***".length());
+            if (text.startsWith(MASKED, start)) return new Span(start, start + MASKED.length());
+        }
+        Matcher scheme = WORD_THEN_SPACE.matcher(text).region(start, text.length());
+        if (scheme.lookingAt()) {
+            String name = SecurityFieldNames.canonical(scheme.group(1));
+            if (!"bearer".equals(name) && !(authorization && ("basic".equals(name) || "negotiate".equals(name)))) {
+                return authorization ? new Span(start, matchEnd(HEADER_LINES, text, start)) : rawValue(text, start);
+            }
+            Span token = rawValue(text, scheme.end());
+            int end = token.end();
+            if (end < text.length() && isQuote(text.charAt(scheme.end()))) end++;
+            if (authorization) {
+                Matcher continuation = TOKEN_CONTINUATION.matcher(text);
+                while (continuation.region(end, text.length()).lookingAt()) end = continuation.end();
+            }
+            return new Span(start, end);
+        }
+        return authorization ? new Span(start, matchEnd(HEADER_LINES, text, start)) : rawValue(text, start);
+    }
+
+    // Only the label is normalized. Compatibility punctuation and spaces within raw values are data.
+    private static Span rawValue(String text, int start) {
+        if (start < text.length() && isQuote(text.charAt(start))) {
+            return new Span(start + 1, endOfQuotedValue(text, start + 1, text.charAt(start)));
+        }
+        return new Span(start, matchEnd(RAW_VALUE, text, start));
+    }
+
+    private static Span addressValue(String scheme, String text, int labelStart, int address) {
+        if ("jdbc".equals(scheme) || ("nats".equals(scheme) && startsWithSlashes(text, address))) {
+            int end = matchEnd(RAW_ADDRESS, text, address);
+            return end == address ? null : new Span(labelStart, end);
+        }
+        if (!USER_INFO_SCHEMES.contains(scheme)) return null;
+        Matcher authority = AUTHORITY.matcher(text).region(address, text.length());
+        if (!authority.lookingAt()) return null;
+        String raw = authority.group(1);
+        int at = Math.max(raw.lastIndexOf('@'), raw.lastIndexOf('＠'));
+        return at < 1 ? null : new Span(authority.start(1), authority.start(1) + at);
+    }
+
+    private static boolean startsWithSlashes(String text, int from) {
+        return from + 1 < text.length() && "/／".indexOf(text.charAt(from)) >= 0
+                && "/／".indexOf(text.charAt(from + 1)) >= 0;
+    }
+
+    private static boolean isQuote(char c) {
+        return "\"'＂＇".indexOf(c) >= 0;
+    }
+
+    private static int endOfQuotedValue(String text, int start, char quote) {
+        for (int i = start; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == quote) {
+                if (i + 1 >= text.length() || text.charAt(i + 1) != quote) return i;
+                i++;
+            }
+            if (c == '\\') i++;
+        }
+        return text.length();
+    }
+
+    private static int matchEnd(Pattern pattern, String text, int start) {
+        Matcher matcher = pattern.matcher(text).region(start, text.length());
+        return matcher.lookingAt() ? matcher.end() : start;
     }
 
     public Object redactValue(Object value) {
         return redactNested(value);
     }
 
-    public Object redactEvidenceValue(Object value, java.util.Set<String> contractKeys) {
-        return redactEvidenceNested(value, contractKeys, "");
+    public Object redactEvidenceValue(Object value, Set<String> contractKeys) {
+        return redactEvidenceNested(value, ContractFields.of(contractKeys), "");
     }
 
-    private Object redactEvidenceNested(Object value, java.util.Set<String> contractKeys, String path) {
+    private record ContractFields(Set<String> paths, List<String> compound, int lookbehind, boolean containsSeparator) {
+        private static final ContractFields NONE = new ContractFields(Set.of(), List.of(), 0, false);
+
+        static ContractFields of(Set<String> keys) {
+            if (keys.isEmpty()) return NONE;
+            Set<String> paths = keys.stream().map(SecurityFieldNames::canonical).collect(Collectors.toSet());
+            List<String> compound = paths.stream().filter(k -> !k.isEmpty() && !SINGLE_WORD.matcher(k).matches()).toList();
+            // Each original code point contributes at least one decomposed code point and takes at most two UTF-16 units.
+            int lookbehind = compound.stream().map(k -> Normalizer.normalize(k, Normalizer.Form.NFKD))
+                    .mapToInt(k -> 2 * k.length()).max().orElse(0);
+            boolean containsSeparator = compound.stream().anyMatch(k -> k.indexOf(':') >= 0 || k.indexOf('=') >= 0);
+            return new ContractFields(paths, compound, lookbehind, containsSeparator);
+        }
+
+        boolean matchesUnquotedSuffix(String text, int copied, int previousSeparator, int end) {
+            if (compound.isEmpty()) return false;
+            int lowerBound = containsSeparator ? copied : Math.max(previousSeparator, copied);
+            while (end > lowerBound && isLabelSpacing(text.charAt(end - 1))) end--;
+            int start = Math.max(lowerBound, end - lookbehind);
+            String candidate = SecurityFieldNames.canonical(text.substring(start, end));
+            return compound.stream().anyMatch(candidate::endsWith);
+        }
+
+        private static boolean isLabelSpacing(char c) {
+            return (c >= '\t' && c <= '\r') || c == '\u180e' || Character.getType(c) == Character.SPACE_SEPARATOR;
+        }
+    }
+
+    private Object redactEvidenceNested(Object value, ContractFields fields, String path) {
         if (value instanceof Map<?, ?> map) {
             Map<String, Object> result = new LinkedHashMap<>();
             map.forEach((key, item) -> {
                 String name = String.valueOf(key);
                 String fieldPath = path.isBlank() ? name : path + "." + name;
-                result.put(name, sensitiveKey(name) || contractKeys.contains(fieldPath) ? MASKED
-                        : redactEvidenceNested(item, contractKeys, fieldPath));
+                result.put(name, SecurityFieldNames.isCredential(name) || fields.paths().contains(SecurityFieldNames.canonical(fieldPath)) ? MASKED
+                        : redactEvidenceNested(item, fields, fieldPath));
             });
             return result;
         }
-        if (value instanceof List<?> list) return list.stream().map(item -> redactEvidenceNested(item, contractKeys, path)).toList();
-        return value instanceof String text ? redactMessage(text) : value;
+        if (value instanceof List<?> list) return list.stream().map(item -> redactEvidenceNested(item, fields, path)).toList();
+        return value instanceof String text ? maskMessage(text, fields) : value;
     }
 
     @SuppressWarnings("unchecked")
     private Object redactNested(Object value) {
         if (value instanceof Map<?, ?> map) {
             Map<String, Object> result = new LinkedHashMap<>();
-            map.forEach((key, item) -> result.put(String.valueOf(key), sensitiveKey(String.valueOf(key)) ? MASKED : redactNested(item)));
+            map.forEach((key, item) -> result.put(String.valueOf(key), SecurityFieldNames.isCredential(String.valueOf(key)) ? MASKED : redactNested(item)));
             return result;
         }
         if (value instanceof List<?> list) {
@@ -119,12 +292,5 @@ public final class V03OutputRedactor {
         }
         if (value instanceof String text) return redactMessage(text);
         return value;
-    }
-
-    private boolean sensitiveKey(String key) {
-        String normalized = key.toLowerCase(Locale.ROOT);
-        return normalized.contains("password") || normalized.contains("token") || normalized.contains("secret")
-                || normalized.contains("authorization") || normalized.contains("api_key") || normalized.equals("apikey")
-                || normalized.contains("credential") || normalized.contains("private_key");
     }
 }

@@ -1,9 +1,12 @@
 package com.specdriven.regression.provider.grpc;
 
+import static com.specdriven.regression.provider.ProviderDiagnosticRedactor.maskSensitiveText;
+
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.util.JsonFormat;
+import com.specdriven.regression.provider.SuiteAssetReader;
 import com.specdriven.regression.provider.runtime.ProviderEvidence;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderFailure;
@@ -307,7 +310,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
         Path file = suiteRoot.resolve(refOrValue).normalize();
         if (Files.isRegularFile(file)) {
             try {
-                return Files.readString(file).strip();
+                return SuiteAssetReader.read(suiteRoot, refOrValue, "Request fixture must stay under the suite root.").strip();
             } catch (IOException e) {
                 throw new IllegalStateException("Unable to read gRPC request body ref `" + refOrValue + "`.", e);
             }
@@ -455,21 +458,6 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
 
     private String safeMessage(Exception e) {
         return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-    }
-
-    private String maskSensitiveText(String text) {
-        if (text == null || text.isBlank()) {
-            return "";
-        }
-        return text
-                .replaceAll("(?i)(\"(?:password|token|api_key|authorization|secret|credential)\"\\s*:\\s*\")[^\"]*(\")", "$1***MASKED***$2")
-                .replaceAll("(?i)(authorization\\s*[:=]\\s*)[^\\s,}\\]]+", "$1***MASKED***")
-                .replaceAll("(?i)(bearer\\s+)[A-Za-z0-9._~+/=-]+", "$1***MASKED***")
-                .replaceAll("(?i)(jdbc:[^\\s,}\\]]+)", "***MASKED***")
-                .replaceAll("(?i)(mongodb(?:\\+srv)?://[^\\s,}\\]]+)", "***MASKED***")
-                .replaceAll("(?i)(nats://[^\\s,}\\]]+)", "***MASKED***")
-                .replaceAll("(?i)((?:password|token|secret|credential|api_key)\\s*[=:]\\s*)[^\\s,}\\]]+", "$1***MASKED***")
-                .replaceAll("-----BEGIN [^-]+ PRIVATE KEY-----[\\s\\S]*?-----END [^-]+ PRIVATE KEY-----", "***MASKED***");
     }
 
     private String stringValue(Object value) {

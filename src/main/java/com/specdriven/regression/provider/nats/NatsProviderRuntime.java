@@ -13,7 +13,7 @@ import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
-import java.net.URISyntaxException;
+import com.specdriven.regression.provider.ProviderEndpoints;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
@@ -337,7 +337,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
                             "NATS env secret ref `" + secretRef + "` is not set.",
                             "Set environment variable `" + envName + "` to a NATS connection URI before running."));
                 }
-                URI uri = natsUri(value);
+                URI uri = natsUri(value, secretRef);
                 if (uri == null) {
                     return new ConnectionSelection("", null, failure(
                             "NATS_CONNECTION_FAILED",
@@ -360,14 +360,10 @@ public class NatsProviderRuntime implements ProviderRuntime {
                 "Supply connection.secret_ref or approved connection.local_ref in Environment Binding."));
     }
 
-    private URI natsUri(String value) {
+    private URI natsUri(String value, String reference) {
         try {
-            URI uri = new URI(value);
-            if (!"nats".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null || uri.getPort() <= 0) {
-                return null;
-            }
-            return uri;
-        } catch (URISyntaxException e) {
+            return ProviderEndpoints.nats(value, reference, false);
+        } catch (IllegalArgumentException error) {
             return null;
         }
     }

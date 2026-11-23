@@ -1,5 +1,6 @@
 package com.specdriven.regression.assertion;
 
+import com.specdriven.regression.provider.jdbc.SqlSource;
 import com.specdriven.regression.dsl.DslTestCaseNormalizer;
 import com.specdriven.regression.oracle.OracleResolver;
 import com.specdriven.regression.oracle.ResolvedOracle;
@@ -448,12 +449,7 @@ public class AssertionEngine {
     }
 
     private String readSqlRef(Path packageRoot, String sqlRef) throws IOException {
-        Path normalizedRoot = packageRoot.toAbsolutePath().normalize();
-        Path sqlPath = normalizedRoot.resolve(sqlRef).normalize();
-        if (!sqlPath.startsWith(normalizedRoot)) {
-            throw new IllegalArgumentException("DB row assertion sql_ref must stay under the RP package: " + sqlRef);
-        }
-        return Files.readString(sqlPath);
+        return SqlSource.read(packageRoot, sqlRef, "DB row assertion sql_ref must stay under the RP package: " + sqlRef);
     }
 
     private Path packageRef(Path packageRoot, String ref, String context) {

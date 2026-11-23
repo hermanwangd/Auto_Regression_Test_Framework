@@ -19,6 +19,8 @@ class V03BindingValueValidatorTest {
 
     @Test
     void rejectsInvalidOrUnsupportedEnvironmentValueShapes() {
+        assertThatThrownBy(() -> validator.validateEnvironmentValue("ＦＡＬＳＥ", V03ValueType.BOOLEAN, "binding.enabled"))
+                .hasMessageContaining("invalid_environment_value_type");
         assertThatThrownBy(() -> validator.validateEnvironmentValue("yes", V03ValueType.BOOLEAN, "binding.enabled"))
                 .hasMessageContaining("invalid_environment_value_type");
         assertThatThrownBy(() -> validator.validateEnvironmentValue("{}", V03ValueType.OBJECT, "binding.config"))

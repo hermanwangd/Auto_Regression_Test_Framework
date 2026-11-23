@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -695,8 +696,8 @@ public class EvidenceHardeningService {
                     "Cleanup failure must be indexed as failed cleanup evidence and must not hide the original failure."));
         }
         Map<String, Object> failure = mapValue(result.get("failure"));
-        String code = stringValue(failure.get("code")).toLowerCase();
-        String classification = stringValue(failure.get("classification")).toLowerCase();
+        String code = stringValue(failure.get("code")).toLowerCase(Locale.ROOT);
+        String classification = stringValue(failure.get("classification")).toLowerCase(Locale.ROOT);
         if (verifierFailed && (code.contains("cleanup") || classification.contains("cleanup"))) {
             findings.add(finding(resultJson, "failure", "cleanup_failure_hides_original_failure",
                     "Preserve the original verification failure in failure.code/classification and nest cleanup failure under failure.cleanup_failure."));
@@ -772,8 +773,8 @@ public class EvidenceHardeningService {
             for (Map.Entry<?, ?> entry : map.entrySet()) {
                 String key = String.valueOf(entry.getKey());
                 Object nested = entry.getValue();
-                if (key.toLowerCase().contains("cleanup")
-                        && String.valueOf(nested).toLowerCase().contains("failed")) {
+                if (key.toLowerCase(Locale.ROOT).contains("cleanup")
+                        && String.valueOf(nested).toLowerCase(Locale.ROOT).contains("failed")) {
                     return true;
                 }
                 if (containsCleanupFailure(nested)) {

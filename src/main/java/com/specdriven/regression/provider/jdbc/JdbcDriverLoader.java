@@ -52,10 +52,9 @@ public class JdbcDriverLoader {
         } catch (ClassNotFoundException e) {
             return invalid(dialect, driverClassName, "Driver class was not found in configured jars.");
         } catch (InvocationTargetException e) {
-            Throwable cause = e.getTargetException() == null ? e : e.getTargetException();
-            return invalid(dialect, driverClassName, cause.getMessage());
-        } catch (ReflectiveOperationException | IllegalArgumentException | SQLException e) {
-            return invalid(dialect, driverClassName, e.getMessage());
+            return invalid(dialect, driverClassName, "Driver initialization failed.");
+        } catch (ReflectiveOperationException | IllegalArgumentException | SQLException | LinkageError e) {
+            return invalid(dialect, driverClassName, "Driver could not be initialized or registered.");
         }
     }
 

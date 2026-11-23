@@ -1845,7 +1845,7 @@ public class ContractBaselineService {
     }
 
     private boolean fileReferenceBindAs(String bindAs) {
-        String normalized = bindAs.toLowerCase();
+        String normalized = bindAs.toLowerCase(Locale.ROOT);
         return normalized.endsWith("_ref")
                 || normalized.endsWith(".ref")
                 || normalized.contains("file")
@@ -2069,12 +2069,13 @@ public class ContractBaselineService {
                     "Remove userinfo from `" + rawKey + "` and provide credentials through approved secret refs when a provider supports them."));
         }
         Set<String> prohibitedQueryKeys = new LinkedHashSet<>(stringList(keySpec.get("prohibited_query_keys"))).stream()
-                .map(valueKey -> valueKey.toLowerCase(Locale.ROOT))
+                .map(SecurityFieldNames::canonical)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         String query = stringValue(uri.getRawQuery());
         if (!query.isBlank()) {
             for (String part : query.split("&")) {
-                String queryKey = part.split("=", 2)[0].toLowerCase(Locale.ROOT);
+                String queryKey = SecurityFieldNames.canonical(java.net.URLDecoder.decode(
+                        part.split("=", 2)[0], java.nio.charset.StandardCharsets.UTF_8));
                 if (prohibitedQueryKeys.contains(queryKey)) {
                     findings.add(new ContractFinding(
                             bindingPath.toString(),
@@ -3640,11 +3641,11 @@ public class ContractBaselineService {
             return false;
         }
         return values.stream().allMatch(item -> item instanceof String text
-                && text.matches("(?i)[ \\t]*(?:close|keep-alive)[ \\t]*(?:,[ \\t]*(?:close|keep-alive)[ \\t]*)*"));
+                && text.matches("(?i)[ \\t]*+(?:close|keep-alive)[ \\t]*+(?:,[ \\t]*+(?:close|keep-alive)[ \\t]*+)*+"));
     }
 
     private boolean secretKey(String key) {
-        String normalized = key.toLowerCase();
+        String normalized = SecurityFieldNames.canonical(key);
         return normalized.equals("password")
                 || normalized.equals("token")
                 || normalized.equals("credential")
@@ -3837,7 +3838,7 @@ public class ContractBaselineService {
             }
             String normalized = reason == null || reason.isBlank()
                     ? "UNKNOWN"
-                    : reason.toUpperCase().replaceAll("[^A-Z0-9]+", "_").replaceAll("(^_|_$)", "");
+                    : reason.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]+", "_").replaceAll("(^_|_$)", "");
             return categoryFor(reason).replace("_ERROR", "") + "_" + normalized;
         }
 

@@ -1,11 +1,12 @@
 package com.specdriven.regression.provider.soap;
 
+import static com.specdriven.regression.provider.ProviderDiagnosticRedactor.maskSensitiveText;
+
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingXPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
-import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
@@ -15,6 +16,8 @@ import com.specdriven.regression.provider.runtime.ProviderFailure;
 import com.specdriven.regression.provider.runtime.ProviderOperationRequest;
 import com.specdriven.regression.provider.runtime.ProviderOperationResult;
 import com.specdriven.regression.provider.runtime.ProviderRuntime;
+import com.specdriven.regression.provider.wiremock.ManagedWireMock;
+import com.specdriven.regression.provider.SuiteAssetReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
@@ -81,7 +84,7 @@ public class SoapMockProviderRuntime implements ProviderRuntime {
             String action = parameterValue(request, "soap.action", "");
             String requestXpath = parameterValue(request, "soap.request_xpath", "");
             int status = intValue(parameterValue(request, "soap.status", "200"), 200);
-            String responseBody = Files.readString(responsePath);
+            String responseBody = SuiteAssetReader.read(context.suiteRoot(), responseRef, "Response fixture must stay under the suite root.");
 
             MappingBuilder mapping = post(urlEqualTo(path));
             if (!action.isBlank()) {
@@ -212,9 +215,9 @@ public class SoapMockProviderRuntime implements ProviderRuntime {
         String portStrategy = stringValue(context.bindingValues().get("port_strategy"));
         if ("fixed".equals(portStrategy)) {
             int port = intValue(context.bindingValues().getOrDefault("fixed_port", context.bindingValues().get("port")), 0);
-            server = new WireMockServer(options().port(port));
+            server = new WireMockServer(ManagedWireMock.loopbackOptions().port(port));
         } else {
-            server = new WireMockServer(options().dynamicPort());
+            server = new WireMockServer(ManagedWireMock.loopbackOptions().dynamicPort());
         }
         server.start();
         endpointUrl = "http://localhost:" + server.port();
@@ -333,21 +336,6 @@ public class SoapMockProviderRuntime implements ProviderRuntime {
 
     private String safeMessage(Exception e) {
         return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-    }
-
-    private String maskSensitiveText(String text) {
-        if (text == null || text.isBlank()) {
-            return "";
-        }
-        return text
-                .replaceAll("(?i)(\"(?:password|token|api_key|authorization|secret|credential)\"\\s*:\\s*\")[^\"]*(\")", "$1***MASKED***$2")
-                .replaceAll("(?i)(authorization\\s*[:=]\\s*)[^\\s,}\\]]+", "$1***MASKED***")
-                .replaceAll("(?i)(bearer\\s+)[A-Za-z0-9._~+/=-]+", "$1***MASKED***")
-                .replaceAll("(?i)(jdbc:[^\\s,}\\]]+)", "***MASKED***")
-                .replaceAll("(?i)(mongodb(?:\\+srv)?://[^\\s,}\\]]+)", "***MASKED***")
-                .replaceAll("(?i)(nats://[^\\s,}\\]]+)", "***MASKED***")
-                .replaceAll("(?i)((?:password|token|secret|credential|api_key)\\s*[=:]\\s*)[^\\s,}\\]]+", "$1***MASKED***")
-                .replaceAll("-----BEGIN [^-]+ PRIVATE KEY-----[\\s\\S]*?-----END [^-]+ PRIVATE KEY-----", "***MASKED***");
     }
 
     private String stringValue(Object value) {

@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.yaml.snakeyaml.Yaml;
 
 class JdbcExternalEnvSecretRefTest {
 
@@ -142,9 +143,9 @@ class JdbcExternalEnvSecretRefTest {
     }
 
     @Test
-    void nativeJdbcConnectionFailureIsNotClassifiedAsSqlExecutionFailure() {
+    void nativeJdbcConnectionFailureIsNotClassifiedAsSqlExecutionFailure() throws Exception {
         JdbcProviderRuntime runtime = new JdbcProviderRuntime(Map.of(
-                "JDBC_CONNECTION", "jdbc:h2:tcp://127.0.0.1:1/unreachable")::get);
+                "JDBC_CONNECTION", "jdbc:h2:mem:synthetic;SYNTHETIC_DRIVER_OPTION=fixture")::get);
 
         ProviderOperationResult result = runtime.execute(
                 nativeContext(tempDir.resolve("suite"), Map.of("connection", Map.of("secret_ref", "env://JDBC_CONNECTION"))),
@@ -157,7 +158,88 @@ class JdbcExternalEnvSecretRefTest {
         assertThat(result.failure()).isNotNull();
         assertThat(result.failure().code()).isEqualTo("DB_CONNECTION_FAILED");
         assertThat(result.failure().classification()).isEqualTo("CONFIGURATION_ERROR");
+        assertThat(result.failure().reason()).isEqualTo("JDBC driver could not open the configured connection.");
+        assertThat(Files.readString(tempDir.resolve("run").resolve(result.evidence().get(0).ref())))
+                .doesNotContain("SYNTHETIC_DRIVER_OPTION", "jdbc:h2:");
         assertThat(result.outputs()).doesNotContainKey("failure_detail_ref");
+    }
+
+    @Test
+    void masksCredentialLabelsAndRoundTripsPublicScalarsInQueryEvidence() throws Exception {
+        Path suite = Files.createDirectory(tempDir.resolve("suite"));
+        Files.writeString(suite.resolve("params.yaml"), "note: |-\n  ready: yes\n  second line\n");
+        Files.writeString(suite.resolve("query.sql"), """
+                select cast(:private_key as varchar) as "ＡＰＩ－ＫＥＹ",
+                       cast(:note as varchar) as "public: note"
+                """);
+        var result = new JdbcProviderRuntime().execute(
+                nativeContext(suite, Map.of("connection", Map.of("local_ref", "approved_local_h2_oracle"))),
+                new ProviderOperationRequest("db_query", List.of(
+                        Map.of("bind_as", "query_ref", "ref", "query.sql"),
+                        Map.of("bind_as", "params.private_key", "ref", "synthetic-row-value"),
+                        Map.of("bind_as", "params.ＴＯＫＥＮ", "ref", "synthetic-parameter-value"),
+                        Map.of("bind_as", "params.note", "ref", "params.yaml#/note")),
+                        Map.of("_strict_params", false)));
+
+        assertThat(result.passed()).as(String.valueOf(result.failure())).isTrue();
+        String publicNote = "ready: yes\nsecond line";
+        var rows = List.of(Map.of("ＡＰＩ－ＫＥＹ", "***", "public: note", publicNote));
+        assertThat(result.outputs()).containsEntry("sample_rows", rows).containsEntry("row_count", 1);
+        String text = Files.readString(tempDir.resolve("run").resolve(result.evidence().get(0).ref()));
+        assertThat(text).doesNotContain("synthetic-row-value", "synthetic-parameter-value");
+        Map<String, Object> evidence = new Yaml().load(text);
+        assertThat(evidence).containsEntry("masked_sample_result", rows)
+                .containsEntry("masked_params", Map.of("private_key", "***", "ＴＯＫＥＮ", "***", "note", publicNote));
+    }
+
+    @Test
+    void rejectsAnOutOfSuiteParameterRefBeforeJdbcExecution() throws Exception {
+        Path suite = Files.createDirectory(tempDir.resolve("suite"));
+        Path otherSuiteData = Files.writeString(tempDir.resolve("other-suite.yaml"), "id: 42");
+        var result = new JdbcProviderRuntime().execute(
+                nativeContext(suite, Map.of("connection", Map.of("local_ref", "approved_local_h2_oracle"))),
+                new ProviderOperationRequest("db_query", List.of(
+                        Map.of("bind_as", "query_ref", "ref", "query.sql"),
+                        Map.of("bind_as", "params.id", "ref", otherSuiteData + "#/id")), Map.of()));
+
+        assertThat(result.failure().reason()).isEqualTo("JDBC parameter data ref could not be read as a suite data document.");
+        assertThat(result.failure().ownerAction()).contains("under the suite root");
+        assertThat(Files.readString(tempDir.resolve("run").resolve(result.evidence().get(0).ref())))
+                .contains(result.failure().reason()).doesNotContain("other-suite.yaml");
+    }
+
+    @Test
+    void sqlDiagnosticsRetainFailureClassificationWithoutDriverTextOrSqlLiterals() throws Exception {
+        Path suite = Files.createDirectory(tempDir.resolve("suite"));
+        Files.writeString(suite.resolve("query.sql"), "select cast('synthetic-conversion-input' as integer)");
+        var result = new JdbcProviderRuntime().execute(
+                nativeContext(suite, Map.of("connection", Map.of("local_ref", "approved_local_h2_oracle"))),
+                new ProviderOperationRequest("db_query",
+                        List.of(Map.of("bind_as", "query_ref", "ref", "query.sql")), Map.of()));
+
+        assertThat(result.failure().code()).isEqualTo("DB_QUERY_FAILED");
+        assertThat(result.failure().reason()).isEqualTo("JDBC driver could not complete the SQL operation.");
+        String text = Files.readString(tempDir.resolve("run").resolve(result.evidence().get(0).ref()));
+        assertThat(text).doesNotContain("synthetic-conversion-input", "select cast");
+        Map<String, Object> evidence = new Yaml().load(text);
+        assertThat(evidence).containsEntry("status", "failed")
+                .containsEntry("reason", result.failure().reason());
+    }
+
+    @Test
+    void nonSqlExceptionDetailsStayOutOfFailureResultAndEvidence() throws Exception {
+        Path suite = Files.createDirectory(tempDir.resolve("suite"));
+        Files.writeString(suite.resolve("query.sql"), "select 1");
+        var result = new JdbcProviderRuntime().execute(
+                nativeContext(suite, Map.of("connection", Map.of("local_ref", "approved_local_h2_oracle"))),
+                new ProviderOperationRequest("db_record_exists", List.of(
+                        Map.of("bind_as", "query_ref", "ref", "query.sql"),
+                        Map.of("bind_as", "expected.row_count", "ref", "synthetic-invalid-count")), Map.of()));
+
+        assertThat(result.failure().code()).isEqualTo("OPERATION_FAILED");
+        assertThat(result.failure().reason()).doesNotContain("synthetic-invalid-count");
+        assertThat(Files.readString(tempDir.resolve("run").resolve(result.evidence().get(0).ref())))
+                .contains("OPERATION_FAILED").doesNotContain("synthetic-invalid-count");
     }
 
     private ProviderExecutionContext nativeContext(Path suiteRoot, Map<String, Object> bindingValues) {

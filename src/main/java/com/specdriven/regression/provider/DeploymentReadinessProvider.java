@@ -39,6 +39,11 @@ public class DeploymentReadinessProvider {
             String readinessProbeName = stringValue(contract.get("readiness_probe"));
             String deploymentRef = firstText(contract, "deployment_ref", "service_ref", "target_selector");
             if (isNativeProvider(providerType) && usesMockNativeReadiness(contract)) {
+                if (isK8sApiProbe(contract)) {
+                    deploymentRef = stringValue(contract.get("deployment_ref"));
+                    K8sApiResource.NAMESPACE.checkReference(stringValue(contract.get("namespace_ref")));
+                    K8sApiResource.DEPLOYMENT.checkReference(deploymentRef);
+                }
                 Files.writeString(stdoutLog, providerType + " mock readiness passed for " + deploymentRef + "\n");
                 Files.writeString(stderrLog, "");
                 Files.writeString(actualOutput, "ready\n");
@@ -149,12 +154,18 @@ public class DeploymentReadinessProvider {
         builder.append("provider: ").append(providerName).append("\n");
         appendIfPresent(builder, "provider_type", stringValue(contract.get("provider_type")));
         appendIfPresent(builder, "readiness_probe", stringValue(contract.get("readiness_probe")));
-        appendIfPresent(builder, "api_server_ref", stringValue(contract.get("api_server_ref")));
+        appendIfPresent(builder, "api_server_ref", ProviderEndpoints.httpEvidenceRef(stringValue(contract.get("api_server_ref"))));
         appendIfPresent(builder, "kube_context_ref", stringValue(contract.get("kube_context_ref")));
-        appendIfPresent(builder, "namespace_ref", stringValue(contract.get("namespace_ref")));
+        String namespace = stringValue(contract.get("namespace_ref"));
+        String deployment = stringValue(contract.get("deployment_ref"));
+        if (isK8sApiProbe(contract)) {
+            namespace = ProviderEndpoints.yamlEvidenceRef(K8sApiResource.NAMESPACE.evidenceRef(namespace));
+            deployment = ProviderEndpoints.yamlEvidenceRef(K8sApiResource.DEPLOYMENT.evidenceRef(deployment));
+        }
+        appendIfPresent(builder, "namespace_ref", namespace);
         appendIfPresent(builder, "pod_ref", stringValue(contract.get("pod_ref")));
         appendIfPresent(builder, "target_selector", stringValue(contract.get("target_selector")));
-        appendIfPresent(builder, "deployment_ref", stringValue(contract.get("deployment_ref")));
+        appendIfPresent(builder, "deployment_ref", deployment);
         appendIfPresent(builder, "service_ref", stringValue(contract.get("service_ref")));
         appendIfPresent(builder, "log_tail_lines", stringValue(contract.get("log_tail_lines")));
         appendIfPresent(builder, "host_ref", stringValue(contract.get("host_ref")));
@@ -163,7 +174,7 @@ public class DeploymentReadinessProvider {
         appendIfPresent(builder, "winrm_ref", stringValue(contract.get("winrm_ref")));
         appendIfPresent(builder, "user_ref", stringValue(contract.get("user_ref")));
         appendIfPresent(builder, "command_ref", stringValue(contract.get("command_ref")));
-        appendIfPresent(builder, "health_url_ref", stringValue(contract.get("health_url_ref")));
+        appendIfPresent(builder, "health_url_ref", ProviderEndpoints.httpEvidenceRef(stringValue(contract.get("health_url_ref"))));
         appendIfPresent(builder, "deployed_version_ref", stringValue(contract.get("deployed_version_ref")));
         builder.append("checks:\n");
         builder.append("  - name: ").append(stringValue(contract.get("readiness_probe"))).append("\n");
@@ -189,6 +200,11 @@ public class DeploymentReadinessProvider {
             }
         }
         return "";
+    }
+
+    private boolean isK8sApiProbe(Map<String, Object> contract) {
+        return "k8s".equalsIgnoreCase(stringValue(contract.get("provider_type")))
+                && "api_deployment_available".equals(contract.get("readiness_probe"));
     }
 
     private boolean isLocalProvider(String providerType) {
