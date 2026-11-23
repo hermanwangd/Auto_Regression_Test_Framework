@@ -44,5 +44,7 @@ connect to a database and must not print raw connection strings.
 Keep SQL files inside the suite or RP package that references them. An alias
 may point to a regular file inside that root. The framework resolves the alias,
 then opens each physical path component relative to its parent directory handle.
-On macOS this uses the bundled JNA library and the system `openat` call. A
-filesystem without a supported handle-based reader returns an error.
+Linux and macOS use the bundled JNA library and `openat`. Linux pins the file
+with `O_PATH` and uses `/proc/self/fd` to verify and read that same regular
+file. macOS uses `/dev/fd`. An unavailable descriptor filesystem or unsupported
+native ABI causes the operation to fail closed.

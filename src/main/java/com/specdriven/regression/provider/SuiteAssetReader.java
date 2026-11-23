@@ -45,17 +45,17 @@ public final class SuiteAssetReader {
 
         // Anchor traversal at the filesystem root so even the suite root's parents
         // are opened without following links after the canonical paths were checked.
+        if (file.getFileSystem() == FileSystems.getDefault() && (com.sun.jna.Platform.isLinux() || com.sun.jna.Platform.isMac())) {
+            try {
+                return PosixSuiteFile.open(file);
+            } catch (LinkageError unavailable) {
+                throw new IOException("Native suite file access is unavailable.", unavailable);
+            }
+        }
         Path anchor = realRoot.getRoot();
         try (DirectoryStream<Path> directory = Files.newDirectoryStream(anchor)) {
             if (directory instanceof SecureDirectoryStream<Path> secure) {
                 return openRelative(secure, anchor.relativize(file));
-            }
-        }
-        if (file.getFileSystem() == FileSystems.getDefault() && com.sun.jna.Platform.isMac()) {
-            try {
-                return DarwinSuiteFile.open(file);
-            } catch (LinkageError unavailable) {
-                throw new IOException("Native macOS suite file access is unavailable.", unavailable);
             }
         }
         throw new IOException("The filesystem does not support confined suite file access.");

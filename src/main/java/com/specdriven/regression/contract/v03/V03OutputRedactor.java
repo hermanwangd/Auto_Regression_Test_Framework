@@ -26,6 +26,7 @@ public final class V03OutputRedactor {
     private static final Pattern ASSIGNMENT = Pattern.compile(ASSIGN);
     private static final Pattern WORD_THEN_SPACE = Pattern.compile("(" + WORD + ")" + SPACING + "++");
     private static final Pattern SPACE = Pattern.compile(SPACING + "++");
+    private static final Pattern HEADER_CONTINUATION = Pattern.compile("[\\t ]*\\r?\\n[\\t ]+[^\\r\\n]*");
     private static final Pattern RAW_VALUE = Pattern.compile("[^\\s,;\"'}]++");
     private static final Pattern RAW_ADDRESS = Pattern.compile("[^\\s,;]++");
     private static final Pattern AUTHORITY = Pattern.compile("[/／]{2}([^/\\s]++)");
@@ -117,12 +118,12 @@ public final class V03OutputRedactor {
             Span value = null;
             if (labels.group("separator") != null) {
                 if (fields.matchesUnquotedSuffix(message, copied, lastSeparator, labels.start())) {
-                    value = assignmentValue(message, matchEnd(SPACE, message, after));
+                    value = assignmentValue(message, matchEnd(SPACE, message, after), false);
                 }
                 lastSeparator = after;
             } else if (assignment.region(after, message.length()).lookingAt()
                     && (SecurityFieldNames.endsWithCredentialLabel(key) || fields.paths().contains(key))) {
-                value = assignmentValue(message, assignment.end());
+                value = assignmentValue(message, assignment.end(), key.endsWith("authorization"));
             } else if ("bearer".equals(key)) {
                 int token = matchEnd(SPACE, message, after);
                 if (token > after) value = rawValue(message, token);
@@ -139,12 +140,18 @@ public final class V03OutputRedactor {
 
     private record Span(int start, int end) {}
 
-    private static Span assignmentValue(String text, int start) {
+    private static Span assignmentValue(String text, int start, boolean authorization) {
         Matcher scheme = WORD_THEN_SPACE.matcher(text).region(start, text.length());
-        if (scheme.lookingAt() && "bearer".equals(SecurityFieldNames.canonical(scheme.group(1)))) {
+        if (scheme.lookingAt()) {
+            String name = SecurityFieldNames.canonical(scheme.group(1));
+            if (!"bearer".equals(name) && !(authorization && "basic".equals(name))) return rawValue(text, start);
             Span token = rawValue(text, scheme.end());
             int end = token.end();
             if (end < text.length() && isQuote(text.charAt(scheme.end()))) end++;
+            if (authorization) {
+                Matcher continuation = HEADER_CONTINUATION.matcher(text);
+                while (continuation.region(end, text.length()).lookingAt()) end = continuation.end();
+            }
             return new Span(start, end);
         }
         return rawValue(text, start);

@@ -9,6 +9,18 @@ import org.junit.jupiter.api.Test;
 
 class V03OutputRedactorTest {
     @Test
+    void masksBasicAuthorizationInDiagnosticsAndNestedTextEvidence() {
+        var redactor = new V03OutputRedactor();
+        String field = "Proxy-Ａｕｔｈｏｒｉｚａｔｉｏｎ: Ｂａｓｉｃ";
+        assertThat(redactor.redactMessage("Authorization: Basic fixtureValue= status=OK"))
+                .isEqualTo("Authorization: [MASKED] status=OK");
+        String folded = field + "\r\n\tfirstPart\r\n secondPart=\r\nNext: OK";
+        assertThat(redactor.redactEvidenceValue(Map.of("message", folded), Set.of()))
+                .isEqualTo(Map.of("message", "Proxy-Ａｕｔｈｏｒｉｚａｔｉｏｎ: [MASKED]\r\nNext: OK"));
+        assertThat(redactor.redactMessage("basic checks completed")).isEqualTo("basic checks completed");
+    }
+
+    @Test
     void retainsOriginalFieldNamesAndMasksEquivalentCredentialAndContractLabels() {
         var redactor = new V03OutputRedactor();
         Map<String, Object> row = Map.of("ＡＰＩ-Key", "fixture value", "顯示名稱", "正常",

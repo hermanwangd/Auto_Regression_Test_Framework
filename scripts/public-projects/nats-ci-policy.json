@@ -88,7 +88,7 @@
     "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/ReviewedOracleCoverageProjection.java": "c18dc7868c43d9a318d194a3658b468fc742ec2471cd068f30013339f0fe4210",
     "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/ReviewedCoverageProjection.java": "f2d7142b37adb554edc95bec2fd26eae2e6887f04d2af5606589ae3aa7369db1",
     "src/main/java/com/specdriven/regression/contract/SecurityFieldNames.java": "072dfbb9175b2e86ac9db1050f64f73160b01659ed6b924f3bb56167c304faaa",
-    "src/main/java/com/specdriven/regression/contract/v03/V03OutputRedactor.java": "5ede5e2cc27d3c84c00ce087428f89003a2d253feb8a347811ad91b720ee82cc",
+    "src/main/java/com/specdriven/regression/contract/v03/V03OutputRedactor.java": "4cf7a3856021246e3fe21392a8dd3298551e33be0d1172ee927117273061b961",
     "src/main/java/com/specdriven/regression/contract/v03/V03RuntimeExecutionService.java": "8754943eef37598125f9d1e22dee1adb1153bad75b693729a1bad9b9f8016be3",
     "src/main/java/com/specdriven/regression/provider/ProviderEndpoints.java": "67460ea8c00a24238e407848c4b3ef9792d0ffeeed029712dcf9d53d35bffe6a",
     "src/main/java/com/specdriven/regression/provider/ProviderDataYaml.java": "3996df29537c4991a4a2c552ed8faf2f2435b5c33a2b135be50ea47329ba7567"

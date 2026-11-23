@@ -12,21 +12,28 @@ import org.junit.jupiter.api.io.TempDir;
 
 class SuiteAssetReaderTest {
     @Test
-    @EnabledOnOs(OS.MAC)
-    void darwinReaderRequiresRegularFilesAndPhysicalPathComponents(@TempDir Path directory) throws Exception {
+    @EnabledOnOs({OS.MAC, OS.LINUX})
+    void nativeReaderRequiresRegularFilesAndPhysicalPathComponents(@TempDir Path directory) throws Exception {
         Path root = directory.toRealPath();
         Path folder = Files.createDirectory(root.resolve("queries"));
         Path file = Files.writeString(folder.resolve("語句.sql"), "SELECT '資料'");
-        try (var stream = DarwinSuiteFile.open(file)) {
+        try (var stream = PosixSuiteFile.open(file)) {
             assertThat(new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)).isEqualTo("SELECT '資料'");
         }
-        assertThatThrownBy(() -> DarwinSuiteFile.open(folder)).isInstanceOf(java.io.IOException.class);
+        assertThatThrownBy(() -> PosixSuiteFile.open(folder)).isInstanceOf(java.io.IOException.class);
 
         Path alias = Files.createSymbolicLink(root.resolve("alias"), folder);
-        assertThatThrownBy(() -> DarwinSuiteFile.open(alias.resolve(file.getFileName())))
+        assertThatThrownBy(() -> PosixSuiteFile.open(alias.resolve(file.getFileName())))
                 .isInstanceOf(java.io.IOException.class);
         Path fileAlias = Files.createSymbolicLink(root.resolve("query-link.sql"), file);
-        assertThatThrownBy(() -> DarwinSuiteFile.open(fileAlias)).isInstanceOf(java.io.IOException.class);
+        assertThatThrownBy(() -> PosixSuiteFile.open(fileAlias)).isInstanceOf(java.io.IOException.class);
+    }
+
+    @Test
+    @EnabledOnOs(OS.LINUX)
+    void linuxReaderRejectsAnOpenedDevice() {
+        assertThatThrownBy(() -> PosixSuiteFile.open(Path.of("/dev/null")))
+                .isInstanceOf(java.io.IOException.class).hasMessageContaining("not a regular file");
     }
 
     @Test
