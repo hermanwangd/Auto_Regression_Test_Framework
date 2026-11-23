@@ -7,6 +7,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
@@ -31,15 +32,22 @@ public final class SqlSource {
         if (!file.startsWith(realRoot)) throw new IllegalArgumentException(outsideRootMessage);
         if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new NoSuchFileException(reference);
 
-        try (DirectoryStream<Path> directory = Files.newDirectoryStream(realRoot)) {
+        // Anchor traversal at the filesystem root so even the suite root's parents
+        // are opened without following links after the canonical paths were checked.
+        Path anchor = realRoot.getRoot();
+        try (DirectoryStream<Path> directory = Files.newDirectoryStream(anchor)) {
             if (directory instanceof SecureDirectoryStream<Path> secure) {
-                return readRelative(secure, realRoot.relativize(file));
-            }
-            try (SeekableByteChannel channel = Files.newByteChannel(file, READ_FILE)) {
-                if (!file.toRealPath().startsWith(realRoot)) throw new IllegalArgumentException(outsideRootMessage);
-                return readUtf8(channel);
+                return readRelative(secure, anchor.relativize(file));
             }
         }
+        if (file.getFileSystem() == FileSystems.getDefault() && com.sun.jna.Platform.isMac()) {
+            try {
+                return DarwinSqlFile.read(file);
+            } catch (LinkageError unavailable) {
+                throw new IOException("Native macOS SQL file access is unavailable.", unavailable);
+            }
+        }
+        throw new IOException("The filesystem does not support confined SQL file access.");
     }
 
     // Open each resolved component relative to its parent handle, without following new links.

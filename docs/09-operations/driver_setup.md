@@ -38,3 +38,11 @@ java -jar ../spec-driven-auto-regression-{{VERSION}}.jar doctor drivers --driver
 
 Driver diagnostics check jar discovery and class loadability only. They do not
 connect to a database and must not print raw connection strings.
+
+## SQL file references
+
+Keep SQL files inside the suite or RP package that references them. An alias
+may point to a regular file inside that root. The framework resolves the alias,
+then opens each physical path component relative to its parent directory handle.
+On macOS this uses the bundled JNA library and the system `openat` call. A
+filesystem without a supported handle-based reader returns an error.
