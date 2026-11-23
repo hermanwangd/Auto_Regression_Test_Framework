@@ -21,6 +21,26 @@ class V03OutputRedactorTest {
     }
 
     @Test
+    void keepsPublicDiagnosticsAfterAuthorizationValues() {
+        var redactor = new V03OutputRedactor();
+        String context = "\n  status=OK\n\tat example.Work.run(Work.java:12)";
+        for (String scheme : java.util.List.of("Basic", "Bearer", "Negotiate")) {
+            String message = "Authorization: " + scheme + " exampleValue" + context;
+            assertThat(redactor.redactMessage(message)).isEqualTo("Authorization: [MASKED]" + context);
+            String providerMessage = com.specdriven.regression.provider.ProviderDiagnosticRedactor.maskSensitiveText(message);
+            assertThat(providerMessage).isEqualTo("Authorization: ***MASKED***" + context);
+            assertThat(redactor.redactMessage(providerMessage)).isEqualTo("Authorization: [MASKED]" + context);
+        }
+    }
+
+    @Test
+    void masksAWholeAuthorizationFieldWhenItsSchemeHasParameters() {
+        var redactor = new V03OutputRedactor();
+        String message = "Authorization: Example a=first, b=second\r\nNext: OK";
+        assertThat(redactor.redactMessage(message)).isEqualTo("Authorization: [MASKED]\r\nNext: OK");
+    }
+
+    @Test
     void retainsOriginalFieldNamesAndMasksEquivalentCredentialAndContractLabels() {
         var redactor = new V03OutputRedactor();
         Map<String, Object> row = Map.of("ＡＰＩ-Key", "fixture value", "顯示名稱", "正常",

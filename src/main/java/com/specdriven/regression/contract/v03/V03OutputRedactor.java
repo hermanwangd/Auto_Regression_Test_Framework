@@ -26,7 +26,10 @@ public final class V03OutputRedactor {
     private static final Pattern ASSIGNMENT = Pattern.compile(ASSIGN);
     private static final Pattern WORD_THEN_SPACE = Pattern.compile("(" + WORD + ")" + SPACING + "++");
     private static final Pattern SPACE = Pattern.compile(SPACING + "++");
-    private static final Pattern HEADER_CONTINUATION = Pattern.compile("[\\t ]*\\r?\\n[\\t ]+[^\\r\\n]*");
+    private static final Pattern TOKEN_CONTINUATION = Pattern.compile(
+            "[\\t ]*\\r?\\n[\\t ]+[A-Za-z0-9._~+/-]++=*+(?=[\\t ]*(?:\\r?$)|[\\t ]+[\\w.-]+[:=])",
+            Pattern.MULTILINE);
+    private static final Pattern HEADER_LINES = Pattern.compile("[^\\r\\n]*+(?:\\r?\\n[\\t ]++[^\\r\\n]*+)*+");
     private static final Pattern RAW_VALUE = Pattern.compile("[^\\s,;\"'}]++");
     private static final Pattern RAW_ADDRESS = Pattern.compile("[^\\s,;]++");
     private static final Pattern AUTHORITY = Pattern.compile("[/／]{2}([^/\\s]++)");
@@ -104,7 +107,16 @@ public final class V03OutputRedactor {
         return maskMessage(message, ContractFields.of(contractKeys));
     }
 
-    private String maskMessage(String message, ContractFields fields) {
+    private static String maskMessage(String message, ContractFields fields) {
+        return maskMessage(message, fields, MASKED);
+    }
+
+    /** Uses the provider evidence marker while applying the same diagnostic field boundaries. */
+    public static String redactProviderDiagnostic(String message) {
+        return maskMessage(message, ContractFields.NONE, "***MASKED***");
+    }
+
+    private static String maskMessage(String message, ContractFields fields, String marker) {
         if (message == null) return "";
         Matcher labels = MESSAGE_LABEL.matcher(message);
         Matcher assignment = ASSIGNMENT.matcher(message);
@@ -131,7 +143,7 @@ public final class V03OutputRedactor {
                 value = addressValue(key, message, labels.start(), after + 1);
             }
             if (value == null || value.start() == value.end()) continue;
-            masked.append(message, copied, value.start()).append(MASKED);
+            masked.append(message, copied, value.start()).append(marker);
             copied = value.end();
             labels.region(copied, message.length());
         }
@@ -141,20 +153,28 @@ public final class V03OutputRedactor {
     private record Span(int start, int end) {}
 
     private static Span assignmentValue(String text, int start, boolean authorization) {
+        if (authorization && start < text.length()) {
+            char first = text.charAt(start);
+            if (isQuote(first)) return rawValue(text, start);
+            if (text.startsWith("***MASKED***", start)) return new Span(start, start + "***MASKED***".length());
+            if (text.startsWith(MASKED, start)) return new Span(start, start + MASKED.length());
+        }
         Matcher scheme = WORD_THEN_SPACE.matcher(text).region(start, text.length());
         if (scheme.lookingAt()) {
             String name = SecurityFieldNames.canonical(scheme.group(1));
-            if (!"bearer".equals(name) && !(authorization && "basic".equals(name))) return rawValue(text, start);
+            if (!"bearer".equals(name) && !(authorization && ("basic".equals(name) || "negotiate".equals(name)))) {
+                return authorization ? new Span(start, matchEnd(HEADER_LINES, text, start)) : rawValue(text, start);
+            }
             Span token = rawValue(text, scheme.end());
             int end = token.end();
             if (end < text.length() && isQuote(text.charAt(scheme.end()))) end++;
             if (authorization) {
-                Matcher continuation = HEADER_CONTINUATION.matcher(text);
+                Matcher continuation = TOKEN_CONTINUATION.matcher(text);
                 while (continuation.region(end, text.length()).lookingAt()) end = continuation.end();
             }
             return new Span(start, end);
         }
-        return rawValue(text, start);
+        return authorization ? new Span(start, matchEnd(HEADER_LINES, text, start)) : rawValue(text, start);
     }
 
     // Only the label is normalized. Compatibility punctuation and spaces within raw values are data.

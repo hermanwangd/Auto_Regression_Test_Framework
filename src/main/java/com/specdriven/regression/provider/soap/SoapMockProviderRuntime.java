@@ -1,5 +1,7 @@
 package com.specdriven.regression.provider.soap;
 
+import static com.specdriven.regression.provider.ProviderDiagnosticRedactor.maskSensitiveText;
+
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingXPath;
@@ -334,21 +336,6 @@ public class SoapMockProviderRuntime implements ProviderRuntime {
 
     private String safeMessage(Exception e) {
         return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-    }
-
-    private String maskSensitiveText(String text) {
-        if (text == null || text.isBlank()) {
-            return "";
-        }
-        return text
-                .replaceAll("(?i)(\"(?:password|token|api_key|authorization|secret|credential)\"\\s*:\\s*\")[^\"]*(\")", "$1***MASKED***$2")
-                .replaceAll("(?i)(authorization\\s*[:=]\\s*)[^\\s,}\\]]+", "$1***MASKED***")
-                .replaceAll("(?i)(bearer\\s+)[A-Za-z0-9._~+/=-]+", "$1***MASKED***")
-                .replaceAll("(?i)(jdbc:[^\\s,}\\]]+)", "***MASKED***")
-                .replaceAll("(?i)(mongodb(?:\\+srv)?://[^\\s,}\\]]+)", "***MASKED***")
-                .replaceAll("(?i)(nats://[^\\s,}\\]]+)", "***MASKED***")
-                .replaceAll("(?i)((?:password|token|secret|credential|api_key)\\s*[=:]\\s*)[^\\s,}\\]]+", "$1***MASKED***")
-                .replaceAll("-----BEGIN [^-]+ PRIVATE KEY-----[\\s\\S]*?-----END [^-]+ PRIVATE KEY-----", "***MASKED***");
     }
 
     private String stringValue(Object value) {
