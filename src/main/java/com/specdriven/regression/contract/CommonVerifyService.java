@@ -1293,7 +1293,7 @@ public class CommonVerifyService {
     }
 
     private boolean secretKey(String key) {
-        String normalized = key.toLowerCase();
+        String normalized = SecurityFieldNames.canonical(key);
         return normalized.equals("password")
                 || normalized.equals("token")
                 || normalized.equals("credential")

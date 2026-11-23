@@ -26,6 +26,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -559,7 +560,7 @@ public class RestClientCapabilityService {
     }
 
     private String evidenceType(String ref) {
-        String normalized = ref.toLowerCase();
+        String normalized = ref.toLowerCase(Locale.ROOT);
         if (normalized.contains("logs/execution")) {
             return "execution_log";
         }
@@ -718,7 +719,7 @@ public class RestClientCapabilityService {
         if (!"assertion_diff".equals(evidenceType) && failureCode(content).isBlank()) {
             return false;
         }
-        String lower = content.toLowerCase();
+        String lower = content.toLowerCase(Locale.ROOT);
         return lower.contains("status: failed")
                 || lower.contains("\"status\": \"failed\"")
                 || lower.contains("comparison_status: failed")

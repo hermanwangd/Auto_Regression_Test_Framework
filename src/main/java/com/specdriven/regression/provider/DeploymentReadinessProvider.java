@@ -149,7 +149,7 @@ public class DeploymentReadinessProvider {
         builder.append("provider: ").append(providerName).append("\n");
         appendIfPresent(builder, "provider_type", stringValue(contract.get("provider_type")));
         appendIfPresent(builder, "readiness_probe", stringValue(contract.get("readiness_probe")));
-        appendIfPresent(builder, "api_server_ref", stringValue(contract.get("api_server_ref")));
+        appendIfPresent(builder, "api_server_ref", ProviderEndpoints.httpEvidenceRef(stringValue(contract.get("api_server_ref"))));
         appendIfPresent(builder, "kube_context_ref", stringValue(contract.get("kube_context_ref")));
         appendIfPresent(builder, "namespace_ref", stringValue(contract.get("namespace_ref")));
         appendIfPresent(builder, "pod_ref", stringValue(contract.get("pod_ref")));
@@ -163,7 +163,7 @@ public class DeploymentReadinessProvider {
         appendIfPresent(builder, "winrm_ref", stringValue(contract.get("winrm_ref")));
         appendIfPresent(builder, "user_ref", stringValue(contract.get("user_ref")));
         appendIfPresent(builder, "command_ref", stringValue(contract.get("command_ref")));
-        appendIfPresent(builder, "health_url_ref", stringValue(contract.get("health_url_ref")));
+        appendIfPresent(builder, "health_url_ref", ProviderEndpoints.httpEvidenceRef(stringValue(contract.get("health_url_ref"))));
         appendIfPresent(builder, "deployed_version_ref", stringValue(contract.get("deployed_version_ref")));
         builder.append("checks:\n");
         builder.append("  - name: ").append(stringValue(contract.get("readiness_probe"))).append("\n");

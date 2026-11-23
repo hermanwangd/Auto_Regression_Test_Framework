@@ -25,6 +25,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -196,7 +197,7 @@ public class SoapMockCapabilityService {
                 List.of(new ContractFinding(
                         selection.suiteRoot().resolve("suite_manifest.yaml").toString(),
                         "provider_runtime",
-                        failure.code().toLowerCase(),
+                        failure.code().toLowerCase(Locale.ROOT),
                         "",
                         SOAP_MOCK + "," + REST_CLIENT,
                         profile,
@@ -740,7 +741,7 @@ public class SoapMockCapabilityService {
     }
 
     private String evidenceType(String ref) {
-        String normalized = ref.toLowerCase();
+        String normalized = ref.toLowerCase(Locale.ROOT);
         if (normalized.contains("logs/execution")) {
             return "execution_log";
         }
@@ -964,7 +965,7 @@ public class SoapMockCapabilityService {
     }
 
     private boolean evidenceFailed(String content) {
-        String lower = content.toLowerCase();
+        String lower = content.toLowerCase(Locale.ROOT);
         return lower.contains("comparison_status: failed")
                 || lower.contains("status: failed")
                 || lower.contains("\"status\": \"failed\"")
@@ -988,7 +989,7 @@ public class SoapMockCapabilityService {
     }
 
     private String contentType(String ref) {
-        String normalized = ref.toLowerCase();
+        String normalized = ref.toLowerCase(Locale.ROOT);
         if (normalized.endsWith(".json")) {
             return "application/json";
         }

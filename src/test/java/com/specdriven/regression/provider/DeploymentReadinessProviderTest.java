@@ -605,44 +605,16 @@ class DeploymentReadinessProviderTest {
     }
 
     @Test
-    void defaultProbeSendsK8sApiBearerTokenWhenConfigured() throws Exception {
-        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/apis/apps/v1/namespaces/payment/deployments/payment-api", exchange -> {
-            assertThat(exchange.getRequestHeaders().getFirst("Authorization"))
-                    .isEqualTo("Bearer token-123");
-            byte[] response = """
-                    spec:
-                      replicas: 1
-                    status:
-                      availableReplicas: 1
-                      updatedReplicas: 1
-                    """.getBytes();
-            exchange.sendResponseHeaders(200, response.length);
-            try (OutputStream body = exchange.getResponseBody()) {
-                body.write(response);
-            }
-        });
-        server.start();
-        try {
-            AdapterExecutionResult result = executeProvider(
-                    new DeploymentReadinessProvider(),
-                    "payment_k8s",
-                    Map.of(
-                            "provider_type", "k8s",
-                            "readiness_probe", "api_deployment_available",
-                            "api_server_ref", "http://127.0.0.1:" + server.getAddress().getPort(),
-                            "bearer_ref", "token-123",
-                            "namespace_ref", "payment",
-                            "deployment_ref", "deployments/payment-api",
-                            "deployed_version_ref", "build-42",
-                            "timeout_seconds", 2));
+    void defaultProbeReportsUnboundK8sCredentialBeforeConnecting() throws Exception {
+        AdapterExecutionResult result = executeProvider(
+                new DeploymentReadinessProvider(), "payment_k8s", Map.of(
+                        "provider_type", "k8s", "readiness_probe", "api_deployment_available",
+                        "api_server_ref", "http://127.0.0.1:443", "bearer_ref", "env://K8S_BEARER_TOKEN",
+                        "namespace_ref", "payment", "deployment_ref", "deployments/payment-api",
+                        "deployed_version_ref", "build-42", "timeout_seconds", 2));
 
-            assertThat(result.exitCode()).isZero();
-            assertThat(Files.readString(result.stdoutLog()))
-                    .contains("k8s api deployment available for deployments/payment-api");
-        } finally {
-            server.stop(0);
-        }
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(Files.readString(result.stderrLog())).contains("HTTPS K8S_API_SERVER");
     }
 
     @Test

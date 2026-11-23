@@ -182,6 +182,20 @@ class DefaultDeploymentReadinessProbeTest {
                 .hasMessageContaining("Environment variable `SPEC_DRIVEN_REGRESSION_UNSET_READINESS_ENV` is not set");
     }
 
+    @Test
+    void bindsBearerToTheRunnerHttpsOrigin() throws Exception {
+        String fixtureToken = java.util.UUID.randomUUID().toString();
+        Map<String, String> bindings = Map.of("K8S_API_SERVER", "https://cluster.example:6443/",
+                "K8S_BEARER_TOKEN", fixtureToken);
+        var probe = new DefaultDeploymentReadinessProbe(java.net.http.HttpClient.newHttpClient(), bindings::get);
+        var request = request("k8s", "api_deployment_available", "", "payment", "deployment/payment-api",
+                "", "", "", 0, Map.of("api_server_ref", "env://K8S_API_SERVER", "bearer_ref", "env://K8S_BEARER_TOKEN"));
+
+        var http = probe.k8sApiRequest(request);
+        assertThat(http.uri().toString()).isEqualTo("https://cluster.example:6443/apis/apps/v1/namespaces/payment/deployments/payment-api");
+        assertThat(http.headers().firstValue("Authorization")).contains("Bearer " + fixtureToken);
+    }
+
     private DeploymentReadinessProbeRequest request(
             String providerType,
             String readinessProbe,

@@ -9,6 +9,20 @@ import org.junit.jupiter.api.Test;
 
 class V03OutputRedactorTest {
     @Test
+    void retainsOriginalFieldNamesAndMasksEquivalentCredentialAndContractLabels() {
+        var redactor = new V03OutputRedactor();
+        Map<String, Object> row = Map.of("ＡＰＩ-Key", "fixture value", "顯示名稱", "正常",
+                "Ｏｗｎｅｒ", "fixture owner");
+        assertThat(redactor.redactEvidenceValue(row, java.util.Set.of("Owner")))
+                .isEqualTo(Map.of("ＡＰＩ-Key", V03OutputRedactor.MASKED, "顯示名稱", "正常",
+                        "Ｏｗｎｅｒ", V03OutputRedactor.MASKED));
+        assertThat(redactor.redactMessage("ＴＯＫＥＮ=fixture")).isEqualTo("TOKEN=" + V03OutputRedactor.MASKED);
+        assertThat(redactor.redactMessage("品項 Ａ")).isEqualTo("品項 Ａ");
+        assertThat(redactor.redactValue(Map.of("privateKey", "fixture value")))
+                .isEqualTo(Map.of("privateKey", V03OutputRedactor.MASKED));
+    }
+
+    @Test
     void masksContractSensitiveOutputsAndNestedSecretLikeValues() {
         V03ProviderContract.V03OperationDefinition operation = new V03ProviderContract.V03OperationDefinition(
                 Set.of(), Set.of(), Set.of("session", "response"), Map.of(), Map.of(

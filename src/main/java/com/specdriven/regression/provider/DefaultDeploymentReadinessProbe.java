@@ -15,18 +15,28 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import org.yaml.snakeyaml.Yaml;
 
 class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
 
     private final HttpClient httpClient;
+    private final Function<String, String> environment;
 
     DefaultDeploymentReadinessProbe() {
         this(HttpClient.newHttpClient());
     }
 
     DefaultDeploymentReadinessProbe(HttpClient httpClient) {
+        this(httpClient, System::getenv);
+    }
+
+    DefaultDeploymentReadinessProbe(HttpClient httpClient, Function<String, String> environment) {
+        if (httpClient.followRedirects() != HttpClient.Redirect.NEVER) {
+            throw new IllegalArgumentException("Readiness requests require a client with redirects disabled.");
+        }
         this.httpClient = httpClient;
+        this.environment = environment;
     }
 
     @Override
@@ -119,19 +129,7 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
 
     private DeploymentReadinessProbeResult checkK8sApiDeploymentAvailable(DeploymentReadinessProbeRequest request)
             throws IOException, InterruptedException {
-        URI uri = URI.create(k8sApiServer(request)
-                + "/apis/apps/v1/namespaces/"
-                + encodePathSegment(resolveRef(request.namespaceRef()))
-                + "/deployments/"
-                + encodePathSegment(k8sDeploymentName(request.deploymentRef())));
-        HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
-                .timeout(Duration.ofSeconds(Math.max(1, request.timeoutSeconds())))
-                .GET();
-        String bearerRef = firstText(request.contract(), "bearer_ref", "credential_ref");
-        if (!bearerRef.isBlank()) {
-            builder.header("Authorization", "Bearer " + resolveRef(bearerRef));
-        }
-        HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = httpClient.send(k8sApiRequest(request), HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new IOException("K8s API deployment readiness failed with status `"
                     + response.statusCode() + "` for `" + request.deploymentRef() + "`.");
@@ -153,12 +151,43 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
                 1);
     }
 
-    private String k8sApiServer(DeploymentReadinessProbeRequest request) throws IOException {
-        String apiServer = firstText(request.contract(), "api_server_ref", "endpoint_ref");
-        if (apiServer.isBlank()) {
-            throw new IOException("K8s API deployment readiness probe requires api_server_ref.");
+    HttpRequest k8sApiRequest(DeploymentReadinessProbeRequest request) throws IOException {
+        String apiRef = firstText(request.contract(), "api_server_ref", "endpoint_ref");
+        if (apiRef.isBlank()) throw new IOException("K8s API deployment readiness probe requires api_server_ref.");
+        URI origin = httpEndpoint(resolveRef(apiRef));
+        if (!(origin.getRawPath().isEmpty() || "/".equals(origin.getRawPath())) || origin.getRawQuery() != null) {
+            throw new IOException("K8s API endpoint must be an origin without a path or query.");
         }
-        return resolveRef(apiServer).replaceAll("/+$", "");
+        boolean operatorOrigin = "env://K8S_API_SERVER".equals(apiRef);
+        if (!operatorOrigin && !ProviderEndpoints.localHost(origin.getHost())) {
+            throw new IOException("Remote K8s API requires env://K8S_API_SERVER.");
+        }
+        String path = "/apis/apps/v1/namespaces/" + encodePathSegment(resolveRef(request.namespaceRef()))
+                + "/deployments/" + encodePathSegment(k8sDeploymentName(request.deploymentRef()));
+        HttpRequest.Builder builder = HttpRequest.newBuilder(origin.resolve(path))
+                .timeout(Duration.ofSeconds(Math.max(1, request.timeoutSeconds()))).GET();
+        String bearerRef = firstText(request.contract(), "bearer_ref", "credential_ref");
+        if (!bearerRef.isBlank()) {
+            if (!operatorOrigin || !"https".equals(origin.getScheme()) || !"env://K8S_BEARER_TOKEN".equals(bearerRef)) {
+                throw new IOException("Bearer readiness requires the HTTPS K8S_API_SERVER and K8S_BEARER_TOKEN environment bindings.");
+            }
+            builder.header("Authorization", "Bearer " + resolveRef(bearerRef));
+        }
+        return builder.build();
+    }
+
+    private URI httpEndpoint(String value) throws IOException {
+        try {
+            URI uri = new URI(value);
+            if (("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) && uri.getHost() != null
+                    && uri.getRawUserInfo() == null && uri.getRawFragment() == null
+                    && uri.getPort() != 0 && uri.getPort() <= 65535 && !uri.getRawAuthority().endsWith(":")) {
+                return uri;
+            }
+        } catch (java.net.URISyntaxException ignored) {
+            // Report only the policy error; URLs can contain sensitive material.
+        }
+        throw new IOException("Invalid HTTP readiness endpoint.");
     }
 
     private String k8sDeploymentName(String deploymentRef) throws IOException {
@@ -233,8 +262,10 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
     private DeploymentReadinessProbeResult checkVmTcp(DeploymentReadinessProbeRequest request)
             throws IOException {
         int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
+        String host = resolveRef(request.hostRef());
+        InetSocketAddress target = tcpEndpoint(host, request.port());
         try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(resolveRef(request.hostRef()), request.port()), timeoutMs);
+            socket.connect(target, timeoutMs);
         }
         return new DeploymentReadinessProbeResult(
                 "vm tcp readiness passed for " + request.hostRef() + ":" + request.port() + "\n",
@@ -242,9 +273,32 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
                 1);
     }
 
+    private InetSocketAddress tcpEndpoint(String host, int port) throws IOException {
+        if (port < 1 || port > 65535) throw new IOException("Invalid VM TCP port.");
+        if (!ProviderEndpoints.localHost(host)) {
+            String binding = environment.apply("VM_TCP_ENDPOINT");
+            URI expected;
+            try {
+                expected = new URI(binding == null ? "" : binding);
+            } catch (java.net.URISyntaxException e) {
+                throw new IOException("Invalid VM_TCP_ENDPOINT.");
+            }
+            if (!"tcp".equals(expected.getScheme()) || !host.equals(expected.getHost()) || port != expected.getPort()
+                    || expected.getUserInfo() != null || expected.getRawQuery() != null || expected.getFragment() != null
+                    || !expected.getPath().isEmpty()) {
+                throw new IOException("Remote VM TCP target must match the runner's VM_TCP_ENDPOINT.");
+            }
+        }
+        return new InetSocketAddress(host, port);
+    }
+
     private DeploymentReadinessProbeResult checkVmHttp(DeploymentReadinessProbeRequest request)
             throws IOException, InterruptedException {
-        URI uri = URI.create(resolveRef(firstText(request.contract(), "health_url_ref", "endpoint_ref")));
+        String reference = firstText(request.contract(), "health_url_ref", "endpoint_ref");
+        URI uri = httpEndpoint(resolveRef(reference));
+        if (!ProviderEndpoints.localHost(uri.getHost()) && !"env://VM_HEALTH_URL".equals(reference)) {
+            throw new IOException("Remote VM HTTP readiness requires env://VM_HEALTH_URL.");
+        }
         HttpRequest httpRequest = HttpRequest.newBuilder(uri)
                 .timeout(Duration.ofSeconds(Math.max(1, request.timeoutSeconds())))
                 .GET()
@@ -254,7 +308,7 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
             throw new IOException("VM HTTP readiness failed with status `" + response.statusCode() + "`.");
         }
         return new DeploymentReadinessProbeResult(
-                "vm http readiness passed for " + uri + "\n",
+                "vm http readiness passed for " + ProviderEndpoints.httpEvidenceRef(reference) + "\n",
                 response.body().isBlank() ? "ready\n" : response.body(),
                 1);
     }
@@ -340,7 +394,7 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
     private String resolveRef(String ref) throws IOException {
         if (ref.startsWith("env://")) {
             String envName = ref.substring("env://".length());
-            String value = System.getenv(envName);
+            String value = environment.apply(envName);
             if (value == null || value.isBlank()) {
                 throw new IOException("Environment variable `" + envName
                         + "` is not set for deployment readiness.");

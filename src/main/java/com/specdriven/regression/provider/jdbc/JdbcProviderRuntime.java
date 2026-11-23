@@ -736,24 +736,14 @@ public class JdbcProviderRuntime implements ProviderRuntime {
     }
 
     private String readRef(Path suiteRoot, String ref, String operation, String missingCode) {
-        Path normalizedRoot = suiteRoot.toAbsolutePath().normalize();
-        Path path = normalizedRoot.resolve(ref).normalize();
-        if (!path.startsWith(normalizedRoot)) {
-            throw new JdbcRuntimeFailure(ProviderFailure.of(
-                    missingCode,
-                    classificationFor(operation),
-                    "SQL ref must stay under the suite root: " + ref,
-                    "Use a checked-in SQL ref under the suite."));
-        }
-        if (!Files.isRegularFile(path)) {
-            throw new JdbcRuntimeFailure(ProviderFailure.of(
-                    missingCode,
-                    classificationFor(operation),
-                    "SQL ref not found: " + ref,
-                    "Restore the checked-in SQL ref."));
-        }
         try {
-            return Files.readString(path);
+            return SqlSource.read(suiteRoot, ref, "SQL ref must stay under the suite root: " + ref);
+        } catch (IllegalArgumentException error) {
+            throw new JdbcRuntimeFailure(ProviderFailure.of(missingCode, classificationFor(operation),
+                    error.getMessage(), "Use a checked-in SQL ref under the suite."));
+        } catch (java.nio.file.NoSuchFileException error) {
+            throw new JdbcRuntimeFailure(ProviderFailure.of(missingCode, classificationFor(operation),
+                    "SQL ref not found: " + ref, "Restore the checked-in SQL ref."));
         } catch (IOException e) {
             throw new JdbcRuntimeFailure(ProviderFailure.of(
                     missingCode,

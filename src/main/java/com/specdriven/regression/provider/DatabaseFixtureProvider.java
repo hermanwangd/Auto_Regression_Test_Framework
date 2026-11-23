@@ -1,5 +1,6 @@
 package com.specdriven.regression.provider;
 
+import com.specdriven.regression.provider.jdbc.SqlSource;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -139,12 +140,7 @@ public class DatabaseFixtureProvider {
     }
 
     private String readSqlRef(Path packageRoot, String sqlRef) throws IOException {
-        Path normalizedRoot = packageRoot.toAbsolutePath().normalize();
-        Path sqlPath = normalizedRoot.resolve(sqlRef).normalize();
-        if (!sqlPath.startsWith(normalizedRoot)) {
-            throw new IllegalArgumentException("DB fixture sql_ref must stay under the RP package: " + sqlRef);
-        }
-        return Files.readString(sqlPath);
+        return SqlSource.read(packageRoot, sqlRef, "DB fixture sql_ref must stay under the RP package: " + sqlRef);
     }
 
     private List<FixtureAction> fixtureActions(

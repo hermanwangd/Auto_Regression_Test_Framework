@@ -110,6 +110,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -1778,7 +1779,7 @@ public class RegressionCommand {
         }
 
         long startedAt = System.currentTimeMillis();
-        String batchId = "BATCH-" + Long.toString(startedAt, 36).toUpperCase();
+        String batchId = "BATCH-" + Long.toString(startedAt, 36).toUpperCase(Locale.ROOT);
         String runId = "RUN-" + UUID.randomUUID();
         Path runDir = outputRoot
                 .resolve(safeFileName(definition.suiteId()))

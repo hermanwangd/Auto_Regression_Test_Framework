@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import org.yaml.snakeyaml.Yaml;
@@ -613,7 +614,7 @@ public class WireMockProviderCapabilityService {
         return new ContractFinding(
                 suiteManifest.toString(),
                 "provider_runtime",
-                failure.code().toLowerCase(),
+                failure.code().toLowerCase(Locale.ROOT),
                 selection.providerId(),
                 selection.providerType(),
                 selection.profile(),

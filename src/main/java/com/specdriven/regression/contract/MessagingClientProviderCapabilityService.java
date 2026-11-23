@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import org.yaml.snakeyaml.Yaml;
@@ -437,7 +438,7 @@ public class MessagingClientProviderCapabilityService {
     }
 
     private RunIds newRunIds(String providerType) {
-        String providerLabel = "ibm_mq".equals(providerType) ? "IBMMQ" : providerType.toUpperCase();
+        String providerLabel = "ibm_mq".equals(providerType) ? "IBMMQ" : providerType.toUpperCase(Locale.ROOT);
         String suffix = RUN_ID_TIME_FORMAT.format(Instant.now()) + "-" + RUN_SEQUENCE.incrementAndGet();
         return new RunIds("BATCH-" + providerLabel + "-" + suffix, "RUN-" + providerLabel + "-" + suffix);
     }

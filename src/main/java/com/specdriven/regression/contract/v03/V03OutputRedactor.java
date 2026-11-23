@@ -1,10 +1,12 @@
 package com.specdriven.regression.contract.v03;
 
+import com.specdriven.regression.contract.SecurityFieldNames;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Applies Provider Contract output sensitivity before values leave runtime memory. */
 public final class V03OutputRedactor {
@@ -75,7 +77,13 @@ public final class V03OutputRedactor {
 
     public String redactMessage(String message) {
         if (message == null) return "";
-        return message.replaceAll("(?i)([\\\"']?(?:password|token|secret|authorization|api[_-]?key|credential|private_key)[\\\"']?\\s*[:=]\\s*[\\\"']?)(?:bearer\\s+)?[^\\s,;\\\"'}]+", "$1" + MASKED)
+        String normalized = java.text.Normalizer.normalize(message, java.text.Normalizer.Form.NFKC);
+        String masked = maskMessage(normalized);
+        return masked.equals(normalized) ? message : masked;
+    }
+
+    private String maskMessage(String message) {
+        return message.replaceAll("(?i)([\\\"']?(?:password|token|secret|authorization|api[_-]?key|credential|private[_-]?key)[\\\"']?\\s*[:=]\\s*[\\\"']?)(?:bearer\\s+)?[^\\s,;\\\"'}]+", "$1" + MASKED)
                 .replaceAll("(?i)bearer\\s+[^\\s,;\\\"'}]+", "Bearer " + MASKED)
                 .replaceAll("(?i)(https?|grpc|grpcs)://[^/@\\s]+@", "$1://" + MASKED + "@")
                 .replaceAll("(?i)jdbc:[^\\s,;]+", MASKED)
@@ -86,17 +94,18 @@ public final class V03OutputRedactor {
         return redactNested(value);
     }
 
-    public Object redactEvidenceValue(Object value, java.util.Set<String> contractKeys) {
-        return redactEvidenceNested(value, contractKeys, "");
+    public Object redactEvidenceValue(Object value, Set<String> contractKeys) {
+        Set<String> canonicalPaths = contractKeys.stream().map(SecurityFieldNames::canonical).collect(Collectors.toSet());
+        return redactEvidenceNested(value, canonicalPaths, "");
     }
 
-    private Object redactEvidenceNested(Object value, java.util.Set<String> contractKeys, String path) {
+    private Object redactEvidenceNested(Object value, Set<String> contractKeys, String path) {
         if (value instanceof Map<?, ?> map) {
             Map<String, Object> result = new LinkedHashMap<>();
             map.forEach((key, item) -> {
                 String name = String.valueOf(key);
                 String fieldPath = path.isBlank() ? name : path + "." + name;
-                result.put(name, sensitiveKey(name) || contractKeys.contains(fieldPath) ? MASKED
+                result.put(name, sensitiveKey(name) || contractKeys.contains(SecurityFieldNames.canonical(fieldPath)) ? MASKED
                         : redactEvidenceNested(item, contractKeys, fieldPath));
             });
             return result;
@@ -122,9 +131,9 @@ public final class V03OutputRedactor {
     }
 
     private boolean sensitiveKey(String key) {
-        String normalized = key.toLowerCase(Locale.ROOT);
+        String normalized = SecurityFieldNames.canonical(key);
         return normalized.contains("password") || normalized.contains("token") || normalized.contains("secret")
-                || normalized.contains("authorization") || normalized.contains("api_key") || normalized.equals("apikey")
-                || normalized.contains("credential") || normalized.contains("private_key");
+                || normalized.contains("authorization") || normalized.contains("api_key") || normalized.contains("apikey")
+                || normalized.contains("credential") || normalized.contains("private_key") || normalized.contains("privatekey");
     }
 }

@@ -278,7 +278,7 @@ class DefaultMessagingTransport implements MessagingTransport {
 
     private MessagingTransportResult natsPublish(MessagingTransportRequest request)
             throws IOException {
-        URI uri = natsUri(resolveRef(request.connectionRef()));
+        URI uri = natsUri(request.connectionRef());
         int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
         byte[] payload = request.payload().getBytes(StandardCharsets.UTF_8);
         try (Socket socket = new Socket()) {
@@ -302,7 +302,7 @@ class DefaultMessagingTransport implements MessagingTransport {
 
     private MessagingTransportResult natsRequestReply(MessagingTransportRequest request)
             throws IOException {
-        URI uri = natsUri(resolveRef(request.connectionRef()));
+        URI uri = natsUri(request.connectionRef());
         int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
         byte[] payload = request.payload().getBytes(StandardCharsets.UTF_8);
         String subject = stripScheme(request.targetRef(), "nats");
@@ -345,7 +345,7 @@ class DefaultMessagingTransport implements MessagingTransport {
 
     private MessagingTransportResult natsObserve(MessagingTransportRequest request)
             throws IOException {
-        URI uri = natsUri(resolveRef(request.connectionRef()));
+        URI uri = natsUri(request.connectionRef());
         int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
         int expectedCount = expectedCount(request);
         List<String> observed = new ArrayList<>();
@@ -394,7 +394,7 @@ class DefaultMessagingTransport implements MessagingTransport {
 
     private MessagingTransportResult natsCleanup(MessagingTransportRequest request)
             throws IOException {
-        URI uri = natsUri(resolveRef(request.connectionRef()));
+        URI uri = natsUri(request.connectionRef());
         int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
         int maxCount = cleanupLimit(request);
         List<String> cleaned = new ArrayList<>();
@@ -437,11 +437,12 @@ class DefaultMessagingTransport implements MessagingTransport {
                 cleaned.size());
     }
 
-    private URI natsUri(String connectionRef) {
-        if (!connectionRef.contains("://")) {
-            return URI.create("nats://" + connectionRef);
+    private URI natsUri(String reference) throws IOException {
+        try {
+            return ProviderEndpoints.nats(resolveRef(reference), reference, true);
+        } catch (IllegalArgumentException error) {
+            throw new IOException(error.getMessage(), error);
         }
-        return URI.create(connectionRef);
     }
 
     private int natsPort(URI uri) {
