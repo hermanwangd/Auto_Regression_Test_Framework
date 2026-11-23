@@ -17,14 +17,15 @@ public final class V03OutputRedactor {
 
     private static final String WORD = "[\\p{L}\\p{M}\\p{N}\\p{So}\\p{Pc}.．\\-－﹣]++";
     private static final String SEPARATOR = "[:=：＝﹕﹦]";
-    private static final String ASSIGN = "\\h*" + SEPARATOR + "\\h*";
+    private static final String SPACING = "[\\h\\s]";
+    private static final String ASSIGN = SPACING + "*" + SEPARATOR + SPACING + "*";
     private static final Pattern SINGLE_WORD = Pattern.compile(WORD);
     private static final Pattern MESSAGE_LABEL = Pattern.compile(
             "(?<quoted>\"[^\"\\r\\n]++\"|'[^'\\r\\n]++'|＂[^＂\\r\\n]++＂|＇[^＇\\r\\n]++＇)(?=" + ASSIGN
                     + ")|(?<separator>" + SEPARATOR + ")|" + WORD);
     private static final Pattern ASSIGNMENT = Pattern.compile(ASSIGN);
-    private static final Pattern WORD_THEN_SPACE = Pattern.compile("(" + WORD + ")\\h++");
-    private static final Pattern SPACE = Pattern.compile("\\h++");
+    private static final Pattern WORD_THEN_SPACE = Pattern.compile("(" + WORD + ")" + SPACING + "++");
+    private static final Pattern SPACE = Pattern.compile(SPACING + "++");
     private static final Pattern RAW_VALUE = Pattern.compile("[^\\s,;\"'}]++");
     private static final Pattern RAW_ADDRESS = Pattern.compile("[^\\s,;]++");
     private static final Pattern AUTHORITY = Pattern.compile("[/／]{2}([^/\\s]++)");
@@ -223,14 +224,14 @@ public final class V03OutputRedactor {
         boolean matchesUnquotedSuffix(String text, int copied, int previousSeparator, int end) {
             if (compound.isEmpty()) return false;
             int lowerBound = containsSeparator ? copied : Math.max(previousSeparator, copied);
-            while (end > lowerBound && isHorizontalSpace(text.charAt(end - 1))) end--;
+            while (end > lowerBound && isLabelSpacing(text.charAt(end - 1))) end--;
             int start = Math.max(lowerBound, end - lookbehind);
             String candidate = SecurityFieldNames.canonical(text.substring(start, end));
             return compound.stream().anyMatch(candidate::endsWith);
         }
 
-        private static boolean isHorizontalSpace(char c) {
-            return c == '\t' || c == '\u180e' || Character.getType(c) == Character.SPACE_SEPARATOR;
+        private static boolean isLabelSpacing(char c) {
+            return (c >= '\t' && c <= '\r') || c == '\u180e' || Character.getType(c) == Character.SPACE_SEPARATOR;
         }
     }
 

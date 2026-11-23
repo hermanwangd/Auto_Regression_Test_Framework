@@ -61,9 +61,22 @@ class V03OutputRedactorTest {
         assertThat(redactor.redactMessage("token=\"one, \\\"two\\\"; three\" status=ＯＫ"))
                 .isEqualTo("token=\"[MASKED]\" status=ＯＫ");
         assertThat(redactor.redactMessage("token='' status=ＯＫ\npassword=\n狀態=Ａ"))
-                .isEqualTo("token='' status=ＯＫ\npassword=\n狀態=Ａ");
+                .isEqualTo("token='' status=ＯＫ\npassword=\n[MASKED]");
         assertThat(redactor.redactMessage("authorization=Bearer 'one two' code=Ａ"))
                 .isEqualTo("authorization=[MASKED] code=Ａ");
+    }
+
+    @Test
+    void masksCredentialsAcrossLineBreaksWithoutSplittingUnicodeValueContent() {
+        var redactor = new V03OutputRedactor();
+        assertThat(redactor.redactMessage("\"ＴＯＫＥＮ\"\r\n＝\nfirst\u00a0last，tail\r\n完成 Ａ"))
+                .isEqualTo("\"ＴＯＫＥＮ\"\r\n＝\n[MASKED]\r\n完成 Ａ");
+        assertThat(redactor.redactMessage("authorization:\nBearer\r\n'first second'\n完成 Ａ"))
+                .isEqualTo("authorization:\n[MASKED]\n完成 Ａ");
+        assertThat(redactor.redactMessage("Ｂｅａｒｅｒ\r\nfirst\u00a0last；tail\n完成 Ａ"))
+                .isEqualTo("Ｂｅａｒｅｒ\r\n[MASKED]\n完成 Ａ");
+        assertThat(redactor.redactMessage("Review Owner\n:\r\nfixture\n完成 Ａ", Set.of("review owner")))
+                .isEqualTo("Review Owner\n:\r\n[MASKED]\n完成 Ａ");
     }
 
     @Test
