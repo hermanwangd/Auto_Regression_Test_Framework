@@ -214,7 +214,10 @@ class V03RuntimeStatusTest {
                 Path evidence = context.runDir().resolve("provider-evidence/raw-runtime.txt");
                 try {
                     Files.createDirectories(evidence.getParent());
-                    Files.writeString(evidence, "authorization=Bearer raw-runtime-token password=raw-password");
+                    String log = "authorization=Bearer raw-runtime-token password=raw-password"
+                            + " ＭＡＳＫＥＤ－ＡＣＴＵＡＬ－ＳＡＭＰＬＥ＝'fixture, suffix' 顯示 Ａ";
+                    Files.writeString(evidence, log);
+                    Files.writeString(evidence.resolveSibling("diagnostic.json"), log);
                 } catch (java.io.IOException error) {
                     throw new java.io.UncheckedIOException(error);
                 }
@@ -222,7 +225,7 @@ class V03RuntimeStatusTest {
                         ? Map.of("actual_json", Map.of("token", "raw-runtime-token", "status", "OK"))
                         : Map.of();
                 return new V03StepResult(step.id(), "passed", outputs,
-                        List.of("provider-evidence/raw-runtime.txt"), "", "");
+                        List.of("provider-evidence/raw-runtime.txt", "provider-evidence/diagnostic.json"), "", "");
             }
         };
         V03RuntimeExecutionService service = new V03RuntimeExecutionService(
@@ -236,10 +239,9 @@ class V03RuntimeStatusTest {
         assertThat(Files.readString(run.resultJson()))
                 .doesNotContain("raw-runtime-token")
                 .doesNotContain("raw-password");
-        assertThat(Files.readString(run.evidenceDir().resolve("provider-evidence/raw-runtime.txt")))
-                .doesNotContain("raw-runtime-token")
-                .doesNotContain("raw-password")
-                .contains(V03OutputRedactor.MASKED);
+        String expectedLog = "authorization=[MASKED] password=[MASKED] ＭＡＳＫＥＤ－ＡＣＴＵＡＬ－ＳＡＭＰＬＥ＝'[MASKED]' 顯示 Ａ";
+        assertThat(Files.readString(run.evidenceDir().resolve("provider-evidence/raw-runtime.txt"))).isEqualTo(expectedLog);
+        assertThat(Files.readString(run.evidenceDir().resolve("provider-evidence/diagnostic.json"))).isEqualTo(expectedLog);
     }
 
     @Test

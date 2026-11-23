@@ -1,6 +1,8 @@
 package com.specdriven.regression.contract.v03;
 
 import com.specdriven.regression.contract.ContractBaselineService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
@@ -1466,24 +1468,28 @@ public class V03RuntimeExecutionService {
 
     private String redactEvidenceDocument(String evidenceRef, String original, java.util.Set<String> contractRedact) throws IOException {
         String lower = evidenceRef.toLowerCase(Locale.ROOT);
-        try {
-            if (lower.endsWith(".json")) {
-                Object document = objectMapper.readValue(original, Object.class);
-                return objectMapper.writeValueAsString(outputRedactor.redactEvidenceValue(document, contractRedact));
+        if (lower.endsWith(".json")) {
+            Object document;
+            try {
+                document = objectMapper.readerFor(Object.class).with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                        .readValue(original);
+            } catch (JsonProcessingException malformed) {
+                return outputRedactor.redactMessage(original, contractRedact);
             }
-            if (lower.endsWith(".yaml") || lower.endsWith(".yml")) {
-                Object document = yaml.load(original);
-                DumperOptions options = new DumperOptions();
-                options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
-                return new Yaml(options).dump(outputRedactor.redactEvidenceValue(document, contractRedact));
-            }
-        } catch (RuntimeException malformedStructuredEvidence) {
-            // Provider evidence with a YAML extension may be diagnostic text; retain the log sanitizer path.
+            return objectMapper.writeValueAsString(outputRedactor.redactEvidenceValue(document, contractRedact));
         }
-        String redacted = outputRedactor.redactMessage(original);
-        for (String key : contractRedact) redacted = redacted.replaceAll("(?i)([\\\"']?" + java.util.regex.Pattern.quote(key)
-                + "[\\\"']?\\s*[:=]\\s*[\\\"']?)[^\\s,;\\\"'}]+", "$1" + V03OutputRedactor.MASKED);
-        return redacted;
+        if (lower.endsWith(".yaml") || lower.endsWith(".yml")) {
+            Object document;
+            try {
+                document = yaml.load(original);
+            } catch (org.yaml.snakeyaml.error.YAMLException malformed) {
+                return outputRedactor.redactMessage(original, contractRedact);
+            }
+            DumperOptions options = new DumperOptions();
+            options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+            return new Yaml(options).dump(outputRedactor.redactEvidenceValue(document, contractRedact));
+        }
+        return outputRedactor.redactMessage(original, contractRedact);
     }
 
     private boolean hasMultipleLinks(Path evidence) {
