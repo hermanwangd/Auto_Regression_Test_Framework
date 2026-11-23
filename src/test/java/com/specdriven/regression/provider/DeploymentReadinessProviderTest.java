@@ -605,6 +605,21 @@ class DeploymentReadinessProviderTest {
     }
 
     @Test
+    void omitsRejectedApiResourceNamesFromReadinessLogsAndEvidence() throws Exception {
+        var probe = new DefaultDeploymentReadinessProbe(java.net.http.HttpClient.newHttpClient(), key -> null);
+        AdapterExecutionResult result = executeProvider(new DeploymentReadinessProvider(probe), "fixture", Map.of(
+                "provider_type", "k8s", "readiness_probe", "api_deployment_available",
+                "api_server_ref", "http://127.0.0.1", "namespace_ref", "Fixture Namespace",
+                "deployment_ref", "deploy/Fixture Deployment"));
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(Files.readString(result.stdoutLog())).isEmpty();
+        assertThat(Files.readString(result.stderrLog())).contains("K8S_NAMESPACE").doesNotContain("Fixture");
+        assertThat(Files.readString(tempDir.resolve("run/readiness.yaml")))
+                .contains("status: failed", "[MASKED]").doesNotContain("Fixture");
+    }
+
+    @Test
     void defaultProbeReportsUnboundK8sCredentialBeforeConnecting() throws Exception {
         AdapterExecutionResult result = executeProvider(
                 new DeploymentReadinessProvider(), "payment_k8s", Map.of(

@@ -3,6 +3,7 @@ package com.specdriven.regression.provider;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Set;
+import org.yaml.snakeyaml.Yaml;
 
 /** Validates endpoint syntax without resolving DNS or including credentials in errors. */
 public final class ProviderEndpoints {
@@ -10,6 +11,10 @@ public final class ProviderEndpoints {
 
     public static boolean localHost(String host) {
         return "127.0.0.1".equals(host) || "::1".equals(host) || "[::1]".equals(host);
+    }
+
+    static String yamlEvidenceRef(String safeReference) {
+        return safeReference.isEmpty() ? "" : new Yaml().dump(safeReference).stripTrailing();
     }
 
     static String httpEvidenceRef(String reference) {
@@ -22,6 +27,27 @@ public final class ProviderEndpoints {
             }
         } catch (URISyntaxException ignored) {
             // A rejected endpoint must not echo credential material into evidence.
+        }
+        return "[MASKED]";
+    }
+
+    static String natsConnectionEvidenceRef(String reference) {
+        if (reference.isEmpty() || reference.matches("env://[A-Za-z_][A-Za-z0-9_]*")
+                || reference.matches("mock://[A-Za-z0-9_-]+(?:[.][A-Za-z0-9_-]+)*")) {
+            return reference;
+        }
+        try {
+            nats(reference, reference, true);
+            return reference;
+        } catch (IllegalArgumentException ignored) {
+            return "[MASKED]";
+        }
+    }
+
+    static String natsTargetEvidenceRef(String reference, String field) {
+        if ("endpoint_ref".equals(field)) return natsConnectionEvidenceRef(reference);
+        if (reference.isEmpty() || reference.matches("(?:(?:nats|mock)://)?[A-Za-z0-9_.*>$-]+")) {
+            return reference;
         }
         return "[MASKED]";
     }

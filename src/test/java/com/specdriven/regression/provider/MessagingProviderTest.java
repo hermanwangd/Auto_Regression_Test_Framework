@@ -98,6 +98,52 @@ class MessagingProviderTest {
     }
 
     @Test
+    void recordsSafeReferencesForMockNatsSuccessUsingEndpointFallback() throws Exception {
+        String endpoint = "mock://fixture-user:fixture-value@broker";
+        var result = executeProvider("fixture", Map.of("provider_type", "nats", "endpoint_ref", endpoint,
+                "actions", Map.of("observe", Map.of("mode", "observe", "observed_payload", "sample message"))),
+                Map.of("steps", List.of(Map.of("action", "observe"))), List.of());
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(Files.readString(result.actualOutput())).isEqualTo("sample message");
+        assertThat(Files.readString(result.stdoutLog())).contains("[MASKED]").doesNotContain("fixture-value");
+        assertThat(Files.readString(result.stderrLog())).isEmpty();
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("status: passed", "connection_ref: '[MASKED]'", "endpoint_ref: '[MASKED]'")
+                .doesNotContain("fixture-user", "fixture-value");
+    }
+
+    @Test
+    void masksAllNatsConnectionAliasesOnPayloadValidationFailure() throws Exception {
+        for (String alias : List.of("bootstrap_servers_ref", "server_ref", "connection_ref", "endpoint_ref")) {
+            var result = executeProvider("fixture", Map.of("provider_type", "nats",
+                    alias, "nats://fixture-user:fixture-value@127.0.0.1:4222"), Map.of(), List.of());
+
+            assertThat(result.exitCode()).isEqualTo(1);
+            assertThat(Files.readString(result.stdoutLog())).isEmpty();
+            assertThat(Files.readString(result.stderrLog())).contains("payload binding").doesNotContain("fixture-value");
+            assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                    .contains("status: failed", "connection_ref:", "[MASKED]").doesNotContain("fixture-user", "fixture-value");
+        }
+    }
+
+    @Test
+    void keepsNatsBindingNameAndSubjectWithoutRecordingTransportErrorText() throws Exception {
+        writePayload("payload.txt", "sample message");
+        MessagingTransport failingTransport = request -> { throw new IOException("fixture transport detail"); };
+        var result = executeProvider(new MessagingProvider(failingTransport), "fixture", Map.of(
+                "provider_type", "nats", "connection_ref", "env://NATS_CONNECTION", "subject_ref", "payments.created"),
+                Map.of(), List.of(new ResolvedBinding("event", "message_event", "payload.txt")));
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(Files.readString(result.stdoutLog())).isEmpty();
+        assertThat(Files.readString(result.stderrLog())).contains("NATS operation failed").doesNotContain("fixture transport detail");
+        assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                .contains("status: failed", "connection_ref: env://NATS_CONNECTION", "subject_ref: payments.created")
+                .doesNotContain("fixture transport detail");
+    }
+
+    @Test
     void defaultsBlankActionModeToPublishAndUsesFirstMessageBinding() throws Exception {
         writePayload("fixtures/events/order.json", "{\"orderId\":\"ORD-001\"}\n");
         RecordingMessagingTransport transport = new RecordingMessagingTransport();

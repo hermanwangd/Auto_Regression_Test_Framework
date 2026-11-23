@@ -4,11 +4,9 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -162,8 +160,8 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
         if (!operatorOrigin && !ProviderEndpoints.localHost(origin.getHost())) {
             throw new IOException("Remote K8s API requires env://K8S_API_SERVER.");
         }
-        String path = "/apis/apps/v1/namespaces/" + encodePathSegment(resolveRef(request.namespaceRef()))
-                + "/deployments/" + encodePathSegment(k8sDeploymentName(request.deploymentRef()));
+        String path = "/apis/apps/v1/namespaces/" + K8sApiResource.NAMESPACE.resolve(request.namespaceRef(), environment)
+                + "/deployments/" + K8sApiResource.DEPLOYMENT.resolve(request.deploymentRef(), environment);
         HttpRequest.Builder builder = HttpRequest.newBuilder(origin.resolve(path))
                 .timeout(Duration.ofSeconds(Math.max(1, request.timeoutSeconds()))).GET();
         String bearerRef = firstText(request.contract(), "bearer_ref", "credential_ref");
@@ -188,20 +186,6 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
             // Report only the policy error; URLs can contain sensitive material.
         }
         throw new IOException("Invalid HTTP readiness endpoint.");
-    }
-
-    private String k8sDeploymentName(String deploymentRef) throws IOException {
-        String deploymentName = resolveRef(deploymentRef);
-        for (String prefix : List.of("deployment/", "deploy/", "deployments/")) {
-            if (deploymentName.startsWith(prefix)) {
-                return deploymentName.substring(prefix.length());
-            }
-        }
-        return deploymentName;
-    }
-
-    private String encodePathSegment(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private Map<?, ?> yamlMap(String content) throws IOException {

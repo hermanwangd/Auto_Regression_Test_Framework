@@ -54,7 +54,7 @@ For a remote NATS broker, use `env://NATS_CONNECTION` (or `env://NATS_SERVER`) w
 
 ## Compatibility readiness probes
 
-The operator supplies the remote targets outside the RP package. Kubernetes API probes accept `env://K8S_API_SERVER` as the origin. To send a bearer credential, use an HTTPS origin and `env://K8S_BEARER_TOKEN`. HTTP readiness uses `env://VM_HEALTH_URL` for the complete remote URL. For TCP readiness set `VM_TCP_ENDPOINT` to `tcp://host:port` matching the requested destination. Numeric loopback remains available for local probes without bearer credentials.
+The operator supplies the remote targets outside the RP package. Kubernetes API probes accept `env://K8S_API_SERVER` as the origin. Supply `namespace_ref` as a Kubernetes namespace name or `env://K8S_NAMESPACE`. Supply `deployment_ref` as a Deployment name or `env://K8S_DEPLOYMENT`. Deployment names may use the `deploy/`, `deployment/`, or `deployments/` prefix. Treat both name bindings as public identifiers because they appear in the API request path. To send a bearer credential, use an HTTPS origin and `env://K8S_BEARER_TOKEN`. HTTP readiness uses `env://VM_HEALTH_URL` for the complete remote URL. For TCP readiness set `VM_TCP_ENDPOINT` to `tcp://host:port` matching the requested destination. Numeric loopback remains available for local probes without bearer credentials.
 
 ## REST Endpoint
 

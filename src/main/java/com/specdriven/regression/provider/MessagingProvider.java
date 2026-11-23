@@ -51,9 +51,12 @@ public class MessagingProvider {
             providerType = stringValue(contract.get("provider_type"));
             actionName = firstStepAction(testCase);
             Map<?, ?> action = selectedAction(contract, actionName);
-            connectionRef = connectionRef(contract);
-            targetRef = targetRef(contract);
+            String transportConnection = connectionRef(contract);
+            String transportTarget = targetRef(contract);
             targetField = targetField(contract);
+            boolean nats = "nats".equalsIgnoreCase(providerType);
+            connectionRef = nats ? ProviderEndpoints.natsConnectionEvidenceRef(transportConnection) : transportConnection;
+            targetRef = nats ? ProviderEndpoints.natsTargetEvidenceRef(transportTarget, targetField) : transportTarget;
             mode = mode(action);
             correlationId = firstText(action, "correlation_id", "correlation_id_ref", "correlation_key");
             payloadBinding = firstText(action, "payload_binding", "message_binding", "event_binding");
@@ -102,8 +105,8 @@ public class MessagingProvider {
             MessagingTransportResult transportResult = transport.execute(new MessagingTransportRequest(
                     providerName,
                     providerType,
-                    connectionRef,
-                    targetRef,
+                    transportConnection,
+                    transportTarget,
                     targetField,
                     actionName,
                     mode,
@@ -113,7 +116,9 @@ public class MessagingProvider {
                     intValue(contract.get("timeout_seconds"), 300),
                     contract,
                     action));
-            Files.writeString(stdoutLog, transportResult.stdout());
+            String diagnostic = nats ? natsSuccessDiagnostic(mode, targetRef, transportResult.messageCount(),
+                    transportConnection.startsWith("mock://")) : transportResult.stdout();
+            Files.writeString(stdoutLog, diagnostic);
             Files.writeString(stderrLog, "");
             Files.writeString(actualOutput, transportResult.actualOutput());
             writeMessagingEvidence(
@@ -135,8 +140,13 @@ public class MessagingProvider {
             return new AdapterExecutionResult(0, false, stdoutLog, stderrLog, actualOutput);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            if ("nats".equalsIgnoreCase(providerType)) throw new IllegalStateException("NATS operation interrupted.");
             throw new IllegalStateException("Messaging provider interrupted.", e);
-        } catch (IOException e) {
+        } catch (IOException | IllegalArgumentException e) {
+            boolean nats = "nats".equalsIgnoreCase(providerType);
+            if (!nats && e instanceof IllegalArgumentException invalid) throw invalid;
+            String diagnostic = e.getMessage() == null ? "Failed to execute messaging provider." : e.getMessage();
+            if (nats) diagnostic = "NATS operation failed. Check the broker binding, subject and action settings.";
             try {
                 Files.createDirectories(stdoutLog.getParent());
                 Files.createDirectories(stderrLog.getParent());
@@ -156,11 +166,22 @@ public class MessagingProvider {
                         payloadBinding,
                         correlationId,
                         cleanupStrategy,
-                        e.getMessage() == null ? "Failed to execute messaging provider." : e.getMessage());
+                        diagnostic);
             } catch (IOException writeFailure) {
                 throw new UncheckedIOException("Failed to execute messaging provider.", writeFailure);
             }
         }
+    }
+
+    // NATS transport text can contain a resolved endpoint or an untrusted broker response.
+    private String natsSuccessDiagnostic(String mode, String target, int count, boolean mock) {
+        return switch (mode) {
+            case "publish" -> "published " + count + (mock ? " message to " : " native message to ") + target + "\n";
+            case "request", "request_reply" -> "requested " + count + " native reply from " + target + "\n";
+            case "consume", "observe" -> "observed " + count + " native messages from " + target + "\n";
+            case "cleanup" -> "cleaned " + count + " native messages from " + target + "\n";
+            default -> "NATS operation completed with " + count + " messages.\n";
+        };
     }
 
     private AdapterExecutionResult fail(
@@ -222,6 +243,10 @@ public class MessagingProvider {
         builder.append("status: ").append(status).append("\n");
         builder.append("provider: ").append(providerName).append("\n");
         builder.append("provider_type: ").append(providerType).append("\n");
+        if ("nats".equalsIgnoreCase(providerType)) {
+            connectionRef = ProviderEndpoints.yamlEvidenceRef(connectionRef);
+            targetRef = ProviderEndpoints.yamlEvidenceRef(targetRef);
+        }
         if (!connectionRef.isBlank()) {
             builder.append("connection_ref: ").append(connectionRef).append("\n");
         }
