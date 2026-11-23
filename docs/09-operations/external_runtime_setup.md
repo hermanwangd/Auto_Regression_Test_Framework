@@ -50,7 +50,7 @@ external systems for these samples.
 - Evidence: publish/observe metadata and result JSON.
 - Common failures: `NATS_CONNECTION_FAILED`, `MESSAGING_TIMEOUT`.
 
-For a remote NATS broker, use `env://NATS_CONNECTION` (or `env://NATS_SERVER`) with the complete broker URI supplied by the runner. Local test bindings accept numeric loopback. The reviewed NATS profile uses its existing pinned loopback binding.
+For a remote NATS broker, use `env://NATS_CONNECTION` (or `env://NATS_SERVER`) with the complete broker URI supplied by the runner. The native transport uses plaintext TCP. For a broker requiring credentials, configure a secure tunnel or TLS proxy on numeric loopback and supply its local URI through the runner environment. Direct remote bindings accept credential-free URIs. Local test bindings accept numeric loopback. The reviewed NATS profile uses its existing pinned loopback binding.
 
 ## Compatibility readiness probes
 

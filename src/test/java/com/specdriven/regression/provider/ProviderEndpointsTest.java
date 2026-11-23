@@ -23,4 +23,15 @@ class ProviderEndpointsTest {
         assertThatThrownBy(() -> ProviderEndpoints.nats(broker, broker, true))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+    @Test
+    void limitsPlaintextAuthenticationToOperatorBoundNumericLoopback() {
+        String binding = "env://NATS_CONNECTION";
+        assertThat(ProviderEndpoints.nats("nats://fixture@127.0.0.1:4222", binding, false).getHost())
+                .isEqualTo("127.0.0.1");
+        assertThatThrownBy(() -> ProviderEndpoints.nats("nats://fixture@example.invalid:4222", binding, false))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> ProviderEndpoints.nats("nats://fixture%09name@127.0.0.1:4222", binding, false))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
 }
