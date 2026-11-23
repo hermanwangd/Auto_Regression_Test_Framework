@@ -8,6 +8,7 @@ This policy defines which provider dependencies may be bundled in the public fra
 - Oracle and DB2 vendor JDBC drivers are not bundled in public release assets.
 - Vendor JDBC drivers must be supplied through `--driver-path`, `--driver-dir`, `REGRESS_DRIVER_PATH`, `usage-kit/drivers/`, or an approved internal provider pack.
 - Kafka, IBM MQ, NATS, REST, SOAP, gRPC, and JDBC external endpoints are owner/project-provisioned runtime dependencies unless a future framework slice explicitly adds provisioning.
+- The dependency scan gates numeric CVSS at its configured threshold (default 4). For a finding with only a severity label, it reports the missing score and blocks if the lower bound of that severity band meets the threshold. Unknown ratings are reported for review.
 - Dependency-Check suppressions require owner, reason, affected provider surface, expiry, and upgrade plan.
 - Future v0.3 may split provider packs. v0.2.7 remains a single framework jar with external driver loading for Oracle/DB2 JDBC.
 

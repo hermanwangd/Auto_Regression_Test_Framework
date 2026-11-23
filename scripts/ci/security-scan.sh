@@ -55,33 +55,7 @@ threshold = float(sys.argv[2])
 with open(report_path, "r", encoding="utf-8") as handle:
     report = json.load(handle)
 
-accepted_wiremock_dompurify = {
-    "CVE-2025-15599",
-    "CVE-2025-26791",
-    "CVE-2026-0540",
-    "CVE-2026-41238",
-    "CVE-2026-41239",
-    "CVE-2026-41240",
-    "CVE-2026-49458",
-    "CVE-2026-49459",
-    "CVE-2026-49978",
-    "GHSA-39q2-94rc-95cp",
-    "GHSA-76mc-f452-cxcm",
-    "GHSA-cj63-jhhr-wcxv",
-    "GHSA-cjmm-f4jc-qw8r",
-    "GHSA-cmwh-pvxp-8882",
-    "GHSA-h8r8-wccr-v5f2",
-    "GHSA-gvmj-g25r-r7wr",
-    "GHSA-vxr8-fq34-vvx9",
-    "GHSA-x4vx-rjvf-j5p4",
-}
 accepted_findings_by_package = {
-    "pkg:maven/org.apache.commons/commons-lang3@3.17.0": {"CVE-2025-48924"},
-    "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.22.0": {"CVE-2026-54515"},
-    "pkg:maven/org.wiremock/wiremock-httpclient-apache5@4.0.0-beta.38": {
-        "CVE-2014-3577",
-        "CVE-2020-13956",
-    },
     "pkg:maven/org.wiremock/wiremock-grpc-extension@1.0.0-beta.5": {
         "CVE-2018-9116",
         "CVE-2018-9117",
@@ -99,9 +73,6 @@ accepted_findings_by_package = {
     },
 }
 accepted_findings_by_file_name = {
-    "commons-lang3-3.17.0.jar": {"CVE-2025-48924"},
-    "jackson-databind-2.22.0.jar": {"CVE-2026-54515"},
-    "wiremock-httpclient-apache5-4.0.0-beta.38.jar": {"CVE-2014-3577", "CVE-2020-13956"},
     "wiremock-grpc-extension-1.0.0-beta.5.jar": {
         "CVE-2018-9116",
         "CVE-2018-9117",
@@ -133,7 +104,6 @@ def dependency_package_ids(dependency):
 def is_accepted_finding(dependency, vulnerability):
     name = vulnerability.get("name") or vulnerability.get("source") or ""
     file_name = str(dependency.get("fileName") or "").lower()
-    file_path = str(dependency.get("filePath") or "").lower()
     package_ids = dependency_package_ids(dependency)
 
     if name in accepted_findings_by_file_name.get(file_name, set()):
@@ -143,29 +113,34 @@ def is_accepted_finding(dependency, vulnerability):
         if name in accepted_findings_by_package.get(package_id, set()):
             return True
 
-    if name in accepted_wiremock_dompurify:
-        return (
-            "pkg:javascript/dompurify@3.1.4" in package_ids
-            or ("swagger-ui" in file_path and "wiremock-4.0.0-beta.38" in file_path)
-            or ("swagger-ui" in file_name and "wiremock" in file_path)
-        )
-
     return False
 
 
 findings = []
 accepted_findings = []
+unscored_findings = []
+# Qualitative bands are used only when the source supplies no numeric CVSS.
+severity_floors = {"LOW": 0.1, "MEDIUM": 4.0, "HIGH": 7.0, "CRITICAL": 9.0}
 for dependency in report.get("dependencies", []):
     file_name = dependency.get("fileName") or dependency.get("filePath") or "unknown-dependency"
     for vulnerability in dependency.get("vulnerabilities", []) or []:
         scores = []
-        for key in ("cvssv4", "cvssv3", "cvssv2"):
+        for key, field in (("cvssv4", "baseScore"), ("cvssv3", "baseScore"),
+                           ("cvssv2", "score"), ("cvssv2", "baseScore")):
             value = vulnerability.get(key)
-            if isinstance(value, dict) and isinstance(value.get("baseScore"), (int, float)):
-                scores.append(float(value["baseScore"]))
+            if isinstance(value, dict) and isinstance(value.get(field), (int, float)):
+                scores.append(float(value[field]))
         if isinstance(vulnerability.get("cvssScore"), (int, float)):
             scores.append(float(vulnerability["cvssScore"]))
-        score = max(scores) if scores else 0.0
+        if not scores:
+            severity = str(vulnerability.get("severity") or "UNKNOWN").upper()
+            floor = severity_floors.get(severity, 0.0)
+            unscored_findings.append((
+                file_name, vulnerability.get("name") or "unknown-vulnerability",
+                severity, floor >= threshold,
+            ))
+            continue
+        score = max(scores)
         if score >= threshold:
             if is_accepted_finding(dependency, vulnerability):
                 accepted_findings.append({
@@ -202,7 +177,14 @@ for item in findings[:10]:
 if len(findings) > 10:
     print(f"- ... {len(findings) - 10} more vulnerabilities above threshold")
 
-sys.exit(1 if findings else 0)
+unscored_blocking = sum(blocks for _, _, _, blocks in unscored_findings)
+print(f"unscored_vulnerability_count: {len(unscored_findings)}")
+print(f"unscored_blocking_vulnerability_count: {unscored_blocking}")
+for dependency, name, severity, blocks in sorted(unscored_findings):
+    disposition = "blocking" if blocks else "reported"
+    print(f"- {disposition}: {dependency} | {name} | severity={severity} | cvss=unscored")
+
+sys.exit(1 if findings or unscored_blocking else 0)
 PY
 }
 
