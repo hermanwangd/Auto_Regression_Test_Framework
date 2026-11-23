@@ -53,7 +53,8 @@ assert_not_contains() {
 }
 
 BASE_URL_FILE="$WORK_DIR/base_url"
-python3 - "$BASE_URL_FILE" <<'PY' &
+(
+exec python3 - "$BASE_URL_FILE" <<'PY'
 import json
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -123,6 +124,7 @@ with open(base_url_file, "w", encoding="utf-8") as handle:
     handle.write(f"http://127.0.0.1:{server.server_port}\n")
 server.serve_forever()
 PY
+) &
 SERVER_PID=$!
 
 for _ in $(seq 1 100); do

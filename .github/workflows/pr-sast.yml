@@ -1,0 +1,49 @@
+name: PR static security analysis
+
+on: pull_request
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-sast-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  sast:
+    name: SAST / new High or Critical
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SCANNER: semgrep/semgrep@sha256:6e1b04340e60e910fbb4ddbf3c857ab0918f064417ad5ac530014ccb3cf8c8f1
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Obtain exact upstream rule commits
+        shell: bash
+        run: |
+          set -euo pipefail
+          fetch_rules() {
+            local dir="$RUNNER_TEMP/$1" url="$2" revision="$3"
+            git init --quiet "$dir"
+            git -C "$dir" fetch --quiet --depth=1 "$url" "$revision"
+            test "$(git -C "$dir" rev-parse FETCH_HEAD)" = "$revision"
+            git -C "$dir" checkout --quiet --detach FETCH_HEAD
+          }
+          fetch_rules sast-gitlab https://gitlab.com/gitlab-org/security-products/sast-rules.git 83144bd2ec7d3200cda96347fa923f81c8ad8413
+          fetch_rules sast-community https://github.com/semgrep/semgrep-rules.git a5ad1714f00c9f7fde980cab0ea1d6dc6d414fd2
+          python3 scripts/ci/sast/policy.py prepare "$RUNNER_TEMP/sast-gitlab" "$RUNNER_TEMP/sast-community" "$RUNNER_TEMP/sast-rules"
+
+      - name: Check policy controls and scan PR changes
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          docker run --rm --network none --cpus=2 --memory=3g --cap-drop ALL \
+            --user "$(id -u):$(id -g)" -e HOME=/tmp -e PYTHONDONTWRITEBYTECODE=1 \
+            -e SEMGREP_SEND_METRICS=off -e SEMGREP_ENABLE_VERSION_CHECK=0 \
+            -e PR_BASE -v "$GITHUB_WORKSPACE:/src" -w /src \
+            -v "$RUNNER_TEMP/sast-rules:/rules:ro" --entrypoint /bin/bash "$SCANNER" \
+            -ec 'python3 -m unittest discover -s scripts/ci/sast -p test_policy.py && scripts/ci/sast/check-controls.sh && scripts/ci/sast/scan.sh "$PR_BASE" /rules'
