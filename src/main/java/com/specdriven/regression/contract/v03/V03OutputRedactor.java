@@ -30,8 +30,6 @@ public final class V03OutputRedactor {
     private static final Pattern RAW_ADDRESS = Pattern.compile("[^\\s,;]++");
     private static final Pattern AUTHORITY = Pattern.compile("[/／]{2}([^/\\s]++)");
 
-    private static final List<String> CREDENTIAL_NAMES = List.of("password", "token", "secret", "authorization",
-            "api_key", "apikey", "credential", "private_key", "privatekey");
     private static final Set<String> USER_INFO_SCHEMES = Set.of("http", "https", "grpc", "grpcs");
 
     public Map<String, Object> redact(V03ExecutionPlan plan, V03ExecutionStep step, Map<String, Object> outputs) {
@@ -123,7 +121,7 @@ public final class V03OutputRedactor {
                 }
                 lastSeparator = after;
             } else if (assignment.region(after, message.length()).lookingAt()
-                    && (CREDENTIAL_NAMES.stream().anyMatch(key::endsWith) || fields.paths().contains(key))) {
+                    && (SecurityFieldNames.endsWithCredentialLabel(key) || fields.paths().contains(key))) {
                 value = assignmentValue(message, assignment.end());
             } else if ("bearer".equals(key)) {
                 int token = matchEnd(SPACE, message, after);
@@ -241,7 +239,7 @@ public final class V03OutputRedactor {
             map.forEach((key, item) -> {
                 String name = String.valueOf(key);
                 String fieldPath = path.isBlank() ? name : path + "." + name;
-                result.put(name, sensitiveKey(name) || fields.paths().contains(SecurityFieldNames.canonical(fieldPath)) ? MASKED
+                result.put(name, SecurityFieldNames.isCredential(name) || fields.paths().contains(SecurityFieldNames.canonical(fieldPath)) ? MASKED
                         : redactEvidenceNested(item, fields, fieldPath));
             });
             return result;
@@ -254,7 +252,7 @@ public final class V03OutputRedactor {
     private Object redactNested(Object value) {
         if (value instanceof Map<?, ?> map) {
             Map<String, Object> result = new LinkedHashMap<>();
-            map.forEach((key, item) -> result.put(String.valueOf(key), sensitiveKey(String.valueOf(key)) ? MASKED : redactNested(item)));
+            map.forEach((key, item) -> result.put(String.valueOf(key), SecurityFieldNames.isCredential(String.valueOf(key)) ? MASKED : redactNested(item)));
             return result;
         }
         if (value instanceof List<?> list) {
@@ -264,10 +262,5 @@ public final class V03OutputRedactor {
         }
         if (value instanceof String text) return redactMessage(text);
         return value;
-    }
-
-    private boolean sensitiveKey(String key) {
-        String normalized = SecurityFieldNames.canonical(key);
-        return CREDENTIAL_NAMES.stream().anyMatch(normalized::contains);
     }
 }

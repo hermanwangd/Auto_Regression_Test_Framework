@@ -3641,7 +3641,7 @@ public class ContractBaselineService {
             return false;
         }
         return values.stream().allMatch(item -> item instanceof String text
-                && text.matches("(?i)[ \\t]*(?:close|keep-alive)[ \\t]*(?:,[ \\t]*(?:close|keep-alive)[ \\t]*)*"));
+                && text.matches("(?i)[ \\t]*+(?:close|keep-alive)[ \\t]*+(?:,[ \\t]*+(?:close|keep-alive)[ \\t]*+)*+"));
     }
 
     private boolean secretKey(String key) {

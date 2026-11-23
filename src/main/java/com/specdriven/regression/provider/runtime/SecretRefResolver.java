@@ -34,7 +34,7 @@ public final class SecretRefResolver {
             return ResolvedSecret.failed(ProviderFailure.of(
                     "SECRET_RESOLUTION_ERROR",
                     "SECRET_RESOLUTION_ERROR",
-                    providerLabel + " " + bindingPath + " env ref `" + secretRef + "` has an invalid environment variable name.",
+                    providerLabel + " " + bindingPath + " env ref has an invalid environment variable name.",
                     "Use env://<ENV_NAME> with uppercase letters, digits, and underscores, starting with a letter or underscore."));
         }
         String resolved = stringValue(environment.apply(envName));

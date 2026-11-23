@@ -927,7 +927,7 @@ public final class ProductTestHandoffService {
         String tail = ref.substring(7); int slash = tail.indexOf('/');
         if (slash <= 0) throw fail("unsupported_reference", "actual step output is malformed");
         String op = ops.get(tail.substring(0, slash)); String output = tail.substring(slash + 1);
-        boolean supported = "execute_sample".equals(op) && output.matches("actual_json(?:\\.[A-Za-z0-9_]+)*|actual_text")
+        boolean supported = "execute_sample".equals(op) && output.matches("actual_json(?:\\.[A-Za-z0-9_]++)*+|actual_text")
                 || "http_request".equals(op) && Set.of("response.status", "response.body", "response.headers", "response.duration_ms").contains(output)
                 || "run_command".equals(op) && Set.of("exit_code", "stdout", "stderr", "duration_ms").contains(output)
                 || "kafka_publish".equals(op) && Set.of("partition", "offset", "key", "topic").contains(output)

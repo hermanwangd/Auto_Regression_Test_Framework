@@ -10,6 +10,7 @@ import java.util.concurrent.*;
 
 /** Trusted already-checked-out roots only; source admission/materialization never executes tests. */
 public final class RunnerBundleService {
+    private static final java.util.regex.Pattern INCLUDE_SECTION_PREFIX = java.util.regex.Pattern.compile("(?i)\\[\\s*+include");
     private record Root(String repo,String sourceCommit,String checkoutCommit,Path path,String owner,boolean main){}
     private record Blob(Root root,String path,String commit,String digest,String artifactId,String role,String sourceId,byte[] bytes){}
     public static final class SourceBindings {
@@ -26,7 +27,9 @@ public final class RunnerBundleService {
     private static byte[] git(Path root,int limit,String...arguments)throws IOException{
         require(Files.isDirectory(root.resolve(".git"),LinkOption.NOFOLLOW_LINKS)&&!Files.isSymbolicLink(root.resolve(".git")),"trusted_checkout_dotgit_directory_required");
         byte[] config=RunnerFiles.read(root,".git/config",65536);String c=new String(config,java.nio.charset.StandardCharsets.UTF_8);
-        require(!c.matches("(?is).*\\[\\s*include(?:if)?[^]]*].*"),"git_config_includes_forbidden");
+        int lastSectionEnd = c.lastIndexOf(']');
+        require(lastSectionEnd < 0 || !INCLUDE_SECTION_PREFIX.matcher(c).region(0, lastSectionEnd).find(),
+                "git_config_includes_forbidden");
         require(!Files.exists(root.resolve(".git/objects/info/alternates"),LinkOption.NOFOLLOW_LINKS),"external_git_object_alternates_forbidden");
         List<String> command=new ArrayList<>(List.of("/usr/bin/git","--no-optional-locks","--no-replace-objects","-c","core.hooksPath=/dev/null","-c","protocol.allow=never","-C",root.toString()));command.addAll(List.of(arguments));
         ProcessBuilder builder=new ProcessBuilder(command);builder.environment().clear();builder.environment().putAll(Map.of("PATH","/usr/bin:/bin","LC_ALL","C","GIT_CONFIG_NOSYSTEM","1","GIT_CONFIG_GLOBAL","/dev/null","GIT_TERMINAL_PROMPT","0","GIT_LITERAL_PATHSPECS","1"));builder.redirectError(ProcessBuilder.Redirect.DISCARD);

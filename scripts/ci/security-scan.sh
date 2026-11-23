@@ -55,74 +55,15 @@ threshold = float(sys.argv[2])
 with open(report_path, "r", encoding="utf-8") as handle:
     report = json.load(handle)
 
-accepted_findings_by_package = {
-    "pkg:maven/org.wiremock/wiremock-grpc-extension@1.0.0-beta.5": {
-        "CVE-2018-9116",
-        "CVE-2018-9117",
-        "CVE-2023-41329",
-    },
-    "pkg:maven/org.wiremock/wiremock-grpc-extension-core@1.0.0-beta.5": {
-        "CVE-2018-9116",
-        "CVE-2018-9117",
-        "CVE-2023-41329",
-    },
-    "pkg:maven/org.wiremock/wiremock-grpc-extension-jetty@1.0.0-beta.5": {
-        "CVE-2018-9116",
-        "CVE-2018-9117",
-        "CVE-2023-41329",
-    },
-}
-accepted_findings_by_file_name = {
-    "wiremock-grpc-extension-1.0.0-beta.5.jar": {
-        "CVE-2018-9116",
-        "CVE-2018-9117",
-        "CVE-2023-41329",
-    },
-    "wiremock-grpc-extension-core-1.0.0-beta.5.jar": {
-        "CVE-2018-9116",
-        "CVE-2018-9117",
-        "CVE-2023-41329",
-    },
-    "wiremock-grpc-extension-jetty-1.0.0-beta.5.jar": {
-        "CVE-2018-9116",
-        "CVE-2018-9117",
-        "CVE-2023-41329",
-    },
-}
-
-
-def dependency_package_ids(dependency):
-    ids = []
-    for package in dependency.get("packages", []) or []:
-        if isinstance(package, dict):
-            value = package.get("id") or package.get("url")
-            if value:
-                ids.append(str(value).lower())
-    return ids
-
-
-def is_accepted_finding(dependency, vulnerability):
-    name = vulnerability.get("name") or vulnerability.get("source") or ""
-    file_name = str(dependency.get("fileName") or "").lower()
-    package_ids = dependency_package_ids(dependency)
-
-    if name in accepted_findings_by_file_name.get(file_name, set()):
-        return True
-
-    for package_id in package_ids:
-        if name in accepted_findings_by_package.get(package_id, set()):
-            return True
-
-    return False
-
-
 findings = []
-accepted_findings = []
+suppressed_findings = []
 unscored_findings = []
 # Qualitative bands are used only when the source supplies no numeric CVSS.
 severity_floors = {"LOW": 0.1, "MEDIUM": 4.0, "HIGH": 7.0, "CRITICAL": 9.0}
 for dependency in report.get("dependencies", []):
     file_name = dependency.get("fileName") or dependency.get("filePath") or "unknown-dependency"
+    for vulnerability in dependency.get("suppressedVulnerabilities", []) or []:
+        suppressed_findings.append((file_name, vulnerability.get("name") or "unknown-vulnerability"))
     for vulnerability in dependency.get("vulnerabilities", []) or []:
         scores = []
         for key, field in (("cvssv4", "baseScore"), ("cvssv3", "baseScore"),
@@ -142,13 +83,6 @@ for dependency in report.get("dependencies", []):
             continue
         score = max(scores)
         if score >= threshold:
-            if is_accepted_finding(dependency, vulnerability):
-                accepted_findings.append({
-                    "dependency": file_name,
-                    "name": vulnerability.get("name") or vulnerability.get("source") or "unknown-vulnerability",
-                    "score": score,
-                })
-                continue
             findings.append({
                 "dependency": file_name,
                 "name": vulnerability.get("name") or vulnerability.get("source") or "unknown-vulnerability",
@@ -157,18 +91,15 @@ for dependency in report.get("dependencies", []):
             })
 
 findings.sort(key=lambda item: (-item["score"], item["dependency"], item["name"]))
-accepted_findings.sort(key=lambda item: (-item["score"], item["dependency"], item["name"]))
+suppressed_findings.sort()
 
 print(f"medium_high_vulnerability_count: {len(findings)}")
 print(f"cvss_threshold: {threshold:g}")
-print(f"accepted_dependency_vulnerability_count: {len(accepted_findings)}")
-for item in accepted_findings[:10]:
-    print(
-        f"- accepted: {item['dependency']} | {item['name']} | "
-        f"cvss={item['score']:g}"
-    )
-if len(accepted_findings) > 10:
-    print(f"- accepted: ... {len(accepted_findings) - 10} more accepted findings")
+print(f"suppressed_dependency_vulnerability_count: {len(suppressed_findings)}")
+for dependency, name in suppressed_findings[:10]:
+    print(f"- suppressed: {dependency} | {name}")
+if len(suppressed_findings) > 10:
+    print(f"- ... {len(suppressed_findings) - 10} more suppressed findings")
 for item in findings[:10]:
     print(
         f"- {item['dependency']} | {item['name']} | "
@@ -238,6 +169,8 @@ if [[ -n "${NVD_API_KEY:-}" ]]; then
   ARGS+=("-DnvdApiKeyEnvironmentVariable=NVD_API_KEY")
 fi
 
+# An earlier scan may have applied suppressions that have since expired.
+rm -f -- target/dependency-check-report.json
 maven_exit_code=0
 MAVEN_OPTS="${MAVEN_OPTS:-"-Xmx1536m"}" ./mvnw "${ARGS[@]}" || maven_exit_code=$?
 

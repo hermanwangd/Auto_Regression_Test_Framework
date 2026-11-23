@@ -1,7 +1,5 @@
 package com.specdriven.regression.provider.grpc;
 
-import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
-
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.specdriven.regression.provider.runtime.ProviderEvidence;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
@@ -9,6 +7,8 @@ import com.specdriven.regression.provider.runtime.ProviderFailure;
 import com.specdriven.regression.provider.runtime.ProviderOperationRequest;
 import com.specdriven.regression.provider.runtime.ProviderOperationResult;
 import com.specdriven.regression.provider.runtime.ProviderRuntime;
+import com.specdriven.regression.provider.wiremock.ManagedWireMock;
+import com.specdriven.regression.provider.SuiteAssetReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
@@ -76,7 +76,7 @@ public class GrpcMockProviderRuntime implements ProviderRuntime {
             String service = parameterValue(request, "grpc.service", stringValue(context.bindingValues().get("service_name")));
             String method = parameterValue(request, "grpc.method", "");
             String requestJson = requestJson(context.suiteRoot(), parameterValue(request, "grpc.request_json", ""));
-            String responseJson = Files.readString(responsePath).strip();
+            String responseJson = SuiteAssetReader.read(context.suiteRoot(), responseRef, "Response fixture must stay under the suite root.").strip();
             String status = parameterValue(request, "grpc.status_code", "OK");
             postJson(adminBaseUrl + "/__admin/mappings", stubJson(service, method, requestJson, responseJson, status));
             write(context.runDir().resolve("provider-evidence/grpc/injected_stubs.yaml"), """
@@ -203,19 +203,15 @@ public class GrpcMockProviderRuntime implements ProviderRuntime {
                 context.suiteRoot(),
                 runtimeWorkDir.resolve("grpc"),
                 stringValue(context.bindingValues().get("descriptor_ref")));
-        String portStrategy = stringValue(context.bindingValues().get("port_strategy"));
-        if ("fixed".equals(portStrategy)) {
+        var config = ManagedWireMock.loopbackOptions().withRootDirectory(runtimeWorkDir.toString())
+                .extensions(new GrpcExtensionFactory());
+        if ("fixed".equals(context.bindingValues().get("port_strategy"))) {
             int port = intValue(context.bindingValues().getOrDefault("fixed_port", context.bindingValues().get("port")), 0);
-            server = new WireMockServer(options()
-                    .withRootDirectory(runtimeWorkDir.toString())
-                    .extensions(new GrpcExtensionFactory())
-                    .port(port));
+            config.port(port);
         } else {
-            server = new WireMockServer(options()
-                    .withRootDirectory(runtimeWorkDir.toString())
-                    .extensions(new GrpcExtensionFactory())
-                    .dynamicPort());
+            config.dynamicPort();
         }
+        server = new WireMockServer(config);
         server.start();
         targetUri = "localhost:" + server.port();
         adminBaseUrl = "http://localhost:" + server.port();
@@ -281,7 +277,7 @@ public class GrpcMockProviderRuntime implements ProviderRuntime {
         Path file = suiteRoot.resolve(refOrValue).normalize();
         if (Files.isRegularFile(file)) {
             try {
-                return Files.readString(file).strip();
+                return SuiteAssetReader.read(suiteRoot, refOrValue, "Request fixture must stay under the suite root.").strip();
             } catch (IOException e) {
                 throw new IllegalStateException("Unable to read gRPC request ref `" + refOrValue + "`.", e);
             }

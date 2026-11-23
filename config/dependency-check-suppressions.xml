@@ -18,85 +18,42 @@
         <cve>CVE-2014-3577</cve>
         <cve>CVE-2020-13956</cve>
     </suppress>
-    <suppress until="2026-10-01Z">
+    <suppress until="2027-02-23Z">
         <notes><![CDATA[
-        Dependency-Check maps WireMock gRPC extension artifacts 1.0.0-beta.5 to the old WireMock
-        product line affected by CVE-2018-9116. The framework uses WireMock core 4.0.0-beta.44;
-        CVE-2018-9116 applies to WireMock before 2.16.0. Re-evaluate when upgrading WireMock gRPC.
+        Owner: Framework maintainer. The grpc_mock provider bundles wiremock-grpc-extension-core
+        1.0.0-beta.5. Its 30 classes belong to org.wiremock.grpc and it has no nested JAR.
+        Dependency-Check assigns the extension the WireMock server CPE with version 1.0.0.5.
+        The 2018 CVEs affect the server before 2.16.0. The 2023 CVE was fixed in 2.35.1 and 3.0.3.
+        The published POM depends on wiremock-core 4.0.0-beta.26. The framework bundles
+        wiremock-core 4.0.0-beta.44 as a separate scanned JAR. Recheck this digest and
+        remove the rule on upgrade, on corrected detection, or by 2027-02-23.
+        https://repo.maven.apache.org/maven2/org/wiremock/wiremock-grpc-extension-core/1.0.0-beta.5/wiremock-grpc-extension-core-1.0.0-beta.5.pom
+        https://nvd.nist.gov/vuln/detail/CVE-2018-9116
+        https://nvd.nist.gov/vuln/detail/CVE-2018-9117
+        https://github.com/wiremock/wiremock/security/advisories/GHSA-pmxq-pj47-j8j4
         ]]></notes>
-        <gav regex="true">^org\.wiremock:wiremock-grpc-extension:1\.0\.0-beta\.5$</gav>
+        <sha1>334c03a646198a1463415764a6687e149c547a10</sha1>
         <cve>CVE-2018-9116</cve>
-    </suppress>
-    <suppress until="2026-10-01Z">
-        <notes><![CDATA[
-        Dependency-Check maps WireMock gRPC extension artifacts 1.0.0-beta.5 to the old WireMock
-        product line affected by CVE-2018-9116. The framework uses WireMock core 4.0.0-beta.44;
-        CVE-2018-9116 applies to WireMock before 2.16.0. Re-evaluate when upgrading WireMock gRPC.
-        ]]></notes>
-        <gav regex="true">^org\.wiremock:wiremock-grpc-extension-core:1\.0\.0-beta\.5$</gav>
-        <cve>CVE-2018-9116</cve>
-    </suppress>
-    <suppress until="2026-10-01Z">
-        <notes><![CDATA[
-        Dependency-Check maps WireMock gRPC extension artifacts 1.0.0-beta.5 to the old WireMock
-        product line affected by CVE-2018-9116. The framework uses WireMock core 4.0.0-beta.44;
-        CVE-2018-9116 applies to WireMock before 2.16.0. Re-evaluate when upgrading WireMock gRPC.
-        ]]></notes>
-        <gav regex="true">^org\.wiremock:wiremock-grpc-extension-jetty:1\.0\.0-beta\.5$</gav>
-        <cve>CVE-2018-9116</cve>
-    </suppress>
-    <suppress until="2026-10-01Z">
-        <notes><![CDATA[
-        WireMock gRPC extension is used only for framework-verification local/CI mock
-        samples. It is not a downstream product runtime surface. Re-evaluate with the next
-        WireMock gRPC extension upgrade.
-        ]]></notes>
-        <gav regex="true">^org\.wiremock:wiremock-grpc-extension:1\.0\.0-beta\.5$</gav>
         <cve>CVE-2018-9117</cve>
-    </suppress>
-    <suppress until="2026-10-01Z">
-        <notes><![CDATA[
-        WireMock gRPC extension is used only for framework-verification local/CI mock
-        samples. It is not a downstream product runtime surface. Re-evaluate with the next
-        WireMock gRPC extension upgrade.
-        ]]></notes>
-        <gav regex="true">^org\.wiremock:wiremock-grpc-extension:1\.0\.0-beta\.5$</gav>
         <cve>CVE-2023-41329</cve>
     </suppress>
-    <suppress until="2026-10-01Z">
+    <suppress until="2027-02-23Z">
         <notes><![CDATA[
-        WireMock gRPC extension core is used only for framework-verification local/CI mock
-        samples. It is not a downstream product runtime surface. Re-evaluate with the next
-        WireMock gRPC extension upgrade.
+        Owner: Framework maintainer. The grpc_mock provider bundles wiremock-grpc-extension-jetty
+        1.0.0-beta.5. Its 5 classes belong to org.wiremock.grpc and it has no nested JAR.
+        Dependency-Check assigns the extension the WireMock server CPE with version 1.0.0.5.
+        The 2018 CVEs affect the server before 2.16.0. The 2023 CVE was fixed in 2.35.1 and 3.0.3.
+        The published POM depends on wiremock-core 4.0.0-beta.26. The framework bundles
+        wiremock-core 4.0.0-beta.44 as a separate scanned JAR. Recheck this digest and
+        remove the rule on upgrade, on corrected detection, or by 2027-02-23.
+        https://repo.maven.apache.org/maven2/org/wiremock/wiremock-grpc-extension-jetty/1.0.0-beta.5/wiremock-grpc-extension-jetty-1.0.0-beta.5.pom
+        https://nvd.nist.gov/vuln/detail/CVE-2018-9116
+        https://nvd.nist.gov/vuln/detail/CVE-2018-9117
+        https://github.com/wiremock/wiremock/security/advisories/GHSA-pmxq-pj47-j8j4
         ]]></notes>
-        <gav regex="true">^org\.wiremock:wiremock-grpc-extension-core:1\.0\.0-beta\.5$</gav>
+        <sha1>a0b8787a3a87061a084e84f8d6d5f2d975582727</sha1>
+        <cve>CVE-2018-9116</cve>
         <cve>CVE-2018-9117</cve>
-    </suppress>
-    <suppress until="2026-10-01Z">
-        <notes><![CDATA[
-        WireMock gRPC extension core is used only for framework-verification local/CI mock
-        samples. It is not a downstream product runtime surface. Re-evaluate with the next
-        WireMock gRPC extension upgrade.
-        ]]></notes>
-        <gav regex="true">^org\.wiremock:wiremock-grpc-extension-core:1\.0\.0-beta\.5$</gav>
-        <cve>CVE-2023-41329</cve>
-    </suppress>
-    <suppress until="2026-10-01Z">
-        <notes><![CDATA[
-        WireMock gRPC extension Jetty helper is used only for framework-verification local/CI
-        mock samples. It is not a downstream product runtime surface. Re-evaluate with the
-        next WireMock gRPC extension upgrade.
-        ]]></notes>
-        <gav regex="true">^org\.wiremock:wiremock-grpc-extension-jetty:1\.0\.0-beta\.5$</gav>
-        <cve>CVE-2018-9117</cve>
-    </suppress>
-    <suppress until="2026-10-01Z">
-        <notes><![CDATA[
-        WireMock gRPC extension Jetty helper is used only for framework-verification local/CI
-        mock samples. It is not a downstream product runtime surface. Re-evaluate with the
-        next WireMock gRPC extension upgrade.
-        ]]></notes>
-        <gav regex="true">^org\.wiremock:wiremock-grpc-extension-jetty:1\.0\.0-beta\.5$</gav>
         <cve>CVE-2023-41329</cve>
     </suppress>
 </suppressions>

@@ -1,5 +1,9 @@
 package com.specdriven.regression.provider.jdbc;
 
+import com.specdriven.regression.contract.SecurityFieldNames;
+import com.specdriven.regression.contract.v03.V03OutputRedactor;
+import com.specdriven.regression.provider.ProviderDataYaml;
+import com.specdriven.regression.provider.SuiteAssetReader;
 import com.specdriven.regression.provider.runtime.ProviderEvidence;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderFailure;
@@ -21,7 +25,6 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -33,13 +36,15 @@ import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.error.YAMLException;
 
 public class JdbcProviderRuntime implements ProviderRuntime {
 
     private static final Set<String> SUPPORTED_DIALECTS = Set.of("oracle", "db2");
     private static final Pattern NAMED_PARAM = Pattern.compile(":([A-Za-z][A-Za-z0-9_]*)");
 
-    private final Yaml yaml = new Yaml();
+    private final Yaml yaml = ProviderDataYaml.create();
+    private final V03OutputRedactor redactor = new V03OutputRedactor();
     private final Function<String, String> environment;
     private final JdbcDriverDiscovery.DiscoveryResult driverDiscovery;
     private final JdbcDriverLoader driverLoader;
@@ -84,11 +89,11 @@ public class JdbcProviderRuntime implements ProviderRuntime {
                     "JDBC dialect `" + dialect + "` is not supported by PR-004.",
                     "Use JDBC dialect `oracle` or `db2`.");
         }
-        SecretConnection connection = resolveConnection(context, dialect);
-        if (connection.failure() != null) {
-            return failed(context, request, Map.of(), connection.failure());
-        }
         try {
+            SecretConnection connection = resolveConnection(context, dialect);
+            if (connection.failure() != null) {
+                return failed(context, request, Map.of(), connection.failure());
+            }
             return switch (request.operation()) {
                 case "db_seed" -> executeUpdate(context, request, connection, "sql_ref", "seed", "seed_evidence_ref");
                 case "db_cleanup" -> executeUpdate(context, request, connection, "sql_ref", "cleanup", "cleanup_evidence_ref");
@@ -103,15 +108,17 @@ public class JdbcProviderRuntime implements ProviderRuntime {
                         "JDBC operation `" + request.operation() + "` is not supported.",
                         "Use db_seed, db_cleanup, db_query, or db_record_exists.");
             };
-        } catch (RuntimeException e) {
+        } catch (JdbcRuntimeFailure e) {
+            return failed(context, request, Map.of(), e.failure());
+        } catch (RuntimeException ignored) {
             return failed(
                     context,
                     request,
                     Map.of(),
                     "OPERATION_FAILED",
                     classificationFor(request.operation()),
-                    maskSensitiveText(e.getMessage()),
-                    "Review JDBC provider evidence and SQL refs.");
+                    "JDBC provider could not complete the operation.",
+                    "Review the JDBC driver, checked-in SQL and parameter refs, and expected row counts.");
         }
     }
 
@@ -179,8 +186,8 @@ public class JdbcProviderRuntime implements ProviderRuntime {
                     Map.of(evidenceOutputName, evidenceRef),
                     List.of(new ProviderEvidence(evidenceKind + "_evidence", evidenceRef, true)),
                     e.failure());
-        } catch (SQLException e) {
-            ProviderFailure failure = failureForSqlException(request.operation(), e);
+        } catch (SQLException ignored) {
+            ProviderFailure failure = failureForSqlException(request.operation());
             long durationMs = Duration.between(startedAt, Instant.now()).toMillis();
             String evidenceRef = writeUpdateEvidence(
                     context,
@@ -245,7 +252,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
                 outputs.put("matched", matched);
             }
             outputs.put("row_count", rowCount);
-            outputs.put("sample_rows", maskRows(sampleRows));
+            outputs.put("sample_rows", sampleRows.stream().map(row -> maskFields(row, false)).toList());
             outputs.put("duration_ms", durationMs);
             outputs.put("query_evidence_ref", evidenceRef);
             if (matched) {
@@ -272,8 +279,8 @@ public class JdbcProviderRuntime implements ProviderRuntime {
                     Map.of("query_evidence_ref", evidenceRef),
                     List.of(new ProviderEvidence("query_evidence", evidenceRef, true)),
                     e.failure());
-        } catch (SQLException e) {
-            ProviderFailure failure = failureForSqlException(request.operation(), e);
+        } catch (SQLException ignored) {
+            ProviderFailure failure = failureForSqlException(request.operation());
             long durationMs = Duration.between(startedAt, Instant.now()).toMillis();
             String evidenceRef = writeQueryEvidence(
                     context,
@@ -297,11 +304,11 @@ public class JdbcProviderRuntime implements ProviderRuntime {
                 return DriverManager.getConnection(secretConnection.jdbcUrl());
             }
             return DriverManager.getConnection(secretConnection.jdbcUrl(), secretConnection.username(), secretConnection.password());
-        } catch (SQLException exception) {
+        } catch (SQLException ignored) {
             throw new JdbcRuntimeFailure(ProviderFailure.of(
                     "DB_CONNECTION_FAILED",
                     "CONFIGURATION_ERROR",
-                    maskSensitiveText(exception.getMessage()),
+                    "JDBC driver could not open the configured connection.",
                     "Verify the JDBC connection secret_ref, vendor driver, endpoint, and network access."));
         }
     }
@@ -313,7 +320,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
                 return SecretConnection.failed(ProviderFailure.of(
                         "SECRET_RESOLUTION_ERROR",
                         "SECRET_RESOLUTION_ERROR",
-                        "JDBC connection.local_ref `" + localRef + "` is not approved for local provider capability runtime.",
+                        "JDBC connection.local_ref is not approved for local provider capability runtime.",
                         "Use approved_local_h2_oracle or approved_local_h2_db2."));
             }
             return localH2Connection(context, dialect);
@@ -383,18 +390,25 @@ public class JdbcProviderRuntime implements ProviderRuntime {
             if (!bindAs.startsWith("params.")) {
                 continue;
             }
-            values.put(bindAs.substring("params.".length()), resolveValue(context.suiteRoot(), stringValue(parameter.get("ref"))));
+            try {
+                Object value = resolveValue(context.suiteRoot(), stringValue(parameter.get("ref")));
+                values.put(bindAs.substring("params.".length()), value);
+            } catch (IOException | IllegalArgumentException | YAMLException ignored) {
+                throw new JdbcRuntimeFailure(ProviderFailure.of("OPERATION_FAILED", classificationFor(request.operation()),
+                        "JDBC parameter data ref could not be read as a suite data document.",
+                        "Use a readable YAML or JSON parameter ref under the suite root."));
+            }
         }
         return values;
     }
 
-    private Object resolveValue(Path suiteRoot, String ref) {
+    private Object resolveValue(Path suiteRoot, String ref) throws IOException {
         if (!ref.contains("#")) {
             return ref;
         }
         String[] parts = ref.split("#", 2);
-        Object loaded = readYaml(suiteRoot.resolve(parts[0]).normalize());
-        Object current = loaded;
+        String document = SuiteAssetReader.read(suiteRoot, parts[0], "JDBC parameter ref must stay under the suite root.");
+        Object current = yaml.load(document);
         String pointer = parts[1].startsWith("/") ? parts[1].substring(1) : parts[1];
         for (String part : pointer.split("/")) {
             if (part.isBlank()) {
@@ -530,15 +544,13 @@ public class JdbcProviderRuntime implements ProviderRuntime {
             id = evidenceKind;
         }
         String evidenceRef = "provider-evidence/jdbc/" + evidenceKind + "_" + safe(id) + ".yaml";
-        StringBuilder content = new StringBuilder();
-        content.append("evidence_type: ").append(evidenceKind).append("_evidence\n");
-        appendEvidenceHeader(content, context);
-        content.append("sql_ref: ").append(sqlRef).append('\n');
-        appendMaskedParams(content, params);
-        content.append("affected_rows: ").append(affectedRows).append('\n');
-        content.append("duration_ms: ").append(durationMs).append('\n');
-        appendStatus(content, failure);
-        write(context.runDir().resolve(evidenceRef), content.toString());
+        Map<String, Object> evidence = evidenceHeader(context, evidenceKind + "_evidence");
+        evidence.put("sql_ref", redactor.redactMessage(sqlRef));
+        evidence.put("masked_params", maskFields(params, true));
+        evidence.put("affected_rows", affectedRows);
+        evidence.put("duration_ms", durationMs);
+        evidence.put("status", failure == null ? "passed" : "failed");
+        writeEvidence(context.runDir().resolve(evidenceRef), evidence, failure);
         return evidenceRef;
     }
 
@@ -556,82 +568,47 @@ public class JdbcProviderRuntime implements ProviderRuntime {
             id = "query";
         }
         String evidenceRef = "provider-evidence/jdbc/query_" + safe(id) + ".yaml";
-        StringBuilder content = new StringBuilder();
-        content.append("evidence_type: query_evidence\n");
-        appendEvidenceHeader(content, context);
-        content.append("query_ref: ").append(queryRef).append('\n');
-        appendMaskedParams(content, params);
-        content.append("row_count: ").append(rowCount).append('\n');
-        content.append("duration_ms: ").append(durationMs).append('\n');
-        content.append("masked_sample_result:\n");
-        for (Map<String, Object> row : maskRows(sampleRows)) {
-            content.append("  -");
-            if (row.isEmpty()) {
-                content.append(" {}\n");
-                continue;
-            }
-            content.append('\n');
-            for (Map.Entry<String, Object> entry : row.entrySet()) {
-                content.append("      ").append(entry.getKey()).append(": ").append(entry.getValue()).append('\n');
-            }
-        }
-        appendStatus(content, failure);
-        write(context.runDir().resolve(evidenceRef), content.toString());
+        Map<String, Object> evidence = evidenceHeader(context, "query_evidence");
+        evidence.put("query_ref", redactor.redactMessage(queryRef));
+        evidence.put("masked_params", maskFields(params, true));
+        evidence.put("row_count", rowCount);
+        evidence.put("duration_ms", durationMs);
+        evidence.put("masked_sample_result", sampleRows.stream().map(row -> maskFields(row, true)).toList());
+        evidence.put("status", failure == null ? "passed" : "failed");
+        writeEvidence(context.runDir().resolve(evidenceRef), evidence, failure);
         return evidenceRef;
     }
 
-    private void appendEvidenceHeader(StringBuilder content, ProviderExecutionContext context) {
-        content.append("evidence_classification: ").append(evidenceClassification(context)).append('\n');
-        content.append("downstream_release_evidence: false\n");
-        content.append("provider_type: ").append(context.providerType()).append('\n');
-        content.append("provider_id: ").append(context.providerId()).append('\n');
-        content.append("profile: ").append(context.profile()).append('\n');
-        content.append("runtime_mode: ").append(context.runtimeMode()).append('\n');
-        content.append("dialect: ").append(normalizedDialect(context)).append('\n');
+    private Map<String, Object> evidenceHeader(ProviderExecutionContext context, String type) {
+        Map<String, Object> evidence = new LinkedHashMap<>();
+        evidence.put("evidence_type", type);
+        evidence.put("evidence_classification", redactor.redactMessage(evidenceClassification(context)));
+        evidence.put("downstream_release_evidence", false);
+        evidence.put("provider_type", redactor.redactMessage(context.providerType()));
+        evidence.put("provider_id", redactor.redactMessage(context.providerId()));
+        evidence.put("profile", redactor.redactMessage(context.profile()));
+        evidence.put("runtime_mode", redactor.redactMessage(context.runtimeMode()));
+        evidence.put("dialect", redactor.redactMessage(normalizedDialect(context)));
+        return evidence;
     }
 
-    private void appendMaskedParams(StringBuilder content, Map<String, Object> params) {
-        content.append("masked_params:\n");
-        if (params.isEmpty()) {
-            content.append("  {}\n");
-            return;
-        }
-        for (Map.Entry<String, Object> entry : params.entrySet()) {
-            content.append("  ").append(entry.getKey()).append(": ").append(mask(entry.getKey(), entry.getValue())).append('\n');
-        }
+    private Map<String, Object> maskFields(Map<?, ?> fields, boolean forEvidence) {
+        Map<String, Object> masked = new LinkedHashMap<>();
+        fields.forEach((key, value) -> {
+            String label = String.valueOf(key);
+            boolean sensitive = SecurityFieldNames.isCredential(label) || "connection".equals(SecurityFieldNames.canonical(label));
+            masked.put(label, sensitive ? "***" : maskValue(value, forEvidence));
+        });
+        return masked;
     }
 
-    private void appendStatus(StringBuilder content, ProviderFailure failure) {
-        content.append("status: ").append(failure == null ? "passed" : "failed").append('\n');
-        if (failure != null) {
-            content.append("failure_code: ").append(failure.code()).append('\n');
-            content.append("classification: ").append(failure.classification()).append('\n');
-            content.append("reason: ").append(failure.reason()).append('\n');
-            content.append("owner_action: ").append(failure.ownerAction()).append('\n');
-        }
-        content.append("masking:\n  raw_secret_found: false\n");
-    }
-
-    private List<Map<String, Object>> maskRows(List<Map<String, Object>> rows) {
-        List<Map<String, Object>> masked = new ArrayList<>();
-        for (Map<String, Object> row : rows) {
-            Map<String, Object> maskedRow = new LinkedHashMap<>();
-            for (Map.Entry<String, Object> entry : row.entrySet()) {
-                maskedRow.put(entry.getKey(), mask(entry.getKey(), entry.getValue()));
-            }
-            masked.add(maskedRow);
-        }
-        return List.copyOf(masked);
-    }
-
-    private Object mask(String key, Object value) {
-        String normalized = key.toLowerCase(Locale.ROOT);
-        if (normalized.contains("password")
-                || normalized.contains("secret")
-                || normalized.contains("token")
-                || normalized.contains("credential")
-                || normalized.contains("authorization")) {
-            return "***";
+    private Object maskValue(Object value, boolean forEvidence) {
+        if (value instanceof Map<?, ?> fields) return maskFields(fields, forEvidence);
+        if (value instanceof List<?> list) return list.stream().map(item -> maskValue(item, forEvidence)).toList();
+        if (value instanceof String text) return redactor.redactMessage(text);
+        // Do not let the YAML serializer inspect vendor-specific JDBC objects.
+        if (forEvidence && value != null && !(value instanceof Number) && !(value instanceof Boolean)) {
+            return redactor.redactMessage(String.valueOf(value));
         }
         return value;
     }
@@ -664,24 +641,13 @@ public class JdbcProviderRuntime implements ProviderRuntime {
                 failure);
     }
 
-    private ProviderFailure failureForSqlException(String operation, SQLException e) {
-        String code = switch (operation) {
-            case "db_cleanup" -> "DB_CLEANUP_FAILED";
-            case "db_seed" -> "DB_EXECUTION_FAILED";
-            default -> "DB_QUERY_FAILED";
-        };
+    private ProviderFailure failureForSqlException(String operation) {
+        String code = classificationFor(operation);
         return ProviderFailure.of(
                 code,
-                classificationFor(operation),
-                maskSensitiveText(e.getMessage()),
+                code,
+                "JDBC driver could not complete the SQL operation.",
                 "Review JDBC SQL ref, params, dialect, and connection secret_ref.");
-    }
-
-    private String maskSensitiveText(String text) {
-        if (text == null) {
-            return "";
-        }
-        return text.replaceAll("jdbc:[^\\s\\\"]+", "jdbc:***");
     }
 
     private String classificationFor(String operation) {
@@ -703,16 +669,9 @@ public class JdbcProviderRuntime implements ProviderRuntime {
             id = request.operation().isBlank() ? "operation" : request.operation();
         }
         String evidenceRef = "provider-evidence/jdbc/failure_" + safe(id) + ".yaml";
-        StringBuilder content = new StringBuilder();
-        content.append("evidence_type: failure_detail\n");
-        appendEvidenceHeader(content, context);
-        content.append("operation: ").append(request.operation()).append('\n');
-        content.append("failure_code: ").append(failure.code()).append('\n');
-        content.append("classification: ").append(failure.classification()).append('\n');
-        content.append("reason: ").append(failure.reason()).append('\n');
-        content.append("owner_action: ").append(failure.ownerAction()).append('\n');
-        content.append("masking:\n  raw_secret_found: false\n");
-        write(context.runDir().resolve(evidenceRef), content.toString());
+        Map<String, Object> evidence = evidenceHeader(context, "failure_detail");
+        evidence.put("operation", redactor.redactMessage(request.operation()));
+        writeEvidence(context.runDir().resolve(evidenceRef), evidence, failure);
         return evidenceRef;
     }
 
@@ -737,27 +696,19 @@ public class JdbcProviderRuntime implements ProviderRuntime {
 
     private String readRef(Path suiteRoot, String ref, String operation, String missingCode) {
         try {
-            return SqlSource.read(suiteRoot, ref, "SQL ref must stay under the suite root: " + ref);
-        } catch (IllegalArgumentException error) {
+            return SqlSource.read(suiteRoot, ref, "SQL ref must stay under the suite root.");
+        } catch (IllegalArgumentException ignored) {
             throw new JdbcRuntimeFailure(ProviderFailure.of(missingCode, classificationFor(operation),
-                    error.getMessage(), "Use a checked-in SQL ref under the suite."));
+                    "Invalid SQL ref for this suite.", "Use a checked-in SQL ref under the suite."));
         } catch (java.nio.file.NoSuchFileException error) {
             throw new JdbcRuntimeFailure(ProviderFailure.of(missingCode, classificationFor(operation),
-                    "SQL ref not found: " + ref, "Restore the checked-in SQL ref."));
+                    "SQL ref not found: " + redactor.redactMessage(ref), "Restore the checked-in SQL ref."));
         } catch (IOException e) {
             throw new JdbcRuntimeFailure(ProviderFailure.of(
                     missingCode,
                     classificationFor(operation),
-                    "SQL ref could not be read: " + ref,
+                    "SQL ref could not be read: " + redactor.redactMessage(ref),
                     "Restore readable permissions for the checked-in SQL ref."));
-        }
-    }
-
-    private Object readYaml(Path path) {
-        try {
-            return yaml.load(Files.readString(path));
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read referenced data: " + path, e);
         }
     }
 
@@ -783,7 +734,15 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         return value.replaceAll("[^A-Za-z0-9._-]", "_");
     }
 
-    private void write(Path path, String content) {
+    private void writeEvidence(Path path, Map<String, Object> evidence, ProviderFailure failure) {
+        if (failure != null) {
+            evidence.put("failure_code", failure.code());
+            evidence.put("classification", failure.classification());
+            evidence.put("reason", failure.reason());
+            evidence.put("owner_action", failure.ownerAction());
+        }
+        evidence.put("masking", Map.of("raw_secret_found", false));
+        String content = yaml.dumpAsMap(evidence);
         try {
             Files.createDirectories(path.getParent());
             Files.writeString(path, content);

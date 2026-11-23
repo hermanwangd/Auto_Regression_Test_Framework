@@ -1,5 +1,6 @@
 package com.specdriven.regression.provider.kafka;
 
+import com.specdriven.regression.provider.ProviderDataYaml;
 import com.specdriven.regression.provider.runtime.ProviderEvidence;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderFailure;
@@ -38,7 +39,7 @@ public class KafkaProviderRuntime implements ProviderRuntime {
     private final Map<String, List<KafkaMessage>> messagesByBusTopic = new ConcurrentHashMap<>();
     private final AtomicLong offsetSequence = new AtomicLong();
     private final KafkaClientTransport kafkaClientTransport;
-    private final Yaml yaml = new Yaml();
+    private final Yaml yaml = ProviderDataYaml.create();
 
     public KafkaProviderRuntime() {
         this(new DefaultKafkaClientTransport());
@@ -854,7 +855,7 @@ public class KafkaProviderRuntime implements ProviderRuntime {
     }
 
     private static final class DefaultKafkaClientTransport implements KafkaClientTransport {
-        private final Yaml yaml = new Yaml();
+        private final Yaml yaml = ProviderDataYaml.create();
         @Override public ReviewedKafkaProducer.Outcome reviewedPublish(KafkaConnection connection,String key,String payload,Duration timeout){
             return ReviewedKafkaProducer.send(KafkaProducer::new,connection,key,payload,timeout,System::nanoTime);
         }

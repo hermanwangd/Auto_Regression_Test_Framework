@@ -4,6 +4,7 @@ import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.util.JsonFormat;
+import com.specdriven.regression.provider.SuiteAssetReader;
 import com.specdriven.regression.provider.runtime.ProviderEvidence;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderFailure;
@@ -307,7 +308,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
         Path file = suiteRoot.resolve(refOrValue).normalize();
         if (Files.isRegularFile(file)) {
             try {
-                return Files.readString(file).strip();
+                return SuiteAssetReader.read(suiteRoot, refOrValue, "Request fixture must stay under the suite root.").strip();
             } catch (IOException e) {
                 throw new IllegalStateException("Unable to read gRPC request body ref `" + refOrValue + "`.", e);
             }

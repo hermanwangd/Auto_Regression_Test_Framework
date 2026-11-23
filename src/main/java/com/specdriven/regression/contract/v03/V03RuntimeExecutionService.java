@@ -1,5 +1,6 @@
 package com.specdriven.regression.contract.v03;
 
+import com.specdriven.regression.provider.ProviderDataYaml;
 import com.specdriven.regression.contract.ContractBaselineService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -62,7 +63,7 @@ public class V03RuntimeExecutionService {
     private static final LocalFakeSitOwnership LOCAL_FAKE_OWNERSHIP = new LocalFakeSitOwnership();
     private final LocalFakeSitOwnership ownershipStore;
     private final InvocationRequirement invocationRequirement;
-    private final Yaml yaml = new Yaml();
+    private final Yaml yaml = ProviderDataYaml.create();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final V03ReferenceParser referenceParser = new V03ReferenceParser();
     private final V03ReferenceResolver referenceResolver = new V03ReferenceResolver(this::readYaml);

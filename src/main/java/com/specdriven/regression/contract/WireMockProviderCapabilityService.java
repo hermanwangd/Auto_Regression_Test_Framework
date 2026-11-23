@@ -234,7 +234,7 @@ public class WireMockProviderCapabilityService {
                     failure = executeResult.failure();
                 } else {
                     VerificationOutcome verification = verify(
-                            selection.testCase(),
+                            wireMockRuntime, selection.testCase(),
                             outputs,
                             selection.runDir(),
                             selection.suiteRoot(),
@@ -417,6 +417,7 @@ public class WireMockProviderCapabilityService {
     }
 
     private VerificationOutcome verify(
+            WireMockHttpMockProviderRuntime wireMockRuntime,
             Map<String, Object> testCase,
             Map<String, Object> outputs,
             Path runDir,
@@ -437,10 +438,9 @@ public class WireMockProviderCapabilityService {
                 checkPassed = actual == expected;
                 writeAssertion(runDir, id, type, checkPassed, "actual_count: " + actual + "\nexpected_count: " + expected);
             } else if ("http_mock_request_body_match".equals(type)) {
-                Path expected = suiteRoot.resolve(stringValue(verify.get("expected_ref"))).normalize();
-                Path requestJournal = runDir.resolve(stringValue(outputs.get("request_journal"))).normalize();
-                checkPassed = requestBodyMatches(requestJournal, expected);
-                writeAssertion(runDir, id, type, checkPassed, "expected_ref: " + expected);
+                String expectedRef = stringValue(verify.get("expected_ref"));
+                checkPassed = wireMockRuntime.observedRequestBodyMatches(suiteRoot, expectedRef);
+                writeAssertion(runDir, id, type, checkPassed, "expected_ref: " + yaml.dump(expectedRef).stripTrailing());
                 if (!checkPassed) {
                     writeFailureDetailIfMissing(runDir, providerId, providerType, ProviderFailure.of(
                             "ASSERTION_FAILED",
@@ -457,26 +457,6 @@ public class WireMockProviderCapabilityService {
             passed = passed && checkPassed;
         }
         return new VerificationOutcome(passed, List.copyOf(verifyResults), List.copyOf(evidenceRefs));
-    }
-
-    private boolean requestBodyMatches(Path requestJournal, Path expectedRequest) {
-        Map<String, Object> expected = readMap(expectedRequest);
-        String expectedPath = stringValue(expected.get("path"));
-        String expectedMethod = stringValue(expected.get("method"));
-        Map<String, Object> expectedBody = mapValue(expected.get("body"));
-        Map<String, Object> journal = readMap(requestJournal);
-        for (Object requestValue : listValue(journal.get("requests"))) {
-            Map<String, Object> request = mapValue(mapValue(requestValue).get("request"));
-            if (!expectedPath.equals(stringValue(request.get("url")))
-                    || !expectedMethod.equals(stringValue(request.get("method")))) {
-                continue;
-            }
-            Map<String, Object> actualBody = readJsonText(stringValue(request.get("body")));
-            if (expectedBody.equals(actualBody)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private SelectedOperation setupOperation(Map<String, Object> testCase, String targetName) {
@@ -833,15 +813,6 @@ public class WireMockProviderCapabilityService {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read WireMock capability artifact: " + path, e);
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> readJsonText(String json) {
-        Object loaded = yaml.load(json);
-        if (loaded instanceof Map<?, ?> map) {
-            return (Map<String, Object>) map;
-        }
-        return Map.of();
     }
 
     @SuppressWarnings("unchecked")
