@@ -7,12 +7,17 @@ git merge-base --is-ancestor "$base" HEAD
 
 scratch=$(mktemp -d)
 trap 'rm -rf -- "$scratch"' EXIT
-git ls-files -z > "$scratch/tracked"
+# Pass explicit tracked targets so tests are checked too. With explicit paths,
+# Semgrep can otherwise parse unchanged files and report old parser diagnostics.
+git diff --name-only --diff-filter=ACMRT -z "$base" HEAD > "$scratch/changed"
 targets=()
 while IFS= read -r -d '' path; do
   if [[ -f "$path" && ! -L "$path" ]]; then targets+=("$path"); fi
-done < "$scratch/tracked"
-(( ${#targets[@]} > 0 )) || { echo 'No tracked files to scan' >&2; exit 2; }
+done < "$scratch/changed"
+if [[ ${#targets[@]} == 0 ]]; then
+  echo 'No added or changed regular files to scan.'
+  exit 0
+fi
 
 for family in gitlab community; do
   semgrep scan --baseline-commit "$base" --config "$rules/$family" \

@@ -73,23 +73,13 @@ def gate(paths):
         if not isinstance(findings, list) or not isinstance(errors, list):
             raise ValueError("Malformed scanner report")
         counts = Counter(severity(finding) for finding in findings)
-        # Semgrep cannot parse an unrendered Go template or every shell heredoc.
-        # Admit only these known path/type pairs, never rule errors or timeouts.
-        unexpected = []
-        for error in errors:
-            kind = error["type"]
-            kind = kind[0] if isinstance(kind, list) else kind
-            known = (error.get("path"), kind) in {
-                ("packaging/portable-runner/deployment/helm/framework-runner/templates/job.yaml", "Other syntax error"),
-                ("scripts/release/verify-wiremock-external-base-url.sh", "PartialParsing"),
-            }
-            if not known or error.get("level") != "warn":
-                unexpected.append(str(kind))
+        diagnostics = Counter(str(error["type"][0] if isinstance(error["type"], list) else error["type"])
+                              for error in errors)
         print(f"{path.name}: new Critical={counts['CRITICAL']}, High={counts['HIGH']}, "
               f"other={len(findings)-counts['CRITICAL']-counts['HIGH']}, diagnostics={len(errors)}")
-        if unexpected:
-            print("Incomplete scan:", dict(Counter(unexpected)), file=sys.stderr)
-        failed |= bool(unexpected or counts["CRITICAL"] or counts["HIGH"])
+        if diagnostics:
+            print("Incomplete scan:", dict(diagnostics), file=sys.stderr)
+        failed |= bool(diagnostics or counts["CRITICAL"] or counts["HIGH"])
     return int(failed)
 
 
