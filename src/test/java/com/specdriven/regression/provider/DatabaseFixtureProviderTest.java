@@ -30,9 +30,11 @@ class DatabaseFixtureProviderTest {
     @Test
     void preflightRecognizesCaseVariantsInResolvedAndBlockedFixtureContracts() {
         var resolved = new ResolvedProviderContract("fixture", "orders", "", "DB_FIXTURE", "", "", "");
+        var adapter = new ResolvedProviderContract("provider", "orders", "", "db_fixture", "", "", "");
         var gap = new ProviderContractGap("field", "fixture", "orders", "", "ReLaTiOnAl_Db",
                 "unsupported", "blocked", "", "", "");
         for (var report : List.of(new ProviderContractResolutionReport(true, List.of(resolved), List.of()),
+                new ProviderContractResolutionReport(true, List.of(adapter), List.of()),
                 new ProviderContractResolutionReport(false, List.of(), List.of(gap)))) {
             assertThatThrownBy(() -> provider.checkExecution(Map.of(), report))
                     .isInstanceOf(UnsupportedOperationException.class).hasMessage(DatabaseFixtureProvider.RETIRED);

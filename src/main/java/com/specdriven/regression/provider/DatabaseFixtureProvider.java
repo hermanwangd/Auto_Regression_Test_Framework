@@ -23,14 +23,14 @@ public class DatabaseFixtureProvider {
 
     public void checkExecution(Map<String, Object> normalizedCase, ProviderContractResolutionReport report) {
         if (hasRowAssertion(normalizedCase)
-                || report.gaps().stream().anyMatch(g -> isDbFixture(g.contractType(), g.providerFamily(), g.providerType()))
-                || report.resolvedContracts().stream().anyMatch(c -> isDbFixture(c.contractType(), c.providerFamily(), c.providerType()))) {
+                || report.gaps().stream().anyMatch(g -> isDatabaseExecutionContract(g.contractType(), g.providerFamily(), g.providerType()))
+                || report.resolvedContracts().stream().anyMatch(c -> isDatabaseExecutionContract(c.contractType(), c.providerFamily(), c.providerType()))) {
             throw new UnsupportedOperationException(RETIRED);
         }
     }
 
-    private boolean isDbFixture(String section, String family, String type) {
-        return "fixture".equals(section) && (DB_FAMILY.matcher(Objects.toString(family, "")).matches()
+    private boolean isDatabaseExecutionContract(String section, String family, String type) {
+        return ("fixture".equals(section) || "provider".equals(section)) && (DB_FAMILY.matcher(Objects.toString(family, "")).matches()
                 || DB_TYPE.matcher(Objects.toString(type, "")).matches());
     }
 
