@@ -1,6 +1,31 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# Hosted caches can have public write permissions. Keep the test JVM and its libraries
+# together under a private directory when the original executable fails that check.
+if [[ ${GITHUB_ACTIONS:-} == true && ${RUNNER_OS:-} == Linux ]]; then
+  executable=$(realpath -e "$JAVA_HOME/bin/java") || exit 1
+  item_is_file=1
+  item=$executable
+  while :; do
+    mode=$(stat -c '%a' "$item") || exit 1
+    if (( (8#$mode & 2) && (item_is_file || !(8#$mode & 01000)) )); then
+      echo "Staging test JDK because $item has mode $mode"
+      private_jdk=$(mktemp -d /tmp/framework-test-jdk.XXXXXXXX) || exit 1
+      trap 'rm -rf -- "$private_jdk"' EXIT
+      cp -a --reflink=auto "$JAVA_HOME/." "$private_jdk/" || exit 1
+      chmod -R go-w "$private_jdk" || exit 1
+      export JAVA_HOME="$private_jdk"
+      export PATH="$JAVA_HOME/bin:$PATH"
+      "$JAVA_HOME/bin/java" -version || exit 1
+      break
+    fi
+    if [[ $item == / ]]; then break; fi
+    item=$(dirname -- "$item")
+    item_is_file=0
+  done
+fi
+
 set +e
 ./mvnw -B -ntp verify
 status=$?
