@@ -35,10 +35,10 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: maven
-      - name: Verify Python virtual-environment launch and JUnit input handling on Windows
-        run: |
-          python -B samples/90-compatibility/test_junit_readers.py
-          python -B samples/90-compatibility/test_sample_launchers.py
+      - name: Verify JUnit input handling on Windows
+        run: python -B samples/90-compatibility/test_junit_readers.py
+      - name: Verify Python virtual-environment launch on Windows
+        run: python -B samples/90-compatibility/test_sample_launchers.py
 
       - name: Verify Windows executable pinning and the native provider
         shell: bash
