@@ -1,0 +1,18 @@
+# Synthetic bindings used only by helm template in the full repository scan.
+deployment:
+  enabled: true
+image: example.invalid/framework@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+run:
+  id: local-scan
+  nonce: local-only
+  correlationId: chart-test
+pins:
+  frameworkSha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  handoffSha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  collectionSpecSha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+storage:
+  inputClaim: inputs
+  outputClaim: outputs
+  exclusive: true
+transport: retained_source_only
+secretMaterializer: none
