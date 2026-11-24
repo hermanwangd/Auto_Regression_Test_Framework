@@ -54,8 +54,7 @@ public class AssertionEngine {
                     actualOutput,
                     runDir));
         }
-        Path evidencePath = runDir.resolve("assertions.yaml");
-        writeEvidence(evidencePath, testCase, details);
+        Path evidencePath = writeEvidence(runDir, testCase, details);
         return aggregate(details, evidencePath);
     }
 
@@ -336,12 +335,12 @@ public class AssertionEngine {
                 evidencePath);
     }
 
-    private void writeEvidence(
-            Path evidencePath,
+    private Path writeEvidence(
+            Path runDir,
             Map<String, Object> testCase,
             List<AssertionDetail> details) {
         try {
-            Files.createDirectories(evidencePath.getParent());
+            Files.createDirectories(runDir);
             StringBuilder builder = new StringBuilder();
             builder.append("assertions:\n");
             for (AssertionDetail detail : details) {
@@ -355,7 +354,7 @@ public class AssertionEngine {
                 builder.append("    decision_rule: ").append(detail.decisionRule()).append("\n");
                 builder.append("    diff_summary: ").append(detail.diffSummary()).append("\n");
             }
-            Files.writeString(evidencePath, builder.toString());
+            return Files.writeString(runDir.resolve("assertions.yaml"), builder.toString());
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write assertion evidence.", e);
         }

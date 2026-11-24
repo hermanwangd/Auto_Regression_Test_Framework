@@ -28,6 +28,18 @@ class DatabaseFixtureProviderTest {
     }
 
     @Test
+    void preflightRecognizesCaseVariantsInResolvedAndBlockedFixtureContracts() {
+        var resolved = new ResolvedProviderContract("fixture", "orders", "", "DB_FIXTURE", "", "", "");
+        var gap = new ProviderContractGap("field", "fixture", "orders", "", "ReLaTiOnAl_Db",
+                "unsupported", "blocked", "", "", "");
+        for (var report : List.of(new ProviderContractResolutionReport(true, List.of(resolved), List.of()),
+                new ProviderContractResolutionReport(false, List.of(), List.of(gap)))) {
+            assertThatThrownBy(() -> provider.checkExecution(Map.of(), report))
+                    .isInstanceOf(UnsupportedOperationException.class).hasMessage(DatabaseFixtureProvider.RETIRED);
+        }
+    }
+
+    @Test
     void absentOrUnrelatedFixturesNeedNoDatabase() {
         Map<String, Map<String, Object>> contracts = Map.of("db", Map.of());
         Path output = root.resolve("output");
