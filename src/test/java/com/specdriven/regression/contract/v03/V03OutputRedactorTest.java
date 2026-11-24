@@ -3,11 +3,79 @@ package com.specdriven.regression.contract.v03;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class V03OutputRedactorTest {
+    @Test
+    void masksSerializedJsonValuesInNestedDiagnosticEnvelopes() throws Exception {
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        String inner = "{\"session\":\"sample-inside\",\"note\":\"公開\"}";
+        String once = json.writeValueAsString(Map.of("echo", inner, "trace", "public-trace"));
+        String twice = json.writeValueAsString(List.of(once));
+        var outer = json.readTree(V03OutputRedactor.redactProviderDiagnostic(twice));
+        var echo = json.readTree(outer.get(0).asText());
+        assertThat(echo.path("trace").asText()).isEqualTo("public-trace");
+        var payload = json.readTree(echo.path("echo").asText());
+        assertThat(payload.path("session").asText()).isEqualTo("***MASKED***");
+        assertThat(payload.path("note").asText()).isEqualTo("公開");
+        assertThat(new V03OutputRedactor().redactValue(Map.of("diagnostic", twice)).toString())
+                .doesNotContain("sample-inside").contains("public-trace");
+    }
+
+    @Test
+    void boundsNestedJsonWorkAndPreservesUnrelatedDiagnostics() throws Exception {
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        var redactor = new V03OutputRedactor();
+        String nested = "{\"session\":\"fixture-deep\"}";
+        for (int i = 0; i < 12; i++) nested = json.writeValueAsString(List.of(nested));
+        String output = redactor.redactMessage(json.writeValueAsString(Map.of("echo", nested, "trace", "ok")));
+        assertThat(output).doesNotContain("fixture-deep");
+        assertThat(json.readTree(output).path("trace").asText()).isEqualTo("ok");
+        String message = "[WARN] quote \\\"public\\\" status=ok";
+        assertThat(redactor.redactMessage(message)).isEqualTo(message);
+    }
+
+    @Test
+    void decodesEscapedJsonMemberNamesOnlyForComparison() {
+        var redactor = new V03OutputRedactor();
+        String session = "\\uff33\\uff45\\uff53\\uff53\\uff49\\uff4f\\uff4e";
+        String cookie = "Set\\u002dCoo\\u006bie";
+        String template = "{\"%s\":\"%s\",\"%s\":%s,\"note\":\"keep \\\\u0061\"}";
+        String raw = template.formatted(session, "fixture-A", cookie, "[\"fixture-B\",\"fixture-C\"]");
+        assertThat(redactor.redactMessage(raw))
+                .isEqualTo(template.formatted(session, "[MASKED]", cookie, "\"[MASKED]\""));
+        assertThat(V03OutputRedactor.redactProviderDiagnostic(raw))
+                .isEqualTo(template.formatted(session, "***MASKED***", cookie, "\"***MASKED***\""));
+        String literalBackslash = "{\"\\\\u0073ession\":\"public\"}";
+        assertThat(redactor.redactMessage(literalBackslash)).isEqualTo(literalBackslash);
+        for (String scalar : List.of("42", "-1.2e+2", "true", "false", "null")) {
+            assertThat(redactor.redactMessage("{\"Cookie\":" + scalar + ",\"note\":true}"))
+                    .isEqualTo("{\"Cookie\":\"[MASKED]\",\"note\":true}");
+        }
+    }
+
+    @Test
+    void protectsCookieHeadersAndSessionEvidenceWhileKeepingPublicContext() {
+        var redactor = new V03OutputRedactor();
+        for (String label : List.of("session", "SessionId", "session_id", "Cookie", "Ｓｅｔ－Ｃｏｏｋｉｅ")) {
+            var data = Map.of(label, List.of("sample-a", "sample-b"), "session_count", 2);
+            var expected = Map.of(label, "[MASKED]", "session_count", 2);
+            assertThat(redactor.redactValue(data)).isEqualTo(expected);
+            assertThat(redactor.redactEvidenceValue(data, Set.of())).isEqualTo(expected);
+        }
+        String header = "Ｃｏｏｋｉｅ: first=sample-a; second=sample-b\r\nTrace: ready";
+        assertThat(redactor.redactMessage(header)).isEqualTo("Ｃｏｏｋｉｅ: [MASKED]\r\nTrace: ready");
+        assertThat(com.specdriven.regression.provider.ProviderDiagnosticRedactor.maskSensitiveText(header))
+                .isEqualTo("Ｃｏｏｋｉｅ: ***MASKED***\r\nTrace: ready");
+        assertThat(redactor.redactMessage("{\"set-cookie\":[\"sample-a\",\"sample-b\"],\"ok\":true}"))
+                .isEqualTo("{\"set-cookie\":\"[MASKED]\",\"ok\":true}");
+        assertThat(redactor.redactMessage("session_id=sample-a status=ready"))
+                .isEqualTo("session_id=[MASKED] status=ready");
+    }
+
     @Test
     void masksBasicAuthorizationInDiagnosticsAndNestedTextEvidence() {
         var redactor = new V03OutputRedactor();

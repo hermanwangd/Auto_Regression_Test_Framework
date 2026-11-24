@@ -130,7 +130,7 @@ public class WireMockHttpRequestCapabilityService {
         List<String> evidenceRefs = new ArrayList<>();
 
         for (RuntimeSelection selection : selections) {
-            TestExecution execution = executeTestCase(resolver, wireMockRuntime, selection, requestedProfile);
+            TestExecution execution = executeTestCase(resolver, wireMockRuntime, restRuntime, selection, requestedProfile);
             providerRuntimeExecuted = providerRuntimeExecuted || execution.providerRuntimeExecuted();
             aggregateOutputs.put(safe(stringValue(selection.testCase().get("test_case_id"))), execution.outputs());
             stepResults.addAll(execution.stepResults());
@@ -237,6 +237,7 @@ public class WireMockHttpRequestCapabilityService {
     private TestExecution executeTestCase(
             ProviderRuntimeResolver resolver,
             WireMockHttpMockProviderRuntime wireMockRuntime,
+            RestClientProviderRuntime restRuntime,
             RuntimeSelection selection,
             String requestedProfile) {
         recreateDirectory(selection.runDir());
@@ -278,7 +279,7 @@ public class WireMockHttpRequestCapabilityService {
                     return blockedExecution(selection, requestedProfile, executeResolution.failure());
                 }
                 ProviderOperationResult executeResult = executeWireMockRequest(
-                        executeResolution, restContext, execute.request(), resolvedBaseUrl);
+                        restRuntime, restContext, execute.request(), resolvedBaseUrl);
                 capture(execute.id(), executeResult, capturedOutputs, outputs, stepResults, evidenceRefs);
                 evidenceRefs.add(JOURNAL_REF);
                 if (!executeResult.passed()) {
@@ -499,7 +500,8 @@ public class WireMockHttpRequestCapabilityService {
         List<Map<String, Object>> parameters = new ArrayList<>();
         for (Map.Entry<String, Object> entry : mapValue(operation.get("inputs")).entrySet()) {
             Map<String, Object> input = new LinkedHashMap<>(mapValue(entry.getValue()));
-            input.put("bind_as", entry.getKey());
+            boolean bodyFile = "request.body".equals(entry.getKey()) && stringValue(input.get("ref")).startsWith("${data.");
+            input.put("bind_as", bodyFile ? "request.body_ref" : entry.getKey());
             input.put("name", entry.getKey());
             input.put("ref", resolveRef(testCase, firstNonBlank(
                     stringValue(input.get("ref")),
@@ -677,7 +679,7 @@ public class WireMockHttpRequestCapabilityService {
                         status));
     }
 
-    private ProviderOperationResult executeWireMockRequest(ProviderRuntimeResolution resolution,
+    private ProviderOperationResult executeWireMockRequest(RestClientProviderRuntime restRuntime,
             ProviderExecutionContext context, ProviderOperationRequest operation, String baseUrl) {
         Path evidence = context.runDir().resolve(JOURNAL_REF);
         String method = "GET";
@@ -704,7 +706,7 @@ public class WireMockHttpRequestCapabilityService {
         inputs.add(Map.of("bind_as", "request.path", "ref", path));
         inputs.add(Map.of("bind_as", correlationBinding, "ref", requestId));
         var outgoing = new ProviderOperationRequest(operation.operation(), List.copyOf(inputs), operation.outputs());
-        ProviderOperationResult result = resolution.runtime().execute(context, outgoing);
+        ProviderOperationResult result = restRuntime.executeAtApprovedOrigin(context, outgoing, baseUrl);
         try {
             HttpRequest request = HttpRequest.newBuilder(origin.resolve("/__admin/requests"))
                     .timeout(Duration.ofSeconds(10)).GET().build();

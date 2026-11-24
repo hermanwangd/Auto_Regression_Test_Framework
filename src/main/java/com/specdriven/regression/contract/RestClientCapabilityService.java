@@ -117,7 +117,8 @@ public class RestClientCapabilityService {
         boolean providerRuntimeExecuted = false;
 
         try (DemoRestServer demoServer = DemoRestServer.startIfNeeded(first.bindingValues())) {
-            RestClientProviderRuntime runtime = new RestClientProviderRuntime();
+            RestClientProviderRuntime runtime = demoServer.baseUrl().isBlank()
+                    ? new RestClientProviderRuntime() : new RestClientProviderRuntime(demoServer.baseUrl());
             for (RuntimeSelection selection : selections) {
                 Map<String, Object> bindingValues = new LinkedHashMap<>(selection.bindingValues());
                 if (!demoServer.baseUrl().isBlank()) {
@@ -328,7 +329,8 @@ public class RestClientCapabilityService {
         List<Map<String, Object>> parameters = new ArrayList<>();
         for (Map.Entry<String, Object> entry : mapValue(operation.get("inputs")).entrySet()) {
             Map<String, Object> input = new LinkedHashMap<>(mapValue(entry.getValue()));
-            input.put("bind_as", entry.getKey());
+            boolean bodyFile = "request.body".equals(entry.getKey()) && stringValue(input.get("ref")).startsWith("${data.");
+            input.put("bind_as", bodyFile ? "request.body_ref" : entry.getKey());
             input.put("name", entry.getKey());
             input.put("ref", resolveRef(testCase, firstNonBlank(
                     stringValue(input.get("ref")),

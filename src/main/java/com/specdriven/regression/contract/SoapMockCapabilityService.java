@@ -117,7 +117,7 @@ public class SoapMockCapabilityService {
         List<String> evidenceRefs = new ArrayList<>();
 
         for (RuntimeSelection selection : selections) {
-            TestExecution execution = executeTestCase(resolver, soapRuntime, selection, requestedProfile);
+            TestExecution execution = executeTestCase(resolver, soapRuntime, restRuntime, selection, requestedProfile);
             providerRuntimeExecuted = providerRuntimeExecuted || execution.providerRuntimeExecuted();
             aggregateOutputs.put(safe(stringValue(selection.testCase().get("test_case_id"))), execution.outputs());
             stepResults.addAll(execution.stepResults());
@@ -228,6 +228,7 @@ public class SoapMockCapabilityService {
     private TestExecution executeTestCase(
             ProviderRuntimeResolver resolver,
             SoapMockProviderRuntime soapRuntime,
+            RestClientProviderRuntime restRuntime,
             RuntimeSelection selection,
             String requestedProfile) {
         recreateDirectory(selection.runDir());
@@ -278,7 +279,8 @@ public class SoapMockCapabilityService {
                 if (!executeResolution.valid()) {
                     return blockedExecution(selection, requestedProfile, executeResolution.failure());
                 }
-                ProviderOperationResult executeResult = executeResolution.runtime().execute(restContext, execute.request());
+                ProviderOperationResult executeResult = restRuntime.executeAtApprovedOrigin(restContext, execute.request(),
+                        stringValue(setupResult.outputs().get("endpoint_url")));
                 capture(execute.id(), "http_request", executeResult, capturedOutputs, outputs, stepResults, evidenceRefs);
                 if (!executeResult.passed()) {
                     status = "failed";
@@ -520,7 +522,8 @@ public class SoapMockCapabilityService {
         List<Map<String, Object>> parameters = new ArrayList<>();
         for (Map.Entry<String, Object> entry : mapValue(operation.get("inputs")).entrySet()) {
             Map<String, Object> input = new LinkedHashMap<>(mapValue(entry.getValue()));
-            input.put("bind_as", entry.getKey());
+            boolean bodyFile = "request.body".equals(entry.getKey()) && stringValue(input.get("ref")).startsWith("${data.");
+            input.put("bind_as", bodyFile ? "request.body_ref" : entry.getKey());
             input.put("name", entry.getKey());
             input.put("ref", resolveRef(testCase, firstNonBlank(
                     stringValue(input.get("ref")),

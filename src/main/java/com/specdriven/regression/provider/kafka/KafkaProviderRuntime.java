@@ -1,5 +1,6 @@
 package com.specdriven.regression.provider.kafka;
 
+import com.specdriven.regression.contract.SecurityFieldNames;
 import com.specdriven.regression.provider.ProviderDataYaml;
 import com.specdriven.regression.provider.runtime.ProviderEvidence;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
@@ -729,11 +730,8 @@ public class KafkaProviderRuntime implements ProviderRuntime {
     }
 
     private boolean secretKey(String key) {
-        String normalized = key.toLowerCase(Locale.ROOT);
-        return normalized.contains("password")
-                || normalized.contains("secret")
-                || normalized.contains("token")
-                || normalized.contains("authorization")
+        String normalized = SecurityFieldNames.canonical(key);
+        return SecurityFieldNames.isCredential(key)
                 || normalized.contains("sasl")
                 || normalized.contains("ssl");
     }

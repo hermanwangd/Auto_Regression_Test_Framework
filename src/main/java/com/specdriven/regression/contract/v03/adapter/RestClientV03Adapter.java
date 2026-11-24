@@ -7,12 +7,17 @@ import com.specdriven.regression.contract.v03.V03StepResult;
 import com.specdriven.regression.provider.http.RestClientProviderRuntime;
 import com.specdriven.regression.provider.http.ReviewedLoopbackHttpPolicy;
 import com.specdriven.regression.sit.SitPolicyAwareProvider;
+import com.specdriven.regression.contract.v03.ref.V03Reference;
+import com.specdriven.regression.contract.v03.ref.V03ReferenceParser;
 import com.specdriven.regression.sit.SitExecutionScope;
+import java.util.Map;
 import com.specdriven.regression.sit.SitOperationEffect;
 
 public class RestClientV03Adapter extends AbstractProviderRuntimeV03Adapter implements V03ProviderRuntimeAdapter, SitPolicyAwareProvider {
 
     private final RestClientProviderRuntime runtime = new RestClientProviderRuntime();
+
+    private final V03ReferenceParser parser = new V03ReferenceParser();
 
     @Override
     public String providerType() {
@@ -26,7 +31,20 @@ public class RestClientV03Adapter extends AbstractProviderRuntimeV03Adapter impl
 
     @Override
     public V03StepResult execute(V03ExecutionStep step, V03ExecutionContext context) {
-        return stepResult(step, runtime.execute(providerContext(step, context), request(step, context)));
+        var provider = providerContext(step, context);
+        var target = context.targets().get(step.target());
+        String approved = null;
+        if (target != null && parser.parse(target.bindings().get("base_url")) instanceof V03Reference.Generated ref
+                && ref.jsonPointer().isBlank()) {
+            var producer = context.targets().get(ref.target());
+            if (producer != null && "mock".equals(producer.runtimeMode())
+                    && (("http_mock".equals(producer.providerType()) && "http_mock.v0.3".equals(producer.providerContract()) && "base_url".equals(ref.output()))
+                    || ("soap_mock".equals(producer.providerType()) && "soap_mock.v0.3".equals(producer.providerContract()) && "endpoint_url".equals(ref.output())))) {
+                // providerContext already resolved the binding against the compiled producer step.
+                approved = stringValue(provider.bindingValues().get("base_url"));
+            }
+        }
+        return stepResult(step, runtime.executeAtApprovedOrigin(provider, request(step, context), approved));
     }
 
     @Override public boolean simulated() { return false; }
@@ -46,10 +64,15 @@ public class RestClientV03Adapter extends AbstractProviderRuntimeV03Adapter impl
     }
 
     @Override
-    String mapBindAs(String inputName) {
-        if ("request.body_ref".equals(inputName)) {
-            return "request.body";
+    Map<String,Object> parameter(String name, Object value, V03ExecutionStep step, V03ExecutionContext context) {
+        if ("request.body_ref".equals(name) || "request.body".equals(name)) {
+            V03Reference ref = parser.parse(value);
+            if (ref instanceof V03Reference.Artifact asset && asset.jsonPointer().isBlank()) {
+                return Map.of("name", name, "bind_as", "request.body_ref", "ref",
+                        new RestClientProviderRuntime.BodyAsset(context.artifactRoots().get(asset.root()), asset.path()));
+            }
+            if (!(ref instanceof V03Reference.Literal)) name = "request.body";
         }
-        return inputName;
+        return super.parameter(name, value, step, context);
     }
 }

@@ -1,6 +1,12 @@
 package com.specdriven.regression.contract.v03;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.specdriven.regression.contract.SecurityFieldNames;
+import java.io.IOException;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -14,6 +20,9 @@ import java.util.stream.Collectors;
 /** Applies Provider Contract output sensitivity before values leave runtime memory. */
 public final class V03OutputRedactor {
     public static final String MASKED = "[MASKED]";
+    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectReader JSON_LABEL = JSON.readerFor(String.class);
+    private static final int MAX_EMBEDDED_JSON_DEPTH = 8;
 
     private static final String WORD = "[\\p{L}\\p{M}\\p{N}\\p{So}\\p{Pc}.．\\-－﹣]++";
     private static final String SEPARATOR = "[:=：＝﹕﹦]";
@@ -21,7 +30,7 @@ public final class V03OutputRedactor {
     private static final String ASSIGN = SPACING + "*" + SEPARATOR + SPACING + "*";
     private static final Pattern SINGLE_WORD = Pattern.compile(WORD);
     private static final Pattern MESSAGE_LABEL = Pattern.compile(
-            "(?<quoted>\"[^\"\\r\\n]++\"|'[^'\\r\\n]++'|＂[^＂\\r\\n]++＂|＇[^＇\\r\\n]++＇)(?=" + ASSIGN
+            "(?<quoted>\"[^\"\\\\\\r\\n]*+(?:\\\\[^\\r\\n][^\"\\\\\\r\\n]*+)*+\"|'[^'\\r\\n]++'|＂[^＂\\r\\n]++＂|＇[^＇\\r\\n]++＇)(?=" + ASSIGN
                     + ")|(?<separator>" + SEPARATOR + ")|" + WORD);
     private static final Pattern ASSIGNMENT = Pattern.compile(ASSIGN);
     private static final Pattern WORD_THEN_SPACE = Pattern.compile("(" + WORD + ")" + SPACING + "++");
@@ -30,6 +39,8 @@ public final class V03OutputRedactor {
             "[\\t ]*\\r?\\n[\\t ]+[A-Za-z0-9._~+/-]++=*+(?=[\\t ]*(?:\\r?$)|[\\t ]+[\\w.-]+[:=])",
             Pattern.MULTILINE);
     private static final Pattern HEADER_LINES = Pattern.compile("[^\\r\\n]*+(?:\\r?\\n[\\t ]++[^\\r\\n]*+)*+");
+    private static final Pattern JSON_SCALAR = Pattern.compile(
+            "(?:true|false|null|-?(?:0|[1-9][0-9]*+)(?:\\.[0-9]++)?(?:[eE][+-]?[0-9]++)?)(?=\\s*[,}\\]])");
     private static final Pattern RAW_VALUE = Pattern.compile("[^\\s,;\"'}]++");
     private static final Pattern RAW_ADDRESS = Pattern.compile("[^\\s,;]++");
     private static final Pattern PRIVATE_KEY_BLOCK = Pattern.compile(
@@ -48,7 +59,7 @@ public final class V03OutputRedactor {
                 continue;
             }
             V03OutputDefinition definition = operation.outputDefinitions().get(output.getKey());
-            result.put(output.getKey(), definition.sensitivity() == V03Sensitivity.PUBLIC
+            result.put(output.getKey(), definition.sensitivity() == V03Sensitivity.PUBLIC && !SecurityFieldNames.isCredential(output.getKey())
                     ? redactValue(output.getValue())
                     : MASKED);
         }
@@ -120,6 +131,13 @@ public final class V03OutputRedactor {
 
     private static String maskMessage(String message, ContractFields fields, String marker) {
         if (message == null) return "";
+        return maskMessage(message, fields, marker, 0);
+    }
+
+    private static String maskMessage(String message, ContractFields fields, String marker, int depth) {
+        if (looksLikeJsonContainer(message) && (message.contains("\\\"") || message.contains("\\u"))) {
+            message = maskEmbeddedJson(message, fields, marker, depth);
+        }
         if (message.contains("-----BEGIN ")) message = PRIVATE_KEY_BLOCK.matcher(message).replaceAll(marker);
         Matcher labels = MESSAGE_LABEL.matcher(message);
         Matcher assignment = ASSIGNMENT.matcher(message);
@@ -128,9 +146,10 @@ public final class V03OutputRedactor {
         int lastSeparator = 0;
         while (labels.find()) {
             String quoted = labels.group("quoted");
-            String key = SecurityFieldNames.canonical(quoted == null ? labels.group() : quoted.substring(1, quoted.length() - 1));
+            String key = SecurityFieldNames.canonical(quoted == null ? labels.group() : quotedLabel(quoted));
             int after = labels.end();
             Span value = null;
+            String replacement = marker;
             if (labels.group("separator") != null) {
                 if (fields.matchesUnquotedSuffix(message, copied, lastSeparator, labels.start())) {
                     value = assignmentValue(message, matchEnd(SPACE, message, after), false);
@@ -138,7 +157,24 @@ public final class V03OutputRedactor {
                 lastSeparator = after;
             } else if (assignment.region(after, message.length()).lookingAt()
                     && (SecurityFieldNames.endsWithCredentialLabel(key) || fields.paths().contains(key))) {
-                value = assignmentValue(message, assignment.end(), key.endsWith("authorization"));
+                int start = assignment.end();
+                int scalarEnd = quoted != null && quoted.charAt(0) == '"' ? matchEnd(JSON_SCALAR, message, start) : start;
+                if (quoted != null && start < message.length() && (message.charAt(start) == '[' || message.charAt(start) == '{')) {
+                    value = new Span(start, endOfContainer(message, start));
+                    replacement = "\"" + marker + "\"";
+                } else if (scalarEnd > start) {
+                    value = new Span(start, scalarEnd);
+                    replacement = "\"" + marker + "\"";
+                } else if (SecurityFieldNames.isCookieLabel(key) && start < message.length()) {
+                    if (quoted != null && isQuote(message.charAt(start))) {
+                        value = rawValue(message, start);
+                    } else {
+                        // A Cookie header may contain multiple pairs, quoted values and folded lines.
+                        value = new Span(start, matchEnd(HEADER_LINES, message, start));
+                    }
+                } else {
+                    value = assignmentValue(message, start, key.endsWith("authorization"));
+                }
             } else if ("bearer".equals(key)) {
                 int token = matchEnd(SPACE, message, after);
                 if (token > after) value = rawValue(message, token);
@@ -146,7 +182,7 @@ public final class V03OutputRedactor {
                 value = addressValue(key, message, labels.start(), after + 1);
             }
             if (value == null || value.start() == value.end()) continue;
-            masked.append(message, copied, value.start()).append(marker);
+            masked.append(message, copied, value.start()).append(replacement);
             copied = value.end();
             labels.region(copied, message.length());
         }
@@ -154,6 +190,53 @@ public final class V03OutputRedactor {
     }
 
     private record Span(int start, int end) {}
+
+    private static boolean looksLikeJsonContainer(String text) {
+        int i = 0;
+        while (i < text.length() && Character.isWhitespace(text.charAt(i))) i++;
+        if (i == text.length()) return false;
+        char opener = text.charAt(i++);
+        if (opener != '{' && opener != '[') return false;
+        while (i < text.length() && Character.isWhitespace(text.charAt(i))) i++;
+        if (i == text.length()) return false;
+        char first = text.charAt(i);
+        return opener == '{' ? first == '"' || first == '}' : "\"{[]-0123456789tfn".indexOf(first) >= 0;
+    }
+
+    /** An HTTP response can contain another serialized JSON document as a string value. */
+    private static String maskEmbeddedJson(String text, ContractFields fields, String marker, int depth) {
+        StringBuilder result = new StringBuilder();
+        int copied = 0;
+        try (JsonParser parser = JSON.createParser(text)) {
+            while (parser.nextToken() != null) {
+                if (!parser.hasToken(JsonToken.VALUE_STRING)) continue;
+                String value = parser.getText();
+                if (!looksLikeJsonContainer(value)) continue;
+                String safe = depth >= MAX_EMBEDDED_JSON_DEPTH ? marker : maskMessage(value, fields, marker, depth + 1);
+                if (safe.equals(value)) continue;
+                int start = Math.toIntExact(parser.currentTokenLocation().getCharOffset());
+                int end = Math.toIntExact(parser.currentLocation().getCharOffset());
+                result.append(text, copied, start).append(JSON.writeValueAsString(safe));
+                copied = end;
+            }
+        } catch (IOException invalidOrOversizedJson) {
+            // An ambiguous encoded envelope must not reach diagnostic evidence with raw inner values.
+            return marker;
+        }
+        return copied == 0 ? text : result.append(text, copied, text.length()).toString();
+    }
+
+    private static String quotedLabel(String quoted) {
+        if (quoted.charAt(0) == '"' && quoted.indexOf('\\') >= 0) {
+            try {
+                // Compare the decoded JSON name while keeping verbatim evidence offsets and spelling.
+                return JSON_LABEL.readValue(quoted);
+            } catch (JsonProcessingException ignored) {
+                // Diagnostics may use arbitrary quoted labels outside JSON.
+            }
+        }
+        return quoted.substring(1, quoted.length() - 1);
+    }
 
     private static Span assignmentValue(String text, int start, boolean authorization) {
         if (authorization && start < text.length()) {
@@ -199,6 +282,17 @@ public final class V03OutputRedactor {
         String raw = authority.group(1);
         int at = Math.max(raw.lastIndexOf('@'), raw.lastIndexOf('＠'));
         return at < 1 ? null : new Span(authority.start(1), authority.start(1) + at);
+    }
+
+    private static int endOfContainer(String text, int start) {
+        int depth = 0;
+        for (int i = start; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (isQuote(c)) i = endOfQuotedValue(text, i + 1, c);
+            else if (c == '[' || c == '{') depth++;
+            else if ((c == ']' || c == '}') && --depth == 0) return i + 1;
+        }
+        return text.length();
     }
 
     private static boolean startsWithSlashes(String text, int from) {

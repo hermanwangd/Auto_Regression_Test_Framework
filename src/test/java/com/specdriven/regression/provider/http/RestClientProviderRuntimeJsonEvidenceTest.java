@@ -29,7 +29,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 class RestClientProviderRuntimeJsonEvidenceTest {
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final RestClientProviderRuntime RUNTIME = new RestClientProviderRuntime();
+    private RestClientProviderRuntime runtime;
 
     @TempDir
     Path tempDir;
@@ -59,6 +59,7 @@ class RestClientProviderRuntimeJsonEvidenceTest {
             }
         });
         server.start();
+        runtime = new RestClientProviderRuntime("http://127.0.0.1:" + server.getAddress().getPort());
     }
 
     @AfterEach
@@ -75,6 +76,8 @@ class RestClientProviderRuntimeJsonEvidenceTest {
                 Arguments.of("quote_slash", "quoted \"value\" with \\ slash", "quoted \"value\" with \\ slash"),
                 Arguments.of("unicode", "繁體中文 café 😀", "繁體中文 café 😀"),
                 Arguments.of("empty", "", ""),
+                Arguments.of("escaped_session", "{\"se\\u0073sion\":\"fixture\",\"note\":\"ok\"}",
+                        "{\"se\\u0073sion\":\"***MASKED***\",\"note\":\"ok\"}"),
                 Arguments.of("masked", "{\"token\":\"fixture-placeholder\",\"note\":\"ok\"}",
                         "{\"token\":\"***MASKED***\",\"note\":\"ok\"}")));
         for (int c = 0; c < 32; c++) {
@@ -89,7 +92,7 @@ class RestClientProviderRuntimeJsonEvidenceTest {
     void preservesResponseBodiesInStrictJsonEvidence(String name, String input, String expected) throws Exception {
         responseBody.set(input);
 
-        ProviderOperationResult result = RUNTIME.execute(context(), request("GET", ""));
+        ProviderOperationResult result = runtime.execute(context(), request("GET", ""));
 
         assertThat(result.passed()).as(name + " operation").isTrue();
         assertThat(result.outputs().get("response.body")).isEqualTo(expected);
@@ -101,10 +104,25 @@ class RestClientProviderRuntimeJsonEvidenceTest {
     }
 
     @Test
+    void masksAnEchoedJsonStringInBothOutputAndProviderEvidence() throws Exception {
+        String source = "{\"session\":\"fixture-inner\",\"trace\":\"公開\"}";
+        String rawResponse = JSON.writeValueAsString(Map.of("echo", source));
+        String safeResponse = JSON.writeValueAsString(Map.of("echo", source.replace("fixture-inner", "***MASKED***")));
+        responseBody.set(rawResponse);
+
+        ProviderOperationResult result = runtime.execute(context(), request("POST", source));
+
+        assertThat(result.passed()).isTrue();
+        assertThat(receivedBody.get()).isEqualTo(source);
+        assertThat(result.outputs().get("response.body")).isEqualTo(safeResponse);
+        assertEvidenceBodies(source.replace("fixture-inner", "***MASKED***"), safeResponse, "POST");
+    }
+
+    @Test
     void preservesTabInRequestBodyEvidence() throws Exception {
         responseBody.set("request accepted");
 
-        ProviderOperationResult result = RUNTIME.execute(context(), request("POST", "left\tright"));
+        ProviderOperationResult result = runtime.execute(context(), request("POST", "left\tright"));
 
         assertThat(result.passed()).isTrue();
         assertThat(result.outputs().get("response.body")).isEqualTo("request accepted");
@@ -119,7 +137,7 @@ class RestClientProviderRuntimeJsonEvidenceTest {
     void preservesTabInReviewedReadEvidence() throws Exception {
         responseBody.set("left\tright");
 
-        ProviderOperationResult result = RUNTIME.executeReviewedRead(context(), request("GET", ""));
+        ProviderOperationResult result = runtime.executeReviewedRead(context(), request("GET", ""));
 
         assertThat(result.passed()).isTrue();
         assertThat(result.outputs().get("response.body")).isEqualTo("left\tright");
@@ -132,7 +150,7 @@ class RestClientProviderRuntimeJsonEvidenceTest {
 
     @Test
     void rejectsUnsupportedOperationWithoutHttpOrEvidence() {
-        ProviderOperationResult result = RUNTIME.execute(context(),
+        ProviderOperationResult result = runtime.execute(context(),
                 new ProviderOperationRequest("not_supported", request("GET", "").parameters(), Map.of()));
 
         assertThat(result.status()).isEqualTo("failed");
@@ -145,12 +163,36 @@ class RestClientProviderRuntimeJsonEvidenceTest {
 
     @Test
     void rejectsReviewedPostWithoutHttpOrEvidence() {
-        assertThatThrownBy(() -> RUNTIME.executeReviewedRead(context(), request("POST", "")))
+        assertThatThrownBy(() -> runtime.executeReviewedRead(context(), request("POST", "")))
                 .isInstanceOf(IllegalArgumentException.class);
 
         assertThat(requestCount.get()).isZero();
         assertThat(receivedMethod.get()).isEmpty();
         assertThat(runDir().resolve("provider-evidence")).doesNotExist();
+    }
+
+    @Test
+    void sendsLiteralBodyAndOnlyReadsExplicitBodyReference() throws Exception {
+        Files.writeString(tempDir.resolve("message.txt"), "declared file");
+        assertThat(runtime.execute(context(), request("POST", "message.txt")).passed()).isTrue();
+        assertThat(receivedBody.get()).isEqualTo("message.txt");
+        var request = request("POST", "");
+        var inputs = new ArrayList<>(request.parameters());
+        inputs.add(Map.of("bind_as", "request.body_ref", "ref", "message.txt"));
+        assertThat(runtime.execute(context(), new ProviderOperationRequest("http_request", inputs, Map.of())).passed()).isTrue();
+        assertThat(receivedBody.get()).isEqualTo("declared file");
+        inputs.set(inputs.size() - 1, Map.of("bind_as", "request.body_ref", "ref", "missing.txt"));
+        assertThat(runtime.execute(context(), new ProviderOperationRequest("http_request", inputs, Map.of())).passed()).isFalse();
+        inputs.add(Map.of("bind_as", "request.body", "ref", "ordinary text"));
+        assertThat(runtime.execute(context(), new ProviderOperationRequest("http_request", inputs, Map.of())).passed()).isFalse();
+        assertThat(requestCount.get()).isEqualTo(2);
+    }
+
+    @Test
+    void refusesUnapprovedOriginBeforeSending() {
+        var denied = new RestClientProviderRuntime("");
+        assertThat(denied.execute(context(), request("GET", "")).passed()).isFalse();
+        assertThat(requestCount.get()).isZero();
     }
 
     private ProviderExecutionContext context() {

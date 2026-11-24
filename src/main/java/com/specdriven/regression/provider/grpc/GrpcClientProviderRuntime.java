@@ -2,6 +2,8 @@ package com.specdriven.regression.provider.grpc;
 
 import static com.specdriven.regression.provider.ProviderDiagnosticRedactor.maskSensitiveText;
 
+import com.specdriven.regression.contract.SecurityFieldNames;
+
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.DynamicMessage;
@@ -354,7 +356,7 @@ public class GrpcClientProviderRuntime implements ProviderRuntime {
         for (String name : headers.keys()) {
             if (name.endsWith(Metadata.BINARY_HEADER_SUFFIX)) continue;
             String value = headers.get(Metadata.Key.of(name, Metadata.ASCII_STRING_MARSHALLER));
-            boolean sensitive = name.matches("(?i).*(?:authorization|password|token|secret|credential|cookie|api[_-]?key).*");
+            boolean sensitive = SecurityFieldNames.isCredential(name) || name.contains("cookie");
             values.put(name, sensitive ? "***MASKED***" : maskSensitiveText(value));
         }
         return values;

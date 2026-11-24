@@ -1,5 +1,8 @@
 package com.specdriven.regression.provider.http;
 
+import com.specdriven.regression.contract.SecurityFieldNames;
+import com.specdriven.regression.contract.v03.V03OutputRedactor;
+import com.specdriven.regression.provider.SuiteAssetReader;
 import com.specdriven.regression.provider.runtime.ProviderEvidence;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderFailure;
@@ -19,7 +22,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 public class RestClientProviderRuntime implements ProviderRuntime {
@@ -30,10 +32,29 @@ public class RestClientProviderRuntime implements ProviderRuntime {
             .build();
     private static final String MASK = "***MASKED***";
 
+    private final RestDestinationPolicy destinations;
+
+    public RestClientProviderRuntime() {
+        destinations = new RestDestinationPolicy(System.getProperty("regress.rest.allowedOrigins",
+                System.getenv("REGRESS_REST_ALLOWED_ORIGINS")), System.getenv("REST_BASE_URL"));
+    }
+
+    public RestClientProviderRuntime(String allowedOrigins) {
+        destinations = new RestDestinationPolicy(allowedOrigins, null);
+    }
+
+    public record BodyAsset(Path root, String reference) {}
+
     @Override
     public ProviderOperationResult execute(ProviderExecutionContext context, ProviderOperationRequest request) {
+        return executeAtApprovedOrigin(context, request, null);
+    }
+
+    /** Extra origin is supplied by the host only after it starts or approves that specific upstream. */
+    public ProviderOperationResult executeAtApprovedOrigin(ProviderExecutionContext context,
+            ProviderOperationRequest request, String approvedOrigin) {
         return switch (request.operation()) {
-            case "http_request" -> httpRequest(context, request, false);
+            case "http_request" -> httpRequest(context, request, false, approvedOrigin);
             default -> ProviderOperationResult.failed(
                     Map.of(),
                     List.of(),
@@ -58,10 +79,10 @@ public class RestClientProviderRuntime implements ProviderRuntime {
                 throw new IllegalArgumentException("Reviewed HTTP inputs must be unique.");
         }
         ReviewedLoopbackHttpPolicy.validateInputs(inputs);
-        return httpRequest(context, request, true);
+        return httpRequest(context, request, true, stringValue(context.bindingValues().get("base_url")));
     }
 
-    private ProviderOperationResult httpRequest(ProviderExecutionContext context, ProviderOperationRequest request, boolean reviewed) {
+    private ProviderOperationResult httpRequest(ProviderExecutionContext context, ProviderOperationRequest request, boolean reviewed, String approvedOrigin) {
         String baseUrl = stringValue(context.bindingValues().get("base_url"));
         if (baseUrl.isBlank() || baseUrl.startsWith("generated://")) {
             return ProviderOperationResult.failed(
@@ -76,13 +97,13 @@ public class RestClientProviderRuntime implements ProviderRuntime {
 
         String method = parameterValue(request, "request.method", "GET");
         String path = parameterValue(request, "request.path", "/");
-        String body = requestBody(context.suiteRoot(), parameterValueObject(request, "request.body", ""));
         Map<String, String> headers = requestHeaders(request);
         headers.putIfAbsent("Content-Type", "application/json");
 
         long started = System.nanoTime();
         try {
-            URI requestUri = uri(baseUrl, path);
+            URI requestUri = destinations.destination(baseUrl, path, approvedOrigin);
+            String body = requestBody(context.suiteRoot(), request);
             HttpRequest.Builder builder = HttpRequest.newBuilder(requestUri)
                     .timeout(requestTimeout(request));
             headers.forEach(builder::header);
@@ -117,6 +138,9 @@ public class RestClientProviderRuntime implements ProviderRuntime {
                     evidence(
                             "http_request", "provider-evidence/http/request.json",
                             "http_request_response", "provider-evidence/http/response.json"));
+        } catch (IllegalArgumentException invalid) {
+            return failed(context, "HTTP_REQUEST_FAILED", "TARGET_RESOLUTION_FAILED",
+                    "Check the authorized HTTP origin, request target and body binding.");
         } catch (HttpTimeoutException e) {
             return failed(context, "PROVIDER_TIMEOUT", "PROVIDER_TIMEOUT", e.getMessage());
         } catch (ConnectException e) {
@@ -208,16 +232,6 @@ public class RestClientProviderRuntime implements ProviderRuntime {
                         "Review provider-evidence/http/response.json and Environment Binding base_url."));
     }
 
-    private URI uri(String baseUrl, String path) {
-        if (baseUrl.endsWith("/") && path.startsWith("/")) {
-            return URI.create(baseUrl + path.substring(1));
-        }
-        if (!baseUrl.endsWith("/") && !path.startsWith("/")) {
-            return URI.create(baseUrl + "/" + path);
-        }
-        return URI.create(baseUrl + path);
-    }
-
     private Duration requestTimeout(ProviderOperationRequest request) {
         String timeout = parameterValue(request, "request.timeout", "");
         if (timeout.isBlank()) {
@@ -251,22 +265,26 @@ public class RestClientProviderRuntime implements ProviderRuntime {
         return header;
     }
 
-    private String requestBody(Path suiteRoot, Object refOrValue) {
-        if (refOrValue == null || (refOrValue instanceof String text && text.isBlank())) {
-            return "";
+    private String requestBody(Path suiteRoot, ProviderOperationRequest request) throws IOException {
+        if (request.parameters().stream().filter(input -> "request.body".equals(input.get("bind_as"))
+                || "request.body_ref".equals(input.get("bind_as"))).count() > 1) {
+            throw new IllegalArgumentException("Ambiguous REST body.");
         }
-        if (refOrValue instanceof String text) {
-            Path file = suiteRoot.resolve(text).normalize();
-            if (Files.isRegularFile(file)) {
-                try {
-                    return Files.readString(file).strip();
-                } catch (IOException e) {
-                    throw new IllegalStateException("Unable to read request body ref `" + text + "`.", e);
-                }
+        Object body = parameterValueObject(request, "request.body", null);
+        Object ref = parameterValueObject(request, "request.body_ref", null);
+        if (ref != null) {
+            BodyAsset asset;
+            if (ref instanceof BodyAsset declared) asset = declared;
+            else if (ref instanceof String name && !name.isBlank()) asset = new BodyAsset(suiteRoot, name);
+            else throw new IllegalArgumentException("Expected a REST body file reference.");
+            if (asset.root() == null || Path.of(asset.reference()).isAbsolute()) throw new IllegalArgumentException("Invalid REST body asset.");
+            try {
+                return SuiteAssetReader.read(asset.root(), asset.reference(), "Invalid REST body asset.").strip();
+            } catch (IOException unavailable) {
+                throw new IOException("Unable to read the declared REST body asset.");
             }
-            return text;
         }
-        return toJson(refOrValue);
+        return body == null ? "" : body instanceof String text ? text : toJson(body);
     }
 
     private String parameterValue(ProviderOperationRequest request, String bindAs, String fallback) {
@@ -366,7 +384,7 @@ public class RestClientProviderRuntime implements ProviderRuntime {
     }
 
     private String maskUrl(String value) {
-        return value.replaceAll("(?i)([?&][^=]*(?:password|token|secret|credential|api[_-]?key|authorization|session)[^=]*=)[^&#]*", "$1" + MASK);
+        return value.replaceAll("(?i)([?&][^=]*(?:password|token|secret|credential|api[_-]?key|authorization|session|cookie)[^=]*=)[^&#]*", "$1" + MASK);
     }
 
     private Map<String, String> maskHeaders(Map<String, String> headers) {
@@ -390,22 +408,15 @@ public class RestClientProviderRuntime implements ProviderRuntime {
     }
 
     private boolean sensitiveName(String name) {
-        String normalized = name == null ? "" : name.toLowerCase(Locale.ROOT);
-        return normalized.contains("authorization")
-                || normalized.contains("cookie")
-                || normalized.contains("password")
-                || normalized.contains("token")
-                || normalized.contains("secret")
-                || normalized.contains("credential")
-                || normalized.contains("api-key")
-                || normalized.contains("api_key");
+        return name != null && (SecurityFieldNames.isCredential(name)
+                || SecurityFieldNames.canonical(name).contains("cookie"));
     }
 
     private String maskText(String value) {
         if (value == null || value.isBlank()) {
             return value == null ? "" : value;
         }
-        String masked = value
+        String masked = V03OutputRedactor.redactProviderDiagnostic(value)
                 .replaceAll("(?i)(Bearer\\s+)[A-Za-z0-9._~+/=-]+", "$1" + MASK)
                 .replaceAll("(?i)(session=)[^;\\s]+", "$1" + MASK);
         masked = masked.replaceAll(

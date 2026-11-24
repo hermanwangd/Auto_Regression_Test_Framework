@@ -43,6 +43,10 @@ External JDBC, Kafka, IBM MQ, and similar dependencies are supplied by the runne
 
 Dependency bundling rules are documented in [provider_dependency_policy.md](docs/09-operations/provider_dependency_policy.md).
 
+For ordinary v0.3 REST requests, the runner owner can set `REGRESS_REST_ALLOWED_ORIGINS` to a comma-separated list of exact HTTP(S) origins, for example `https://api.example.test,https://reports.example.test:8443`. Embedded Java callers can set `-Dregress.rest.allowedOrigins=...`, which takes precedence. When neither setting is present, the origin of the runner's existing `REST_BASE_URL` is authorized. An explicitly empty list grants no external origins. The environment profile selects the base URL and may include a base path. The request target must stay on that origin. Framework-owned mock endpoints and reviewed local reads retain their scoped authorization.
+
+Use `request.body` for literal text or structured data and `request.body_ref` for a declared body file, such as `artifact://fixtures/order.json`. The runner confines file reads to the declared asset root. Supplying both body inputs fails the request.
+
 ## Extending Providers
 
 Start with a Provider Contract, Provider Instance shape, Env_Profile binding keys, runtime implementation, evidence contract, sample suite, and release verification coverage.
