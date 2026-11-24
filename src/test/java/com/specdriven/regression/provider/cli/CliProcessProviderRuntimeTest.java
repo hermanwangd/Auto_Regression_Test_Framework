@@ -138,19 +138,12 @@ class CliProcessProviderRuntimeTest {
     }
 
     @Test
-    void refusesPubliclyWritableProgramAndDirectoryBeforeLaunch() throws Exception {
-        Path directory = Files.createDirectory(temp.resolve("programs"));
-        Path executable = Files.copy(Path.of("/usr/bin/true").toRealPath(), directory.resolve("product"));
-        var binding = Map.<String,Object>of("executable", executable.toString(), "executable_sha256", sha(executable));
-        Files.setPosixFilePermissions(executable, java.nio.file.attribute.PosixFilePermissions.fromString("rwxr-xrwx"));
-        var file = runtime().execute(context("public-file", binding), request(Map.of("process.argv", List.of())));
-        assertFailed(file, "PROVIDER_UNAVAILABLE");
-        assertThat(proof(file)).containsEntry("launched", false);
-        Files.setPosixFilePermissions(executable, java.nio.file.attribute.PosixFilePermissions.fromString("rwxr-xr-x"));
-        Files.setPosixFilePermissions(directory, java.nio.file.attribute.PosixFilePermissions.fromString("rwxrwxrwx"));
-        var parent = runtime().execute(context("public-directory", binding), request(Map.of("process.argv", List.of())));
-        assertFailed(parent, "PROVIDER_UNAVAILABLE");
-        assertThat(proof(parent)).containsEntry("launched", false);
+    void publicWriteIsAllowedOnlyOnAStickyParentDirectory() {
+        assertThatCode(() -> CliProcessProviderRuntime.checkExecutableMode(0755, false)).doesNotThrowAnyException();
+        assertThatCode(() -> CliProcessProviderRuntime.checkExecutableMode(01777, true)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> CliProcessProviderRuntime.checkExecutableMode(0757, false)).isInstanceOf(IOException.class);
+        assertThatThrownBy(() -> CliProcessProviderRuntime.checkExecutableMode(01777, false)).isInstanceOf(IOException.class);
+        assertThatThrownBy(() -> CliProcessProviderRuntime.checkExecutableMode(0777, true)).isInstanceOf(IOException.class);
     }
 
     @Test

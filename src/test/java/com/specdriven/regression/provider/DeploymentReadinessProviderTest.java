@@ -934,7 +934,7 @@ class DeploymentReadinessProviderTest {
 
     @Test
     void defaultProbeRunsVmTcpConnectAgainstLocalSocket() throws Exception {
-        try (ServerSocket server = new ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"))) {
+        try (ServerSocket server = LoopbackTestListener.open(false)) {
             Thread acceptThread = new Thread(() -> {
                 try (var ignored = server.accept()) {
                     // Accept one connection so the TCP readiness probe can complete.

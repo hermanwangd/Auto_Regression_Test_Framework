@@ -22,7 +22,7 @@ class LoopbackTcpTransportTest {
                 : new byte[]{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
         InetAddress loopback = InetAddress.getByAddress(addressBytes);
         assumeTrue(NetworkInterface.getByInetAddress(loopback) != null, "Loopback family unavailable");
-        try (ServerSocket listener = new ServerSocket(0, 1, loopback);
+        try (ServerSocket listener = LoopbackTestListener.open(addressBytes.length == 16);
                 Socket client = LoopbackTcpTransport.connect(host, listener.getLocalPort(), 2000, 50);
                 Socket peer = listener.accept()) {
             assertThat(client.getLocalAddress()).isEqualTo(loopback);
@@ -35,7 +35,7 @@ class LoopbackTcpTransportTest {
 
     @Test
     void readinessClosesAfterTheHandshakeWithoutWriting() throws Exception {
-        try (ServerSocket listener = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
+        try (ServerSocket listener = LoopbackTestListener.open(false)) {
             LoopbackTcpTransport.checkConnection("127.0.0.1", listener.getLocalPort(), 2000);
             try (Socket peer = listener.accept()) {
                 peer.setSoTimeout(1000);

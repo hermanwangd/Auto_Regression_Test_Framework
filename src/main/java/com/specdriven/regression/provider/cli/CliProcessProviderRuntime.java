@@ -228,18 +228,24 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
         if (!directory.getFileSystem().supportedFileAttributeViews().contains("unix")) return;
         for (Path parent = directory; parent != null; parent = parent.getParent()) {
             int mode = (int) Files.getAttribute(parent, "unix:mode", LinkOption.NOFOLLOW_LINKS);
-            // Shared sticky directories such as /tmp protect entries from replacement by unrelated users.
-            if ((mode & 0002) != 0 && (mode & 01000) == 0)
-                throw new IOException("executable directory permits public replacement");
+            checkExecutableMode(mode, true);
+        }
+    }
+
+    static void checkExecutableMode(int mode, boolean directory) throws IOException {
+        // A sticky parent such as /tmp protects entries from replacement by unrelated users.
+        if ((mode & 0002) != 0 && !(directory && (mode & 01000) != 0)) {
+            throw new IOException("executable or its directory permits public modification");
         }
     }
 
     private static BasicFileAttributes attributes(Path file) throws IOException {
         BasicFileAttributes value = Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-        if (!value.isRegularFile() || !Files.isExecutable(file)) throw new IOException("invalid executable");
-        if (file.getFileSystem().supportedFileAttributeViews().contains("unix")
-                && (value.fileKey() == null || ((int) Files.getAttribute(file, "unix:mode", LinkOption.NOFOLLOW_LINKS) & 0002) != 0))
-            throw new IOException("invalid executable identity or public write permissions");
+        if (!value.isRegularFile() || value.isSymbolicLink() || !Files.isExecutable(file)) throw new IOException("invalid executable");
+        if (file.getFileSystem().supportedFileAttributeViews().contains("unix")) {
+            if (value.fileKey() == null) throw new IOException("executable file identity is unavailable");
+            checkExecutableMode((int) Files.getAttribute(file, "unix:mode", LinkOption.NOFOLLOW_LINKS), false);
+        }
         return value;
     }
 
