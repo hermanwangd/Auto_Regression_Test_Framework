@@ -165,6 +165,40 @@ validate_external_profile samples/20-provider-capability-p0/http/rest_client_ext
 validate_external_profile samples/20-provider-capability-p0/rpc/grpc_client_external/suite_manifest.yaml external_native
 
 if [[ "$REQUIRE_EXTERNAL_JDBC" == "true" ]]; then
+  # Verify the entire release sample before seed can change the native database.
+  if ! REGRESS_JDBC_APPROVED_SQL_SHA256="$jdbc_sql_approvals" python3 -I - "$JDBC_EXTERNAL_DIALECT" "${jdbc_external_suite%/*}" <<'PY_SQL'
+import hashlib
+import os
+from pathlib import Path
+import re
+import sys
+
+dialect, suite_root = sys.argv[1:]
+entries = {entry.strip(" \t\r\n\f\v") for entry in os.environ["REGRESS_JDBC_APPROVED_SQL_SHA256"].split(",")}
+entry_format = re.compile(r"(oracle|db2):[A-Z_][A-Z0-9_]*:(db_seed|db_query|db_record_exists|db_cleanup):[0-9a-f]{64}")
+if not all(entry_format.fullmatch(entry) for entry in entries):
+    sys.exit("invalid_external_jdbc_sql_approval_format")
+
+for operation, ref in (
+    ("db_seed", "fixtures/seed_order.sql"),
+    ("db_query", "queries/find_order_by_id.sql"),
+    ("db_cleanup", "fixtures/cleanup_order.sql"),
+):
+    try:
+        digest = hashlib.sha256()
+        with (Path(suite_root) / ref).open("rb") as source:
+            for chunk in iter(lambda: source.read(65536), b""):
+                digest.update(chunk)
+    except OSError:
+        sys.exit(f"unreadable_external_jdbc_sql: {operation}")
+    if f"{dialect}:JDBC_CONNECTION:{operation}:{digest.hexdigest()}" not in entries:
+        sys.exit(f"unapproved_external_jdbc_sql: {operation}")
+PY_SQL
+  then
+    echo "external_jdbc_runtime_verification: blocked" >&2
+    echo "owner_action: Verify the independently supplied approvals for all three native sample SQL files." >&2
+    exit 1
+  fi
   REGRESS_JDBC_APPROVED_SQL_SHA256="$jdbc_sql_approvals" run_suite "$jdbc_external_suite" "$jdbc_external_profile"
   echo "external_jdbc_runtime_verification: passed"
 else

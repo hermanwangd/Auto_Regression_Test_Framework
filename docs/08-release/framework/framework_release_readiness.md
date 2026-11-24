@@ -69,8 +69,9 @@ For a native JDBC release run, configure the GitHub Actions secrets
 corresponding vendor driver on the runner. Use a native URL matching the
 selected dialect. The approval secret must contain independently reviewed
 digests for `db_seed`, `db_query` and `db_cleanup` for the selected dialect
-and connection name `JDBC_CONNECTION`. The release step supplies the protected
-value to the selected native sample. Public CI can validate both profiles
+and connection name `JDBC_CONNECTION`. Before starting the native sample, the
+release step compares all three files against those approvals. A missing or
+stale approval blocks the run before seed can modify the database. Public CI can validate both profiles
 with native verification disabled. See [JDBC SQL approval and sample file paths](../../09-operations/driver_setup.md#external-sql-approval).
 
 `dummy_rest` is compatibility-only and must not count as a supported provider capability sample. `scripts/release/verify-usage-kit.sh` must validate canonical v0.3 samples and confirm deprecated alias directories are absent from the usage kit.
