@@ -1,7 +1,6 @@
-"""Scan tracked regular files and the two rendered Helm Jobs with the pinned rules."""
+"""Evaluate full-repository and rendered Helm reports for the checked-out commit."""
 import json
 import os
-import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -11,16 +10,6 @@ from policy import severity
 
 JOB_TEMPLATE = "packaging/portable-runner/deployment/helm/framework-runner/templates/job.yaml"
 RENDERED = {"produce.yaml", "collect.yaml"}
-
-
-def scan(cwd, targets, rules, report):
-    subprocess.run([
-        "semgrep", "scan", "--config", str(rules), "--jobs", "1", "--max-memory", "900",
-        "--timeout", "60", "--metrics", "off", "--disable-version-check",
-        "--no-rewrite-rule-ids", "--disable-nosem", "--quiet", "--json", "--output", str(report),
-        "--", *targets,
-    ], cwd=cwd, check=True)
-    return json.loads(report.read_bytes())
 
 
 def evaluate(report, rendered):
@@ -50,44 +39,30 @@ def evaluate(report, rendered):
             "blocking": blocking, "diagnostics": diagnostics}
 
 
-def full_scan(rules, output, commit):
-    root = Path.cwd()
-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    if head != commit:
-        raise ValueError(f"Expected {commit}, checked out {head}")
-    entries = os.fsdecode(subprocess.check_output(["git", "ls-files", "-z"])).split("\0")
-    targets = [path for path in entries if path and not Path(path).is_symlink() and Path(path).is_file()]
-    if not targets:
-        raise ValueError("No tracked regular files to scan")
-    rendered_dir = output / "rendered"
-    for name in RENDERED:
-        if "kind: Job" not in (rendered_dir / name).read_text().splitlines():
-            raise ValueError(f"Missing rendered Job in {name}")
-
-    summary = {"commit": head, "submitted_regular_files": len(targets), "scans": {}}
+def full_gate(reports, output, commit):
+    targets = set(os.fsdecode((reports / "targets").read_bytes()).split("\0")) - {""}
+    summary = {"commit": commit, "submitted_regular_files": len(targets), "scans": {}}
     analyzed = set()
     for family in ("gitlab", "community"):
-        for scope, cwd, files in [("repository", root, targets), ("rendered", rendered_dir, sorted(RENDERED))]:
+        for scope in ("repository", "rendered"):
             label = f"{family}-{scope}"
             try:
-                report = scan(cwd, files, rules / family, output / f"{label}.json")
+                report = json.loads((reports / f"{label}.json").read_bytes())
                 result = evaluate(report, scope == "rendered")
                 if scope == "repository":
                     analyzed.update(report["paths"]["scanned"])
                 print(f"{label}: analyzed={result['analyzed']} High={result['high']} "
                       f"Critical={result['critical']} passed={result['passed']}", flush=True)
-            except (subprocess.CalledProcessError, OSError, ValueError, KeyError, TypeError) as exc:
-                # CalledProcessError contains the complete target list. Report its exit code only.
-                reason = f"Semgrep exited {exc.returncode}" if isinstance(exc, subprocess.CalledProcessError) else str(exc)
-                result = {"passed": False, "error": reason}
-                print(f"{label}: {reason}", file=sys.stderr)
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                result = {"passed": False, "error": str(exc)}
+                print(f"{label}: {exc}", file=sys.stderr)
             summary["scans"][label] = result
 
-    missing = sorted(set(targets) - analyzed)
+    missing = sorted(targets - analyzed)
     source_extensions = {".java", ".py", ".sh", ".js", ".yaml", ".yml", ".properties"}
     missing_source = [p for p in missing if Path(p).suffix in source_extensions or Path(p).name == "Dockerfile"]
     summary["unanalyzed_files"] = missing
-    summary["passed"] = all(item["passed"] for item in summary["scans"].values()) and not missing_source
+    summary["passed"] = bool(targets) and all(item["passed"] for item in summary["scans"].values()) and not missing_source
     if missing_source:
         print(f"Source files missing from both reports: {missing_source}", file=sys.stderr)
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
@@ -95,4 +70,4 @@ def full_scan(rules, output, commit):
 
 
 if __name__ == "__main__":
-    sys.exit(full_scan(Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve(), sys.argv[3]))
+    sys.exit(full_gate(Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]))

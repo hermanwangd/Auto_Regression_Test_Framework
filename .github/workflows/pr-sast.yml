@@ -70,8 +70,8 @@ jobs:
             --user "$(id -u):$(id -g)" -e HOME=/tmp -e PYTHONDONTWRITEBYTECODE=1 \
             -e SEMGREP_SEND_METRICS=off -e SEMGREP_ENABLE_VERSION_CHECK=0 \
             -v "$GITHUB_WORKSPACE:/src:ro" -w /src -v "$RUNNER_TEMP/sast-rules:/rules:ro" \
-            -v "$RUNNER_TEMP/sast-output:/output" --entrypoint python3 "$SCANNER" \
-            scripts/ci/sast/full_scan.py /rules /output "$GITHUB_SHA"
+            -v "$RUNNER_TEMP/sast-output:/output" --entrypoint /bin/bash "$SCANNER" \
+            scripts/ci/sast/full-scan.sh /rules /output "$GITHUB_SHA"
 
       - name: Retain the main commit and scan results
         if: ${{ !cancelled() && github.event_name == 'push' }}

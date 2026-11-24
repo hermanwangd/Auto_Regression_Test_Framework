@@ -1,6 +1,9 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
-from full_scan import JOB_TEMPLATE, RENDERED, evaluate
+from full_gate import JOB_TEMPLATE, RENDERED, evaluate, full_gate
 
 
 def report(errors=(), findings=(), scanned=("existing.java",)):
@@ -30,3 +33,16 @@ class FullScanTest(unittest.TestCase):
         for files, rendered in [([], False), (["produce.yaml"], True)]:
             with self.assertRaises(ValueError):
                 evaluate(report(scanned=files), rendered)
+
+    def test_raw_template_exception_needs_both_families_to_finish_the_render_scan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            (out / "targets").write_bytes(JOB_TEMPLATE.encode() + b"\0")
+            raw = report(errors=[{"type": "Other syntax error", "path": JOB_TEMPLATE}], scanned=[JOB_TEMPLATE])
+            for family in ("gitlab", "community"):
+                (out / f"{family}-repository.json").write_text(json.dumps(raw))
+                (out / f"{family}-rendered.json").write_text(json.dumps(report(scanned=RENDERED)))
+            self.assertEqual(full_gate(out, out, "test"), 0)
+            (out / "community-rendered.json").unlink()
+            self.assertEqual(full_gate(out, out, "test"), 1)
+            self.assertFalse(json.loads((out / "summary.json").read_bytes())["passed"])
