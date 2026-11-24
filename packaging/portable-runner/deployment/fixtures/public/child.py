@@ -6,6 +6,6 @@ elif mode=='failure':sys.exit(7)
 elif mode=='timeout':time.sleep(20)
 elif mode=='overflow':os.write(1,b'x'*(1024*1024+1));time.sleep(20)
 elif mode=='nested':
- subprocess.Popen([sys.executable,'-B',__file__,'timeout'],start_new_session=True)
+ subprocess.Popen(['/bin/sleep','20'],start_new_session=True)
  time.sleep(20)
 else:raise SystemExit(2)

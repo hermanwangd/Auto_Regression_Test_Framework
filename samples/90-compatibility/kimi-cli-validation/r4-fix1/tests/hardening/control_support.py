@@ -113,15 +113,19 @@ def invoke(manifest, suite, requirements="requirements-click.lock", config="runt
 
 def invoke_subprocess(manifest, suite, requirements="requirements-click.lock", config="runtime_gate.json",
                       test_path=None, node_selection=None, timeout=20):
-    argv = [sys.executable, str(ROOT / "scripts" / "run_suite.py"), "--suite", suite,
-            "--manifest", str(manifest), "--requirements", str(requirements),
-            "--runtime-config", str(config), "--timeout-seconds", str(timeout)]
+    if not Path(sys.executable).is_absolute() or not 0 < timeout <= 3600:
+        raise ValueError("invalid interpreter or timeout for control")
+    optional = []
     if test_path is not None:
-        argv.extend(["--test-path", str(test_path)])
+        optional.append(f"--test-path={test_path}")
     if node_selection is not None:
-        argv.extend(["--node-selection", node_selection])
-    completed = subprocess.run(argv, cwd=ROOT, text=True, encoding="utf-8", capture_output=True,
-                               timeout=timeout + 10, check=False)
+        optional.append(f"--node-selection={node_selection}")
+    completed = subprocess.run(
+        ["/usr/bin/env", sys.executable, "-E", "-s", "scripts/run_suite.py", f"--suite={suite}",
+         f"--manifest={manifest}", f"--requirements={requirements}", f"--runtime-config={config}",
+         f"--timeout-seconds={timeout}", *optional],
+        cwd=ROOT, env={}, text=True, encoding="utf-8", capture_output=True, timeout=timeout + 10, check=False,
+    )
     return Invocation(suite, completed.returncode, completed.stdout, completed.stderr,
                       payload_from_stdout(completed.stdout))
 
@@ -147,7 +151,7 @@ def record_invocation(record_property, label, invocation, extra=None):
     _, metadata, _ = load_result(invocation)
     record = {
         "label": label,
-        "nested_runner_command": [sys.executable, str(ROOT / "scripts" / "run_suite.py")],
+        "nested_runner_command": ["/usr/bin/env", sys.executable, "-E", "-s", "scripts/run_suite.py"],
         "nested_runner_return_code": invocation.code,
         "nested_runner_stdout": invocation.stdout,
         "nested_runner_stderr": invocation.stderr,

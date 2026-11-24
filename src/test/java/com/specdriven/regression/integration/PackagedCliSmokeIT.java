@@ -1,11 +1,14 @@
 package com.specdriven.regression.integration;
 
+import com.specdriven.regression.testsupport.TestJvm;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Comparator;
 import java.util.concurrent.TimeUnit;
 import java.util.jar.JarOutputStream;
@@ -55,8 +58,7 @@ class PackagedCliSmokeIT {
             jar.finish();
         }
         Path output = tempDir.resolve("cli.log");
-        var cli = new ProcessBuilder("java", "-Xmx192m", "-jar",
-                "target/spec-driven-auto-regression-0.3.2.jar", "run",
+        var cli = TestJvm.forPackagedJar(List.of("-Xmx192m"), "run",
                 "--root", tempDir.toString(), "--suite", "jdbc/suite_manifest.yaml",
                 "--profile", "external_" + dialect, option, value)
                 .redirectErrorStream(true).redirectOutput(output.toFile());
@@ -78,15 +80,8 @@ class PackagedCliSmokeIT {
 
     @Test
     void packagedJarDelegatesCheckReadinessCommand() throws Exception {
-        Path jar = Path.of("target/spec-driven-auto-regression-0.3.2.jar").toAbsolutePath().normalize();
-        assertThat(Files.isRegularFile(jar)).isTrue();
 
-        Process process = new ProcessBuilder(
-                javaBinary(),
-                "-Xmx512m",
-                "-XX:MaxMetaspaceSize=256m",
-                "-jar",
-                jar.toString(),
+        Process process = TestJvm.forPackagedJar(List.of("-Xmx512m", "-XX:MaxMetaspaceSize=256m"),
                 "check-readiness",
                 "--root",
                 ".")
@@ -108,17 +103,10 @@ class PackagedCliSmokeIT {
 
     @Test
     void packagedJarUsesBundledProviderContractsOutsideRepositoryCwd() throws Exception {
-        Path jar = Path.of("target/spec-driven-auto-regression-0.3.2.jar").toAbsolutePath().normalize();
-        assertThat(Files.isRegularFile(jar)).isTrue();
         Path copiedSuite = tempDir.resolve("usage-kit").resolve("nats");
         copyDirectory(Path.of("samples/20-provider-capability-p0/messaging/nats"), copiedSuite);
 
-        Process process = new ProcessBuilder(
-                javaBinary(),
-                "-Xmx512m",
-                "-XX:MaxMetaspaceSize=256m",
-                "-jar",
-                jar.toString(),
+        Process process = TestJvm.forPackagedJar(List.of("-Xmx512m", "-XX:MaxMetaspaceSize=256m"),
                 "validate",
                 "--suite",
                 copiedSuite.resolve("suite_manifest.yaml").toString())
@@ -138,10 +126,6 @@ class PackagedCliSmokeIT {
                 .contains("suite_id: NATS-v0.3")
                 .contains("provider_contracts_used:")
                 .contains("nats.v0.3");
-    }
-
-    private String javaBinary() {
-        return Path.of(System.getProperty("java.home"), "bin", "java").toString();
     }
 
     private void copyDirectory(Path source, Path target) throws Exception {

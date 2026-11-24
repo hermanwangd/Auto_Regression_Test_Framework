@@ -1,4 +1,5 @@
 """Finite old/new behavioral RED harness; old broad scan is blocked before metadata read."""
+from fixture_process import run_fixture
 import argparse,importlib.util,json,os,sys,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -22,7 +23,7 @@ class ReviewRegressions(unittest.TestCase):
   def bound(path):
    if str(path)=='/proc':requested.append('/proc');return iter([])
    return original(path)
-  with patch.object(Path,'iterdir',bound):result=s._run_owned([sys.executable,'-B',str(D/'fixtures/public/child.py'),'failure'],0.3,lambda:None)
+  with patch.object(Path,'iterdir',bound):result=run_fixture(s,'failure',0.3,lambda:None)
   self.assertEqual(result['exit_code'],7);self.assertEqual(requested,[])
  def test_primary_status_cannot_be_stolen_by_adopted_reaper(self):
   actual=s.subprocess.Popen;wait=os.waitpid;primary=[];adopted_wait_requests=[]
@@ -30,7 +31,7 @@ class ReviewRegressions(unittest.TestCase):
    process=actual(*a,**kw);primary.append(process.pid);return process
   def adopted(pid,flags):adopted_wait_requests.append(pid);return wait(pid,flags)
   with patch.object(s.subprocess,'Popen',launched),patch.object(os,'waitpid',adopted):
-   result=s._run_owned([sys.executable,'-B',str(D/'fixtures/public/child.py'),'failure'],0.3,lambda:None)
+   result=run_fixture(s,'failure',0.3,lambda:None)
   self.assertEqual(result['exit_code'],7)
   self.assertNotIn(primary[0],adopted_wait_requests,'Popen must exclusively own primary wait/status')
 

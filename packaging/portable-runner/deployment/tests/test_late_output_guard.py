@@ -32,8 +32,8 @@ class LateOutputGuardTest(unittest.TestCase):
   def children(pid,known):return {child} if pid==me and state['live'] else set()
   def now():state['clock']+=.001;return state['clock']
   reads=iter(chunks)
-  with patch.object(s.ctypes,'CDLL',return_value=Lib()),patch.object(s,'_identity',identity),patch.object(s,'_children',children),patch.object(s.selectors,'DefaultSelector',Selector),patch.object(s.subprocess,'Popen',launched),patch.object(s.os,'set_blocking'),patch.object(s.os,'read',side_effect=lambda *a:next(reads)),patch.object(s.os,'kill',side_effect=AssertionError('no model PID may be signaled')),patch.object(s.time,'monotonic',now),patch.object(s.time,'sleep'):
-   result=s._run_owned(['/unit/fixed-only-command'],1,lambda:attempts.append(True))
+  with patch.object(s.ctypes,'CDLL',return_value=Lib()),patch.object(s,'_identity',identity),patch.object(s,'_children',children),patch.object(s.selectors,'DefaultSelector',Selector),patch.object(s.os,'set_blocking'),patch.object(s.os,'read',side_effect=lambda *a:next(reads)),patch.object(s.os,'kill',side_effect=AssertionError('no model PID may be signaled')),patch.object(s.time,'monotonic',now),patch.object(s.time,'sleep'):
+   result=s._supervise(launched,1,lambda:attempts.append(True))
   self.assertEqual(result['exit_code'],0);self.assertEqual(attempts,[True]);self.assertEqual(result['captured_bytes'],1048576);return result
  def test_cleanup_tail_overflow_remains_command_failure_with_raw_zero(self):
   result=self.model(True);self.assertEqual(result['reason'],'log_overflow');self.assertFalse(s.successful(result));self.assertFalse(result['cleanup_eligible'])

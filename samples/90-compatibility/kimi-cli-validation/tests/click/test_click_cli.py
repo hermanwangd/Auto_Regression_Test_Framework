@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -125,22 +124,11 @@ def test_clk_005_file_error_then_next_invocation_succeeds(record_property):
 
 def test_clk_006_real_subprocess_invocation(record_property, tmp_path):
     root = Path(__file__).resolve().parents[2]
-    env = os.environ.copy()
-    env.pop("SWARM_NAME", None)
-    env.pop("SWARM_COUNT", None)
-    env["PYTHONPATH"] = str(root / "src")
-    command = [
-        sys.executable,
-        "-m",
-        "swarm_cli01.click_app",
-        "--name",
-        "process",
-        "--count",
-        "2",
-        "process.txt",
-    ]
+    assert Path(sys.executable).is_absolute()
+    env = {"PYTHONPATH": str(root / "src")}
     completed = subprocess.run(
-        command,
+        ["/usr/bin/env", sys.executable, "-s", "-m", "swarm_cli01.click_app",
+         "--name", "process", "--count", "2", "process.txt"],
         cwd=tmp_path,
         env=env,
         text=True,
@@ -150,7 +138,7 @@ def test_clk_006_real_subprocess_invocation(record_property, tmp_path):
         check=False,
     )
     observed = {
-        "command": command,
+        "command": completed.args,
         "exit_code": completed.returncode,
         "stdout": completed.stdout,
         "stderr": completed.stderr,

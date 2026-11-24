@@ -1,6 +1,7 @@
 package com.featuredeliveryintelligence.fdi.producttest.preparation;
 
 import com.fasterxml.jackson.databind.*;
+import com.featuredeliveryintelligence.fdi.producttest.JavaChildProcess;
 import com.fasterxml.jackson.databind.node.*;
 import com.featuredeliveryintelligence.fdi.application.ProductTestKnowledgePreparationBridge;
 import com.featuredeliveryintelligence.fdi.orchestration.CogneeSearchClient;
@@ -92,7 +93,7 @@ public final class HostKnowledgeContextPortTest {
         public byte[] select(byte[] sourceEvidence) {
             try {
                 Path input=privateRoot.resolve("source.json");Files.write(input,sourceEvidence);
-                byte[] raw=invoke(scenario.equals("denied")?"default":"selection",input);
+                byte[] raw=invoke(scenario.equals("denied") ? Mode.DEFAULT : Mode.SELECTION);
                 if(scenario.equals("tampered")) { var changed=(ObjectNode)JSON.readTree(raw);((ObjectNode)changed.path("context").path("selected").get(0)).put("providerRevision","fixture:tampered");PreparationFixture.resign(changed);return PreparationFixture.bytes(changed); }
                 return raw;
             } catch(PreparationContracts.Blocked e){throw e;}catch(Exception e){lastFailure=e.getClass().getSimpleName()+("BRIDGE_TIMEOUT".equals(e.getMessage())?"_BRIDGE_TIMEOUT":"");throw PreparationContracts.fail(ContextAcquisition.Reason.UNAVAILABLE);}
@@ -102,14 +103,21 @@ public final class HostKnowledgeContextPortTest {
                 var replay=(ObjectNode)JSON.readTree(sourceEvidence);var receipt=JSON.readTree(original);replay.set("selectionReceipt",receipt);
                 var selected=receipt.path("context").path("selected").get(0);
                 var feedback=replay.putObject("consumerFeedback");feedback.put("recordKey",selected.path("recordKey").asText()).put("recordVersion",selected.path("recordVersion").asInt()).put("disposition","REJECTED").put("reason","Preparation replay only; no adoption claim").put("outcome","UNASSESSED");feedback.putArray("outcomeEvidenceRefs");
-                Path input=privateRoot.resolve("replay.json");Files.write(input,PreparationFixture.bytes(replay));JsonNode checked=JSON.readTree(invoke("replay",input));
+                Path input=privateRoot.resolve("replay.json");Files.write(input,PreparationFixture.bytes(replay));JsonNode checked=JSON.readTree(invoke(Mode.REPLAY));
                 check("FEEDBACK_BUILT".equals(checked.path("status").asText()),"HOST_REPLAY_FAILED");
                 check(receipt.path("selectionReceiptSha256").equals(checked.path("selectionReceiptSha256")),"ORIGINAL_RECEIPT_DIGEST_CHANGED");replays++;
             }catch(Exception e){throw PreparationContracts.fail(ContextAcquisition.Reason.TAMPERED);}
         }
-        private byte[] invoke(String mode,Path input) throws Exception {
+        private enum Mode { DEFAULT, SELECTION, REPLAY }
+
+        private byte[] invoke(Mode operation) throws Exception {
+            String mode = operation.name().toLowerCase(Locale.ROOT);
+            Path input = privateRoot.resolve(operation == Mode.REPLAY ? "replay.json" : "source.json");
             String endpoint="http://127.0.0.1:"+server.getAddress().getPort();
-            var process=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin/java").toString(),"-Xmx256m","-XX:MaxMetaspaceSize=128m","-cp",System.getProperty("java.class.path"),Bootstrap.class.getName(),mode,input.toString(),endpoint).start();
+            var child = JavaChildProcess.fromRuntime(Path.of(System.getProperty("java.home"), "bin", "java"));
+            child.command().addAll(List.of("-Xmx256m", "-XX:MaxMetaspaceSize=128m", "-cp", System.getProperty("java.class.path"),
+                    Bootstrap.class.getName(), mode, input.toString(), endpoint));
+            var process = child.start();
             bridgeOperations.add("START_HOST_"+mode.toUpperCase(java.util.Locale.ROOT));
             var readers=Executors.newFixedThreadPool(2);Future<byte[]> stdout=readers.submit(()->bounded(process.getInputStream(),4*1024*1024));Future<byte[]> stderr=readers.submit(()->bounded(process.getErrorStream(),4096));
             try {

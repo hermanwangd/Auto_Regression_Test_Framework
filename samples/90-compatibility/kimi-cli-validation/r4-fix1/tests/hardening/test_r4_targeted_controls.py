@@ -1,7 +1,7 @@
 import concurrent.futures
 import json
 from pathlib import Path
-import subprocess
+from types import SimpleNamespace
 
 import pytest
 
@@ -45,14 +45,11 @@ def assert_harness_rejection(invocation, code):
 
 
 def inject_report(monkeypatch, report_bytes, exit_code=0):
-    real_run = subprocess.run
-
     def fake_run(command, **kwargs):
-        if "--junitxml" not in command:
-            return real_run(command, **kwargs)
+        assert "--junitxml" in command
         report = Path(command[command.index("--junitxml") + 1])
         report.write_bytes(report_bytes)
-        return subprocess.CompletedProcess(command, exit_code, "injected raw JUnit control", "")
+        return SimpleNamespace(returncode=exit_code, stdout="injected raw JUnit control", stderr="")
     monkeypatch.setattr(run_suite.subprocess, "run", fake_run)
 
 

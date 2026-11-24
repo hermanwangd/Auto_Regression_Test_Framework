@@ -2,9 +2,11 @@
 import importlib.util
 import pathlib
 import tempfile
+import sys
 import unittest
 
 SOURCE = pathlib.Path(__file__).resolve().parents[1] / "verify-knowledge-preparation.py"
+sys.path.insert(0, str(SOURCE.parent))
 spec = importlib.util.spec_from_file_location("preparation_verifier", SOURCE)
 subject = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(subject)

@@ -6,17 +6,45 @@ from argparse import Namespace
 from pathlib import Path
 import stat
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
 import zipfile
 
 SCRIPT = Path(__file__).resolve().parents[1] / "public-cli-project.py"
+sys.path.insert(0, str(SCRIPT.parent))
 SPEC = importlib.util.spec_from_file_location("public_cli_project", SCRIPT)
 HARNESS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(HARNESS)
 
 
 class PublicCliProjectTest(unittest.TestCase):
+    def test_selected_jdk_requires_a_java_installation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / "bin").mkdir()
+            name = "java.exe" if HARNESS.os.name == "nt" else "java"
+            candidate = home / "bin" / name
+            candidate.touch(mode=0o700)
+            with self.assertRaisesRegex(ValueError, "runtime installation"):
+                HARNESS.jdk_tool(home, "java")
+
+    def test_compiler_selector_accepts_versioned_driver_and_rejects_unrelated_program(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            driver = root / "x86_64-linux-gnu-gcc-12"
+            unrelated = root / "unrelated"
+            for item in (driver, unrelated):
+                item.touch(mode=0o700)
+            self.assertEqual(driver.resolve(), HARNESS.compiler_tool(str(driver)))
+            with self.assertRaisesRegex(ValueError, "C compiler driver"):
+                HARNESS.compiler_tool(str(unrelated))
+
+    def test_child_environment_preserves_configuration_and_drops_extra_vm_options(self):
+        settings = {"JAVA_HOME": "/selected/jdk", "JAVA_TOOL_OPTIONS": "unused", "JDK_JAVAC_OPTIONS": "unused"}
+        with patch.dict(HARNESS.os.environ, settings, clear=True):
+            self.assertEqual({"JAVA_HOME": "/selected/jdk"}, HARNESS.jdk_environment())
+
     def archive(self, names):
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w") as archive:

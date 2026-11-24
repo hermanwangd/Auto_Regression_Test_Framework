@@ -1,5 +1,7 @@
 package com.specdriven.regression.producttest;
 
+import com.specdriven.regression.provider.ProviderDataYaml;
+
 import static org.assertj.core.api.Assertions.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.*;
@@ -92,7 +94,7 @@ class ProductTestHandoffV2PreparationTest {
         Files.writeString(suite.resolve("suite_manifest.yaml"),"{\n  \"manifest_version\": \"v0.3\",\n  \"suite_id\": \"P2-PUBLIC-TOTAL\",\n  \"default_profile\": \"local\",\n  \"artifact_roots\": {\n    \"expected_results\": \"data/\",\n    \"fixtures\": \"data/\"\n  },\n  \"targets\": {\n    \"public_api\": {\n      \"provider_contract\": \"rest_client.v0.3\"\n    }\n  },\n  \"env_profiles\": {\n    \"local\": {\n      \"ref\": \"config/local.yaml\"\n    }\n  },\n  \"tests\": [\n    {\n      \"ref\": \"cases/total.yaml\"\n    }\n  ]\n}\n");
         Files.writeString(suite.resolve("cases/total.yaml"),"dsl_version: v0.3\ntest_case_id: P2-TOTAL-1\ntitle: Independently frozen total of the public 5 and 7 values\nexecute:\n  - id: total\n    target: public_api\n    op: http_request\n    with:\n      request.method: GET\n      request.path: /total\n      request.timeout: PT3S\nverify:\n  - id: status\n    type: assertion\n    assert:\n      actual: step://total/response.status\n      operator: equals\n      expected: 200\n  - id: total_oracle\n    type: assertion\n    assert:\n      actual: step://total/response.body\n      operator: json_match\n      expected_ref: artifact://expected_results/independent-oracle.json\n");
         Files.writeString(suite.resolve("data/independent-oracle.json"),"{\"total\":12}\n");
-        var yaml=new org.yaml.snakeyaml.Yaml();Map<String,Object> profile=yaml.load(Files.readString(suite.resolve("env_profiles/local_native.yaml")));
+        var yaml=ProviderDataYaml.create();Map<String,Object> profile=yaml.load(Files.readString(suite.resolve("env_profiles/local_native.yaml")));
         profile.put("profile_id","local");profile.put("targets",Map.of("public_api",Map.of("runtime_mode","native","bindings",Map.of("base_url","http://127.0.0.1:1"))));
         Map<String,Object> policy=(Map<String,Object>)profile.get("product_test");policy.put("knowledge_mode","required");policy.put("provider_modes",Map.of("public_api","real"));
         Files.writeString(suite.resolve("config/local.yaml"),yaml.dump(profile));
@@ -149,7 +151,7 @@ class ProductTestHandoffV2PreparationTest {
         var sources=(com.fasterxml.jackson.databind.node.ObjectNode)json.readTree(suite.resolve("handoff/sources.json").toFile());
         for(var artifact:sources.path("artifacts"))if(artifact.path("role").asText().equals("case"))((com.fasterxml.jackson.databind.node.ObjectNode)artifact).put("sha256",hash(suite.resolve("cases/total.yaml"))).put("bytes",Files.size(suite.resolve("cases/total.yaml")));
         json.writeValue(suite.resolve("handoff/sources.json").toFile(),sources);((com.fasterxml.jackson.databind.node.ObjectNode)h.path("external_artifact_bindings")).put("sha256",hash(suite.resolve("handoff/sources.json")));((com.fasterxml.jackson.databind.node.ObjectNode)h.path("proposal_trace").get(0)).put("case_sha256",hash(suite.resolve("cases/total.yaml")));
-        var refs=((com.fasterxml.jackson.databind.node.ObjectNode)h.path("requirement_mapping").get(0)).putArray("oracle_refs");refs.add("data/independent-oracle.json");Map<String,Object> test=new org.yaml.snakeyaml.Yaml().load(Files.readString(suite.resolve("cases/total.yaml")));
+        var refs=((com.fasterxml.jackson.databind.node.ObjectNode)h.path("requirement_mapping").get(0)).putArray("oracle_refs");refs.add("data/independent-oracle.json");Map<String,Object> test=ProviderDataYaml.create().load(Files.readString(suite.resolve("cases/total.yaml")));
         for(var raw:(List<Map<String,Object>>)test.get("verify"))if(!((Map<?,?>)raw.get("assert")).containsKey("expected_ref"))refs.add("cases/total.yaml#"+raw.get("id"));
         json.writeValue(suite.resolve("review-input.json").toFile(),h);
     }

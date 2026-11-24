@@ -1,4 +1,5 @@
 """DEP-COMP-1/2 direct behavior, status doubles are not product/collector evidence."""
+from fixture_process import run_fixture
 import io,json,os,sys,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -56,7 +57,7 @@ class ObservationTest(unittest.TestCase):
    if path.name=='children' and len(path.parts)>2 and path.parts[2]!=str(parent):raise FileNotFoundError('public missing stable child interface')
    return actual_read(path,*a,**kw)
   with patch.object(s.subprocess,'Popen',launch),patch.object(s,'_children',children),patch.object(Path,'read_text',read):
-   r=s._run_owned([sys.executable,'-B',str(D/'fixtures/public/child.py'),'timeout'],0.08,lambda:attempts.append(True))
+   r=run_fixture(s,'timeout',0.08,lambda:attempts.append(True))
   self.assertEqual(attempts,[True]);self.assertFalse(r['stop_verified']);self.assertFalse(r['cleanup_eligible']);self.assertTrue(r['reaped'])
  def test_identity_read_error_after_launch_retains_failure_and_collects(self):
   parent=os.getpid();actual_read=Path.read_text;actual_children=s._children;actual_launch=s.subprocess.Popen;launched=[];reads=[0];attempts=[]
@@ -71,12 +72,12 @@ class ObservationTest(unittest.TestCase):
     if reads[0]==2:raise PermissionError('public injected registered identity denial')
    return actual_read(path,*a,**kw)
   with patch.object(s.subprocess,'Popen',launch),patch.object(s,'_children',children),patch.object(Path,'read_text',read):
-   result=s._run_owned([sys.executable,'-B',str(D/'fixtures/public/child.py'),'timeout'],0.08,lambda:attempts.append(True))
+   result=run_fixture(s,'timeout',0.08,lambda:attempts.append(True))
   self.assertEqual(attempts,[True]);self.assertFalse(result['stop_verified']);self.assertFalse(result['cleanup_eligible']);self.assertTrue(result['reaped'])
  def test_before_launch_failure_restores_subreaper(self):
   import ctypes
   libc=ctypes.CDLL(None);before=ctypes.c_int();libc.prctl(37,__import__('ctypes').byref(before),0,0,0)
-  with patch.object(s,'_children',side_effect=s.StopFailure('public baseline unobservable')),self.assertRaises(s.StopFailure):s._run_owned([sys.executable,'-B',str(D/'fixtures/public/child.py'),'success'],0.1,lambda:None)
+  with patch.object(s,'_children',side_effect=s.StopFailure('public baseline unobservable')),self.assertRaises(s.StopFailure):run_fixture(s,'success',0.1,lambda:None)
   after=ctypes.c_int();libc.prctl(37,__import__('ctypes').byref(after),0,0,0)
   try:self.assertEqual(after.value,before.value)
   finally:libc.prctl(36,before.value,0,0,0)

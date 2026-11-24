@@ -41,6 +41,13 @@ class FrameworkCliTransportTest {
         assertThat(receipt.frameworkVerdict()).isEmpty();
     }
 
+    @Test void configuredExecutableMustBelongToAJavaRuntime() throws Exception {
+        Path executable = Files.createDirectories(root.resolve("bin")).resolve("java");
+        Files.writeString(executable, "ordinary test fixture");
+        assertThatThrownBy(() -> JavaChildProcess.fromRuntime(executable))
+                .isInstanceOf(java.io.IOException.class).hasMessageContaining("Java runtime launcher");
+    }
+
     @Test void missingJavaExecutableIsALaunchFailure() throws Exception {
         transport("System.out.println(\"unused\");", Duration.ofSeconds(4));
         Path jar = root.resolve("fixture.jar");

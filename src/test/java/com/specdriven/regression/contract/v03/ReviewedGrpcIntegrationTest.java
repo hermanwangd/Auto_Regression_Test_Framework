@@ -1,5 +1,7 @@
 package com.specdriven.regression.contract.v03;
 
+import com.specdriven.regression.testsupport.TestJvm;
+
 import static org.assertj.core.api.Assertions.*;
 import com.specdriven.regression.producttest.ProductTestHandoffService;
 import com.specdriven.regression.producttest.ProductTestHandoffService.InvocationRequirement;
@@ -115,8 +117,11 @@ class ReviewedGrpcIntegrationTest {
   final Path root;final String id=UUID.randomUUID().toString().replace("-","");final Process process;final String endpoint;
   Owner(Path root,String mode)throws Exception {
    this.root=root;Files.createDirectories(root);
-   Files.writeString(root.resolve("launcher.args"),"-cp \""+System.getProperty("java.class.path")+"\"\n"+GrpcEchoOwner.class.getName()+"\n");
-   process=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin/java").toString(),"-Xmx128m","-XX:MaxMetaspaceSize=128m","-Dswarm.grpc.owner_nonce="+id,"@"+root.resolve("launcher.args"),root.toString(),mode).redirectErrorStream(true).redirectOutput(root.resolve("owner.log").toFile()).start();
+   if (!Set.of("echo", "wrong_oracle", "down", "timeout", "inbound_overflow", "json_overflow").contains(mode))
+    throw new IllegalArgumentException("Unknown echo fixture mode");
+   process = TestJvm.forMain(GrpcEchoOwner.class,
+     List.of("-Xmx128m", "-XX:MaxMetaspaceSize=128m", "-Dswarm.grpc.owner_nonce=" + id),
+     root.toString(), mode).redirectErrorStream(true).redirectOutput(root.resolve("owner.log").toFile()).start();
    long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(30);
    while(!Files.exists(root.resolve("owner-ready.json")) && process.isAlive() && System.nanoTime()<end)Thread.sleep(20);
    if(!Files.exists(root.resolve("owner-ready.json"))) {process.destroyForcibly();if(!process.waitFor(2,TimeUnit.SECONDS))throw new IllegalStateException("Owned fixture startup failed and PID termination was not confirmed");throw new IllegalStateException("Owned fixture did not publish atomic readiness within 30s: "+Files.readString(root.resolve("owner.log")));}

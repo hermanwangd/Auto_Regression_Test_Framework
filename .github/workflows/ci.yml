@@ -57,6 +57,11 @@ jobs:
       - name: Unit, integration, and packaged CLI verification
         run: scripts/ci/maven-verify-with-diagnostics.sh
 
+      - name: Verify portable packaging and Linux process supervision
+        run: |
+          python3 -B -m unittest discover -s packaging/portable-runner/tests
+          python3 -B -m unittest discover -s packaging/portable-runner/deployment/tests
+
       - name: Compatibility runner command and process-tree checks
         run: python3 -B -m unittest discover -s samples/90-compatibility/kimi-db-validation/fix1 -p test_process_policy.py
 

@@ -1,4 +1,5 @@
 package com.specdriven.regression.fixture;
+import com.specdriven.regression.testsupport.FixtureGit;
 
 import static org.assertj.core.api.Assertions.*;
 import static com.specdriven.regression.fixture.SharedSitDataDecision.*;
@@ -10,7 +11,6 @@ import java.nio.file.*;
 import java.security.*;
 import java.time.*;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -36,18 +36,12 @@ class SharedSitDataContractValidatorTest {
         return value.deepCopy();
     }
     static String digest(JsonNode value) throws Exception { return sha(bytes(ordered(value))); }
-    static String git(Path root, String... args) throws Exception {
-        var argv = new ArrayList<>(List.of("/usr/bin/git", "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgSign=false", "-C", root.toString())); argv.addAll(List.of(args));
-        var builder = new ProcessBuilder(argv); builder.environment().clear();
-        builder.environment().putAll(Map.of("PATH", "/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM", "1", "GIT_CONFIG_GLOBAL", "/dev/null", "GIT_OPTIONAL_LOCKS", "0", "GIT_TERMINAL_PROMPT", "0", "GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z"));
-        builder.redirectErrorStream(true); var process = builder.start(); assertThat(process.waitFor(10, TimeUnit.SECONDS)).isTrue(); byte[] output = process.getInputStream().readNBytes(8193); assertThat(output.length).isLessThanOrEqualTo(8192); assertThat(process.exitValue()).as(new String(output)).isZero(); return new String(output).strip();
-    }
     @BeforeAll void actualAdmittedPublicSource(@TempDir Path temp) throws Exception {
-        Path root = Files.createDirectory(temp.resolve("main-product")); git(root, "init", "-q");
+        Path root = Files.createDirectory(temp.resolve("main-product")); FixtureGit.init(root);
         Map<String,String> payloads = Map.of("suite", "suite: public-c17\n", "data", "{\"public\":true}\n", "schema", "{\"type\":\"object\"}\n", "config", "{\"public_config\":true}\n", "oracle", "{\"public\":true}\n", "cleanup", "{\"owned\":\"public-contract-only\"}\n");
         Map<String,String> paths = Map.of("suite", "tests/sit/suite.yaml", "data", "tests/sit/data/public.json", "schema", "tests/sit/config/schema.json", "config", "tests/sit/config/nonsecret.json", "oracle", "tests/sit/data/oracle.json", "cleanup", "tests/sit/config/cleanup.json");
         for (String name : paths.keySet()) { Path file = root.resolve(paths.get(name)); Files.createDirectories(file.getParent()); Files.writeString(file, payloads.get(name)); }
-        git(root, "add", "."); git(root, "-c", "user.name=Public Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "public C17 immutable sources A"); String a = git(root, "rev-parse", "HEAD");
+        FixtureGit.add(root, "."); FixtureGit.commit(root, "public C17 immutable sources A"); String a = FixtureGit.head(root);
         ObjectNode lock = JSON.createObjectNode(); lock.put("schema_version", "runner-dependencies.lock.v1"); lock.put("lock_id", "c17-public"); lock.put("lock_version", "1");
         var flow = lock.putObject("main_flow"); flow.put("owner_ref", "public-owner"); flow.put("source_repo", REPO); flow.put("source_testrepo_version", a); flow.put("sit_root", "tests/sit");
         var repo = lock.putArray("repositories").addObject(); repo.put("source_repo", REPO); repo.put("source_testrepo_version", a); repo.put("commit_algorithm", "git-sha1"); repo.put("source_owner_ref", "public-owner");
@@ -58,7 +52,7 @@ class SharedSitDataContractValidatorTest {
         }
         flow.put("suite_artifact_id", artifacts.get("suite").path("artifact_id").asText());
         var sut = lock.putArray("sut_expectations").addObject(); sut.put("sut_id", "sut-main"); sut.put("owner_ref", "public-owner"); sut.put("source_repo", REPO); sut.put("expected_deployed_revision", "sut-v1"); sut.put("readiness_binding_ref", "sut"); sut.put("cleanup_owner_ref", "public-cleaner"); lock.putArray("relations");
-        Path lockPath = root.resolve("tests/sit/dependencies.lock"); Files.write(lockPath, bytes(lock)); git(root, "add", "."); git(root, "-c", "user.name=Public Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "public composition X lock"); String x = git(root, "rev-parse", "HEAD");
+        Path lockPath = root.resolve("tests/sit/dependencies.lock"); Files.write(lockPath, bytes(lock)); FixtureGit.add(root, "."); FixtureGit.commit(root, "public composition X lock"); String x = FixtureGit.head(root);
         var binding = JSON.createObjectNode(); binding.put("schema_version", "runner-trusted-roots.v1"); binding.put("binding_id", "c17-public"); binding.put("approved_lock_sha256", sha(bytes(lock))); var bound = binding.putArray("roots").addObject(); bound.put("source_repo", REPO); bound.put("expected_commit", x); bound.put("commit_algorithm", "git-sha1"); bound.put("absolute_checkout_root", root.toString()); bound.put("source_owner_ref", "public-owner"); bound.put("binding_evidence_sha256", "1".repeat(64)); Path roots = temp.resolve("roots.json"); Files.write(roots, bytes(binding));
         source = new RunnerBundleService().inspectBindings(lockPath, sha(bytes(lock)), roots, sha(bytes(binding)));
     }

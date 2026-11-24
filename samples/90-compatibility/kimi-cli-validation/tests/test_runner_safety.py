@@ -7,10 +7,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts'))
 
 def load(path, name):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -75,7 +77,7 @@ class RunnerSafetyTests(unittest.TestCase):
                 report = Path(command[command.index('--junitxml') + 1])
                 report.write_text('<testsuites><testsuite>' + ''.join(
                     '<testcase name="' + c['test_name'] + '"><failure message="expected assertion failure"/></testcase>' for c in manifest['cases']) + '</testsuite></testsuites>')
-                return subprocess.CompletedProcess(command, 1, '', '')
+                return SimpleNamespace(returncode=1, stdout='', stderr='')
             with patch.object(runner.platform, 'platform', return_value='test-platform'), patch.object(sys, 'argv', ['run_suite.py', '--suite', 'click']), patch.object(runner.subprocess, 'run', side_effect=assertion_failure):
                 code = runner.main()
             self.assertEqual(code, 1)

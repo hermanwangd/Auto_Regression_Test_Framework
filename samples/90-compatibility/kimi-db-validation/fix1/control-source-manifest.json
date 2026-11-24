@@ -9,7 +9,7 @@
     "controls/tests/conftest.py": "97cfaee5d98bf90907e262568ea3a48ecf477b6583daa3161fffa88eb298a022",
     "controls/tests/test_hardening_controls.py": "43a0e84269ba5b75d165a77d8de8633f064c650f8fce1aa3adc596216913e11a",
     "isolated_pytest.py": "7cb109ceab22eb66c5e8f51f48a57a690017098dde498fa9ec13e3abd58d10f4",
-    "junit_policy.py": "d4c7cf16c745a8fd9c41124b98ee56d168fd07a3716909ec9ccfc5aecfca0267",
+    "junit_policy.py": "ed2af04374c50a40e7330ea5491db277596e16c593e7945be202ae4d3c6f7bf6",
     "process_policy.py": "5e408e8f0d201caac9ac2104620f6cc4a3854cc0a2396baa50741852de1ef57d",
     "provenance/frozen-manifest.sha256": "1d5fabf32f719748f16ade1df739823c7fb0e628ae9ace1510513950886f072a",
     "provenance/source-lock.json": "7ff5fa4f24c938f41ab64ccbf97afbf6bdd50bdd44b5ecab54e663ec4c7a921c",
@@ -26,6 +26,7 @@
     "approved_runtime.py": "a46dcc97d890c0d422837ddf885ce57eca6e5386edee0d01c1ccd8a6d0467832",
     "approved_import_probe.py": "7566a48e58b6c104c51263b32e91272723bbcf238e16d95b0fd9d52b83bef3a6",
     "controls/process_tree_fixture.py": "f6bfedec1f6fc6beb35292f59f0a3d1dc5d93ea655d44f27a64007612cbc7c13",
-    "test_process_policy.py": "283c6346d98bdcfe3f086d0fface1685653641dfae443c31988be32e47fda017"
+    "test_process_policy.py": "283c6346d98bdcfe3f086d0fface1685653641dfae443c31988be32e47fda017",
+    "junit_reader.py": "f3dd4f0c6236fe9ae2180286a4d21e0f96c4b1696c2fae565617999b452ff662"
   }
 }

@@ -1,5 +1,7 @@
 package com.specdriven.regression.provider.grpc;
 
+import com.specdriven.regression.testsupport.TestJvm;
+
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.specdriven.regression.contract.v03.V03RuntimeExecutionService;
@@ -147,9 +149,9 @@ public final class P04OwnedStreamingProbe {
         Owner(Path root,Path source)throws Exception {
             this.root=root;
             Path log=root.resolveSibling(root.getFileName()+".log");
-            Path argfile=root.resolveSibling(root.getFileName()+".args");
-            Files.writeString(argfile,"-cp \""+System.getProperty("java.class.path")+"\"\n"+P04StreamingOwner.class.getName()+"\n");
-            process=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin/java").toString(),"-Xmx128m","-XX:MaxMetaspaceSize=128m","-Dswarm.grpc.owner_nonce="+id,"@"+argfile,root.toString(),source.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
+            process = TestJvm.forMain(P04StreamingOwner.class,
+                    List.of("-Xmx128m", "-XX:MaxMetaspaceSize=128m", "-Dswarm.grpc.owner_nonce=" + id),
+                    root.toString(), source.toString()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
             long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(5);
             while(!Files.exists(root.resolve("owner-ready.json"))&&process.isAlive()&&System.nanoTime()<end)Thread.sleep(10);
             if(!Files.exists(root.resolve("owner-ready.json"))) {process.destroyForcibly();if(!process.waitFor(2,TimeUnit.SECONDS))throw new IllegalStateException("owner reaping uncertain");throw new IllegalStateException("owner readiness failed: "+Files.readString(log));}
