@@ -5,11 +5,10 @@ set -uo pipefail
 # together under a private directory when the original executable fails that check.
 if [[ ${GITHUB_ACTIONS:-} == true && ${RUNNER_OS:-} == Linux ]]; then
   executable=$(realpath -e "$JAVA_HOME/bin/java") || exit 1
-  item_is_file=1
   item=$executable
   while :; do
-    mode=$(stat -c '%a' "$item") || exit 1
-    if (( (8#$mode & 2) && (item_is_file || !(8#$mode & 01000)) )); then
+    mode=$(stat -c '%A' "$item") || exit 1
+    if [[ ${mode:8:1} == w && ( -f $item || ${mode:9:1} != [tT] ) ]]; then
       echo "Staging test JDK because $item has mode $mode"
       private_jdk=$(mktemp -d /tmp/framework-test-jdk.XXXXXXXX) || exit 1
       trap 'rm -rf -- "$private_jdk"' EXIT
@@ -22,7 +21,6 @@ if [[ ${GITHUB_ACTIONS:-} == true && ${RUNNER_OS:-} == Linux ]]; then
     fi
     if [[ $item == / ]]; then break; fi
     item=$(dirname -- "$item")
-    item_is_file=0
   done
 fi
 
