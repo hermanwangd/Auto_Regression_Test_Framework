@@ -43,9 +43,14 @@ class DatabaseFixtureProviderTest {
     void absentOrUnrelatedFixturesNeedNoDatabase() {
         Map<String, Map<String, Object>> contracts = Map.of("db", Map.of());
         Path output = root.resolve("output");
+        var fileFixture = new ResolvedProviderContract("fixture", "file", "", "file_batch", "file_fixture",
+                "supported", "supported", "", "", "");
+        provider.checkExecution(Map.of("assertions", List.of("invalid", Map.of("type", "file_diff"))),
+                new ProviderContractResolutionReport(true, List.of(fileFixture), List.of()));
         provider.setup(root, Map.of(), contracts, output);
+        provider.setup(root, Map.of("fixture", Map.of()), contracts, output);
         provider.cleanup(root, Map.of("fixture", Map.of("cleanup",
-                List.of("invalid", Map.of("provider", "file")))), contracts, output);
+                List.of("invalid", Map.of(), Map.of("provider", "file")))), contracts, output);
         assertThat(output).doesNotExist();
     }
 }
