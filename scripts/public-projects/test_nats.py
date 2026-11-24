@@ -62,16 +62,22 @@ class NatsHarnessBoundaryTest(unittest.TestCase):
         pin = {"name": "SHA256SUMS", "size": len(content), "sha256": hashlib.sha256(content).hexdigest()}
         cache = self.root / "download"
         cache.mkdir()
-        with mock.patch.object(nats.http.client, "HTTPSConnection") as connect:
-            connection = connect.return_value
+        with mock.patch.object(nats, "OpenerDirector") as factory:
+            opener = factory.return_value
             for partial in (content[:-1], content + b".", b"X" * len(content)):
-                connection.getresponse.return_value = Response(partial)
+                opener.open.return_value = Response(partial)
                 with self.subTest(partial=partial), self.assertRaises(ValueError):
                     nats.download_release_file("v1.0.0", pin, cache)
                 self.assertEqual(list(cache.iterdir()), [])
-            connection.getresponse.return_value = Response(content)
+            opener.open.return_value = Response(content)
             self.assertEqual(nats.download_release_file("v1.0.0", pin, cache).read_bytes(), content)
-            connect.assert_called_with("github.com", timeout=30)
+            request = opener.open.call_args.args[0]
+            self.assertEqual(request.full_url, "https://github.com/nats-io/nats-server/releases/download/v1.0.0/SHA256SUMS")
+            handler = opener.add_handler.call_args.args[0]
+            self.assertIsInstance(handler, nats.HTTPSHandler)
+            self.assertTrue(handler._context.check_hostname)
+            self.assertEqual(handler._context.verify_mode, nats.ssl.CERT_REQUIRED)
+            self.assertGreaterEqual(handler._context.minimum_version, nats.ssl.TLSVersion.TLSv1_2)
 
     def test_added_operation_is_rejected_before_dispatch(self):
         path = self.root / "positive/test_cases/publish.yaml"

@@ -8,7 +8,6 @@ All receipts remain local framework verification, never SIT or release evidence.
 import argparse
 import datetime as dt
 import hashlib
-import http.client
 import json
 import os
 from pathlib import Path
@@ -16,11 +15,12 @@ import platform
 import re
 import shutil
 import socket
+import ssl
 import subprocess
 import tarfile
 import time
 import tempfile
-from contextlib import closing
+from urllib.request import HTTPSHandler, OpenerDirector, Request
 from urllib.parse import urlsplit
 import uuid
 
@@ -117,30 +117,34 @@ def download_release_file(version, pin, directory):
         return path
     target = f"/nats-io/nats-server/releases/download/{version}/{name}"
     headers = {"User-Agent": "framework-sit-public-proof"}
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    # Install only TLS transport. Redirects are checked explicitly and proxies are not inherited.
+    opener = OpenerDirector()
+    opener.add_handler(HTTPSHandler(context=context))
     for host in ("github.com", "release-assets.githubusercontent.com"):
-        with closing(http.client.HTTPSConnection(host, timeout=30)) as connection:
-            connection.request("GET", target, headers=headers)
-            with connection.getresponse() as response:
-                if response.status in (301, 302, 303, 307, 308) and host == "github.com":
-                    target = release_redirect_target(response.getheader("Location"))
-                    continue
-                require(response.status == 200, "Release asset download failed")
-                with tempfile.NamedTemporaryFile(dir=directory) as temporary:
-                    digest = hashlib.sha256()
-                    count = 0
-                    while block := response.read(65536):
-                        count += len(block)
-                        require(count <= pin["size"], "Official download exceeds pinned size")
-                        digest.update(block)
-                        temporary.write(block)
-                    require(count == pin["size"] and digest.hexdigest() == pin["sha256"],
-                            "Official asset checksum mismatch")
-                    temporary.flush()
-                    try:
-                        os.link(temporary.name, path)
-                    except FileExistsError:
-                        pass  # The caller verifies the cache entry before use.
-                    return path
+        request = Request("https://" + host + target, headers=headers)
+        with opener.open(request, timeout=30) as response:
+            if response.status in (301, 302, 303, 307, 308) and host == "github.com":
+                target = release_redirect_target(response.getheader("Location"))
+                continue
+            require(response.status == 200, "Release asset download failed")
+            with tempfile.NamedTemporaryFile(dir=directory) as temporary:
+                digest = hashlib.sha256()
+                count = 0
+                while block := response.read(65536):
+                    count += len(block)
+                    require(count <= pin["size"], "Official download exceeds pinned size")
+                    digest.update(block)
+                    temporary.write(block)
+                require(count == pin["size"] and digest.hexdigest() == pin["sha256"],
+                        "Official asset checksum mismatch")
+                temporary.flush()
+                try:
+                    os.link(temporary.name, path)
+                except FileExistsError:
+                    pass  # The caller verifies the cache entry before use.
+                return path
     raise ValueError("Release asset redirect limit exceeded")
 
 
