@@ -187,8 +187,8 @@ public class NatsProviderRuntime implements ProviderRuntime {
         }
         Instant deadline = Instant.now().plus(timeout.value());
         int attempts = 0;
-        List<ObservedEvent> observed = List.of();
-        Match match = Match.notMatched();
+        List<ObservedEvent> observed;
+        Match match;
         do {
             attempts++;
             observed = eventsAfter(connection.busKey(), subject, consumeFrom.value());

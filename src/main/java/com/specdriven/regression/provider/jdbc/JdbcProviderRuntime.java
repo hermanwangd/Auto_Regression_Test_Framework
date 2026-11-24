@@ -47,6 +47,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
             "jdbc:h2:mem:[a-zA-Z0-9._-]+(?:;(?:MODE=(?:Oracle|DB2)|DB_CLOSE_DELAY=-1|DATABASE_TO_UPPER=true|USER=sa))*",
             Pattern.CASE_INSENSITIVE);
     private static final String SQL_APPROVALS = "REGRESS_JDBC_APPROVED_SQL_SHA256";
+    private static final Pattern GENERATED_REF = Pattern.compile("generated://provider-capability/", Pattern.CASE_INSENSITIVE);
     private static final Pattern APPROVAL_ENTRY = Pattern.compile(
             "(oracle|db2):[A-Z_][A-Z0-9_]*:(db_seed|db_cleanup|db_query|db_record_exists):[0-9a-f]{64}");
     private static final Pattern NAMED_PARAM = Pattern.compile(":([A-Za-z][A-Za-z0-9_]*)");
@@ -353,8 +354,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
                     "JDBC connection.secret_ref or connection.local_ref is missing.",
                     "Supply connection.secret_ref or an approved connection.local_ref in Environment Binding."));
         }
-        String normalizedRef = secretRef.toLowerCase(Locale.ROOT);
-        if (normalizedRef.startsWith("generated://provider-capability/")) {
+        if (GENERATED_REF.matcher(secretRef).lookingAt()) {
             return localH2Connection(context, dialect);
         }
         ResolvedSecret resolvedSecret = SecretRefResolver.resolveEnvSecretRef(

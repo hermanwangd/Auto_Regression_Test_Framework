@@ -1,5 +1,6 @@
 package com.specdriven.regression.evidence;
 
+import com.specdriven.regression.provider.ProviderDataYaml;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -8,7 +9,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import org.yaml.snakeyaml.error.YAMLException;
 
 public final class EvidenceIndexFormatter {
 
@@ -56,11 +59,16 @@ public final class EvidenceIndexFormatter {
     private static Entry entry(Context context, Path runDir, String ref) {
         String evidenceType = evidenceType(context.providerType(), ref);
         String content = read(runDir.resolve(ref));
-        String providerType = firstNonBlank(metadataValue(content, "provider_type"), context.providerType());
-        String providerId = firstNonBlank(metadataValue(content, "provider_id"), context.providerId());
-        String testCaseId = firstNonBlank(metadataValue(content, "test_case_id"), testCaseIdFromRef(ref), context.testCaseId());
-        String extractedFailureCode = failureCode(content);
-        String status = failed(content) || ref.contains("failure_detail") ? "failed" : "passed";
+        boolean natsDocument = ref.contains("provider-evidence/nats/") && ref.endsWith(".yaml");
+        Map<?, ?> fields = natsDocument ? natsFields(content) : Map.of();
+        String providerType = firstNonBlank(metadata(content, fields, natsDocument, "provider_type"), context.providerType());
+        String providerId = firstNonBlank(metadata(content, fields, natsDocument, "provider_id"), context.providerId());
+        String testCaseId = firstNonBlank(metadata(content, fields, natsDocument, "test_case_id"), testCaseIdFromRef(ref), context.testCaseId());
+        String extractedFailureCode = natsDocument ? identifier(fields, "failure_code") : failureCode(content);
+        boolean documentFailed = natsDocument
+                ? !"passed".equals(fields.get("status")) || !extractedFailureCode.isEmpty()
+                : failed(content);
+        String status = documentFailed || ref.contains("failure_detail") ? "failed" : "passed";
         String failureCode = status.equals("failed")
                 ? (extractedFailureCode.isBlank() ? "EVIDENCE_FAILED" : extractedFailureCode)
                 : "";
@@ -75,6 +83,25 @@ public final class EvidenceIndexFormatter {
                 linkedResultField(evidenceType),
                 status,
                 failureCode);
+    }
+
+    private static Map<?, ?> natsFields(String content) {
+        try {
+            Object document = ProviderDataYaml.create().load(content);
+            if (document instanceof Map<?, ?> fields) return fields;
+        } catch (YAMLException ignored) {
+            // An unreadable event cannot produce passing evidence.
+        }
+        return Map.of();
+    }
+
+    private static String metadata(String content, Map<?, ?> fields, boolean structured, String name) {
+        return structured ? identifier(fields, name) : metadataValue(content, name);
+    }
+
+    private static String identifier(Map<?, ?> fields, String name) {
+        Object value = fields.get(name);
+        return value instanceof String text && text.matches("[A-Za-z0-9_][A-Za-z0-9_.-]*") ? text : "";
     }
 
     private static String evidenceType(String providerType, String ref) {
