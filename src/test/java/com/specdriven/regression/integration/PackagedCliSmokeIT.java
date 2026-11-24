@@ -8,13 +8,73 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Comparator;
 import java.util.concurrent.TimeUnit;
+import java.util.jar.JarOutputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 class PackagedCliSmokeIT {
 
     @TempDir
     Path tempDir;
+
+    enum DriverSource { ORACLE_JAR, DB2_DIRECTORY }
+
+    @ParameterizedTest
+    @EnumSource(DriverSource.class)
+    void ordinaryV03RunUsesTheExplicitDriverSource(DriverSource source) throws Exception {
+        boolean explicitJar = source == DriverSource.ORACLE_JAR;
+        String dialect = explicitJar ? "oracle" : "db2";
+        String option = explicitJar ? "--driver-path" : "--driver-dir";
+        String value = explicitJar ? "vendor/fixture.jar" : "vendor";
+        Path suite = tempDir.resolve("jdbc");
+        copyDirectory(Path.of("samples/20-provider-capability-p0/data/jdbc"), suite);
+        Files.writeString(suite.resolve("queries/find_order_by_id.sql"), "SELECT 1\n");
+        Files.writeString(suite.resolve("test_cases/order_query_success.yaml"), """
+                dsl_version: v0.3
+                test_case_id: DRIVER-SELECTION
+                title: Discover the external driver
+                execute:
+                  - id: query_order
+                    target: order_db
+                    op: db_query
+                    with:
+                      query_ref: artifact://queries/find_order_by_id.sql
+                verify:
+                  - id: one_row
+                    type: assertion
+                    assert:
+                      actual: step://query_order/row_count
+                      operator: equals
+                      expected: 1
+                """);
+        Files.createDirectory(tempDir.resolve("vendor"));
+        // A real jar with no vendor class reaches the loader and yields JDBC_DRIVER_INVALID.
+        try (var jar = new JarOutputStream(Files.newOutputStream(tempDir.resolve("vendor/fixture.jar")))) {
+            jar.finish();
+        }
+        Path output = tempDir.resolve("cli.log");
+        var cli = new ProcessBuilder("java", "-Xmx192m", "-jar",
+                "target/spec-driven-auto-regression-0.3.2.jar", "run",
+                "--root", tempDir.toString(), "--suite", "jdbc/suite_manifest.yaml",
+                "--profile", "external_" + dialect, option, value)
+                .redirectErrorStream(true).redirectOutput(output.toFile());
+        cli.environment().keySet().removeIf(name -> name.startsWith("REGRESS_REVIEWED_"));
+        cli.environment().put("REGRESS_DRIVER_PATH", tempDir.resolve("missing.jar").toString());
+        cli.environment().put("JDBC_CONNECTION", "jdbc:" + dialect + ":fixture");
+        cli.environment().put("REGRESS_JDBC_APPROVED_SQL_SHA256", dialect + ":JDBC_CONNECTION:db_query:"
+                + "a0a22c9dfa428cdce6fb3e58a40d4052335e17e5fbe42efc2f17f9ca813be62c");
+        Process process = cli.start();
+        try {
+            assertThat(process.waitFor(45, TimeUnit.SECONDS)).isTrue();
+            String log = Files.readString(output);
+            assertThat(process.exitValue()).as(log).isOne();
+            assertThat(log).contains("failure_code: JDBC_DRIVER_INVALID");
+        } finally {
+            process.destroyForcibly();
+        }
+    }
 
     @Test
     void packagedJarDelegatesCheckReadinessCommand() throws Exception {
