@@ -4,6 +4,8 @@
 
 Bind exactly `executable` and `executable_sha256`. The executable must be a regular executable file, not a symlink, and the SHA-256 must contain 64 lowercase hexadecimal characters. The runtime stream-hashes the executable immediately before launch and verifies its identity has not changed during hashing. A hash mismatch prevents launch. This pins only the executable file: OS libraries, interpreter dependencies, plugins, network access and external files are not transitively pinned or contained. The runtime is not an OS sandbox. Use a trusted standalone executable, reviewed arguments and public fixture inputs.
 
+At launch the runtime resolves the executable's parent directory once and records the resolved program path. On Unix, the program must have a stable filesystem identity and must not be world-writable. Ancestor directories must protect entries from public replacement. A system sticky temporary directory is supported. Keep the program and its path under trusted administration throughout execution because Java starts a process by pathname after checking its identity.
+
 The operation accepts these finite literal inputs:
 
 | Input | Bound and default |
@@ -23,6 +25,12 @@ Each operation writes one `cli_process` artifact at `provider-evidence/cli_proce
 The adapter declares the explicit `LOCAL_PROCESS` effect and refuses shared-state ownership scopes. Local CLI checks cannot establish global read-only behavior or shared-SIT ownership.
 
 The contract file is packaged directly from `docs/02-architecture/contracts/provider-contracts/cli_process_v0_3.yaml` by the existing Maven resource configuration and generated provider-contract index; no second source copy is required.
+
+## Legacy fixture mappings
+
+The legacy file-batch adapter accepts up to 16 simple fixture operations in a command of up to 4,096 characters. It supports `echo ready`, `printf 'ready\n'`, `sleep 2` (0–300 seconds), and `exit 7` (0–255). A semicolon separates operations and the literal suffix ` >&2` routes fixture text to the error log. Text operations accept ASCII letters, digits, spaces and basic punctuation. Echo also accepts escaped double quotes for JSON fixtures. Printf accepts the newline escape. The historical wrapper `/bin/sh -c 'echo ready; echo warning >&2'` is accepted for this same limited grammar. The adapter validates every statement first. Java writes the requested text directly to the logs, applies the run deadline to pauses and returns the requested exit code. These fixture operations run entirely in the framework JVM.
+
+Move mappings that launch a product binary, script or JAR to `cli_process.v0.3`. Bind the executable's path and SHA-256, then supply its reviewed argument list as `process.argv`.
 
 ## Authoring example
 

@@ -54,7 +54,9 @@
     "src/main/java/com/specdriven/regression/provider/ProviderEndpoints.java",
     "src/main/java/com/specdriven/regression/provider/ProviderDataYaml.java",
     "src/main/java/com/specdriven/regression/provider/SuiteAssetReader.java",
-    "src/main/java/com/specdriven/regression/provider/PosixSuiteFile.java"
+    "src/main/java/com/specdriven/regression/provider/PosixSuiteFile.java",
+    "src/main/java/com/specdriven/regression/provider/LoopbackTcpTransport.java",
+    "src/main/java/com/specdriven/regression/provider/nats/LoopbackNatsTransport.java"
   ],
   "schema": "local-public-ci-policy.v1",
   "sit_authority": false,
@@ -65,7 +67,7 @@
     "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/CoverageArtifacts.java": "f14b83ee2b229b6047dabc26b7755909a1901b00171b072811f8017be162a020",
     "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/FrameworkCliTransport.java": "e25f0374855f00b7eb00e7e8747aa6b996300f382c271723ab0885372ddb643e",
     "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/Json.java": "1a0bcf2306a08fa99a5677c986327c8572d1273fbfd8180c7f0132342da968cb",
-    "pom.xml": "e59adf1dc581d13bb7b273b6e684390e0b544a0c4d49af47e0c1b0ab9b7f6abb",
+    "pom.xml": "b8992f13ce1626ac1492a28af9ff59189f2fcb6c10643e1baa69a7cbfc3e177d",
     "scripts/public-projects/nats-cases.json": "6214de207bcfb0a2e49acfd74a26fb731a64af17abe75cdc0167e37982de6081",
     "scripts/public-projects/nats-lock.json": "dbc30fddf07c76ac6d99eb9687a4f2d9f82856f0227f6098312c45182c6e867d",
     "scripts/public-projects/nats-payload.json": "637e3485302117f4a8039145aefd2a5021620c693b43bf8fff312724620b6fd7",
@@ -78,7 +80,7 @@
     "src/main/java/com/specdriven/regression/evidence/EvidenceHardeningService.java": "a5addea77d6225b92728d23f74a1e9d65f0c58626a18e0fab7dad9794fd10320",
     "src/main/java/com/specdriven/regression/producttest/ProductTestHandoffService.java": "0ba189449065eb827996d1f6845b7e6ff8628ebf2f93f746ac918d0784c75fbf",
     "src/main/java/com/specdriven/regression/producttest/ReviewedNativeCapability.java": "6429093908a14d10865ad03b6d6738a15571a2afaee6eec08111ad78c6375ad8",
-    "src/main/java/com/specdriven/regression/provider/nats/NatsProviderRuntime.java": "bdb1503df6779ee1154851cd1cbee1e0e0ac991b233af9e334311cb3f5faf7c6",
+    "src/main/java/com/specdriven/regression/provider/nats/NatsProviderRuntime.java": "db287d9a63943c52d9dbfcd1ed090b42b2497a79b66315a20e8a2c9cbb8259ca",
     "src/main/java/com/specdriven/regression/provider/nats/ReviewedLoopbackNatsPolicy.java": "842135fa6c6cadf77c4bca6e425328a74d66b20e97e2890e7d879b9138497f5d",
     "src/main/java/com/specdriven/regression/report/CanonicalCoverageReport.java": "1fdf3778627d0e58bacded77af05c0844e880863f7eacd951c20f15f1be746b2",
     "src/main/java/com/specdriven/regression/report/CanonicalCoverageReportResult.java": "8503dc6ecd443195a7bee7d2509a592dc096732be4fdb2d071f85bf3146970fc",
@@ -92,9 +94,11 @@
     "src/main/java/com/specdriven/regression/contract/SecurityFieldNames.java": "7e239cad9b4308d8e54cb720d6abba01ad6f037e76f6486b635a038375ab57cb",
     "src/main/java/com/specdriven/regression/contract/v03/V03OutputRedactor.java": "a8b1a8c6e638b4572ecec62a40b51f157c28e27b6291aa78eee2981b89aa74f1",
     "src/main/java/com/specdriven/regression/contract/v03/V03RuntimeExecutionService.java": "8754943eef37598125f9d1e22dee1adb1153bad75b693729a1bad9b9f8016be3",
-    "src/main/java/com/specdriven/regression/provider/ProviderEndpoints.java": "67460ea8c00a24238e407848c4b3ef9792d0ffeeed029712dcf9d53d35bffe6a",
+    "src/main/java/com/specdriven/regression/provider/ProviderEndpoints.java": "d1d57fc80482dbedf3cdcfe0d680af17f18e9f4b54157531c9d6e7a168eed8dc",
     "src/main/java/com/specdriven/regression/provider/ProviderDataYaml.java": "4ec3eb87f5a8a82aeb637a272522157803c357d6250ace43aca0382386f4b2d4",
     "src/main/java/com/specdriven/regression/provider/SuiteAssetReader.java": "d2b096d14a3873f07ede463f0161cb98ad353d3b2b5b45058cdf8b3d7bdc733c",
-    "src/main/java/com/specdriven/regression/provider/PosixSuiteFile.java": "40723b4bad5440c703b06f7857f610fd3d96a311610fbd4a6665519198108d07"
+    "src/main/java/com/specdriven/regression/provider/PosixSuiteFile.java": "40723b4bad5440c703b06f7857f610fd3d96a311610fbd4a6665519198108d07",
+    "src/main/java/com/specdriven/regression/provider/LoopbackTcpTransport.java": "d4d6264d9cfb09b6f95dd1a59dfc6be76aad8b52ce7c981c41d0b4acbd894cda",
+    "src/main/java/com/specdriven/regression/provider/nats/LoopbackNatsTransport.java": "62c1ebbfcaaf2ada9fdd34b0c879194ba3589a3a2233be4d7a5d6d14a0efacb9"
   }
 }

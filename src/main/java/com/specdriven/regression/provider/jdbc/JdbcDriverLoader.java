@@ -1,5 +1,6 @@
 package com.specdriven.regression.provider.jdbc;
 
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -41,19 +42,30 @@ public class JdbcDriverLoader {
                         }
                     })
                     .toArray(URL[]::new);
-            URLClassLoader classLoader = new URLClassLoader(urls, Thread.currentThread().getContextClassLoader());
-            Class<?> driverClass = Class.forName(driverClassName, true, classLoader);
-            if (!Driver.class.isAssignableFrom(driverClass)) {
-                return invalid(dialect, driverClassName, "Class does not implement java.sql.Driver.");
+            URLClassLoader classLoader = new URLClassLoader(urls, ClassLoader.getPlatformClassLoader());
+            boolean registered = false;
+            try {
+                // Check the JDBC type before running any static initializer from a configured driver jar.
+                Class<?> driverClass = switch (driverClassName) {
+                    case "oracle.jdbc.OracleDriver" -> Class.forName("oracle.jdbc.OracleDriver", false, classLoader);
+                    case "com.ibm.db2.jcc.DB2Driver" -> Class.forName("com.ibm.db2.jcc.DB2Driver", false, classLoader);
+                    default -> throw new IllegalArgumentException("Unsupported JDBC driver.");
+                };
+                if (!Driver.class.isAssignableFrom(driverClass)) {
+                    return invalid(dialect, driverClassName, "Class does not implement java.sql.Driver.");
+                }
+                Driver driver = driverClass.asSubclass(Driver.class).getConstructor().newInstance();
+                DriverManager.registerDriver(new DriverShim(driver));
+                registered = true;
+                return new LoadResult(true, "", "Driver loaded: " + driverClassName, "");
+            } finally {
+                if (!registered) classLoader.close();
             }
-            Driver driver = (Driver) driverClass.getDeclaredConstructor().newInstance();
-            DriverManager.registerDriver(new DriverShim(driver));
-            return new LoadResult(true, "", "Driver loaded: " + driverClassName, "");
         } catch (ClassNotFoundException e) {
             return invalid(dialect, driverClassName, "Driver class was not found in configured jars.");
         } catch (InvocationTargetException e) {
             return invalid(dialect, driverClassName, "Driver initialization failed.");
-        } catch (ReflectiveOperationException | IllegalArgumentException | SQLException | LinkageError e) {
+        } catch (ReflectiveOperationException | IOException | IllegalArgumentException | SQLException | LinkageError e) {
             return invalid(dialect, driverClassName, "Driver could not be initialized or registered.");
         }
     }

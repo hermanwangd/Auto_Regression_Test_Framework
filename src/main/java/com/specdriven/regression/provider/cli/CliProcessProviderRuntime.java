@@ -80,8 +80,11 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
             byte[] stdin = ReviewedCliPolicy.utf8((String) inputs.getOrDefault("process.stdin", ""));
             int timeout = ((Number) inputs.getOrDefault("process.timeout_ms", ReviewedCliPolicy.DEFAULT_TIMEOUT_MS)).intValue();
             int maximum = ((Number) inputs.getOrDefault("process.max_output_bytes", ReviewedCliPolicy.DEFAULT_MAX_OUTPUT_BYTES)).intValue();
-            Path executable = Path.of((String) context.bindingValues().get("executable"));
-            evidence.put("executable", executable.toString());
+            Path binding = Path.of((String) context.bindingValues().get("executable"));
+            evidence.put("executable", binding.toString());
+            // Freeze directory aliases once. Never follow a symlink in the final executable component.
+            Path executable = binding.getParent().toRealPath().resolve(binding.getFileName());
+            evidence.put("resolved_executable", executable.toString());
             evidence.put("executable_sha256", context.bindingValues().get("executable_sha256"));
             evidence.put("argv_sha256", sha(JSON.writeValueAsBytes(argv)));
             evidence.put("stdin_sha256", sha(stdin));
@@ -90,13 +93,13 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
             evidence.put("max_output_bytes", maximum);
             Path cwd = ownedWorkingDirectory(context.runDir(), (String) inputs.getOrDefault("process.cwd", "."));
             evidence.put("cwd", cwd.toString());
-            // Hash by streaming the final nonsymlink file immediately before constructing and starting the process.
+            validateLaunchDirectory(executable.getParent());
+            // The pinned program selects the executable. Every request argument remains in a later argv slot.
             BasicFileAttributes identity = attributes(executable);
             String observedHash = hashExecutable(executable);
             evidence.put("observed_executable_sha256", observedHash);
-            if (!context.bindingValues().get("executable_sha256").equals(observedHash)
-                    || !sameFile(identity, attributes(executable)))
-                throw new Problem("PROVIDER_UNAVAILABLE", "Pinned executable identity or SHA-256 changed before launch.");
+            if (!context.bindingValues().get("executable_sha256").equals(observedHash))
+                throw new Problem("PROVIDER_UNAVAILABLE", "Pinned executable SHA-256 changed before launch.");
             List<String> command = new ArrayList<>(argv.size() + 1);
             command.add(executable.toString());
             command.addAll(argv);
@@ -105,6 +108,8 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
             builder.environment().put("LANG", "C");
             builder.environment().put("LC_ALL", "C");
             long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout);
+            if (!sameFile(identity, attributes(executable)))
+                throw new Problem("PROVIDER_UNAVAILABLE", "Pinned executable identity changed before launch.");
             process = builder.start();
             evidence.put("launched", true);
             evidence.put("pid", process.pid());
@@ -219,9 +224,22 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
         return cwd;
     }
 
+    private static void validateLaunchDirectory(Path directory) throws IOException {
+        if (!directory.getFileSystem().supportedFileAttributeViews().contains("unix")) return;
+        for (Path parent = directory; parent != null; parent = parent.getParent()) {
+            int mode = (int) Files.getAttribute(parent, "unix:mode", LinkOption.NOFOLLOW_LINKS);
+            // Shared sticky directories such as /tmp protect entries from replacement by unrelated users.
+            if ((mode & 0002) != 0 && (mode & 01000) == 0)
+                throw new IOException("executable directory permits public replacement");
+        }
+    }
+
     private static BasicFileAttributes attributes(Path file) throws IOException {
         BasicFileAttributes value = Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-        if (!value.isRegularFile() || value.isSymbolicLink() || !Files.isExecutable(file)) throw new IOException("invalid executable");
+        if (!value.isRegularFile() || !Files.isExecutable(file)) throw new IOException("invalid executable");
+        if (file.getFileSystem().supportedFileAttributeViews().contains("unix")
+                && (value.fileKey() == null || ((int) Files.getAttribute(file, "unix:mode", LinkOption.NOFOLLOW_LINKS) & 0002) != 0))
+            throw new IOException("invalid executable identity or public write permissions");
         return value;
     }
 

@@ -17,7 +17,6 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
 import com.specdriven.regression.provider.ProviderEndpoints;
@@ -355,7 +354,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
                             "NATS_CONNECTION_FAILED",
                             "NATS_CONNECTION_FAILED",
                             "NATS env secret ref `" + secretRef + "` did not resolve to a supported NATS URI.",
-                            "Set `" + envName + "` to `nats://host:port` for this execution profile."));
+                            "Set `" + envName + "` to a numeric loopback NATS URI. Use a secure local tunnel for a remote broker."));
                 }
                 return new ConnectionSelection("env:" + envName, uri, null);
             }
@@ -770,7 +769,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
         }
 
         private static void readServerInfo(BufferedInputStream input, long deadline) throws IOException {
-            if (!readLine(input, deadline).startsWith("INFO ")) throw new IOException("missing INFO");
+            LoopbackNatsTransport.requirePlaintextServerInfo(readLine(input, deadline));
         }
 
         private static ExternalObservation readObservation(BufferedInputStream input, BufferedOutputStream output,
@@ -830,18 +829,20 @@ public class NatsProviderRuntime implements ProviderRuntime {
         }
 
         private static final class TimedSocket implements AutoCloseable {
-            final Socket socket = new Socket();
+            final Socket socket;
             final long deadline;
             final java.util.concurrent.ScheduledFuture<?> closer;
             TimedSocket(URI uri, Duration timeout) throws IOException {
                 long budget = Math.max(1, Math.min(timeout.toMillis(), Integer.MAX_VALUE));
                 deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(budget);
-                closer = DEADLINES.schedule(() -> { try { socket.close(); } catch (IOException ignored) { } },
-                        budget, java.util.concurrent.TimeUnit.MILLISECONDS);
+                socket = LoopbackNatsTransport.connect(uri, (int) Math.min(2000, budget), (int) budget);
                 try {
-                    socket.connect(new InetSocketAddress(uri.getHost(), uri.getPort()), (int)Math.min(2000, budget));
-                    socket.setSoTimeout((int)budget);
-                } catch (IOException | RuntimeException error) { close(); throw error; }
+                    closer = DEADLINES.schedule(() -> { try { socket.close(); } catch (IOException ignored) { } },
+                            deadline - System.nanoTime(), java.util.concurrent.TimeUnit.NANOSECONDS);
+                } catch (RuntimeException error) {
+                    socket.close();
+                    throw error;
+                }
             }
             @Override public void close() throws IOException { closer.cancel(false); socket.close(); }
         }

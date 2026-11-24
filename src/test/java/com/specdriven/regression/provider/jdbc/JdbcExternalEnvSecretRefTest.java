@@ -120,6 +120,26 @@ class JdbcExternalEnvSecretRefTest {
     }
 
     @Test
+    void quotedSeparatorsAndParameterNamesRemainData() throws Exception {
+        Path suite = Files.createDirectory(tempDir.resolve("suite"));
+        String script = "CREATE TABLE NOTES (NOTE VARCHAR(100)); "
+                + "INSERT INTO NOTES VALUES ('first;:literal'); -- :comment\n"
+                + "INSERT INTO NOTES VALUES (:value);";
+        Files.writeString(suite.resolve("setup.sql"), script);
+        Files.writeString(suite.resolve("lookup.sql"), "SELECT NOTE FROM NOTES WHERE NOTE = :value");
+        var context = nativeContext(suite, Map.of("connection", Map.of("local_ref", "approved_local_h2_oracle")));
+        var runtime = new JdbcProviderRuntime();
+        var seed = runtime.execute(context, new ProviderOperationRequest("db_seed", List.of(
+                Map.of("bind_as", "sql_ref", "ref", "setup.sql"),
+                Map.of("bind_as", "params.value", "ref", "note;:kept")), Map.of()));
+        assertThat(seed.passed()).isTrue();
+        var result = runtime.execute(context, new ProviderOperationRequest("db_query", List.of(
+                Map.of("bind_as", "query_ref", "ref", "lookup.sql"),
+                Map.of("bind_as", "params.value", "ref", "first;:literal")), Map.of()));
+        assertThat(result.outputs().get("sample_rows")).isEqualTo(List.of(Map.of("NOTE", "first;:literal")));
+    }
+
+    @Test
     void countsEveryRowWhileExposingOnlyFiveSamples() throws Exception {
         Path suite = Files.createDirectory(tempDir.resolve("suite"));
         Files.writeString(suite.resolve("count.sql"), "SELECT X FROM SYSTEM_RANGE(1, 9)");

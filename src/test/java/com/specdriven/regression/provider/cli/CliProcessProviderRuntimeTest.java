@@ -138,6 +138,22 @@ class CliProcessProviderRuntimeTest {
     }
 
     @Test
+    void refusesPubliclyWritableProgramAndDirectoryBeforeLaunch() throws Exception {
+        Path directory = Files.createDirectory(temp.resolve("programs"));
+        Path executable = Files.copy(Path.of("/usr/bin/true").toRealPath(), directory.resolve("product"));
+        var binding = Map.<String,Object>of("executable", executable.toString(), "executable_sha256", sha(executable));
+        Files.setPosixFilePermissions(executable, java.nio.file.attribute.PosixFilePermissions.fromString("rwxr-xrwx"));
+        var file = runtime().execute(context("public-file", binding), request(Map.of("process.argv", List.of())));
+        assertFailed(file, "PROVIDER_UNAVAILABLE");
+        assertThat(proof(file)).containsEntry("launched", false);
+        Files.setPosixFilePermissions(executable, java.nio.file.attribute.PosixFilePermissions.fromString("rwxr-xr-x"));
+        Files.setPosixFilePermissions(directory, java.nio.file.attribute.PosixFilePermissions.fromString("rwxrwxrwx"));
+        var parent = runtime().execute(context("public-directory", binding), request(Map.of("process.argv", List.of())));
+        assertFailed(parent, "PROVIDER_UNAVAILABLE");
+        assertThat(proof(parent)).containsEntry("launched", false);
+    }
+
+    @Test
     void rejectsSymlinkExecutableAndInvalidInputBeforeLaunch() throws Exception {
         Path link = temp.resolve("java-link");
         Files.createSymbolicLink(link, javaBinary());

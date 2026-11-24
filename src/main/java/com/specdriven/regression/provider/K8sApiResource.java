@@ -5,20 +5,26 @@ import java.util.List;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
-/** Path components accepted by the Kubernetes apps/v1 Deployment API. */
+/** Kubernetes resource names and their runner-owned environment bindings. */
 enum K8sApiResource {
     NAMESPACE("K8S_NAMESPACE", 63, "[a-z0-9](?:[-a-z0-9]*[a-z0-9])?"),
-    DEPLOYMENT("K8S_DEPLOYMENT", 253, "[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*");
+    DEPLOYMENT("K8S_DEPLOYMENT", "deployment/", "deploy/", "deployments/"),
+    POD("K8S_POD", "pod/", "pods/");
 
-    private static final List<String> DEPLOYMENT_PREFIXES = List.of("deployment/", "deploy/", "deployments/");
     private final String binding;
     private final int maxLength;
     private final Pattern names;
+    private final List<String> prefixes;
 
-    K8sApiResource(String binding, int maxLength, String pattern) {
+    K8sApiResource(String binding, String... prefixes) {
+        this(binding, 253, "[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*", prefixes);
+    }
+
+    K8sApiResource(String binding, int maxLength, String pattern, String... prefixes) {
         this.binding = binding;
         this.maxLength = maxLength;
         this.names = Pattern.compile(pattern);
+        this.prefixes = List.of(prefixes);
     }
 
     String resolve(String reference, Function<String, String> environment) throws IOException {
@@ -45,8 +51,8 @@ enum K8sApiResource {
     }
 
     private String resourceName(String value) {
-        if (value != null && this == DEPLOYMENT) {
-            for (String prefix : DEPLOYMENT_PREFIXES) {
+        if (value != null) {
+            for (String prefix : prefixes) {
                 if (value.startsWith(prefix)) return value.substring(prefix.length());
             }
         }

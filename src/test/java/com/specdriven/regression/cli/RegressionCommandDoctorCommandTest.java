@@ -130,14 +130,34 @@ class RegressionCommandDoctorCommandTest {
         return path;
     }
 
+    @Test
+    void rejectedClassDoesNotRunItsInitializerDuringDriverTypeChecking() throws Exception {
+        Path driverDir = Files.createDirectory(tempDir.resolve("wrong-driver"));
+        String marker = "framework.test.driver.typecheck." + java.util.UUID.randomUUID();
+        String nonDriver = "package oracle.jdbc; public class OracleDriver { static { System.setProperty(\""
+                + marker + "\", \"initialized\"); } }";
+        try {
+            driverJar(driverDir.resolve("fixture-driver.jar"), nonDriver);
+            CommandResult result = execute("doctor", "drivers", "--root", tempDir.toString(), "--driver-dir", driverDir.toString());
+            assertThat(result.stdout()).contains("oracle_failure_code: JDBC_DRIVER_INVALID");
+            assertThat(System.getProperty(marker)).isNull();
+        } finally {
+            System.clearProperty(marker);
+        }
+    }
+
     private Path driverJar(Path jar) throws Exception {
+        return driverJar(jar, driverSource("oracle.jdbc", "OracleDriver", "jdbc:oracle:"));
+    }
+
+    private Path driverJar(Path jar, String oracleDefinition) throws Exception {
         Path sourceRoot = Files.createDirectories(tempDir.resolve("driver-src"));
         Path classRoot = Files.createDirectories(tempDir.resolve("driver-classes"));
         Path oracleSource = sourceRoot.resolve("oracle/jdbc/OracleDriver.java");
         Path db2Source = sourceRoot.resolve("com/ibm/db2/jcc/DB2Driver.java");
         Files.createDirectories(oracleSource.getParent());
         Files.createDirectories(db2Source.getParent());
-        Files.writeString(oracleSource, driverSource("oracle.jdbc", "OracleDriver", "jdbc:oracle:"));
+        Files.writeString(oracleSource, oracleDefinition);
         Files.writeString(db2Source, driverSource("com.ibm.db2.jcc", "DB2Driver", "jdbc:db2:"));
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         assertThat(compiler).isNotNull();

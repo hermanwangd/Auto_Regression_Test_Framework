@@ -13,12 +13,12 @@ import com.specdriven.regression.provider.runtime.ProviderRuntime;
 import com.specdriven.regression.provider.runtime.SecretRefResolver;
 import com.specdriven.regression.provider.runtime.SecretRefResolver.ResolvedSecret;
 import java.io.IOException;
+import java.io.StringReader;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -33,12 +33,19 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.h2.util.ScriptReader;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.ResultSetExtractor;
+import org.springframework.jdbc.core.SqlParameter;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterUtils;
+import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.error.YAMLException;
 
-public class JdbcProviderRuntime implements ProviderRuntime {
+public final class JdbcProviderRuntime implements ProviderRuntime {
 
     // H2 keeps each run-scoped in-memory database across provider phases in this JVM.
     private static final String LOCAL_PASSWORD = java.util.UUID.randomUUID().toString();
@@ -50,7 +57,6 @@ public class JdbcProviderRuntime implements ProviderRuntime {
     private static final Pattern GENERATED_REF = Pattern.compile("generated://provider-capability/", Pattern.CASE_INSENSITIVE);
     private static final Pattern APPROVAL_ENTRY = Pattern.compile(
             "(oracle|db2):[A-Z_][A-Z0-9_]*:(db_seed|db_cleanup|db_query|db_record_exists):[0-9a-f]{64}");
-    private static final Pattern NAMED_PARAM = Pattern.compile(":([A-Za-z][A-Za-z0-9_]*)");
 
     private final Yaml yaml = ProviderDataYaml.create();
     private final V03OutputRedactor redactor = new V03OutputRedactor();
@@ -153,16 +159,14 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         Map<String, Object> params = parameterValues(context, request);
         int affectedRows = 0;
         try {
-            List<PreparedSql> preparedStatements = statements(readApprovedSql(secretConnection, context.suiteRoot(), sqlRef, request.operation(), "SQL_REF_MISSING")).stream()
-                    .map(this::prepareSql)
-                    .toList();
-            validateScriptParams(request, preparedStatements, params);
+            List<String> script = statements(readApprovedSql(secretConnection, context.suiteRoot(), sqlRef,
+                    request.operation(), "SQL_REF_MISSING"));
+            var bindings = new MapSqlParameterSource(params);
+            validateBindings(request, script, bindings);
             try (Connection connection = open(secretConnection)) {
-                for (PreparedSql preparedSql : preparedStatements) {
-                    try (PreparedStatement preparedStatement = connection.prepareStatement(preparedSql.sql())) {
-                        bindParams(preparedStatement, preparedSql.params(), params);
-                        affectedRows += Math.max(preparedStatement.executeUpdate(), 0);
-                    }
+                var jdbc = new NamedParameterJdbcTemplate(new SingleConnectionDataSource(connection, true));
+                for (String statement : script) {
+                    affectedRows += Math.max(jdbc.update(statement, bindings), 0);
                 }
             }
             long durationMs = Duration.between(startedAt, Instant.now()).toMillis();
@@ -197,7 +201,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
                     Map.of(evidenceOutputName, evidenceRef),
                     List.of(new ProviderEvidence(evidenceKind + "_evidence", evidenceRef, true)),
                     e.failure());
-        } catch (SQLException ignored) {
+        } catch (SQLException | DataAccessException ignored) {
             ProviderFailure failure = failureForSqlException(request.operation());
             long durationMs = Duration.between(startedAt, Instant.now()).toMillis();
             String evidenceRef = writeUpdateEvidence(
@@ -232,20 +236,14 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         List<Map<String, Object>> sampleRows = List.of();
         int rowCount = 0;
         try {
-            PreparedSql preparedSql = prepareSql(readApprovedSql(secretConnection, context.suiteRoot(), queryRef, request.operation(), "QUERY_REF_MISSING"));
-            validateParams(request, preparedSql, params);
-            try (Connection connection = open(secretConnection);
-                    PreparedStatement statement = connection.prepareStatement(preparedSql.sql())) {
-                bindParams(statement, preparedSql.params(), params);
-                try (ResultSet resultSet = statement.executeQuery()) {
-                    List<Map<String, Object>> sample = new ArrayList<>(5);
-                    ResultSetMetaData metadata = resultSet.getMetaData();
-                    while (resultSet.next()) {
-                        rowCount++;
-                        if (sample.size() < 5) sample.add(readRow(resultSet, metadata));
-                    }
-                    sampleRows = List.copyOf(sample);
-                }
+            String sql = readApprovedSql(secretConnection, context.suiteRoot(), queryRef, request.operation(), "QUERY_REF_MISSING");
+            var bindings = new MapSqlParameterSource(params);
+            validateBindings(request, List.of(sql), bindings);
+            try (Connection connection = open(secretConnection)) {
+                var jdbc = new NamedParameterJdbcTemplate(new SingleConnectionDataSource(connection, true));
+                QueryRows rows = jdbc.query(sql, bindings, (ResultSetExtractor<QueryRows>) this::sampleRows);
+                rowCount = rows.total();
+                sampleRows = rows.sample();
             }
             long durationMs = Duration.between(startedAt, Instant.now()).toMillis();
             boolean matched = !recordExists || matchesExpected(rowCount, request);
@@ -295,7 +293,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
                     Map.of("query_evidence_ref", evidenceRef),
                     List.of(new ProviderEvidence("query_evidence", evidenceRef, true)),
                     e.failure());
-        } catch (SQLException ignored) {
+        } catch (SQLException | DataAccessException ignored) {
             ProviderFailure failure = failureForSqlException(request.operation());
             long durationMs = Duration.between(startedAt, Instant.now()).toMillis();
             String evidenceRef = writeQueryEvidence(
@@ -446,35 +444,13 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         return "";
     }
 
-    private PreparedSql prepareSql(String sql) {
-        Matcher matcher = NAMED_PARAM.matcher(sql);
-        StringBuilder prepared = new StringBuilder();
-        List<String> params = new ArrayList<>();
-        while (matcher.find()) {
-            params.add(matcher.group(1));
-            matcher.appendReplacement(prepared, "?");
-        }
-        matcher.appendTail(prepared);
-        return new PreparedSql(prepared.toString(), List.copyOf(params));
-    }
-
-    private void validateParams(ProviderOperationRequest request, PreparedSql preparedSql, Map<String, Object> params) {
-        Set<String> required = new LinkedHashSet<>(preparedSql.params());
-        validateParams(request, required, params);
-    }
-
-    private void validateScriptParams(
-            ProviderOperationRequest request,
-            List<PreparedSql> preparedStatements,
-            Map<String, Object> params) {
+    private void validateBindings(ProviderOperationRequest request, List<String> statements, MapSqlParameterSource bindings) {
         Set<String> required = new LinkedHashSet<>();
-        for (PreparedSql preparedSql : preparedStatements) {
-            required.addAll(preparedSql.params());
+        for (String sql : statements) {
+            NamedParameterUtils.buildSqlParameterList(NamedParameterUtils.parseSqlStatement(sql), bindings)
+                    .stream().map(SqlParameter::getName).forEach(required::add);
         }
-        validateParams(request, required, params);
-    }
-
-    private void validateParams(ProviderOperationRequest request, Set<String> required, Map<String, Object> params) {
+        Map<String, Object> params = bindings.getValues();
         for (String requiredParam : required) {
             if (!params.containsKey(requiredParam) || stringValue(params.get(requiredParam)).isBlank()) {
                 throw new JdbcRuntimeFailure(ProviderFailure.of(
@@ -502,11 +478,15 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         return !(strict instanceof Boolean bool) || bool;
     }
 
-    private void bindParams(PreparedStatement statement, List<String> names, Map<String, Object> params)
-            throws SQLException {
-        for (int index = 0; index < names.size(); index++) {
-            statement.setObject(index + 1, params.get(names.get(index)));
+    private QueryRows sampleRows(ResultSet resultSet) throws SQLException {
+        List<Map<String, Object>> sample = new ArrayList<>(5);
+        ResultSetMetaData metadata = resultSet.getMetaData();
+        int count = 0;
+        while (resultSet.next()) {
+            count++;
+            if (sample.size() < 5) sample.add(readRow(resultSet, metadata));
         }
+        return new QueryRows(count, List.copyOf(sample));
     }
 
     private Map<String, Object> readRow(ResultSet resultSet, ResultSetMetaData metadata) throws SQLException {
@@ -695,10 +675,11 @@ public class JdbcProviderRuntime implements ProviderRuntime {
 
     private List<String> statements(String script) {
         List<String> statements = new ArrayList<>();
-        for (String statement : script.split(";")) {
-            String trimmed = statement.trim();
-            if (!trimmed.isBlank()) {
-                statements.add(trimmed);
+        try (var reader = new ScriptReader(new StringReader(script))) {
+            reader.setSkipRemarks(true);
+            String statement;
+            while ((statement = reader.readStatement()) != null) {
+                if (!statement.isBlank()) statements.add(statement);
             }
         }
         return List.copyOf(statements);
@@ -778,7 +759,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         }
     }
 
-    private record PreparedSql(String sql, List<String> params) {
+    private record QueryRows(int total, List<Map<String, Object>> sample) {
     }
 
     private record SecretConnection(String jdbcUrl, String username, String password, String dialect,

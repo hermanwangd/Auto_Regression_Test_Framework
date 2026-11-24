@@ -50,11 +50,15 @@ external systems for these samples.
 - Evidence: publish/observe metadata and result JSON.
 - Common failures: `NATS_CONNECTION_FAILED`, `MESSAGING_TIMEOUT`.
 
-For a remote NATS broker, use `env://NATS_CONNECTION` (or `env://NATS_SERVER`) with the complete broker URI supplied by the runner. The native transport uses plaintext TCP. For a broker requiring credentials, configure a secure tunnel or TLS proxy on numeric loopback and supply its local URI through the runner environment. Direct remote bindings accept credential-free URIs. Local test bindings accept numeric loopback. The reviewed NATS profile uses its existing pinned loopback binding.
+The native NATS client opens plaintext connections only to `127.0.0.1` or `[::1]`. If the listener's initial `INFO` requires TLS, the client closes the connection before sending credentials or payloads. For a remote broker, configure a runner-managed tunnel that exposes a plaintext NATS listener on loopback, encrypts the remote hop, and verifies the remote peer. Set the profile's environment binding, such as `NATS_CONNECTION`, to the local listener URI (for example, `nats://127.0.0.1:4222`). The reviewed disposable profile accepts only its pinned numeric IPv4 loopback URI.
 
 ## Compatibility readiness probes
 
-The operator supplies the remote targets outside the RP package. Kubernetes API probes accept `env://K8S_API_SERVER` as the origin. Supply `namespace_ref` as a Kubernetes namespace name or `env://K8S_NAMESPACE`. Supply `deployment_ref` as a Deployment name or `env://K8S_DEPLOYMENT`. Deployment names may use the `deploy/`, `deployment/`, or `deployments/` prefix. Treat both name bindings as public identifiers because they appear in the API request path. To send a bearer credential, use an HTTPS origin and `env://K8S_BEARER_TOKEN`. HTTP readiness uses `env://VM_HEALTH_URL` for the complete remote URL. For TCP readiness set `VM_TCP_ENDPOINT` to `tcp://host:port` matching the requested destination. Numeric loopback remains available for local probes without bearer credentials.
+The runner supplies remote origins and commands outside the RP package. Use HTTPS for remote Kubernetes and HTTP health probes. Set `K8S_API_SERVER` or `VM_HEALTH_URL` in the runner. A Kubernetes bearer token requires HTTPS and `env://K8S_BEARER_TOKEN`. Local HTTP fixtures may use numeric loopback. For a TCP reachability probe, set `VM_TCP_ENDPOINT` to the exact numeric loopback address and port, such as `tcp://127.0.0.1:8080`. A remote TCP service needs a runner-managed encrypted tunnel or a separate HTTPS health check.
+
+Kubernetes CLI probes use the system-installed kubectl. Use a namespace and deployment name or `env://K8S_NAMESPACE` and `env://K8S_DEPLOYMENT`. A pod name may use `env://K8S_POD`. To select a context, set `K8S_CONTEXT` on the runner. The suite can reference that context or omit it. Without a configured context the runner uses its current context.
+
+For SSH, set `VM_SSH_ENDPOINT` and `VM_SSH_COMMAND` on the runner and configure its known_hosts file. For WinRM, set `VM_WINRM_ENDPOINT` to an HTTPS endpoint and configure `VM_WINRM_COMMAND`. The supported SSH query is `systemctl is-active <unit>`. The supported WinRM query is `Get-Service <name>`. Suite host, port, user and command values must match their runner bindings. The optional tool name is limited to `kubectl`, `ssh` or `winrs` for the selected transport.
 
 ## REST Endpoint
 
