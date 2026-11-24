@@ -56,8 +56,21 @@ class NatsNativeProtocolTest {
         assertThat(result.failure().code()).isEqualTo("NATS_CONNECTION_FAILED");
     }
 
+    @Test void closesWithoutSendingCredentialsWhenTheLoopbackServerRequiresTls() throws Exception {
+        try (Peer peer = new Peer("tls_required")) {
+            var result = publish("nats://fixture-user:fixture-value@127.0.0.1:" + peer.port(), "PT1S");
+            assertThat(result.passed()).isFalse();
+            assertThat(result.failure().code()).isEqualTo("NATS_CONNECTION_FAILED");
+            peer.completed();
+        }
+    }
+
     ProviderOperationResult publish(int port, String timeout) {
-        System.setProperty("NATS_NATIVE_PROTOCOL_TEST", "nats://127.0.0.1:" + port);
+        return publish("nats://127.0.0.1:" + port, timeout);
+    }
+
+    ProviderOperationResult publish(String connection, String timeout) {
+        System.setProperty("NATS_NATIVE_PROTOCOL_TEST", connection);
         try {
             var context = new ProviderExecutionContext("bus", "nats", "native_test", "native", temporary, temporary,
                     Map.of(), Map.of(), Map.of("connection", Map.of("secret_ref", "env://NATS_NATIVE_PROTOCOL_TEST"),
@@ -112,6 +125,12 @@ class NatsNativeProtocolTest {
                 try (Socket socket = server.accept()) {
                     socket.setSoTimeout(2000);
                     var in = new BufferedInputStream(socket.getInputStream()); var out = socket.getOutputStream();
+                    if (behavior.equals("tls_required")) {
+                        out.write("INFO {\"tls_required\":true}\r\n".getBytes(StandardCharsets.UTF_8));
+                        out.flush();
+                        assertThat(in.read()).as("first client byte").isEqualTo(-1);
+                        return;
+                    }
                     out.write("INFO {}\r\n".getBytes(StandardCharsets.UTF_8)); out.flush();
                     line(in); String subscription = line(in); String publish = line(in);
                     if (!subscription.equals("SUB " + SUBJECT + " 1")) throw new IOException("wrong subscription");

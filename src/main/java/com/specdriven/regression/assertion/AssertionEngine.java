@@ -1,27 +1,28 @@
 package com.specdriven.regression.assertion;
 
-import com.specdriven.regression.provider.jdbc.SqlSource;
+import com.specdriven.regression.provider.ProviderDataYaml;
+import com.specdriven.regression.provider.SuiteAssetReader;
+import com.specdriven.regression.contract.SecurityFieldNames;
+import com.specdriven.regression.contract.v03.V03OutputRedactor;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import com.specdriven.regression.dsl.DslTestCaseNormalizer;
 import com.specdriven.regression.oracle.OracleResolver;
 import com.specdriven.regression.oracle.ResolvedOracle;
+import com.specdriven.regression.provider.DatabaseFixtureProvider;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
-import org.yaml.snakeyaml.Yaml;
 
 @Service
 public class AssertionEngine {
 
+    private final V03OutputRedactor redactor = new V03OutputRedactor();
     private final OracleResolver oracleResolver;
     private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
 
@@ -38,16 +39,10 @@ public class AssertionEngine {
             Map<String, Object> testCase,
             Path actualOutput,
             Path runDir) {
-        return evaluateFileDiff(packageRoot, testCase, actualOutput, runDir, Map.of());
-    }
-
-    public AssertionEvaluation evaluateFileDiff(
-            Path packageRoot,
-            Map<String, Object> testCase,
-            Path actualOutput,
-            Path runDir,
-            Map<String, Map<String, Object>> dbFixtureContracts) {
         testCase = dslTestCaseNormalizer.normalize(testCase);
+        if (DatabaseFixtureProvider.hasRowAssertion(testCase)) {
+            throw new UnsupportedOperationException(DatabaseFixtureProvider.RETIRED);
+        }
         List<AssertionDetail> details = new ArrayList<>();
         for (Map<?, ?> assertion : assertions(testCase)) {
             details.add(evaluateAssertion(
@@ -55,8 +50,7 @@ public class AssertionEngine {
                     testCase,
                     assertion,
                     actualOutput,
-                    runDir,
-                    dbFixtureContracts));
+                    runDir));
         }
         if (details.isEmpty()) {
             details.add(evaluateAssertion(
@@ -64,12 +58,17 @@ public class AssertionEngine {
                     testCase,
                     Map.of(),
                     actualOutput,
-                    runDir,
-                    dbFixtureContracts));
+                    runDir));
         }
-        Path evidencePath = runDir.resolve("assertions.yaml");
-        writeEvidence(evidencePath, testCase, details);
+        Path evidencePath = writeEvidence(runDir, testCase, details);
         return aggregate(details, evidencePath);
+    }
+
+    /** Retains the legacy Java signature for existing callers. */
+    public AssertionEvaluation evaluateFileDiff(
+            Path packageRoot, Map<String, Object> testCase, Path actualOutput, Path runDir,
+            Map<String, Map<String, Object>> dbFixtureContracts) {
+        return evaluateFileDiff(packageRoot, testCase, actualOutput, runDir);
     }
 
     private AssertionDetail evaluateAssertion(
@@ -77,8 +76,7 @@ public class AssertionEngine {
             Map<String, Object> testCase,
             Map<?, ?> assertion,
             Path actualOutput,
-            Path runDir,
-            Map<String, Map<String, Object>> dbFixtureContracts) {
+            Path runDir) {
         String assertionType = stringValue(assertion.get("type"));
         if ("json_path_equals".equals(assertionType)) {
             return evaluateJsonPathEquals(testCase, assertion, actualOutput, runDir);
@@ -98,12 +96,9 @@ public class AssertionEngine {
         if ("contract_matches".equals(assertionType)) {
             return evaluateContractMatches(packageRoot, testCase, assertion, actualOutput, runDir);
         }
-        if ("db_row_matches".equals(assertionType)) {
-            return evaluateDbRowMatches(packageRoot, testCase, assertion, runDir, dbFixtureContracts);
-        }
         String oracleReference = stringValue(assertion.get("oracle"));
         ResolvedOracle oracle = resolveOracle(packageRoot, testCase, oracleReference);
-        boolean passed = sameContent(oracle.expectedPath(), actualOutput);
+        boolean passed = sameContent(packageRoot, oracle.expectedPath(), runDir, actualOutput);
         String status = passed ? "passed" : "failed";
         String actualRef = runDir.relativize(actualOutput).toString();
         String diffSummary = passed
@@ -120,40 +115,6 @@ public class AssertionEngine {
                 diffSummary);
     }
 
-    private AssertionDetail evaluateDbRowMatches(
-            Path packageRoot,
-            Map<String, Object> testCase,
-            Map<?, ?> assertion,
-            Path runDir,
-            Map<String, Map<String, Object>> dbFixtureContracts) {
-        String oracleReference = stringValue(assertion.get("oracle"));
-        String oracleName = oracleName(oracleReference);
-        Map<?, ?> oracle = oracleDefinition(testCase, oracleName);
-        String provider = firstText(oracle, "provider", "fixture_provider");
-        Map<String, Object> contract = dbFixtureContracts.getOrDefault(provider, Map.of());
-        String queryName = firstText(oracle, "query", "query_name");
-        String queryRef = firstText(oracle, "ref", "sql_ref");
-        int expectedCount = intValue(firstText(oracle, "expected_count", "row_count"), 0);
-        int actualCount = executeCountQuery(packageRoot, contract, queryRef);
-        boolean passed = actualCount == expectedCount;
-        String status = passed ? "passed" : "failed";
-        String expectedRef = queryRef + " expected_count=" + expectedCount;
-        String actualRef = "db:" + provider + "/" + queryName;
-        String diffSummary = passed
-                ? "query `%s` returned expected row_count `%s`".formatted(queryName, expectedCount)
-                : "query `%s` expected row_count `%s` but was `%s`"
-                        .formatted(queryName, expectedCount, actualCount);
-        return new AssertionDetail(
-                passed,
-                status,
-                "db_row_matches",
-                oracleReference,
-                expectedRef,
-                actualRef,
-                "db_row_matches",
-                diffSummary);
-    }
-
     private AssertionDetail evaluateJsonPathEquals(
             Map<String, Object> testCase,
             Map<?, ?> assertion,
@@ -161,10 +122,12 @@ public class AssertionEngine {
             Path runDir) {
         String path = firstText(assertion, "path", "json_path", "actual");
         String expectedValue = expectedValue(assertion);
-        Object actualValue = valueAtPath(readYamlMap(actualOutput), path);
+        Object actualValue = valueAtPath(readRunYaml(runDir, actualOutput), path);
         boolean passed = expectedValue.equals(stringValue(actualValue));
         String status = passed ? "passed" : "failed";
         String actualRef = runDir.relativize(actualOutput).toString();
+        expectedValue = displayValue(path, expectedValue);
+        actualValue = displayValue(path, actualValue);
         String expectedRef = "inline:" + expectedValue;
         String diffSummary = passed
                 ? "json path `%s` matched `%s`".formatted(path, expectedValue)
@@ -187,7 +150,7 @@ public class AssertionEngine {
             Path actualOutput,
             Path runDir) {
         String path = firstText(assertion, "path", "json_path", "actual");
-        boolean present = pathExists(readYamlMap(actualOutput), path);
+        boolean present = pathExists(readRunYaml(runDir, actualOutput), path);
         String status = present ? "failed" : "passed";
         String actualRef = runDir.relativize(actualOutput).toString();
         String expectedRef = "absent:" + path;
@@ -213,13 +176,15 @@ public class AssertionEngine {
         String path = firstText(assertion, "path", "json_path", "actual");
         String expectedText = expectedValue(assertion);
         String toleranceText = firstText(assertion, "tolerance", "epsilon");
-        Object actualValue = valueAtPath(readYamlMap(actualOutput), path);
+        Object actualValue = valueAtPath(readRunYaml(runDir, actualOutput), path);
         double expected = doubleValue(expectedText, 0);
         double tolerance = doubleValue(toleranceText, 0);
         double actual = doubleValue(stringValue(actualValue), Double.NaN);
         boolean passed = !Double.isNaN(actual) && Math.abs(actual - expected) <= tolerance;
         String status = passed ? "passed" : "failed";
         String actualRef = runDir.relativize(actualOutput).toString();
+        expectedText = displayValue(path, expectedText);
+        actualValue = displayValue(path, actualValue);
         String expectedRef = "inline:" + expectedText + " tolerance=" + toleranceText;
         String diffSummary = passed
                 ? "numeric path `%s` matched `%s` within tolerance `%s` (actual `%s`)"
@@ -243,7 +208,7 @@ public class AssertionEngine {
             Path actualOutput,
             Path runDir) {
         String path = firstText(assertion, "path", "json_path", "actual");
-        Object actualRoot = readYamlMap(actualOutput);
+        Object actualRoot = readRunYaml(runDir, actualOutput);
         String source = "";
         Object actualValue;
         if (path.isBlank()) {
@@ -268,6 +233,8 @@ public class AssertionEngine {
         boolean passed = expectedStatus.equals(stringValue(actualValue));
         String status = passed ? "passed" : "failed";
         String actualRef = runDir.relativize(actualOutput).toString();
+        expectedStatus = displayValue(path, expectedStatus);
+        actualValue = displayValue(path, actualValue);
         String expectedRef = "inline:" + expectedStatus;
         String diffSummary = passed
                 ? "response status %s matched `%s`".formatted(source, expectedStatus)
@@ -295,7 +262,7 @@ public class AssertionEngine {
         Map<?, ?> oracle = oracleDefinition(testCase, oracleName);
         String schemaRef = firstText(oracle, "ref", "schema_ref");
         Map<String, Object> schema = readYamlMap(packageRoot, schemaRef, "schema assertion");
-        Object actualRoot = readYamlMap(actualOutput);
+        Object actualRoot = readRunYaml(runDir, actualOutput);
         List<Map<?, ?>> rules = ruleMaps(schema.get("fields"));
         List<String> failures = new ArrayList<>();
         for (Map<?, ?> rule : rules) {
@@ -329,7 +296,7 @@ public class AssertionEngine {
         Map<?, ?> oracle = oracleDefinition(testCase, oracleName);
         String contractRef = firstText(oracle, "ref", "contract_ref");
         Map<String, Object> contract = readYamlMap(packageRoot, contractRef, "contract assertion");
-        Object actualRoot = readYamlMap(actualOutput);
+        Object actualRoot = readRunYaml(runDir, actualOutput);
         List<Map<?, ?>> expectations = contractExpectations(contract);
         List<String> failures = new ArrayList<>();
         for (Map<?, ?> expectation : expectations) {
@@ -380,26 +347,28 @@ public class AssertionEngine {
                 evidencePath);
     }
 
-    private void writeEvidence(
-            Path evidencePath,
+    private Path writeEvidence(
+            Path runDir,
             Map<String, Object> testCase,
             List<AssertionDetail> details) {
         try {
-            Files.createDirectories(evidencePath.getParent());
-            StringBuilder builder = new StringBuilder();
-            builder.append("assertions:\n");
+            Path path = runDir.resolve("assertions.yaml");
+            List<Map<String, Object>> assertions = new ArrayList<>();
             for (AssertionDetail detail : details) {
-                builder.append("  - test_case_id: ").append(stringValue(testCase.get("test_case_id"))).append("\n");
-                builder.append("    ac_id: ").append(stringValue(testCase.get("ac_id"))).append("\n");
-                builder.append("    type: ").append(detail.assertionType()).append("\n");
-                builder.append("    status: ").append(detail.status()).append("\n");
-                builder.append("    oracle: ").append(detail.oracleReference()).append("\n");
-                builder.append("    expected_ref: ").append(detail.expectedRef()).append("\n");
-                builder.append("    actual_ref: ").append(detail.actualRef()).append("\n");
-                builder.append("    decision_rule: ").append(detail.decisionRule()).append("\n");
-                builder.append("    diff_summary: ").append(detail.diffSummary()).append("\n");
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("test_case_id", stringValue(testCase.get("test_case_id")));
+                entry.put("ac_id", stringValue(testCase.get("ac_id")));
+                entry.put("type", detail.assertionType());
+                entry.put("status", detail.status());
+                entry.put("oracle", detail.oracleReference());
+                entry.put("expected_ref", detail.expectedRef());
+                entry.put("actual_ref", detail.actualRef());
+                entry.put("decision_rule", detail.decisionRule());
+                entry.put("diff_summary", detail.diffSummary());
+                assertions.add(entry);
             }
-            Files.writeString(evidencePath, builder.toString());
+            ProviderDataYaml.writeEvidence(path, Map.of("assertions", assertions));
+            return path;
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write assertion evidence.", e);
         }
@@ -429,38 +398,6 @@ public class AssertionEngine {
         return Map.of();
     }
 
-    private int executeCountQuery(
-            Path packageRoot,
-            Map<String, Object> contract,
-            String queryRef) {
-        String connectionRef = stringValue(contract.get("connection_ref"));
-        if (connectionRef.isBlank()) {
-            throw new IllegalArgumentException("DB row assertion requires fixture provider connection_ref.");
-        }
-        try (Connection connection = DriverManager.getConnection(connectionRef);
-                Statement statement = connection.createStatement();
-                ResultSet resultSet = statement.executeQuery(readSqlRef(packageRoot, queryRef))) {
-            return resultSet.next() ? resultSet.getInt(1) : 0;
-        } catch (SQLException e) {
-            throw new IllegalStateException("Failed to execute DB row assertion query.", e);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read DB row assertion query.", e);
-        }
-    }
-
-    private String readSqlRef(Path packageRoot, String sqlRef) throws IOException {
-        return SqlSource.read(packageRoot, sqlRef, "DB row assertion sql_ref must stay under the RP package: " + sqlRef);
-    }
-
-    private Path packageRef(Path packageRoot, String ref, String context) {
-        Path normalizedRoot = packageRoot.toAbsolutePath().normalize();
-        Path refPath = normalizedRoot.resolve(ref).normalize();
-        if (!refPath.startsWith(normalizedRoot)) {
-            throw new IllegalArgumentException(context + " ref must stay under the RP package: " + ref);
-        }
-        return refPath;
-    }
-
     private String oracleName(String oracleReference) {
         String prefix = "${oracles.";
         if (oracleReference.startsWith(prefix) && oracleReference.endsWith("}")) {
@@ -469,10 +406,11 @@ public class AssertionEngine {
         return oracleReference;
     }
 
-    private boolean sameContent(Path expected, Path actual) {
+    private boolean sameContent(Path root, Path expected, Path runDir, Path actual) {
         try {
             return Files.exists(expected) && Files.exists(actual)
-                    && Files.readString(expected).equals(Files.readString(actual));
+                    && SuiteAssetReader.read(root, expected.toAbsolutePath().toString(), "Oracle output must stay inside the RP package.")
+                            .equals(readRunFile(runDir, actual));
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to compare assertion files.", e);
         }
@@ -492,21 +430,29 @@ public class AssertionEngine {
         return assertionMaps;
     }
 
+    private String readRunFile(Path runDir, Path path) throws IOException {
+        return SuiteAssetReader.read(runDir, path.toAbsolutePath().toString(), "Assertion output must stay inside the run directory.");
+    }
+
     @SuppressWarnings("unchecked")
-    private Map<String, Object> readYamlMap(Path path) {
+    private Map<String, Object> readRunYaml(Path runDir, Path path) {
         try {
-            Object loaded = new Yaml().load(Files.readString(path));
-            if (loaded instanceof Map<?, ?> map) {
-                return (Map<String, Object>) map;
-            }
-            return Map.of();
+            Object loaded = ProviderDataYaml.create().load(readRunFile(runDir, path));
+            return loaded instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read assertion actual output.", e);
         }
     }
 
+    @SuppressWarnings("unchecked")
     private Map<String, Object> readYamlMap(Path packageRoot, String ref, String context) {
-        return readYamlMap(packageRef(packageRoot, ref, context));
+        try {
+            Object document = ProviderDataYaml.create().load(SuiteAssetReader.read(packageRoot, ref,
+                    context + " ref must stay under the RP package: " + ref));
+            return document instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+        } catch (IOException error) {
+            throw new UncheckedIOException("Failed to read assertion actual output.", error);
+        }
     }
 
     private Object valueAtPath(Object root, String path) {
@@ -628,14 +574,21 @@ public class AssertionEngine {
         }
         if (rule.containsKey("equals") && !stringValue(rule.get("equals")).equals(stringValue(actualValue))) {
             failures.add("path `%s` expected `%s` but was `%s`"
-                    .formatted(path, stringValue(rule.get("equals")), stringValue(actualValue)));
+                    .formatted(path, displayValue(path, rule.get("equals")), displayValue(path, actualValue)));
         }
         Object enumValue = rule.containsKey("enum") ? rule.get("enum") : rule.get("values");
         if (enumValue instanceof List<?> allowedValues
                 && allowedValues.stream().map(this::stringValue).noneMatch(stringValue(actualValue)::equals)) {
             failures.add("path `%s` value `%s` is outside allowed values `%s`"
-                    .formatted(path, stringValue(actualValue), allowedValues));
+                    .formatted(path, displayValue(path, actualValue), displayValue(path, allowedValues)));
         }
+    }
+
+    private String displayValue(String path, Object value) {
+        if (Arrays.stream(path.split("[./\\[\\]]+")).anyMatch(SecurityFieldNames::isCredential)) {
+            return V03OutputRedactor.MASKED;
+        }
+        return stringValue(redactor.redactValue(value));
     }
 
     private boolean matchesType(Object value, String expectedType) {
@@ -677,7 +630,7 @@ public class AssertionEngine {
         if (!Files.exists(evidencePath)) {
             return "";
         }
-        Map<String, Object> evidence = readYamlMap(evidencePath);
+        Map<String, Object> evidence = readRunYaml(runDir, evidencePath);
         return firstText(evidence, "http_status", "status_code", "response_status");
     }
 
@@ -701,13 +654,6 @@ public class AssertionEngine {
             }
         }
         return "";
-    }
-
-    private int intValue(String value, int fallback) {
-        if (value == null || value.isBlank()) {
-            return fallback;
-        }
-        return Integer.parseInt(value);
     }
 
     private double doubleValue(String value, double fallback) {

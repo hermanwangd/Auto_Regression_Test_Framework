@@ -15,7 +15,7 @@ class OracleReadinessServiceTest {
     Path tempDir;
 
     @Test
-    void acceptsQueryResultOracleForDbAssertions() throws Exception {
+    void rejectsLegacyDbAssertionInPreflight() throws Exception {
         Path testCase = tempDir.resolve("TC-DB-ASSERT.yaml");
         Files.writeString(testCase, """
                 test_case_id: TC-DB-ASSERT
@@ -34,8 +34,8 @@ class OracleReadinessServiceTest {
 
         OracleReadinessReport report = new OracleReadinessService().check(testCase);
 
-        assertThat(report.ready()).isTrue();
-        assertThat(report.gaps()).isEmpty();
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).singleElement().satisfies(gap -> assertThat(gap.oracleType()).isEqualTo("db_row_matches"));
     }
 
     @Test

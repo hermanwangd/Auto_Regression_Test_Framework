@@ -12,6 +12,8 @@ import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class JdbcProviderCapabilityCommandTest {
 
@@ -105,84 +107,46 @@ class JdbcProviderCapabilityCommandTest {
                 .contains("jdbc");
     }
 
-    @Test
-    void jdbcSuiteRunsProviderRuntimeAndReportConsumesGeneratedResult() {
-        CommandResult run = execute("run", "--suite", JDBC_SUITE.toString(), "--profile", "local_jdbc");
-
-        assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
-        assertThat(run.stdout())
-                .contains("run_status: passed")
-                .contains("test_count: 3")
-                .contains("provider_runtime_executed: true")
-                .contains("provider_type: jdbc")
-                .contains("provider_id: oracle-like-db")
-                .contains("runtime_mode: ephemeral")
-                .contains("dialect: oracle")
-                .contains("evidence_classification: framework_provider_capability_only");
-
-        Path resultJson = extractPath(run.stdout(), "result_json");
-        Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
-        assertThat(resultJson).isRegularFile();
-        assertThat(evidenceDir).isDirectory();
-        assertEvidenceFilesExist(evidenceDir);
-
-        String resultText = read(resultJson);
-        assertThat(resultText)
-                .contains("\"suite_id\": \"JDBC-CAPABILITY-v0.2\"")
-                .contains("\"test_case_id\": \"JDBC-CAPABILITY-v0.2-MULTI\"")
-                .contains("\"test_count\": 3")
-                .contains("\"provider_type\": \"jdbc\"")
-                .contains("\"provider_id\": \"oracle-like-db\"")
-                .contains("\"provider_id\": \"db2-like-db\"")
-                .contains("\"runtime_mode\": \"ephemeral\"")
-                .contains("\"dialect\": \"oracle\"")
-                .contains("\"dialect\": \"db2\"")
-                .contains("\"status\": \"passed\"")
-                .contains("\"test_case_id\": \"JDBC-ORACLE-CRUD-TC-001\"")
-                .contains("\"test_case_id\": \"JDBC-DB2-CRUD-TC-001\"")
-                .contains("ORD-CRUD-001")
-                .contains("\"seed_evidence_ref\"")
-                .contains("\"query_evidence_ref\"")
-                .contains("\"cleanup_evidence_ref\"")
-                .contains("\"release_evidence_eligible\": false")
-                .doesNotContain("plain-text-secret")
-                .doesNotContain("jdbc:h2:");
-        assertThat(read(evidenceDir.resolve("logs/execution.log")))
-                .contains("profile: local_jdbc")
-                .contains("runtime_mode: ephemeral");
-        assertThat(read(evidenceDir.resolve("batch/batch.yaml")))
-                .contains("profile: local_jdbc")
-                .contains("runtime_mode: ephemeral");
-
-        CommandResult report = execute("report", "--result", resultJson.toString());
-        assertThat(report.exit()).as(report.stderr() + report.stdout()).isZero();
-        assertThat(report.stdout())
-                .contains("report_status: review_ready")
-                .contains("suite_id: JDBC-CAPABILITY-v0.2")
-                .contains("batch_id: BATCH-STANDALONE-")
-                .contains("run_id: RUN-JDBC-")
-                .contains("test_case_id: JDBC-CAPABILITY-v0.2-MULTI")
-                .contains("status: passed")
-                .contains("test_count: 3")
-                .contains("provider_results_count: 3")
-                .contains("provider_id: oracle-like-db")
-                .contains("provider_id: db2-like-db");
+    @ParameterizedTest
+    @CsvSource({
+            "suite_manifest.yaml, local_jdbc",
+            "suite_manifest_external_oracle.yaml, external_jdbc_oracle_env_secret_ref",
+            "suite_manifest_external_db2.yaml, external_jdbc_db2_env_secret_ref"
+    })
+    void realRunRefusesLocalAndExternalLegacyDatabases(String manifest, String profile) {
+        Path suite = JDBC_SUITE.resolveSibling(manifest).toAbsolutePath();
+        CommandResult run = execute("run", "--root", tempDir.toString(), "--suite", suite.toString(), "--profile", profile);
+        assertThat(run.exit()).as(run.stdout()).isOne();
+        assertThat(run.stdout()).contains("run_status: blocked", "reason: legacy_db_execution_disabled",
+                "provider_runtime_invoked: false").doesNotContain("result_json:", "evidence_dir:");
+        assertThat(tempDir.resolve("target")).doesNotExist();
     }
 
     @Test
-    void jdbcSuiteFailsOwnerActionablyWhenExternalEnvSecretRefIsMissing() {
-        CommandResult run = execute(
-                "run",
-                "--suite", JDBC_EXTERNAL_ORACLE_SUITE.toString(),
-                "--profile", "external_jdbc_oracle_env_secret_ref");
-
-        assertThat(run.exit()).isEqualTo(1);
-        assertThat(run.stdout())
-                .contains("run_status: failed")
-                .contains("SECRET_RESOLUTION_ERROR")
-                .contains("JDBC connection.secret_ref env ref `env://JDBC_CONNECTION` is not set")
-                .contains("Set environment variable `JDBC_CONNECTION`")
-                .doesNotContain("jdbc:h2:");
+    void groupRefusesDatabaseBeforeTheFirstEligibleChildStarts() throws IOException {
+        Path first = Path.of("samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e");
+        copyDirectory(first, tempDir.resolve("first"));
+        copyDirectory(JDBC_SUITE.getParent(), tempDir.resolve("second"));
+        Path group = tempDir.resolve("group.yaml");
+        Files.writeString(group, """
+                contract_version: v0.2
+                suite_id: LEGACY-DB-GROUP
+                profile: local_golden
+                child_suites:
+                  - id: first
+                    ref: first/suite_manifest.yaml
+                    profile: local_golden
+                  - id: second
+                    ref: second/suite_manifest.yaml
+                    profile: local_jdbc
+                """);
+        CommandResult dry = execute("run", "--root", tempDir.toString(), "--suite", group.toString(), "--dry-run");
+        assertThat(dry.exit()).as(dry.stdout()).isZero();
+        CommandResult run = execute("run", "--root", tempDir.toString(), "--suite", group.toString(), "--profile", "local_golden");
+        assertThat(run.exit()).as(run.stdout()).isOne();
+        assertThat(run.stdout()).contains("run_status: blocked", "reason: legacy_db_execution_disabled", "second")
+                .doesNotContain("result_json:", "evidence_dir:");
+        assertThat(tempDir.resolve("target")).doesNotExist();
     }
 
     @Test
@@ -214,39 +178,6 @@ class JdbcProviderCapabilityCommandTest {
     }
 
     @Test
-    void jdbcSuiteRunsAllTestsWithSharedProfile() throws Exception {
-        Path suite = mutableJdbc();
-        Path secondTestCase = suite.getParent().resolve("second_test_case.yaml");
-        Files.copy(suite.getParent().resolve("test_case.yaml"), secondTestCase);
-        Files.writeString(secondTestCase, read(secondTestCase)
-                .replace("JDBC-CAPABILITY-TC-001", "JDBC-CAPABILITY-TC-002"));
-        Files.writeString(suite, read(suite)
-                .replace("  - test_case.yaml", "  - test_case.yaml\n  - second_test_case.yaml"));
-
-        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
-
-        assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
-        assertThat(run.stdout())
-                .contains("test_count: 4")
-                .contains("profile: local_jdbc");
-        Path resultJson = extractPath(run.stdout(), "result_json");
-        String resultText = read(resultJson);
-        assertThat(resultText)
-                .contains("\"test_case_id\": \"JDBC-CAPABILITY-v0.2-MULTI\"")
-                .contains("\"test_count\": 4")
-                .contains("\"test_case_id\": \"JDBC-CAPABILITY-TC-001\"")
-                .contains("\"test_case_id\": \"JDBC-CAPABILITY-TC-002\"")
-                .contains("\"test_case_id\": \"JDBC-ORACLE-CRUD-TC-001\"")
-                .contains("\"test_case_id\": \"JDBC-DB2-CRUD-TC-001\"");
-        Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
-        assertThat(read(evidenceDir.resolve("evidence_index.yaml")))
-                .contains("test_case_id: JDBC-CAPABILITY-TC-001")
-                .contains("test_case_id: JDBC-CAPABILITY-TC-002")
-                .contains("test_case_id: JDBC-ORACLE-CRUD-TC-001")
-                .contains("test_case_id: JDBC-DB2-CRUD-TC-001");
-    }
-
-    @Test
     void jdbcRunRejectsUnsupportedDialectBeforeExecution() throws Exception {
         Path suite = mutableJdbc();
         Path envProfile = suite.getParent().resolve("env_profiles/local_jdbc.yaml");
@@ -260,28 +191,6 @@ class JdbcProviderCapabilityCommandTest {
                 .contains("reason: unsupported_dialect")
                 .contains("provider_type: jdbc");
         assertThat(result.stdout()).doesNotContain("provider_runtime_executed: true");
-    }
-
-    @Test
-    void jdbcRunSupportsDb2DialectQueryPath() throws Exception {
-        Path suite = mutableJdbc();
-        Path testCase = suite.getParent().resolve("test_case.yaml");
-        Files.writeString(testCase, read(testCase)
-                .replace("target: oracle_like_db", "target: db2_like_db")
-                .replace("queries/order_exists_oracle.sql", "queries/order_exists_db2.sql")
-                .replace("query_order_oracle", "query_order_db2"));
-
-        CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
-
-        assertThat(result.exit()).as(result.stderr() + result.stdout()).isZero();
-        assertThat(result.stdout())
-                .contains("provider_id: db2-like-db")
-                .contains("dialect: db2");
-        Path evidenceDir = extractPath(result.stdout(), "evidence_dir");
-        assertThat(read(evidenceDir.resolve("provider-evidence/jdbc/query_JDBC-CAPABILITY-TC-001__query_order_db2.yaml")))
-                .contains("dialect: db2")
-                .contains("query_ref: queries/order_exists_db2.sql")
-                .contains("status: passed");
     }
 
     @Test
@@ -375,103 +284,6 @@ class JdbcProviderCapabilityCommandTest {
                 .contains("reason: raw_secret");
     }
 
-    @Test
-    void jdbcRunFailsOwnerActionablyWhenSqlParamIsMissing() throws Exception {
-        Path suite = mutableJdbc();
-        Path query = suite.getParent().resolve("queries/order_exists_oracle.sql");
-        Files.writeString(query, read(query).replace(":order_id", ":missing_order_id"));
-
-        CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
-
-        assertThat(result.exit()).isEqualTo(1);
-        assertThat(result.stdout()).contains("run_status: failed");
-        Path resultJson = extractPath(result.stdout(), "result_json");
-        assertThat(read(resultJson))
-                .contains("\"status\": \"failed\"")
-                .contains("\"classification\": \"DB_QUERY_FAILED\"")
-                .contains("SQL_PARAM_MISSING")
-                .contains("order_id");
-    }
-
-    @Test
-    void jdbcRunClassifiesMissingSeedSqlRefAsExecutionFailure() throws Exception {
-        Path suite = mutableJdbc();
-        Path testCase = suite.getParent().resolve("test_case.yaml");
-        Files.writeString(testCase, read(testCase).replace("fixtures/db_seed.sql", "fixtures/missing_seed.sql"));
-
-        CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
-
-        assertThat(result.exit()).isEqualTo(1);
-        assertThat(result.stdout())
-                .contains("run_status: blocked")
-                .contains("reason: unresolved_artifact_ref")
-                .contains("data.order_seed.ref")
-                .contains("missing_seed.sql");
-        assertThat(result.stdout()).doesNotContain("result_json:");
-    }
-
-    @Test
-    void jdbcRunCapturesCleanupFailureWithoutHidingRecordFailure() throws Exception {
-        Path suite = mutableJdbc();
-        Path expected = suite.getParent().resolve("expected_results/db_expected.json");
-        Files.writeString(expected, read(expected).replace("\"min_rows\": 1", "\"min_rows\": 2"));
-        Path cleanup = suite.getParent().resolve("fixtures/db_cleanup.sql");
-        Files.writeString(cleanup, "DELETE FROM missing_table WHERE order_id = :order_id");
-
-        CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_jdbc");
-
-        assertThat(result.exit()).isEqualTo(1);
-        Path resultJson = extractPath(result.stdout(), "result_json");
-        Path evidenceDir = extractPath(result.stdout(), "evidence_dir");
-        assertThat(read(resultJson))
-                .contains("\"status\": \"failed\"")
-                .contains("\"classification\": \"ASSERTION_FAILED\"")
-                .contains("\"cleanup_failure\"")
-                .contains("DB_CLEANUP_FAILED");
-        assertThat(read(evidenceDir.resolve("provider-evidence/jdbc/cleanup_JDBC-CAPABILITY-TC-001__cleanup_order.yaml")))
-                .contains("status: failed")
-                .contains("failure_code: DB_CLEANUP_FAILED");
-    }
-
-    @Test
-    void jdbcReportRejectsMissingRequiredEvidenceRef() {
-        CommandResult run = execute("run", "--suite", JDBC_SUITE.toString(), "--profile", "local_jdbc");
-        Path resultJson = extractPath(run.stdout(), "result_json");
-        Path evidenceDir = extractPath(run.stdout(), "evidence_dir");
-        delete(evidenceDir.resolve("provider-evidence/jdbc/query_JDBC-CAPABILITY-TC-001__query_order_oracle.yaml"));
-
-        CommandResult report = execute("report", "--result", resultJson.toString());
-
-        assertThat(report.exit()).isEqualTo(1);
-        assertThat(report.stdout())
-                .contains("report_status: invalid")
-                .contains("reason: missing_evidence_ref")
-                .contains("provider-evidence/jdbc/query_JDBC-CAPABILITY-TC-001__query_order_oracle.yaml");
-    }
-
-    private void assertEvidenceFilesExist(Path evidenceDir) {
-        List<String> evidenceFiles = List.of(
-                "evidence_index.yaml",
-                "provider-evidence/jdbc/seed_JDBC-CAPABILITY-TC-001__seed_order.yaml",
-                "provider-evidence/jdbc/query_JDBC-CAPABILITY-TC-001__query_order_oracle.yaml",
-                "provider-evidence/jdbc/cleanup_JDBC-CAPABILITY-TC-001__cleanup_order.yaml",
-                "provider-evidence/jdbc/seed_JDBC-ORACLE-CRUD-TC-001__oracle_create_order.yaml",
-                "provider-evidence/jdbc/query_JDBC-ORACLE-CRUD-TC-001__oracle_read_updated_order.yaml",
-                "provider-evidence/jdbc/query_JDBC-ORACLE-CRUD-TC-001__oracle_deleted_order_record_absent.yaml",
-                "provider-evidence/jdbc/seed_JDBC-DB2-CRUD-TC-001__db2_create_order.yaml",
-                "provider-evidence/jdbc/query_JDBC-DB2-CRUD-TC-001__db2_read_updated_order.yaml",
-                "provider-evidence/jdbc/query_JDBC-DB2-CRUD-TC-001__db2_deleted_order_record_absent.yaml",
-                "logs/execution.log",
-                "assertions/JDBC-CAPABILITY-TC-001__order_record_exists.yaml",
-                "assertions/JDBC-ORACLE-CRUD-TC-001__oracle_deleted_order_record_absent.yaml",
-                "assertions/JDBC-DB2-CRUD-TC-001__db2_deleted_order_record_absent.yaml",
-                "batch/batch.yaml");
-
-        assertThat(evidenceFiles).allSatisfy(path -> assertThat(evidenceDir.resolve(path))
-                .as(path)
-                .isRegularFile());
-    }
-
     private Path mutableJdbc() throws IOException {
         Path target = tempDir.resolve("jdbc_" + System.nanoTime());
         copyDirectory(Path.of("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc"), target);
@@ -493,26 +305,9 @@ class JdbcProviderCapabilityCommandTest {
         }
     }
 
-    private Path extractPath(String stdout, String key) {
-        return stdout.lines()
-                .filter(line -> line.startsWith(key + ": "))
-                .map(line -> line.substring((key + ": ").length()).trim())
-                .map(Path::of)
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("Missing path line for " + key + " in:\n" + stdout));
-    }
-
     private String read(Path path) {
         try {
             return Files.readString(path);
-        } catch (IOException e) {
-            throw new AssertionError(e);
-        }
-    }
-
-    private void delete(Path path) {
-        try {
-            Files.delete(path);
         } catch (IOException e) {
             throw new AssertionError(e);
         }

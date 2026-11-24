@@ -22,6 +22,11 @@ The supported runtime commands are `validate`, `run`, `report`, `validate-eviden
 
 ## Provider Support
 
+Legacy RP database fixture setup, verification, cleanup and the `db_row_matches` assertion are retired.
+The runner also blocks v0.2 suites that select JDBC, including mixed suites and groups containing a JDBC child.
+Archived v0.2 manifests remain available for static validation and dry-run.
+Use the [v0.3 JDBC suite](samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml) for database cases.
+
 Provider support is tracked by provider type and `support_status`, not by server ownership. See [provider_support_matrix.md](docs/09-operations/provider_support_matrix.md).
 
 ## Usage Kit vs Source
@@ -40,6 +45,9 @@ The [Swarm product-testing module](docs/09-operations/product-testing-module.md)
 ## External Runtime Setup
 
 External JDBC, Kafka, IBM MQ, and similar dependencies are supplied by the runner environment. JDBC vendor drivers are never bundled; use `--driver-path`, `--driver-dir`, `REGRESS_DRIVER_PATH`, or `usage-kit/drivers/`.
+
+For external Oracle and Db2 suites the runner must set `REGRESS_JDBC_APPROVED_SQL_SHA256` from SQL files reviewed independently of the suite under test. Each comma-separated entry has the form `dialect:connection_environment_variable:operation:sha256`. The operation is one of `db_query`, `db_record_exists`, `db_seed`, and `db_cleanup`. Use the lowercase SHA-256 of the exact UTF-8 file bytes, including line endings. For example, `oracle:JDBC_CONNECTION:db_query:<64 lowercase hex digits>` authorizes one query file for that runner connection. Missing, malformed or mismatched approvals block the external operation before driver loading. Keep approvals in the runner's protected environment. Local in-memory H2 suites use their existing profile. Named parameters are bound by Spring JDBC. Quoted text and SQL comments do not introduce parameters. The concrete runtime is final. Java integrations that provide a custom runtime implement the existing `ProviderRuntime` interface.
+
 
 Dependency bundling rules are documented in [provider_dependency_policy.md](docs/09-operations/provider_dependency_policy.md).
 

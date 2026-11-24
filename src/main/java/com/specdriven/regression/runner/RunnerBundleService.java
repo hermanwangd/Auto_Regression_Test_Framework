@@ -24,29 +24,55 @@ public final class RunnerBundleService {
     private static void commit(String value){require(value.matches("[a-f0-9]{40}"),"exact_git_sha1_required");}
     private static void owner(String value){require(!value.equalsIgnoreCase("UNBOUND")&&!value.startsWith("MISSING"),"SOURCE_OWNER_UNBOUND");}
     private static String repo(JsonNode n){String r=text(n,"source_repo");java.net.URI uri=java.net.URI.create(r);require(uri.isAbsolute()&&uri.getUserInfo()==null&&uri.getQuery()==null&&uri.getFragment()==null&&!r.contains("\n"),"governed_nonsecret_repository_identity_required");return r;}
-    private static byte[] git(Path root,int limit,String...arguments)throws IOException{
+    private enum GitRead { HEAD, TREE_ENTRY, BLOB, ANCESTOR }
+
+    private static byte[] git(Path root, int limit, GitRead operation, String revision, String operand) throws IOException {
         require(Files.isDirectory(root.resolve(".git"),LinkOption.NOFOLLOW_LINKS)&&!Files.isSymbolicLink(root.resolve(".git")),"trusted_checkout_dotgit_directory_required");
         byte[] config=RunnerFiles.read(root,".git/config",65536);String c=new String(config,java.nio.charset.StandardCharsets.UTF_8);
         int lastSectionEnd = c.lastIndexOf(']');
         require(lastSectionEnd < 0 || !INCLUDE_SECTION_PREFIX.matcher(c).region(0, lastSectionEnd).find(),
                 "git_config_includes_forbidden");
         require(!Files.exists(root.resolve(".git/objects/info/alternates"),LinkOption.NOFOLLOW_LINKS),"external_git_object_alternates_forbidden");
-        List<String> command=new ArrayList<>(List.of("/usr/bin/git","--no-optional-locks","--no-replace-objects","-c","core.hooksPath=/dev/null","-c","protocol.allow=never","-C",root.toString()));command.addAll(List.of(arguments));
-        ProcessBuilder builder=new ProcessBuilder(command);builder.environment().clear();builder.environment().putAll(Map.of("PATH","/usr/bin:/bin","LC_ALL","C","GIT_CONFIG_NOSYSTEM","1","GIT_CONFIG_GLOBAL","/dev/null","GIT_TERMINAL_PROMPT","0","GIT_LITERAL_PATHSPECS","1"));builder.redirectError(ProcessBuilder.Redirect.DISCARD);
+        ProcessBuilder builder = new ProcessBuilder("/usr/bin/git", "--no-optional-locks", "--no-replace-objects",
+                "-c", "core.hooksPath=/dev/null", "-c", "protocol.allow=never", "--git-dir=.git");
+        List<String> argv = builder.command();
+        switch (operation) {
+            case HEAD -> argv.addAll(List.of("rev-parse", "--verify", "HEAD^{commit}"));
+            case TREE_ENTRY -> {
+                commit(revision);
+                RunnerFiles.relative(operand);
+                argv.addAll(List.of("ls-tree", "-z", revision, "--", operand));
+            }
+            case BLOB -> {
+                commit(revision);
+                argv.addAll(List.of("cat-file", "blob", revision));
+            }
+            case ANCESTOR -> {
+                commit(revision);
+                commit(operand);
+                argv.addAll(List.of("merge-base", "--is-ancestor", revision, operand));
+            }
+        }
+        builder.directory(root.toFile());
+        builder.environment().clear();
+        builder.environment().putAll(Map.of("PATH","/usr/bin:/bin","LC_ALL","C","GIT_CONFIG_NOSYSTEM","1",
+                "GIT_CONFIG_GLOBAL","/dev/null","GIT_TERMINAL_PROMPT","0","GIT_LITERAL_PATHSPECS","1",
+                "GIT_NO_LAZY_FETCH","1"));
+        builder.redirectError(ProcessBuilder.Redirect.DISCARD);
         Process p=builder.start();ExecutorService io=Executors.newSingleThreadExecutor();Future<byte[]> read=io.submit(()->{try(var in=p.getInputStream();var out=new ByteArrayOutputStream()){byte[] buf=new byte[8192];int n;while((n=in.read(buf))!=-1){require(out.size()+n<=limit,"committed_blob_byte_limit");out.write(buf,0,n);}return out.toByteArray();}});
         try{byte[] data=read.get(10,TimeUnit.SECONDS);require(p.waitFor(1,TimeUnit.SECONDS)&&p.exitValue()==0,"git_commit_or_blob_unavailable");return data;}
         catch(InterruptedException e){Thread.currentThread().interrupt();throw new IOException("git_metadata_interrupted",e);}catch(ExecutionException|TimeoutException e){throw new IOException("git_metadata_failed_or_timeout",e);}finally{p.destroyForcibly();io.shutdownNow();try{p.waitFor(1,TimeUnit.SECONDS);}catch(InterruptedException e){Thread.currentThread().interrupt();}}
     }
     private static byte[] regularBlob(Path root,String revision,String path,int limit)throws IOException{
-        byte[] tree=git(root,4096,"ls-tree","-z",revision,"--",path);
+        byte[] tree=git(root,4096,GitRead.TREE_ENTRY,revision,path);
         String entry=new String(tree,java.nio.charset.StandardCharsets.UTF_8);int separator=entry.indexOf('\t');
         require(separator>0&&entry.endsWith("\0")&&entry.indexOf('\0')==entry.length()-1,"literal_committed_file_entry_required");
         String[] header=entry.substring(0,separator).split(" ");
         require(header.length==3&&Set.of("100644","100755").contains(header[0])&&header[1].equals("blob")&&entry.substring(separator+1,entry.length()-1).equals(path),"committed_source_mode_not_regular");
-        return git(root,limit,"cat-file","blob",revision+":"+path);
+        return git(root,limit,GitRead.BLOB,header[2],null);
     }
-    private static String head(Path root)throws IOException{return new String(git(root,128,"rev-parse","--verify","HEAD^{commit}"),java.nio.charset.StandardCharsets.US_ASCII).strip();}
-    private static void ancestor(Root r)throws IOException{git(r.path(),1,"merge-base","--is-ancestor",r.sourceCommit(),r.checkoutCommit());}
+    private static String head(Path root)throws IOException{return new String(git(root,128,GitRead.HEAD,null,null),java.nio.charset.StandardCharsets.US_ASCII).strip();}
+    private static void ancestor(Root r)throws IOException{git(r.path(),1,GitRead.ANCESTOR,r.sourceCommit(),r.checkoutCommit());}
     public SourceBindings inspectBindings(Path lockFile,String independentlyExpectedLockSha256,Path protectedTrustedRoots,String independentlyExpectedRootsSha256)throws IOException{
         byte[] lockRaw=RunnerFiles.read(lockFile,RunnerFiles.TEXT_LIMIT);require(RunnerFiles.sha(lockRaw).equals(independentlyExpectedLockSha256)&&independentlyExpectedLockSha256.matches("[a-f0-9]{64}"),"independent_lock_pin_mismatch");
         JsonNode lock=RunnerFiles.document(lockRaw);JsonNode trusted=RunnerFiles.pinned(protectedTrustedRoots,independentlyExpectedRootsSha256);

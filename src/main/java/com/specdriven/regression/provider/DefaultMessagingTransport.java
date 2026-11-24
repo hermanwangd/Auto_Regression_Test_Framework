@@ -1,10 +1,10 @@
 package com.specdriven.regression.provider;
 
+import com.specdriven.regression.provider.nats.LoopbackNatsTransport;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URI;
@@ -285,9 +285,7 @@ class DefaultMessagingTransport implements MessagingTransport {
         String subject = natsSubject(request.targetRef(), false);
         int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
         byte[] payload = request.payload().getBytes(StandardCharsets.UTF_8);
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(uri.getHost(), natsPort(uri)), timeoutMs);
-            socket.setSoTimeout(timeoutMs);
+        try (Socket socket = LoopbackNatsTransport.connect(uri, timeoutMs, timeoutMs)) {
             InputStream input = socket.getInputStream();
             OutputStream output = socket.getOutputStream();
             readNatsInfo(input);
@@ -311,9 +309,7 @@ class DefaultMessagingTransport implements MessagingTransport {
         int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
         byte[] payload = request.payload().getBytes(StandardCharsets.UTF_8);
         String replySubject = natsReplySubject(request);
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(uri.getHost(), natsPort(uri)), timeoutMs);
-            socket.setSoTimeout(timeoutMs);
+        try (Socket socket = LoopbackNatsTransport.connect(uri, timeoutMs, timeoutMs)) {
             InputStream input = socket.getInputStream();
             OutputStream output = socket.getOutputStream();
             readNatsInfo(input);
@@ -354,9 +350,7 @@ class DefaultMessagingTransport implements MessagingTransport {
         int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
         int expectedCount = expectedCount(request);
         List<String> observed = new ArrayList<>();
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(uri.getHost(), natsPort(uri)), timeoutMs);
-            socket.setSoTimeout(timeoutMs);
+        try (Socket socket = LoopbackNatsTransport.connect(uri, timeoutMs, timeoutMs)) {
             InputStream input = socket.getInputStream();
             OutputStream output = socket.getOutputStream();
             readNatsInfo(input);
@@ -404,9 +398,7 @@ class DefaultMessagingTransport implements MessagingTransport {
         int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
         int maxCount = cleanupLimit(request);
         List<String> cleaned = new ArrayList<>();
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(uri.getHost(), natsPort(uri)), timeoutMs);
-            socket.setSoTimeout(timeoutMs);
+        try (Socket socket = LoopbackNatsTransport.connect(uri, timeoutMs, timeoutMs)) {
             InputStream input = socket.getInputStream();
             OutputStream output = socket.getOutputStream();
             readNatsInfo(input);
@@ -451,10 +443,6 @@ class DefaultMessagingTransport implements MessagingTransport {
         }
     }
 
-    private int natsPort(URI uri) {
-        return uri.getPort() > 0 ? uri.getPort() : 4222;
-    }
-
     private String natsSubject(String ref, boolean subscription) throws IOException {
         String subject = stripScheme(ref, "nats");
         if (subject.isEmpty() || subject.length() > 1024 || !subject.chars().allMatch(c -> c >= 33 && c <= 126)
@@ -478,10 +466,7 @@ class DefaultMessagingTransport implements MessagingTransport {
     }
 
     private void readNatsInfo(InputStream input) throws IOException {
-        String line = readLine(input);
-        if (!line.startsWith("INFO")) {
-            throw new IOException("NATS server did not send INFO before command.");
-        }
+        LoopbackNatsTransport.requirePlaintextServerInfo(readLine(input));
     }
 
     private void awaitNatsPong(InputStream input) throws IOException {

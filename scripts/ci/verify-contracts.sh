@@ -14,7 +14,7 @@ VERSION="${FRAMEWORK_VERSION:-$(awk '
     exit
   }
 ' pom.xml)}"
-JAR="target/spec-driven-auto-regression-${VERSION}.jar"
+JAR="${ROOT_DIR}/target/spec-driven-auto-regression-${VERSION}.jar"
 
 if [[ ! -f "$JAR" ]]; then
   MAVEN_OPTS="${MAVEN_OPTS:-"-Xmx1024m"}" ./mvnw -B -ntp -DskipTests package
@@ -29,6 +29,31 @@ run_cli validate --suite samples/00-getting-started/golden_e2e/suite_manifest.ya
 run_cli validate --suite samples/20-provider-capability-p0/suite_manifest.yaml
 run_cli validate-evidence --result samples/40-evidence-reporting/evidence_hardening/valid_result.json
 run_cli report --result samples/40-evidence-reporting/evidence_hardening/valid_result.json
+
+# Exercise the bundled contract from outside the repository with no SQL approvals.
+(
+  scratch=$(mktemp -d)
+  trap 'rm -rf -- "$scratch"' EXIT
+  cp -R "$ROOT_DIR/samples/20-provider-capability-p0/data/jdbc" "$scratch/jdbc"
+  cd "$scratch"
+  unset REGRESS_JDBC_APPROVED_SQL_SHA256
+  for profile in external_oracle external_db2; do
+    # No address or credentials are needed to verify denial before driver loading.
+    case "$profile" in
+      external_oracle) export JDBC_CONNECTION='jdbc:oracle:' ;;
+      external_db2) export JDBC_CONNECTION='jdbc:db2:' ;;
+    esac
+    status=0
+    run_cli run --suite jdbc/suite_manifest.yaml --profile "$profile" > "$profile.log" || status=$?
+    if [[ $status != 1 ]] || ! grep -Fxq 'failure_code: JDBC_SQL_NOT_APPROVED' "$profile.log"; then
+      cat "$profile.log" >&2
+      exit 1
+    fi
+    result=$(sed -n 's/^result_json: //p' "$profile.log")
+    run_cli validate-evidence --result "$result"
+    echo "External SQL denial verified for $profile"
+  done
+)
 
 if grep -RInE "provider_family" docs samples schemas src/main/java; then
   echo "provider_family is not allowed in public framework artifacts." >&2

@@ -1,13 +1,13 @@
 package com.specdriven.regression.provider;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +21,7 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
 
     private final HttpClient httpClient;
     private final Function<String, String> environment;
+    private final Function<ReadinessTool, ProcessBuilder> tools;
 
     DefaultDeploymentReadinessProbe() {
         this(HttpClient.newHttpClient());
@@ -31,11 +32,17 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
     }
 
     DefaultDeploymentReadinessProbe(HttpClient httpClient, Function<String, String> environment) {
+        this(httpClient, environment, DefaultDeploymentReadinessProbe::systemTool);
+    }
+
+    DefaultDeploymentReadinessProbe(HttpClient httpClient, Function<String, String> environment,
+            Function<ReadinessTool, ProcessBuilder> tools) {
         if (httpClient.followRedirects() != HttpClient.Redirect.NEVER) {
             throw new IllegalArgumentException("Readiness requests require a client with redirects disabled.");
         }
         this.httpClient = httpClient;
         this.environment = environment;
+        this.tools = tools;
     }
 
     @Override
@@ -54,20 +61,10 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
         if ("api_deployment_available".equals(request.readinessProbe())) {
             return checkK8sApiDeploymentAvailable(request);
         }
-        List<String> command = k8sCommand(request);
-        ProcessBuilder builder = new ProcessBuilder(command);
-        Process process = builder.start();
-        boolean completed = process.waitFor(Math.max(1, request.timeoutSeconds()), TimeUnit.SECONDS);
-        if (!completed) {
-            process.destroyForcibly();
-            throw new IOException("K8s readiness probe timed out for `" + request.deploymentRef() + "`.");
-        }
-        String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-        if (process.exitValue() != 0) {
-            throw new IOException("K8s readiness probe failed for `" + request.deploymentRef()
-                    + "`: " + stderr.strip());
-        }
+        requireTool(request, "kubectl_ref", ReadinessTool.KUBECTL);
+        ReadinessCommand command = new ReadinessCommand(ReadinessTool.KUBECTL, k8sArguments(request));
+        String stdout = runTool(command, request.timeoutSeconds(),
+                "K8s readiness probe", request.deploymentRef());
         if ("pod_logs".equals(request.readinessProbe())) {
             return new DeploymentReadinessProbeResult(
                     stdout,
@@ -80,30 +77,29 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
                 1);
     }
 
-    private List<String> k8sCommand(DeploymentReadinessProbeRequest request) throws IOException {
-        String executable = stringValue(request.contract().get("kubectl_ref"));
-        if (executable.isBlank()) {
-            executable = "kubectl";
-        }
+    private List<String> k8sArguments(DeploymentReadinessProbeRequest request) throws IOException {
         List<String> command = new ArrayList<>();
-        command.add(executable);
-        String context = resolveRef(request.kubeContextRef());
-        if (!context.isBlank()) {
-            command.add("--context");
-            command.add(context);
+        String context = environment.apply("K8S_CONTEXT");
+        if (!request.kubeContextRef().isEmpty()
+                && (context == null || context.isBlank()
+                || !(request.kubeContextRef().equals("env://K8S_CONTEXT") || request.kubeContextRef().equals(context)))) {
+            throw new IOException("K8s CLI context must match the runner's K8S_CONTEXT.");
+        }
+        if (context != null && !context.isBlank()) {
+            command.add("--context=" + context);
         }
         if (!request.namespaceRef().isBlank()) {
             command.add("-n");
-            command.add(resolveRef(request.namespaceRef()));
+            command.add(K8sApiResource.NAMESPACE.resolve(request.namespaceRef(), environment));
         }
         if ("pod_logs".equals(request.readinessProbe())) {
             command.add("logs");
             String podRef = firstText(request.contract(), "pod_ref");
             if (!podRef.isBlank()) {
-                command.add(resolveRef(podRef));
+                command.add(K8sApiResource.POD.resolve(podRef, environment));
             } else if (!request.targetSelector().isBlank()) {
                 command.add("-l");
-                command.add(request.targetSelector());
+                command.add(labelSelector(request.targetSelector()));
             } else {
                 throw new IOException("K8s pod_logs readiness probe requires pod_ref or target_selector.");
             }
@@ -115,15 +111,25 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
             command.add("--for=condition=Ready");
             command.add("pod");
             command.add("-l");
-            command.add(request.targetSelector());
+            command.add(labelSelector(request.targetSelector()));
             command.add("--timeout=" + Math.max(1, request.timeoutSeconds()) + "s");
             return command;
         }
+        if (!"rollout_status".equals(request.readinessProbe())) {
+            throw new IOException("Unsupported Kubernetes CLI readiness probe.");
+        }
         command.add("rollout");
         command.add("status");
-        command.add(request.deploymentRef());
+        command.add("deployment/" + K8sApiResource.DEPLOYMENT.resolve(request.deploymentRef(), environment));
         command.add("--timeout=" + Math.max(1, request.timeoutSeconds()) + "s");
         return command;
+    }
+
+    private String labelSelector(String selector) throws IOException {
+        if (!selector.matches("[A-Za-z0-9!][A-Za-z0-9_. /(),!=<>-]{0,1023}")) {
+            throw new IOException("K8s readiness requires a label selector.");
+        }
+        return selector;
     }
 
     private DeploymentReadinessProbeResult checkK8sApiDeploymentAvailable(DeploymentReadinessProbeRequest request)
@@ -153,13 +159,13 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
     HttpRequest k8sApiRequest(DeploymentReadinessProbeRequest request) throws IOException {
         String apiRef = firstText(request.contract(), "api_server_ref", "endpoint_ref");
         if (apiRef.isBlank()) throw new IOException("K8s API deployment readiness probe requires api_server_ref.");
-        URI origin = httpEndpoint(resolveRef(apiRef));
+        URI origin = httpEndpoint(dedicatedValue(apiRef, "K8S_API_SERVER"));
         if (!(origin.getRawPath().isEmpty() || "/".equals(origin.getRawPath())) || origin.getRawQuery() != null) {
             throw new IOException("K8s API endpoint must be an origin without a path or query.");
         }
         boolean operatorOrigin = "env://K8S_API_SERVER".equals(apiRef);
-        if (!operatorOrigin && !ProviderEndpoints.localHost(origin.getHost())) {
-            throw new IOException("Remote K8s API requires env://K8S_API_SERVER.");
+        if (!ProviderEndpoints.localHost(origin.getHost()) && (!operatorOrigin || !"https".equals(origin.getScheme()))) {
+            throw new IOException("Remote K8s API requires HTTPS and env://K8S_API_SERVER.");
         }
         String path = "/apis/apps/v1/namespaces/" + K8sApiResource.NAMESPACE.resolve(request.namespaceRef(), environment)
                 + "/deployments/" + K8sApiResource.DEPLOYMENT.resolve(request.deploymentRef(), environment);
@@ -170,7 +176,7 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
             if (!operatorOrigin || !"https".equals(origin.getScheme()) || !"env://K8S_BEARER_TOKEN".equals(bearerRef)) {
                 throw new IOException("Bearer readiness requires the HTTPS K8S_API_SERVER and K8S_BEARER_TOKEN environment bindings.");
             }
-            builder.header("Authorization", "Bearer " + resolveRef(bearerRef));
+            builder.header("Authorization", "Bearer " + dedicatedValue(bearerRef, "K8S_BEARER_TOKEN"));
         }
         return builder.build();
     }
@@ -235,54 +241,34 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
         if ("tcp_connect".equals(request.readinessProbe())) {
             return checkVmTcp(request);
         }
-        if ("ssh_command".equals(request.readinessProbe())) {
-            return checkVmCommand(request, vmSshCommand(request), "ssh_command");
-        }
-        if ("winrm_command".equals(request.readinessProbe())) {
-            return checkVmCommand(request, vmWinrmCommand(request), "winrm_command");
+        if ("ssh_command".equals(request.readinessProbe()) || "winrm_command".equals(request.readinessProbe())) {
+            return checkVmCommand(request);
         }
         throw new IOException("Unsupported VM readiness_probe `" + request.readinessProbe() + "`.");
     }
 
     private DeploymentReadinessProbeResult checkVmTcp(DeploymentReadinessProbeRequest request)
             throws IOException {
-        int timeoutMs = Math.max(1, request.timeoutSeconds()) * 1000;
-        String host = resolveRef(request.hostRef());
-        InetSocketAddress target = tcpEndpoint(host, request.port());
-        try (Socket socket = new Socket()) {
-            socket.connect(target, timeoutMs);
+        URI endpoint = runnerEndpoint("VM_TCP_ENDPOINT", "tcp");
+        if (!ProviderEndpoints.localHost(endpoint.getHost()) || endpoint.getRawUserInfo() != null
+                || endpoint.getPort() < 1 || endpoint.getPort() != request.port()
+                || !hostMatches(request.hostRef(), endpoint, "VM_TCP_ENDPOINT")) {
+            throw new IOException("VM TCP readiness requires the runner's numeric loopback VM_TCP_ENDPOINT and port.");
         }
+        int timeoutMs = (int) Math.min(Integer.MAX_VALUE, TimeUnit.SECONDS.toMillis(Math.max(1, request.timeoutSeconds())));
+        LoopbackTcpTransport.checkConnection(endpoint.getHost(), endpoint.getPort(), timeoutMs);
         return new DeploymentReadinessProbeResult(
                 "vm tcp readiness passed for " + request.hostRef() + ":" + request.port() + "\n",
                 "ready\n",
                 1);
     }
 
-    private InetSocketAddress tcpEndpoint(String host, int port) throws IOException {
-        if (port < 1 || port > 65535) throw new IOException("Invalid VM TCP port.");
-        if (!ProviderEndpoints.localHost(host)) {
-            String binding = environment.apply("VM_TCP_ENDPOINT");
-            URI expected;
-            try {
-                expected = new URI(binding == null ? "" : binding);
-            } catch (java.net.URISyntaxException e) {
-                throw new IOException("Invalid VM_TCP_ENDPOINT.");
-            }
-            if (!"tcp".equals(expected.getScheme()) || !host.equals(expected.getHost()) || port != expected.getPort()
-                    || expected.getUserInfo() != null || expected.getRawQuery() != null || expected.getFragment() != null
-                    || !expected.getPath().isEmpty()) {
-                throw new IOException("Remote VM TCP target must match the runner's VM_TCP_ENDPOINT.");
-            }
-        }
-        return new InetSocketAddress(host, port);
-    }
-
     private DeploymentReadinessProbeResult checkVmHttp(DeploymentReadinessProbeRequest request)
             throws IOException, InterruptedException {
         String reference = firstText(request.contract(), "health_url_ref", "endpoint_ref");
-        URI uri = httpEndpoint(resolveRef(reference));
-        if (!ProviderEndpoints.localHost(uri.getHost()) && !"env://VM_HEALTH_URL".equals(reference)) {
-            throw new IOException("Remote VM HTTP readiness requires env://VM_HEALTH_URL.");
+        URI uri = httpEndpoint(dedicatedValue(reference, "VM_HEALTH_URL"));
+        if (!ProviderEndpoints.localHost(uri.getHost()) && !("env://VM_HEALTH_URL".equals(reference) && "https".equals(uri.getScheme()))) {
+            throw new IOException("Remote VM HTTP readiness requires HTTPS and env://VM_HEALTH_URL.");
         }
         HttpRequest httpRequest = HttpRequest.newBuilder(uri)
                 .timeout(Duration.ofSeconds(Math.max(1, request.timeoutSeconds())))
@@ -298,95 +284,153 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
                 1);
     }
 
-    private DeploymentReadinessProbeResult checkVmCommand(
-            DeploymentReadinessProbeRequest request,
-            List<String> command,
-            String probeName) throws IOException, InterruptedException {
-        Process process = new ProcessBuilder(command).start();
-        boolean completed = process.waitFor(Math.max(1, request.timeoutSeconds()), TimeUnit.SECONDS);
-        if (!completed) {
-            process.destroyForcibly();
-            throw new IOException("VM " + probeName + " readiness probe timed out for `"
-                    + request.hostRef() + "`.");
+    private DeploymentReadinessProbeResult checkVmCommand(DeploymentReadinessProbeRequest request)
+            throws IOException, InterruptedException {
+        boolean ssh = "ssh_command".equals(request.readinessProbe());
+        ReadinessTool tool = ssh ? ReadinessTool.SSH : ReadinessTool.WINRS;
+        String prefix = ssh ? "VM_SSH" : "VM_WINRM";
+        requireTool(request, ssh ? "ssh_ref" : "winrm_ref", tool);
+        String commandRef = firstText(request.contract(), "command_ref");
+        if (commandRef.isBlank()) throw new IOException("VM command readiness probe requires command_ref.");
+        String command = requiredBinding(prefix + "_COMMAND");
+        if (!commandRef.equals("env://" + prefix + "_COMMAND") && !commandRef.equals(command)) {
+            throw new IOException("VM readiness command must match the runner's " + prefix + "_COMMAND.");
         }
-        String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-        if (process.exitValue() != 0) {
-            throw new IOException("VM " + probeName + " readiness probe failed for `"
-                    + request.hostRef() + "`: " + stderr.strip());
+        String binding = prefix + "_ENDPOINT";
+        URI endpoint = runnerEndpoint(binding, ssh ? "ssh" : "https");
+        int port = endpoint.getPort() == -1 ? (ssh ? 22 : 5986) : endpoint.getPort();
+        String user = endpoint.getRawUserInfo();
+        String requestedUser = firstText(request.contract(), "user_ref");
+        if (!hostMatches(request.hostRef(), endpoint, binding)
+                || (request.port() != 0 && request.port() != port)
+                || (!requestedUser.isEmpty() && !requestedUser.equals(user))
+                || (user != null && !user.matches("[A-Za-z0-9_][A-Za-z0-9._-]{0,127}"))) {
+            throw new IOException("VM readiness destination, port and user must match the runner's " + binding + ".");
         }
+        String verb = ssh ? "systemctl is-active " : "Get-Service ";
+        String service = command.startsWith(verb) ? command.substring(verb.length()) : "";
+        if (!service.matches("[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}")) {
+            throw new IOException(prefix + "_COMMAND must select one service using " + verb.strip() + ".");
+        }
+        List<String> arguments = new ArrayList<>();
+        if (ssh) {
+            arguments.addAll(List.of("-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+                    "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no", "-o", "ConnectTimeout=" + Math.max(1, request.timeoutSeconds()), "-p", Integer.toString(port), "--"));
+            arguments.add((user == null ? "" : user + "@") + endpoint.getHost());
+            arguments.addAll(List.of("systemctl", "is-active", "--", service));
+        } else {
+            arguments.add("-r:https://" + endpoint.getHost() + ":" + port);
+            if (user != null) arguments.add("-u:" + user);
+            arguments.addAll(List.of("powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                    "Get-Service -Name '" + service + "' -ErrorAction Stop"));
+        }
+        String stdout = runTool(new ReadinessCommand(tool, arguments), request.timeoutSeconds(),
+                "VM " + request.readinessProbe() + " readiness probe", request.hostRef());
         String output = stdout.isBlank() ? "ready\n" : stdout;
         return new DeploymentReadinessProbeResult(output, output, 1);
     }
 
-    private List<String> vmSshCommand(DeploymentReadinessProbeRequest request) throws IOException {
-        String executable = firstText(request.contract(), "ssh_ref");
-        if (executable.isBlank()) {
-            executable = "ssh";
-        }
-        List<String> command = new ArrayList<>();
-        command.add(resolveRef(executable));
-        command.add("-o");
-        command.add("BatchMode=yes");
-        command.add("-o");
-        command.add("ConnectTimeout=" + Math.max(1, request.timeoutSeconds()));
-        if (request.port() > 0) {
-            command.add("-p");
-            command.add(Integer.toString(request.port()));
-        }
-        command.add(vmLoginTarget(request));
-        command.add(vmCommandRef(request));
-        return command;
-    }
-
-    private List<String> vmWinrmCommand(DeploymentReadinessProbeRequest request) throws IOException {
-        String executable = firstText(request.contract(), "winrm_ref");
-        if (executable.isBlank()) {
-            executable = "winrs";
-        }
-        List<String> command = new ArrayList<>();
-        command.add(resolveRef(executable));
-        String host = resolveRef(request.hostRef());
-        if (request.port() > 0) {
-            host = host + ":" + request.port();
-        }
-        command.add("-r:" + host);
-        String user = firstText(request.contract(), "user_ref");
-        if (!user.isBlank()) {
-            command.add("-u:" + resolveRef(user));
-        }
-        command.add(vmCommandRef(request));
-        return command;
-    }
-
-    private String vmLoginTarget(DeploymentReadinessProbeRequest request) throws IOException {
-        String host = resolveRef(request.hostRef());
-        String user = firstText(request.contract(), "user_ref");
-        if (user.isBlank()) {
-            return host;
-        }
-        return resolveRef(user) + "@" + host;
-    }
-
-    private String vmCommandRef(DeploymentReadinessProbeRequest request) throws IOException {
-        String command = firstText(request.contract(), "command_ref");
-        if (command.isBlank()) {
-            throw new IOException("VM command readiness probe requires command_ref.");
-        }
-        return resolveRef(command);
-    }
-
-    private String resolveRef(String ref) throws IOException {
-        if (ref.startsWith("env://")) {
-            String envName = ref.substring("env://".length());
-            String value = environment.apply(envName);
-            if (value == null || value.isBlank()) {
-                throw new IOException("Environment variable `" + envName
-                        + "` is not set for deployment readiness.");
+    private URI runnerEndpoint(String binding, String scheme) throws IOException {
+        String value = requiredBinding(binding);
+        try {
+            URI endpoint = new URI(value);
+            if (scheme.equals(endpoint.getScheme()) && endpoint.getHost() != null
+                    && !endpoint.getRawAuthority().endsWith(":") && endpoint.getPort() != 0 && endpoint.getPort() <= 65535
+                    && endpoint.getRawPath().isEmpty() && endpoint.getRawQuery() == null && endpoint.getRawFragment() == null) {
+                return endpoint;
             }
-            return value;
+        } catch (java.net.URISyntaxException ignored) {
+            // Report the name of the binding without echoing its value.
         }
-        return ref;
+        throw new IOException("Invalid readiness endpoint in " + binding + ".");
+    }
+
+    private boolean hostMatches(String reference, URI endpoint, String binding) {
+        return reference.equals("env://" + binding) || reference.equals(endpoint.getHost())
+                || (endpoint.getHost().startsWith("[") && ("[" + reference + "]").equals(endpoint.getHost()));
+    }
+
+    private String dedicatedValue(String reference, String binding) throws IOException {
+        if (!reference.startsWith("env://")) return reference;
+        if (!reference.equals("env://" + binding)) {
+            throw new IOException("Readiness requires its dedicated env://" + binding + " binding.");
+        }
+        return requiredBinding(binding);
+    }
+
+    private String requiredBinding(String binding) throws IOException {
+        String value = environment.apply(binding);
+        if (value == null || value.isBlank()) throw new IOException("Environment variable `" + binding + "` is not set for deployment readiness.");
+        return value;
+    }
+
+    private void requireTool(DeploymentReadinessProbeRequest request, String field, ReadinessTool tool) throws IOException {
+        String reference = firstText(request.contract(), field);
+        if (!reference.isEmpty() && !reference.equals(tool.name)) {
+            throw new IOException("Readiness " + field + " only accepts the runner tool " + tool.name + ".");
+        }
+    }
+
+    enum ReadinessTool {
+        KUBECTL("kubectl"), SSH("ssh"), WINRS("winrs");
+
+        final String name;
+
+        ReadinessTool(String name) {
+            this.name = name;
+        }
+    }
+
+    private record ReadinessCommand(ReadinessTool tool, List<String> arguments) {
+        ReadinessCommand {
+            arguments = List.copyOf(arguments);
+        }
+    }
+
+    private static ProcessBuilder systemTool(ReadinessTool tool) {
+        boolean windows = java.io.File.separatorChar == '\\';
+        ProcessBuilder builder = switch (tool) {
+            case SSH -> windows ? new ProcessBuilder("C:\\Windows\\System32\\OpenSSH\\ssh.exe") : new ProcessBuilder("/usr/bin/ssh");
+            case WINRS -> {
+                if (!windows) throw new IllegalArgumentException("WinRM readiness requires a Windows runner.");
+                yield new ProcessBuilder("C:\\Windows\\System32\\winrs.exe");
+            }
+            case KUBECTL -> {
+                if (windows) yield new ProcessBuilder("C:\\Program Files\\Kubernetes\\kubectl.exe");
+                if (Files.isExecutable(Path.of("/usr/bin/kubectl"))) yield new ProcessBuilder("/usr/bin/kubectl");
+                if (Files.isExecutable(Path.of("/opt/homebrew/bin/kubectl"))) yield new ProcessBuilder("/opt/homebrew/bin/kubectl");
+                yield new ProcessBuilder("/usr/local/bin/kubectl");
+            }
+        };
+        Path executable = Path.of(builder.command().get(0));
+        builder.directory(executable.getParent().toFile());
+        builder.environment().put("PATH", windows ? "C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\WindowsPowerShell\\v1.0"
+                : "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin");
+        return builder;
+    }
+
+    private String runTool(ReadinessCommand command, int timeoutSeconds, String description, String target)
+            throws IOException, InterruptedException {
+        ProcessBuilder builder;
+        try {
+            builder = tools.apply(command.tool());
+        } catch (IllegalArgumentException error) {
+            throw new IOException(error.getMessage(), error);
+        }
+        builder.command().addAll(command.arguments());
+        Process process = builder.start();
+        try {
+            if (!process.waitFor(Math.max(1, timeoutSeconds), TimeUnit.SECONDS)) {
+                throw new IOException(description + " timed out for `" + target + "`.");
+            }
+            if (process.exitValue() != 0) {
+                String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+                throw new IOException(description + " failed for `" + target + "`: " + stderr.strip());
+            }
+            return new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        } finally {
+            if (process.isAlive()) process.destroyForcibly();
+        }
     }
 
     private String firstText(Map<String, Object> map, String... fields) {

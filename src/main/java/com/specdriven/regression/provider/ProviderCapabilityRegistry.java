@@ -483,6 +483,10 @@ class ProviderCapabilityRegistry {
             String providerName,
             Map<String, Object> contract,
             List<ProviderContractViolation> violations) {
+        if (family.equals("db_fixture")) {
+            violations.add(new ProviderContractViolation(".provider_type", "unsupported", "blocked",
+                    DatabaseFixtureProvider.RETIRED));
+        }
         if (family.equals("db_fixture") && type.equals("jdbc")) {
             if (!hasAnyText(contract, "connection_ref")) {
                 violations.add(required(".connection_ref", "Declare connection_ref for fixture `" + providerName + "`."));

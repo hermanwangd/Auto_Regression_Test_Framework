@@ -8,11 +8,10 @@ import com.specdriven.regression.provider.runtime.ProviderOperationRequest;
 import com.specdriven.regression.provider.runtime.ProviderOperationResult;
 import com.specdriven.regression.provider.runtime.ProviderRuntime;
 import java.io.ByteArrayOutputStream;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
@@ -30,7 +29,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -42,6 +43,7 @@ import java.util.regex.Pattern;
 /** Direct argv execution with finite I/O and evidence; this is not an OS sandbox. */
 public final class CliProcessProviderRuntime implements ProviderRuntime {
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final Executor PIN_RECHECK = CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS);
     private static final String MASK = "***MASKED***";
     private static final Pattern SECRET = Pattern.compile("(?i)(?:bearer\\s+\\S+|[\"']?(?:password|passwd|(?:access_)?token|secret|credential|api[_-]?key|private[_-]?key|authorization|session|cookie)[\"']?\\s*[:=]\\s*\\S+"
             + "|-----BEGIN[^\\r\\n]*PRIVATE KEY-----|(?:https?|grpc|grpcs)://[^/@\\s]+@|jdbc:[^\\s,;]+|nats://[^\\s,;]+)");
@@ -61,6 +63,7 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
         evidence.put("masking_applied", true);
         evidence.put("launched", false);
         Process process = null;
+        PinnedCliExecutable pinned = null;
         ExecutorService workers = null;
         List<Future<?>> pending = new ArrayList<>();
         Map<Long,ProcessHandle> descendants = new LinkedHashMap<>();
@@ -80,8 +83,11 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
             byte[] stdin = ReviewedCliPolicy.utf8((String) inputs.getOrDefault("process.stdin", ""));
             int timeout = ((Number) inputs.getOrDefault("process.timeout_ms", ReviewedCliPolicy.DEFAULT_TIMEOUT_MS)).intValue();
             int maximum = ((Number) inputs.getOrDefault("process.max_output_bytes", ReviewedCliPolicy.DEFAULT_MAX_OUTPUT_BYTES)).intValue();
-            Path executable = Path.of((String) context.bindingValues().get("executable"));
-            evidence.put("executable", executable.toString());
+            Path binding = Path.of((String) context.bindingValues().get("executable"));
+            evidence.put("executable", binding.toString());
+            // Freeze directory aliases once. Never follow a symlink in the final executable component.
+            Path executable = binding.getParent().toRealPath().resolve(binding.getFileName());
+            evidence.put("resolved_executable", executable.toString());
             evidence.put("executable_sha256", context.bindingValues().get("executable_sha256"));
             evidence.put("argv_sha256", sha(JSON.writeValueAsBytes(argv)));
             evidence.put("stdin_sha256", sha(stdin));
@@ -90,22 +96,14 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
             evidence.put("max_output_bytes", maximum);
             Path cwd = ownedWorkingDirectory(context.runDir(), (String) inputs.getOrDefault("process.cwd", "."));
             evidence.put("cwd", cwd.toString());
-            // Hash by streaming the final nonsymlink file immediately before constructing and starting the process.
-            BasicFileAttributes identity = attributes(executable);
-            String observedHash = hashExecutable(executable);
+            validateLaunchDirectory(executable.getParent());
+            attributes(executable);
+            pinned = PinnedCliExecutable.open(executable);
+            String observedHash = pinned.sha256();
             evidence.put("observed_executable_sha256", observedHash);
-            if (!context.bindingValues().get("executable_sha256").equals(observedHash)
-                    || !sameFile(identity, attributes(executable)))
-                throw new Problem("PROVIDER_UNAVAILABLE", "Pinned executable identity or SHA-256 changed before launch.");
-            List<String> command = new ArrayList<>(argv.size() + 1);
-            command.add(executable.toString());
-            command.addAll(argv);
-            ProcessBuilder builder = new ProcessBuilder(command).directory(cwd.toFile());
-            builder.environment().clear();
-            builder.environment().put("LANG", "C");
-            builder.environment().put("LC_ALL", "C");
+            evidence.put("launch_image_policy", pinned.policy());
             long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout);
-            process = builder.start();
+            process = pinned.start((String) context.bindingValues().get("executable_sha256"), argv, cwd);
             evidence.put("launched", true);
             evidence.put("pid", process.pid());
             final Process launched = process;
@@ -171,6 +169,10 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
             // Cleanup gets a separate finite allowance; it never converts an incomplete execution to a pass.
             interrupted |= Thread.interrupted();
             boolean clean = cleanup(process, descendants, workers, pending, problem != null);
+            if (pinned != null) {
+                try { clean &= releasePinWhenExited(pinned, process, Map.copyOf(descendants), PIN_RECHECK); }
+                catch (IOException error) { clean = false; }
+            }
             evidence.put("cleanup_status", clean ? "complete" : "uncertain");
             evidence.put("descendant_pids", List.copyOf(descendants.keySet()));
             if (!clean) problem = new Problem("OPERATION_FAILED", "CLI owned process or I/O cleanup is incomplete or uncertain.");
@@ -219,26 +221,29 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
         return cwd;
     }
 
+    private static void validateLaunchDirectory(Path directory) throws IOException {
+        if (!directory.getFileSystem().supportedFileAttributeViews().contains("unix")) return;
+        for (Path parent = directory; parent != null; parent = parent.getParent()) {
+            int mode = (int) Files.getAttribute(parent, "unix:mode", LinkOption.NOFOLLOW_LINKS);
+            checkExecutableMode(mode, true);
+        }
+    }
+
+    static void checkExecutableMode(int mode, boolean directory) throws IOException {
+        // A sticky parent such as /tmp protects entries from replacement by unrelated users.
+        if ((mode & 0002) != 0 && !(directory && (mode & 01000) != 0)) {
+            throw new IOException("executable or its directory permits public modification");
+        }
+    }
+
     private static BasicFileAttributes attributes(Path file) throws IOException {
         BasicFileAttributes value = Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
         if (!value.isRegularFile() || value.isSymbolicLink() || !Files.isExecutable(file)) throw new IOException("invalid executable");
-        return value;
-    }
-
-    private static boolean sameFile(BasicFileAttributes first, BasicFileAttributes second) {
-        return java.util.Objects.equals(first.fileKey(), second.fileKey()) && first.size() == second.size()
-                && first.lastModifiedTime().equals(second.lastModifiedTime());
-    }
-
-    private static String hashExecutable(Path file) throws IOException {
-        MessageDigest digest = digest();
-        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
-                InputStream stream = Channels.newInputStream(channel)) {
-            byte[] buffer = new byte[8192];
-            int count;
-            while ((count = stream.read(buffer)) != -1) digest.update(buffer, 0, count);
+        if (file.getFileSystem().supportedFileAttributeViews().contains("unix")) {
+            if (value.fileKey() == null) throw new IOException("executable file identity is unavailable");
+            checkExecutableMode((int) Files.getAttribute(file, "unix:mode", LinkOption.NOFOLLOW_LINKS), false);
         }
-        return HexFormat.of().formatHex(digest.digest());
+        return value;
     }
 
     private static byte[] drain(InputStream stream, OutputBudget budget, AtomicReference<Problem> failure) throws IOException {
@@ -335,6 +340,26 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
 
     private static boolean alive(Process process, Map<Long,ProcessHandle> descendants) {
         return process.isAlive() || descendants.values().stream().anyMatch(ProcessHandle::isAlive);
+    }
+
+    static boolean releasePinWhenExited(Closeable pin, Process parent, Map<Long,ProcessHandle> descendants,
+            Executor recheck) throws IOException {
+        boolean exited;
+        try { exited = parent == null || !alive(parent, descendants); }
+        catch (RuntimeException unavailable) { exited = false; }
+        if (exited) {
+            pin.close();
+            return true;
+        }
+        // Keep the pin strongly reachable after the operation returns, even if exit observation fails.
+        recheck.execute(() -> {
+            try { releasePinWhenExited(pin, parent, descendants, recheck); }
+            catch (IOException error) {
+                System.getLogger(CliProcessProviderRuntime.class.getName())
+                        .log(System.Logger.Level.WARNING, "Could not release the CLI executable pin after exit.", error);
+            }
+        });
+        return false;
     }
 
     private static boolean trackForCleanup(Process process, Map<Long,ProcessHandle> descendants) {

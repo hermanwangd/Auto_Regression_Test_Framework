@@ -2,7 +2,9 @@
 
 `cli_process.v0.3` uses the existing provider runtime and v0.3 execution pipeline. The native `run_command` operation starts the exact absolute executable from the environment binding with its literal `process.argv` list. It does not add a shell. A completed process produces `exit_code`, `stdout`, `stderr` and `duration_ms` for the framework's ordinary assertions. Nonzero exit codes are observations; an expected nonzero exit can pass.
 
-Bind exactly `executable` and `executable_sha256`. The executable must be a regular executable file, not a symlink, and the SHA-256 must contain 64 lowercase hexadecimal characters. The runtime stream-hashes the executable immediately before launch and verifies its identity has not changed during hashing. A hash mismatch prevents launch. This pins only the executable file: OS libraries, interpreter dependencies, plugins, network access and external files are not transitively pinned or contained. The runtime is not an OS sandbox. Use a trusted standalone executable, reviewed arguments and public fixture inputs.
+Bind exactly `executable` and `executable_sha256`. The executable must be a regular executable file, not a symlink, and the SHA-256 must contain 64 lowercase hexadecimal characters. On Linux and other POSIX runners the runtime streams the executable into a runner-private directory, verifies SHA-256 and launches those exact bytes with the original basename. Standalone executables are supported. For the launcher of the running JDK, the private layout references that JDK's own libraries and configuration. Other tools that require colocated private libraries must be supplied as standalone tools. macOS tools from its read-only system bin directories run in place to preserve operating-system signature enforcement. On Windows the provider supports native `.exe` files. It opens the image for reading with write and delete sharing denied and holds the handle through process cleanup. This preserves the installed DLL search directory. The Java provider requires only the JDK and the configured executable.
+
+Keep environment profiles, approved hashes, literal arguments and the runner's temp directory under trusted administration. The pin covers the executable image. External libraries, interpreters, plugins, network access and files retain their own trust boundaries. The stage is outside the child's working directory. If bounded cleanup finishes while the parent or a tracked descendant is still alive, the operation reports uncertain cleanup and returns a failure. The running framework keeps the stage or file handle until it observes that all known processes have exited, then releases the pin in the background.
 
 The operation accepts these finite literal inputs:
 
@@ -23,6 +25,12 @@ Each operation writes one `cli_process` artifact at `provider-evidence/cli_proce
 The adapter declares the explicit `LOCAL_PROCESS` effect and refuses shared-state ownership scopes. Local CLI checks cannot establish global read-only behavior or shared-SIT ownership.
 
 The contract file is packaged directly from `docs/02-architecture/contracts/provider-contracts/cli_process_v0_3.yaml` by the existing Maven resource configuration and generated provider-contract index; no second source copy is required.
+
+## Legacy fixture mappings
+
+The legacy file-batch adapter accepts up to 16 simple fixture operations in a command of up to 4,096 characters. It supports `echo ready`, `printf 'ready\n'`, `sleep 2` (0–300 seconds), and `exit 7` (0–255). A semicolon separates operations and the literal suffix ` >&2` routes fixture text to the error log. Text operations accept ASCII letters, digits, spaces and basic punctuation. Echo also accepts escaped double quotes for JSON fixtures. Printf accepts the newline escape. The historical wrapper `/bin/sh -c 'echo ready; echo warning >&2'` is accepted for this same limited grammar. The adapter validates every statement first. Java writes the requested text directly to the logs, applies the run deadline to pauses and returns the requested exit code. These fixture operations run entirely in the framework JVM.
+
+Move mappings that launch a product binary, script or JAR to `cli_process.v0.3`. Bind the executable's path and SHA-256, then supply its reviewed argument list as `process.argv`.
 
 ## Authoring example
 

@@ -15,6 +15,24 @@ class EvidenceIndexFormatterTest {
     Path tempDir;
 
     @Test
+    void natsEvidenceIndexReadsRootStatusAndFailureCode() throws Exception {
+        String ref = "provider-evidence/nats/observe.yaml";
+        Path evidence = tempDir.resolve(ref);
+        Files.createDirectories(evidence.getParent());
+        var context = new EvidenceIndexFormatter.Context("suite", "batch", "run", "case", "test", "nats", "bus");
+        String payload = "masked_observed_payload:\n  status: failed\n  failure_code: NESTED\n";
+        Files.writeString(evidence, payload + "status: passed\nfailure_code: ''\n");
+        assertThat(EvidenceIndexFormatter.format(context, tempDir, List.of(ref)))
+                .contains("    status: passed").doesNotContain("NESTED", "    failure_code:");
+        Files.writeString(evidence, payload + "status: failed\nfailure_code: NO_EVENT\n");
+        assertThat(EvidenceIndexFormatter.format(context, tempDir, List.of(ref)))
+                .contains("    status: failed", "    failure_code: NO_EVENT").doesNotContain("NESTED");
+        Files.writeString(evidence, "status: passed\nstatus: failed\n");
+        assertThat(EvidenceIndexFormatter.format(context, tempDir, List.of(ref)))
+                .contains("    status: failed", "    failure_code: EVIDENCE_FAILED");
+    }
+
+    @Test
     void nestedMultiTestEvidenceKeepsOwningTestCaseId() throws Exception {
         Path evidence = tempDir.resolve("tests/TC-002/assertions/payload_matches.yaml");
         Files.createDirectories(evidence.getParent());

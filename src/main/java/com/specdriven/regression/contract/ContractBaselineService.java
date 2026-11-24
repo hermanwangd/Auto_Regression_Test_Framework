@@ -160,6 +160,19 @@ public class ContractBaselineService {
     }
 
     public ValidationResult validateSuite(Path suiteManifest) {
+        return validateSuite(suiteManifest, false);
+    }
+
+    public ValidationResult validateForExecution(Path suiteManifest) {
+        return validateSuite(suiteManifest, true);
+    }
+
+    static ContractFinding retiredJdbcFinding(Path manifest) {
+        return new ContractFinding(manifest.toString(), "targets", "legacy_db_execution_disabled",
+                "", "jdbc", "", "", "Migrate database tests and their Env_Profile to a v0.3 JDBC suite.");
+    }
+
+    private ValidationResult validateSuite(Path suiteManifest, boolean forExecution) {
         ContractGraph graph = loadGraph(suiteManifest);
         List<ContractFinding> findings = new ArrayList<>(graph.loadFindings());
         validateProhibitedSuiteFields(graph, findings);
@@ -187,6 +200,9 @@ public class ContractBaselineService {
                 .map(Map.Entry::getKey).distinct().forEach(path -> findings.add(finding(path,
                         "product_test", "unsupported_product_test_version",
                         "Reviewed product testing requires a v0.3 leaf suite; legacy execution cannot ignore this policy.")));
+        if (forExecution && providerTypes(graph).contains("jdbc")) {
+            findings.add(retiredJdbcFinding(suiteManifest));
+        }
         validateRequiredFields(graph, findings);
         validateProhibitedFields(graph, findings);
         validateDataBindingCategories(graph, findings);

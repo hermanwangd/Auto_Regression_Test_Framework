@@ -27,7 +27,7 @@ class V03ProviderContractCatalogTest {
                 .containsExactly("setup");
         assertThat(contracts.get("http_mock.v0.3").bindableOutputs()).containsExactly("base_url");
         assertThat(contracts.get("jdbc.v0.3").failureCodes())
-                .contains("JDBC_DRIVER_NOT_FOUND", "JDBC_DRIVER_INVALID", "DB_CONNECTION_FAILED");
+                .contains("JDBC_SQL_NOT_APPROVED", "JDBC_DRIVER_NOT_FOUND", "JDBC_DRIVER_INVALID", "DB_CONNECTION_FAILED");
     }
 
     @Test

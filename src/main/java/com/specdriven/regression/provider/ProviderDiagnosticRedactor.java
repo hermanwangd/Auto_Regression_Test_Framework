@@ -2,9 +2,14 @@ package com.specdriven.regression.provider;
 
 import com.specdriven.regression.contract.v03.V03OutputRedactor;
 
-/** Shared text masking before gRPC and SOAP providers write evidence. */
+/** Shared text masking before providers write evidence. */
 public final class ProviderDiagnosticRedactor {
     private ProviderDiagnosticRedactor() { }
+
+    // Assertions require the original observation. A masked copy cannot stand in for it.
+    static boolean canPersistObservation(String text) {
+        return text != null && (text.isBlank() || text.equals(maskSensitiveText(text)));
+    }
 
     public static String maskSensitiveText(String text) {
         if (text == null || text.isBlank()) {

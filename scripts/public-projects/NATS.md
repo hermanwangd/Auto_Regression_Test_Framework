@@ -2,7 +2,7 @@
 
 This harness starts the official Go `nats-io/nats-server` v2.15.2 broker and calls the existing packaged product-testing module. The framework's existing native NATS provider sends `SUB` and `PUB`, then requires the exact echoed `MSG` subject, subscription ID, byte count, payload and CRLF. A `PONG` alone cannot pass.
 
-The committed lock records the release commit, official SHA256SUMS, archive sizes/digests and extracted executable digests for Linux amd64 and macOS arm64. Downloads and extraction are bounded; only the regular broker executable is extracted. The broker listens on `127.0.0.1`, uses an owned random name and subject, and enables no JetStream, monitoring or persistence.
+The committed lock records the release commit, official SHA256SUMS, archive sizes/digests and extracted executable digests for Linux amd64 and macOS arm64. Downloads allow HTTPS from github.com and one redirect to release-assets.githubusercontent.com. Only complete, digest-verified downloads are published to the cache. The child JVM uses the runner’s JAVA_HOME or /usr/bin/java. The broker starts from a private copy verified against the binary pin. Downloads and extraction are bounded; only the regular broker executable is extracted. The broker listens on `127.0.0.1`, uses an owned random name and subject, and enables no JetStream, monitoring or persistence.
 
 After building the framework and module, CI uses one harness:
 

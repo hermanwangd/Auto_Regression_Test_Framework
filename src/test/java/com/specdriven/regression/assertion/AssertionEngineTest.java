@@ -6,9 +6,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.Statement;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +16,18 @@ class AssertionEngineTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void comparesSensitiveValuesWhileMaskingBothEvidenceAndReturnedSummary() throws Exception {
+        Path output = Files.writeString(tempDir.resolve("result.yaml"), "session_id: sample-observed");
+        var result = new AssertionEngine().evaluateFileDiff(tempDir, Map.of("test_case_id", "TC", "ac_id", "AC",
+                "assertions", List.of(Map.of("type", "json_path_equals", "path", "$.session_id", "expected_value", "sample-expected"))),
+                output, tempDir);
+        assertThat(result.passed()).isFalse();
+        assertThat(result.toString()).contains("[MASKED]").doesNotContain("sample-observed", "sample-expected");
+        assertThat(Files.readString(tempDir.resolve("assertions.yaml")))
+                .contains("[MASKED]").doesNotContain("sample-observed", "sample-expected");
+    }
 
     @Test
     void evaluatesSchemaAndContractAssertionsAgainstActualOutput() throws Exception {
@@ -302,44 +311,17 @@ class AssertionEngineTest {
     }
 
     @Test
-    void evaluatesDbRowMatchesAgainstJdbcFixtureContract() throws Exception {
-        Path runDir = tempDir.resolve("evidence/runs/RUN-DB-ASSERT");
-        Path actualOutput = runDir.resolve("actual/output.yaml");
-        Files.createDirectories(actualOutput.getParent());
-        Files.createDirectories(tempDir.resolve("queries"));
-        Files.writeString(actualOutput, "status: checked\n");
-        Files.writeString(tempDir.resolve("queries/count-paid-orders.sql"), """
-                select count(*) from orders where status = 'PAID'
-                """);
-        String jdbcUrl = "jdbc:h2:mem:assertion_engine_db;DB_CLOSE_DELAY=-1";
-        try (Connection connection = DriverManager.getConnection(jdbcUrl);
-                Statement statement = connection.createStatement()) {
-            statement.execute("create table orders(id int primary key, status varchar(20))");
-            statement.execute("insert into orders values (1, 'PAID')");
-        }
-
-        AssertionEvaluation evaluation = new AssertionEngine().evaluateFileDiff(
-                tempDir,
-                Map.of(
-                        "test_case_id", "TC-DB-ASSERT",
-                        "ac_id", "AC-DB-ASSERT",
-                        "oracles", Map.of(
-                                "paid_orders_count", Map.of(
-                                        "provider", "db_seed",
-                                        "query", "paid_orders",
-                                        "sql_ref", "queries/count-paid-orders.sql",
-                                        "expected_count", 1)),
-                        "assertions", List.of(Map.of(
-                                "type", "db_row_matches",
-                                "oracle", "${oracles.paid_orders_count}"))),
-                actualOutput,
-                runDir,
-                Map.of("db_seed", Map.of("connection_ref", jdbcUrl)));
-
-        assertThat(evaluation.passed()).isTrue();
-        assertThat(Files.readString(runDir.resolve("assertions.yaml")))
-                .contains("type: db_row_matches")
-                .contains("query `paid_orders` returned expected row_count `1`");
+    void rejectsRetiredDbAssertionsBeforeReadingOraclesOrWritingEvidence() {
+        Path runDir = tempDir.resolve("run");
+        Map<String, Object> testCase = Map.of("assertions", List.of(
+                Map.of("type", "file_diff"), Map.of("type", "db_row_matches")));
+        var engine = new AssertionEngine();
+        assertThatThrownBy(() -> engine.evaluateFileDiff(tempDir, testCase, tempDir.resolve("absent"), runDir))
+                .isInstanceOf(UnsupportedOperationException.class).hasMessageContaining("Legacy DB fixture execution is disabled");
+        assertThatThrownBy(() -> engine.evaluateFileDiff(tempDir, testCase, tempDir.resolve("absent"), runDir,
+                Map.of("db", Map.of("connection_ref", "fixture-marker"))))
+                .isInstanceOf(UnsupportedOperationException.class).hasMessageContaining("Legacy DB fixture execution is disabled");
+        assertThat(runDir).doesNotExist();
     }
 
     @Test
@@ -624,153 +606,7 @@ class AssertionEngineTest {
     }
 
     @Test
-    void failsDbRowMatchesWhenActualCountDiffers() throws Exception {
-        Path runDir = tempDir.resolve("evidence/runs/RUN-DB-ASSERT-FAIL");
-        Path actualOutput = runDir.resolve("actual/output.yaml");
-        Files.createDirectories(actualOutput.getParent());
-        Files.createDirectories(tempDir.resolve("queries"));
-        Files.writeString(actualOutput, "status: checked\n");
-        Files.writeString(tempDir.resolve("queries/count-paid-orders.sql"), """
-                select count(*) from orders where status = 'PAID'
-                """);
-        String jdbcUrl = "jdbc:h2:mem:assertion_engine_db_fail;DB_CLOSE_DELAY=-1";
-        try (Connection connection = DriverManager.getConnection(jdbcUrl);
-                Statement statement = connection.createStatement()) {
-            statement.execute("create table orders(id int primary key, status varchar(20))");
-            statement.execute("insert into orders values (1, 'PENDING')");
-        }
-
-        AssertionEvaluation evaluation = new AssertionEngine().evaluateFileDiff(
-                tempDir,
-                Map.of(
-                        "test_case_id", "TC-DB-ASSERT-FAIL",
-                        "ac_id", "AC-DB-ASSERT-FAIL",
-                        "oracles", Map.of(
-                                "paid_orders_count", Map.of(
-                                        "provider", "db_seed",
-                                        "query", "paid_orders",
-                                        "sql_ref", "queries/count-paid-orders.sql",
-                                        "expected_count", 1)),
-                        "assertions", List.of(Map.of(
-                                "type", "db_row_matches",
-                                "oracle", "${oracles.paid_orders_count}"))),
-                actualOutput,
-                runDir,
-                Map.of("db_seed", Map.of("connection_ref", jdbcUrl)));
-
-        assertThat(evaluation.passed()).isFalse();
-        assertThat(evaluation.diffSummary())
-                .isEqualTo("query `paid_orders` expected row_count `1` but was `0`");
-    }
-
-    @Test
-    void dbRowMatchesDefaultsExpectedCountToZeroWhenOracleOmitsCount() throws Exception {
-        Path runDir = tempDir.resolve("evidence/runs/RUN-DB-DEFAULT-COUNT");
-        Path actualOutput = runDir.resolve("actual/output.yaml");
-        Files.createDirectories(actualOutput.getParent());
-        Files.createDirectories(tempDir.resolve("queries"));
-        Files.writeString(actualOutput, "status: checked\n");
-        Files.writeString(tempDir.resolve("queries/count-paid-orders.sql"), """
-                select count(*) from orders where status = 'PAID'
-                """);
-        String jdbcUrl = "jdbc:h2:mem:assertion_engine_db_default_count;DB_CLOSE_DELAY=-1";
-        try (Connection connection = DriverManager.getConnection(jdbcUrl);
-                Statement statement = connection.createStatement()) {
-            statement.execute("create table orders(id int primary key, status varchar(20))");
-        }
-
-        AssertionEvaluation evaluation = new AssertionEngine().evaluateFileDiff(
-                tempDir,
-                Map.of(
-                        "test_case_id", "TC-DB-DEFAULT-COUNT",
-                        "ac_id", "AC-DB-DEFAULT-COUNT",
-                        "oracles", Map.of(
-                                "paid_orders_count", Map.of(
-                                        "provider", "db_seed",
-                                        "query", "paid_orders",
-                                        "sql_ref", "queries/count-paid-orders.sql")),
-                        "assertions", List.of(Map.of(
-                                "type", "db_row_matches",
-                                "oracle", "${oracles.paid_orders_count}"))),
-                actualOutput,
-                runDir,
-                Map.of("db_seed", Map.of("connection_ref", jdbcUrl)));
-
-        assertThat(evaluation.passed()).isTrue();
-        assertThat(evaluation.diffSummary())
-                .isEqualTo("query `paid_orders` returned expected row_count `0`");
-    }
-
-    @Test
-    void dbRowMatchesRequiresConnectionRefAndReadableSqlReference() throws Exception {
-        Path runDir = tempDir.resolve("evidence/runs/RUN-DB-CONTRACT-GAPS");
-        Path actualOutput = runDir.resolve("actual/output.yaml");
-        Files.createDirectories(actualOutput.getParent());
-        Files.writeString(actualOutput, "status: checked\n");
-        Map<String, Object> testCase = Map.of(
-                "test_case_id", "TC-DB-CONTRACT-GAPS",
-                "ac_id", "AC-DB-CONTRACT-GAPS",
-                "oracles", Map.of(
-                        "missing_contract", Map.of(
-                                "provider", "db_seed",
-                                "query", "orders",
-                                "sql_ref", "queries/missing.sql",
-                                "expected_count", 1)),
-                "assertions", List.of(Map.of(
-                        "type", "db_row_matches",
-                        "oracle", "${oracles.missing_contract}")));
-
-        assertThatThrownBy(() -> new AssertionEngine().evaluateFileDiff(
-                tempDir,
-                testCase,
-                actualOutput,
-                runDir,
-                Map.of("db_seed", Map.of())))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("DB row assertion requires fixture provider connection_ref");
-
-        assertThatThrownBy(() -> new AssertionEngine().evaluateFileDiff(
-                tempDir,
-                testCase,
-                actualOutput,
-                runDir,
-                Map.of("db_seed", Map.of("connection_ref", "jdbc:h2:mem:missing_sql_ref"))))
-                .isInstanceOf(UncheckedIOException.class)
-                .hasMessageContaining("Failed to read DB row assertion query");
-    }
-
-    @Test
-    void dbRowMatchesWrapsSqlExecutionFailures() throws Exception {
-        Path runDir = tempDir.resolve("evidence/runs/RUN-DB-SQL-FAILURE");
-        Path actualOutput = runDir.resolve("actual/output.yaml");
-        Files.createDirectories(actualOutput.getParent());
-        Files.createDirectories(tempDir.resolve("queries"));
-        Files.writeString(actualOutput, "status: checked\n");
-        Files.writeString(tempDir.resolve("queries/invalid-count.sql"), "select count(*) from missing_orders\n");
-
-        assertThatThrownBy(() -> new AssertionEngine().evaluateFileDiff(
-                tempDir,
-                Map.of(
-                        "test_case_id", "TC-DB-SQL-FAILURE",
-                        "ac_id", "AC-DB-SQL-FAILURE",
-                        "oracles", Map.of(
-                                "missing_table_count", Map.of(
-                                        "provider", "db_seed",
-                                        "query", "missing_orders",
-                                        "sql_ref", "queries/invalid-count.sql",
-                                        "expected_count", 0)),
-                        "assertions", List.of(Map.of(
-                                "type", "db_row_matches",
-                                "oracle", "${oracles.missing_table_count}"))),
-                actualOutput,
-                runDir,
-                Map.of("db_seed", Map.of("connection_ref", "jdbc:h2:mem:sql_failure"))))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Failed to execute DB row assertion query");
-    }
-
-    @Test
-    void blocksUnsafeSchemaAndDbSqlReferences() throws Exception {
+    void blocksUnsafeSchemaReferences() throws Exception {
         Path runDir = tempDir.resolve("evidence/runs/RUN-UNSAFE-REF");
         Path actualOutput = runDir.resolve("actual/output.yaml");
         Files.createDirectories(actualOutput.getParent());
@@ -792,26 +628,20 @@ class AssertionEngineTest {
                 runDir))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("schema assertion ref must stay under the RP package");
+    }
 
-        assertThatThrownBy(() -> new AssertionEngine().evaluateFileDiff(
-                tempDir,
-                Map.of(
-                        "test_case_id", "TC-UNSAFE-SQL",
-                        "ac_id", "AC-UNSAFE-SQL",
-                        "oracles", Map.of(
-                                "unsafe_query", Map.of(
-                                        "provider", "db_seed",
-                                        "query", "unsafe",
-                                        "sql_ref", "../outside/query.sql",
-                                        "expected_count", 1)),
-                        "assertions", List.of(Map.of(
-                                "type", "db_row_matches",
-                                "oracle", "${oracles.unsafe_query}"))),
-                actualOutput,
-                runDir,
-                Map.of("db_seed", Map.of("connection_ref", "jdbc:h2:mem:unused"))))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("DB row assertion sql_ref must stay under the RP package");
+    @Test
+    void actualOutputMustResolveWithinTheRunDirectory() throws Exception {
+        Path run = Files.createDirectory(tempDir.resolve("run"));
+        Path outside = Files.writeString(tempDir.resolve("elsewhere.yaml"), "status: routine\n");
+        Path alias = Files.createSymbolicLink(run.resolve("actual.yaml"), outside);
+        Map<String, Object> testCase = Map.of("assertions", List.of(
+                Map.of("type", "json_path_equals", "path", "$.status", "expected_value", "routine")));
+        for (Path actual : List.of(outside, alias)) {
+            assertThatThrownBy(() -> new AssertionEngine().evaluateFileDiff(tempDir, testCase, actual, run))
+                    .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("inside the run directory");
+        }
+        assertThat(run.resolve("assertions.yaml")).doesNotExist();
     }
 
     @Test
@@ -833,9 +663,9 @@ class AssertionEngineTest {
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("Failed to read assertion actual output");
 
-        Path runDirAsFile = tempDir.resolve("evidence-file");
-        Path actualOutput = tempDir.resolve("actual.yaml");
-        Files.writeString(runDirAsFile, "not a directory\n");
+        Path unwritableEvidence = tempDir.resolve("blocked-evidence");
+        Files.createDirectories(unwritableEvidence.resolve("assertions.yaml"));
+        Path actualOutput = unwritableEvidence.resolve("actual.yaml");
         Files.writeString(actualOutput, "status: OK\n");
 
         assertThatThrownBy(() -> new AssertionEngine().evaluateFileDiff(
@@ -848,7 +678,7 @@ class AssertionEngineTest {
                                 "path", "$.status",
                                 "expected_value", "OK"))),
                 actualOutput,
-                runDirAsFile))
+                unwritableEvidence))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("Failed to write assertion evidence");
     }
@@ -872,28 +702,6 @@ class AssertionEngineTest {
                 runDir))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("Failed to compare assertion files");
-    }
-
-    @Test
-    void dbRowMatchesReportsUnreadableQueryWhenOracleDefinitionIsMissing() throws Exception {
-        Path runDir = tempDir.resolve("evidence/runs/RUN-MISSING-DB-ORACLE");
-        Path actualOutput = runDir.resolve("actual/output.yaml");
-        Files.createDirectories(actualOutput.getParent());
-        Files.writeString(actualOutput, "status: checked\n");
-
-        assertThatThrownBy(() -> new AssertionEngine().evaluateFileDiff(
-                tempDir,
-                Map.of(
-                        "test_case_id", "TC-MISSING-DB-ORACLE",
-                        "ac_id", "AC-MISSING-DB-ORACLE",
-                        "assertions", List.of(Map.of(
-                                "type", "db_row_matches",
-                                "oracle", "${oracles.missing_count}"))),
-                actualOutput,
-                runDir,
-                Map.of("", Map.of("connection_ref", "jdbc:h2:mem:missing_db_oracle"))))
-                .isInstanceOf(UncheckedIOException.class)
-                .hasMessageContaining("Failed to read DB row assertion query");
     }
 
     @Test

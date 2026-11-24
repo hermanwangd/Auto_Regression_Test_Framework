@@ -60,11 +60,6 @@ class SuiteExecutionContextRuntimeContractTest {
                 sample("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/http/rest_client_with_wiremock/suite_manifest.yaml"),
                 "local_wiremock_http");
         assertRuntimePair(
-                (manifest, profile, output) -> new JdbcProviderCapabilityService().run(manifest, profile, output),
-                (manifest, profile, context) -> new JdbcProviderCapabilityService().run(manifest, profile, context),
-                sample("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/data/jdbc/suite_manifest.yaml"),
-                "local_jdbc");
-        assertRuntimePair(
                 (manifest, profile, output) -> new MessagingClientProviderCapabilityService().run(manifest, profile, output),
                 (manifest, profile, context) -> new MessagingClientProviderCapabilityService().run(manifest, profile, context),
                 sample("samples/90-compatibility/legacy-v0.2/20-provider-capability-p0/messaging/kafka/suite_manifest.yaml"),
@@ -79,6 +74,28 @@ class SuiteExecutionContextRuntimeContractTest {
                 (manifest, profile, context) -> new GoldenE2eService().run(manifest, profile, context),
                 sample("samples/90-compatibility/legacy-v0.2/00-getting-started/golden_e2e/suite_manifest.yaml"),
                 "local_golden");
+    }
+
+    @Test
+    void retiredDatabaseServicesRefuseStandaloneAndParentContextCallsBeforeIo() {
+        Path manifest = tempDir.resolve("absent.yaml");
+        Path output = tempDir.resolve("output");
+        SuiteExecutionContext context = SuiteExecutionContext.standalone("ci", tempDir);
+        var jdbc = new JdbcProviderCapabilityService();
+        var mixed = new ContractBaselineRuntimeService();
+        for (var result : List.of(jdbc.run(manifest, "ci", output), jdbc.run(manifest, "ci", context),
+                jdbc.run(manifest, "ci", output, null), jdbc.run(manifest, "ci", context, null))) {
+            assertThat(result.status()).isEqualTo("blocked");
+            assertThat(result.providerRuntimeExecuted()).isFalse();
+            assertThat(result.findings()).singleElement().satisfies(f -> assertThat(f.reason()).isEqualTo("legacy_db_execution_disabled"));
+        }
+        for (var result : List.of(mixed.run(manifest, "ci", output), mixed.run(manifest, "ci", context),
+                mixed.run(manifest, "ci", output, null), mixed.run(manifest, "ci", context, null))) {
+            assertThat(result.status()).isEqualTo("blocked");
+            assertThat(result.providerRuntimeExecuted()).isFalse();
+            assertThat(result.findings()).singleElement().satisfies(f -> assertThat(f.reason()).isEqualTo("legacy_db_execution_disabled"));
+        }
+        assertThat(output).doesNotExist();
     }
 
     @Test

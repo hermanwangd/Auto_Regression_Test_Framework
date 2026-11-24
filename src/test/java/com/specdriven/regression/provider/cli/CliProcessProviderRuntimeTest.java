@@ -11,19 +11,25 @@ import com.specdriven.regression.provider.runtime.ProviderOperationResult;
 import com.specdriven.regression.provider.runtime.ProviderRuntime;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class CliProcessProviderRuntimeTest {
     @TempDir Path temp;
@@ -138,6 +144,15 @@ class CliProcessProviderRuntimeTest {
     }
 
     @Test
+    void publicWriteIsAllowedOnlyOnAStickyParentDirectory() {
+        assertThatCode(() -> CliProcessProviderRuntime.checkExecutableMode(0755, false)).doesNotThrowAnyException();
+        assertThatCode(() -> CliProcessProviderRuntime.checkExecutableMode(01777, true)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> CliProcessProviderRuntime.checkExecutableMode(0757, false)).isInstanceOf(IOException.class);
+        assertThatThrownBy(() -> CliProcessProviderRuntime.checkExecutableMode(01777, false)).isInstanceOf(IOException.class);
+        assertThatThrownBy(() -> CliProcessProviderRuntime.checkExecutableMode(0777, true)).isInstanceOf(IOException.class);
+    }
+
+    @Test
     void rejectsSymlinkExecutableAndInvalidInputBeforeLaunch() throws Exception {
         Path link = temp.resolve("java-link");
         Files.createSymbolicLink(link, javaBinary());
@@ -166,6 +181,46 @@ class CliProcessProviderRuntimeTest {
         @SuppressWarnings("unchecked") List<Number> children = (List<Number>) evidence.get("descendant_pids");
         assertThat(children).isNotEmpty();
         for (Number child : children) assertThat(ProcessHandle.of(child.longValue()).map(ProcessHandle::isAlive).orElse(false)).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void uncertainCleanupRetainsPinUntilBothKnownProcessesExit(boolean parentExitsFirst) throws Exception {
+        Path java = javaBinary();
+        String digest = sha(java);
+        List<String> fixtureArgs = args("stdin");
+        var processes = new ArrayList<Process>();
+        var rechecks = new ArrayDeque<Runnable>();
+        try (var fixture = PinnedCliExecutable.open(java)) {
+            try (FileChannel pin = FileChannel.open(temp.resolve("pin"), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+                processes.add(fixture.start(digest, fixtureArgs, temp));
+                processes.add(fixture.start(digest, fixtureArgs, temp));
+                Process parent = processes.get(0);
+                Process tracked = processes.get(1);
+                assertThat(CliProcessProviderRuntime.releasePinWhenExited(pin, parent,
+                        Map.of(tracked.pid(), tracked.toHandle()), rechecks::addLast)).isFalse();
+                assertThat(pin.isOpen()).isTrue();
+
+                Process first = parentExitsFirst ? parent : tracked;
+                Process last = parentExitsFirst ? tracked : parent;
+                first.getOutputStream().close();
+                assertThat(first.waitFor(10, TimeUnit.SECONDS)).isTrue();
+                assertThat(last.isAlive()).isTrue();
+                rechecks.removeFirst().run();
+                assertThat(pin.isOpen()).isTrue();
+
+                last.getOutputStream().close();
+                assertThat(last.waitFor(10, TimeUnit.SECONDS)).isTrue();
+                rechecks.removeFirst().run();
+                assertThat(pin.isOpen()).isFalse();
+                assertThat(rechecks).isEmpty();
+            } finally {
+                for (Process process : processes) {
+                    process.destroyForcibly();
+                    assertThat(process.waitFor(10, TimeUnit.SECONDS)).isTrue();
+                }
+            }
+        }
     }
 
     @Test
@@ -252,7 +307,9 @@ class CliProcessProviderRuntimeTest {
         return new ProviderOperationRequest("run_command", parameters, Map.of("_operation_id", "command"));
     }
 
-    private Path javaBinary() throws IOException { return Path.of(System.getProperty("java.home"), "bin/java").toRealPath(); }
+    private Path javaBinary() throws IOException {
+        return Path.of(System.getProperty("java.home"), "bin", java.io.File.separatorChar == '\\' ? "java.exe" : "java").toRealPath();
+    }
 
     private List<String> args(String mode, String... extra) throws Exception {
         List<String> args = new ArrayList<>(List.of("-Xmx32m", "-XX:MaxMetaspaceSize=48m", "-cp",

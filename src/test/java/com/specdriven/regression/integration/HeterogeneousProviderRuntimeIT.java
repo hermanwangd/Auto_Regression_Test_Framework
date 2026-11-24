@@ -8,7 +8,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.DriverManager;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -39,8 +38,7 @@ class HeterogeneousProviderRuntimeIT {
                 .contains("status: passed")
                 .contains("run_id: RUN-001")
                 .contains("run_id: RUN-012");
-        assertRunPassed(packageRoot, "RP-HET-TC-DB", "provider_contract_kind: db_fixture", "fixture_setup.yaml",
-                "cleanup.yaml");
+        assertRunPassed(packageRoot, "RP-HET-TC-FILE", "provider_contract_kind: file_batch");
         assertRunPassed(packageRoot, "RP-HET-TC-REST", "provider_contract_kind: request_response", "request_response.yaml");
         assertRunPassed(packageRoot, "RP-HET-TC-GRPC", "provider_contract_kind: request_response", "provider_type: grpc");
         assertRunPassed(packageRoot, "RP-HET-TC-KAFKA-PUBLISH", "provider_contract_kind: messaging", "provider_type: kafka",
@@ -58,7 +56,6 @@ class HeterogeneousProviderRuntimeIT {
         assertRunPassed(packageRoot, "RP-HET-TC-K8S", "provider_contract_kind: deployment_readiness", "provider_type: k8s");
         assertRunPassed(packageRoot, "RP-HET-TC-VM", "provider_contract_kind: deployment_readiness", "provider_type: vm");
         assertRunPassed(packageRoot, "RP-HET-TC-RUNNER", "provider_contract_kind: external_runner", "external_runner.yaml");
-        assertThat(countOrders("jdbc:h2:mem:heterogeneous_runtime;DB_CLOSE_DELAY=-1")).isZero();
     }
 
     private Path createHeterogeneousRuntimeFixture() throws Exception {
@@ -78,7 +75,6 @@ class HeterogeneousProviderRuntimeIT {
     private void writeCommonFixtureFiles(Path packageRoot) throws Exception {
         Files.createDirectories(packageRoot.resolve("fixtures/api"));
         Files.createDirectories(packageRoot.resolve("fixtures/events"));
-        Files.createDirectories(packageRoot.resolve("fixtures/db"));
         Files.createDirectories(packageRoot.resolve("fixtures/readiness"));
         Files.createDirectories(packageRoot.resolve("expected/output"));
         Files.createDirectories(packageRoot.resolve("descriptors"));
@@ -88,21 +84,10 @@ class HeterogeneousProviderRuntimeIT {
                 "{\"paymentId\":\"P-100\",\"amount\":42}");
         Files.writeString(packageRoot.resolve("fixtures/events/payment_event.json"),
                 "{\"event\":\"payment.accepted\",\"paymentId\":\"P-100\"}");
-        Files.writeString(packageRoot.resolve("fixtures/db/seed_orders.sql"), """
-                CREATE TABLE IF NOT EXISTS orders (
-                  id VARCHAR(64) PRIMARY KEY,
-                  status VARCHAR(32)
-                );
-                MERGE INTO orders KEY(id) VALUES ('ORDER-100', 'READY');
-                """);
-        Files.writeString(packageRoot.resolve("fixtures/db/cleanup_orders.sql"),
-                "DELETE FROM orders WHERE id = 'ORDER-100';\n");
-        Files.writeString(packageRoot.resolve("fixtures/db/count_orders.sql"),
-                "SELECT COUNT(*) FROM orders\n");
         Files.writeString(packageRoot.resolve("fixtures/readiness/k8s.ready"), "ready\n");
         Files.writeString(packageRoot.resolve("fixtures/readiness/vm.ready"), "ready\n");
         Files.writeString(packageRoot.resolve("descriptors/payment.desc"), "mock descriptor");
-        writeExpected(packageRoot, "RP-HET-AC-DB", "db-fixture-ok");
+        writeExpected(packageRoot, "RP-HET-AC-FILE", "file-batch-ok");
         writeExpected(packageRoot, "RP-HET-AC-REST", "{\"status\":\"approved\",\"channel\":\"rest\"}");
         writeExpected(packageRoot, "RP-HET-AC-GRPC", "{\"status\":\"approved\",\"channel\":\"grpc\"}");
         writeExpected(packageRoot, "RP-HET-AC-KAFKA-PUBLISH", "{\"event\":\"payment.accepted\",\"paymentId\":\"P-100\"}");
@@ -124,7 +109,7 @@ class HeterogeneousProviderRuntimeIT {
         Files.writeString(generated.resolve("suite_manifest.yaml"), """
                 suite_id: heterogeneous-runtime
                 tests:
-                  - tests/approved/RP-HET-TC-DB.yaml
+                  - tests/approved/RP-HET-TC-FILE.yaml
                   - tests/approved/RP-HET-TC-REST.yaml
                   - tests/approved/RP-HET-TC-GRPC.yaml
                   - tests/approved/RP-HET-TC-KAFKA-PUBLISH.yaml
@@ -144,11 +129,11 @@ class HeterogeneousProviderRuntimeIT {
                 environment_binding_ref: environment_bindings/ci_ephemeral.yaml
                 execution_mode: ci_ephemeral
                 target_dependencies:
-                  RU-payment-db: []
+                  RU-payment-file: []
                   RU-payment-rest:
-                    - target_id: RU-payment-db
+                    - target_id: RU-payment-file
                   RU-payment-grpc:
-                    - target_id: RU-payment-db
+                    - target_id: RU-payment-file
                   RU-payment-kafka-publish:
                     - target_id: RU-payment-rest
                   RU-payment-kafka-observe:
@@ -181,7 +166,7 @@ class HeterogeneousProviderRuntimeIT {
                 """);
         Files.writeString(generated.resolve("environment_bindings/ci_ephemeral.yaml"), environmentBindingYaml());
         Files.writeString(generated.resolve("traceability_map.yaml"), "source_labels: {}\n");
-        writeProviderContract(generated, "RU-payment-db", providerContractDb());
+        writeProviderContract(generated, "RU-payment-file", providerContractFile());
         writeProviderContract(generated, "RU-payment-rest", providerContractRest());
         writeProviderContract(generated, "RU-payment-grpc", providerContractGrpc());
         writeProviderContract(generated, "RU-payment-kafka-publish", providerContractKafkaPublish());
@@ -201,7 +186,7 @@ class HeterogeneousProviderRuntimeIT {
                 environment_type: isolated
                 targets:
                 """);
-        appendTarget(builder, "RU-payment-db", "spring_boot_cli");
+        appendTarget(builder, "RU-payment-file", "spring_boot_cli");
         appendTarget(builder, "RU-payment-rest", "request_response");
         appendTarget(builder, "RU-payment-grpc", "grpc_request_response");
         appendTarget(builder, "RU-payment-kafka-publish", "kafka_publish_bus");
@@ -229,45 +214,24 @@ class HeterogeneousProviderRuntimeIT {
                 .append("\n");
     }
 
-    private String providerContractDb() {
+    private String providerContractFile() {
         return """
                 provider_contracts:
                   providers:
                     spring_boot_cli:
                       provider_contract_kind: file_batch
                       provider_type: shell
-                      command: printf 'db-fixture-ok'
+                      command: printf 'file-batch-ok'
                       timeout_seconds: 10
                       success_exit_codes: [0]
                       logs:
-                        stdout: logs/db-stdout.log
-                        stderr: logs/db-stderr.log
+                        stdout: logs/file-stdout.log
+                        stderr: logs/file-stderr.log
                       outputs:
-                        actual_output_ref: actual/db-output.txt
+                        actual_output_ref: actual/file-output.txt
                       contract_path: release_units[0].provider_contracts.providers.spring_boot_cli
-                  bindings:
-                    db_seed:
-                      provider_contract_kind: file_batch
-                      provider_type: file_fixture
-                      bind_as: jdbc_seed
-                      contract_path: release_units[0].provider_contracts.bindings.db_seed
-                  fixtures:
-                    relational_db:
-                      provider_contract_kind: db_fixture
-                      provider_type: jdbc
-                      connection_ref: jdbc:h2:mem:heterogeneous_runtime;DB_CLOSE_DELAY=-1
-                      isolation_key: test_run_id
-                      cleanup_strategy: by_test_run_id
-                      setup_actions:
-                        seed_orders:
-                          sql_ref: fixtures/db/seed_orders.sql
-                      cleanup_actions:
-                        cleanup_orders:
-                          sql_ref: fixtures/db/cleanup_orders.sql
-                      verification_queries:
-                        seeded_orders:
-                          sql_ref: fixtures/db/count_orders.sql
-                      contract_path: release_units[0].provider_contracts.fixtures.relational_db
+                  bindings: {}
+                  fixtures: {}
                 """;
     }
 
@@ -535,17 +499,8 @@ class HeterogeneousProviderRuntimeIT {
     }
 
     private void writeApprovedTests(Path packageRoot) throws Exception {
-        writeDslTest(packageRoot, "RP-HET-TC-DB", "RP-HET-AC-DB", "RU-payment-db",
-                "spring_boot_cli", "execute_command", "db_output", "actual/db-output.txt", """
-                  orders_seed:
-                    type: db_seed
-                    provider: relational_db
-                    ref: fixtures/db/seed_orders.sql
-                    bind_as: db_seed
-                    cleanup_ref: fixtures/db/cleanup_orders.sql
-                    setup_action: seed_orders
-                    cleanup_action: cleanup_orders
-                """, "");
+        writeDslTest(packageRoot, "RP-HET-TC-FILE", "RP-HET-AC-FILE", "RU-payment-file",
+                "spring_boot_cli", "execute_command", "file_output", "actual/file-output.txt", "{}", "");
         writeDslTest(packageRoot, "RP-HET-TC-REST", "RP-HET-AC-REST", "RU-payment-rest",
                 "request_response", "call_api", "response", "actual/rest-response.json", "{}", """
                       payment_payload:
@@ -742,14 +697,6 @@ class HeterogeneousProviderRuntimeIT {
             }
         }
         return builder.toString();
-    }
-
-    private int countOrders(String jdbcUrl) throws Exception {
-        try (var connection = DriverManager.getConnection(jdbcUrl);
-                var statement = connection.createStatement();
-                var result = statement.executeQuery("SELECT COUNT(*) FROM orders")) {
-            return result.next() ? result.getInt(1) : -1;
-        }
     }
 
     private PrintStream print(ByteArrayOutputStream output) {

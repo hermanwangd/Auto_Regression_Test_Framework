@@ -9,9 +9,13 @@ import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 class MockServerCrossVerifySampleCommandTest {
 
@@ -115,27 +119,35 @@ class MockServerCrossVerifySampleCommandTest {
     }
 
     @Test
-    void providerCapabilityParentSuiteRunsEveryChildThroughSharedRuntimeDispatch() throws Exception {
-        CommandResult run = execute(
-                "run",
-                "--suite",
-                PROVIDER_CAPABILITY_SUITE.toString(),
-                "--profile",
-                "local_provider");
+    void providerCapabilityGroupBlocksWithJdbcAndRunsItsOtherElevenChildrenWithoutIt() throws Exception {
+        Path suiteDir = tempDir.resolve("suite");
+        copyDirectory(PROVIDER_CAPABILITY_SUITE.getParent(), suiteDir);
+        Path manifest = suiteDir.resolve("suite_manifest.yaml");
+        String[] args = {"run", "--root", tempDir.toString(), "--suite", manifest.toString(), "--profile", "local_provider"};
+        CommandResult blocked = execute(args);
+        assertThat(blocked.exit()).isOne();
+        assertThat(blocked.stdout()).contains("run_status: blocked", "legacy_db_execution_disabled", "test_count: 12");
+        assertThat(tempDir.resolve("target/regression")).doesNotExist();
 
+        var yaml = new Yaml(new SafeConstructor(new LoaderOptions()));
+        Map<String, Object> group = yaml.load(Files.readString(manifest));
+        List<?> children = (List<?>) group.get("child_suites");
+        assertThat(children.removeIf(child -> "jdbc".equals(((Map<?, ?>) child).get("id")))).isTrue();
+        Files.writeString(manifest, yaml.dump(group));
+        CommandResult run = execute(args);
         assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
         assertThat(run.stdout())
                 .contains("run_status: passed")
                 .contains("suite_id: PROVIDER-CAPABILITY-P0-v0.2")
-                .contains("test_count: 12")
-                .contains("passed_count: 12")
+                .contains("test_count: 11")
+                .contains("passed_count: 11")
                 .contains("failed_count: 0");
 
         Path suiteSummary = extractPath(run.stdout(), "suite_summary_json");
         String summary = Files.readString(suiteSummary);
         assertThat(summary)
                 .contains("\"child_suite_id\": \"WIREMOCK-CAPABILITY-v0.2\"")
-                .contains("\"child_suite_id\": \"JDBC-CAPABILITY-v0.2\"")
+                .doesNotContain("JDBC-CAPABILITY-v0.2")
                 .contains("\"child_suite_id\": \"NATS-CAPABILITY-v0.2\"")
                 .contains("\"child_suite_id\": \"COMMON-VERIFY-CAPABILITY-v0.2\"")
                 .contains("\"child_suite_id\": \"PROVIDER-CAPABILITY-COMPARE-v0.2\"")

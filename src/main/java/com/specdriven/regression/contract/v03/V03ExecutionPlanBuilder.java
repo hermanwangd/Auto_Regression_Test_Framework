@@ -66,6 +66,9 @@ public class V03ExecutionPlanBuilder {
 
         Path suiteRoot = suiteManifest.toAbsolutePath().normalize().getParent();
         Map<String, Object> suite = readMap(suiteManifest);
+        if (!"v0.3".equals(suite.get("manifest_version"))) {
+            throw new IllegalArgumentException("The v0.3 runtime requires manifest_version v0.3.");
+        }
         String profile = effectiveProfile(requestedProfile, suite, validation);
         Map<String, Object> envProfile = readEnvProfile(suiteRoot, suite, profile);
         Map<String, V03ProviderContract> contracts = verifiedContractDirectory == null

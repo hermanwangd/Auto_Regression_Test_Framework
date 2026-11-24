@@ -1,16 +1,22 @@
 package com.specdriven.regression.provider;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.regex.Pattern;
 import com.specdriven.regression.adapter.AdapterExecutionResult;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Locale;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
 @Component
 public class DeploymentReadinessProvider {
+
+    private static final Pattern K8S = Pattern.compile("k8s", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LOCAL = Pattern.compile("local|mock", Pattern.CASE_INSENSITIVE);
+    private static final Pattern NATIVE = Pattern.compile("k8s|vm", Pattern.CASE_INSENSITIVE);
 
     private final DeploymentReadinessProbe readinessProbe;
 
@@ -31,9 +37,9 @@ public class DeploymentReadinessProvider {
             Path stderrLog,
             Path actualOutput) {
         try {
-            Files.createDirectories(stdoutLog.getParent());
-            Files.createDirectories(stderrLog.getParent());
-            Files.createDirectories(actualOutput.getParent());
+            ProviderDataYaml.createParent(stdoutLog);
+            ProviderDataYaml.createParent(stderrLog);
+            ProviderDataYaml.createParent(actualOutput);
 
             String providerType = stringValue(contract.get("provider_type"));
             String readinessProbeName = stringValue(contract.get("readiness_probe"));
@@ -44,7 +50,8 @@ public class DeploymentReadinessProvider {
                     K8sApiResource.NAMESPACE.checkReference(stringValue(contract.get("namespace_ref")));
                     K8sApiResource.DEPLOYMENT.checkReference(deploymentRef);
                 }
-                Files.writeString(stdoutLog, providerType + " mock readiness passed for " + deploymentRef + "\n");
+                Files.writeString(stdoutLog, ProviderDiagnosticRedactor.maskSensitiveText(
+                        providerType + " mock readiness passed for " + deploymentRef + "\n"));
                 Files.writeString(stderrLog, "");
                 Files.writeString(actualOutput, "ready\n");
                 writeReadinessEvidence(runDir, providerName, contract, "passed", "", 1);
@@ -65,7 +72,11 @@ public class DeploymentReadinessProvider {
                         stringValue(contract.get("deployed_version_ref")),
                         intValue(contract.get("timeout_seconds"), 300),
                         contract));
-                Files.writeString(stdoutLog, probeResult.stdout());
+                if (!ProviderDiagnosticRedactor.canPersistObservation(probeResult.actualOutput())) {
+                    return fail(runDir, stdoutLog, stderrLog, actualOutput, providerName, contract,
+                            "Readiness observation withheld by the evidence redaction policy.");
+                }
+                Files.writeString(stdoutLog, ProviderDiagnosticRedactor.maskSensitiveText(probeResult.stdout()));
                 Files.writeString(stderrLog, "");
                 Files.writeString(actualOutput, probeResult.actualOutput());
                 writeReadinessEvidence(runDir, providerName, contract, "passed", "", probeResult.checkCount());
@@ -91,7 +102,7 @@ public class DeploymentReadinessProvider {
                         contract,
                         "Unsupported local readiness_probe `" + readinessProbeName + "`.");
             }
-            if (deploymentRef.isBlank() || !Files.exists(packageRoot.resolve(deploymentRef))) {
+            if (!markerExists(packageRoot, deploymentRef)) {
                 return fail(
                         runDir,
                         stdoutLog,
@@ -102,7 +113,8 @@ public class DeploymentReadinessProvider {
                         "Deployment readiness marker not found: `" + deploymentRef + "`.");
             }
 
-            Files.writeString(stdoutLog, "readiness passed for " + deploymentRef + "\n");
+            Files.writeString(stdoutLog, ProviderDiagnosticRedactor.maskSensitiveText(
+                    "readiness passed for " + deploymentRef + "\n"));
             Files.writeString(stderrLog, "");
             Files.writeString(actualOutput, "ready\n");
             writeReadinessEvidence(runDir, providerName, contract, "passed", "", 1);
@@ -135,6 +147,7 @@ public class DeploymentReadinessProvider {
             Map<String, Object> contract,
             String message) throws IOException {
         Files.writeString(stdoutLog, "");
+        message = ProviderDiagnosticRedactor.maskSensitiveText(message);
         Files.writeString(stderrLog, message);
         Files.writeString(actualOutput, "");
         writeReadinessEvidence(runDir, providerName, contract, "failed", message, 0);
@@ -148,47 +161,34 @@ public class DeploymentReadinessProvider {
             String status,
             String error,
             int checkCount) throws IOException {
-        Files.createDirectories(runDir);
-        StringBuilder builder = new StringBuilder();
-        builder.append("status: ").append(status).append("\n");
-        builder.append("provider: ").append(providerName).append("\n");
-        appendIfPresent(builder, "provider_type", stringValue(contract.get("provider_type")));
-        appendIfPresent(builder, "readiness_probe", stringValue(contract.get("readiness_probe")));
-        appendIfPresent(builder, "api_server_ref", ProviderEndpoints.httpEvidenceRef(stringValue(contract.get("api_server_ref"))));
-        appendIfPresent(builder, "kube_context_ref", stringValue(contract.get("kube_context_ref")));
-        String namespace = stringValue(contract.get("namespace_ref"));
-        String deployment = stringValue(contract.get("deployment_ref"));
-        if (isK8sApiProbe(contract)) {
-            namespace = ProviderEndpoints.yamlEvidenceRef(K8sApiResource.NAMESPACE.evidenceRef(namespace));
-            deployment = ProviderEndpoints.yamlEvidenceRef(K8sApiResource.DEPLOYMENT.evidenceRef(deployment));
+        Map<String, Object> evidence = new LinkedHashMap<>();
+        evidence.put("status", status);
+        evidence.put("provider", ProviderDiagnosticRedactor.maskSensitiveText(providerName));
+        for (String field : List.of("provider_type", "readiness_probe", "api_server_ref", "kube_context_ref",
+                "namespace_ref", "pod_ref", "target_selector", "deployment_ref", "service_ref", "log_tail_lines",
+                "host_ref", "port", "ssh_ref", "winrm_ref", "user_ref", "command_ref", "health_url_ref", "deployed_version_ref")) {
+            Object raw = contract.get(field);
+            String value = stringValue(raw);
+            if (value.isBlank()) continue;
+            if (field.equals("api_server_ref") || field.equals("health_url_ref")) value = ProviderEndpoints.httpEvidenceRef(value);
+            if (isK8sApiProbe(contract)) {
+                if (field.equals("namespace_ref")) value = K8sApiResource.NAMESPACE.evidenceRef(value);
+                if (field.equals("deployment_ref")) value = K8sApiResource.DEPLOYMENT.evidenceRef(value);
+            }
+            evidence.put(field, raw instanceof Number ? raw : ProviderDiagnosticRedactor.maskSensitiveText(value));
         }
-        appendIfPresent(builder, "namespace_ref", namespace);
-        appendIfPresent(builder, "pod_ref", stringValue(contract.get("pod_ref")));
-        appendIfPresent(builder, "target_selector", stringValue(contract.get("target_selector")));
-        appendIfPresent(builder, "deployment_ref", deployment);
-        appendIfPresent(builder, "service_ref", stringValue(contract.get("service_ref")));
-        appendIfPresent(builder, "log_tail_lines", stringValue(contract.get("log_tail_lines")));
-        appendIfPresent(builder, "host_ref", stringValue(contract.get("host_ref")));
-        appendIfPresent(builder, "port", stringValue(contract.get("port")));
-        appendIfPresent(builder, "ssh_ref", stringValue(contract.get("ssh_ref")));
-        appendIfPresent(builder, "winrm_ref", stringValue(contract.get("winrm_ref")));
-        appendIfPresent(builder, "user_ref", stringValue(contract.get("user_ref")));
-        appendIfPresent(builder, "command_ref", stringValue(contract.get("command_ref")));
-        appendIfPresent(builder, "health_url_ref", ProviderEndpoints.httpEvidenceRef(stringValue(contract.get("health_url_ref"))));
-        appendIfPresent(builder, "deployed_version_ref", stringValue(contract.get("deployed_version_ref")));
-        builder.append("checks:\n");
-        builder.append("  - name: ").append(stringValue(contract.get("readiness_probe"))).append("\n");
-        builder.append("    status: ").append(status).append("\n");
-        builder.append("check_count: ").append(checkCount).append("\n");
-        if (!error.isBlank()) {
-            builder.append("error: ").append(error).append("\n");
-        }
-        Files.writeString(runDir.resolve("readiness.yaml"), builder.toString());
+        evidence.put("checks", List.of(Map.of("name", evidence.getOrDefault("readiness_probe", ""), "status", status)));
+        evidence.put("check_count", checkCount);
+        if (!error.isBlank()) evidence.put("error", error);
+        ProviderDataYaml.writeEvidence(runDir.resolve("readiness.yaml"), evidence);
     }
 
-    private void appendIfPresent(StringBuilder builder, String field, String value) {
-        if (!value.isBlank()) {
-            builder.append(field).append(": ").append(value).append("\n");
+    private boolean markerExists(Path root, String ref) throws IOException {
+        if (ref.isBlank()) return false;
+        try (var marker = SuiteAssetReader.open(root, ref, "Marker must be inside the RP package.")) {
+            return true;
+        } catch (java.nio.file.NoSuchFileException | IllegalArgumentException missing) {
+            return false;
         }
     }
 
@@ -203,18 +203,16 @@ public class DeploymentReadinessProvider {
     }
 
     private boolean isK8sApiProbe(Map<String, Object> contract) {
-        return "k8s".equalsIgnoreCase(stringValue(contract.get("provider_type")))
+        return K8S.matcher(stringValue(contract.get("provider_type"))).matches()
                 && "api_deployment_available".equals(contract.get("readiness_probe"));
     }
 
     private boolean isLocalProvider(String providerType) {
-        String normalized = providerType.toLowerCase(Locale.ROOT);
-        return normalized.equals("local") || normalized.equals("mock");
+        return LOCAL.matcher(providerType).matches();
     }
 
     private boolean isNativeProvider(String providerType) {
-        String normalized = providerType.toLowerCase(Locale.ROOT);
-        return normalized.equals("k8s") || normalized.equals("vm");
+        return NATIVE.matcher(providerType).matches();
     }
 
     private boolean usesMockNativeReadiness(Map<String, Object> contract) {

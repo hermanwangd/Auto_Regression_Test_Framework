@@ -53,6 +53,20 @@ class RunnerBundleServiceTest {
  @Test void modifiedBytesCannotBorrowCommittedVersion()throws Exception{Files.writeString(service.resolve("tests/sit/data/public.json"),"changed\n");blocked("hash");}
  @Test void duplicateQualifiedIdentityRejected()throws Exception{((ArrayNode)document.path("artifacts")).add(document.path("artifacts").get(1).deepCopy());persist();blocked("duplicate");}
  @Test void traversalRejectedEvenWithRecomputedLockPin()throws Exception{((ObjectNode)document.path("artifacts").get(3)).put("source_path","../outside");persist();blocked("traversal");}
+ @Test void gitReadsOnlyTheExactLiteralTreeEntry()throws Exception{
+  String name="tests/sit/data/-fixture[1].json";
+  Files.writeString(service.resolve(name),"literal fixture\n");
+  Files.writeString(service.resolve("tests/sit/data/-fixture1.json"),"different fixture\n");
+  git(service,"add","tests/sit/data");git(service,"-c","user.name=Public Fixture","-c","user.email=fixture@example.invalid","commit","-qm","literal fixture paths");
+  serviceVersion(git(service,"rev-parse","HEAD"));
+  ((ArrayNode)document.get("artifacts")).add(artifact(service,"sanitized_data",name,"literal"));persist();
+  var result=execute("literal-path");
+  assertThat(result.code()).as(result.out()+result.err()).isZero();
+  try(var files=Files.walk(result.target().resolve("inputs"))){
+   Path bundled=files.filter(file->file.endsWith(name)).findFirst().orElseThrow();
+   assertThat(Files.readString(bundled)).isEqualTo("literal fixture\n");
+  }
+ }
  @Test void symlinkAndHardlinkInputsBlocked()throws Exception{Path p=service.resolve("tests/sit/data/public.json");Path outside=temp.resolve("outside");Files.move(p,outside);Files.createSymbolicLink(p,outside);blocked("symlink");Files.delete(p);Files.createLink(p,outside);blocked("hardlink");}
  @Test void requiredDataOrCleanupOwnerCannotDisappear()throws Exception{((ObjectNode)document.path("artifacts").get(3)).put("cleanup_owner_ref","");persist();blocked("owner");}
  @Test void sourceRevisionIsNotDeployedSutRevision()throws Exception{((ObjectNode)document.path("sut_expectations").get(0)).put("expected_deployed_revision","");persist();blocked("sut");}

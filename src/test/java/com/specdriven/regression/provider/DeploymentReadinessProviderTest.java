@@ -22,6 +22,18 @@ class DeploymentReadinessProviderTest {
     Path tempDir;
 
     @Test
+    void localMarkerMustBelongToThePackage() throws Exception {
+        Path root = Files.createDirectory(tempDir.resolve("package"));
+        Path output = tempDir.resolve("run");
+        Files.createSymbolicLink(root.resolve("marker"), Files.writeString(tempDir.resolve("outside"), "ready"));
+        var result = new DeploymentReadinessProvider().execute("local", root,
+                Map.of("provider_type", "local", "readiness_probe", "file_exists", "deployment_ref", "marker"),
+                output, output.resolve("stdout"), output.resolve("stderr"), output.resolve("actual"));
+        assertThat(result.exitCode()).isOne();
+        assertThat(Files.readString(output.resolve("readiness.yaml"))).contains("status: failed");
+    }
+
+    @Test
     void runsNativeK8sReadinessProbeAndWritesEvidence() throws Exception {
         RecordingDeploymentReadinessProbe probe = new RecordingDeploymentReadinessProbe();
 
@@ -55,6 +67,33 @@ class DeploymentReadinessProviderTest {
                 .contains("deployment_ref: deployment/payment-api")
                 .contains("deployed_version_ref: build-42")
                 .contains("check_count: 1");
+    }
+
+    @Test
+    void rejectsPodLogsContainingCredentialsBeforePersistingObservation() throws Exception {
+        String logs = "service ready\nAuthorization: Bearer pod-log-canary\n";
+        var provider = new DeploymentReadinessProvider(request -> new DeploymentReadinessProbeResult(logs, logs, 1));
+        var result = executeProvider(provider, "payments", Map.of("provider_type", "k8s",
+                "readiness_probe", "pod_logs", "target_selector", "app=payments"));
+
+        assertThat(result.exitCode()).isOne();
+        assertThat(Files.readString(result.actualOutput())).isEmpty();
+        assertThat(Files.readString(result.stdoutLog())).isEmpty();
+        assertThat(Files.readString(result.stderrLog())).contains("observation withheld").doesNotContain("pod-log-canary");
+        assertThat(Files.readString(tempDir.resolve("run/readiness.yaml")))
+                .contains("status: failed", "check_count: 0").doesNotContain("pod-log-canary");
+    }
+
+    @Test
+    void masksMockReadinessReferenceInStdoutAndEvidence() throws Exception {
+        var result = executeProvider(new DeploymentReadinessProvider(), "payments", Map.of("provider_type", "vm",
+                "readiness_probe", "tcp_connect", "host_ref", "mock://fixture", "service_ref", "token=mock-ref-canary"));
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(Files.readString(result.actualOutput())).isEqualTo("ready\n");
+        assertThat(Files.readString(result.stdoutLog())).contains("***MASKED***").doesNotContain("mock-ref-canary");
+        assertThat(Files.readString(tempDir.resolve("run/readiness.yaml")))
+                .contains("status: passed", "***MASKED***").doesNotContain("mock-ref-canary");
     }
 
     @Test
@@ -388,12 +427,12 @@ class DeploymentReadinessProviderTest {
                 """);
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("kubectl", kubectl, Map.of("K8S_CONTEXT", "kind-ci")),
                 "payment_k8s",
                 Map.of(
                         "provider_type", "k8s",
                         "readiness_probe", "rollout_status",
-                        "kubectl_ref", kubectl.toString(),
+                        "kubectl_ref", "kubectl",
                         "kube_context_ref", "kind-ci",
                         "namespace_ref", "payment",
                         "deployment_ref", "deployment/payment-api",
@@ -413,12 +452,12 @@ class DeploymentReadinessProviderTest {
                 """);
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("kubectl", kubectl, Map.of("K8S_CONTEXT", "kind-ci")),
                 "payment_k8s",
                 Map.of(
                         "provider_type", "k8s",
                         "readiness_probe", "rollout_status",
-                        "kubectl_ref", kubectl.toString(),
+                        "kubectl_ref", "kubectl",
                         "namespace_ref", "payment",
                         "deployment_ref", "deployment/payment-api",
                         "deployed_version_ref", "build-42",
@@ -439,12 +478,12 @@ class DeploymentReadinessProviderTest {
                 """);
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("kubectl", kubectl, Map.of("K8S_CONTEXT", "kind-ci")),
                 "payment_k8s",
                 Map.of(
                         "provider_type", "k8s",
                         "readiness_probe", "rollout_status",
-                        "kubectl_ref", kubectl.toString(),
+                        "kubectl_ref", "kubectl",
                         "namespace_ref", "payment",
                         "deployment_ref", "deployment/payment-api",
                         "deployed_version_ref", "build-42",
@@ -464,12 +503,12 @@ class DeploymentReadinessProviderTest {
                 """);
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("kubectl", kubectl, Map.of("K8S_CONTEXT", "kind-ci")),
                 "payment_k8s",
                 Map.of(
                         "provider_type", "k8s",
                         "readiness_probe", "pod_ready",
-                        "kubectl_ref", kubectl.toString(),
+                        "kubectl_ref", "kubectl",
                         "kube_context_ref", "kind-ci",
                         "namespace_ref", "payment",
                         "target_selector", "app=payment-api",
@@ -492,12 +531,12 @@ class DeploymentReadinessProviderTest {
                 """.formatted(argsFile));
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("kubectl", kubectl, Map.of("K8S_CONTEXT", "kind-ci")),
                 "payment_k8s",
                 Map.of(
                         "provider_type", "k8s",
                         "readiness_probe", "pod_logs",
-                        "kubectl_ref", kubectl.toString(),
+                        "kubectl_ref", "kubectl",
                         "kube_context_ref", "kind-ci",
                         "namespace_ref", "payment",
                         "target_selector", "app=payment-api",
@@ -507,7 +546,7 @@ class DeploymentReadinessProviderTest {
 
         assertThat(result.exitCode()).isZero();
         assertThat(Files.readString(argsFile))
-                .contains("--context\nkind-ci")
+                .contains("--context=kind-ci")
                 .contains("-n\npayment")
                 .contains("logs")
                 .contains("-l\napp=payment-api")
@@ -529,13 +568,13 @@ class DeploymentReadinessProviderTest {
                 """.formatted(argsFile));
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("kubectl", kubectl, Map.of("K8S_CONTEXT", "kind-ci")),
                 "payment_k8s",
                 Map.of(
                         "provider_type", "k8s",
                         "readiness_probe", "pod_logs",
-                        "kubectl_ref", kubectl.toString(),
-                        "kube_context_ref", "env://PATH",
+                        "kubectl_ref", "kubectl",
+                        "kube_context_ref", "env://K8S_CONTEXT",
                         "namespace_ref", "payment",
                         "pod_ref", "payment-api-abc123",
                         "log_tail_lines", "3",
@@ -544,7 +583,7 @@ class DeploymentReadinessProviderTest {
 
         assertThat(result.exitCode()).isZero();
         assertThat(Files.readString(argsFile))
-                .contains("--context\n")
+                .contains("--context=kind-ci")
                 .contains("-n\npayment")
                 .contains("logs\npayment-api-abc123")
                 .contains("--tail=3")
@@ -710,12 +749,12 @@ class DeploymentReadinessProviderTest {
                 """);
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("kubectl", kubectl, Map.of("K8S_CONTEXT", "kind-ci")),
                 "payment_k8s",
                 Map.of(
                         "provider_type", "k8s",
                         "readiness_probe", "rollout_status",
-                        "kubectl_ref", kubectl.toString(),
+                        "kubectl_ref", "kubectl",
                         "namespace_ref", "payment",
                         "deployment_ref", "deployment/payment-api",
                         "deployed_version_ref", "build-42",
@@ -735,12 +774,12 @@ class DeploymentReadinessProviderTest {
                 """);
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("kubectl", kubectl, Map.of("K8S_CONTEXT", "kind-ci")),
                 "payment_k8s",
                 Map.of(
                         "provider_type", "k8s",
                         "readiness_probe", "pod_logs",
-                        "kubectl_ref", kubectl.toString(),
+                        "kubectl_ref", "kubectl",
                         "namespace_ref", "payment",
                         "log_tail_lines", 10,
                         "deployed_version_ref", "build-42",
@@ -760,12 +799,12 @@ class DeploymentReadinessProviderTest {
                 """);
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("kubectl", kubectl, Map.of("K8S_CONTEXT", "kind-ci")),
                 "payment_k8s",
                 Map.of(
                         "provider_type", "k8s",
                         "readiness_probe", "pod_logs",
-                        "kubectl_ref", kubectl.toString(),
+                        "kubectl_ref", "kubectl",
                         "namespace_ref", "payment",
                         "target_selector", "app=payment-api",
                         "log_tail_lines", "many",
@@ -786,12 +825,12 @@ class DeploymentReadinessProviderTest {
                 """);
 
         AdapterExecutionResult missingTail = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("kubectl", kubectl, Map.of("K8S_CONTEXT", "kind-ci")),
                 "payment_k8s",
                 Map.of(
                         "provider_type", "k8s",
                         "readiness_probe", "pod_logs",
-                        "kubectl_ref", kubectl.toString(),
+                        "kubectl_ref", "kubectl",
                         "namespace_ref", "payment",
                         "target_selector", "app=payment-api",
                         "deployed_version_ref", "build-42",
@@ -802,12 +841,12 @@ class DeploymentReadinessProviderTest {
                 .contains("K8s pod_logs readiness probe requires positive log_tail_lines");
 
         AdapterExecutionResult zeroTail = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("kubectl", kubectl, Map.of("K8S_CONTEXT", "kind-ci")),
                 "payment_k8s",
                 Map.of(
                         "provider_type", "k8s",
                         "readiness_probe", "pod_logs",
-                        "kubectl_ref", kubectl.toString(),
+                        "kubectl_ref", "kubectl",
                         "namespace_ref", "payment",
                         "target_selector", "app=payment-api",
                         "log_tail_lines", 0,
@@ -898,13 +937,13 @@ class DeploymentReadinessProviderTest {
                 """);
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("kubectl", kubectl, Map.of()),
                 "payment_k8s",
                 Map.of(
                         "provider_type", "k8s",
                         "readiness_probe", "rollout_status",
-                        "kubectl_ref", kubectl.toString(),
-                        "kube_context_ref", "env://SPEC_REGRESSION_MISSING_KUBE_CONTEXT",
+                        "kubectl_ref", "kubectl",
+                        "kube_context_ref", "env://K8S_CONTEXT",
                         "namespace_ref", "payment",
                         "deployment_ref", "deployment/payment-api",
                         "deployed_version_ref", "build-42",
@@ -913,16 +952,16 @@ class DeploymentReadinessProviderTest {
         Path runDir = tempDir.resolve("run");
         assertThat(result.exitCode()).isEqualTo(1);
         assertThat(Files.readString(result.stderrLog()))
-                .contains("SPEC_REGRESSION_MISSING_KUBE_CONTEXT");
+                .contains("K8S_CONTEXT");
         assertThat(Files.readString(runDir.resolve("readiness.yaml")))
                 .contains("status: failed")
                 .contains("check_count: 0")
-                .contains("SPEC_REGRESSION_MISSING_KUBE_CONTEXT");
+                .contains("K8S_CONTEXT");
     }
 
     @Test
     void defaultProbeRunsVmTcpConnectAgainstLocalSocket() throws Exception {
-        try (ServerSocket server = new ServerSocket(0)) {
+        try (ServerSocket server = LoopbackTestListener.open(false)) {
             Thread acceptThread = new Thread(() -> {
                 try (var ignored = server.accept()) {
                     // Accept one connection so the TCP readiness probe can complete.
@@ -933,7 +972,8 @@ class DeploymentReadinessProviderTest {
             acceptThread.start();
 
             AdapterExecutionResult result = executeProvider(
-                    new DeploymentReadinessProvider(),
+                    new DeploymentReadinessProvider(new DefaultDeploymentReadinessProbe(java.net.http.HttpClient.newHttpClient(),
+                            Map.of("VM_TCP_ENDPOINT", "tcp://127.0.0.1:" + server.getLocalPort())::get)),
                     "payment_vm",
                     Map.of(
                             "provider_type", "vm",
@@ -1067,12 +1107,12 @@ class DeploymentReadinessProviderTest {
                 """);
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("ssh", ssh, Map.of("VM_SSH_ENDPOINT", "ssh://10.0.0.15", "VM_SSH_COMMAND", "systemctl is-active payment-api")),
                 "payment_vm",
                 Map.of(
                         "provider_type", "vm",
                         "readiness_probe", "ssh_command",
-                        "ssh_ref", ssh.toString(),
+                        "ssh_ref", "ssh",
                         "host_ref", "10.0.0.15",
                         "service_ref", "payment-api",
                         "deployed_version_ref", "build-43",
@@ -1092,12 +1132,12 @@ class DeploymentReadinessProviderTest {
                 """);
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("ssh", ssh, Map.of("VM_SSH_ENDPOINT", "ssh://10.0.0.15", "VM_SSH_COMMAND", "systemctl is-active payment-api")),
                 "payment_vm",
                 Map.of(
                         "provider_type", "vm",
                         "readiness_probe", "ssh_command",
-                        "ssh_ref", ssh.toString(),
+                        "ssh_ref", "ssh",
                         "host_ref", "10.0.0.15",
                         "command_ref", "systemctl is-active payment-api",
                         "service_ref", "payment-api",
@@ -1120,12 +1160,12 @@ class DeploymentReadinessProviderTest {
                 """.formatted(argsFile));
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("ssh", ssh, Map.of("VM_SSH_ENDPOINT", "ssh://deploy@10.0.0.15:2222", "VM_SSH_COMMAND", "systemctl is-active payment-api")),
                 "payment_vm",
                 Map.of(
                         "provider_type", "vm",
                         "readiness_probe", "ssh_command",
-                        "ssh_ref", ssh.toString(),
+                        "ssh_ref", "ssh",
                         "host_ref", "10.0.0.15",
                         "user_ref", "deploy",
                         "port", 2222,
@@ -1141,12 +1181,12 @@ class DeploymentReadinessProviderTest {
                 .contains("-o\nConnectTimeout=2")
                 .contains("-p\n2222")
                 .contains("deploy@10.0.0.15")
-                .contains("systemctl is-active payment-api");
+                .contains("systemctl\nis-active\n--\npayment-api");
         assertThat(Files.readString(result.stdoutLog())).isEqualTo("active\n");
         assertThat(Files.readString(result.actualOutput())).isEqualTo("active\n");
         assertThat(Files.readString(runDir.resolve("readiness.yaml")))
                 .contains("readiness_probe: ssh_command")
-                .contains("ssh_ref: " + ssh)
+                .contains("ssh_ref: ssh")
                 .contains("host_ref: 10.0.0.15")
                 .contains("user_ref: deploy")
                 .contains("command_ref: systemctl is-active payment-api")
@@ -1161,12 +1201,12 @@ class DeploymentReadinessProviderTest {
                 """);
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("ssh", ssh, Map.of("VM_SSH_ENDPOINT", "ssh://10.0.0.15", "VM_SSH_COMMAND", "systemctl is-active payment-api")),
                 "payment_vm",
                 Map.of(
                         "provider_type", "vm",
                         "readiness_probe", "ssh_command",
-                        "ssh_ref", ssh.toString(),
+                        "ssh_ref", "ssh",
                         "host_ref", "10.0.0.15",
                         "command_ref", "systemctl is-active payment-api",
                         "service_ref", "payment-api",
@@ -1187,12 +1227,12 @@ class DeploymentReadinessProviderTest {
                 """);
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("ssh", ssh, Map.of("VM_SSH_ENDPOINT", "ssh://10.0.0.15", "VM_SSH_COMMAND", "systemctl is-active payment-api")),
                 "payment_vm",
                 Map.of(
                         "provider_type", "vm",
                         "readiness_probe", "ssh_command",
-                        "ssh_ref", ssh.toString(),
+                        "ssh_ref", "ssh",
                         "host_ref", "10.0.0.15",
                         "command_ref", "systemctl is-active payment-api",
                         "service_ref", "payment-api",
@@ -1237,12 +1277,12 @@ class DeploymentReadinessProviderTest {
                 """.formatted(argsFile));
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("winrs", winrm, Map.of("VM_WINRM_ENDPOINT", "https://10.0.0.16", "VM_WINRM_COMMAND", "Get-Service payment-api")),
                 "payment_vm",
                 Map.of(
                         "provider_type", "vm",
                         "readiness_probe", "winrm_command",
-                        "winrm_ref", winrm.toString(),
+                        "winrm_ref", "winrs",
                         "host_ref", "10.0.0.16",
                         "command_ref", "Get-Service payment-api",
                         "service_ref", "payment-api",
@@ -1252,13 +1292,13 @@ class DeploymentReadinessProviderTest {
         Path runDir = tempDir.resolve("run");
         assertThat(result.exitCode()).isZero();
         assertThat(Files.readString(argsFile))
-                .contains("-r:10.0.0.16")
-                .contains("Get-Service payment-api");
+                .contains("-r:https://10.0.0.16:5986")
+                .contains("powershell.exe\n-NoProfile\n-NonInteractive\n-Command\nGet-Service -Name 'payment-api' -ErrorAction Stop");
         assertThat(Files.readString(result.stdoutLog())).isEqualTo("Running\n");
         assertThat(Files.readString(result.actualOutput())).isEqualTo("Running\n");
         assertThat(Files.readString(runDir.resolve("readiness.yaml")))
                 .contains("readiness_probe: winrm_command")
-                .contains("winrm_ref: " + winrm)
+                .contains("winrm_ref: winrs")
                 .contains("host_ref: 10.0.0.16")
                 .contains("command_ref: Get-Service payment-api")
                 .contains("check_count: 1");
@@ -1275,12 +1315,12 @@ class DeploymentReadinessProviderTest {
                 """.formatted(argsFile));
 
         AdapterExecutionResult result = executeProvider(
-                new DeploymentReadinessProvider(),
+                commandProvider("winrs", winrm, Map.of("VM_WINRM_ENDPOINT", "https://deploy@10.0.0.16:5986", "VM_WINRM_COMMAND", "Get-Service payment-api")),
                 "payment_vm",
                 Map.of(
                         "provider_type", "vm",
                         "readiness_probe", "winrm_command",
-                        "winrm_ref", winrm.toString(),
+                        "winrm_ref", "winrs",
                         "host_ref", "10.0.0.16",
                         "port", 5986,
                         "user_ref", "deploy",
@@ -1291,9 +1331,17 @@ class DeploymentReadinessProviderTest {
 
         assertThat(result.exitCode()).isZero();
         assertThat(Files.readString(argsFile))
-                .contains("-r:10.0.0.16:5986")
+                .contains("-r:https://10.0.0.16:5986")
                 .contains("-u:deploy")
-                .contains("Get-Service payment-api");
+                .contains("powershell.exe\n-NoProfile\n-NonInteractive\n-Command\nGet-Service -Name 'payment-api' -ErrorAction Stop");
+    }
+
+    private DeploymentReadinessProvider commandProvider(String expectedTool, Path script, Map<String, String> bindings) {
+        return new DeploymentReadinessProvider(new DefaultDeploymentReadinessProbe(java.net.http.HttpClient.newHttpClient(),
+                bindings::get, tool -> {
+                    assertThat(tool.name).isEqualTo(expectedTool);
+                    return new ProcessBuilder("/bin/sh", script.toString());
+                }));
     }
 
     private AdapterExecutionResult executeProvider(

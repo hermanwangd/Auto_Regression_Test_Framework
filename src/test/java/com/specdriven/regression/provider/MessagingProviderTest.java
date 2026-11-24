@@ -20,6 +20,22 @@ class MessagingProviderTest {
     Path tempDir;
 
     @Test
+    void localPayloadCannotLeaveThePackageThroughAnAlias() throws Exception {
+        Path root = Files.createDirectory(tempDir.resolve("package"));
+        Files.createSymbolicLink(root.resolve("message.json"), Files.writeString(tempDir.resolve("outside"), "sample"));
+        var transport = new RecordingMessagingTransport();
+        var provider = new MessagingProvider(transport);
+        Path output = tempDir.resolve("run");
+        assertThatThrownBy(() -> provider.execute("events", root, Map.of("provider_type", "kafka",
+                        "actions", Map.of("send", Map.of("mode", "publish", "payload_binding", "event"))),
+                Map.of("steps", List.of(Map.of("action", "send"))),
+                List.of(new ResolvedBinding("event", "message_event", "message.json")), output,
+                output.resolve("out"), output.resolve("err"), output.resolve("actual")))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("inside the RP package");
+        assertThat(transport.request).isNull();
+    }
+
+    @Test
     void publishesKafkaThroughNativeTransportAndWritesEvidence() throws Exception {
         writePayload("fixtures/events/payment.json", "{\"eventId\":\"EVT-001\"}\n");
         RecordingMessagingTransport transport = new RecordingMessagingTransport();
@@ -95,6 +111,37 @@ class MessagingProviderTest {
                 .contains("correlation_id: paymentId")
                 .contains("message_count: 1")
                 .contains("payload_binding: payment_event");
+    }
+
+    @Test
+    void withholdsCredentialBearingBrokerPayloadsAndRecordsFailedEvidence() throws Exception {
+        String payload = "{\"headers\":{\"Authorization\":\"Bearer broker-canary\"}}\n";
+        for (String providerType : List.of("nats", "kafka")) {
+            var transport = new RecordingMessagingTransport(new MessagingTransportResult(payload, payload, 1));
+            var result = executeProvider(new MessagingProvider(transport), "events",
+                    Map.of("provider_type", providerType, "subject_ref", "events",
+                            "actions", Map.of("observe", Map.of("mode", "observe",
+                                    "cleanup_strategy", "password=cleanup-canary"))),
+                    Map.of("steps", List.of(Map.of("action", "observe"))), List.of());
+
+            assertThat(result.exitCode()).isOne();
+            assertThat(Files.readString(result.actualOutput())).isEmpty();
+            assertThat(Files.readString(result.stdoutLog())).isEmpty();
+            assertThat(Files.readString(result.stderrLog())).contains("observation withheld").doesNotContain("broker-canary");
+            assertThat(Files.readString(tempDir.resolve("run/messaging.yaml")))
+                    .contains("status: failed", "message_count: 0").doesNotContain("broker-canary", "cleanup-canary");
+        }
+    }
+
+    @Test
+    void preservesWhitespaceOnlyMessageBodiesForExactAssertions() throws Exception {
+        String whitespace = " \t\r\n";
+        var transport = new RecordingMessagingTransport(new MessagingTransportResult("observed one", whitespace, 1));
+        var result = executeProvider(new MessagingProvider(transport), "events", Map.of("provider_type", "mock",
+                "actions", Map.of("observe", Map.of("mode", "observe"))), Map.of(), List.of());
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(Files.readString(result.actualOutput())).isEqualTo(whitespace);
     }
 
     @Test

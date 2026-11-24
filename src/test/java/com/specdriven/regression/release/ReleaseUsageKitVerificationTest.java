@@ -10,8 +10,12 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.yaml.snakeyaml.Yaml;
 
 class ReleaseUsageKitVerificationTest {
@@ -36,12 +40,105 @@ class ReleaseUsageKitVerificationTest {
                 .contains("REQUIRE_EXTERNAL_CLIENTS: ${{ vars.REQUIRE_EXTERNAL_CLIENTS || 'false' }}")
                 .contains("JDBC_EXTERNAL_DIALECT: ${{ vars.JDBC_EXTERNAL_DIALECT || 'oracle' }}")
                 .contains("JDBC_CONNECTION: ${{ secrets.JDBC_CONNECTION }}")
+                .contains("REGRESS_JDBC_APPROVED_SQL_SHA256: ${{ secrets.REGRESS_JDBC_APPROVED_SQL_SHA256 }}")
                 .contains("REST_BASE_URL: ${{ secrets.REST_BASE_URL }}")
                 .contains("GRPC_TARGET: ${{ secrets.GRPC_TARGET }}")
                 .contains("NATS_CONNECTION: ${{ secrets.NATS_CONNECTION }}")
                 .contains("KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}")
                 .contains("IBM_MQ_CONN_NAME: ${{ secrets.IBM_MQ_CONN_NAME }}")
                 .contains("IBM_MQ_CREDENTIAL: ${{ secrets.IBM_MQ_CREDENTIAL }}");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "true,  missing,         jdbc:db2:fixture, 1, missing_external_jdbc_env: REGRESS_JDBC_APPROVED_SQL_SHA256",
+            "true,  complete,        jdbc:db2:fixture, 0, external_jdbc_runtime_verification: passed",
+            "true,  stale_seed,      jdbc:db2:fixture, 1, unapproved_external_jdbc_sql: db_seed",
+            "true,  missing_cleanup, jdbc:db2:fixture, 1, unapproved_external_jdbc_sql: db_cleanup",
+            "true,  stale_cleanup,   jdbc:db2:fixture, 1, unapproved_external_jdbc_sql: db_cleanup",
+            "true,  stale_query,     jdbc:db2:fixture, 1, unapproved_external_jdbc_sql: db_query",
+            "true,  malformed,       jdbc:db2:fixture, 1, invalid_external_jdbc_sql_approval_format",
+            "true,  complete,        jdbc:h2:mem:test, 1, external_jdbc_runtime_verification: blocked",
+            "false, complete,        jdbc:db2:fixture, 0, external_jdbc_runtime_verification: not_configured"
+    })
+    void releaseGateScopesIndependentSqlApprovalsToTheNativeSample(boolean required, String approvalCase,
+            String connection, int expectedExit, String expectedStatus, @TempDir Path root) throws Exception {
+        Path suiteRoot = Path.of("samples/20-provider-capability-p0/data/jdbc");
+        for (String ref : List.of("fixtures/seed_order.sql", "queries/find_order_by_id.sql", "fixtures/cleanup_order.sql")) {
+            Path sql = suiteRoot.resolve(ref);
+            Files.createDirectories(root.resolve(sql).getParent());
+            Files.copy(sql, root.resolve(sql));
+        }
+        Path scripts = Files.createDirectories(root.resolve("scripts/release"));
+        for (String name : List.of("verify-supported-provider-samples.sh", "verify-release-version.sh")) {
+            Files.copy(Path.of("scripts/release", name), scripts.resolve(name));
+            assertThat(scripts.resolve(name).toFile().setExecutable(true)).isTrue();
+        }
+        Files.writeString(root.resolve("pom.xml"), """
+                <project>
+                  <artifactId>spec-driven-auto-regression</artifactId>
+                  <version>1.0.0</version>
+                </project>
+                """);
+        Files.createDirectories(root.resolve("target"));
+        Files.writeString(root.resolve("target/spec-driven-auto-regression-1.0.0.jar"), "fixture");
+        Path bin = Files.createDirectories(root.resolve("bin"));
+        Path java = Files.writeString(bin.resolve("java"), """
+                #!/usr/bin/env bash
+                set -eu
+                shift 3
+                if [[ "$1" == run ]]; then
+                  echo "$*" >> runs.log
+                  if [[ "${*: -1}" == external_db2 ]]; then
+                    [[ "${REGRESS_JDBC_APPROVED_SQL_SHA256:-}" == "$EXPECTED_APPROVALS" ]]
+                  else
+                    [[ -z "${REGRESS_JDBC_APPROVED_SQL_SHA256:-}" ]]
+                  fi
+                  echo '{}' > result.json
+                  echo "result_json: $PWD/result.json"
+                fi
+                """);
+        assertThat(java.toFile().setExecutable(true)).isTrue();
+        Path log = root.resolve("gate.log");
+        var gate = new ProcessBuilder("bash", scripts.resolve("verify-supported-provider-samples.sh").toString())
+                .redirectErrorStream(true).redirectOutput(log.toFile());
+        var env = gate.environment();
+        String systemPath = env.get("PATH");
+        env.clear();
+        env.put("PATH", bin + ":" + systemPath);
+        env.put("REQUIRE_EXTERNAL_JDBC", Boolean.toString(required));
+        env.put("JDBC_EXTERNAL_DIALECT", "db2");
+        env.put("JDBC_CONNECTION", connection);
+        // Fixed test approvals for the checked-in SQL bytes, independent of the files copied above.
+        String seed = "db2:JDBC_CONNECTION:db_seed:281788f4939f4845e302f3500db53c813b5da97682397d7fb0755bb61edfc37c";
+        String query = "db2:JDBC_CONNECTION:db_query:8732f08dcf92d1b1d1ea3908622ab1fa3243633ca549c1ae1dbe640b11f5a5c9";
+        String cleanup = "db2:JDBC_CONNECTION:db_cleanup:77f943082ad8e1044bcd20d270749d0ac4d5a67cac02a00ce4fd30326dec6419";
+        String complete = String.join(",", seed, query, cleanup);
+        String approvals = switch (approvalCase) {
+            case "complete" -> complete;
+            case "missing" -> "";
+            case "missing_cleanup" -> String.join(",", seed, query);
+            case "stale_seed" -> String.join(",", "db2:JDBC_CONNECTION:db_seed:" + "0".repeat(64), query, cleanup);
+            case "stale_cleanup" -> String.join(",", seed, query, "db2:JDBC_CONNECTION:db_cleanup:" + "0".repeat(64));
+            case "stale_query" -> String.join(",", seed, "db2:JDBC_CONNECTION:db_query:" + "0".repeat(64), cleanup);
+            case "malformed" -> complete + ",invalid";
+            default -> throw new AssertionError(approvalCase);
+        };
+        env.put("EXPECTED_APPROVALS", complete);
+        if (!approvals.isEmpty()) env.put("REGRESS_JDBC_APPROVED_SQL_SHA256", approvals);
+        Process process = gate.start();
+        try {
+            assertThat(process.waitFor(30, TimeUnit.SECONDS)).isTrue();
+            String output = Files.readString(log);
+            assertThat(process.exitValue()).as(output).isEqualTo(expectedExit);
+            assertThat(output).contains(expectedStatus).doesNotContain(seed, query, cleanup, connection);
+            Path runs = root.resolve("runs.log");
+            List<String> invocations = Files.exists(runs) ? Files.readAllLines(runs) : List.of();
+            long nativeRuns = invocations.stream().filter(line -> line.endsWith("--profile external_db2")).count();
+            assertThat(nativeRuns).isEqualTo(required && expectedExit == 0 ? 1 : 0);
+        } finally {
+            process.destroyForcibly();
+        }
     }
 
     @Test

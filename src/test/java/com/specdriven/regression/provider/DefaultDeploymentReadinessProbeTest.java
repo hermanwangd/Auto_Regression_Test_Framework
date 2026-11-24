@@ -23,7 +23,7 @@ class DefaultDeploymentReadinessProbeTest {
     Path tempDir;
 
     @Test
-    void k8sRolloutStatusUsesKubectlRefAndAllowsBlankNamespace() throws Exception {
+    void k8sRolloutStatusUsesRunnerKubectlAndAllowsBlankNamespace() throws Exception {
         Path argsFile = tempDir.resolve("kubectl-args.txt");
         Path kubectl = executableScript("""
                 printf '%%s\\n' "$@" > %s
@@ -39,9 +39,13 @@ class DefaultDeploymentReadinessProbeTest {
                 "",
                 "",
                 0,
-                Map.of("kubectl_ref", kubectl.toString()));
+                Map.of("kubectl_ref", "kubectl"));
 
-        DeploymentReadinessProbeResult result = new DefaultDeploymentReadinessProbe().check(request);
+        var probe = new DefaultDeploymentReadinessProbe(java.net.http.HttpClient.newHttpClient(), key -> null, tool -> {
+            assertThat(tool).isEqualTo(DefaultDeploymentReadinessProbe.ReadinessTool.KUBECTL);
+            return new ProcessBuilder("/bin/sh", kubectl.toString());
+        });
+        DeploymentReadinessProbeResult result = probe.check(request);
 
         assertThat(result.stdout()).isEqualTo("k8s readiness passed for deployment/payment-api\n");
         assertThat(result.actualOutput()).isEqualTo("ready\n");
@@ -178,11 +182,11 @@ class DefaultDeploymentReadinessProbeTest {
                 "",
                 "",
                 0,
-                Map.of("api_server_ref", "env://SPEC_DRIVEN_REGRESSION_UNSET_READINESS_ENV"));
+                Map.of("api_server_ref", "env://K8S_API_SERVER"));
 
-        assertThatThrownBy(() -> new DefaultDeploymentReadinessProbe().check(request))
-                .isInstanceOf(IOException.class)
-                .hasMessageContaining("Environment variable `SPEC_DRIVEN_REGRESSION_UNSET_READINESS_ENV` is not set");
+        var probe = new DefaultDeploymentReadinessProbe(java.net.http.HttpClient.newHttpClient(), key -> null);
+        assertThatThrownBy(() -> probe.check(request)).isInstanceOf(IOException.class)
+                .hasMessageContaining("Environment variable `K8S_API_SERVER` is not set");
     }
 
     @Test
@@ -241,6 +245,106 @@ class DefaultDeploymentReadinessProbeTest {
     }
 
     @Test
+    void rejectsSuiteSelectedExecutablesBeforeLaunch() {
+        var probe = neverLaunch(Map.of());
+        String path = tempDir.resolve("fixture-tool").toString();
+        for (String ref : List.of(path, "env://FIXTURE_TOOL")) {
+            for (var request : List.of(
+                    request("k8s", "rollout_status", "", "", "deploy/app", "", "", "", 0, Map.of("kubectl_ref", ref)),
+                    request("vm", "ssh_command", "", "", "", "", "", "fixture", 0, Map.of("ssh_ref", ref)),
+                    request("vm", "winrm_command", "", "", "", "", "", "fixture", 0, Map.of("winrm_ref", ref)))) {
+                assertThatThrownBy(() -> probe.check(request)).isInstanceOf(IOException.class)
+                        .hasMessageContaining("runner tool").hasMessageNotContaining(ref);
+            }
+        }
+    }
+
+    @Test
+    void rejectsKubernetesContextChangesAndInvalidResourceArgumentsBeforeLaunch() {
+        var probe = neverLaunch(Map.of("K8S_CONTEXT", "fixture", "K8S_POD", "invalid/name"));
+        for (var request : List.of(
+                request("k8s", "rollout_status", "other", "", "deploy/app", "", "", "", 0, Map.of()),
+                request("k8s", "rollout_status", "", "other namespace", "deploy/app", "", "", "", 0, Map.of()),
+                request("k8s", "rollout_status", "", "", "-fixture", "", "", "", 0, Map.of()),
+                request("k8s", "pod_logs", "", "", "", "", "", "", 0, Map.of("pod_ref", "env://K8S_POD", "log_tail_lines", 1)),
+                request("k8s", "pod_ready", "", "", "", "", "-fixture", "", 0, Map.of()),
+                request("k8s", "unknown", "", "", "deploy/app", "", "", "", 0, Map.of()))) {
+            assertThatThrownBy(() -> probe.check(request)).isInstanceOf(IOException.class);
+        }
+    }
+
+    @Test
+    void rejectsVmCommandDestinationUserPortAndCommandMismatchesBeforeLaunch() {
+        for (String mode : List.of("ssh_command", "winrm_command")) {
+            boolean ssh = mode.equals("ssh_command");
+            String prefix = ssh ? "VM_SSH" : "VM_WINRM";
+            String approvedCommand = ssh ? "systemctl is-active fixture" : "Get-Service fixture";
+            var probe = neverLaunch(Map.of(prefix + "_ENDPOINT", (ssh ? "ssh" : "https") + "://deploy@fixture:9000",
+                    prefix + "_COMMAND", approvedCommand));
+            var command = Map.<String, Object>of("command_ref", "env://" + prefix + "_COMMAND");
+            for (var request : List.of(
+                    request("vm", mode, "", "", "", "", "", "other", 9000, command),
+                    request("vm", mode, "", "", "", "", "", "fixture", 9001, command),
+                    request("vm", mode, "", "", "", "", "", "fixture", 9000, Map.of("user_ref", "other", "command_ref", approvedCommand)),
+                    request("vm", mode, "", "", "", "", "", "fixture", 9000, Map.of("command_ref", "other")))) {
+                assertThatThrownBy(() -> probe.check(request)).isInstanceOf(IOException.class).hasMessageContaining(prefix);
+            }
+        }
+    }
+
+    @Test
+    void runnerCommandMustSelectExactlyOneService() {
+        for (String mode : List.of("ssh_command", "winrm_command")) {
+            boolean ssh = mode.equals("ssh_command");
+            String prefix = ssh ? "VM_SSH" : "VM_WINRM";
+            String verb = ssh ? "systemctl is-active " : "Get-Service ";
+            var request = request("vm", mode, "", "", "", "", "", "fixture", 0,
+                    Map.of("command_ref", "env://" + prefix + "_COMMAND"));
+            for (String invalid : List.of("unsupported fixture", verb + "service other", verb + "-option")) {
+                var probe = neverLaunch(Map.of(prefix + "_ENDPOINT", (ssh ? "ssh" : "https") + "://fixture",
+                        prefix + "_COMMAND", invalid));
+                assertThatThrownBy(() -> probe.check(request)).isInstanceOf(IOException.class)
+                        .hasMessageContaining("must select one service");
+            }
+        }
+    }
+
+    @Test
+    void rejectsPlaintextRemoteReadinessAndUnrelatedEnvironmentBindings() {
+        var probe = neverLaunch(Map.of("VM_HEALTH_URL", "http://fixture.invalid/ready",
+                "K8S_API_SERVER", "http://fixture.invalid", "VM_TCP_ENDPOINT", "tcp://fixture.invalid:1234"));
+        var tcp = request("vm", "tcp_connect", "", "", "", "", "", "fixture.invalid", 1234, Map.of());
+        assertThatThrownBy(() -> probe.check(tcp)).isInstanceOf(IOException.class).hasMessageContaining("numeric loopback");
+        var http = request("vm", "http_get", "", "", "", "", "", "", 0, Map.of("health_url_ref", "env://VM_HEALTH_URL"));
+        assertThatThrownBy(() -> probe.check(http)).isInstanceOf(IOException.class).hasMessageContaining("HTTPS");
+        var api = request("k8s", "api_deployment_available", "", "default", "deploy/app", "", "", "", 0,
+                Map.of("api_server_ref", "env://K8S_API_SERVER"));
+        assertThatThrownBy(() -> probe.check(api)).isInstanceOf(IOException.class).hasMessageContaining("HTTPS");
+
+        var arbitraryRef = request("vm", "http_get", "", "", "", "", "", "", 0, Map.of("health_url_ref", "env://FIXTURE_VALUE"));
+        var unreadable = new DefaultDeploymentReadinessProbe(java.net.http.HttpClient.newHttpClient(), key -> {
+            throw new AssertionError("Unexpected access to an unrelated environment binding");
+        });
+        assertThatThrownBy(() -> unreadable.check(arbitraryRef)).isInstanceOf(IOException.class).hasMessageContaining("VM_HEALTH_URL");
+    }
+
+    @Test
+    void requiresTheExactRunnerLoopbackTcpPort() {
+        var probe = neverLaunch(Map.of("VM_TCP_ENDPOINT", "tcp://127.0.0.1:51000"));
+        var wrongPort = request("vm", "tcp_connect", "", "", "", "", "", "127.0.0.1", 52000, Map.of());
+        var wrongAddress = request("vm", "tcp_connect", "", "", "", "", "", "::1", 51000, Map.of());
+        for (var request : List.of(wrongPort, wrongAddress)) {
+            assertThatThrownBy(() -> probe.check(request)).isInstanceOf(IOException.class).hasMessageContaining("VM_TCP_ENDPOINT");
+        }
+    }
+
+    private DefaultDeploymentReadinessProbe neverLaunch(Map<String, String> bindings) {
+        return new DefaultDeploymentReadinessProbe(java.net.http.HttpClient.newHttpClient(), bindings::get, tool -> {
+            throw new AssertionError("Invalid request reached tool selection");
+        });
+    }
+
+    @Test
     void commandProbeStreamsUseUtf8UnderAnAsciiJvm() throws Exception {
         Path script = executableScript("""
                 case "$*" in
@@ -265,18 +369,23 @@ class DefaultDeploymentReadinessProbeTest {
     public static class AsciiProbeCheck {
         public static void main(String[] args) throws Exception {
             assertThat(Charset.defaultCharset()).isEqualTo(StandardCharsets.US_ASCII);
-            var probe = new DefaultDeploymentReadinessProbe();
             for (String provider : List.of("k8s", "vm")) {
                 boolean k8s = provider.equals("k8s");
                 String mode = k8s ? "rollout_status" : "ssh_command";
-                var contract = k8s ? Map.<String, Object>of("kubectl_ref", args[0])
-                        : Map.<String, Object>of("ssh_ref", args[0], "command_ref", "fixture");
-                var success = request(provider, mode, "", "", "fixture-success", "", "", "fixture-success", 0, contract);
-                assertThat(probe.check(success).stdout()).isEqualTo("服務就緒");
-                var failure = request(provider, mode, "", "", "fixture-failure", "", "", "fixture-failure", 0, contract);
-                String prefix = k8s ? "K8s readiness probe" : "VM " + mode + " readiness probe";
-                assertThatThrownBy(() -> probe.check(failure)).isInstanceOf(IOException.class)
-                        .hasMessage(prefix + " failed for `fixture-failure`: 診斷錯誤");
+                var contract = k8s ? Map.<String, Object>of() : Map.<String, Object>of("command_ref", "env://VM_SSH_COMMAND");
+                for (String target : List.of("fixture-success", "fixture-failure")) {
+                    var bindings = Map.of("VM_SSH_ENDPOINT", "ssh://" + target, "VM_SSH_COMMAND", "systemctl is-active fixture");
+                    var probe = new DefaultDeploymentReadinessProbe(java.net.http.HttpClient.newHttpClient(), bindings::get,
+                            tool -> new ProcessBuilder("/bin/sh", args[0]));
+                    var request = request(provider, mode, "", "", target, "", "", target, 0, contract);
+                    if (target.equals("fixture-success")) {
+                        assertThat(probe.check(request).stdout()).isEqualTo("服務就緒");
+                    } else {
+                        String prefix = k8s ? "K8s readiness probe" : "VM " + mode + " readiness probe";
+                        assertThatThrownBy(() -> probe.check(request)).isInstanceOf(IOException.class)
+                                .hasMessage(prefix + " failed for `fixture-failure`: 診斷錯誤");
+                    }
+                }
             }
         }
     }

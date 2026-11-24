@@ -54,6 +54,17 @@ class DefaultMessagingTransportTest {
     }
 
     @Test
+    void rejectsHostnameBindingsInEveryNatsModeBeforeConnecting() {
+        var transport = new DefaultMessagingTransport(null, null, name -> "nats://localhost:4222");
+        for (String mode : List.of("publish", "observe", "request_reply", "cleanup")) {
+            var request = new MessagingTransportRequest("events", "nats", "env://NATS_SERVER",
+                    "events.valid", "subject_ref", "fixture", mode, "", "", "fixture", 1, Map.of(), Map.of());
+            assertThatThrownBy(() -> transport.execute(request))
+                    .isInstanceOf(java.io.IOException.class).hasMessageContaining("numeric loopback");
+        }
+    }
+
+    @Test
     void observesKafkaMessagesWithCorrelationThroughMockConsumer() throws Exception {
         TopicPartition partition = new TopicPartition("payment.events", 0);
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);

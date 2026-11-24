@@ -770,6 +770,8 @@ The managed HTTP mock listens on IPv4 loopback and serves checked-in static resp
 
 `jdbc` supports deterministic local verification plus optional native external verification. `local_v03` uses approved framework-owned local database bindings for deterministic local/CI evidence. Native external JDBC uses the same v0.3 suite with `external_oracle` or `external_db2` Env_Profile selection. Each external Env_Profile uses `connection.secret_ref: env://JDBC_CONNECTION`. `env://JDBC_CONNECTION` is the canonical public secret-ref name and must be written in uppercase exactly; mixed-case variants are invalid. The runner process supplies the actual JDBC URL through the environment variable `JDBC_CONNECTION`, not through a literal `env://...` value. The framework resolves `JDBC_CONNECTION` only at runtime, masks the resolved value from result/evidence/report output, and fails owner-actionably with `SECRET_RESOLUTION_ERROR` when the env var is missing. External Oracle/DB2 suites assume the owner has pre-provisioned the target schema and `ORDERS` table. Release CI validates both external profiles by default and runs exactly one native external profile only when `REQUIRE_EXTERNAL_JDBC=true`; `JDBC_EXTERNAL_DIALECT=oracle|db2` selects which profile to execute.
 
+The runner also supplies `REGRESS_JDBC_APPROVED_SQL_SHA256` for native Oracle and Db2 operations. Each approval binds the selected dialect, connection environment variable, operation and exact file digest. Provision independently reviewed digests for the sample’s seed, query and cleanup before starting the native run. See [JDBC SQL approval and sample file paths](driver_setup.md#external-sql-approval).
+
 ### 10.2 v0.2 Provider Instance Examples
 
 REST Provider Instance:
@@ -1206,6 +1208,7 @@ regress validate \
   --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
   --profile external_db2
 
+: "${REGRESS_JDBC_APPROVED_SQL_SHA256:?Supply independently reviewed SQL approvals}"
 JDBC_CONNECTION='<jdbc-url>' regress run \
   --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
   --profile external_oracle

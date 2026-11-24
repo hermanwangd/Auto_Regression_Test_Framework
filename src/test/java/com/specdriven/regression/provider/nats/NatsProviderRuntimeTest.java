@@ -18,6 +18,34 @@ class NatsProviderRuntimeTest {
     Path tempDir;
 
     @Test
+    void resolvesThePhysicalPayloadBeforeUsingTheBroker() throws Exception {
+        var base = context();
+        Path suite = java.nio.file.Files.createDirectory(tempDir.resolve("suite"));
+        java.nio.file.Files.createSymbolicLink(suite.resolve("input.json"),
+                java.nio.file.Files.writeString(tempDir.resolve("outside.json"), "{}"));
+        var context = new ProviderExecutionContext(base.providerId(), base.providerType(), base.profile(), base.runtimeMode(),
+                suite, tempDir, base.providerContract(), base.providerInstance(), base.bindingValues());
+        var result = new NatsProviderRuntime().execute(context, new ProviderOperationRequest("nats_publish",
+                List.of(Map.of("bind_as", "subject", "ref", "orders.ready"), Map.of("bind_as", "payload_ref", "ref", "input.json")),
+                Map.of()));
+        assertThat(result.failure().code()).isEqualTo("REF_OUTSIDE_SUITE_ROOT");
+    }
+
+    @Test
+    void roundTripsPayloadKeysAndMasksLabeledTextInStoredEvidence() throws Exception {
+        var result = new NatsProviderRuntime().execute(context(), new ProviderOperationRequest("nats_publish",
+                List.of(Map.of("bind_as", "subject", "ref", "orders.ready"), Map.of("bind_as", "payload",
+                        "ref", "{\"note\":\"session_id=sample-private\",\"field: with spaces\":\"line one\\nline two\"}")),
+                Map.of("_operation_id", "payload-evidence")));
+        assertThat(result.passed()).isTrue();
+        String raw = java.nio.file.Files.readString(tempDir.resolve("provider-evidence/nats/payload-evidence.yaml"));
+        assertThat(raw).doesNotContain("sample-private");
+        Map<?, ?> evidence = com.specdriven.regression.provider.ProviderDataYaml.create().load(raw);
+        assertThat(((Map<?, ?>) evidence.get("masked_observed_payload")).get("field: with spaces"))
+                .isEqualTo("line one\nline two");
+    }
+
+    @Test
     void natsObserveReturnsObservedEventEvidenceForPublishedSubject() {
         NatsProviderRuntime runtime = new NatsProviderRuntime();
         ProviderExecutionContext context = context();

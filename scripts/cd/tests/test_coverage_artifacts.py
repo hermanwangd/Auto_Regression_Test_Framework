@@ -1,11 +1,10 @@
 """Static Azure staging contracts; no live Azure execution."""
 import fnmatch
 import json
-import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from scripts.cd.collect_coverage_evidence import collect
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -26,12 +25,6 @@ class CoverageArtifactsTests(unittest.TestCase):
         self.assertIn('failTaskOnMissingResultsFile: true', text)
         self.assertIn('condition: always()', text)
 
-    def collector(self):
-        text = (ROOT / 'pipelines/azure/sit-postdeploy.yml').read_text()
-        begin = text.index('              import json, os, shutil')
-        end = text.index('              PY', begin)
-        return '\n'.join(line[14:] for line in text[begin:end].splitlines())
-
     def test_cd_collector_adds_pair_outside_canonical_tree_without_raw_logs(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / 'source'; source.mkdir()
@@ -40,8 +33,9 @@ class CoverageArtifactsTests(unittest.TestCase):
             cov = source / 'runtime/target/coverage/run'; cov.mkdir(parents=True)
             for name in ('coverage.json', 'coverage.md', 'raw.log', 'secret.json'):
                 (cov / name).write_text('{}')
-            with patch.dict(os.environ, CD_EVIDENCE_ROOT=str(source), CD_STAGED_ROOT=str(target)):
-                exec(compile(self.collector(), '<azure-collector>', 'exec'), {})
+            self.assertIn('python3 -B scripts/cd/collect_coverage_evidence.py',
+                          (ROOT / 'pipelines/azure/sit-postdeploy.yml').read_text())
+            collect(source, target)
             files = json.loads((target / 'collection.json').read_text())['files']
             self.assertIn('runtime/target/coverage/run/coverage.json', files)
             self.assertIn('runtime/target/coverage/run/coverage.md', files)

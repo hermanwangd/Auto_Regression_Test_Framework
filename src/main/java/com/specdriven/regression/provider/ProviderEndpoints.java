@@ -2,7 +2,6 @@ package com.specdriven.regression.provider;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.Set;
 import org.yaml.snakeyaml.Yaml;
 
 /** Validates endpoint syntax without resolving DNS or including credentials in errors. */
@@ -56,21 +55,18 @@ public final class ProviderEndpoints {
         try {
             String address = compatibility && !value.contains("://") ? "nats://" + value : value;
             URI uri = new URI(address);
-            boolean approvedRemote = Set.of("env://NATS_CONNECTION", "env://NATS_SERVER").contains(reference);
             boolean local = localHost(uri.getHost());
             String userInfo = uri.getUserInfo();
-            // The native socket transport is plaintext. Authenticated remote brokers
-            // must be reached through an operator-managed secure loopback tunnel.
             if (userInfo != null && (!local || compatibility || !reference.startsWith("env://")
                     || userInfo.codePoints().anyMatch(Character::isISOControl))) {
                 throw new IllegalArgumentException("NATS credentials require a local environment-backed endpoint.");
             }
             if (!"nats".equals(uri.getScheme()) || uri.getHost() == null
-                    || (!local && !approvedRemote)
+                    || !local
                     || uri.getPort() == 0 || uri.getPort() > 65535
                     || (uri.getPort() < 0 && (!compatibility || uri.getRawAuthority().endsWith(":")))
                     || !uri.getRawPath().isEmpty() || uri.getRawQuery() != null || uri.getRawFragment() != null) {
-                throw new IllegalArgumentException("Invalid NATS endpoint or unapproved remote broker reference.");
+                throw new IllegalArgumentException("NATS requires a numeric loopback endpoint. For a remote broker, configure a secure local tunnel.");
             }
             return uri;
         } catch (URISyntaxException error) {

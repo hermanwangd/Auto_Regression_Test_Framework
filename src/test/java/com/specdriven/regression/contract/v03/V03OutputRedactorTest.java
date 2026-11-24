@@ -10,6 +10,35 @@ import org.junit.jupiter.api.Test;
 
 class V03OutputRedactorTest {
     @Test
+    void comparesUnicodeLabelsAcrossTheWholeAssignmentAndPreservesPublicText() {
+        var redactor = new V03OutputRedactor();
+        String label = "Straße " + "\u200b".repeat(40) + "Owner";
+        assertThat(redactor.redactMessage("trace=ok " + label + "=sample", Set.of("STRASSE OWNER")))
+                .isEqualTo("trace=ok " + label + "=[MASKED]");
+        assertThat(redactor.redactEvidenceValue(Map.of("Straße", "sample", "trace", "ok"), Set.of("STRASSE")))
+                .isEqualTo(Map.of("Straße", "[MASKED]", "trace", "ok"));
+    }
+
+    @Test
+    void masksTheWholeDiagnosticWhenOverlappingCompoundLabelsExhaustTheScanBudget() {
+        var redactor = new V03OutputRedactor();
+        String message = "public:".repeat(300) + "review:id=sample";
+        assertThat(redactor.redactMessage(message, Set.of("review:id"))).isEqualTo("[MASKED]");
+    }
+
+    @Test
+    void masksFormattedLabelsAndCredentialSubpathsAndBoundsOversizedMessages() {
+        var redactor = new V03OutputRedactor();
+        String label = "Ｓｅｓ\u200bsｉｏｎ";
+        assertThat(redactor.redactMessage(label + "=example")).isEqualTo(label + "=[MASKED]");
+        assertThat(redactor.redactValue(Map.of(label, "example"))).isEqualTo(Map.of(label, "[MASKED]"));
+        assertThat(redactor.redactAssertionValue(null, null, "step://read/body.session_id", "example", Map.of()))
+                .isEqualTo("[MASKED]");
+        assertThat(redactor.redactMessage("a".repeat(65537))).isEqualTo("[MASKED]");
+        assertThat(redactor.redactValue(java.util.Arrays.asList(null, "public"))).isEqualTo(java.util.Arrays.asList(null, "public"));
+    }
+
+    @Test
     void masksSerializedJsonValuesInNestedDiagnosticEnvelopes() throws Exception {
         var json = new com.fasterxml.jackson.databind.ObjectMapper();
         String inner = "{\"session\":\"sample-inside\",\"note\":\"公開\"}";

@@ -40,16 +40,33 @@ class DataPipelineAdapterTest {
     }
 
     @Test
-    void timesOutLongRunningCommandAndReturnsMinusOneExitCode() {
-        AdapterExecutionResult result = adapter.execute(request("sleep 2", 1));
-
-        assertThat(result.exitCode()).isEqualTo(-1);
-        assertThat(result.timeout()).isTrue();
-        assertThat(result.stdoutLog()).exists();
+    void acceptsTheHistoricalWrapperAsFixtureSyntax() throws Exception {
+        AdapterExecutionResult result = adapter.execute(request("/bin/sh -c 'echo ready; echo warning >&2'", 2));
+        assertThat(Files.readString(result.actualOutput())).isEqualTo("ready\n");
+        assertThat(Files.readString(result.stderrLog())).isEqualTo("warning\n");
     }
 
     @Test
-    void wrapsProcessStartIoFailure() {
+    void rejectsUnsupportedCommandsBeforeAnyFixtureOperationRuns() {
+        for (String command : List.of("./run-product.sh", "echo ready; date", "printf '%s' ready",
+                "echo ready > report", "sleep 301", "exit 256", "echo $HOME")) {
+            assertThatThrownBy(() -> adapter.execute(request(command, 2)))
+                    .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("cli_process");
+            assertThat(tempDir.resolve("run")).doesNotExist();
+        }
+    }
+
+    @Test
+    void timesOutWithOnlyTheOutputWrittenBeforeThePause() throws Exception {
+        AdapterExecutionResult result = adapter.execute(request("echo first; sleep 2; echo late", 1));
+
+        assertThat(result.exitCode()).isEqualTo(-1);
+        assertThat(result.timeout()).isTrue();
+        assertThat(Files.readString(result.actualOutput())).isEqualTo("first\n");
+    }
+
+    @Test
+    void wrapsMissingWorkingDirectoryFailure() {
         Path missingWorkingDirectory = tempDir.resolve("missing-workdir");
 
         assertThatThrownBy(() -> adapter.execute(new AdapterExecutionRequest(
@@ -66,7 +83,7 @@ class DataPipelineAdapterTest {
     }
 
     @Test
-    void preservesInterruptedStatusWhenProcessWaitIsInterrupted() {
+    void preservesInterruptedStatusWhenFixtureIsInterrupted() {
         Thread.currentThread().interrupt();
 
         assertThatThrownBy(() -> adapter.execute(request("sleep 1", 5)))

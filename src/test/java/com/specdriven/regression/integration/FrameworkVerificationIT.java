@@ -379,8 +379,17 @@ class FrameworkVerificationIT {
         Files.writeString(mapping, providerFamilyMapping());
         ProviderContractResolver resolver = new ProviderContractResolver();
 
+        var withDatabase = resolver.resolve(mapping, "request_response", List.of("api_payload"), List.of("relational_db"));
+        assertThat(withDatabase.ready()).isFalse();
+        assertThat(withDatabase.gaps()).singleElement().satisfies(gap -> {
+            assertThat(gap.fieldPath()).isEqualTo("release_units[2].provider_contracts.fixtures.relational_db.provider_type");
+            assertThat(gap.providerFamily()).isEqualTo("db_fixture");
+            assertThat(gap.runtimeStatus()).isEqualTo("blocked");
+            assertThat(gap.ownerAction()).contains("Legacy DB fixture execution is disabled", "v0.3");
+        });
+
         List<ProviderContractResolutionReport> reports = List.of(
-                resolver.resolve(mapping, "request_response", List.of("api_payload"), List.of("relational_db")),
+                resolver.resolve(mapping, "request_response", List.of("api_payload"), List.of()),
                 resolver.resolve(mapping, "message_bus", List.of("message_event"), List.of()),
                 resolver.resolve(mapping, "k8s_readiness", List.of(), List.of()),
                 resolver.resolve(mapping, "external_runner", List.of(), List.of()),
@@ -391,14 +400,14 @@ class FrameworkVerificationIT {
                         .flatMap(report -> report.resolvedContracts().stream())
                         .map(ResolvedProviderContract::providerFamily)
                         .toList())
-                .contains("request_response", "messaging", "db_fixture",
+                .contains("request_response", "messaging",
                         "deployment_readiness", "external_runner", "file_batch");
         assertThat(reports.stream()
                         .flatMap(report -> report.resolvedContracts().stream())
                         .map(ResolvedProviderContract::contractPath)
                         .toList())
                 .contains("release_units[1].provider_contracts.bindings.message_event",
-                        "release_units[2].provider_contracts.fixtures.relational_db");
+                        "release_units[0].provider_contracts.providers.request_response");
 
         Path missingMapping = tempDir.resolve("missing-provider-rp_ru_mapping.yaml");
         Files.writeString(missingMapping, """

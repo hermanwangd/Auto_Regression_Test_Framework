@@ -216,11 +216,8 @@ def test_ambient_package_and_plugin_neutralized(tmp_path, case):
 
 @pytest.mark.case_id("HR2-TIMEOUT-TREE-011")
 def test_timeout_kills_owned_child_and_grandchild(tmp_path, case):
-    grandchild = tmp_path / "grandchild.py"
-    child = tmp_path / "child.py"
-    grandchild.write_text("import os,signal,time\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\nprint(f'GRANDCHILD {os.getpid()}',flush=True)\ntime.sleep(60)\n")
-    child.write_text("import os,signal,subprocess,sys,time\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\ng=subprocess.Popen([sys.executable,'-u',sys.argv[1]])\nprint(f'CHILD {os.getpid()} GRANDCHILD {g.pid}',flush=True)\ntime.sleep(60)\n")
-    result = run_bounded_subprocess([sys.executable, "-u", str(child), str(grandchild)], cwd=tmp_path, stdout_path=artifact("timeout-tree.stdout.log"), stderr_path=artifact("timeout-tree.stderr.log"), timeout_seconds=0.3, term_grace_seconds=0.2, kill_grace_seconds=0.5)
+    command = [sys.executable, "-u", str(ROOT / "controls/process_tree_fixture.py"), "timeout"]
+    result = run_bounded_subprocess(command, cwd=tmp_path, stdout_path=artifact("timeout-tree.stdout.log"), stderr_path=artifact("timeout-tree.stderr.log"), timeout_seconds=0.3, term_grace_seconds=0.2, kill_grace_seconds=0.5)
     (artifact("timeout-tree-result.json")).write_text(json.dumps(result, indent=2) + "\n")
     logs = Path(result["stdout"]).read_text()
     case["observed"] = {"status": result["status"], "exit_code": result["exit_code"], "bounded_wall_time": result["duration_seconds"] < 5, "parent_reaped": result["cleanup"]["parent_reaped"], "no_live_owned_group_members": result["cleanup"]["live_members_after"] == [] and group_members(result["pgid"]) == [], "cleanup_pass": result["cleanup_pass"], "child_and_grandchild_started": "CHILD" in logs and "GRANDCHILD" in logs}
@@ -228,10 +225,8 @@ def test_timeout_kills_owned_child_and_grandchild(tmp_path, case):
 
 @pytest.mark.case_id("HR2-TIMEOUT-NORMAL-012")
 def test_normal_child_grandchild_exit(tmp_path, case):
-    grandchild = tmp_path / "grandchild.py"; child = tmp_path / "child.py"
-    grandchild.write_text("print('GRANDCHILD DONE',flush=True)\n")
-    child.write_text("import subprocess,sys\nprint('CHILD START',flush=True)\nr=subprocess.run([sys.executable,sys.argv[1]])\nprint('CHILD DONE',flush=True)\nraise SystemExit(r.returncode)\n")
-    result = run_bounded_subprocess([sys.executable, "-u", str(child), str(grandchild)], cwd=tmp_path, stdout_path=artifact("timeout-normal.stdout.log"), stderr_path=artifact("timeout-normal.stderr.log"), timeout_seconds=10)
+    command = [sys.executable, "-u", str(ROOT / "controls/process_tree_fixture.py"), "normal"]
+    result = run_bounded_subprocess(command, cwd=tmp_path, stdout_path=artifact("timeout-normal.stdout.log"), stderr_path=artifact("timeout-normal.stderr.log"), timeout_seconds=10)
     (artifact("timeout-normal-result.json")).write_text(json.dumps(result, indent=2) + "\n")
     case["observed"] = {"status": result["status"], "exit_code": result["exit_code"], "not_timed_out": not result["timed_out"], "cleanup_pass": result["cleanup_pass"], "no_owned_group_members": group_members(result["pgid"]) == [], "grandchild_completed": "GRANDCHILD DONE" in Path(result["stdout"]).read_text()}
 
