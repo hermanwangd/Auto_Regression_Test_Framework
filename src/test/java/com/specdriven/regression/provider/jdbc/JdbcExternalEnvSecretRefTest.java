@@ -90,7 +90,11 @@ class JdbcExternalEnvSecretRefTest {
         var driver = new java.sql.Driver() {
             public boolean acceptsURL(String requested) { return url.equals(requested); }
             public java.sql.Connection connect(String requested, java.util.Properties properties) throws java.sql.SQLException {
-                return acceptsURL(requested) ? java.sql.DriverManager.getConnection("jdbc:h2:mem:") : null;
+                if (!acceptsURL(requested)) return null;
+                var localCredentials = new java.util.Properties();
+                localCredentials.setProperty("user", "snapshot_fixture");
+                localCredentials.setProperty("password", java.util.UUID.randomUUID().toString());
+                return java.sql.DriverManager.getConnection("jdbc:h2:mem:", localCredentials);
             }
             public java.sql.DriverPropertyInfo[] getPropertyInfo(String u, java.util.Properties p) { return new java.sql.DriverPropertyInfo[0]; }
             public int getMajorVersion() { return 1; }
