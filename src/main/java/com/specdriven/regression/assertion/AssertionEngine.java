@@ -98,7 +98,7 @@ public class AssertionEngine {
         }
         String oracleReference = stringValue(assertion.get("oracle"));
         ResolvedOracle oracle = resolveOracle(packageRoot, testCase, oracleReference);
-        boolean passed = sameContent(packageRoot, oracle.expectedPath(), actualOutput);
+        boolean passed = sameContent(packageRoot, oracle.expectedPath(), runDir, actualOutput);
         String status = passed ? "passed" : "failed";
         String actualRef = runDir.relativize(actualOutput).toString();
         String diffSummary = passed
@@ -122,7 +122,7 @@ public class AssertionEngine {
             Path runDir) {
         String path = firstText(assertion, "path", "json_path", "actual");
         String expectedValue = expectedValue(assertion);
-        Object actualValue = valueAtPath(readYamlMap(actualOutput), path);
+        Object actualValue = valueAtPath(readRunYaml(runDir, actualOutput), path);
         boolean passed = expectedValue.equals(stringValue(actualValue));
         String status = passed ? "passed" : "failed";
         String actualRef = runDir.relativize(actualOutput).toString();
@@ -150,7 +150,7 @@ public class AssertionEngine {
             Path actualOutput,
             Path runDir) {
         String path = firstText(assertion, "path", "json_path", "actual");
-        boolean present = pathExists(readYamlMap(actualOutput), path);
+        boolean present = pathExists(readRunYaml(runDir, actualOutput), path);
         String status = present ? "failed" : "passed";
         String actualRef = runDir.relativize(actualOutput).toString();
         String expectedRef = "absent:" + path;
@@ -176,7 +176,7 @@ public class AssertionEngine {
         String path = firstText(assertion, "path", "json_path", "actual");
         String expectedText = expectedValue(assertion);
         String toleranceText = firstText(assertion, "tolerance", "epsilon");
-        Object actualValue = valueAtPath(readYamlMap(actualOutput), path);
+        Object actualValue = valueAtPath(readRunYaml(runDir, actualOutput), path);
         double expected = doubleValue(expectedText, 0);
         double tolerance = doubleValue(toleranceText, 0);
         double actual = doubleValue(stringValue(actualValue), Double.NaN);
@@ -208,7 +208,7 @@ public class AssertionEngine {
             Path actualOutput,
             Path runDir) {
         String path = firstText(assertion, "path", "json_path", "actual");
-        Object actualRoot = readYamlMap(actualOutput);
+        Object actualRoot = readRunYaml(runDir, actualOutput);
         String source = "";
         Object actualValue;
         if (path.isBlank()) {
@@ -262,7 +262,7 @@ public class AssertionEngine {
         Map<?, ?> oracle = oracleDefinition(testCase, oracleName);
         String schemaRef = firstText(oracle, "ref", "schema_ref");
         Map<String, Object> schema = readYamlMap(packageRoot, schemaRef, "schema assertion");
-        Object actualRoot = readYamlMap(actualOutput);
+        Object actualRoot = readRunYaml(runDir, actualOutput);
         List<Map<?, ?>> rules = ruleMaps(schema.get("fields"));
         List<String> failures = new ArrayList<>();
         for (Map<?, ?> rule : rules) {
@@ -296,7 +296,7 @@ public class AssertionEngine {
         Map<?, ?> oracle = oracleDefinition(testCase, oracleName);
         String contractRef = firstText(oracle, "ref", "contract_ref");
         Map<String, Object> contract = readYamlMap(packageRoot, contractRef, "contract assertion");
-        Object actualRoot = readYamlMap(actualOutput);
+        Object actualRoot = readRunYaml(runDir, actualOutput);
         List<Map<?, ?>> expectations = contractExpectations(contract);
         List<String> failures = new ArrayList<>();
         for (Map<?, ?> expectation : expectations) {
@@ -406,10 +406,11 @@ public class AssertionEngine {
         return oracleReference;
     }
 
-    private boolean sameContent(Path root, Path expected, Path actual) {
+    private boolean sameContent(Path root, Path expected, Path runDir, Path actual) {
         try {
             return Files.exists(expected) && Files.exists(actual)
-                    && SuiteAssetReader.read(root, expected.toAbsolutePath().toString(), "Oracle output must stay inside the RP package.").equals(Files.readString(actual));
+                    && SuiteAssetReader.read(root, expected.toAbsolutePath().toString(), "Oracle output must stay inside the RP package.")
+                            .equals(readRunFile(runDir, actual));
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to compare assertion files.", e);
         }
@@ -429,19 +430,21 @@ public class AssertionEngine {
         return assertionMaps;
     }
 
+    private String readRunFile(Path runDir, Path path) throws IOException {
+        return SuiteAssetReader.read(runDir, path.toAbsolutePath().toString(), "Assertion output must stay inside the run directory.");
+    }
+
     @SuppressWarnings("unchecked")
-    private Map<String, Object> readYamlMap(Path path) {
+    private Map<String, Object> readRunYaml(Path runDir, Path path) {
         try {
-            Object loaded = ProviderDataYaml.create().load(Files.readString(path));
-            if (loaded instanceof Map<?, ?> map) {
-                return (Map<String, Object>) map;
-            }
-            return Map.of();
+            Object loaded = ProviderDataYaml.create().load(readRunFile(runDir, path));
+            return loaded instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read assertion actual output.", e);
         }
     }
 
+    @SuppressWarnings("unchecked")
     private Map<String, Object> readYamlMap(Path packageRoot, String ref, String context) {
         try {
             Object document = ProviderDataYaml.create().load(SuiteAssetReader.read(packageRoot, ref,
@@ -627,7 +630,7 @@ public class AssertionEngine {
         if (!Files.exists(evidencePath)) {
             return "";
         }
-        Map<String, Object> evidence = readYamlMap(evidencePath);
+        Map<String, Object> evidence = readRunYaml(runDir, evidencePath);
         return firstText(evidence, "http_status", "status_code", "response_status");
     }
 

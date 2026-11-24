@@ -631,6 +631,20 @@ class AssertionEngineTest {
     }
 
     @Test
+    void actualOutputMustResolveWithinTheRunDirectory() throws Exception {
+        Path run = Files.createDirectory(tempDir.resolve("run"));
+        Path outside = Files.writeString(tempDir.resolve("elsewhere.yaml"), "status: routine\n");
+        Path alias = Files.createSymbolicLink(run.resolve("actual.yaml"), outside);
+        Map<String, Object> testCase = Map.of("assertions", List.of(
+                Map.of("type", "json_path_equals", "path", "$.status", "expected_value", "routine")));
+        for (Path actual : List.of(outside, alias)) {
+            assertThatThrownBy(() -> new AssertionEngine().evaluateFileDiff(tempDir, testCase, actual, run))
+                    .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("inside the run directory");
+        }
+        assertThat(run.resolve("assertions.yaml")).doesNotExist();
+    }
+
+    @Test
     void wrapsMissingActualOutputAndAssertionEvidenceWriteFailures() throws Exception {
         Path runDir = tempDir.resolve("evidence/runs/RUN-IO-FAILURES");
         Path missingActualOutput = runDir.resolve("actual/missing.yaml");
@@ -649,9 +663,9 @@ class AssertionEngineTest {
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("Failed to read assertion actual output");
 
-        Path runDirAsFile = tempDir.resolve("evidence-file");
-        Path actualOutput = tempDir.resolve("actual.yaml");
-        Files.writeString(runDirAsFile, "not a directory\n");
+        Path unwritableEvidence = tempDir.resolve("blocked-evidence");
+        Files.createDirectories(unwritableEvidence.resolve("assertions.yaml"));
+        Path actualOutput = unwritableEvidence.resolve("actual.yaml");
         Files.writeString(actualOutput, "status: OK\n");
 
         assertThatThrownBy(() -> new AssertionEngine().evaluateFileDiff(
@@ -664,7 +678,7 @@ class AssertionEngineTest {
                                 "path", "$.status",
                                 "expected_value", "OK"))),
                 actualOutput,
-                runDirAsFile))
+                unwritableEvidence))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("Failed to write assertion evidence");
     }
