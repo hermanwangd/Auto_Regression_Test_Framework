@@ -10,6 +10,23 @@ import org.junit.jupiter.api.Test;
 
 class V03OutputRedactorTest {
     @Test
+    void comparesUnicodeLabelsAcrossTheWholeAssignmentAndPreservesPublicText() {
+        var redactor = new V03OutputRedactor();
+        String label = "Straße " + "\u200b".repeat(40) + "Owner";
+        assertThat(redactor.redactMessage("trace=ok " + label + "=sample", Set.of("STRASSE OWNER")))
+                .isEqualTo("trace=ok " + label + "=[MASKED]");
+        assertThat(redactor.redactEvidenceValue(Map.of("Straße", "sample", "trace", "ok"), Set.of("STRASSE")))
+                .isEqualTo(Map.of("Straße", "[MASKED]", "trace", "ok"));
+    }
+
+    @Test
+    void masksTheWholeDiagnosticWhenOverlappingCompoundLabelsExhaustTheScanBudget() {
+        var redactor = new V03OutputRedactor();
+        String message = "public:".repeat(300) + "review:id=sample";
+        assertThat(redactor.redactMessage(message, Set.of("review:id"))).isEqualTo("[MASKED]");
+    }
+
+    @Test
     void masksFormattedLabelsAndCredentialSubpathsAndBoundsOversizedMessages() {
         var redactor = new V03OutputRedactor();
         String label = "Ｓｅｓ\u200bsｉｏｎ";

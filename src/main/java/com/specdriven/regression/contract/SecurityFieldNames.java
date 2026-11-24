@@ -1,8 +1,7 @@
 package com.specdriven.regression.contract;
 
-import java.text.Normalizer;
+import com.ibm.icu.text.Normalizer2;
 import java.util.List;
-import java.util.Locale;
 import java.util.regex.Pattern;
 
 /** Comparison form for credential labels. Keep the original spelling in evidence. */
@@ -11,12 +10,12 @@ public final class SecurityFieldNames {
             "api_key", "apikey", "credential", "private_key", "privatekey");
 
     private static final Pattern FORMAT = Pattern.compile("\\p{Cf}");
+    private static final Normalizer2 IDENTIFIER_FOLD = Normalizer2.getNFKCCasefoldInstance();
 
     private SecurityFieldNames() { }
 
     public static String canonical(String name) {
-        String normalized = Normalizer.normalize(name, Normalizer.Form.NFKC);
-        return FORMAT.matcher(normalized).replaceAll("").toLowerCase(Locale.ROOT).replace('-', '_');
+        return IDENTIFIER_FOLD.normalize(FORMAT.matcher(name).replaceAll("")).replace('-', '_');
     }
 
     public static boolean isCredential(String name) {

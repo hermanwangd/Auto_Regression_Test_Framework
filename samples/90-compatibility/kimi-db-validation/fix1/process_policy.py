@@ -45,7 +45,9 @@ def wait_bounded(process: subprocess.Popen, seconds: float) -> tuple[bool, int |
         return False, None
 
 
-def terminate_owned_group(pgid: int, term_grace: float, kill_grace: float) -> dict:
+def terminate_owned_group(
+    pgid: int, term_grace: float, kill_grace: float, *, parent: subprocess.Popen | None = None,
+) -> dict:
     """Only signals this run's PGID; every wait and poll has a hard deadline."""
     started = time.monotonic()
     before = group_members(pgid)
@@ -69,20 +71,26 @@ def terminate_owned_group(pgid: int, term_grace: float, kill_grace: float) -> di
     deadline = time.monotonic() + kill_grace
     while time.monotonic() < deadline and live_members(pgid):
         time.sleep(min(0.02, max(0, deadline - time.monotonic())))
+    parent_reaped = True
+    if parent is not None:
+        parent_reaped, _ = wait_bounded(parent, kill_grace)
     remaining = group_members(pgid)
     live_remaining = [item for item in remaining if item["state"] != "Z"]
-    return {
+    outcome = {
         "pgid": pgid,
         "members_before": before,
         "members_after": remaining,
         "live_members_after": live_remaining,
-        "cleanup_pass": not live_remaining,
+        "cleanup_pass": parent_reaped and not live_remaining,
         "term_error": term_error,
         "kill_error": kill_error,
         "cleanup_duration_seconds": round(time.monotonic() - started, 6),
         "term_grace_seconds": term_grace,
         "kill_grace_seconds": kill_grace,
     }
+    if parent is not None:
+        outcome["parent_reaped"] = parent_reaped
+    return outcome
 
 
 def run_bounded_subprocess(
@@ -127,13 +135,10 @@ def run_bounded_subprocess(
         if not completed:
             result["timed_out"] = True
             result["error"] = f"subprocess exceeded {timeout_seconds} seconds"
-            cleanup = terminate_owned_group(process.pid, term_grace_seconds, kill_grace_seconds)
-            reaped, observed_exit = wait_bounded(process, kill_grace_seconds)
-            cleanup["parent_reaped"] = reaped
-            cleanup["cleanup_pass"] = cleanup["cleanup_pass"] and reaped
+            cleanup = terminate_owned_group(process.pid, term_grace_seconds, kill_grace_seconds, parent=process)
             result.update({
                 "status": "timeout", "exit_code": 124,
-                "parent_exit_after_kill": observed_exit,
+                "parent_exit_after_kill": process.returncode,
                 "cleanup": cleanup, "cleanup_pass": cleanup["cleanup_pass"],
                 "ended_at": utcnow(),
             })

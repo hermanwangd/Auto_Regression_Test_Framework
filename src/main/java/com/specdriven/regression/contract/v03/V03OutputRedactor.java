@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.specdriven.regression.contract.SecurityFieldNames;
 import java.io.IOException;
-import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -146,15 +145,15 @@ public final class V03OutputRedactor {
         StringBuilder masked = new StringBuilder();
         int copied = 0;
         int lastSeparator = 0;
-        // Bound overlapping quoted-label scans, including escaped nested JSON envelopes.
-        long lookaheadBudget = 32L * message.length();
+        // Both quoted labels and compound names containing separators can overlap.
+        long remainingScan = 32L * message.length();
         while (labels.find()) {
             String quoted = null;
             int after = labels.end();
             if (labels.group("quote") != null) {
                 int end = endOfLabel(message, after, message.charAt(labels.start()));
-                lookaheadBudget -= end - after;
-                if (lookaheadBudget < 0) return marker;
+                remainingScan -= end - after;
+                if (remainingScan < 0) return marker;
                 if (end == message.length() || message.charAt(end) != message.charAt(labels.start())
                         || !assignment.region(end + 1, message.length()).lookingAt()) continue;
                 after = end + 1;
@@ -164,8 +163,13 @@ public final class V03OutputRedactor {
             Span value = null;
             String replacement = marker;
             if (labels.group("separator") != null) {
-                if (fields.matchesUnquotedSuffix(message, copied, lastSeparator, labels.start())) {
-                    value = assignmentValue(message, matchEnd(SPACE, message, after), false);
+                if (!fields.compound().isEmpty()) {
+                    int start = fields.containsSeparator() ? copied : Math.max(lastSeparator, copied);
+                    remainingScan -= labels.start() - start;
+                    if (remainingScan < 0) return marker;
+                    if (fields.matchesUnquotedSuffix(message, start, labels.start())) {
+                        value = assignmentValue(message, matchEnd(SPACE, message, after), false);
+                    }
                 }
                 lastSeparator = after;
             } else if (assignment.region(after, message.length()).lookingAt()
@@ -386,25 +390,19 @@ public final class V03OutputRedactor {
         return redactEvidenceNested(value, ContractFields.of(contractKeys), "");
     }
 
-    private record ContractFields(Set<String> paths, List<String> compound, int lookbehind, boolean containsSeparator) {
-        private static final ContractFields NONE = new ContractFields(Set.of(), List.of(), 0, false);
+    private record ContractFields(Set<String> paths, List<String> compound, boolean containsSeparator) {
+        private static final ContractFields NONE = new ContractFields(Set.of(), List.of(), false);
 
         static ContractFields of(Set<String> keys) {
             if (keys.isEmpty()) return NONE;
             Set<String> paths = keys.stream().map(SecurityFieldNames::canonical).collect(Collectors.toSet());
             List<String> compound = paths.stream().filter(k -> !k.isEmpty() && !SINGLE_WORD.matcher(k).matches()).toList();
-            // Each original code point contributes at least one decomposed code point and takes at most two UTF-16 units.
-            int lookbehind = compound.stream().map(k -> Normalizer.normalize(k, Normalizer.Form.NFKD))
-                    .mapToInt(k -> 2 * k.length()).max().orElse(0);
             boolean containsSeparator = compound.stream().anyMatch(k -> k.indexOf(':') >= 0 || k.indexOf('=') >= 0);
-            return new ContractFields(paths, compound, lookbehind, containsSeparator);
+            return new ContractFields(paths, compound, containsSeparator);
         }
 
-        boolean matchesUnquotedSuffix(String text, int copied, int previousSeparator, int end) {
-            if (compound.isEmpty()) return false;
-            int lowerBound = containsSeparator ? copied : Math.max(previousSeparator, copied);
-            while (end > lowerBound && isLabelSpacing(text.charAt(end - 1))) end--;
-            int start = Math.max(lowerBound, end - lookbehind);
+        boolean matchesUnquotedSuffix(String text, int start, int end) {
+            while (end > start && isLabelSpacing(text.charAt(end - 1))) end--;
             String candidate = SecurityFieldNames.canonical(text.substring(start, end));
             return compound.stream().anyMatch(candidate::endsWith);
         }
