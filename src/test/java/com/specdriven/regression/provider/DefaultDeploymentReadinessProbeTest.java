@@ -249,9 +249,10 @@ class DefaultDeploymentReadinessProbeTest {
                 esac
                 """);
         Path log = tempDir.resolve("charset-check.log");
-        Process process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+        Process process = new ProcessBuilder("./java",
                 "-Xmx96m", "-Dfile.encoding=US-ASCII", "-cp", System.getProperty("java.class.path"),
                 AsciiProbeCheck.class.getName(), script.toString())
+                .directory(Path.of(System.getProperty("java.home"), "bin").toFile())
                 .redirectErrorStream(true).redirectOutput(log.toFile()).start();
         try {
             assertThat(process.waitFor(30, TimeUnit.SECONDS)).isTrue();
