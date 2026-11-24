@@ -1072,7 +1072,7 @@ class ProviderCapabilityRegistryTest {
         assertThat(fileFixture.ready()).isTrue();
         assertThat(requestBody.ready()).isTrue();
         assertThat(eventPayload.ready()).isTrue();
-        assertThat(relationalDb.ready()).isTrue();
+        assertThat(relationalDb.ready()).isFalse();
     }
 
     @Test
@@ -1220,7 +1220,7 @@ class ProviderCapabilityRegistryTest {
         assertThat(messagingByName.providerFamily()).isEqualTo("messaging");
         assertThat(messagingByName.ready()).isTrue();
         assertThat(jdbcFixture.providerFamily()).isEqualTo("db_fixture");
-        assertThat(jdbcFixture.ready()).isTrue();
+        assertThat(jdbcFixture.ready()).isFalse();
         assertThat(readinessByName.providerFamily()).isEqualTo("deployment_readiness");
         assertThat(readinessByName.ready()).isTrue();
         assertThat(externalRunnerByType.providerFamily()).isEqualTo("external_runner");
@@ -1346,6 +1346,7 @@ class ProviderCapabilityRegistryTest {
         assertThat(validation.ready()).isFalse();
         assertThat(validation.violations()).extracting(ProviderCapabilityRegistry.ProviderContractViolation::pathSuffix)
                 .containsExactlyInAnyOrder(
+                        ".provider_type",
                         ".setup_actions.parent_only.sql_ref",
                         ".setup_actions.nested_parent.sql_ref",
                         ".setup_actions.trailing_parent.sql_ref",

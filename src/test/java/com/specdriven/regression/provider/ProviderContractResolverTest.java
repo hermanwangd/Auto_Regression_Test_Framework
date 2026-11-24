@@ -238,7 +238,11 @@ class ProviderContractResolverTest {
                 List.of("api_payload", "message_event"),
                 List.of("relational_db"));
 
-        assertThat(report.ready()).isTrue();
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).anySatisfy(gap -> {
+            assertThat(gap.providerName()).isEqualTo("relational_db");
+            assertThat(gap.ownerAction()).contains(DatabaseFixtureProvider.RETIRED);
+        });
         assertThat(report.resolvedContracts())
                 .anySatisfy(contract -> {
                     assertThat(contract.providerName()).isEqualTo("request_response");
@@ -255,14 +259,6 @@ class ProviderContractResolverTest {
                     assertThat(contract.capability()).isEqualTo("message_event");
                     assertThat(contract.contractPath())
                             .isEqualTo("release_units[1].provider_contracts.bindings.message_event");
-                })
-                .anySatisfy(contract -> {
-                    assertThat(contract.providerName()).isEqualTo("relational_db");
-                    assertThat(contract.providerFamily()).isEqualTo("db_fixture");
-                    assertThat(contract.affectedRu()).isEqualTo("RU-payment-events");
-                    assertThat(contract.capability()).isEqualTo("relational_db");
-                    assertThat(contract.contractPath())
-                            .isEqualTo("release_units[1].provider_contracts.fixtures.relational_db");
                 });
     }
 
@@ -375,9 +371,10 @@ class ProviderContractResolverTest {
         assertThat(request.ready()).isTrue();
         assertThat(request.resolvedContracts()).extracting(ResolvedProviderContract::providerFamily)
                 .contains("request_response");
-        assertThat(messaging.ready()).isTrue();
+        assertThat(messaging.ready()).isFalse();
+        assertThat(messaging.gaps()).anySatisfy(gap -> assertThat(gap.ownerAction()).contains(DatabaseFixtureProvider.RETIRED));
         assertThat(messaging.resolvedContracts()).extracting(ResolvedProviderContract::providerFamily)
-                .contains("messaging", "db_fixture");
+                .contains("messaging").doesNotContain("db_fixture");
         assertThat(readiness.ready()).isTrue();
         assertThat(readiness.resolvedContracts()).singleElement()
                 .extracting(ResolvedProviderContract::providerFamily)
@@ -830,8 +827,11 @@ class ProviderContractResolverTest {
                 List.of("db_seed"),
                 List.of("relational_db"));
 
-        assertThat(report.ready()).isTrue();
-        assertThat(report.gaps()).isEmpty();
+        assertThat(report.ready()).isFalse();
+        assertThat(report.gaps()).anySatisfy(gap -> {
+            assertThat(gap.providerName()).isEqualTo("relational_db");
+            assertThat(gap.ownerAction()).contains(DatabaseFixtureProvider.RETIRED);
+        });
         assertThat(report.resolvedContracts())
                 .anySatisfy(contract -> {
                     assertThat(contract.contractType()).isEqualTo("provider");
@@ -845,11 +845,6 @@ class ProviderContractResolverTest {
                     assertThat(contract.contractType()).isEqualTo("binding");
                     assertThat(contract.providerName()).isEqualTo("db_seed");
                     assertThat(contract.providerFamily()).isEqualTo("file_batch");
-                })
-                .anySatisfy(contract -> {
-                    assertThat(contract.contractType()).isEqualTo("fixture");
-                    assertThat(contract.providerName()).isEqualTo("relational_db");
-                    assertThat(contract.providerFamily()).isEqualTo("db_fixture");
                 });
         assertThat(resolver.generatedAdapterContract(
                 tempDir,

@@ -22,6 +22,11 @@ The supported runtime commands are `validate`, `run`, `report`, `validate-eviden
 
 ## Provider Support
 
+Legacy RP database fixture setup, verification, cleanup and the `db_row_matches` assertion are retired.
+The runner also blocks v0.2 suites that select JDBC, including mixed suites and groups containing a JDBC child.
+Archived v0.2 manifests remain available for static validation and dry-run.
+Use the [v0.3 JDBC suite](samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml) for database cases.
+
 Provider support is tracked by provider type and `support_status`, not by server ownership. See [provider_support_matrix.md](docs/09-operations/provider_support_matrix.md).
 
 ## Usage Kit vs Source

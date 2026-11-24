@@ -1,6 +1,7 @@
 package com.specdriven.regression.oracle;
 
 import com.specdriven.regression.dsl.DslTestCaseNormalizer;
+import com.specdriven.regression.provider.DatabaseFixtureProvider;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -27,6 +28,9 @@ public class OracleReadinessService {
         String testCaseId = stringValue(testCase.get("test_case_id"));
         String acId = stringValue(testCase.get("ac_id"));
         List<OracleReadinessGap> gaps = new ArrayList<>();
+        if (DatabaseFixtureProvider.hasRowAssertion(testCase)) {
+            gaps.add(new OracleReadinessGap(testCaseId, acId, "assertions", "db_row_matches", DatabaseFixtureProvider.RETIRED));
+        }
         Object oracles = testCase.get("oracles");
         if (oracles instanceof Map<?, ?> oracleMap) {
             for (Map.Entry<?, ?> entry : oracleMap.entrySet()) {

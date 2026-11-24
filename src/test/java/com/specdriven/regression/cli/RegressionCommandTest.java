@@ -11,7 +11,6 @@ import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.DriverManager;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -2782,7 +2781,7 @@ class RegressionCommandTest {
     }
 
     @Test
-    void runExecutesDbFixtureSetupAndCleanupWithEvidence() throws Exception {
+    void runBlocksRetiredDbFixturesBeforeSetup() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-DB";
         String acId = rpId + "-AC-001";
@@ -2802,60 +2801,12 @@ class RegressionCommandTest {
         int exit = command.execute(new String[] {
                 "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral"},
                 print(output), print(new ByteArrayOutputStream()));
-
-        Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
-        String runEvidence = Files.readString(runDir.resolve("run.yaml"));
-        assertThat(exit).isZero();
-        assertThat(Files.readString(runDir.resolve("fixture_setup.yaml")))
-                .contains("provider: relational_db")
-                .contains("action: seed_orders")
-                .contains("isolation_key: test_run_id")
-                .contains("row_count: 1");
-        assertThat(Files.readString(runDir.resolve("cleanup.yaml")))
-                .contains("provider: relational_db")
-                .contains("action: cleanup_orders")
-                .contains("isolation_key: test_run_id")
-                .contains("status: passed");
-        assertThat(countOrders(jdbcUrl)).isZero();
-        assertThat(runEvidence)
-                .contains("status: passed")
-                .contains("provider_contract_kind: db_fixture")
-                .contains("contract_path: release_units[0].provider_contracts.fixtures.relational_db")
-                .contains("cleanup_result: cleanup.yaml");
-    }
-
-    @Test
-    void runCleansDbFixtureWhenAssertionFails() throws Exception {
-        RegressionCommand command = command();
-        String rpId = "RP-DB-FAIL";
-        String acId = rpId + "-AC-001";
-        String jdbcUrl = "jdbc:h2:mem:rp_db_fixture_fail_" + System.nanoTime() + ";DB_CLOSE_DELAY=-1";
-        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
-                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
-        command.execute(new String[] {
-                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_db"},
-                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
-        writeReadyAcceptanceCriteria(rpId, acId);
-        writeDbFixtureMapping(rpId, jdbcUrl);
-        writeDbFixtureSql(rpId);
-        writeApprovedExpectedResult(rpId, acId, "unexpected-output\n");
-        writeApprovedDbFixtureTestCase(rpId, acId);
-
-        int exit = command.execute(new String[] {
-                "run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral"},
-                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
-
-        Path runDir = tempDir.resolve("docs/08-release/release-packages/" + rpId + "/evidence/runs/RUN-001");
-        assertThat(exit).isEqualTo(1);
-        assertThat(Files.readString(runDir.resolve("run.yaml")))
-                .contains("status: failed")
-                .contains("assertion_status: failed")
-                .contains("cleanup_result: cleanup.yaml");
-        assertThat(Files.readString(runDir.resolve("cleanup.yaml")))
-                .contains("provider: relational_db")
-                .contains("action: cleanup_orders")
-                .contains("status: passed");
-        assertThat(countOrders(jdbcUrl)).isZero();
+        assertThat(exit).isOne();
+        assertThat(output.toString()).contains("Legacy DB fixture execution is disabled");
+        assertThat(output.toString()).contains("provider_runtime_started: false", "run_status: blocked");
+        Path run = tempDir.resolve("docs/08-release/release-packages").resolve(rpId).resolve("evidence/runs/RUN-001");
+        assertThat(run.resolve("fixture_setup.yaml")).doesNotExist();
+        assertThat(run.resolve("cleanup.yaml")).doesNotExist();
     }
 
     @Test
@@ -3853,7 +3804,7 @@ class RegressionCommandTest {
     }
 
     @Test
-    void runWritesCleanupEvidenceForMutatingFixtureWithCleanupPolicy() throws Exception {
+    void runBlocksRetiredDbFixtureWithCleanupPolicy() throws Exception {
         RegressionCommand command = command();
         command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
                 print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
@@ -3866,16 +3817,16 @@ class RegressionCommandTest {
         writeApprovedExpectedResult("RP-001", "RP-001-AC-001");
         writeApprovedTestCaseWithCleanupFixture("RP-001");
 
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
         int exit = command.execute(new String[] {
                 "run", "--root", tempDir.toString(), "--rp-id", "RP-001", "--env", "ci_ephemeral"},
-                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
-
-        Path runDir = tempDir.resolve("docs/08-release/release-packages/RP-001/evidence/runs/RUN-001");
-        assertThat(exit).isZero();
-        assertThat(Files.readString(runDir.resolve("run.yaml"))).contains("cleanup_result: cleanup.yaml");
-        assertThat(Files.readString(runDir.resolve("cleanup.yaml"))).contains("status: passed");
-        assertThat(Files.readString(runDir.resolve("cleanup.yaml"))).contains("provider: relational_db");
-        assertThat(Files.readString(runDir.resolve("cleanup.yaml"))).contains("action: cleanup_orders");
+                print(output), print(new ByteArrayOutputStream()));
+        assertThat(exit).isOne();
+        assertThat(output.toString()).contains("Legacy DB fixture execution is disabled");
+        assertThat(output.toString()).contains("provider_runtime_started: false", "run_status: blocked");
+        Path run = tempDir.resolve("docs/08-release/release-packages").resolve("RP-001").resolve("evidence/runs/RUN-001");
+        assertThat(run.resolve("fixture_setup.yaml")).doesNotExist();
+        assertThat(run.resolve("cleanup.yaml")).doesNotExist();
     }
 
     @Test
@@ -7000,14 +6951,5 @@ class RegressionCommandTest {
                 runtime:
                   execution_mode: ci_ephemeral
                 """.formatted(rpId, rpId, rpId, rpId));
-    }
-
-    private int countOrders(String jdbcUrl) throws Exception {
-        try (var connection = DriverManager.getConnection(jdbcUrl);
-                var statement = connection.createStatement();
-                var result = statement.executeQuery("SELECT COUNT(*) FROM orders")) {
-            result.next();
-            return result.getInt(1);
-        }
     }
 }

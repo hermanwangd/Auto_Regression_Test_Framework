@@ -1,18 +1,13 @@
 package com.specdriven.regression.assertion;
 
-import com.specdriven.regression.provider.jdbc.SqlSource;
 import com.specdriven.regression.dsl.DslTestCaseNormalizer;
 import com.specdriven.regression.oracle.OracleResolver;
 import com.specdriven.regression.oracle.ResolvedOracle;
+import com.specdriven.regression.provider.DatabaseFixtureProvider;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,16 +33,10 @@ public class AssertionEngine {
             Map<String, Object> testCase,
             Path actualOutput,
             Path runDir) {
-        return evaluateFileDiff(packageRoot, testCase, actualOutput, runDir, Map.of());
-    }
-
-    public AssertionEvaluation evaluateFileDiff(
-            Path packageRoot,
-            Map<String, Object> testCase,
-            Path actualOutput,
-            Path runDir,
-            Map<String, Map<String, Object>> dbFixtureContracts) {
         testCase = dslTestCaseNormalizer.normalize(testCase);
+        if (DatabaseFixtureProvider.hasRowAssertion(testCase)) {
+            throw new UnsupportedOperationException(DatabaseFixtureProvider.RETIRED);
+        }
         List<AssertionDetail> details = new ArrayList<>();
         for (Map<?, ?> assertion : assertions(testCase)) {
             details.add(evaluateAssertion(
@@ -55,8 +44,7 @@ public class AssertionEngine {
                     testCase,
                     assertion,
                     actualOutput,
-                    runDir,
-                    dbFixtureContracts));
+                    runDir));
         }
         if (details.isEmpty()) {
             details.add(evaluateAssertion(
@@ -64,12 +52,18 @@ public class AssertionEngine {
                     testCase,
                     Map.of(),
                     actualOutput,
-                    runDir,
-                    dbFixtureContracts));
+                    runDir));
         }
         Path evidencePath = runDir.resolve("assertions.yaml");
         writeEvidence(evidencePath, testCase, details);
         return aggregate(details, evidencePath);
+    }
+
+    /** Retains the legacy Java signature for existing callers. */
+    public AssertionEvaluation evaluateFileDiff(
+            Path packageRoot, Map<String, Object> testCase, Path actualOutput, Path runDir,
+            Map<String, Map<String, Object>> dbFixtureContracts) {
+        return evaluateFileDiff(packageRoot, testCase, actualOutput, runDir);
     }
 
     private AssertionDetail evaluateAssertion(
@@ -77,8 +71,7 @@ public class AssertionEngine {
             Map<String, Object> testCase,
             Map<?, ?> assertion,
             Path actualOutput,
-            Path runDir,
-            Map<String, Map<String, Object>> dbFixtureContracts) {
+            Path runDir) {
         String assertionType = stringValue(assertion.get("type"));
         if ("json_path_equals".equals(assertionType)) {
             return evaluateJsonPathEquals(testCase, assertion, actualOutput, runDir);
@@ -98,9 +91,6 @@ public class AssertionEngine {
         if ("contract_matches".equals(assertionType)) {
             return evaluateContractMatches(packageRoot, testCase, assertion, actualOutput, runDir);
         }
-        if ("db_row_matches".equals(assertionType)) {
-            return evaluateDbRowMatches(packageRoot, testCase, assertion, runDir, dbFixtureContracts);
-        }
         String oracleReference = stringValue(assertion.get("oracle"));
         ResolvedOracle oracle = resolveOracle(packageRoot, testCase, oracleReference);
         boolean passed = sameContent(oracle.expectedPath(), actualOutput);
@@ -117,40 +107,6 @@ public class AssertionEngine {
                 oracle.expectedRef(),
                 actualRef,
                 assertionType,
-                diffSummary);
-    }
-
-    private AssertionDetail evaluateDbRowMatches(
-            Path packageRoot,
-            Map<String, Object> testCase,
-            Map<?, ?> assertion,
-            Path runDir,
-            Map<String, Map<String, Object>> dbFixtureContracts) {
-        String oracleReference = stringValue(assertion.get("oracle"));
-        String oracleName = oracleName(oracleReference);
-        Map<?, ?> oracle = oracleDefinition(testCase, oracleName);
-        String provider = firstText(oracle, "provider", "fixture_provider");
-        Map<String, Object> contract = dbFixtureContracts.getOrDefault(provider, Map.of());
-        String queryName = firstText(oracle, "query", "query_name");
-        String queryRef = firstText(oracle, "ref", "sql_ref");
-        int expectedCount = intValue(firstText(oracle, "expected_count", "row_count"), 0);
-        int actualCount = executeCountQuery(packageRoot, contract, queryRef);
-        boolean passed = actualCount == expectedCount;
-        String status = passed ? "passed" : "failed";
-        String expectedRef = queryRef + " expected_count=" + expectedCount;
-        String actualRef = "db:" + provider + "/" + queryName;
-        String diffSummary = passed
-                ? "query `%s` returned expected row_count `%s`".formatted(queryName, expectedCount)
-                : "query `%s` expected row_count `%s` but was `%s`"
-                        .formatted(queryName, expectedCount, actualCount);
-        return new AssertionDetail(
-                passed,
-                status,
-                "db_row_matches",
-                oracleReference,
-                expectedRef,
-                actualRef,
-                "db_row_matches",
                 diffSummary);
     }
 
@@ -429,29 +385,6 @@ public class AssertionEngine {
         return Map.of();
     }
 
-    private int executeCountQuery(
-            Path packageRoot,
-            Map<String, Object> contract,
-            String queryRef) {
-        String connectionRef = stringValue(contract.get("connection_ref"));
-        if (connectionRef.isBlank()) {
-            throw new IllegalArgumentException("DB row assertion requires fixture provider connection_ref.");
-        }
-        try (Connection connection = DriverManager.getConnection(connectionRef);
-                Statement statement = connection.createStatement();
-                ResultSet resultSet = statement.executeQuery(readSqlRef(packageRoot, queryRef))) {
-            return resultSet.next() ? resultSet.getInt(1) : 0;
-        } catch (SQLException e) {
-            throw new IllegalStateException("Failed to execute DB row assertion query.", e);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read DB row assertion query.", e);
-        }
-    }
-
-    private String readSqlRef(Path packageRoot, String sqlRef) throws IOException {
-        return SqlSource.read(packageRoot, sqlRef, "DB row assertion sql_ref must stay under the RP package: " + sqlRef);
-    }
-
     private Path packageRef(Path packageRoot, String ref, String context) {
         Path normalizedRoot = packageRoot.toAbsolutePath().normalize();
         Path refPath = normalizedRoot.resolve(ref).normalize();
@@ -701,13 +634,6 @@ public class AssertionEngine {
             }
         }
         return "";
-    }
-
-    private int intValue(String value, int fallback) {
-        if (value == null || value.isBlank()) {
-            return fallback;
-        }
-        return Integer.parseInt(value);
     }
 
     private double doubleValue(String value, double fallback) {

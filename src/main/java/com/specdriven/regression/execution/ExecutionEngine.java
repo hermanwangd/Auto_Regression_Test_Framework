@@ -23,7 +23,6 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -170,56 +169,43 @@ public class ExecutionEngine {
                 adapterName,
                 bindingReport.resolvedBindings().stream().map(ResolvedBinding::bindingType).toList(),
                 fixtureProviders(testCase));
+        databaseFixtureProvider.checkExecution(testCase, providerReport);
         ResolvedProviderContract adapterProviderContract = adapterProviderContract(providerReport);
         Map<String, Object> contract = providerContractResolver.generatedAdapterContract(
                 packageRoot,
                 requestedProfile,
                 targetRuId,
                 adapterName);
-        Map<String, Map<String, Object>> dbFixtureContracts = dbFixtureContracts(
-                packageRoot,
-                requestedProfile,
-                targetRuId,
-                adapterName,
-                providerReport);
         Path runDir = packageRoot.resolve("evidence/runs").resolve(runId);
         Path stdoutLog = runDir.resolve(pathValue(contract, "logs", "stdout", "logs/stdout.log"));
         Path stderrLog = runDir.resolve(pathValue(contract, "logs", "stderr", "logs/stderr.log"));
         Path actualOutput = runDir.resolve(pathValue(contract, "outputs", "actual_output_ref", "actual/output.txt"));
         Path workingDirectory = workingDirectory(packageRoot, contract);
 
-        AdapterExecutionResult adapterResult;
+        AdapterExecutionResult adapterResult = executeProvider(
+                adapterProviderContract,
+                packageRoot,
+                contract,
+                testCase,
+                bindingReport.resolvedBindings(),
+                workingDirectory,
+                runDir,
+                stdoutLog,
+                stderrLog,
+                actualOutput);
+        ExternalRunnerEvidenceResult externalRunnerEvidence =
+                writeExternalRunnerEvidence(adapterProviderContract, contract, runDir);
+        boolean passed = externalRunnerEvidence.complete()
+                && !adapterResult.timeout()
+                && successExitCodes(contract.get("success_exit_codes")).contains(adapterResult.exitCode());
         AssertionEvaluation assertionEvaluation = null;
-        boolean passed;
-        try {
-            databaseFixtureProvider.setup(packageRoot, testCase, dbFixtureContracts, runDir);
-            adapterResult = executeProvider(
-                    adapterProviderContract,
+        if (passed) {
+            assertionEvaluation = assertionEngine.evaluateFileDiff(
                     packageRoot,
-                    contract,
                     testCase,
-                    bindingReport.resolvedBindings(),
-                    workingDirectory,
-                    runDir,
-                    stdoutLog,
-                    stderrLog,
-                    actualOutput);
-            ExternalRunnerEvidenceResult externalRunnerEvidence =
-                    writeExternalRunnerEvidence(adapterProviderContract, contract, runDir);
-            passed = externalRunnerEvidence.complete()
-                    && !adapterResult.timeout()
-                    && successExitCodes(contract.get("success_exit_codes")).contains(adapterResult.exitCode());
-            if (passed) {
-                assertionEvaluation = assertionEngine.evaluateFileDiff(
-                        packageRoot,
-                        testCase,
-                        adapterResult.actualOutput(),
-                        runDir,
-                        dbFixtureContracts);
-                passed = assertionEvaluation.passed();
-            }
-        } finally {
-            databaseFixtureProvider.cleanup(packageRoot, testCase, dbFixtureContracts, runDir);
+                    adapterResult.actualOutput(),
+                    runDir);
+            passed = assertionEvaluation.passed();
         }
         String status = passed ? "passed" : "failed";
         evidenceWriter.writeExecutionRun(
@@ -382,34 +368,6 @@ public class ExecutionEngine {
             }
         }
         throw new IllegalStateException("No resolved execution provider contract available.");
-    }
-
-    private Map<String, Map<String, Object>> dbFixtureContracts(
-            Path packageRoot,
-            String requestedProfile,
-            String targetRuId,
-            String adapterName,
-            ProviderContractResolutionReport providerReport) {
-        Map<String, Map<String, Object>> contracts = new LinkedHashMap<>();
-        for (ResolvedProviderContract contract : providerReport.resolvedContracts()) {
-            if ("fixture".equals(contract.contractType()) && "db_fixture".equals(contract.providerFamily())) {
-                Map<String, Object> fixtureContract = providerContractResolver.generatedFixtureContract(
-                        packageRoot,
-                        requestedProfile,
-                        targetRuId,
-                        adapterName,
-                        contract.providerName());
-                if (isJdbcFixtureContract(fixtureContract)) {
-                    contracts.put(contract.providerName(), fixtureContract);
-                }
-            }
-        }
-        return Map.copyOf(contracts);
-    }
-
-    private boolean isJdbcFixtureContract(Map<String, Object> contract) {
-        return "jdbc".equalsIgnoreCase(stringValue(contract.get("provider_type")))
-                && !stringValue(contract.get("connection_ref")).isBlank();
     }
 
     private String adapterName(Map<String, Object> testCase) {

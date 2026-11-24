@@ -13,16 +13,12 @@ import com.specdriven.regression.contract.ContractBaselineService.DryRunResult;
 import com.specdriven.regression.contract.ContractBaselineService.ReportResult;
 import com.specdriven.regression.contract.ContractBaselineService.ResolvedTarget;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
-import com.specdriven.regression.contract.ContractBaselineRuntimeService;
-import com.specdriven.regression.contract.ContractBaselineRuntimeService.ContractBaselineRunResult;
 import com.specdriven.regression.contract.CommonVerifyService;
 import com.specdriven.regression.contract.CommonVerifyService.CommonVerifyRunResult;
 import com.specdriven.regression.contract.GoldenE2eService;
 import com.specdriven.regression.contract.GoldenE2eService.GoldenRunResult;
 import com.specdriven.regression.contract.GrpcMockCapabilityService;
 import com.specdriven.regression.contract.GrpcMockCapabilityService.GrpcRunResult;
-import com.specdriven.regression.contract.JdbcProviderCapabilityService;
-import com.specdriven.regression.contract.JdbcProviderCapabilityService.JdbcRunResult;
 import com.specdriven.regression.contract.MessagingClientProviderCapabilityService;
 import com.specdriven.regression.contract.MessagingClientProviderCapabilityService.MessagingClientRunResult;
 import com.specdriven.regression.contract.NatsProviderCapabilityService;
@@ -165,7 +161,6 @@ public class RegressionCommand {
     private final GeneratedRuntimeArtifacts generatedRuntimeArtifacts = new GeneratedRuntimeArtifacts();
     private final ParameterSetResolver parameterSetResolver = new ParameterSetResolver();
     private final ContractBaselineService contractBaselineService = new ContractBaselineService();
-    private final ContractBaselineRuntimeService contractBaselineRuntimeService = new ContractBaselineRuntimeService();
     private final EvidenceHardeningService evidenceHardeningService = new EvidenceHardeningService();
     private final CommonVerifyService commonVerifyService = new CommonVerifyService();
     private final GoldenE2eService goldenE2eService = new GoldenE2eService();
@@ -175,8 +170,6 @@ public class RegressionCommand {
             new WireMockHttpRequestCapabilityService();
     private final RestClientCapabilityService restClientCapabilityService =
             new RestClientCapabilityService();
-    private final JdbcProviderCapabilityService jdbcProviderCapabilityService =
-            new JdbcProviderCapabilityService();
     private final NatsProviderCapabilityService natsProviderCapabilityService =
             new NatsProviderCapabilityService();
     private final MessagingClientProviderCapabilityService messagingClientProviderCapabilityService =
@@ -1254,22 +1247,18 @@ public class RegressionCommand {
             if (profile == null) {
                 return 2;
             }
-            boolean reviewed = invocationRequirement.required() || ProductTestHandoffService.configured(suiteManifest, profile);
-            JdbcDriverDiscovery.DiscoveryResult driverDiscovery = reviewed ? null : jdbcDriverDiscovery(root, options);
             if (isSuiteGroupManifest(suiteManifest)) {
                 return runSuiteGroup(
                         suiteManifest,
                         profile,
                         root.resolve("target/regression").normalize(),
-                        driverDiscovery,
                         out);
             }
             SuiteRuntimeResult result = suiteRuntimeDispatcher.dispatch(
                     suiteManifest,
                     suite,
                     profile,
-                    root.resolve("target/regression").normalize(),
-                    driverDiscovery);
+                    root.resolve("target/regression").normalize());
             printSuiteRuntimeResult(out, result);
             return result.passed() ? 0 : 1;
         }
@@ -1312,9 +1301,8 @@ public class RegressionCommand {
             Path suiteManifest,
             String suiteRef,
             String profile,
-            Path outputRoot,
-            JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
-        return dispatchSuiteRuntimeInternal(suiteManifest, suiteRef, profile, outputRoot, driverDiscovery, null);
+            Path outputRoot) {
+        return dispatchSuiteRuntimeInternal(suiteManifest, suiteRef, profile, outputRoot, null);
     }
 
     private SuiteRuntimeResult dispatchSuiteRuntimeInternal(
@@ -1322,10 +1310,9 @@ public class RegressionCommand {
             String suiteRef,
             String profile,
             Path outputRoot,
-            JdbcDriverDiscovery.DiscoveryResult driverDiscovery,
             SuiteExecutionContext parentContext) {
         SuiteRuntimeResult result = dispatchSuiteRuntimeUnfinalized(
-                suiteManifest, suiteRef, profile, outputRoot, driverDiscovery, parentContext);
+                suiteManifest, suiteRef, profile, outputRoot, parentContext);
         if (result.resultJson() == null) {
             return result;
         }
@@ -1343,7 +1330,6 @@ public class RegressionCommand {
             String suiteRef,
             String profile,
             Path outputRoot,
-            JdbcDriverDiscovery.DiscoveryResult driverDiscovery,
             SuiteExecutionContext parentContext) {
         if (parentContext != null && !parentContext.matchesRequestedProfile(profile)) {
             return SuiteRuntimeResult.blocked("", profile, List.of(new ContractFinding(
@@ -1372,7 +1358,7 @@ public class RegressionCommand {
                     "product_test", "REVIEWED_HANDOFF_REQUIRED", "", "", profile, "",
                     "Correct the reviewed leaf/profile handoff: " + error.getMessage())));
         }
-        ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
+        ValidationResult validation = contractBaselineService.validateForExecution(suiteManifest);
         if (!validation.valid()) {
             return SuiteRuntimeResult.blocked(validation.suiteId(), profile, validation.findings());
         }
@@ -1389,13 +1375,6 @@ public class RegressionCommand {
                     suiteManifest,
                     profile,
                     runtimeContext(parentContext, outputRoot, profile)));
-        }
-        if (supportsContractBaselineMixedSample(providerTypes)) {
-            return SuiteRuntimeResult.fromContractBaseline(contractBaselineRuntimeService.run(
-                    suiteManifest,
-                    profile,
-                    runtimeContext(parentContext, outputRoot, profile),
-                    driverDiscovery));
         }
         if (supportsSoapMockSample(providerTypes)) {
             return SuiteRuntimeResult.fromSoap(soapMockCapabilityService.run(
@@ -1420,13 +1399,6 @@ public class RegressionCommand {
                     suiteManifest,
                     profile,
                     runtimeContext(parentContext, outputRoot, profile)));
-        }
-        if (providerTypes.equals(List.of("jdbc")) || suiteRef.contains("provider_capability/jdbc")) {
-            return SuiteRuntimeResult.fromJdbc(jdbcProviderCapabilityService.run(
-                    suiteManifest,
-                    profile,
-                    runtimeContext(parentContext, outputRoot, profile),
-                    driverDiscovery));
         }
         if (supportsMessagingClientSample(providerTypes, suiteRef)) {
             return SuiteRuntimeResult.fromMessaging(messagingClientProviderCapabilityService.run(
@@ -1572,7 +1544,7 @@ public class RegressionCommand {
     }
 
     private int validateSuiteGroup(Path suiteManifest, String requestedProfile, PrintStream out) {
-        SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest);
+        SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest, false);
         SuiteGroupDefinition definition = validation.definition();
         List<ContractFinding> profileFindings = suiteGroupProfileFindings(suiteManifest, definition, requestedProfile);
         List<ContractFinding> findings = new ArrayList<>(validation.findings());
@@ -1600,7 +1572,7 @@ public class RegressionCommand {
     }
 
     private int dryRunSuiteGroup(Path suiteManifest, String requestedProfile, PrintStream out) {
-        SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest);
+        SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest, false);
         SuiteGroupDefinition definition = validation.definition();
         List<ContractFinding> profileFindings = suiteGroupProfileFindings(suiteManifest, definition, requestedProfile);
         List<ContractFinding> findings = new ArrayList<>(validation.findings());
@@ -1729,7 +1701,7 @@ public class RegressionCommand {
         return List.of();
     }
 
-    private SuiteGroupValidation validateSuiteGroupArtifacts(Path suiteManifest) {
+    private SuiteGroupValidation validateSuiteGroupArtifacts(Path suiteManifest, boolean forExecution) {
         Map<String, Object> manifest = readYamlMap(suiteManifest);
         List<ContractFinding> findings = new ArrayList<>();
         SuiteGroupDefinition definition = suiteGroupDefinition(suiteManifest, manifest, findings);
@@ -1744,7 +1716,9 @@ public class RegressionCommand {
                         "Create or correct the child suite manifest referenced by the suite group."));
                 continue;
             }
-            ValidationResult childValidation = contractBaselineService.validateSuite(child.suiteManifest());
+            ValidationResult childValidation = forExecution
+                    ? contractBaselineService.validateForExecution(child.suiteManifest())
+                    : contractBaselineService.validateSuite(child.suiteManifest());
             addUnique(providerInstances, childValidation.providerInstancesUsed());
             addUnique(providerTypes, childValidation.providerTypesUsed());
             if (!childValidation.valid()) {
@@ -1758,9 +1732,8 @@ public class RegressionCommand {
             Path suiteManifest,
             String requestedProfile,
             Path outputRoot,
-            JdbcDriverDiscovery.DiscoveryResult driverDiscovery,
             PrintStream out) {
-        SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest);
+        SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest, true);
         SuiteGroupDefinition definition = validation.definition();
         List<ContractFinding> findings = new ArrayList<>(validation.findings());
         if (!definition.profile().isBlank() && !definition.profile().equals(requestedProfile)) {
@@ -1794,7 +1767,7 @@ public class RegressionCommand {
                 childOutputRoot);
         List<SuiteGroupChildResult> childResults = new ArrayList<>();
         for (SuiteGroupChild child : definition.children()) {
-            childResults.add(runSuiteGroupChild(child, childOutputRoot, driverDiscovery, parentContext));
+            childResults.add(runSuiteGroupChild(child, childOutputRoot, parentContext));
         }
         for (SuiteGroupChildResult childResult : childResults) {
             findings.addAll(childResult.findings());
@@ -1865,9 +1838,8 @@ public class RegressionCommand {
     private SuiteGroupChildResult runSuiteGroupChild(
             SuiteGroupChild child,
             Path childOutputRoot,
-            JdbcDriverDiscovery.DiscoveryResult driverDiscovery,
             SuiteExecutionContext parentContext) {
-        ValidationResult validation = contractBaselineService.validateSuite(child.suiteManifest());
+        ValidationResult validation = contractBaselineService.validateForExecution(child.suiteManifest());
         if (!validation.valid()) {
             return SuiteGroupChildResult.fromBlocked(child, validation.suiteId(), validation.findings());
         }
@@ -1876,7 +1848,6 @@ public class RegressionCommand {
                 child.ref(),
                 child.profile(),
                 childOutputRoot,
-                driverDiscovery,
                 parentContext.forChildProfile(child.profile()));
         return SuiteGroupChildResult.fromSuiteRuntime(child, result);
     }
@@ -1887,9 +1858,8 @@ public class RegressionCommand {
                 Path suiteManifest,
                 String suiteRef,
                 String profile,
-                Path outputRoot,
-                JdbcDriverDiscovery.DiscoveryResult driverDiscovery) {
-            return dispatchSuiteRuntimeInternal(suiteManifest, suiteRef, profile, outputRoot, driverDiscovery);
+                Path outputRoot) {
+            return dispatchSuiteRuntimeInternal(suiteManifest, suiteRef, profile, outputRoot);
         }
 
         SuiteRuntimeResult dispatch(
@@ -1897,10 +1867,9 @@ public class RegressionCommand {
                 String suiteRef,
                 String profile,
                 Path outputRoot,
-                JdbcDriverDiscovery.DiscoveryResult driverDiscovery,
                 SuiteExecutionContext parentContext) {
             return dispatchSuiteRuntimeInternal(
-                    suiteManifest, suiteRef, profile, outputRoot, driverDiscovery, parentContext);
+                    suiteManifest, suiteRef, profile, outputRoot, parentContext);
         }
     }
 
@@ -2183,13 +2152,6 @@ public class RegressionCommand {
                     "Correct the v0.3 target bindings or Provider Contract metadata: " + error.getMessage()));
             return null;
         }
-    }
-
-    private boolean supportsContractBaselineMixedSample(List<String> providerTypes) {
-        return providerTypes.size() == 3
-                && providerTypes.contains("wiremock_http_mock")
-                && providerTypes.contains("jdbc")
-                && providerTypes.contains("nats");
     }
 
     private boolean supportsSoapMockSample(List<String> providerTypes) {
@@ -3524,29 +3486,6 @@ public class RegressionCommand {
                     result.findings());
         }
 
-        static SuiteRuntimeResult fromContractBaseline(ContractBaselineRunResult result) {
-            return new SuiteRuntimeResult(
-                    result.passed(),
-                    result.status(),
-                    result.suiteId(),
-                    result.batchId(),
-                    result.runId(),
-                    result.testCaseId(),
-                    result.testCount(),
-                    result.profile(),
-                    result.providerRuntimeExecuted(),
-                    result.providerIds(),
-                    result.providerTypes(),
-                    result.resultJson(),
-                    null,
-                    result.evidenceDir(),
-                    result.evidenceClassification(),
-                    List.of(
-                            "provider_types: " + String.join(",", result.providerTypes()),
-                            "provider_ids: " + String.join(",", result.providerIds())),
-                    result.findings());
-        }
-
         static SuiteRuntimeResult fromSoap(SoapRunResult result) {
             return new SuiteRuntimeResult(
                     result.passed(),
@@ -3640,31 +3579,6 @@ public class RegressionCommand {
                     result.evidenceDir(),
                     "framework_provider_capability_only",
                     outputLines,
-                    result.findings());
-        }
-
-        static SuiteRuntimeResult fromJdbc(JdbcRunResult result) {
-            return new SuiteRuntimeResult(
-                    result.passed(),
-                    result.status(),
-                    result.suiteId(),
-                    result.batchId(),
-                    result.runId(),
-                    result.testCaseId(),
-                    result.testCount(),
-                    result.profile(),
-                    result.providerRuntimeExecuted(),
-                    blankListFiltered(result.providerId()),
-                    blankListFiltered(result.providerType()),
-                    result.resultJson(),
-                    null,
-                    result.evidenceDir(),
-                    "framework_provider_capability_only",
-                    List.of(
-                            "provider_type: " + result.providerType(),
-                            "provider_id: " + result.providerId(),
-                            "runtime_mode: " + result.runtimeMode(),
-                            "dialect: " + result.dialect()),
                     result.findings());
         }
 

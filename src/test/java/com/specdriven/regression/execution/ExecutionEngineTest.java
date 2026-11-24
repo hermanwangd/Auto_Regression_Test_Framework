@@ -243,50 +243,13 @@ class ExecutionEngineTest {
     }
 
     @Test
-    void evaluatesDbRowMatchesAssertionAgainstFixtureDatabase() throws Exception {
-        String jdbcUrl = "jdbc:h2:mem:execution_db_assertion_" + System.nanoTime() + ";DB_CLOSE_DELAY=-1";
-        writeDbRowAssertionPackage(jdbcUrl);
-        ProviderRuntime fakeRuntime = request -> {
-            try {
-                Files.createDirectories(request.stdoutLog().getParent());
-                Files.createDirectories(request.stderrLog().getParent());
-                Files.createDirectories(request.actualOutput().getParent());
-                Files.writeString(request.stdoutLog(), "db assertion target executed\n");
-                Files.writeString(request.stderrLog(), "");
-                Files.writeString(request.actualOutput(), "ok\n");
-                return new AdapterExecutionResult(0, false, request.stdoutLog(), request.stderrLog(), request.actualOutput());
-            } catch (IOException e) {
-                throw new UncheckedIOException("Failed to write fake DB assertion output.", e);
-            }
-        };
-        ExecutionEngine engine = new ExecutionEngine(
-                new DataPipelineAdapter(),
-                new AssertionEngine(),
-                new EvidenceWriter(),
-                new BindingResolver(),
-                new ProviderContractResolver(),
-                new DatabaseFixtureProvider(),
-                new ProviderRuntimeRegistry(Map.of("request_response/rest", fakeRuntime)));
-
-        ExecutionResult result = engine.execute(
-                tempDir,
-                tempDir.resolve("tests/approved/TC-DB-ASSERT-001.yaml"),
-                "BATCH-DB-ASSERT",
-                "RUN-DB-ASSERT");
-
-        Path runDir = tempDir.resolve("evidence/runs/RUN-DB-ASSERT");
-        assertThat(result.passed()).isTrue();
-        assertThat(Files.readString(runDir.resolve("assertions.yaml")))
-                .contains("type: db_row_matches")
-                .contains("oracle: ${oracles.order_projection}")
-                .contains("expected_ref: queries/count_payment_orders.sql expected_count=1")
-                .contains("actual_ref: db:relational_db/count_payment_orders")
-                .contains("decision_rule: db_row_matches")
-                .contains("query `count_payment_orders` returned expected row_count `1`");
-        assertThat(Files.readString(runDir.resolve("run.yaml")))
-                .contains("provider_contract_kind: db_fixture")
-                .contains("assertion_status: passed")
-                .contains("cleanup_result: cleanup.yaml");
+    void rejectsDbAssertionBeforeStartingTheAdapter() throws Exception {
+        writeDbRowAssertionPackage("fixture-marker");
+        var engine = new ExecutionEngine(new DataPipelineAdapter(), new AssertionEngine());
+        assertThatThrownBy(() -> engine.execute(tempDir,
+                tempDir.resolve("tests/approved/TC-DB-ASSERT-001.yaml"), "BATCH-DB-ASSERT", "RUN-DB-ASSERT"))
+                .isInstanceOf(UnsupportedOperationException.class).hasMessageContaining("Legacy DB fixture execution is disabled");
+        assertThat(tempDir.resolve("evidence/runs/RUN-DB-ASSERT")).doesNotExist();
     }
 
     @Test
@@ -399,12 +362,12 @@ class ExecutionEngineTest {
                         tempDir.resolve("tests/approved/TC-FIXTURE-ONLY.yaml"),
                         "BATCH-FIXTURE-ONLY",
                         "RUN-FIXTURE-ONLY"))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("No resolved execution provider contract available");
+                .isInstanceOf(UnsupportedOperationException.class)
+                .hasMessageContaining("Legacy DB fixture execution is disabled");
     }
 
     @Test
-    void filtersFixtureProvidersAndIgnoresNonRunnableDbFixtureContracts() throws Exception {
+    void rejectsSelectedDbFixturesEvenFromAnInjectedResolver() throws Exception {
         writeRequestResponsePackage();
         CapturingFixtureProviderResolver resolver = new CapturingFixtureProviderResolver();
         Files.writeString(tempDir.resolve("tests/approved/TC-REGISTRY-001.yaml"), """
@@ -445,15 +408,11 @@ class ExecutionEngineTest {
                 new DatabaseFixtureProvider(),
                 new ProviderRuntimeRegistry(Map.of("request_response/rest", fakeRuntime)));
 
-        ExecutionResult result = engine.execute(
-                tempDir,
-                tempDir.resolve("tests/approved/TC-REGISTRY-001.yaml"),
-                "BATCH-FIXTURE-FILTER",
-                "RUN-FIXTURE-FILTER");
-
-        assertThat(result.passed()).isTrue();
+        assertThatThrownBy(() -> engine.execute(tempDir, tempDir.resolve("tests/approved/TC-REGISTRY-001.yaml"),
+                "BATCH-FIXTURE-FILTER", "RUN-FIXTURE-FILTER"))
+                .isInstanceOf(UnsupportedOperationException.class).hasMessageContaining("Legacy DB fixture execution is disabled");
         assertThat(resolver.fixtureProviders).containsExactly("relational_db");
-        assertThat(Files.exists(tempDir.resolve("evidence/runs/RUN-FIXTURE-FILTER/fixture_setup.yaml"))).isFalse();
+        assertThat(tempDir.resolve("evidence/runs/RUN-FIXTURE-FILTER")).doesNotExist();
     }
 
     private ResolvedProviderContract resolvedAdapter(String providerFamily, String providerType) {
