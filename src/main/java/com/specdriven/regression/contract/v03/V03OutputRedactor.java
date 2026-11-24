@@ -1,5 +1,8 @@
 package com.specdriven.regression.contract.v03;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.specdriven.regression.contract.SecurityFieldNames;
 import java.text.Normalizer;
 import java.util.ArrayList;
@@ -14,6 +17,7 @@ import java.util.stream.Collectors;
 /** Applies Provider Contract output sensitivity before values leave runtime memory. */
 public final class V03OutputRedactor {
     public static final String MASKED = "[MASKED]";
+    private static final ObjectReader JSON_LABEL = new ObjectMapper().readerFor(String.class);
 
     private static final String WORD = "[\\p{L}\\p{M}\\p{N}\\p{So}\\p{Pc}.．\\-－﹣]++";
     private static final String SEPARATOR = "[:=：＝﹕﹦]";
@@ -21,7 +25,7 @@ public final class V03OutputRedactor {
     private static final String ASSIGN = SPACING + "*" + SEPARATOR + SPACING + "*";
     private static final Pattern SINGLE_WORD = Pattern.compile(WORD);
     private static final Pattern MESSAGE_LABEL = Pattern.compile(
-            "(?<quoted>\"[^\"\\r\\n]++\"|'[^'\\r\\n]++'|＂[^＂\\r\\n]++＂|＇[^＇\\r\\n]++＇)(?=" + ASSIGN
+            "(?<quoted>\"[^\"\\\\\\r\\n]*+(?:\\\\[^\\r\\n][^\"\\\\\\r\\n]*+)*+\"|'[^'\\r\\n]++'|＂[^＂\\r\\n]++＂|＇[^＇\\r\\n]++＇)(?=" + ASSIGN
                     + ")|(?<separator>" + SEPARATOR + ")|" + WORD);
     private static final Pattern ASSIGNMENT = Pattern.compile(ASSIGN);
     private static final Pattern WORD_THEN_SPACE = Pattern.compile("(" + WORD + ")" + SPACING + "++");
@@ -30,6 +34,8 @@ public final class V03OutputRedactor {
             "[\\t ]*\\r?\\n[\\t ]+[A-Za-z0-9._~+/-]++=*+(?=[\\t ]*(?:\\r?$)|[\\t ]+[\\w.-]+[:=])",
             Pattern.MULTILINE);
     private static final Pattern HEADER_LINES = Pattern.compile("[^\\r\\n]*+(?:\\r?\\n[\\t ]++[^\\r\\n]*+)*+");
+    private static final Pattern JSON_SCALAR = Pattern.compile(
+            "(?:true|false|null|-?(?:0|[1-9][0-9]*+)(?:\\.[0-9]++)?(?:[eE][+-]?[0-9]++)?)(?=\\s*[,}\\]])");
     private static final Pattern RAW_VALUE = Pattern.compile("[^\\s,;\"'}]++");
     private static final Pattern RAW_ADDRESS = Pattern.compile("[^\\s,;]++");
     private static final Pattern PRIVATE_KEY_BLOCK = Pattern.compile(
@@ -128,7 +134,7 @@ public final class V03OutputRedactor {
         int lastSeparator = 0;
         while (labels.find()) {
             String quoted = labels.group("quoted");
-            String key = SecurityFieldNames.canonical(quoted == null ? labels.group() : quoted.substring(1, quoted.length() - 1));
+            String key = SecurityFieldNames.canonical(quoted == null ? labels.group() : quotedLabel(quoted));
             int after = labels.end();
             Span value = null;
             String replacement = marker;
@@ -140,8 +146,12 @@ public final class V03OutputRedactor {
             } else if (assignment.region(after, message.length()).lookingAt()
                     && (SecurityFieldNames.endsWithCredentialLabel(key) || fields.paths().contains(key))) {
                 int start = assignment.end();
+                int scalarEnd = quoted != null && quoted.charAt(0) == '"' ? matchEnd(JSON_SCALAR, message, start) : start;
                 if (quoted != null && start < message.length() && (message.charAt(start) == '[' || message.charAt(start) == '{')) {
                     value = new Span(start, endOfContainer(message, start));
+                    replacement = "\"" + marker + "\"";
+                } else if (scalarEnd > start) {
+                    value = new Span(start, scalarEnd);
                     replacement = "\"" + marker + "\"";
                 } else if (SecurityFieldNames.isCookieLabel(key) && start < message.length()) {
                     if (quoted != null && isQuote(message.charAt(start))) {
@@ -168,6 +178,18 @@ public final class V03OutputRedactor {
     }
 
     private record Span(int start, int end) {}
+
+    private static String quotedLabel(String quoted) {
+        if (quoted.charAt(0) == '"' && quoted.indexOf('\\') >= 0) {
+            try {
+                // Compare the decoded JSON name while keeping verbatim evidence offsets and spelling.
+                return JSON_LABEL.readValue(quoted);
+            } catch (JsonProcessingException ignored) {
+                // Diagnostics may use arbitrary quoted labels outside JSON.
+            }
+        }
+        return quoted.substring(1, quoted.length() - 1);
+    }
 
     private static Span assignmentValue(String text, int start, boolean authorization) {
         if (authorization && start < text.length()) {

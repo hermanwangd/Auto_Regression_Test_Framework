@@ -10,6 +10,25 @@ import org.junit.jupiter.api.Test;
 
 class V03OutputRedactorTest {
     @Test
+    void decodesEscapedJsonMemberNamesOnlyForComparison() {
+        var redactor = new V03OutputRedactor();
+        String session = "\\uff33\\uff45\\uff53\\uff53\\uff49\\uff4f\\uff4e";
+        String cookie = "Set\\u002dCoo\\u006bie";
+        String template = "{\"%s\":\"%s\",\"%s\":%s,\"note\":\"keep \\\\u0061\"}";
+        String raw = template.formatted(session, "fixture-A", cookie, "[\"fixture-B\",\"fixture-C\"]");
+        assertThat(redactor.redactMessage(raw))
+                .isEqualTo(template.formatted(session, "[MASKED]", cookie, "\"[MASKED]\""));
+        assertThat(V03OutputRedactor.redactProviderDiagnostic(raw))
+                .isEqualTo(template.formatted(session, "***MASKED***", cookie, "\"***MASKED***\""));
+        String literalBackslash = "{\"\\\\u0073ession\":\"public\"}";
+        assertThat(redactor.redactMessage(literalBackslash)).isEqualTo(literalBackslash);
+        for (String scalar : List.of("42", "-1.2e+2", "true", "false", "null")) {
+            assertThat(redactor.redactMessage("{\"Cookie\":" + scalar + ",\"note\":true}"))
+                    .isEqualTo("{\"Cookie\":\"[MASKED]\",\"note\":true}");
+        }
+    }
+
+    @Test
     void protectsCookieHeadersAndSessionEvidenceWhileKeepingPublicContext() {
         var redactor = new V03OutputRedactor();
         for (String label : List.of("session", "SessionId", "session_id", "Cookie", "Ｓｅｔ－Ｃｏｏｋｉｅ")) {

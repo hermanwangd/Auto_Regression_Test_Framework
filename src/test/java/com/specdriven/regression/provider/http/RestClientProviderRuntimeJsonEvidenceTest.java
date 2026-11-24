@@ -76,6 +76,8 @@ class RestClientProviderRuntimeJsonEvidenceTest {
                 Arguments.of("quote_slash", "quoted \"value\" with \\ slash", "quoted \"value\" with \\ slash"),
                 Arguments.of("unicode", "繁體中文 café 😀", "繁體中文 café 😀"),
                 Arguments.of("empty", "", ""),
+                Arguments.of("escaped_session", "{\"se\\u0073sion\":\"fixture\",\"note\":\"ok\"}",
+                        "{\"se\\u0073sion\":\"***MASKED***\",\"note\":\"ok\"}"),
                 Arguments.of("masked", "{\"token\":\"fixture-placeholder\",\"note\":\"ok\"}",
                         "{\"token\":\"***MASKED***\",\"note\":\"ok\"}")));
         for (int c = 0; c < 32; c++) {
