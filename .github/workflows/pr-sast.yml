@@ -1,17 +1,20 @@
-name: PR static security analysis
+name: Static security analysis
 
-on: pull_request
+on:
+  pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
-  group: pr-sast-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: sast-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   sast:
-    name: SAST / new High or Critical
+    name: ${{ github.event_name == 'pull_request' && 'SAST / new High or Critical' || 'SAST / full repository' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -38,6 +41,7 @@ jobs:
           python3 scripts/ci/sast/policy.py prepare "$RUNNER_TEMP/sast-gitlab" "$RUNNER_TEMP/sast-community" "$RUNNER_TEMP/sast-rules"
 
       - name: Check policy controls and scan PR changes
+        if: github.event_name == 'pull_request'
         env:
           PR_BASE: ${{ github.event.pull_request.base.sha }}
         run: |
@@ -46,4 +50,33 @@ jobs:
             -e SEMGREP_SEND_METRICS=off -e SEMGREP_ENABLE_VERSION_CHECK=0 \
             -e PR_BASE -v "$GITHUB_WORKSPACE:/src" -w /src \
             -v "$RUNNER_TEMP/sast-rules:/rules:ro" --entrypoint /bin/bash "$SCANNER" \
-            -ec 'python3 -m unittest discover -s scripts/ci/sast -p test_policy.py && scripts/ci/sast/check-controls.sh && scripts/ci/sast/scan.sh "$PR_BASE" /rules'
+            -ec 'python3 -m unittest discover -s scripts/ci/sast && scripts/ci/sast/check-controls.sh && scripts/ci/sast/scan.sh "$PR_BASE" /rules'
+
+      - name: Render runner Jobs for static analysis
+        if: github.event_name == 'push'
+        run: |
+          mkdir -p "$RUNNER_TEMP/sast-output/rendered"
+          for phase in produce collect; do
+            helm template framework-runner packaging/portable-runner/deployment/helm/framework-runner \
+              --kube-version 1.32.0 --show-only templates/job.yaml \
+              -f scripts/ci/sast/helm-values.yaml --set-string "deployment.phase=$phase" \
+              > "$RUNNER_TEMP/sast-output/rendered/$phase.yaml"
+          done
+
+      - name: Scan the full main commit and both rendered Jobs
+        if: github.event_name == 'push'
+        run: |
+          docker run --rm --network none --cpus=2 --memory=3g --cap-drop ALL \
+            --user "$(id -u):$(id -g)" -e HOME=/tmp -e PYTHONDONTWRITEBYTECODE=1 \
+            -e SEMGREP_SEND_METRICS=off -e SEMGREP_ENABLE_VERSION_CHECK=0 \
+            -v "$GITHUB_WORKSPACE:/src:ro" -w /src -v "$RUNNER_TEMP/sast-rules:/rules:ro" \
+            -v "$RUNNER_TEMP/sast-output:/output" --entrypoint /bin/bash "$SCANNER" \
+            scripts/ci/sast/full-scan.sh /rules /output "$GITHUB_SHA"
+
+      - name: Retain the main commit and scan results
+        if: ${{ !cancelled() && github.event_name == 'push' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: full-sast-${{ github.sha }}
+          path: ${{ runner.temp }}/sast-output/summary.json
+          if-no-files-found: error
