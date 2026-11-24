@@ -196,7 +196,7 @@
     "test_path": "tests/click/test_click_cli.py",
     "node_selection": null,
     "frozen_source_sha256": {
-      "tests/click/test_click_cli.py": "730c50b33036d4a0766f5dad0a11ef7693ab0cce1893a353321f37c6d133c409"
+      "tests/click/test_click_cli.py": "6b087345e2a32ee33ed07bd47b3c928be67337bca4e28151bb0c5305b28bdec0"
     }
   }
 }

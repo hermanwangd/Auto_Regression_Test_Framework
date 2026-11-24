@@ -293,7 +293,7 @@ def test_r4_419_420_effective_runtime_file_mutation_rejected(record_property, ki
     )
     (control / "test_control.py").write_text(source, encoding="utf-8")
     document = json.loads(manifest.read_text(encoding="utf-8"))
-    test_relative = str((control / "test_control.py").relative_to(ROOT))
+    test_relative = (control / "test_control.py").relative_to(ROOT).as_posix()
     document["execution"]["frozen_source_sha256"][test_relative] = run_suite.sha256(control / "test_control.py")
     manifest.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     result = invoke_subprocess(manifest, label, requirements, config)
@@ -305,7 +305,7 @@ def test_r4_419_420_effective_runtime_file_mutation_rejected(record_property, ki
     assert "FROZEN_INPUTS_CHANGED" in reject_codes(metadata)
     assert metadata["summary_counts"]["passed"] == 1
     assert cases["cases"][0]["status"] == "passed"
-    effective_relative = str((control / filename).relative_to(ROOT))
+    effective_relative = (control / filename).relative_to(ROOT).as_posix()
     assert effective_relative in metadata["source_sha256_before"]
     assert effective_relative in metadata["source_sha256_after"]
     assert metadata["source_sha256_before"][effective_relative] != metadata["source_sha256_after"][effective_relative]

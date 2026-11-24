@@ -133,7 +133,7 @@ def execute(w):
     argv=[python,'-B',wrapper,*options]
     def launch(**io):
         # Keep the absolute, digest-checked interpreter as argv[0] for virtual environments.
-        return subprocess.Popen(['/usr/bin/env','--',python,'-B',wrapper,*options],**io)
+        return subprocess.Popen(['/usr/bin/env','--',*argv],**io)
     stop,output=_invoke(w,launch,w['deadline_seconds'],available)
     d.write_durable(root/'execution.log',output)
     gate=None
@@ -165,7 +165,7 @@ def invoke_collector(w,source,saved,invocation):
     options=['--collection-spec',w['collection_spec']['path'],'--expected-spec-sha256',w['collection_spec']['sha256'],'--source',str(source),'--out',str(saved)]
     argv=[java,'-jar',jar,'runner-import',*options]
     def launch(**io):
-        return subprocess.Popen(['java','-jar',jar,'runner-import',*options],executable=java,**io)
+        return subprocess.Popen(['/usr/bin/env','--',*argv],**io)
     stop,output=_invoke(w,launch,30);d.write_durable(Path(invocation).with_suffix('.log'),output)
     result={'schema_version':'package-collector-invocation.v1','run_id':w['run_id'],'correlation_id':w['correlation_id'],'spec_sha256':w['collection_spec']['sha256'],'jar_sha256':JAR_SHA,'source_identity':d.directory_identity(source),'output_identity':d.directory_identity(saved) if saved.exists() else None,'argv':argv,'stop':stop}
     put(invocation,result)

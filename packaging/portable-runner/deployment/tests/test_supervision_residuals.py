@@ -91,6 +91,19 @@ class OutcomeTest(unittest.TestCase):
    with self.subTest(stop=stop):self.assertEqual(self.execute_code(stop),1)
  def test_CLI_ordinary_zero_and_exit7_preserved(self):
   self.assertEqual(self.execute_code(outcome()),0);self.assertEqual(self.execute_code(outcome(code=7)),1)
+ def test_collector_records_the_exact_jvm_arguments_it_started(self):
+  with tempfile.TemporaryDirectory() as td:
+   root=Path(td).resolve();source=root/'source';source.mkdir(mode=0o700)
+   receipt=root/'invocation.json';saved=root/'saved'
+   binding={'run_id':'unit','correlation_id':'corr','tools':{'java':{'path':'/unit/jdk/bin/java'},'framework_jar':{'path':'/unit/framework.jar'}},'collection_spec':{'path':'/unit/spec','sha256':'0'*64}}
+   def invoke(_binding,launch,_seconds):
+    launch()
+    return outcome(code=7),b''
+   with patch.object(c,'spec_document',return_value={}),patch.object(c,'_invoke',invoke),patch.object(c.subprocess,'Popen') as started:
+    c.invoke_collector(binding,source,saved,receipt)
+   expected=['/unit/jdk/bin/java','-jar','/unit/framework.jar','runner-import','--collection-spec','/unit/spec','--expected-spec-sha256','0'*64,'--source',str(source),'--out',str(saved)]
+   self.assertEqual(json.loads(receipt.read_bytes())['argv'],expected)
+   started.assert_called_once_with(['/usr/bin/env','--',*expected])
  def test_collector_guard_eventual_zero_is_incomplete(self):
   with tempfile.TemporaryDirectory() as td:
    root=Path(td);root.chmod(0o700);source=root/'source';source.mkdir(mode=0o700);saved=root/'saved';saved.mkdir(mode=0o700);dump(saved/'collection.json',{'framework_verdict':'UNKNOWN'})

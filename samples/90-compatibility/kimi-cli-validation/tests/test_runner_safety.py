@@ -1,5 +1,7 @@
 """Narrow regression controls for ambient inputs and report freshness."""
+import contextlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -29,6 +31,17 @@ class RunnerSafetyTests(unittest.TestCase):
                          'test_clk_003_missing_required_option_is_rejected']:
                 with self.subTest(name=name):
                     getattr(cases, name)(lambda *args: None)
+
+    def test_unknown_pytest_target_rejected_before_launch(self):
+        runner = load(ROOT / 'scripts/run_suite.py', 'runner_target_control')
+        with tempfile.TemporaryDirectory() as folder:
+            argv = ['run_suite.py', '--suite', 'click', '--test-path', 'tests/unregistered',
+                    '--evidence-root', folder]
+            with (patch.object(sys, 'argv', argv), patch.object(runner.subprocess, 'run') as launch,
+                  contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit)):
+                runner.main()
+            launch.assert_not_called()
+            self.assertEqual(list(Path(folder).iterdir()), [])
 
     def exercise(self, outcome):
         with tempfile.TemporaryDirectory() as folder:

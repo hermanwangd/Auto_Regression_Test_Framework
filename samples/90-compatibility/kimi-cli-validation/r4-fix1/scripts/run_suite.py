@@ -85,7 +85,7 @@ def approved_inputs(root, suite, manifest_path, test_path, requirements, config)
 
 
 def relative_path(root, path):
-    return str(path.resolve().relative_to(root.resolve()))
+    return path.resolve().relative_to(root.resolve()).as_posix()
 
 
 def selected_source_hashes(root, test_path):
@@ -254,7 +254,10 @@ def junit_identity(testcase):
 
 
 def identity_key(identity):
-    return identity["classname"], identity["name"], identity.get("file")
+    file = identity.get("file")
+    if os.name == "nt" and file:
+        file = file.replace('\\', "/")
+    return identity["classname"], identity["name"], file
 
 
 def raw_outcome(testcase):
@@ -467,8 +470,9 @@ def main(argv=None):
                          "effective_node_selection": selection,
                          "selected_source_sha256": selected_hashes}
         command_target = relative_path(root, test_path) + (f"::{selection}" if selection else "")
-        pytest_args = ["-I", "-m", "pytest", command_target, "-vv", "--junitxml", str(junit_work_path)]
-        command = ["/usr/bin/env", sys.executable, *pytest_args]
+        pytest_args = ["-m", "pytest", command_target, "-vv", "--junitxml", str(junit_work_path)]
+        command = (["python", "-I", *pytest_args] if os.name == "nt" else
+                   ["/usr/bin/env", sys.executable, "-I", *pytest_args])
     except Exception as exc:
         if harness_error is None:
             code = "DUPLICATE_CASE_ID" if str(exc).startswith("DUPLICATE_CASE_ID") else ("FROZEN_EXECUTION_MISMATCH" if str(exc).startswith(("UNFROZEN_TEST_PATH_OVERRIDE", "UNFROZEN_NODE_SELECTION_OVERRIDE", "Path escapes frozen source root")) else "INPUT_PREFLIGHT_ERROR")
@@ -525,11 +529,14 @@ def main(argv=None):
                          "message": "A per-run JUnit path already existed; refusing to execute or read it."}
     if harness_error is None:
         try:
-            completed = subprocess.run(
-                ["/usr/bin/env", sys.executable, *pytest_args], cwd=root,
-                env={"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
-                text=True, encoding="utf-8", capture_output=True, timeout=args.timeout_seconds, check=False,
-            )
+            environment = {"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"}
+            options = dict(cwd=root, env=environment, text=True, encoding="utf-8",
+                           capture_output=True, timeout=args.timeout_seconds, check=False)
+            if os.name == "nt":
+                environment["SystemRoot"] = os.environ["SystemRoot"]
+                completed = subprocess.run(["python", "-I", *pytest_args], executable=sys.executable, **options)
+            else:
+                completed = subprocess.run(["/usr/bin/env", sys.executable, "-I", *pytest_args], **options)
             stdout = output_text(completed.stdout)
             stderr = output_text(completed.stderr)
         except subprocess.TimeoutExpired as exc:

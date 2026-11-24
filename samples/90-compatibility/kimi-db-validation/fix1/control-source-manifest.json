@@ -27,6 +27,6 @@
     "approved_import_probe.py": "7566a48e58b6c104c51263b32e91272723bbcf238e16d95b0fd9d52b83bef3a6",
     "controls/process_tree_fixture.py": "f6bfedec1f6fc6beb35292f59f0a3d1dc5d93ea655d44f27a64007612cbc7c13",
     "test_process_policy.py": "283c6346d98bdcfe3f086d0fface1685653641dfae443c31988be32e47fda017",
-    "junit_reader.py": "f3dd4f0c6236fe9ae2180286a4d21e0f96c4b1696c2fae565617999b452ff662"
+    "junit_reader.py": "7318e24996236d19e5144fec65eaa9827751ef709853ce6694db01e993a9160f"
   }
 }

@@ -37,11 +37,35 @@ class JUnitElement:
         return next((child for child in self.children if child.tag == tag), None)
 
 
+def open_report_descriptor(path):
+    if os.name != "nt":
+        return os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+
+    import _winapi
+    import msvcrt
+
+    # Open the reparse point itself. Transfer ownership of this exact handle
+    # to the CRT so type checks and the bounded read refer to the same object.
+    file_share_read = 0x00000001
+    file_flag_open_reparse_point = 0x00200000
+    handle = _winapi.CreateFile(os.fspath(path), _winapi.GENERIC_READ, file_share_read,
+                                0, _winapi.OPEN_EXISTING, file_flag_open_reparse_point, 0)
+    try:
+        if _winapi.GetFileType(handle) != _winapi.FILE_TYPE_DISK:
+            raise ParseError("JUnit report must be a regular disk file")
+        return msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY | os.O_NOINHERIT)
+    except BaseException:
+        _winapi.CloseHandle(handle)
+        raise
+
+
 def read_report(path):
-    # Open once: a size check on a pathname cannot bind the subsequent read.
-    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    descriptor = open_report_descriptor(path)
     with os.fdopen(descriptor, "rb") as stream:
-        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+        info = os.fstat(stream.fileno())
+        if os.name == "nt" and info.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+            raise OSError("JUnit report must not be a reparse point")
+        if not stat.S_ISREG(info.st_mode):
             raise ParseError("JUnit report must be a regular file")
         data = stream.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:

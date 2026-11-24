@@ -148,21 +148,20 @@ def main():
         encoding="utf-8",
     )
 
-    pytest_args = ["-I", "-m", "pytest", test_path, "-vv", "--junitxml", str(junit_path)]
-    command = ["/usr/bin/env", sys.executable, *pytest_args]
+    pytest_args = ["-m", "pytest", test_path, "-vv", "--junitxml", str(junit_path)]
+    command = (["python", "-I", *pytest_args] if os.name == "nt" else
+               ["/usr/bin/env", sys.executable, "-I", *pytest_args])
     started_at = utc_now()
     execution_error = None
     try:
-        completed = subprocess.run(
-            ["/usr/bin/env", sys.executable, *pytest_args],
-            cwd=root,
-            env={"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
-            text=True,
-            encoding="utf-8",
-            capture_output=True,
-            check=False,
-            timeout=60,
-        )
+        environment = {"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"}
+        options = dict(cwd=root, env=environment, text=True, encoding="utf-8",
+                       capture_output=True, timeout=60, check=False)
+        if os.name == "nt":
+            environment["SystemRoot"] = os.environ["SystemRoot"]
+            completed = subprocess.run(["python", "-I", *pytest_args], executable=sys.executable, **options)
+        else:
+            completed = subprocess.run(["/usr/bin/env", sys.executable, "-I", *pytest_args], **options)
     except (OSError, subprocess.TimeoutExpired) as error:
         execution_error = type(error).__name__ + ": " + str(error)
         completed = SimpleNamespace(returncode=2, stdout="", stderr=execution_error)
