@@ -38,9 +38,10 @@ run_cli report --result samples/40-evidence-reporting/evidence_hardening/valid_r
   cd "$scratch"
   unset REGRESS_JDBC_APPROVED_SQL_SHA256
   for profile in external_oracle external_db2; do
+    # No address or credentials are needed to verify denial before driver loading.
     case "$profile" in
-      external_oracle) export JDBC_CONNECTION='jdbc:oracle:thin:@//127.0.0.1:1/QA' ;;
-      external_db2) export JDBC_CONNECTION='jdbc:db2://127.0.0.1:1/QA' ;;
+      external_oracle) export JDBC_CONNECTION='jdbc:oracle:' ;;
+      external_db2) export JDBC_CONNECTION='jdbc:db2:' ;;
     esac
     status=0
     run_cli run --suite jdbc/suite_manifest.yaml --profile "$profile" > "$profile.log" || status=$?
