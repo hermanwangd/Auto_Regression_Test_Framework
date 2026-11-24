@@ -1,5 +1,6 @@
 package com.specdriven.regression.provider.ibmmq;
 
+import com.specdriven.regression.contract.SecurityFieldNames;
 import com.specdriven.regression.provider.runtime.ProviderEvidence;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderFailure;
@@ -701,12 +702,8 @@ public class IbmMqProviderRuntime implements ProviderRuntime {
     }
 
     private boolean secretKey(String key) {
-        String normalized = key.toLowerCase(Locale.ROOT);
-        return normalized.contains("password")
-                || normalized.contains("secret")
-                || normalized.contains("token")
-                || normalized.contains("authorization")
-                || normalized.contains("credential")
+        String normalized = SecurityFieldNames.canonical(key);
+        return SecurityFieldNames.isCredential(key)
                 || normalized.contains("ccdt")
                 || normalized.contains("tls");
     }

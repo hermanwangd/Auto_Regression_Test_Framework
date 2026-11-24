@@ -1,5 +1,6 @@
 package com.specdriven.regression.provider.nats;
 
+import com.specdriven.regression.contract.SecurityFieldNames;
 import com.specdriven.regression.provider.runtime.ProviderEvidence;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
 import com.specdriven.regression.provider.runtime.ProviderFailure;
@@ -626,11 +627,8 @@ public class NatsProviderRuntime implements ProviderRuntime {
     }
 
     private boolean secretKey(String key) {
-        String normalized = key.toLowerCase(Locale.ROOT);
-        return normalized.contains("password")
-                || normalized.contains("secret")
-                || normalized.contains("token")
-                || normalized.contains("authorization")
+        String normalized = SecurityFieldNames.canonical(key);
+        return SecurityFieldNames.isCredential(key)
                 || normalized.contains("connection");
     }
 

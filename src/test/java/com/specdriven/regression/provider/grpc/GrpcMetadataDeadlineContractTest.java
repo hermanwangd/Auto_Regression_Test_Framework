@@ -29,7 +29,7 @@ class GrpcMetadataDeadlineContractTest {
     @TempDir Path temp;
 
     @ParameterizedTest
-    @ValueSource(strings = {"cookie", "set-cookie", "authorization"})
+    @ValueSource(strings = {"cookie", "set-cookie", "authorization", "session", "session_id", "x-session-id"})
     void preservesPublicAsciiMetadataAndMasksCredentialHeaders(String sensitiveHeader) throws Exception {
         try (Peer peer = new Peer("unary", sensitiveHeader)) {
             var result = call(peer, "public-request", "PT1S", List.of(parameter("grpc.metadata.x-client-contract", "public-client")));
