@@ -10,6 +10,8 @@ import java.util.Comparator;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class PackagedCliSmokeIT {
 
@@ -78,6 +80,30 @@ class PackagedCliSmokeIT {
                 .contains("suite_id: NATS-v0.3")
                 .contains("provider_contracts_used:")
                 .contains("nats.v0.3");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"external_oracle,jdbc:oracle:thin:@//127.0.0.1:1/QA", "external_db2,jdbc:db2://127.0.0.1:1/QA"})
+    void packagedJarReportsDeniedExternalSqlAsADeclaredFailure(String profile, String connection) throws Exception {
+        Path jar = Path.of("target/spec-driven-auto-regression-0.3.2.jar").toAbsolutePath();
+        Path suite = tempDir.resolve("jdbc");
+        copyDirectory(Path.of("samples/20-provider-capability-p0/data/jdbc"), suite);
+        Path output = tempDir.resolve("run.log");
+        ProcessBuilder command = new ProcessBuilder(javaBinary(), "-Xmx256m", "-jar", jar.toString(),
+                "run", "--suite", suite.resolve("suite_manifest.yaml").toString(), "--profile", profile)
+                .directory(tempDir.toFile()).redirectErrorStream(true).redirectOutput(output.toFile());
+        command.environment().put("JDBC_CONNECTION", connection);
+        command.environment().remove("REGRESS_JDBC_APPROVED_SQL_SHA256");
+        Process process = command.start();
+        try {
+            assertThat(process.waitFor(30, TimeUnit.SECONDS)).isTrue();
+            String log = Files.readString(output);
+            assertThat(process.exitValue()).as(log).isEqualTo(1);
+            assertThat(log).contains("run_status: failed", "failure_code: JDBC_SQL_NOT_APPROVED", "result_json:")
+                    .doesNotContain("undeclared_provider_failure_code", connection);
+        } finally {
+            process.destroyForcibly();
+        }
     }
 
     private String javaBinary() {
