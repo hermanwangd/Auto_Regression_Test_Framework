@@ -18,6 +18,18 @@ class AssertionEngineTest {
     Path tempDir;
 
     @Test
+    void comparesSensitiveValuesWhileMaskingBothEvidenceAndReturnedSummary() throws Exception {
+        Path output = Files.writeString(tempDir.resolve("result.yaml"), "session_id: sample-observed");
+        var result = new AssertionEngine().evaluateFileDiff(tempDir, Map.of("test_case_id", "TC", "ac_id", "AC",
+                "assertions", List.of(Map.of("type", "json_path_equals", "path", "$.session_id", "expected_value", "sample-expected"))),
+                output, tempDir);
+        assertThat(result.passed()).isFalse();
+        assertThat(result.toString()).contains("[MASKED]").doesNotContain("sample-observed", "sample-expected");
+        assertThat(Files.readString(tempDir.resolve("assertions.yaml")))
+                .contains("[MASKED]").doesNotContain("sample-observed", "sample-expected");
+    }
+
+    @Test
     void evaluatesSchemaAndContractAssertionsAgainstActualOutput() throws Exception {
         Path runDir = tempDir.resolve("evidence/runs/RUN-SCHEMA-CONTRACT");
         Path actualOutput = runDir.resolve("actual/response.json");

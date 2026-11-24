@@ -10,6 +10,18 @@ import org.junit.jupiter.api.Test;
 
 class V03OutputRedactorTest {
     @Test
+    void masksFormattedLabelsAndCredentialSubpathsAndBoundsOversizedMessages() {
+        var redactor = new V03OutputRedactor();
+        String label = "Ｓｅｓ\u200bsｉｏｎ";
+        assertThat(redactor.redactMessage(label + "=example")).isEqualTo(label + "=[MASKED]");
+        assertThat(redactor.redactValue(Map.of(label, "example"))).isEqualTo(Map.of(label, "[MASKED]"));
+        assertThat(redactor.redactAssertionValue(null, null, "step://read/body.session_id", "example", Map.of()))
+                .isEqualTo("[MASKED]");
+        assertThat(redactor.redactMessage("a".repeat(65537))).isEqualTo("[MASKED]");
+        assertThat(redactor.redactValue(java.util.Arrays.asList(null, "public"))).isEqualTo(java.util.Arrays.asList(null, "public"));
+    }
+
+    @Test
     void masksSerializedJsonValuesInNestedDiagnosticEnvelopes() throws Exception {
         var json = new com.fasterxml.jackson.databind.ObjectMapper();
         String inner = "{\"session\":\"sample-inside\",\"note\":\"公開\"}";

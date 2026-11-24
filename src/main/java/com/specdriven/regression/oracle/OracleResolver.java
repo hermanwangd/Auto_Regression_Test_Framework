@@ -1,12 +1,12 @@
 package com.specdriven.regression.oracle;
 
+import com.specdriven.regression.provider.ProviderDataYaml;
+import com.specdriven.regression.provider.SuiteAssetReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import org.springframework.stereotype.Service;
-import org.yaml.snakeyaml.Yaml;
 
 @Service
 public class OracleResolver {
@@ -17,7 +17,7 @@ public class OracleResolver {
             String oracleReference,
             Map<?, ?> oracleDefinition) {
         String expectedResultRef = stringValue(oracleDefinition.get("ref"));
-        Map<String, Object> expectedResult = readYamlMap(packageRoot.resolve(expectedResultRef));
+        Map<String, Object> expectedResult = readYamlMap(packageRoot, expectedResultRef);
         String expectedOutputRef = expectedOutputRef(expectedResult);
         if (expectedOutputRef.isBlank() && !expectedResult.containsKey("expected_outputs")) {
             expectedOutputRef = expectedResultRef;
@@ -39,15 +39,15 @@ public class OracleResolver {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> readYamlMap(Path path) {
+    private Map<String, Object> readYamlMap(Path root, String ref) {
         try {
-            Object loaded = new Yaml().load(Files.readString(path));
+            Object loaded = ProviderDataYaml.create().load(SuiteAssetReader.read(root, ref, "Oracle ref must stay inside the RP package."));
             if (loaded instanceof Map<?, ?> map) {
                 return (Map<String, Object>) map;
             }
             return Map.of();
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read oracle artifact: " + path, e);
+            throw new UncheckedIOException("Failed to read oracle artifact: " + ref, e);
         }
     }
 

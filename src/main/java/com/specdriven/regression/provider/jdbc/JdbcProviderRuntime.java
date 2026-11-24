@@ -40,7 +40,15 @@ import org.yaml.snakeyaml.error.YAMLException;
 
 public class JdbcProviderRuntime implements ProviderRuntime {
 
+    // H2 keeps each run-scoped in-memory database across provider phases in this JVM.
+    private static final String LOCAL_PASSWORD = java.util.UUID.randomUUID().toString();
     private static final Set<String> SUPPORTED_DIALECTS = Set.of("oracle", "db2");
+    private static final Pattern MEMORY_URL = Pattern.compile(
+            "jdbc:h2:mem:[a-zA-Z0-9._-]+(?:;(?:MODE=(?:Oracle|DB2)|DB_CLOSE_DELAY=-1|DATABASE_TO_UPPER=true|USER=sa))*",
+            Pattern.CASE_INSENSITIVE);
+    private static final String SQL_APPROVALS = "REGRESS_JDBC_APPROVED_SQL_SHA256";
+    private static final Pattern APPROVAL_ENTRY = Pattern.compile(
+            "(oracle|db2):[A-Z_][A-Z0-9_]*:(db_seed|db_cleanup|db_query|db_record_exists):[0-9a-f]{64}");
     private static final Pattern NAMED_PARAM = Pattern.compile(":([A-Za-z][A-Za-z0-9_]*)");
 
     private final Yaml yaml = ProviderDataYaml.create();
@@ -143,15 +151,17 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         Instant startedAt = Instant.now();
         Map<String, Object> params = parameterValues(context, request);
         int affectedRows = 0;
-        try (Connection connection = open(secretConnection)) {
-            List<PreparedSql> preparedStatements = statements(readRef(context.suiteRoot(), sqlRef, request.operation(), "SQL_REF_MISSING")).stream()
+        try {
+            List<PreparedSql> preparedStatements = statements(readApprovedSql(secretConnection, context.suiteRoot(), sqlRef, request.operation(), "SQL_REF_MISSING")).stream()
                     .map(this::prepareSql)
                     .toList();
             validateScriptParams(request, preparedStatements, params);
-            for (PreparedSql preparedSql : preparedStatements) {
-                try (PreparedStatement preparedStatement = connection.prepareStatement(preparedSql.sql())) {
-                    bindParams(preparedStatement, preparedSql.params(), params);
-                    affectedRows += Math.max(preparedStatement.executeUpdate(), 0);
+            try (Connection connection = open(secretConnection)) {
+                for (PreparedSql preparedSql : preparedStatements) {
+                    try (PreparedStatement preparedStatement = connection.prepareStatement(preparedSql.sql())) {
+                        bindParams(preparedStatement, preparedSql.params(), params);
+                        affectedRows += Math.max(preparedStatement.executeUpdate(), 0);
+                    }
                 }
             }
             long durationMs = Duration.between(startedAt, Instant.now()).toMillis();
@@ -220,15 +230,20 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         Map<String, Object> params = parameterValues(context, request);
         List<Map<String, Object>> sampleRows = List.of();
         int rowCount = 0;
-        try (Connection connection = open(secretConnection)) {
-            PreparedSql preparedSql = prepareSql(readRef(context.suiteRoot(), queryRef, request.operation(), "QUERY_REF_MISSING"));
+        try {
+            PreparedSql preparedSql = prepareSql(readApprovedSql(secretConnection, context.suiteRoot(), queryRef, request.operation(), "QUERY_REF_MISSING"));
             validateParams(request, preparedSql, params);
-            try (PreparedStatement statement = connection.prepareStatement(preparedSql.sql())) {
+            try (Connection connection = open(secretConnection);
+                    PreparedStatement statement = connection.prepareStatement(preparedSql.sql())) {
                 bindParams(statement, preparedSql.params(), params);
                 try (ResultSet resultSet = statement.executeQuery()) {
-                    List<Map<String, Object>> rows = rows(resultSet);
-                    rowCount = rows.size();
-                    sampleRows = rows.stream().limit(5).toList();
+                    List<Map<String, Object>> sample = new ArrayList<>(5);
+                    ResultSetMetaData metadata = resultSet.getMetaData();
+                    while (resultSet.next()) {
+                        rowCount++;
+                        if (sample.size() < 5) sample.add(readRow(resultSet, metadata));
+                    }
+                    sampleRows = List.copyOf(sample);
                 }
             }
             long durationMs = Duration.between(startedAt, Instant.now()).toMillis();
@@ -299,6 +314,11 @@ public class JdbcProviderRuntime implements ProviderRuntime {
     }
 
     private Connection open(SecretConnection secretConnection) {
+        if (secretConnection.external()) {
+            var loaded = driverLoader.load(secretConnection.dialect(), driverDiscovery);
+            if (!loaded.loaded()) throw new JdbcRuntimeFailure(ProviderFailure.of(loaded.failureCode(),
+                    "CONFIGURATION_ERROR", loaded.message(), loaded.ownerAction()));
+        }
         try {
             if (secretConnection.username().isBlank() && secretConnection.password().isBlank()) {
                 return DriverManager.getConnection(secretConnection.jdbcUrl());
@@ -345,37 +365,32 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         if (resolvedSecret.failure() != null) {
             return SecretConnection.failed(resolvedSecret.failure());
         }
-        ProviderFailure driverFailure = externalDriverFailure(dialect, resolvedSecret.value());
-        if (driverFailure != null) {
-            return SecretConnection.failed(driverFailure);
+        String jdbcUrl = resolvedSecret.value();
+        if (MEMORY_URL.matcher(jdbcUrl).matches()) return new SecretConnection(jdbcUrl, "", "", "", "", null);
+        String prefix = dialect.equals("db2") ? "jdbc:db2:" : "jdbc:oracle:";
+        if (!jdbcUrl.startsWith(prefix)) {
+            return SecretConnection.failed(ProviderFailure.of("DB_CONNECTION_FAILED", "CONFIGURATION_ERROR",
+                    "JDBC driver could not open the configured connection.",
+                    "Use the JDBC URL of the selected dialect or a supported in-memory H2 profile."));
         }
-        return new SecretConnection(resolvedSecret.value(), "", "", null);
-    }
-
-    private ProviderFailure externalDriverFailure(String dialect, String jdbcUrl) {
-        if (isLocalH2CompatibilityConnection(jdbcUrl)) {
-            return null;
-        }
-        JdbcDriverLoader.LoadResult loadResult = driverLoader.load(dialect, driverDiscovery);
-        if (loadResult.loaded()) {
-            return null;
-        }
-        return ProviderFailure.of(
-                loadResult.failureCode(),
-                "CONFIGURATION_ERROR",
-                loadResult.message(),
-                loadResult.ownerAction());
-    }
-
-    private boolean isLocalH2CompatibilityConnection(String jdbcUrl) {
-        return jdbcUrl.toLowerCase(Locale.ROOT).startsWith("jdbc:h2:");
+        return new SecretConnection(jdbcUrl, "", "", dialect, secretRef.substring("env://".length()), null);
     }
 
     private SecretConnection localH2Connection(ProviderExecutionContext context, String dialect) {
-        String dbName = safe(context.providerId() + "-" + context.runDir().getFileName());
+        String identity = context.runDir().toAbsolutePath().normalize() + "\n" + dialect + "\n" + context.providerId();
+        String dbName = sha256(identity);
         String mode = "db2".equals(dialect) ? "DB2" : "Oracle";
         String jdbcUrl = "jdbc:h2:mem:" + dbName + ";MODE=" + mode + ";DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=true";
-        return new SecretConnection(jdbcUrl, "sa", "", null);
+        return new SecretConnection(jdbcUrl, "framework_local", LOCAL_PASSWORD, "", "", null);
+    }
+
+    private static String sha256(String value) {
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256");
+            return java.util.HexFormat.of().formatHex(digest.digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException unavailable) {
+            throw new IllegalStateException("SHA-256 is unavailable.", unavailable);
+        }
     }
 
     private boolean approvedLocalRef(String localRef, String dialect) {
@@ -494,17 +509,12 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         }
     }
 
-    private List<Map<String, Object>> rows(ResultSet resultSet) throws SQLException {
-        ResultSetMetaData metadata = resultSet.getMetaData();
-        List<Map<String, Object>> rows = new ArrayList<>();
-        while (resultSet.next()) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            for (int column = 1; column <= metadata.getColumnCount(); column++) {
-                row.put(metadata.getColumnLabel(column), resultSet.getObject(column));
-            }
-            rows.add(row);
+    private Map<String, Object> readRow(ResultSet resultSet, ResultSetMetaData metadata) throws SQLException {
+        Map<String, Object> row = new LinkedHashMap<>();
+        for (int column = 1; column <= metadata.getColumnCount(); column++) {
+            row.put(metadata.getColumnLabel(column), resultSet.getObject(column));
         }
-        return List.copyOf(rows);
+        return row;
     }
 
     private boolean matchesExpected(int rowCount, ProviderOperationRequest request) {
@@ -694,9 +704,26 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         return List.copyOf(statements);
     }
 
-    private String readRef(Path suiteRoot, String ref, String operation, String missingCode) {
+    private String readApprovedSql(SecretConnection connection, Path suiteRoot, String ref, String operation, String missingCode) {
         try {
-            return SqlSource.read(suiteRoot, ref, "SQL ref must stay under the suite root.");
+            String sql = SqlSource.read(suiteRoot, ref, "SQL ref must stay under the suite root.");
+            if (connection.external()) {
+                String entry = connection.dialect() + ":" + connection.envName() + ":" + operation + ":" + sha256(sql);
+                String approvals = Objects.toString(environment.apply(SQL_APPROVALS), "");
+                boolean approved = false;
+                for (String configured : approvals.split(",", -1)) {
+                    String candidate = configured.strip();
+                    if (!APPROVAL_ENTRY.matcher(candidate).matches()) {
+                        approved = false;
+                        break;
+                    }
+                    if (entry.equals(candidate)) approved = true;
+                }
+                if (!approved) throw new JdbcRuntimeFailure(ProviderFailure.of("JDBC_SQL_NOT_APPROVED",
+                        "CONFIGURATION_ERROR", "The runner has not approved this SQL asset for the selected external database operation.",
+                        "Configure " + SQL_APPROVALS + " from the independently reviewed SQL bytes."));
+            }
+            return sql;
         } catch (IllegalArgumentException ignored) {
             throw new JdbcRuntimeFailure(ProviderFailure.of(missingCode, classificationFor(operation),
                     "Invalid SQL ref for this suite.", "Use a checked-in SQL ref under the suite."));
@@ -744,7 +771,7 @@ public class JdbcProviderRuntime implements ProviderRuntime {
         evidence.put("masking", Map.of("raw_secret_found", false));
         String content = yaml.dumpAsMap(evidence);
         try {
-            Files.createDirectories(path.getParent());
+            ProviderDataYaml.createParent(path);
             Files.writeString(path, content);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write JDBC provider evidence: " + path, e);
@@ -754,10 +781,18 @@ public class JdbcProviderRuntime implements ProviderRuntime {
     private record PreparedSql(String sql, List<String> params) {
     }
 
-    private record SecretConnection(String jdbcUrl, String username, String password, ProviderFailure failure) {
+    private record SecretConnection(String jdbcUrl, String username, String password, String dialect,
+            String envName, ProviderFailure failure) {
+        boolean external() { return !envName.isEmpty(); }
+
+
+        @Override
+        public String toString() {
+            return "SecretConnection[redacted]";
+        }
 
         static SecretConnection failed(ProviderFailure failure) {
-            return new SecretConnection("", "", "", failure);
+            return new SecretConnection("", "", "", "", "", failure);
         }
     }
 

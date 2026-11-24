@@ -23,31 +23,27 @@ public final class V03OutputRedactor {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final ObjectReader JSON_LABEL = JSON.readerFor(String.class);
     private static final int MAX_EMBEDDED_JSON_DEPTH = 8;
+    private static final int MAX_DIAGNOSTIC_CHARS = 64 * 1024;
 
-    private static final String WORD = "[\\p{L}\\p{M}\\p{N}\\p{So}\\p{Pc}.．\\-－﹣]++";
+    private static final String WORD = "[\\p{L}\\p{M}\\p{N}\\p{So}\\p{Pc}\\p{Cf}.．\\-－﹣]++";
     private static final String SEPARATOR = "[:=：＝﹕﹦]";
     private static final String SPACING = "[\\h\\s]";
     private static final String ASSIGN = SPACING + "*" + SEPARATOR + SPACING + "*";
     private static final Pattern SINGLE_WORD = Pattern.compile(WORD);
-    private static final Pattern MESSAGE_LABEL = Pattern.compile(
-            "(?<quoted>\"[^\"\\\\\\r\\n]*+(?:\\\\[^\\r\\n][^\"\\\\\\r\\n]*+)*+\"|'[^'\\r\\n]++'|＂[^＂\\r\\n]++＂|＇[^＇\\r\\n]++＇)(?=" + ASSIGN
-                    + ")|(?<separator>" + SEPARATOR + ")|" + WORD);
+    private static final Pattern MESSAGE_LABEL = Pattern.compile("(?<quote>[\"'＂＇])|(?<separator>" + SEPARATOR + ")|" + WORD);
     private static final Pattern ASSIGNMENT = Pattern.compile(ASSIGN);
     private static final Pattern WORD_THEN_SPACE = Pattern.compile("(" + WORD + ")" + SPACING + "++");
     private static final Pattern SPACE = Pattern.compile(SPACING + "++");
     private static final Pattern TOKEN_CONTINUATION = Pattern.compile(
             "[\\t ]*\\r?\\n[\\t ]+[A-Za-z0-9._~+/-]++=*+(?=[\\t ]*(?:\\r?$)|[\\t ]+[\\w.-]+[:=])",
             Pattern.MULTILINE);
-    private static final Pattern HEADER_LINES = Pattern.compile("[^\\r\\n]*+(?:\\r?\\n[\\t ]++[^\\r\\n]*+)*+");
-    private static final Pattern JSON_SCALAR = Pattern.compile(
-            "(?:true|false|null|-?(?:0|[1-9][0-9]*+)(?:\\.[0-9]++)?(?:[eE][+-]?[0-9]++)?)(?=\\s*[,}\\]])");
     private static final Pattern RAW_VALUE = Pattern.compile("[^\\s,;\"'}]++");
     private static final Pattern RAW_ADDRESS = Pattern.compile("[^\\s,;]++");
     private static final Pattern PRIVATE_KEY_BLOCK = Pattern.compile(
             "-----BEGIN ((?:[A-Z0-9-]++ )*?PRIVATE KEY)-----.*?(?:-----END \\1-----|\\z)", Pattern.DOTALL);
     private static final Pattern AUTHORITY = Pattern.compile("[/／]{2}([^/\\s]++)");
 
-    private static final Set<String> USER_INFO_SCHEMES = Set.of("http", "https", "grpc", "grpcs");
+    private static final Set<String> USER_INFO_SCHEMES = Set.of("http", "https", "grpc", "grpcs", "kafka", "amqp", "amqps");
 
     public Map<String, Object> redact(V03ExecutionPlan plan, V03ExecutionStep step, Map<String, Object> outputs) {
         V03ProviderContract contract = plan.providerContracts().get(step.providerContract());
@@ -63,7 +59,7 @@ public final class V03OutputRedactor {
                     ? redactValue(output.getValue())
                     : MASKED);
         }
-        return Map.copyOf(result);
+        return java.util.Collections.unmodifiableMap(result);
     }
 
     public Object redactAssertionValue(
@@ -72,6 +68,11 @@ public final class V03OutputRedactor {
             Object raw,
             Object value,
             Map<V03StepOutputKey, V03ProducedOutput> stepOutputs) {
+        if (raw instanceof String ref && ref.startsWith("step://")) {
+            int path = ref.indexOf('/', "step://".length());
+            if (path >= 0 && java.util.Arrays.stream(ref.substring(path + 1).split("[./#]+"))
+                    .anyMatch(SecurityFieldNames::isCredential)) return MASKED;
+        }
         V03OutputDefinition definition = outputDefinitionForReference(assertion, raw, stepOutputs);
         if (definition != null && definition.sensitivity() != V03Sensitivity.PUBLIC) {
             return MASKED;
@@ -135,6 +136,7 @@ public final class V03OutputRedactor {
     }
 
     private static String maskMessage(String message, ContractFields fields, String marker, int depth) {
+        if (message.length() > MAX_DIAGNOSTIC_CHARS) return marker;
         if (looksLikeJsonContainer(message) && (message.contains("\\\"") || message.contains("\\u"))) {
             message = maskEmbeddedJson(message, fields, marker, depth);
         }
@@ -144,10 +146,21 @@ public final class V03OutputRedactor {
         StringBuilder masked = new StringBuilder();
         int copied = 0;
         int lastSeparator = 0;
+        // Bound overlapping quoted-label scans, including escaped nested JSON envelopes.
+        long lookaheadBudget = 32L * message.length();
         while (labels.find()) {
-            String quoted = labels.group("quoted");
-            String key = SecurityFieldNames.canonical(quoted == null ? labels.group() : quotedLabel(quoted));
+            String quoted = null;
             int after = labels.end();
+            if (labels.group("quote") != null) {
+                int end = endOfLabel(message, after, message.charAt(labels.start()));
+                lookaheadBudget -= end - after;
+                if (lookaheadBudget < 0) return marker;
+                if (end == message.length() || message.charAt(end) != message.charAt(labels.start())
+                        || !assignment.region(end + 1, message.length()).lookingAt()) continue;
+                after = end + 1;
+                quoted = message.substring(labels.start(), after);
+            }
+            String key = SecurityFieldNames.canonical(quoted == null ? labels.group() : quotedLabel(quoted));
             Span value = null;
             String replacement = marker;
             if (labels.group("separator") != null) {
@@ -158,7 +171,7 @@ public final class V03OutputRedactor {
             } else if (assignment.region(after, message.length()).lookingAt()
                     && (SecurityFieldNames.endsWithCredentialLabel(key) || fields.paths().contains(key))) {
                 int start = assignment.end();
-                int scalarEnd = quoted != null && quoted.charAt(0) == '"' ? matchEnd(JSON_SCALAR, message, start) : start;
+                int scalarEnd = quoted != null && quoted.charAt(0) == '"' ? jsonScalarEnd(message, start) : start;
                 if (quoted != null && start < message.length() && (message.charAt(start) == '[' || message.charAt(start) == '{')) {
                     value = new Span(start, endOfContainer(message, start));
                     replacement = "\"" + marker + "\"";
@@ -170,7 +183,7 @@ public final class V03OutputRedactor {
                         value = rawValue(message, start);
                     } else {
                         // A Cookie header may contain multiple pairs, quoted values and folded lines.
-                        value = new Span(start, matchEnd(HEADER_LINES, message, start));
+                        value = new Span(start, headerEnd(message, start));
                     }
                 } else {
                     value = assignmentValue(message, start, key.endsWith("authorization"));
@@ -181,7 +194,10 @@ public final class V03OutputRedactor {
             } else if (after < message.length() && ":：﹕".indexOf(message.charAt(after)) >= 0) {
                 value = addressValue(key, message, labels.start(), after + 1);
             }
-            if (value == null || value.start() == value.end()) continue;
+            if (value == null || value.start() == value.end()) {
+                if (quoted != null) labels.region(after, message.length());
+                continue;
+            }
             masked.append(message, copied, value.start()).append(replacement);
             copied = value.end();
             labels.region(copied, message.length());
@@ -190,6 +206,47 @@ public final class V03OutputRedactor {
     }
 
     private record Span(int start, int end) {}
+
+    private static int endOfLabel(String text, int start, char quote) {
+        int end = start;
+        while (end < text.length()) {
+            char c = text.charAt(end);
+            if (c == quote || c == '\r' || c == '\n') break;
+            end++;
+            if (quote == '"' && c == '\\' && end < text.length()
+                    && text.charAt(end) != '\r' && text.charAt(end) != '\n') end++;
+        }
+        return end;
+    }
+
+    private static int jsonScalarEnd(String text, int start) {
+        int end = start;
+        while (end < text.length() && "-+.0123456789eE".indexOf(text.charAt(end)) >= 0) end++;
+        if (end == start) {
+            for (String literal : List.of("true", "false", "null")) {
+                if (text.startsWith(literal, start)) { end += literal.length(); break; }
+            }
+        }
+        int delimiter = end;
+        while (delimiter < text.length() && Character.isWhitespace(text.charAt(delimiter))) delimiter++;
+        return delimiter < text.length() && ",}]".indexOf(text.charAt(delimiter)) >= 0 ? end : start;
+    }
+
+    private static int headerEnd(String text, int start) {
+        int end = start;
+        while (end < text.length()) {
+            char c = text.charAt(end);
+            if (c == '\r' || c == '\n') {
+                int next = end + 1;
+                if (c == '\r' && next < text.length() && text.charAt(next) == '\n') next++;
+                if (next == text.length() || (text.charAt(next) != ' ' && text.charAt(next) != '\t')) break;
+                end = next;
+            } else {
+                end++;
+            }
+        }
+        return end;
+    }
 
     private static boolean looksLikeJsonContainer(String text) {
         int i = 0;
@@ -249,7 +306,7 @@ public final class V03OutputRedactor {
         if (scheme.lookingAt()) {
             String name = SecurityFieldNames.canonical(scheme.group(1));
             if (!"bearer".equals(name) && !(authorization && ("basic".equals(name) || "negotiate".equals(name)))) {
-                return authorization ? new Span(start, matchEnd(HEADER_LINES, text, start)) : rawValue(text, start);
+                return authorization ? new Span(start, headerEnd(text, start)) : rawValue(text, start);
             }
             Span token = rawValue(text, scheme.end());
             int end = token.end();
@@ -260,7 +317,7 @@ public final class V03OutputRedactor {
             }
             return new Span(start, end);
         }
-        return authorization ? new Span(start, matchEnd(HEADER_LINES, text, start)) : rawValue(text, start);
+        return authorization ? new Span(start, headerEnd(text, start)) : rawValue(text, start);
     }
 
     // Only the label is normalized. Compatibility punctuation and spaces within raw values are data.
@@ -382,7 +439,7 @@ public final class V03OutputRedactor {
         if (value instanceof List<?> list) {
             List<Object> result = new ArrayList<>();
             list.forEach(item -> result.add(redactNested(item)));
-            return List.copyOf(result);
+            return java.util.Collections.unmodifiableList(result);
         }
         if (value instanceof String text) return redactMessage(text);
         return value;

@@ -3,16 +3,20 @@ package com.specdriven.regression.contract;
 import java.text.Normalizer;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /** Comparison form for credential labels. Keep the original spelling in evidence. */
 public final class SecurityFieldNames {
     private static final List<String> CREDENTIAL_NAMES = List.of("password", "token", "secret", "authorization",
             "api_key", "apikey", "credential", "private_key", "privatekey");
 
+    private static final Pattern FORMAT = Pattern.compile("\\p{Cf}");
+
     private SecurityFieldNames() { }
 
     public static String canonical(String name) {
-        return Normalizer.normalize(name, Normalizer.Form.NFKC).toLowerCase(Locale.ROOT).replace('-', '_');
+        String normalized = Normalizer.normalize(name, Normalizer.Form.NFKC);
+        return FORMAT.matcher(normalized).replaceAll("").toLowerCase(Locale.ROOT).replace('-', '_');
     }
 
     public static boolean isCredential(String name) {

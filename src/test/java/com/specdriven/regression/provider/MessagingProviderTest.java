@@ -20,6 +20,22 @@ class MessagingProviderTest {
     Path tempDir;
 
     @Test
+    void localPayloadCannotLeaveThePackageThroughAnAlias() throws Exception {
+        Path root = Files.createDirectory(tempDir.resolve("package"));
+        Files.createSymbolicLink(root.resolve("message.json"), Files.writeString(tempDir.resolve("outside"), "sample"));
+        var transport = new RecordingMessagingTransport();
+        var provider = new MessagingProvider(transport);
+        Path output = tempDir.resolve("run");
+        assertThatThrownBy(() -> provider.execute("events", root, Map.of("provider_type", "kafka",
+                        "actions", Map.of("send", Map.of("mode", "publish", "payload_binding", "event"))),
+                Map.of("steps", List.of(Map.of("action", "send"))),
+                List.of(new ResolvedBinding("event", "message_event", "message.json")), output,
+                output.resolve("out"), output.resolve("err"), output.resolve("actual")))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("inside the RP package");
+        assertThat(transport.request).isNull();
+    }
+
+    @Test
     void publishesKafkaThroughNativeTransportAndWritesEvidence() throws Exception {
         writePayload("fixtures/events/payment.json", "{\"eventId\":\"EVT-001\"}\n");
         RecordingMessagingTransport transport = new RecordingMessagingTransport();

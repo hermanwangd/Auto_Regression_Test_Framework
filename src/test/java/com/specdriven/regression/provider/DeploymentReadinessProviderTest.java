@@ -22,6 +22,18 @@ class DeploymentReadinessProviderTest {
     Path tempDir;
 
     @Test
+    void localMarkerMustBelongToThePackage() throws Exception {
+        Path root = Files.createDirectory(tempDir.resolve("package"));
+        Path output = tempDir.resolve("run");
+        Files.createSymbolicLink(root.resolve("marker"), Files.writeString(tempDir.resolve("outside"), "ready"));
+        var result = new DeploymentReadinessProvider().execute("local", root,
+                Map.of("provider_type", "local", "readiness_probe", "file_exists", "deployment_ref", "marker"),
+                output, output.resolve("stdout"), output.resolve("stderr"), output.resolve("actual"));
+        assertThat(result.exitCode()).isOne();
+        assertThat(Files.readString(output.resolve("readiness.yaml"))).contains("status: failed");
+    }
+
+    @Test
     void runsNativeK8sReadinessProbeAndWritesEvidence() throws Exception {
         RecordingDeploymentReadinessProbe probe = new RecordingDeploymentReadinessProbe();
 

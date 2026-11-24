@@ -1,5 +1,11 @@
 package com.specdriven.regression.assertion;
 
+import com.specdriven.regression.provider.ProviderDataYaml;
+import com.specdriven.regression.provider.SuiteAssetReader;
+import com.specdriven.regression.contract.SecurityFieldNames;
+import com.specdriven.regression.contract.v03.V03OutputRedactor;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import com.specdriven.regression.dsl.DslTestCaseNormalizer;
 import com.specdriven.regression.oracle.OracleResolver;
 import com.specdriven.regression.oracle.ResolvedOracle;
@@ -12,11 +18,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
-import org.yaml.snakeyaml.Yaml;
 
 @Service
 public class AssertionEngine {
 
+    private final V03OutputRedactor redactor = new V03OutputRedactor();
     private final OracleResolver oracleResolver;
     private final DslTestCaseNormalizer dslTestCaseNormalizer = new DslTestCaseNormalizer();
 
@@ -92,7 +98,7 @@ public class AssertionEngine {
         }
         String oracleReference = stringValue(assertion.get("oracle"));
         ResolvedOracle oracle = resolveOracle(packageRoot, testCase, oracleReference);
-        boolean passed = sameContent(oracle.expectedPath(), actualOutput);
+        boolean passed = sameContent(packageRoot, oracle.expectedPath(), actualOutput);
         String status = passed ? "passed" : "failed";
         String actualRef = runDir.relativize(actualOutput).toString();
         String diffSummary = passed
@@ -120,6 +126,8 @@ public class AssertionEngine {
         boolean passed = expectedValue.equals(stringValue(actualValue));
         String status = passed ? "passed" : "failed";
         String actualRef = runDir.relativize(actualOutput).toString();
+        expectedValue = displayValue(path, expectedValue);
+        actualValue = displayValue(path, actualValue);
         String expectedRef = "inline:" + expectedValue;
         String diffSummary = passed
                 ? "json path `%s` matched `%s`".formatted(path, expectedValue)
@@ -175,6 +183,8 @@ public class AssertionEngine {
         boolean passed = !Double.isNaN(actual) && Math.abs(actual - expected) <= tolerance;
         String status = passed ? "passed" : "failed";
         String actualRef = runDir.relativize(actualOutput).toString();
+        expectedText = displayValue(path, expectedText);
+        actualValue = displayValue(path, actualValue);
         String expectedRef = "inline:" + expectedText + " tolerance=" + toleranceText;
         String diffSummary = passed
                 ? "numeric path `%s` matched `%s` within tolerance `%s` (actual `%s`)"
@@ -223,6 +233,8 @@ public class AssertionEngine {
         boolean passed = expectedStatus.equals(stringValue(actualValue));
         String status = passed ? "passed" : "failed";
         String actualRef = runDir.relativize(actualOutput).toString();
+        expectedStatus = displayValue(path, expectedStatus);
+        actualValue = displayValue(path, actualValue);
         String expectedRef = "inline:" + expectedStatus;
         String diffSummary = passed
                 ? "response status %s matched `%s`".formatted(source, expectedStatus)
@@ -340,21 +352,23 @@ public class AssertionEngine {
             Map<String, Object> testCase,
             List<AssertionDetail> details) {
         try {
-            Files.createDirectories(runDir);
-            StringBuilder builder = new StringBuilder();
-            builder.append("assertions:\n");
+            Path path = runDir.resolve("assertions.yaml");
+            List<Map<String, Object>> assertions = new ArrayList<>();
             for (AssertionDetail detail : details) {
-                builder.append("  - test_case_id: ").append(stringValue(testCase.get("test_case_id"))).append("\n");
-                builder.append("    ac_id: ").append(stringValue(testCase.get("ac_id"))).append("\n");
-                builder.append("    type: ").append(detail.assertionType()).append("\n");
-                builder.append("    status: ").append(detail.status()).append("\n");
-                builder.append("    oracle: ").append(detail.oracleReference()).append("\n");
-                builder.append("    expected_ref: ").append(detail.expectedRef()).append("\n");
-                builder.append("    actual_ref: ").append(detail.actualRef()).append("\n");
-                builder.append("    decision_rule: ").append(detail.decisionRule()).append("\n");
-                builder.append("    diff_summary: ").append(detail.diffSummary()).append("\n");
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("test_case_id", stringValue(testCase.get("test_case_id")));
+                entry.put("ac_id", stringValue(testCase.get("ac_id")));
+                entry.put("type", detail.assertionType());
+                entry.put("status", detail.status());
+                entry.put("oracle", detail.oracleReference());
+                entry.put("expected_ref", detail.expectedRef());
+                entry.put("actual_ref", detail.actualRef());
+                entry.put("decision_rule", detail.decisionRule());
+                entry.put("diff_summary", detail.diffSummary());
+                assertions.add(entry);
             }
-            return Files.writeString(runDir.resolve("assertions.yaml"), builder.toString());
+            ProviderDataYaml.writeEvidence(path, Map.of("assertions", assertions));
+            return path;
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write assertion evidence.", e);
         }
@@ -384,15 +398,6 @@ public class AssertionEngine {
         return Map.of();
     }
 
-    private Path packageRef(Path packageRoot, String ref, String context) {
-        Path normalizedRoot = packageRoot.toAbsolutePath().normalize();
-        Path refPath = normalizedRoot.resolve(ref).normalize();
-        if (!refPath.startsWith(normalizedRoot)) {
-            throw new IllegalArgumentException(context + " ref must stay under the RP package: " + ref);
-        }
-        return refPath;
-    }
-
     private String oracleName(String oracleReference) {
         String prefix = "${oracles.";
         if (oracleReference.startsWith(prefix) && oracleReference.endsWith("}")) {
@@ -401,10 +406,10 @@ public class AssertionEngine {
         return oracleReference;
     }
 
-    private boolean sameContent(Path expected, Path actual) {
+    private boolean sameContent(Path root, Path expected, Path actual) {
         try {
             return Files.exists(expected) && Files.exists(actual)
-                    && Files.readString(expected).equals(Files.readString(actual));
+                    && SuiteAssetReader.read(root, expected.toAbsolutePath().toString(), "Oracle output must stay inside the RP package.").equals(Files.readString(actual));
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to compare assertion files.", e);
         }
@@ -427,7 +432,7 @@ public class AssertionEngine {
     @SuppressWarnings("unchecked")
     private Map<String, Object> readYamlMap(Path path) {
         try {
-            Object loaded = new Yaml().load(Files.readString(path));
+            Object loaded = ProviderDataYaml.create().load(Files.readString(path));
             if (loaded instanceof Map<?, ?> map) {
                 return (Map<String, Object>) map;
             }
@@ -438,7 +443,13 @@ public class AssertionEngine {
     }
 
     private Map<String, Object> readYamlMap(Path packageRoot, String ref, String context) {
-        return readYamlMap(packageRef(packageRoot, ref, context));
+        try {
+            Object document = ProviderDataYaml.create().load(SuiteAssetReader.read(packageRoot, ref,
+                    context + " ref must stay under the RP package: " + ref));
+            return document instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+        } catch (IOException error) {
+            throw new UncheckedIOException("Failed to read assertion actual output.", error);
+        }
     }
 
     private Object valueAtPath(Object root, String path) {
@@ -560,14 +571,21 @@ public class AssertionEngine {
         }
         if (rule.containsKey("equals") && !stringValue(rule.get("equals")).equals(stringValue(actualValue))) {
             failures.add("path `%s` expected `%s` but was `%s`"
-                    .formatted(path, stringValue(rule.get("equals")), stringValue(actualValue)));
+                    .formatted(path, displayValue(path, rule.get("equals")), displayValue(path, actualValue)));
         }
         Object enumValue = rule.containsKey("enum") ? rule.get("enum") : rule.get("values");
         if (enumValue instanceof List<?> allowedValues
                 && allowedValues.stream().map(this::stringValue).noneMatch(stringValue(actualValue)::equals)) {
             failures.add("path `%s` value `%s` is outside allowed values `%s`"
-                    .formatted(path, stringValue(actualValue), allowedValues));
+                    .formatted(path, displayValue(path, actualValue), displayValue(path, allowedValues)));
         }
+    }
+
+    private String displayValue(String path, Object value) {
+        if (Arrays.stream(path.split("[./\\[\\]]+")).anyMatch(SecurityFieldNames::isCredential)) {
+            return V03OutputRedactor.MASKED;
+        }
+        return stringValue(redactor.redactValue(value));
     }
 
     private boolean matchesType(Object value, String expectedType) {

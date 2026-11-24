@@ -46,6 +46,9 @@ The [Swarm product-testing module](docs/09-operations/product-testing-module.md)
 
 External JDBC, Kafka, IBM MQ, and similar dependencies are supplied by the runner environment. JDBC vendor drivers are never bundled; use `--driver-path`, `--driver-dir`, `REGRESS_DRIVER_PATH`, or `usage-kit/drivers/`.
 
+For external Oracle and Db2 suites the runner must set `REGRESS_JDBC_APPROVED_SQL_SHA256` from SQL files reviewed independently of the suite under test. Each comma-separated entry has the form `dialect:connection_environment_variable:operation:sha256`. The operation is one of `db_query`, `db_record_exists`, `db_seed`, and `db_cleanup`. Use the lowercase SHA-256 of the exact UTF-8 file bytes, including line endings. For example, `oracle:JDBC_CONNECTION:db_query:<64 lowercase hex digits>` authorizes one query file for that runner connection. Missing, malformed or mismatched approvals block the external operation before driver loading. Keep approvals in the runner's protected environment. Local in-memory H2 suites use their existing profile.
+
+
 Dependency bundling rules are documented in [provider_dependency_policy.md](docs/09-operations/provider_dependency_policy.md).
 
 For ordinary v0.3 REST requests, the runner owner can set `REGRESS_REST_ALLOWED_ORIGINS` to a comma-separated list of exact HTTP(S) origins, for example `https://api.example.test,https://reports.example.test:8443`. Embedded Java callers can set `-Dregress.rest.allowedOrigins=...`, which takes precedence. When neither setting is present, the origin of the runner's existing `REST_BASE_URL` is authorized. An explicitly empty list grants no external origins. The environment profile selects the base URL and may include a base path. The request target must stay on that origin. Framework-owned mock endpoints and reviewed local reads retain their scoped authorization.

@@ -1,5 +1,11 @@
 package com.specdriven.regression.provider.nats;
 
+import java.util.Objects;
+import com.specdriven.regression.provider.SuiteAssetReader;
+import com.specdriven.regression.provider.ProviderDataYaml;
+import com.specdriven.regression.contract.v03.V03OutputRedactor;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.specdriven.regression.contract.SecurityFieldNames;
 import com.specdriven.regression.provider.runtime.ProviderEvidence;
 import com.specdriven.regression.provider.runtime.ProviderExecutionContext;
@@ -32,7 +38,8 @@ import org.yaml.snakeyaml.Yaml;
 public class NatsProviderRuntime implements ProviderRuntime {
 
     private final Map<String, List<ObservedEvent>> eventsByBusSubject = new ConcurrentHashMap<>();
-    private final Yaml yaml = new Yaml();
+    private static final ObjectMapper JSON = new ObjectMapper();
+    private final Yaml yaml = ProviderDataYaml.create();
 
     public ProviderOperationResult executeReviewedPublish(ProviderExecutionContext context, ProviderOperationRequest request) {
         if (!"native".equals(context.runtimeMode()) || !"nats_publish".equals(request.operation()))
@@ -307,6 +314,10 @@ public class NatsProviderRuntime implements ProviderRuntime {
         String localRef = stringValue(connection.get("local_ref"));
         String secretRef = stringValue(connection.get("secret_ref"));
         String publicUri = firstNonBlank(stringValue(connection.get("uri")), stringValue(context.bindingValues().get("connection.uri")));
+        if (!localRef.isBlank() && !secretRef.isBlank()) {
+            return new ConnectionSelection("", null, failure("NATS_CONNECTION_FAILED", "NATS_CONNECTION_FAILED",
+                    "NATS connection has conflicting bindings.", "Select one connection binding."));
+        }
         if (!publicUri.isBlank()) {
             try {
                 URI uri = ReviewedLoopbackNatsPolicy.origin(publicUri);
@@ -328,7 +339,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
                     "Use an approved local_ref or a secret_ref resolved by the execution environment."));
         }
         if (!secretRef.isBlank()) {
-            if (secretRef.startsWith("env://")) {
+            if (secretRef.matches("env://[A-Z_][A-Z0-9_]*")) {
                 String envName = secretRef.substring("env://".length());
                 String value = firstNonBlank(System.getenv(envName), System.getProperty(envName));
                 if (value.isBlank()) {
@@ -389,7 +400,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
                     "Add checked-in payload ref input `payload_ref` or inline input `payload`."));
         }
         try {
-            String text = payloadRef.isBlank() ? payloadText : Files.readString(suiteFile(context.suiteRoot(), payloadRef));
+            String text = payloadRef.isBlank() ? payloadText : readAsset(context.suiteRoot(), payloadRef);
             if (text.isBlank()) {
                 return Payload.failed(failure(
                         "PAYLOAD_PARAM_MISSING",
@@ -466,10 +477,10 @@ public class NatsProviderRuntime implements ProviderRuntime {
 
     private Object resolveRef(Path suiteRoot, String ref) {
         if (!ref.contains("#")) {
-            return readObject(suiteFile(suiteRoot, ref));
+            return readObject(suiteRoot, ref);
         }
         String[] parts = ref.split("#", 2);
-        Object current = readObject(suiteFile(suiteRoot, parts[0]));
+        Object current = readObject(suiteRoot, parts[0]);
         String pointer = parts[1].startsWith("/") ? parts[1].substring(1) : parts[1];
         for (String part : pointer.split("/")) {
             if (part.isBlank()) {
@@ -480,22 +491,20 @@ public class NatsProviderRuntime implements ProviderRuntime {
         return current;
     }
 
-    private Object readObject(Path path) {
+    private Object readObject(Path root, String ref) {
         try {
-            return yaml.load(Files.readString(path));
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read NATS fixture: " + path, e);
+            return yaml.load(readAsset(root, ref));
+        } catch (IOException error) {
+            throw new UncheckedIOException("Failed to read NATS fixture.", error);
         }
     }
 
-    private Path suiteFile(Path suiteRoot, String ref) {
-        Path root = suiteRoot.toAbsolutePath().normalize();
-        String filePart = ref.split("#", 2)[0];
-        Path resolved = root.resolve(filePart).normalize();
-        if (!resolved.startsWith(root)) {
+    private String readAsset(Path root, String ref) throws IOException {
+        try {
+            return SuiteAssetReader.read(root, ref.split("#", 2)[0], "NATS asset must be inside the suite.");
+        } catch (IllegalArgumentException outside) {
             throw new OutsideSuiteRefException();
         }
-        return resolved;
     }
 
     private ParsedInstant consumeFrom(ProviderOperationRequest request, Instant startedAt) {
@@ -567,37 +576,38 @@ public class NatsProviderRuntime implements ProviderRuntime {
         String operationId = safe(firstNonBlank(stringValue(request.outputs().get("_operation_id")), request.operation()));
         String ref = "provider-evidence/nats/" + operationId + ".yaml";
         Instant now = Instant.now();
-        StringBuilder evidence = new StringBuilder();
-        evidence.append("evidence_type: nats_event\n");
-        evidence.append("evidence_classification: ").append(evidenceClassification(context)).append('\n');
-        evidence.append("downstream_release_evidence: false\n");
-        evidence.append("provider_type: ").append(context.providerType()).append('\n');
-        evidence.append("provider_id: ").append(context.providerId()).append('\n');
-        evidence.append("profile: ").append(context.profile()).append('\n');
-        evidence.append("runtime_mode: ").append(context.runtimeMode()).append('\n');
-        evidence.append("operation: ").append(request.operation()).append('\n');
-        evidence.append("subject: ").append(observation.subject()).append('\n');
-        evidence.append("consume_from: ").append(observation.consumeFrom()).append('\n');
-        evidence.append("observation_window:\n");
-        evidence.append("  started_at: ").append(observation.startedAt() == null ? now : observation.startedAt()).append('\n');
-        evidence.append("  finished_at: ").append(observation.finishedAt() == null ? now : observation.finishedAt()).append('\n');
-        evidence.append("timeout: ").append(observation.timeout() == null ? "" : observation.timeout()).append('\n');
-        evidence.append("poll_interval: ").append(observation.pollInterval() == null ? "" : observation.pollInterval()).append('\n');
-        evidence.append("attempts: ").append(observation.attempts()).append('\n');
-        evidence.append("observed_count: ").append(observation.observedCount()).append('\n');
-        evidence.append("matched: ").append(observation.matched()).append('\n');
-        evidence.append("matched_fields: ").append(observation.matchedFields()).append('\n');
-        evidence.append("masked_observed_payload:\n");
-        appendYamlValue(evidence, maskPayload(observation.matchedPayload()), 2);
+        Map<String, Object> evidence = new LinkedHashMap<>();
+        evidence.put("evidence_type", "nats_event");
+        evidence.put("evidence_classification", evidenceClassification(context));
+        evidence.put("downstream_release_evidence", false);
+        evidence.put("provider_type", context.providerType());
+        evidence.put("provider_id", context.providerId());
+        evidence.put("profile", context.profile());
+        evidence.put("runtime_mode", context.runtimeMode());
+        evidence.put("operation", request.operation());
+        evidence.put("subject", observation.subject());
+        evidence.put("consume_from", observation.consumeFrom());
+        evidence.put("observation_window", Map.of("started_at", (observation.startedAt() == null ? now : observation.startedAt()).toString(),
+                "finished_at", (observation.finishedAt() == null ? now : observation.finishedAt()).toString()));
+        evidence.put("timeout", Objects.toString(observation.timeout(), ""));
+        evidence.put("poll_interval", Objects.toString(observation.pollInterval(), ""));
+        evidence.put("attempts", observation.attempts());
+        evidence.put("observed_count", observation.observedCount());
+        evidence.put("matched", observation.matched());
+        evidence.put("matched_fields", observation.matchedFields());
+        evidence.put("masked_observed_payload", maskPayload(observation.matchedPayload()));
         if (observation.failure() != null && observation.lastObservedPayload() != null) {
-            evidence.append("last_observed_payload:\n");
-            appendYamlValue(evidence, maskPayload(observation.lastObservedPayload()), 2);
+            evidence.put("last_observed_payload", maskPayload(observation.lastObservedPayload()));
         }
-        evidence.append("duration_ms: ").append(observation.durationMs()).append('\n');
-        evidence.append("status: ").append(observation.failure() == null ? "passed" : "failed").append('\n');
-        evidence.append("failure_code: ").append(observation.failure() == null ? "" : observation.failure().code()).append('\n');
-        evidence.append("masking:\n  raw_secret_found: false\n");
-        write(context.runDir().resolve(ref), evidence.toString());
+        evidence.put("duration_ms", observation.durationMs());
+        evidence.put("status", observation.failure() == null ? "passed" : "failed");
+        evidence.put("failure_code", observation.failure() == null ? "" : observation.failure().code());
+        evidence.put("masking", Map.of("raw_secret_found", false));
+        try {
+            ProviderDataYaml.writeEvidence(context.runDir().resolve(ref), evidence);
+        } catch (IOException error) {
+            throw new UncheckedIOException("Failed to write NATS evidence.", error);
+        }
         return ref;
     }
 
@@ -617,7 +627,7 @@ public class NatsProviderRuntime implements ProviderRuntime {
         if (value instanceof Collection<?> collection) {
             return collection.stream().map(this::maskPayload).toList();
         }
-        return value == null ? "" : value;
+        return value instanceof String text ? V03OutputRedactor.redactProviderDiagnostic(text) : value;
     }
 
     private String evidenceClassification(ProviderExecutionContext context) {
@@ -681,79 +691,14 @@ public class NatsProviderRuntime implements ProviderRuntime {
         return value.replaceAll("[^A-Za-z0-9._-]", "_");
     }
 
-    private void write(Path path, String content) {
-        try {
-            Files.createDirectories(path.getParent());
-            Files.writeString(path, content);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to write NATS provider evidence: " + path, e);
-        }
-    }
-
-    private void appendYamlValue(StringBuilder builder, Object value, int indent) {
-        String prefix = " ".repeat(indent);
-        if (value instanceof Map<?, ?> map && !map.isEmpty()) {
-            for (Map.Entry<?, ?> entry : map.entrySet()) {
-                builder.append(prefix).append(entry.getKey()).append(": ");
-                Object nested = entry.getValue();
-                if (nested instanceof Map<?, ?> || nested instanceof Collection<?>) {
-                    builder.append('\n');
-                    appendYamlValue(builder, nested, indent + 2);
-                } else {
-                    builder.append(nested).append('\n');
-                }
-            }
-        } else if (value instanceof Collection<?> collection && !collection.isEmpty()) {
-            for (Object item : collection) {
-                builder.append(prefix).append("- ");
-                if (item instanceof Map<?, ?> || item instanceof Collection<?>) {
-                    builder.append('\n');
-                    appendYamlValue(builder, item, indent + 2);
-                } else {
-                    builder.append(item).append('\n');
-                }
-            }
-        } else {
-            builder.append(prefix).append("{}\n");
-        }
-    }
-
     private String toJson(Object value) {
-        if (value == null) {
-            return "null";
+        try {
+            return JSON.writeValueAsString(value);
+        } catch (JsonProcessingException error) {
+            throw new IllegalArgumentException("Invalid NATS payload.", error);
         }
-        if (value instanceof String text) {
-            return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
-        }
-        if (value instanceof Number || value instanceof Boolean) {
-            return String.valueOf(value);
-        }
-        if (value instanceof Map<?, ?> map) {
-            StringBuilder json = new StringBuilder("{");
-            boolean first = true;
-            for (Map.Entry<?, ?> entry : map.entrySet()) {
-                if (!first) {
-                    json.append(", ");
-                }
-                first = false;
-                json.append(toJson(entry.getKey())).append(": ").append(toJson(entry.getValue()));
-            }
-            return json.append("}").toString();
-        }
-        if (value instanceof Collection<?> collection) {
-            StringBuilder json = new StringBuilder("[");
-            boolean first = true;
-            for (Object item : collection) {
-                if (!first) {
-                    json.append(", ");
-                }
-                first = false;
-                json.append(toJson(item));
-            }
-            return json.append("]").toString();
-        }
-        return toJson(String.valueOf(value));
     }
+
 
     private record ConnectionSelection(String busKey, URI externalUri, ProviderFailure failure) {
     }
