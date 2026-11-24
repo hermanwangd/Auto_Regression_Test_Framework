@@ -1,4 +1,3 @@
-import os
 import shutil
 import subprocess
 import sys
@@ -35,8 +34,8 @@ class SecretScanTest(unittest.TestCase):
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_text(content + "\n")
                 result = subprocess.run(
-                    [shutil.which("bash"), str(script)], cwd=root,
-                    env={**os.environ, "PATH": str(commands)}, capture_output=True, text=True,
+                    ["/bin/bash", str(script)], cwd=root,
+                    env={"PATH": str(commands), "LC_ALL": "C"}, capture_output=True, text=True,
                 )
                 self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
                 marker = "failed" if expected else "passed"

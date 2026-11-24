@@ -8,6 +8,7 @@ All receipts remain local framework verification, never SIT or release evidence.
 import argparse
 import datetime as dt
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -18,7 +19,9 @@ import socket
 import subprocess
 import tarfile
 import time
-import urllib.request
+import tempfile
+from contextlib import closing
+from urllib.parse import urlsplit
 import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -92,6 +95,55 @@ def validate_policy(expected_sha=None):
     return policy
 
 
+def release_redirect_target(location):
+    require(isinstance(location, str) and location and not any(ord(c) < 33 for c in location),
+            "Invalid release asset redirect")
+    url = urlsplit(location)
+    require(url.scheme == "https" and url.netloc == "release-assets.githubusercontent.com"
+            and url.path.startswith("/") and not url.path.startswith("//") and not url.fragment,
+            "Unexpected release asset redirect")
+    return url.path + ("?" + url.query if url.query else "")
+
+
+def download_release_file(version, pin, directory):
+    name = pin["name"]
+    require(re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", version) and
+            (name == "SHA256SUMS" or name in
+             {f"nats-server-{version}-{arch}.tar.gz" for arch in ("darwin-arm64", "linux-amd64")}),
+            "Unsupported release asset name")
+    require(0 < pin["size"] <= MAX_BYTES, "Unsupported release asset size")
+    path = directory / name
+    if path.exists():
+        return path
+    target = f"/nats-io/nats-server/releases/download/{version}/{name}"
+    headers = {"User-Agent": "framework-sit-public-proof"}
+    for host in ("github.com", "release-assets.githubusercontent.com"):
+        with closing(http.client.HTTPSConnection(host, timeout=30)) as connection:
+            connection.request("GET", target, headers=headers)
+            with connection.getresponse() as response:
+                if response.status in (301, 302, 303, 307, 308) and host == "github.com":
+                    target = release_redirect_target(response.getheader("Location"))
+                    continue
+                require(response.status == 200, "Release asset download failed")
+                with tempfile.NamedTemporaryFile(dir=directory) as temporary:
+                    digest = hashlib.sha256()
+                    count = 0
+                    while block := response.read(65536):
+                        count += len(block)
+                        require(count <= pin["size"], "Official download exceeds pinned size")
+                        digest.update(block)
+                        temporary.write(block)
+                    require(count == pin["size"] and digest.hexdigest() == pin["sha256"],
+                            "Official asset checksum mismatch")
+                    temporary.flush()
+                    try:
+                        os.link(temporary.name, path)
+                    except FileExistsError:
+                        pass  # The caller verifies the cache entry before use.
+                    return path
+    raise ValueError("Release asset redirect limit exceeded")
+
+
 def download_asset(directory):
     lock = read_json(HERE / "nats-lock.json")
     key = platform.system() + "-" + platform.machine().lower()
@@ -100,20 +152,8 @@ def download_asset(directory):
     require(key in lock["assets"], "Pinned NATS platform supports Darwin arm64 or Linux x86_64")
     asset = lock["assets"][key]
     directory.mkdir(parents=True, exist_ok=True)
-    base = "https://github.com/nats-io/nats-server/releases/download/" + lock["version"] + "/"
     for pin in [lock["checksums"], asset]:
-        path = directory / pin["name"]
-        if not path.exists():
-            request = urllib.request.Request(base + pin["name"], headers={"User-Agent": "framework-sit-public-proof"})
-            with urllib.request.urlopen(request, timeout=30) as source, path.open("xb") as output:
-                total = 0
-                while True:
-                    block = source.read(65536)
-                    if not block:
-                        break
-                    total += len(block)
-                    require(total <= pin["size"], "Official download exceeds pinned size")
-                    output.write(block)
+        path = download_release_file(lock["version"], pin, directory)
         require(path.is_file() and not path.is_symlink() and path.stat().st_size == pin["size"]
                 and sha(path) == pin["sha256"], "Official asset checksum mismatch")
     sums = dict((parts[1].lstrip("*"), parts[0]) for line in (directory / "SHA256SUMS").read_text().splitlines()
@@ -222,9 +262,11 @@ def validate_plan(plan):
 
 def java_path():
     home = os.environ.get("JAVA_HOME")
-    executable = Path(home) / "bin/java" if home else Path(shutil.which("java") or "/missing/java")
-    require(executable.is_file(), "Java 17+ executable is required")
-    return executable.resolve()
+    executable = Path(home) / "bin/java" if home else Path("/usr/bin/java")
+    executable = executable.resolve(strict=True)
+    require(executable.name == "java" and os.pathsep not in str(executable.parent)
+            and executable.is_file() and os.access(executable, os.X_OK), "Java 17+ executable is required")
+    return executable
 
 
 def prepare(args, output):
@@ -262,11 +304,12 @@ def prepare(args, output):
         (suite / "handoff").mkdir()
         review = expected_handoff(case, plan, suite, include_hashes=False)
         write_json(suite / "review-input.json", review)
-        command = [plan["java"], "-Xmx512m", "-XX:MaxMetaspaceSize=256m", "-jar", str(framework),
+        arguments = ["-Xmx512m", "-XX:MaxMetaspaceSize=256m", "-jar", str(framework),
                    "prepare-product-test-handoff", "--suite", str(suite / "suite_manifest.yaml"), "--profile", "local_native",
                    "--review-input", str(suite / "review-input.json"), "--out", str(suite / "handoff/reviewed-tests.json")]
         with (suite / "prepare.log").open("w") as log:
-            completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=30)
+            completed = subprocess.run(["java", *arguments], env={"PATH": str(java_path().parent)},
+                                       stdout=log, stderr=subprocess.STDOUT, timeout=30)
         require(completed.returncode == 0, "Framework handoff preparation rejected " + case + "; inspect prepare.log")
         plan["cases"][case] = {"subject": subject, "expected_verdict": CASES[case],
                                "handoff_sha256": sha(suite / "handoff/reviewed-tests.json")}
@@ -287,14 +330,27 @@ def port_closed(port):
 class Broker:
     def __init__(self, plan, directory):
         self.plan, self.directory, self.process, self.log = plan, directory, None, None
+        self.private = None
     def start(self):
         require_free_space(self.directory)
         require(port_closed(self.plan["port"]), "Selected port is already occupied; no existing process was changed")
-        require(sha(self.plan["binary"]) == self.plan["binary_sha256"], "Broker binary changed")
+        # Go releases are standalone. Launch from a fresh private copy of the exact approved bytes.
+        self.private = tempfile.TemporaryDirectory(prefix="broker-", dir=self.directory)
+        private = Path(self.private.name)
+        binary = private / "nats-server"
+        with Path(self.plan["binary"]).open("rb") as source, binary.open("xb") as destination:
+            limit = max(asset["binary_size"] for asset in read_json(HERE / "nats-lock.json")["assets"].values())
+            total = 0
+            while block := source.read(65536):
+                total += len(block)
+                require(total <= limit, "Broker binary exceeds locked release size")
+                destination.write(block)
+        require(sha(binary) == self.plan["binary_sha256"], "Broker binary changed")
+        binary.chmod(0o500)
         self.log = (self.directory / ("broker-" + uuid.uuid4().hex + ".log")).open("wb")
-        command = [self.plan["binary"], "-a", "127.0.0.1", "-p", str(self.plan["port"]), "-n", self.plan["broker_name"]]
-        self.process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=self.log, stderr=subprocess.STDOUT,
-                                        cwd=self.directory, env={})
+        self.process = subprocess.Popen(["./nats-server", "-a", "127.0.0.1", "-p", str(self.plan["port"]),
+                                         "-n", self.plan["broker_name"]], stdin=subprocess.DEVNULL,
+                                        stdout=self.log, stderr=subprocess.STDOUT, cwd=private, env={})
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
             require(self.process.poll() is None, "Owned broker exited before readiness; inspect broker log")
@@ -307,7 +363,7 @@ class Broker:
                             "Loopback peer is not the owned broker")
                     require(info.get("version") == read_json(HERE / "nats-lock.json")["version"].removeprefix("v"),
                             "Owned broker reported an unexpected release version")
-                    return {"pid": self.process.pid, "argv": command, "server_name": info["server_name"], "version": info.get("version")}
+                    return {"pid": self.process.pid, "argv": self.process.args, "cwd": str(private), "server_name": info["server_name"], "version": info.get("version")}
             except (ConnectionError, OSError):
                 time.sleep(0.03)
         raise ValueError("Owned broker did not become ready within five seconds")
@@ -315,6 +371,9 @@ class Broker:
         if self.process is None:
             if self.log is not None:
                 self.log.close()
+            if self.private is not None:
+                self.private.cleanup()
+                self.private = None
             return {"terminated": True, "port_closed": port_closed(self.plan["port"])}
         if self.process.poll() is None:
             self.process.terminate()
@@ -327,6 +386,8 @@ class Broker:
         evidence = {"pid": self.process.pid, "exit_code": self.process.returncode, "terminated": self.process.poll() is not None,
                     "port_closed": port_closed(self.plan["port"])}
         self.process = None
+        self.private.cleanup()
+        self.private = None
         require(evidence["terminated"] and evidence["port_closed"], "Owned broker cleanup is unconfirmed")
         return evidence
 
@@ -351,12 +412,13 @@ def run_case(plan, prepared, case, output):
                "artifact_root": str(suite), "suite_manifest": str(suite / "suite_manifest.yaml"), "suite_id": handoff["suite_id"],
                "profile": "local_native", "reviewed_handoff": str(suite / "handoff/reviewed-tests.json"), "expected_handoff_sha256": pin}
     write_json(work / "request.json", request)
-    environment = {"SWARM_PRODUCT_TEST_FRAMEWORK_JAR": plan["framework_jar"], "SWARM_PRODUCT_TEST_FRAMEWORK_SHA256": plan["framework_sha256"],
+    environment = {"PATH": str(java_path().parent),
+                   "SWARM_PRODUCT_TEST_FRAMEWORK_JAR": plan["framework_jar"], "SWARM_PRODUCT_TEST_FRAMEWORK_SHA256": plan["framework_sha256"],
                    "SWARM_PRODUCT_TEST_HANDOFF_SHA256": pin, "SWARM_PRODUCT_TEST_ARTIFACT_ROOT": str(suite),
                    "SWARM_PRODUCT_TEST_OUTPUT_ROOT": str(work / "outputs"), "SWARM_PRODUCT_TEST_TIMEOUT_MS": "60000",
                    "SWARM_PRODUCT_TEST_MAX_OUTPUT_BYTES": "262144"}
     with (work / "receipt.json").open("w") as stdout, (work / "stderr.log").open("w") as stderr:
-        completed = subprocess.run([plan["java"], "-Xmx512m", "-XX:MaxMetaspaceSize=256m", "-jar", plan["module_cli"],
+        completed = subprocess.run(["java", "-Xmx512m", "-XX:MaxMetaspaceSize=256m", "-jar", plan["module_cli"],
                                     "product-test", "run", "--request", str(work / "request.json")],
                                    env=environment, cwd=work, stdout=stdout, stderr=stderr, timeout=75)
     receipt = read_json(work / "receipt.json")

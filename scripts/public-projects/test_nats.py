@@ -2,6 +2,7 @@
 import copy
 import datetime as dt
 import hashlib
+import io
 import json
 import importlib.util
 from pathlib import Path
@@ -44,6 +45,33 @@ class NatsHarnessBoundaryTest(unittest.TestCase):
         nats.validate_suites(self.plan, self.root)
         wrong = nats.read_json(self.root / "wrong-oracle/test_cases/publish.yaml")
         self.assertIs(wrong["verify"][0]["assert"]["expected"], False)
+
+    def test_release_redirect_requires_the_exact_download_service(self):
+        base = "https://release-assets.githubusercontent.com"
+        self.assertEqual(nats.release_redirect_target(base + "/fixture?q=1"), "/fixture?q=1")
+        for location in (None, "/fixture", "http://release-assets.githubusercontent.com/fixture",
+                         base + ".example/fixture", base + ":8443/fixture", base + "//fixture", base + "/x#y"):
+            with self.subTest(location=location), self.assertRaises(ValueError):
+                nats.release_redirect_target(location)
+
+    def test_download_publishes_only_complete_pinned_bytes(self):
+        class Response(io.BytesIO):
+            status = 200
+
+        content = b"NATS fixture"
+        pin = {"name": "SHA256SUMS", "size": len(content), "sha256": hashlib.sha256(content).hexdigest()}
+        cache = self.root / "download"
+        cache.mkdir()
+        with mock.patch.object(nats.http.client, "HTTPSConnection") as connect:
+            connection = connect.return_value
+            for partial in (content[:-1], content + b".", b"X" * len(content)):
+                connection.getresponse.return_value = Response(partial)
+                with self.subTest(partial=partial), self.assertRaises(ValueError):
+                    nats.download_release_file("v1.0.0", pin, cache)
+                self.assertEqual(list(cache.iterdir()), [])
+            connection.getresponse.return_value = Response(content)
+            self.assertEqual(nats.download_release_file("v1.0.0", pin, cache).read_bytes(), content)
+            connect.assert_called_with("github.com", timeout=30)
 
     def test_added_operation_is_rejected_before_dispatch(self):
         path = self.root / "positive/test_cases/publish.yaml"

@@ -195,8 +195,8 @@ class SitPostdeployTests(unittest.TestCase):
         output = self.root / "executed"
         output.mkdir()
         commands = []
-        def fake_launch(argv, work, name, deadline):
-            commands.append((argv, name))
+        def fake_launch(java, argv, work, name, deadline):
+            commands.append(([str(java), *argv], name))
             if name == "validate": return 0, "validation_status: passed\nplan_digest: " + "a" * 64
             if name == "run":
                 path, result, _ = self.canonical(output)
@@ -225,7 +225,7 @@ class SitPostdeployTests(unittest.TestCase):
         output = self.root / "readiness-blocked"
         output.mkdir()
         summary = {}
-        def fake_launch(argv, work, name, deadline):
+        def fake_launch(java, argv, work, name, deadline):
             if name == "validate": return 0, "validation_status: passed\nplan_digest: " + "a" * 64
             if name == "run":
                 path, result, readiness = self.canonical(output)
@@ -248,16 +248,17 @@ class SitPostdeployTests(unittest.TestCase):
         child.poll.return_value = 0
         child.wait.return_value = 0
         with patch.object(gate.subprocess, "Popen", return_value=child) as spawn:
-            status, _ = gate.launch(["/approved/java", "validate"], output, "small", gate.time.monotonic() + 1)
+            status, _ = gate.launch(Path("/approved/java"), ["validate"], output, "small", gate.time.monotonic() + 1)
         self.assertEqual(status, 0)
-        self.assertEqual(spawn.call_args.kwargs["env"], {"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"})
+        self.assertEqual(spawn.call_args.args[0], ["java", "validate"])
+        self.assertEqual(spawn.call_args.kwargs["env"], {"PATH": "/approved", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"})
         self.assertTrue(spawn.call_args.kwargs["start_new_session"])
         self.assertNotIn("shell", spawn.call_args.kwargs)
         def overflow(*args, **kwargs):
             kwargs["stdout"].write(b"x" * (gate.MAX_LOG + 1))
             return child
         with patch.object(gate.subprocess, "Popen", side_effect=overflow):
-            with self.assertRaises(gate.Blocked): gate.launch(["/approved/java"], output, "large", gate.time.monotonic() + 1)
+            with self.assertRaises(gate.Blocked): gate.launch(Path("/approved/java"), [], output, "large", gate.time.monotonic() + 1)
 
     def test_readiness_simulated_version_adapter_time_identity_and_plan_rejected(self):
         output = self.root / "canonical"

@@ -247,11 +247,14 @@ def validate_test(test, targets):
                 "Expected values must be inline literals without reference substitutes")
 
 
-def launch(argv, work, name, deadline):
+def launch(java, arguments, work, name, deadline):
     """Bound owned JVM process group and files, without a shell or inherited credentials."""
+    require(java.is_absolute() and java.name == "java" and os.pathsep not in str(java.parent),
+            "Runner must select a JDK java executable")
     out_path, err_path = work / (name + ".stdout"), work / (name + ".stderr")
     with out_path.open("wb") as out, err_path.open("wb") as err:
-        child = subprocess.Popen(argv, cwd=work, env={"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
+        child = subprocess.Popen(["java", *arguments], cwd=work,
+                                 env={"PATH": str(java.parent), "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
                                  stdin=subprocess.DEVNULL, stdout=out, stderr=err, start_new_session=True)
         try:
             while child.poll() is None:
@@ -306,17 +309,17 @@ def execute(handoff, blobs, output, java, summary=None):
     contracts = output / "docs/02-architecture/contracts/provider-contracts"
     contracts.mkdir(parents=True)
     (contracts / "rest_client_v0_3.yaml").write_bytes(blobs[handoff["suite"]["provider_contract_ref"]])
-    base = [str(java), "-Xmx512m", "-XX:MaxMetaspaceSize=256m", "-Djava.io.tmpdir=" + str(runtime),
+    base = ["-Xmx512m", "-XX:MaxMetaspaceSize=256m", "-Djava.io.tmpdir=" + str(runtime),
             "-Dloader.path=" + plugins, "-cp", str(snapshot / handoff["framework"]["path"]),
             "org.springframework.boot.loader.launch.PropertiesLauncher"]
     deadline = time.monotonic() + 300
     summary["framework_launch_attempted"] = True
-    validate_exit, validate_stdout = launch(base + ["validate", "--suite", str(snapshot / handoff["suite"]["manifest"]),
+    validate_exit, validate_stdout = launch(java, base + ["validate", "--suite", str(snapshot / handoff["suite"]["manifest"]),
                                       "--profile", handoff["suite"]["profile"], "--root", str(runtime)], output, "validate", deadline)
     plans = [line.removeprefix("plan_digest: ") for line in validate_stdout.splitlines() if line.startswith("plan_digest: ")]
     require(validate_exit == 0 and "validation_status: passed" in validate_stdout
             and plans == [handoff["expected_plan_digest"]], "Framework compiled plan differs from protected approval")
-    run_exit, stdout = launch(base + ["run", "--suite", str(snapshot / handoff["suite"]["manifest"]),
+    run_exit, stdout = launch(java, base + ["run", "--suite", str(snapshot / handoff["suite"]["manifest"]),
                               "--profile", handoff["suite"]["profile"], "--root", str(runtime)], output, "run", deadline)
     paths = [line.removeprefix("result_json: ") for line in stdout.splitlines() if line.startswith("result_json: ")]
     require(len(paths) == 1, "Framework did not return exactly one canonical result")
@@ -325,8 +328,8 @@ def execute(handoff, blobs, output, java, summary=None):
     rel = str(path.relative_to(runtime))
     require(rel.startswith("target/regression/"), "Framework result is outside canonical runtime root")
     result = document(read_file(runtime, rel))
-    evidence_exit, evidence_stdout = launch(base + ["validate-evidence", "--result", str(path), "--root", str(runtime)], output, "validate-evidence", deadline)
-    report_exit, report_stdout = launch(base + ["report", "--result", str(path), "--format", "json", "--root", str(runtime)], output, "report", deadline)
+    evidence_exit, evidence_stdout = launch(java, base + ["validate-evidence", "--result", str(path), "--root", str(runtime)], output, "validate-evidence", deadline)
+    report_exit, report_stdout = launch(java, base + ["report", "--result", str(path), "--format", "json", "--root", str(runtime)], output, "report", deadline)
     require(evidence_exit == 0 and "evidence_validation_status: passed" in evidence_stdout and report_exit == 0,
             "Existing framework evidence validation/report rejected the result")
     report = document(report_stdout)
