@@ -10,6 +10,35 @@ import org.junit.jupiter.api.Test;
 
 class V03OutputRedactorTest {
     @Test
+    void masksSerializedJsonValuesInNestedDiagnosticEnvelopes() throws Exception {
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        String inner = "{\"session\":\"sample-inside\",\"note\":\"公開\"}";
+        String once = json.writeValueAsString(Map.of("echo", inner, "trace", "public-trace"));
+        String twice = json.writeValueAsString(List.of(once));
+        var outer = json.readTree(V03OutputRedactor.redactProviderDiagnostic(twice));
+        var echo = json.readTree(outer.get(0).asText());
+        assertThat(echo.path("trace").asText()).isEqualTo("public-trace");
+        var payload = json.readTree(echo.path("echo").asText());
+        assertThat(payload.path("session").asText()).isEqualTo("***MASKED***");
+        assertThat(payload.path("note").asText()).isEqualTo("公開");
+        assertThat(new V03OutputRedactor().redactValue(Map.of("diagnostic", twice)).toString())
+                .doesNotContain("sample-inside").contains("public-trace");
+    }
+
+    @Test
+    void boundsNestedJsonWorkAndPreservesUnrelatedDiagnostics() throws Exception {
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        var redactor = new V03OutputRedactor();
+        String nested = "{\"session\":\"fixture-deep\"}";
+        for (int i = 0; i < 12; i++) nested = json.writeValueAsString(List.of(nested));
+        String output = redactor.redactMessage(json.writeValueAsString(Map.of("echo", nested, "trace", "ok")));
+        assertThat(output).doesNotContain("fixture-deep");
+        assertThat(json.readTree(output).path("trace").asText()).isEqualTo("ok");
+        String message = "[WARN] quote \\\"public\\\" status=ok";
+        assertThat(redactor.redactMessage(message)).isEqualTo(message);
+    }
+
+    @Test
     void decodesEscapedJsonMemberNamesOnlyForComparison() {
         var redactor = new V03OutputRedactor();
         String session = "\\uff33\\uff45\\uff53\\uff53\\uff49\\uff4f\\uff4e";

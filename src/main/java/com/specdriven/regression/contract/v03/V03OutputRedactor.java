@@ -1,9 +1,12 @@
 package com.specdriven.regression.contract.v03;
 
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.specdriven.regression.contract.SecurityFieldNames;
+import java.io.IOException;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -17,7 +20,9 @@ import java.util.stream.Collectors;
 /** Applies Provider Contract output sensitivity before values leave runtime memory. */
 public final class V03OutputRedactor {
     public static final String MASKED = "[MASKED]";
-    private static final ObjectReader JSON_LABEL = new ObjectMapper().readerFor(String.class);
+    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectReader JSON_LABEL = JSON.readerFor(String.class);
+    private static final int MAX_EMBEDDED_JSON_DEPTH = 8;
 
     private static final String WORD = "[\\p{L}\\p{M}\\p{N}\\p{So}\\p{Pc}.．\\-－﹣]++";
     private static final String SEPARATOR = "[:=：＝﹕﹦]";
@@ -126,6 +131,13 @@ public final class V03OutputRedactor {
 
     private static String maskMessage(String message, ContractFields fields, String marker) {
         if (message == null) return "";
+        return maskMessage(message, fields, marker, 0);
+    }
+
+    private static String maskMessage(String message, ContractFields fields, String marker, int depth) {
+        if (looksLikeJsonContainer(message) && (message.contains("\\\"") || message.contains("\\u"))) {
+            message = maskEmbeddedJson(message, fields, marker, depth);
+        }
         if (message.contains("-----BEGIN ")) message = PRIVATE_KEY_BLOCK.matcher(message).replaceAll(marker);
         Matcher labels = MESSAGE_LABEL.matcher(message);
         Matcher assignment = ASSIGNMENT.matcher(message);
@@ -178,6 +190,41 @@ public final class V03OutputRedactor {
     }
 
     private record Span(int start, int end) {}
+
+    private static boolean looksLikeJsonContainer(String text) {
+        int i = 0;
+        while (i < text.length() && Character.isWhitespace(text.charAt(i))) i++;
+        if (i == text.length()) return false;
+        char opener = text.charAt(i++);
+        if (opener != '{' && opener != '[') return false;
+        while (i < text.length() && Character.isWhitespace(text.charAt(i))) i++;
+        if (i == text.length()) return false;
+        char first = text.charAt(i);
+        return opener == '{' ? first == '"' || first == '}' : "\"{[]-0123456789tfn".indexOf(first) >= 0;
+    }
+
+    /** An HTTP response can contain another serialized JSON document as a string value. */
+    private static String maskEmbeddedJson(String text, ContractFields fields, String marker, int depth) {
+        StringBuilder result = new StringBuilder();
+        int copied = 0;
+        try (JsonParser parser = JSON.createParser(text)) {
+            while (parser.nextToken() != null) {
+                if (!parser.hasToken(JsonToken.VALUE_STRING)) continue;
+                String value = parser.getText();
+                if (!looksLikeJsonContainer(value)) continue;
+                String safe = depth >= MAX_EMBEDDED_JSON_DEPTH ? marker : maskMessage(value, fields, marker, depth + 1);
+                if (safe.equals(value)) continue;
+                int start = Math.toIntExact(parser.currentTokenLocation().getCharOffset());
+                int end = Math.toIntExact(parser.currentLocation().getCharOffset());
+                result.append(text, copied, start).append(JSON.writeValueAsString(safe));
+                copied = end;
+            }
+        } catch (IOException invalidOrOversizedJson) {
+            // An ambiguous encoded envelope must not reach diagnostic evidence with raw inner values.
+            return marker;
+        }
+        return copied == 0 ? text : result.append(text, copied, text.length()).toString();
+    }
 
     private static String quotedLabel(String quoted) {
         if (quoted.charAt(0) == '"' && quoted.indexOf('\\') >= 0) {

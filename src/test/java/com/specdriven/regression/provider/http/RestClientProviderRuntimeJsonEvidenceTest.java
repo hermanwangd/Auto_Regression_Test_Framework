@@ -104,6 +104,21 @@ class RestClientProviderRuntimeJsonEvidenceTest {
     }
 
     @Test
+    void masksAnEchoedJsonStringInBothOutputAndProviderEvidence() throws Exception {
+        String source = "{\"session\":\"fixture-inner\",\"trace\":\"公開\"}";
+        String rawResponse = JSON.writeValueAsString(Map.of("echo", source));
+        String safeResponse = JSON.writeValueAsString(Map.of("echo", source.replace("fixture-inner", "***MASKED***")));
+        responseBody.set(rawResponse);
+
+        ProviderOperationResult result = runtime.execute(context(), request("POST", source));
+
+        assertThat(result.passed()).isTrue();
+        assertThat(receivedBody.get()).isEqualTo(source);
+        assertThat(result.outputs().get("response.body")).isEqualTo(safeResponse);
+        assertEvidenceBodies(source.replace("fixture-inner", "***MASKED***"), safeResponse, "POST");
+    }
+
+    @Test
     void preservesTabInRequestBodyEvidence() throws Exception {
         responseBody.set("request accepted");
 
