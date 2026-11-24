@@ -7,20 +7,20 @@ external systems for these samples.
 ## JDBC Oracle
 
 - Dependency: reachable Oracle database and approved Oracle JDBC driver.
-- Required env var: `JDBC_CONNECTION`.
+- Required runner variables are `JDBC_CONNECTION` and `REGRESS_JDBC_APPROVED_SQL_SHA256`. The latter authorizes the sample’s seed, query and cleanup SQL. See [JDBC driver setup and SQL approval](driver_setup.md#external-sql-approval).
 - Validate: `java -jar ../spec-driven-auto-regression-{{VERSION}}.jar validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile external_oracle`.
 - Run: add `--driver-path ./drivers/oracle/ojdbc11.jar`.
 - Evidence: JDBC query, seed, cleanup, result JSON, and evidence index.
-- Common failures: `JDBC_DRIVER_NOT_FOUND`, `JDBC_CONNECTION_FAILED`.
+- Common failures: `JDBC_SQL_NOT_APPROVED`, `JDBC_DRIVER_NOT_FOUND`, `DB_CONNECTION_FAILED`.
 
 ## JDBC DB2
 
 - Dependency: reachable DB2 database and approved DB2 JDBC driver.
-- Required env var: `JDBC_CONNECTION`.
+- Required runner variables are `JDBC_CONNECTION` and `REGRESS_JDBC_APPROVED_SQL_SHA256`. The latter authorizes the sample’s seed, query and cleanup SQL. See [JDBC driver setup and SQL approval](driver_setup.md#external-sql-approval).
 - Validate: `java -jar ../spec-driven-auto-regression-{{VERSION}}.jar validate --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile external_db2`.
 - Run: add `--driver-path ./drivers/db2/jcc.jar`.
 - Evidence: JDBC query, seed, cleanup, result JSON, and evidence index.
-- Common failures: `JDBC_DRIVER_NOT_FOUND`, `JDBC_CONNECTION_FAILED`.
+- Common failures: `JDBC_SQL_NOT_APPROVED`, `JDBC_DRIVER_NOT_FOUND`, `DB_CONNECTION_FAILED`.
 
 ## Kafka
 

@@ -1,6 +1,7 @@
 package com.specdriven.regression.provider.cli;
 
 import com.sun.nio.file.ExtendedOpenOption;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -17,8 +18,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
 
-/** Holds the verified launch image until child and stream cleanup is complete. */
-final class PinnedCliExecutable implements AutoCloseable {
+/** Owns the verified image or the file handle that protects it in place. */
+final class PinnedCliExecutable implements Closeable {
     private final Path image;
     private final Path staging;
     private final FileChannel heldFile;

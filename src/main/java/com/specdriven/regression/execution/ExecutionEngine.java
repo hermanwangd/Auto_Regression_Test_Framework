@@ -197,7 +197,7 @@ public class ExecutionEngine {
                 writeExternalRunnerEvidence(adapterProviderContract, contract, runDir);
         boolean passed = externalRunnerEvidence.complete()
                 && !adapterResult.timeout()
-                && successExitCodes(contract.get("success_exit_codes")).contains(adapterResult.exitCode());
+                && successfulProviderExit(adapterProviderContract, adapterResult.exitCode(), contract);
         AssertionEvaluation assertionEvaluation = null;
         if (passed) {
             assertionEvaluation = assertionEngine.evaluateFileDiff(
@@ -429,6 +429,13 @@ public class ExecutionEngine {
             }
         }
         return fallback;
+    }
+
+    private boolean successfulProviderExit(ResolvedProviderContract provider, int exitCode, Map<String, Object> contract) {
+        // These runtimes use nonzero codes for their own failed evidence or checks.
+        if (exitCode != 0 && ("messaging".equalsIgnoreCase(provider.providerFamily())
+                || "deployment_readiness".equalsIgnoreCase(provider.providerFamily()))) return false;
+        return successExitCodes(contract.get("success_exit_codes")).contains(exitCode);
     }
 
     private List<Integer> successExitCodes(Object value) {

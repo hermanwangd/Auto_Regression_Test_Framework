@@ -26,6 +26,6 @@
     "approved_runtime.py": "a46dcc97d890c0d422837ddf885ce57eca6e5386edee0d01c1ccd8a6d0467832",
     "approved_import_probe.py": "7566a48e58b6c104c51263b32e91272723bbcf238e16d95b0fd9d52b83bef3a6",
     "controls/process_tree_fixture.py": "f6bfedec1f6fc6beb35292f59f0a3d1dc5d93ea655d44f27a64007612cbc7c13",
-    "test_process_policy.py": "f8b64c693f3277d6bd72cc741354f7b5bfc3d77371db52a151b3411d489f2994"
+    "test_process_policy.py": "283c6346d98bdcfe3f086d0fface1685653641dfae443c31988be32e47fda017"
   }
 }

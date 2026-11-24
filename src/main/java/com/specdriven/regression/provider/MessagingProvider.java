@@ -120,6 +120,11 @@ public class MessagingProvider {
                     intValue(contract.get("timeout_seconds"), 300),
                     contract,
                     action));
+            if (!ProviderDiagnosticRedactor.canPersistObservation(transportResult.actualOutput())) {
+                return fail(runDir, stdoutLog, stderrLog, actualOutput, providerName, providerType,
+                        connectionRef, targetRef, targetField, actionName, mode, payloadBinding, correlationId,
+                        cleanupStrategy, "Messaging observation withheld by the evidence redaction policy.");
+            }
             String diagnostic = nats ? natsSuccessDiagnostic(mode, targetRef, transportResult.messageCount(),
                     transportConnection.startsWith("mock://")) : transportResult.stdout();
             Files.writeString(stdoutLog, ProviderDiagnosticRedactor.maskSensitiveText(diagnostic));
@@ -246,17 +251,17 @@ public class MessagingProvider {
         Map<String, Object> evidence = new LinkedHashMap<>();
         evidence.put("status", status);
         evidence.put("provider", ProviderDiagnosticRedactor.maskSensitiveText(providerName));
-        evidence.put("provider_type", providerType);
+        evidence.put("provider_type", ProviderDiagnosticRedactor.maskSensitiveText(providerType));
         if (!connectionRef.isBlank()) evidence.put("connection_ref", NATS.matcher(providerType).matches() ? connectionRef : ProviderDiagnosticRedactor.maskSensitiveText(connectionRef));
         if (!targetRef.isBlank()) evidence.put(targetField, NATS.matcher(providerType).matches() ? targetRef : ProviderDiagnosticRedactor.maskSensitiveText(targetRef));
         Map<String, Object> action = new LinkedHashMap<>();
         action.put("action", ProviderDiagnosticRedactor.maskSensitiveText(actionName));
-        action.put("mode", mode.isBlank() ? "publish" : mode);
+        action.put("mode", mode.isBlank() ? "publish" : ProviderDiagnosticRedactor.maskSensitiveText(mode));
         if (!payloadBinding.isBlank()) action.put("payload_binding", ProviderDiagnosticRedactor.maskSensitiveText(payloadBinding));
         if (!correlationId.isBlank()) action.put("correlation_id", ProviderDiagnosticRedactor.maskSensitiveText(correlationId));
-        if (!cleanupStrategy.isBlank()) action.put("cleanup_strategy", cleanupStrategy);
+        if (!cleanupStrategy.isBlank()) action.put("cleanup_strategy", ProviderDiagnosticRedactor.maskSensitiveText(cleanupStrategy));
         action.put("message_count", messageCount);
-        action.put("actual_output", runDir.relativize(actualOutput).toString());
+        action.put("actual_output", ProviderDiagnosticRedactor.maskSensitiveText(runDir.relativize(actualOutput).toString()));
         evidence.put("actions", List.of(action));
         if (!error.isBlank()) evidence.put("error", error);
         ProviderDataYaml.writeEvidence(runDir.resolve("messaging.yaml"), evidence);

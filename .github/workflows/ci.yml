@@ -34,7 +34,8 @@ jobs:
           java-version: '17'
           cache: maven
       - name: Verify Windows executable pinning and the native provider
-        run: mvn -B -ntp "-Dtest=PinnedCliExecutableTest,CliProcessProviderRuntimeTest#suppliesImmediateEofWhenStdinIsOmitted" test
+        shell: bash
+        run: ./mvnw -B -ntp "-Dtest=PinnedCliExecutableTest,CliProcessProviderRuntimeTest#suppliesImmediateEofWhenStdinIsOmitted" test
 
   framework-gates:
     name: Framework Gates

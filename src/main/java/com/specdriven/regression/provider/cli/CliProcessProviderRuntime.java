@@ -8,6 +8,7 @@ import com.specdriven.regression.provider.runtime.ProviderOperationRequest;
 import com.specdriven.regression.provider.runtime.ProviderOperationResult;
 import com.specdriven.regression.provider.runtime.ProviderRuntime;
 import java.io.ByteArrayOutputStream;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -28,7 +29,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -40,6 +43,7 @@ import java.util.regex.Pattern;
 /** Direct argv execution with finite I/O and evidence; this is not an OS sandbox. */
 public final class CliProcessProviderRuntime implements ProviderRuntime {
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final Executor PIN_RECHECK = CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS);
     private static final String MASK = "***MASKED***";
     private static final Pattern SECRET = Pattern.compile("(?i)(?:bearer\\s+\\S+|[\"']?(?:password|passwd|(?:access_)?token|secret|credential|api[_-]?key|private[_-]?key|authorization|session|cookie)[\"']?\\s*[:=]\\s*\\S+"
             + "|-----BEGIN[^\\r\\n]*PRIVATE KEY-----|(?:https?|grpc|grpcs)://[^/@\\s]+@|jdbc:[^\\s,;]+|nats://[^\\s,;]+)");
@@ -166,7 +170,8 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
             interrupted |= Thread.interrupted();
             boolean clean = cleanup(process, descendants, workers, pending, problem != null);
             if (pinned != null) {
-                try { pinned.close(); } catch (IOException error) { clean = false; }
+                try { clean &= releasePinWhenExited(pinned, process, Map.copyOf(descendants), PIN_RECHECK); }
+                catch (IOException error) { clean = false; }
             }
             evidence.put("cleanup_status", clean ? "complete" : "uncertain");
             evidence.put("descendant_pids", List.copyOf(descendants.keySet()));
@@ -335,6 +340,26 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
 
     private static boolean alive(Process process, Map<Long,ProcessHandle> descendants) {
         return process.isAlive() || descendants.values().stream().anyMatch(ProcessHandle::isAlive);
+    }
+
+    static boolean releasePinWhenExited(Closeable pin, Process parent, Map<Long,ProcessHandle> descendants,
+            Executor recheck) throws IOException {
+        boolean exited;
+        try { exited = parent == null || !alive(parent, descendants); }
+        catch (RuntimeException unavailable) { exited = false; }
+        if (exited) {
+            pin.close();
+            return true;
+        }
+        // Keep the pin strongly reachable after the operation returns, even if exit observation fails.
+        recheck.execute(() -> {
+            try { releasePinWhenExited(pin, parent, descendants, recheck); }
+            catch (IOException error) {
+                System.getLogger(CliProcessProviderRuntime.class.getName())
+                        .log(System.Logger.Level.WARNING, "Could not release the CLI executable pin after exit.", error);
+            }
+        });
+        return false;
     }
 
     private static boolean trackForCleanup(Process process, Map<Long,ProcessHandle> descendants) {

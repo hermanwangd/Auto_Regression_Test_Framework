@@ -70,6 +70,33 @@ class DeploymentReadinessProviderTest {
     }
 
     @Test
+    void rejectsPodLogsContainingCredentialsBeforePersistingObservation() throws Exception {
+        String logs = "service ready\nAuthorization: Bearer pod-log-canary\n";
+        var provider = new DeploymentReadinessProvider(request -> new DeploymentReadinessProbeResult(logs, logs, 1));
+        var result = executeProvider(provider, "payments", Map.of("provider_type", "k8s",
+                "readiness_probe", "pod_logs", "target_selector", "app=payments"));
+
+        assertThat(result.exitCode()).isOne();
+        assertThat(Files.readString(result.actualOutput())).isEmpty();
+        assertThat(Files.readString(result.stdoutLog())).isEmpty();
+        assertThat(Files.readString(result.stderrLog())).contains("observation withheld").doesNotContain("pod-log-canary");
+        assertThat(Files.readString(tempDir.resolve("run/readiness.yaml")))
+                .contains("status: failed", "check_count: 0").doesNotContain("pod-log-canary");
+    }
+
+    @Test
+    void masksMockReadinessReferenceInStdoutAndEvidence() throws Exception {
+        var result = executeProvider(new DeploymentReadinessProvider(), "payments", Map.of("provider_type", "vm",
+                "readiness_probe", "tcp_connect", "host_ref", "mock://fixture", "service_ref", "token=mock-ref-canary"));
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(Files.readString(result.actualOutput())).isEqualTo("ready\n");
+        assertThat(Files.readString(result.stdoutLog())).contains("***MASKED***").doesNotContain("mock-ref-canary");
+        assertThat(Files.readString(tempDir.resolve("run/readiness.yaml")))
+                .contains("status: passed", "***MASKED***").doesNotContain("mock-ref-canary");
+    }
+
+    @Test
     void runsNativeK8sPodLogProbeAndWritesEvidence() throws Exception {
         RecordingDeploymentReadinessProbe probe = new RecordingDeploymentReadinessProbe(
                 new DeploymentReadinessProbeResult(

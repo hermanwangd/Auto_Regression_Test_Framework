@@ -81,6 +81,7 @@ import com.specdriven.regression.provider.ProviderContractResolutionReport;
 import com.specdriven.regression.provider.ProviderContractResolver;
 import com.specdriven.regression.provider.ResolvedProviderContract;
 import com.specdriven.regression.provider.jdbc.JdbcDriverDiscovery;
+import com.specdriven.regression.provider.jdbc.JdbcDriverDiscovery.DiscoveryResult;
 import com.specdriven.regression.provider.jdbc.JdbcDriverLoader;
 import com.specdriven.regression.report.CoverageReportResult;
 import com.specdriven.regression.report.CoverageReportService;
@@ -110,6 +111,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.Yaml;
 
@@ -182,7 +184,6 @@ public class RegressionCommand {
     private final V03DryRunRenderer v03DryRunRenderer = new V03DryRunRenderer();
     private final SuiteArtifactFinalizer suiteArtifactFinalizer = new SuiteArtifactFinalizer();
     private final SuiteAggregationService suiteAggregationService = new SuiteAggregationService();
-    private final SuiteRuntimeDispatcher suiteRuntimeDispatcher = new SuiteRuntimeDispatcher();
     private boolean legacyRpModeEnabledForCompatibilityTests;
     private final InvocationRequirement invocationRequirement;
 
@@ -313,7 +314,7 @@ public class RegressionCommand {
         out.println("commands:");
         out.println("  build-info --format json");
         out.println("  validate --suite <suite_manifest> [--profile <profile>]");
-        out.println("  run --suite <suite_manifest> --profile <profile>");
+        out.println("  run --suite <suite_manifest> --profile <profile> [--driver-path <jar>] [--driver-dir <dir>]");
         out.println("  run --suite <suite_manifest> --dry-run [--profile <profile>]");
         out.println("  report --result <result_json> [--format text|yaml|json] [--coverage-dir <dir>] [--coverage-catalog <json>] [--coverage-selection <json>] [--coverage-authority <json> --expected-coverage-authority-sha256 <sha256>]");
         out.println("  validate-evidence --result <result_json>");
@@ -324,7 +325,7 @@ public class RegressionCommand {
     private void printCommandUsage(String command, PrintStream out) {
         switch (command) {
             case "run" -> {
-                out.println("usage: regress run --suite <suite_manifest> --profile <profile>");
+                out.println("usage: regress run --suite <suite_manifest> --profile <profile> [--driver-path <jar>] [--driver-dir <dir>]");
                 out.println("       regress run --suite <suite_manifest> --dry-run [--profile <profile>]");
             }
             case "validate" -> out.println("usage: regress validate --suite <suite_manifest> [--profile <profile>]");
@@ -1247,18 +1248,19 @@ public class RegressionCommand {
             if (profile == null) {
                 return 2;
             }
+            Supplier<DiscoveryResult> jdbcDrivers = () -> jdbcDriverDiscovery(root, options);
             if (isSuiteGroupManifest(suiteManifest)) {
                 return runSuiteGroup(
                         suiteManifest,
                         profile,
                         root.resolve("target/regression").normalize(),
-                        out);
+                        jdbcDrivers, out);
             }
-            SuiteRuntimeResult result = suiteRuntimeDispatcher.dispatch(
+            SuiteRuntimeResult result = dispatchSuiteRuntime(
                     suiteManifest,
                     suite,
                     profile,
-                    root.resolve("target/regression").normalize());
+                    root.resolve("target/regression").normalize(), null, jdbcDrivers);
             printSuiteRuntimeResult(out, result);
             return result.passed() ? 0 : 1;
         }
@@ -1297,22 +1299,15 @@ public class RegressionCommand {
         return ready ? 0 : 1;
     }
 
-    private SuiteRuntimeResult dispatchSuiteRuntimeInternal(
-            Path suiteManifest,
-            String suiteRef,
-            String profile,
-            Path outputRoot) {
-        return dispatchSuiteRuntimeInternal(suiteManifest, suiteRef, profile, outputRoot, null);
-    }
-
-    private SuiteRuntimeResult dispatchSuiteRuntimeInternal(
+    private SuiteRuntimeResult dispatchSuiteRuntime(
             Path suiteManifest,
             String suiteRef,
             String profile,
             Path outputRoot,
-            SuiteExecutionContext parentContext) {
+            SuiteExecutionContext parentContext,
+            Supplier<DiscoveryResult> jdbcDrivers) {
         SuiteRuntimeResult result = dispatchSuiteRuntimeUnfinalized(
-                suiteManifest, suiteRef, profile, outputRoot, parentContext);
+                suiteManifest, suiteRef, profile, outputRoot, parentContext, jdbcDrivers);
         if (result.resultJson() == null) {
             return result;
         }
@@ -1330,7 +1325,8 @@ public class RegressionCommand {
             String suiteRef,
             String profile,
             Path outputRoot,
-            SuiteExecutionContext parentContext) {
+            SuiteExecutionContext parentContext,
+            Supplier<DiscoveryResult> jdbcDrivers) {
         if (parentContext != null && !parentContext.matchesRequestedProfile(profile)) {
             return SuiteRuntimeResult.blocked("", profile, List.of(new ContractFinding(
                     suiteManifest.toString(),
@@ -1368,7 +1364,7 @@ public class RegressionCommand {
                     suiteManifest,
                     profile,
                     runtimeContext(parentContext, outputRoot, profile),
-                    validation));
+                    validation, jdbcDrivers));
         }
         if (supportsWireMockHttpRequestSample(providerTypes)) {
             return SuiteRuntimeResult.fromMixed(wireMockHttpRequestCapabilityService.run(
@@ -1732,6 +1728,7 @@ public class RegressionCommand {
             Path suiteManifest,
             String requestedProfile,
             Path outputRoot,
+            Supplier<DiscoveryResult> jdbcDrivers,
             PrintStream out) {
         SuiteGroupValidation validation = validateSuiteGroupArtifacts(suiteManifest, true);
         SuiteGroupDefinition definition = validation.definition();
@@ -1767,7 +1764,7 @@ public class RegressionCommand {
                 childOutputRoot);
         List<SuiteGroupChildResult> childResults = new ArrayList<>();
         for (SuiteGroupChild child : definition.children()) {
-            childResults.add(runSuiteGroupChild(child, childOutputRoot, parentContext));
+            childResults.add(runSuiteGroupChild(child, childOutputRoot, parentContext, jdbcDrivers));
         }
         for (SuiteGroupChildResult childResult : childResults) {
             findings.addAll(childResult.findings());
@@ -1838,39 +1835,19 @@ public class RegressionCommand {
     private SuiteGroupChildResult runSuiteGroupChild(
             SuiteGroupChild child,
             Path childOutputRoot,
-            SuiteExecutionContext parentContext) {
+            SuiteExecutionContext parentContext,
+            Supplier<DiscoveryResult> jdbcDrivers) {
         ValidationResult validation = contractBaselineService.validateForExecution(child.suiteManifest());
         if (!validation.valid()) {
             return SuiteGroupChildResult.fromBlocked(child, validation.suiteId(), validation.findings());
         }
-        SuiteRuntimeResult result = suiteRuntimeDispatcher.dispatch(
+        SuiteRuntimeResult result = dispatchSuiteRuntime(
                 child.suiteManifest(),
                 child.ref(),
                 child.profile(),
                 childOutputRoot,
-                parentContext.forChildProfile(child.profile()));
+                parentContext.forChildProfile(child.profile()), jdbcDrivers);
         return SuiteGroupChildResult.fromSuiteRuntime(child, result);
-    }
-
-    private final class SuiteRuntimeDispatcher {
-
-        SuiteRuntimeResult dispatch(
-                Path suiteManifest,
-                String suiteRef,
-                String profile,
-                Path outputRoot) {
-            return dispatchSuiteRuntimeInternal(suiteManifest, suiteRef, profile, outputRoot);
-        }
-
-        SuiteRuntimeResult dispatch(
-                Path suiteManifest,
-                String suiteRef,
-                String profile,
-                Path outputRoot,
-                SuiteExecutionContext parentContext) {
-            return dispatchSuiteRuntimeInternal(
-                    suiteManifest, suiteRef, profile, outputRoot, parentContext);
-        }
     }
 
     private SuiteGroupOutput writeSuiteGroupOutput(

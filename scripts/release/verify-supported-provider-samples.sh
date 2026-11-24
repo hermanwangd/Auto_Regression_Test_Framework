@@ -10,6 +10,8 @@ REQUIRE_EXTERNAL_MESSAGING="${REQUIRE_EXTERNAL_MESSAGING:-false}"
 REQUIRE_EXTERNAL_JDBC="${REQUIRE_EXTERNAL_JDBC:-false}"
 REQUIRE_EXTERNAL_CLIENTS="${REQUIRE_EXTERNAL_CLIENTS:-false}"
 JDBC_EXTERNAL_DIALECT="${JDBC_EXTERNAL_DIALECT:-oracle}"
+jdbc_sql_approvals="${REGRESS_JDBC_APPROVED_SQL_SHA256:-}"
+unset REGRESS_JDBC_APPROVED_SQL_SHA256
 external_env_names=(NATS_CONNECTION KAFKA_BOOTSTRAP_SERVERS IBM_MQ_CONN_NAME IBM_MQ_CREDENTIAL)
 external_client_env_names=(REST_BASE_URL GRPC_TARGET)
 
@@ -93,6 +95,45 @@ external_client_env_state() {
   done
 }
 
+jdbc_external_suite=""
+jdbc_external_profile=""
+case "$JDBC_EXTERNAL_DIALECT" in
+  oracle)
+    jdbc_external_suite="samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml"
+    jdbc_external_profile="external_oracle"
+    ;;
+  db2)
+    jdbc_external_suite="samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml"
+    jdbc_external_profile="external_db2"
+    ;;
+  *)
+    echo "external_jdbc_runtime_verification: blocked" >&2
+    echo "invalid_external_jdbc_dialect: ${JDBC_EXTERNAL_DIALECT}" >&2
+    echo "owner_action: Set JDBC_EXTERNAL_DIALECT to oracle or db2." >&2
+    exit 1
+    ;;
+esac
+
+if [[ "$REQUIRE_EXTERNAL_JDBC" == "true" ]]; then
+  if [[ -z "${JDBC_CONNECTION:-}" ]]; then
+    echo "external_jdbc_runtime_verification: blocked" >&2
+    echo "missing_external_jdbc_env: JDBC_CONNECTION" >&2
+    echo "owner_action: Configure JDBC_CONNECTION for the selected native database." >&2
+    exit 1
+  fi
+  if [[ -z "${jdbc_sql_approvals//[[:space:]]/}" ]]; then
+    echo "external_jdbc_runtime_verification: blocked" >&2
+    echo "missing_external_jdbc_env: REGRESS_JDBC_APPROVED_SQL_SHA256" >&2
+    echo "owner_action: Supply independently reviewed seed, query and cleanup SQL digests for this dialect and JDBC_CONNECTION." >&2
+    exit 1
+  fi
+  if [[ "$JDBC_CONNECTION" != "jdbc:${JDBC_EXTERNAL_DIALECT}:"* ]]; then
+    echo "external_jdbc_runtime_verification: blocked" >&2
+    echo "owner_action: Supply a native JDBC_CONNECTION for the selected JDBC_EXTERNAL_DIALECT." >&2
+    exit 1
+  fi
+fi
+
 supported_local_suites=(
   "samples/20-provider-capability-p0/verification/artifact_compare/suite_manifest.yaml local_v03"
   "samples/20-provider-capability-p0/verification/common_verify/suite_manifest.yaml local_v03"
@@ -123,37 +164,12 @@ validate_external_profile samples/20-provider-capability-p0/data/jdbc/suite_mani
 validate_external_profile samples/20-provider-capability-p0/http/rest_client_external/suite_manifest.yaml external_native
 validate_external_profile samples/20-provider-capability-p0/rpc/grpc_client_external/suite_manifest.yaml external_native
 
-jdbc_external_suite=""
-jdbc_external_profile=""
-case "$JDBC_EXTERNAL_DIALECT" in
-  oracle)
-    jdbc_external_suite="samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml"
-    jdbc_external_profile="external_oracle"
-    ;;
-  db2)
-    jdbc_external_suite="samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml"
-    jdbc_external_profile="external_db2"
-    ;;
-  *)
-    echo "external_jdbc_runtime_verification: blocked" >&2
-    echo "invalid_external_jdbc_dialect: ${JDBC_EXTERNAL_DIALECT}" >&2
-    echo "owner_action: Set JDBC_EXTERNAL_DIALECT to oracle or db2." >&2
-    exit 1
-    ;;
-esac
-
 if [[ "$REQUIRE_EXTERNAL_JDBC" == "true" ]]; then
-  if [[ -z "${JDBC_CONNECTION:-}" ]]; then
-    echo "external_jdbc_runtime_verification: blocked" >&2
-    echo "missing_external_jdbc_env: JDBC_CONNECTION" >&2
-    echo "owner_action: Configure JDBC_CONNECTION and JDBC_EXTERNAL_DIALECT, or leave REQUIRE_EXTERNAL_JDBC=false when native external JDBC runtime evidence is not required." >&2
-    exit 1
-  fi
-  run_suite "$jdbc_external_suite" "$jdbc_external_profile"
+  REGRESS_JDBC_APPROVED_SQL_SHA256="$jdbc_sql_approvals" run_suite "$jdbc_external_suite" "$jdbc_external_profile"
   echo "external_jdbc_runtime_verification: passed"
 else
   echo "external_jdbc_runtime_verification: not_configured"
-  echo "owner_action: Configure JDBC_CONNECTION, set JDBC_EXTERNAL_DIALECT=oracle|db2, and set REQUIRE_EXTERNAL_JDBC=true when native external JDBC runtime evidence is required."
+  echo "owner_action: Configure JDBC_CONNECTION and REGRESS_JDBC_APPROVED_SQL_SHA256, set JDBC_EXTERNAL_DIALECT=oracle|db2, and set REQUIRE_EXTERNAL_JDBC=true when native external JDBC runtime evidence is required."
 fi
 
 external_env_state

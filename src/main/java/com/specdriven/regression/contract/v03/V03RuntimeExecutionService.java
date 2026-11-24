@@ -1,6 +1,7 @@
 package com.specdriven.regression.contract.v03;
 
 import com.specdriven.regression.provider.ProviderDataYaml;
+import com.specdriven.regression.provider.jdbc.JdbcDriverDiscovery.DiscoveryResult;
 import com.specdriven.regression.contract.ContractBaselineService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -40,6 +41,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 import com.specdriven.regression.summary.SuiteExecutionContext;
 import com.specdriven.regression.sit.SitReadinessReport;
 import com.specdriven.regression.sit.SitReadinessService;
@@ -125,21 +127,26 @@ public class V03RuntimeExecutionService {
         if (invocationRequirement.required() && !invocationRequirement.equals(requirement)) {
             return reviewedBlocked(suiteManifest, profile, "The explicit digest must match the captured invocation pin.");
         }
-        return runGuarded(suiteManifest, profile, context, null, requirement);
+        return runGuarded(suiteManifest, profile, context, null, requirement, null);
     }
 
     public V03RuntimeRunResult run(Path suiteManifest, String profile, SuiteExecutionContext executionContext) {
-        return runGuarded(suiteManifest, profile, executionContext, null, invocationRequirement);
+        return run(suiteManifest, profile, executionContext, null);
     }
 
     /** Command validation never bypasses the common reviewed-input boundary. */
     public V03RuntimeRunResult run(Path suiteManifest, String profile, SuiteExecutionContext executionContext,
             ValidationResult validation) {
-        return runGuarded(suiteManifest, profile, executionContext, validation, invocationRequirement);
+        return run(suiteManifest, profile, executionContext, validation, null);
+    }
+
+    public V03RuntimeRunResult run(Path suiteManifest, String profile, SuiteExecutionContext executionContext,
+            ValidationResult validation, Supplier<DiscoveryResult> ordinaryJdbcDrivers) {
+        return runGuarded(suiteManifest, profile, executionContext, validation, invocationRequirement, ordinaryJdbcDrivers);
     }
 
     private V03RuntimeRunResult runGuarded(Path suiteManifest, String profile, SuiteExecutionContext executionContext,
-            ValidationResult validation, InvocationRequirement requirement) {
+            ValidationResult validation, InvocationRequirement requirement, Supplier<DiscoveryResult> ordinaryJdbcDrivers) {
         requireMatchingProfile(profile, executionContext);
         long reviewedOperationStarted=System.nanoTime();
         try {
@@ -152,8 +159,10 @@ public class V03RuntimeExecutionService {
                     var checked = baseline.validateSuite(snapshot.suiteManifest());
                     boolean jdbc=snapshot.policy().nativeExecution()&&((java.util.List<?>)snapshot.provenance().get("reviewed_contracts")).stream().anyMatch(raw->raw instanceof Map<?,?> contract&&"jdbc.v0.3".equals(contract.get("provider_contract")));
                     var jdbcInvocation=jdbc?com.specdriven.regression.provider.jdbc.ReviewedJdbcInvocation.fromProtectedChild(requirement,reviewedOperationStarted):null;
+                    var reviewedRegistry = jdbcInvocation == null ? runtimeRegistry
+                            : runtimeRegistry.replacing(new JdbcV03Adapter(jdbcInvocation));
                     var result = runValidated(snapshot.suiteManifest(), profile, executionContext, checked, baseline,
-                            snapshot.contractDirectory(), snapshot.policy(), snapshot.provenance(),jdbcInvocation);
+                            snapshot.contractDirectory(), snapshot.policy(), snapshot.provenance(), reviewedRegistry);
                     if (result.resultJson() != null) {
                         new SuiteArtifactFinalizer().finalizeLeaf(snapshot.suiteManifest(), result.resultJson());
                     }
@@ -163,9 +172,11 @@ public class V03RuntimeExecutionService {
         } catch (IllegalArgumentException | IllegalStateException | UncheckedIOException error) {
             return reviewedBlocked(suiteManifest, profile, error.getMessage());
         }
-        return runValidated(suiteManifest, profile, executionContext,
-                validation == null ? contractBaselineService.validateSuite(suiteManifest) : validation,
-                contractBaselineService, null, null, Map.of());
+        ValidationResult checked = validation == null ? contractBaselineService.validateSuite(suiteManifest) : validation;
+        var ordinaryRegistry = checked.valid() && checked.providerTypesUsed().contains("jdbc") && ordinaryJdbcDrivers != null
+                ? runtimeRegistry.replacing(JdbcV03Adapter.withDrivers(ordinaryJdbcDrivers.get())) : runtimeRegistry;
+        return runValidated(suiteManifest, profile, executionContext, checked,
+                contractBaselineService, null, null, Map.of(), ordinaryRegistry);
     }
 
     private V03RuntimeRunResult reviewedBlocked(Path suiteManifest, String profile, String reason) {
@@ -176,13 +187,7 @@ public class V03RuntimeExecutionService {
 
     private V03RuntimeRunResult runValidated(Path suiteManifest, String profile, SuiteExecutionContext executionContext,
             ValidationResult validation, ContractBaselineService baseline, Path verifiedContracts,
-            ProductTestPolicy policy, Map<String,Object> provenance) {
-        return runValidated(suiteManifest,profile,executionContext,validation,baseline,verifiedContracts,policy,provenance,null);
-    }
-    private V03RuntimeRunResult runValidated(Path suiteManifest,String profile,SuiteExecutionContext executionContext,
-            ValidationResult validation,ContractBaselineService baseline,Path verifiedContracts,ProductTestPolicy policy,Map<String,Object> provenance,
-            com.specdriven.regression.provider.jdbc.ReviewedJdbcInvocation jdbcInvocation) {
-        V03ProviderRuntimeRegistry selectedRegistry=jdbcInvocation==null?runtimeRegistry:runtimeRegistry.replacing(new JdbcV03Adapter(jdbcInvocation));
+            ProductTestPolicy policy, Map<String,Object> provenance, V03ProviderRuntimeRegistry selectedRegistry) {
         if (!validation.valid()) {
             return V03RuntimeRunResult.blocked(validation.suiteId(), profile, validation.findings());
         }

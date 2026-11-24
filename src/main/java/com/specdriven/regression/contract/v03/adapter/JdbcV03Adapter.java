@@ -4,7 +4,11 @@ import com.specdriven.regression.contract.v03.V03ExecutionContext;
 import com.specdriven.regression.contract.v03.V03ExecutionStep;
 import com.specdriven.regression.contract.v03.V03ProviderRuntimeAdapter;
 import com.specdriven.regression.contract.v03.V03StepResult;
+import com.specdriven.regression.provider.jdbc.JdbcDriverDiscovery;
 import com.specdriven.regression.provider.jdbc.JdbcProviderRuntime;
+import com.specdriven.regression.provider.jdbc.ReviewedJdbcInvocation;
+import java.nio.file.Path;
+import java.util.Objects;
 import java.util.Set;
 
 public class JdbcV03Adapter extends AbstractProviderRuntimeV03Adapter implements V03ProviderRuntimeAdapter,com.specdriven.regression.sit.SitPolicyAwareProvider {
@@ -16,10 +20,23 @@ public class JdbcV03Adapter extends AbstractProviderRuntimeV03Adapter implements
             "db_cleanup");
 
     private final JdbcProviderRuntime runtime;
-    private final com.specdriven.regression.provider.jdbc.ReviewedJdbcInvocation invocation;
-    public JdbcV03Adapter(){this.runtime=new JdbcProviderRuntime();this.invocation=null;}
-    public JdbcV03Adapter(com.specdriven.regression.provider.jdbc.ReviewedJdbcInvocation invocation) {
-        this.invocation=java.util.Objects.requireNonNull(invocation);this.runtime=new JdbcProviderRuntime(com.specdriven.regression.provider.jdbc.JdbcDriverDiscovery.missing(java.nio.file.Path.of(".")));
+    private final ReviewedJdbcInvocation invocation;
+
+    public JdbcV03Adapter() {
+        this(new JdbcProviderRuntime(), null);
+    }
+
+    public static JdbcV03Adapter withDrivers(JdbcDriverDiscovery.DiscoveryResult drivers) {
+        return new JdbcV03Adapter(new JdbcProviderRuntime(drivers), null);
+    }
+
+    public JdbcV03Adapter(ReviewedJdbcInvocation invocation) {
+        this(new JdbcProviderRuntime(JdbcDriverDiscovery.missing(Path.of("."))), Objects.requireNonNull(invocation));
+    }
+
+    private JdbcV03Adapter(JdbcProviderRuntime runtime, ReviewedJdbcInvocation invocation) {
+        this.runtime = runtime;
+        this.invocation = invocation;
     }
 
     @Override

@@ -64,6 +64,15 @@ For v0.3.0, checked-in samples use the canonical sample layout documented in `sa
 
 JDBC external native runtime evidence is optional in public CI. The release gate always validates both external JDBC suite profiles: `samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml --profile external_oracle` and `--profile external_db2`. It runs exactly one native JDBC sample only when `REQUIRE_EXTERNAL_JDBC=true`; `JDBC_EXTERNAL_DIALECT=oracle|db2` selects the profile and `JDBC_CONNECTION` supplies the actual URL. The canonical Env_Profile secret ref is `connection.secret_ref: env://JDBC_CONNECTION`. Mixed-case secret-ref names and raw JDBC URLs in checked-in artifacts are invalid. Missing external JDBC configuration must not block CI-verifiable release samples when `REQUIRE_EXTERNAL_JDBC=false`.
 
+For a native JDBC release run, configure the GitHub Actions secrets
+`JDBC_CONNECTION` and `REGRESS_JDBC_APPROVED_SQL_SHA256` and provision the
+corresponding vendor driver on the runner. Use a native URL matching the
+selected dialect. The approval secret must contain independently reviewed
+digests for `db_seed`, `db_query` and `db_cleanup` for the selected dialect
+and connection name `JDBC_CONNECTION`. The release step supplies the protected
+value to the selected native sample. Public CI can validate both profiles
+with native verification disabled. See [JDBC SQL approval and sample file paths](../../09-operations/driver_setup.md#external-sql-approval).
+
 `dummy_rest` is compatibility-only and must not count as a supported provider capability sample. `scripts/release/verify-usage-kit.sh` must validate canonical v0.3 samples and confirm deprecated alias directories are absent from the usage kit.
 
 ## Integrity Metadata

@@ -2047,6 +2047,41 @@ class RegressionCommandTest {
     }
 
     @Test
+    void runSkipsAssertionsWhenMessagingWithholdsAnObservationEvenWithAcceptedFailureCode() throws Exception {
+        RegressionCommand command = command();
+        String rpId = "RP-MSG-REDACTION";
+        String acId = rpId + "-AC-001";
+        command.execute(new String[] {"init-product-repo", "--root", tempDir.toString()},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        command.execute(new String[] {
+                "init-rp", "--root", tempDir.toString(), "--rp-id", rpId, "--package-type", "service_event"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+        writeReadyAcceptanceCriteria(rpId, acId);
+        writeMessagingProviderMapping(rpId);
+        Path packageRoot = tempDir.resolve("docs/08-release/release-packages").resolve(rpId);
+        Path mapping = packageRoot.resolve("rp_ru_mapping.yaml");
+        writeMappingAndGeneratedArtifacts(mapping, Files.readString(mapping)
+                .replace("timeout_seconds: 10", "success_exit_codes: [0, 1]\n                          timeout_seconds: 10"));
+        writeMessagingEventPayload(rpId, "{\"password\":\"message-body-canary\"}\n");
+        writeApprovedExpectedResult(rpId, acId, "");
+        writeApprovedMessagingTestCase(rpId, acId);
+
+        int exit = command.execute(new String[] {"run", "--root", tempDir.toString(), "--rp-id", rpId, "--env", "ci_ephemeral"},
+                print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+
+        Path runDir = packageRoot.resolve("evidence/runs/RUN-001");
+        assertThat(exit).isOne();
+        assertThat(Files.readString(runDir.resolve("run.yaml"))).contains("status: failed", "assertion_status: not_run");
+        assertThat(runDir.resolve("assertions.yaml")).doesNotExist();
+        assertThat(Files.readString(runDir.resolve("actual/message.json"))).isEmpty();
+        try (var files = Files.walk(runDir)) {
+            for (Path file : files.filter(Files::isRegularFile).toList()) {
+                assertThat(Files.readString(file)).as(file.toString()).doesNotContain("message-body-canary");
+            }
+        }
+    }
+
+    @Test
     void runDryRunBlocksMessagingProviderWithoutTimeoutBeforeInvocation() throws Exception {
         RegressionCommand command = command();
         String rpId = "RP-MSG-TIMEOUT";

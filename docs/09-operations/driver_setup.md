@@ -12,9 +12,32 @@ approved internal driver jars at runtime.
 `--driver-path` may be repeated. `--driver-dir` scans only direct child `.jar`
 files. `REGRESS_DRIVER_PATH` uses the platform path separator.
 
+## External SQL approval
+
+Before running an external suite, supply `REGRESS_JDBC_APPROVED_SQL_SHA256`
+from the runner's protected environment. Review the SQL independently of the
+checkout being tested. For each approved file, record the SHA-256 of its exact
+UTF-8 bytes, including line endings, as 64 lowercase hexadecimal digits.
+Join the entries with commas. Each entry has the form
+`<dialect>:<connection environment variable>:<operation>:<sha256>`.
+
+The following paths are relative to `samples/20-provider-capability-p0/data/jdbc/`.
+For this sample use `oracle` or `db2` and the connection name `JDBC_CONNECTION`
+for all three entries.
+
+| Operation | SQL file |
+| --- | --- |
+| `db_seed` | `fixtures/seed_order.sql` |
+| `db_query` | `queries/find_order_by_id.sql` |
+| `db_cleanup` | `fixtures/cleanup_order.sql` |
+
+The runner verifies each file before it opens the external connection for that
+operation. Supply all three approvals before starting the sample.
+
 ## Oracle Example
 
 ```bash
+: "${REGRESS_JDBC_APPROVED_SQL_SHA256:?Supply independently reviewed SQL approvals}"
 JDBC_CONNECTION='<oracle-jdbc-url>' java -jar ../spec-driven-auto-regression-{{VERSION}}.jar run \
   --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
   --profile external_oracle \
@@ -24,6 +47,7 @@ JDBC_CONNECTION='<oracle-jdbc-url>' java -jar ../spec-driven-auto-regression-{{V
 ## DB2 Example
 
 ```bash
+: "${REGRESS_JDBC_APPROVED_SQL_SHA256:?Supply independently reviewed SQL approvals}"
 JDBC_CONNECTION='<db2-jdbc-url>' java -jar ../spec-driven-auto-regression-{{VERSION}}.jar run \
   --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml \
   --profile external_db2 \

@@ -50,7 +50,8 @@ public class DeploymentReadinessProvider {
                     K8sApiResource.NAMESPACE.checkReference(stringValue(contract.get("namespace_ref")));
                     K8sApiResource.DEPLOYMENT.checkReference(deploymentRef);
                 }
-                Files.writeString(stdoutLog, providerType + " mock readiness passed for " + deploymentRef + "\n");
+                Files.writeString(stdoutLog, ProviderDiagnosticRedactor.maskSensitiveText(
+                        providerType + " mock readiness passed for " + deploymentRef + "\n"));
                 Files.writeString(stderrLog, "");
                 Files.writeString(actualOutput, "ready\n");
                 writeReadinessEvidence(runDir, providerName, contract, "passed", "", 1);
@@ -71,6 +72,10 @@ public class DeploymentReadinessProvider {
                         stringValue(contract.get("deployed_version_ref")),
                         intValue(contract.get("timeout_seconds"), 300),
                         contract));
+                if (!ProviderDiagnosticRedactor.canPersistObservation(probeResult.actualOutput())) {
+                    return fail(runDir, stdoutLog, stderrLog, actualOutput, providerName, contract,
+                            "Readiness observation withheld by the evidence redaction policy.");
+                }
                 Files.writeString(stdoutLog, ProviderDiagnosticRedactor.maskSensitiveText(probeResult.stdout()));
                 Files.writeString(stderrLog, "");
                 Files.writeString(actualOutput, probeResult.actualOutput());
@@ -108,7 +113,8 @@ public class DeploymentReadinessProvider {
                         "Deployment readiness marker not found: `" + deploymentRef + "`.");
             }
 
-            Files.writeString(stdoutLog, "readiness passed for " + deploymentRef + "\n");
+            Files.writeString(stdoutLog, ProviderDiagnosticRedactor.maskSensitiveText(
+                    "readiness passed for " + deploymentRef + "\n"));
             Files.writeString(stderrLog, "");
             Files.writeString(actualOutput, "ready\n");
             writeReadinessEvidence(runDir, providerName, contract, "passed", "", 1);

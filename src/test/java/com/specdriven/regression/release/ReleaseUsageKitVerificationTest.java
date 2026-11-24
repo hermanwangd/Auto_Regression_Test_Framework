@@ -10,8 +10,12 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.yaml.snakeyaml.Yaml;
 
 class ReleaseUsageKitVerificationTest {
@@ -36,12 +40,86 @@ class ReleaseUsageKitVerificationTest {
                 .contains("REQUIRE_EXTERNAL_CLIENTS: ${{ vars.REQUIRE_EXTERNAL_CLIENTS || 'false' }}")
                 .contains("JDBC_EXTERNAL_DIALECT: ${{ vars.JDBC_EXTERNAL_DIALECT || 'oracle' }}")
                 .contains("JDBC_CONNECTION: ${{ secrets.JDBC_CONNECTION }}")
+                .contains("REGRESS_JDBC_APPROVED_SQL_SHA256: ${{ secrets.REGRESS_JDBC_APPROVED_SQL_SHA256 }}")
                 .contains("REST_BASE_URL: ${{ secrets.REST_BASE_URL }}")
                 .contains("GRPC_TARGET: ${{ secrets.GRPC_TARGET }}")
                 .contains("NATS_CONNECTION: ${{ secrets.NATS_CONNECTION }}")
                 .contains("KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.KAFKA_BOOTSTRAP_SERVERS }}")
                 .contains("IBM_MQ_CONN_NAME: ${{ secrets.IBM_MQ_CONN_NAME }}")
                 .contains("IBM_MQ_CREDENTIAL: ${{ secrets.IBM_MQ_CREDENTIAL }}");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "true,  false, jdbc:db2:fixture, 1, missing_external_jdbc_env: REGRESS_JDBC_APPROVED_SQL_SHA256",
+            "true,  true,  jdbc:db2:fixture, 0, external_jdbc_runtime_verification: passed",
+            "true,  true,  jdbc:h2:mem:test, 1, external_jdbc_runtime_verification: blocked",
+            "false, true,  jdbc:db2:fixture, 0, external_jdbc_runtime_verification: not_configured"
+    })
+    void releaseGateScopesIndependentSqlApprovalsToTheNativeSample(boolean required, boolean approved,
+            String connection, int expectedExit, String expectedStatus, @TempDir Path root) throws Exception {
+        Path scripts = Files.createDirectories(root.resolve("scripts/release"));
+        for (String name : List.of("verify-supported-provider-samples.sh", "verify-release-version.sh")) {
+            Files.copy(Path.of("scripts/release", name), scripts.resolve(name));
+            assertThat(scripts.resolve(name).toFile().setExecutable(true)).isTrue();
+        }
+        Files.writeString(root.resolve("pom.xml"), """
+                <project>
+                  <artifactId>spec-driven-auto-regression</artifactId>
+                  <version>1.0.0</version>
+                </project>
+                """);
+        Files.createDirectories(root.resolve("target"));
+        Files.writeString(root.resolve("target/spec-driven-auto-regression-1.0.0.jar"), "fixture");
+        Path bin = Files.createDirectories(root.resolve("bin"));
+        Path java = Files.writeString(bin.resolve("java"), """
+                #!/usr/bin/env bash
+                set -eu
+                shift 3
+                if [[ "$1" == run ]]; then
+                  echo "$*" >> runs.log
+                  if [[ "${*: -1}" == external_db2 ]]; then
+                    [[ "${REGRESS_JDBC_APPROVED_SQL_SHA256:-}" == "$EXPECTED_APPROVALS" ]]
+                  else
+                    [[ -z "${REGRESS_JDBC_APPROVED_SQL_SHA256:-}" ]]
+                  fi
+                  echo '{}' > result.json
+                  echo "result_json: $PWD/result.json"
+                fi
+                """);
+        assertThat(java.toFile().setExecutable(true)).isTrue();
+        Path log = root.resolve("gate.log");
+        var gate = new ProcessBuilder("bash", scripts.resolve("verify-supported-provider-samples.sh").toString())
+                .redirectErrorStream(true).redirectOutput(log.toFile());
+        var env = gate.environment();
+        String systemPath = env.get("PATH");
+        env.clear();
+        env.put("PATH", bin + ":" + systemPath);
+        env.put("REQUIRE_EXTERNAL_JDBC", Boolean.toString(required));
+        env.put("JDBC_EXTERNAL_DIALECT", "db2");
+        env.put("JDBC_CONNECTION", connection);
+        String approvals = "db2:JDBC_CONNECTION:db_seed:" + "1".repeat(64)
+                + ",db2:JDBC_CONNECTION:db_query:" + "2".repeat(64)
+                + ",db2:JDBC_CONNECTION:db_cleanup:" + "3".repeat(64);
+        env.put("EXPECTED_APPROVALS", approvals);
+        if (approved) env.put("REGRESS_JDBC_APPROVED_SQL_SHA256", approvals);
+        Process process = gate.start();
+        try {
+            assertThat(process.waitFor(30, TimeUnit.SECONDS)).isTrue();
+            String output = Files.readString(log);
+            assertThat(process.exitValue()).as(output).isEqualTo(expectedExit);
+            assertThat(output).contains(expectedStatus).doesNotContain(approvals, connection);
+            Path runs = root.resolve("runs.log");
+            if (expectedExit != 0) {
+                assertThat(runs).doesNotExist();
+            } else {
+                long nativeRuns = Files.readAllLines(runs).stream()
+                        .filter(line -> line.endsWith("--profile external_db2")).count();
+                assertThat(nativeRuns).isEqualTo(required ? 1 : 0);
+            }
+        } finally {
+            process.destroyForcibly();
+        }
     }
 
     @Test
