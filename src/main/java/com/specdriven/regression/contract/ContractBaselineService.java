@@ -426,6 +426,10 @@ public class ContractBaselineService {
                     "execute", "verify", "evidence", "runtime")) {
                 require(entry.getKey(), testCase, field, findings);
             }
+            Object status = testCase.get("status");
+            if (!isMissing(status)) {
+                validateExecutionStatus(entry.getKey(), status, findings);
+            }
         }
         for (Map.Entry<Path, Map<String, Object>> entry : graph.providerContractsByPath().entrySet()) {
             Map<String, Object> contract = entry.getValue();
@@ -484,9 +488,8 @@ public class ContractBaselineService {
             for (String field : List.of("dsl_version", "test_case_id", "title", "execute", "verify")) {
                 require(entry.getKey(), testCase, field, findings);
             }
-            if (testCase.containsKey("status") && !"active".equals(testCase.get("status"))) {
-                findings.add(finding(entry.getKey(), "status", "lifecycle_not_execution_eligible",
-                        "Submit the case for owner review before promoting it to active."));
+            if (testCase.containsKey("status")) {
+                validateExecutionStatus(entry.getKey(), testCase.get("status"), findings);
             }
         }
         for (Map.Entry<Path, Map<String, Object>> entry : graph.envProfiles().entrySet()) {
@@ -494,6 +497,13 @@ public class ContractBaselineService {
             for (String field : List.of("profile_id", "execution_mode", "targets")) {
                 require(entry.getKey(), profile, field, findings);
             }
+        }
+    }
+
+    private void validateExecutionStatus(Path casePath, Object status, List<ContractFinding> findings) {
+        if (!"active".equals(status)) {
+            findings.add(finding(casePath, "status", "lifecycle_not_execution_eligible",
+                    "Submit the case for owner review before promoting it to active."));
         }
     }
 
