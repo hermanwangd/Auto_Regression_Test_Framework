@@ -1,5 +1,7 @@
 """Narrow regression controls for ambient inputs and report freshness."""
+import contextlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -7,10 +9,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts'))
 
 def load(path, name):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -27,6 +31,17 @@ class RunnerSafetyTests(unittest.TestCase):
                          'test_clk_003_missing_required_option_is_rejected']:
                 with self.subTest(name=name):
                     getattr(cases, name)(lambda *args: None)
+
+    def test_unknown_pytest_target_rejected_before_launch(self):
+        runner = load(ROOT / 'scripts/run_suite.py', 'runner_target_control')
+        with tempfile.TemporaryDirectory() as folder:
+            argv = ['run_suite.py', '--suite', 'click', '--test-path', 'tests/unregistered',
+                    '--evidence-root', folder]
+            with (patch.object(sys, 'argv', argv), patch.object(runner.subprocess, 'run') as launch,
+                  contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit)):
+                runner.main()
+            launch.assert_not_called()
+            self.assertEqual(list(Path(folder).iterdir()), [])
 
     def exercise(self, outcome):
         with tempfile.TemporaryDirectory() as folder:
@@ -75,7 +90,7 @@ class RunnerSafetyTests(unittest.TestCase):
                 report = Path(command[command.index('--junitxml') + 1])
                 report.write_text('<testsuites><testsuite>' + ''.join(
                     '<testcase name="' + c['test_name'] + '"><failure message="expected assertion failure"/></testcase>' for c in manifest['cases']) + '</testsuite></testsuites>')
-                return subprocess.CompletedProcess(command, 1, '', '')
+                return SimpleNamespace(returncode=1, stdout='', stderr='')
             with patch.object(runner.platform, 'platform', return_value='test-platform'), patch.object(sys, 'argv', ['run_suite.py', '--suite', 'click']), patch.object(runner.subprocess, 'run', side_effect=assertion_failure):
                 code = runner.main()
             self.assertEqual(code, 1)

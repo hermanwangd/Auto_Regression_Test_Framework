@@ -56,7 +56,8 @@
     "src/main/java/com/specdriven/regression/provider/SuiteAssetReader.java",
     "src/main/java/com/specdriven/regression/provider/PosixSuiteFile.java",
     "src/main/java/com/specdriven/regression/provider/LoopbackTcpTransport.java",
-    "src/main/java/com/specdriven/regression/provider/nats/LoopbackNatsTransport.java"
+    "src/main/java/com/specdriven/regression/provider/nats/LoopbackNatsTransport.java",
+    "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/JavaChildProcess.java"
   ],
   "schema": "local-public-ci-policy.v1",
   "sit_authority": false,
@@ -65,7 +66,7 @@
     "integrations/swarm-product-test/pom.xml": "fc921ee26c546299da31edef785153234648f4dfe8c13b8d19dec22e68d479b3",
     "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/CanonicalEvidence.java": "47c73523fd7c53bd691b7b2391acc828e1dbbdbbc492da4efef4116684e9d5ad",
     "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/CoverageArtifacts.java": "f14b83ee2b229b6047dabc26b7755909a1901b00171b072811f8017be162a020",
-    "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/FrameworkCliTransport.java": "e25f0374855f00b7eb00e7e8747aa6b996300f382c271723ab0885372ddb643e",
+    "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/FrameworkCliTransport.java": "522be16177e2a6908d09db568d6f6579dfb52699624b7148a37312a732bbb7c8",
     "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/Json.java": "1a0bcf2306a08fa99a5677c986327c8572d1273fbfd8180c7f0132342da968cb",
     "pom.xml": "02be988f328f90e6679b182a257991321ca0716e06460079dcd65d063fc4b351",
     "scripts/public-projects/nats-cases.json": "6214de207bcfb0a2e49acfd74a26fb731a64af17abe75cdc0167e37982de6081",
@@ -99,6 +100,7 @@
     "src/main/java/com/specdriven/regression/provider/SuiteAssetReader.java": "d2b096d14a3873f07ede463f0161cb98ad353d3b2b5b45058cdf8b3d7bdc733c",
     "src/main/java/com/specdriven/regression/provider/PosixSuiteFile.java": "40723b4bad5440c703b06f7857f610fd3d96a311610fbd4a6665519198108d07",
     "src/main/java/com/specdriven/regression/provider/LoopbackTcpTransport.java": "d4d6264d9cfb09b6f95dd1a59dfc6be76aad8b52ce7c981c41d0b4acbd894cda",
-    "src/main/java/com/specdriven/regression/provider/nats/LoopbackNatsTransport.java": "62c1ebbfcaaf2ada9fdd34b0c879194ba3589a3a2233be4d7a5d6d14a0efacb9"
+    "src/main/java/com/specdriven/regression/provider/nats/LoopbackNatsTransport.java": "62c1ebbfcaaf2ada9fdd34b0c879194ba3589a3a2233be4d7a5d6d14a0efacb9",
+    "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/JavaChildProcess.java": "f8b31449dbb3d1dde558311b42d3368c14f333f3039406ab4782aeb29ce78f40"
   }
 }

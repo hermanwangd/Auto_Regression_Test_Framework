@@ -8,7 +8,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -21,6 +20,7 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
         String invocation = UUID.randomUUID().toString();
         Path output = null;
         Integer runExit = null;
+        Path suite;
         long deadline = System.nanoTime() + binding.totalTimeout().toNanos();
         Instant started = Instant.now();
         var consumedOutput = new AtomicInteger();
@@ -33,7 +33,7 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
             try {if(binding.coverageAuthority()!=null)new ReviewedOracleCoverageProjection.Authority(binding.coverageAuthority(),binding.coverageAuthoritySha256(),Json.MAPPER).verifyScope(Json.MAPPER.valueToTree(java.util.Map.of("domain","product","project_ref",request.projectRef(),"workspace_ref",request.workspaceRef(),"repository_revisions",request.repositoryRevisions())));}
             catch(Exception invalidAuthority){throw ReviewedOracleCoverageProjection.Authority.rejection(invalidAuthority);}
             Path approved = LocalFiles.real(binding.approvedArtifactRoot());
-            Path suite = LocalFiles.contained(approved, Path.of(request.suiteManifest()));
+            suite = LocalFiles.contained(approved, Path.of(request.suiteManifest()));
             Path artifactRoot = LocalFiles.real(Path.of(request.artifactRoot()));
             require(artifactRoot.startsWith(approved) && suite.startsWith(artifactRoot), "Artifact root is not approved");
             DefaultProductTestingModule.validateReviewedInputs(request,binding.sutBindingSha256());
@@ -53,8 +53,7 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
             return Receipts.failure(request, invocation, ProductTestReceipt.Outcome.REJECTED, jdbcSelected?"Protected JDBC admission rejected":message(e), "", null);
         }
         try {
-            var run = invoke(List.of("run", "--suite", request.suiteManifest(), "--profile", request.profile(),
-                    "--root", output.toString()), request, output, deadline, consumedOutput, cleanup,jdbc,a01LaunchArguments);
+            var run = invoke(Operation.RUN, suite, request, output, deadline, consumedOutput, cleanup,jdbc,a01LaunchArguments);
             runExit = run.exitCode();
             if(jdbc!=null){jdbcConsumerStage="SCAN_STDOUT";jdbc.scan(run.stdout());jdbcConsumerStage="SCAN_STDERR";jdbc.scan(run.stderr());jdbcConsumerStage="DRIVER_RECHECK";jdbc.verifyDriver();}
             jdbcConsumerStage="RUN_LOGS";
@@ -67,16 +66,12 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
             var evidence = CanonicalEvidence.inspect(request, output, run.stdout(), started, binding.fixtureLeaseSha256(),binding.sutBindingSha256());
             if(jdbc!=null)jdbc.verifyCanonicalChild(evidence.result());
             checkDeadline(deadline);
-            var validation = invoke(List.of("validate-evidence", "--result", evidence.result().toString(), "--root", output.toString()),
-                    request, output, deadline, consumedOutput, cleanup,null,a01LaunchArguments);
+            var validation = invoke(Operation.VALIDATE, evidence.result(), request, output, deadline, consumedOutput, cleanup,null,a01LaunchArguments);
             if(jdbc!=null){jdbc.scan(validation.stdout());jdbc.scan(validation.stderr());}
             Files.writeString(output.resolve("validation.stdout.log"), validation.stdout());
             Files.writeString(output.resolve("validation.stderr.log"), validation.stderr());
             require(validation.exitCode() == 0, "Framework evidence validation failed");
-            List<String> reportArgs=new ArrayList<>(List.of("report","--result",evidence.result().toString(),"--format","json","--root",output.toString(),"--coverage-dir",output.resolve("coverage").toString()));
-            if(binding.coverageAuthority()!=null)reportArgs.addAll(List.of("--coverage-authority",binding.coverageAuthority().toString(),"--expected-coverage-authority-sha256",binding.coverageAuthoritySha256()));
-            var report = invoke(reportArgs,
-                    request, output, deadline, consumedOutput, cleanup,null,a01LaunchArguments);
+            var report = invoke(Operation.REPORT, evidence.result(), request, output, deadline, consumedOutput, cleanup,null,a01LaunchArguments);
             if(jdbc!=null){jdbc.scan(report.stdout());jdbc.scan(report.stderr());jdbc.verifyDriver();}
             Files.writeString(output.resolve("report.stderr.log"), report.stderr());
             require(report.exitCode() == 0, "Framework report validation failed");
@@ -128,21 +123,33 @@ public final class FrameworkCliTransport implements FrameworkExecutionPort {
         return List.of("-Dswarm.grpc.a01.owner_launch_sha256="+pin);
     }
 
-    private ProcessResult invoke(List<String> command, ProductTestRequest request, Path output, long deadline,
+    private enum Operation { RUN, VALIDATE, REPORT }
+
+    private ProcessResult invoke(Operation operation, Path input, ProductTestRequest request, Path output, long deadline,
                                  AtomicInteger consumed, CleanupState cleanup,JdbcProcessChannel jdbc,List<String> a01LaunchArguments) throws Exception {
         checkDeadline(deadline);
         require(LocalFiles.sha256(binding.frameworkJar()).equals(binding.frameworkSha256()), "Configured framework digest mismatch");
-        Path java;
-        try { java = binding.javaExecutable().toRealPath(); }
+        ProcessBuilder builder;
+        try { builder = JavaChildProcess.fromRuntime(binding.javaExecutable()); }
         catch (IOException e) { throw new LaunchException("Cannot resolve configured Java executable", e); }
         long operationStart=System.nanoTime();
         long phaseDeadline=jdbc==null?deadline:Math.min(deadline,operationStart+TimeUnit.SECONDS.toNanos(5));
-        var argv = new ArrayList<>(List.of(java.toString(), "-Xmx512m", "-XX:MaxMetaspaceSize=256m","-Djava.io.tmpdir="+output));
+        var argv = builder.command();
+        argv.addAll(List.of("-Xmx512m", "-XX:MaxMetaspaceSize=256m", "-Djava.io.tmpdir=" + output));
         argv.addAll(a01LaunchArguments);
         if(jdbc!=null)jdbc.addJavaArguments(argv);
         argv.add("-jar");argv.add(binding.frameworkJar().toRealPath().toString());
-        argv.addAll(command);
-        var builder = new ProcessBuilder(argv).directory(output.toFile());
+        switch (operation) {
+            case RUN -> argv.addAll(List.of("run", "--suite", input.toString(), "--profile", request.profile(), "--root", output.toString()));
+            case VALIDATE -> argv.addAll(List.of("validate-evidence", "--result", input.toString(), "--root", output.toString()));
+            case REPORT -> {
+                argv.addAll(List.of("report", "--result", input.toString(), "--format", "json", "--root", output.toString(),
+                        "--coverage-dir", output.resolve("coverage").toString()));
+                if (binding.coverageAuthority() != null) argv.addAll(List.of("--coverage-authority",
+                        binding.coverageAuthority().toString(), "--expected-coverage-authority-sha256", binding.coverageAuthoritySha256()));
+            }
+        }
+        builder.directory(output.toFile());
         builder.environment().clear();
         builder.environment().put("REGRESS_REVIEWED_HANDOFF_SHA256", binding.approvedHandoffSha256());
         if(binding.fixtureLeaseSha256()!=null) builder.environment().put("REGRESS_REVIEWED_FIXTURE_LEASE_SHA256",binding.fixtureLeaseSha256());

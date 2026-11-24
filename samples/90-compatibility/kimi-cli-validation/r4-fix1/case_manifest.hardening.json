@@ -17,10 +17,10 @@
     "node_selection": null,
     "frozen_source_sha256": {
       "tests/hardening/__init__.py": "ef5d0acae1fe91f0703b6c2f8d5d7ec9b6bf57d8d7cdd6d75ac717141cdc102e",
-      "tests/hardening/control_support.py": "e6ac969e7c84a8f158fcb14a1b5a38745f6103177055d90ea12ebb8e09b026a2",
+      "tests/hardening/control_support.py": "53b7fb42fabb8de7f1a2d38c6c432ab46779d80103ff4e1277013257331e4826",
       "tests/hardening/test_acceptance_gate.py": "d76f6a6f6df935888be9a5141ddb12529ce560df5d8ef95a2a68558fa12081ff",
-      "tests/hardening/test_r4_targeted_controls.py": "e3a1748623e778dfc91cf658898b135df7df7d98730406095fdc67b551878acc",
-      "tests/hardening/test_runner_fail_closed.py": "51218ba649191fb8f2a527db618379bc402d3ee50c8011a31d173069919f19a0"
+      "tests/hardening/test_r4_targeted_controls.py": "674481195bef097400423aa4993a4bc6d103a2ba7d66af7675022a19aecbab48",
+      "tests/hardening/test_runner_fail_closed.py": "4f2441c7762a2c179b00e47e032041d3648dedf99f190c0c63c4d06639032eaf"
     }
   },
   "cases": [

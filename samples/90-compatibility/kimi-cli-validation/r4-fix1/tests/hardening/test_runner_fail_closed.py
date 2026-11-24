@@ -52,7 +52,8 @@ def test_hrn_002_timeout_fails_closed(tmp_path, monkeypatch):
     manifest, _ = stage_control("control-timeout")
 
     def timeout(*args, **kwargs):
-        raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs["timeout"], output="partial", stderr="late")
+        assert "--junitxml" in args[0]
+        raise subprocess.TimeoutExpired("pytest", kwargs["timeout"], output="partial", stderr="late")
 
     monkeypatch.setattr(run_suite.subprocess, "run", timeout)
     result = invoke(manifest, "control-timeout")
@@ -69,7 +70,7 @@ def test_hrn_003_zero_exit_without_report_fails_closed(tmp_path, monkeypatch):
     manifest, _ = stage_control("control-missing")
 
     def missing_report(command, **kwargs):
-        return subprocess.CompletedProcess(command, 0, "no report produced", "")
+        return SimpleNamespace(returncode=0, stdout="no report produced", stderr="")
 
     monkeypatch.setattr(run_suite.subprocess, "run", missing_report)
     result = invoke(manifest, "control-missing")
@@ -86,7 +87,7 @@ def test_hrn_004_invalid_report_fails_closed(tmp_path, monkeypatch):
     def invalid_report(command, **kwargs):
         report = Path(command[command.index("--junitxml") + 1])
         report.write_text("<not-valid-xml", encoding="utf-8")
-        return subprocess.CompletedProcess(command, 0, "invalid report produced", "")
+        return SimpleNamespace(returncode=0, stdout="invalid report produced", stderr="")
 
     monkeypatch.setattr(run_suite.subprocess, "run", invalid_report)
     result = invoke(manifest, "control-invalid")

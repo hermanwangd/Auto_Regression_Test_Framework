@@ -54,7 +54,7 @@ class SourceQualityTest(unittest.TestCase):
  def command_fault(self,error):
   c=self.support.Commands(self.root/'commands',self.root,os.statvfs(self.root).f_bavail*os.statvfs(self.root).f_frsize)
   with patch.object(self.support.subprocess,'Popen',side_effect=self.spawn('import time; time.sleep(30)')),patch.object(c,'guard',side_effect=[1,error]):
-   with self.assertRaises(type(error)):c.run('fault',['PUBLIC'],docker=False)
+   with self.assertRaises(type(error)):c.run('fault',['image','inspect','public'])
   self.assertGreater(self.children[0].wait.call_count,0);self.assertIsNotNone(self.children[0].returncode)
  def test_monitor_oserror_reaps_owned_child(self):self.command_fault(OSError('PUBLIC_MONITOR_FAILURE'))
  def test_keyboard_interrupt_reaps_owned_child(self):self.command_fault(KeyboardInterrupt())
@@ -63,7 +63,7 @@ class SourceQualityTest(unittest.TestCase):
   def raced(pid,sig):
    self.real_kill(pid,sig);raise ProcessLookupError('PUBLIC_EXIT_RACE')
   with patch.object(self.support.subprocess,'Popen',side_effect=self.spawn('import time; time.sleep(30)')),patch.object(c,'guard',side_effect=[1,ValueError('PUBLIC_LIMIT')]),patch.object(self.support.os,'killpg',side_effect=raced):
-   try:c.run('race',['PUBLIC'],docker=False,allowed=None)
+   try:c.run('race',['image','inspect','public'],allowed=None)
    except ProcessLookupError:pass
   self.assertGreater(self.children[0].wait.call_count,0)
  def test_kill_failure_still_attempts_bounded_wait_without_masking_original(self):
@@ -73,22 +73,30 @@ class SourceQualityTest(unittest.TestCase):
  def test_normal_and_expected_nonzero_commands_retain_records(self):
   c=self.support.Commands(self.root/'commands',self.root,os.statvfs(self.root).f_bavail*os.statvfs(self.root).f_frsize)
   for code in [0,17]:
-   r=c.run('exit-'+str(code),[sys.executable,'-c','print("PUBLIC"); raise SystemExit('+str(code)+')'],docker=False,allowed=(0,17));self.assertEqual(r['exit_code'],code);self.assertTrue((self.root/'commands'/('exit-'+str(code)+'-command.json')).exists())
+   with patch.object(self.support.subprocess,'Popen',side_effect=self.spawn('print("PUBLIC"); raise SystemExit('+str(code)+')')):
+    r=c.run('exit-'+str(code),['image','inspect','public'],allowed=(0,17))
+   self.assertEqual(r['exit_code'],code);self.assertTrue((self.root/'commands'/('exit-'+str(code)+'-command.json')).exists())
  def test_fresh_metadata_directory_created_before_spawn(self):
   root=self.root/'fresh';root.mkdir()
   with patch.object(self.resolver,'I',root),patch.object(self.resolver.subprocess,'Popen',side_effect=self.spawn('print("{\\"schemaVersion\\":2}")')):
-   self.assertEqual(self.resolver.run('public','PUBLIC')['schemaVersion'],2)
+   self.assertEqual(self.resolver.run('public',self.resolver.BASES[0][1])['schemaVersion'],2)
   self.assertTrue((root/'evidence/public-command.json').exists())
  def test_resolver_interrupt_reaps_owned_child(self):
   root=self.root/'resolver';(root/'evidence').mkdir(parents=True)
   with patch.object(self.resolver,'I',root),patch.object(self.resolver.subprocess,'Popen',side_effect=self.spawn('import time; time.sleep(30)')),patch.object(self.resolver.time,'sleep',side_effect=KeyboardInterrupt()):
-   with self.assertRaises(KeyboardInterrupt):self.resolver.run('public','PUBLIC')
+   with self.assertRaises(KeyboardInterrupt):self.resolver.run('public',self.resolver.BASES[0][1])
   self.assertGreater(self.children[0].wait.call_count,0)
  def test_resolver_does_not_overwrite_existing_stderr(self):
   root=self.root/'resolver';(root/'evidence').mkdir(parents=True);target=root/'evidence/public.stderr.log';target.write_text('PUBLIC_RETAINED')
   with patch.object(self.resolver,'I',root),patch.object(self.resolver.subprocess,'Popen',side_effect=self.spawn('print("{}")')):
-   with self.assertRaises((ValueError,AssertionError,FileExistsError)):self.resolver.run('public','PUBLIC')
+   with self.assertRaises((ValueError,AssertionError,FileExistsError)):self.resolver.run('public',self.resolver.BASES[0][1])
   self.assertEqual(target.read_text(),'PUBLIC_RETAINED')
+ def test_only_packaging_operations_and_official_refs_are_admitted(self):
+  c=self.support.Commands(self.root/'commands',self.root,0)
+  with patch.object(c,'guard'),patch.object(self.resolver,'I',self.root),patch.object(subprocess,'Popen') as spawn:
+   with self.assertRaisesRegex(ValueError,'unsupported_base_reference'):self.resolver.run('public','other/image:latest')
+   with self.assertRaisesRegex(ValueError,'unsupported_docker_operation'):c.run('public',['context','ls'])
+   spawn.assert_not_called()
  def test_resolver_existing_basepins_still_protected(self):
   root=self.root/'resolver';root.mkdir();(root/'base-pins.json').write_text('PUBLIC_FROZEN')
   with patch.object(self.resolver,'I',root),patch.object(self.resolver.subprocess,'Popen') as spawn:
@@ -165,11 +173,13 @@ class SourceQualityTest(unittest.TestCase):
   e.remove.assert_not_called();self.assertTrue(any(x['operation']=='AVAILABLE_SNAPSHOT_FAILED' for x in e.events))
  def test_final_command_log_cap_is_checked_after_fast_exit(self):
   c=self.support.Commands(self.root/'commands',self.root,os.statvfs(self.root).f_bavail*os.statvfs(self.root).f_frsize)
-  r=c.run('fast',[sys.executable,'-c','print("X"*10000)'],docker=False,allowed=None,cap=100);self.assertEqual(r['guard'],'command_log_limit')
+  with patch.object(self.support.subprocess,'Popen',side_effect=self.spawn('print("X"*10000)')):
+   r=c.run('fast',['image','inspect','public'],allowed=None,cap=100)
+  self.assertEqual(r['guard'],'command_log_limit')
  def test_record_failure_occurs_after_owned_child_reap(self):
   c=self.support.Commands(self.root/'commands',self.root,os.statvfs(self.root).f_bavail*os.statvfs(self.root).f_frsize)
   with patch.object(self.support.subprocess,'Popen',side_effect=self.spawn('print("PUBLIC")')),patch.object(self.support,'save',side_effect=OSError('PUBLIC_RECORD_FAILURE')):
-   with self.assertRaisesRegex(OSError,'PUBLIC_RECORD_FAILURE'):c.run('record',['PUBLIC'],docker=False)
+   with self.assertRaisesRegex(OSError,'PUBLIC_RECORD_FAILURE'):c.run('record',['image','inspect','public'])
   self.assertGreater(self.children[0].wait.call_count,0);self.assertIsNotNone(self.children[0].returncode)
  def test_whole_deadline_includes_independent_readback(self):
   root,error,published,_=self.main_export('readback');self.assertIsInstance(error,TimeoutError);self.assertFalse(list((root/'exports').glob('*.oci.tar')))

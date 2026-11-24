@@ -8,6 +8,8 @@ from pathlib import Path
 import subprocess
 import uuid
 
+from harness_tools import jdk_tool, require
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--framework-jar", type=Path, required=True)
 parser.add_argument("--framework-sha256", required=True)
@@ -30,7 +32,7 @@ args = parser.parse_args()
 module = Path(__file__).resolve().parents[1]
 suite = args.suite_dir.resolve(strict=True)
 jar = args.framework_jar.resolve(strict=True)
-assert args.name and all(c.isalnum() or c in "_-" for c in args.name), "Use a simple output name"
+require(args.name and all(c.isalnum() or c in "_-" for c in args.name), "Use a simple output name")
 work = (args.output_dir or module / "target/smoke" / args.name).resolve()
 work.mkdir(parents=True, exist_ok=False)
 outputs = work / "outputs"
@@ -38,13 +40,13 @@ outputs.mkdir(mode=0o700, exist_ok=True)
 handoff_path = suite / "handoff/reviewed-tests.json"
 handoff = json.loads(handoff_path.read_text())
 manifest = (args.suite_manifest or suite / "suite_manifest.yaml").resolve(strict=True)
-assert manifest.is_relative_to(suite) and manifest.is_file(), "Manifest must be contained in reviewed suite"
+require(manifest.is_relative_to(suite) and manifest.is_file(), "Manifest must be contained in reviewed suite")
 for value in (args.mission_ref,args.request_ref):
-    assert value is None or (0 < len(value) <= 256 and value == value.strip() and not any(ord(c) < 32 or ord(c) == 127 for c in value)), "Correlation reference must be bounded metadata"
+    require(value is None or (0 < len(value) <= 256 and value == value.strip() and not any(ord(c) < 32 or ord(c) == 127 for c in value)), "Correlation reference must be bounded metadata")
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
-assert sha(jar) == args.framework_sha256, "Framework artifact differs from supplied pin"
-assert sha(handoff_path) == args.handoff_sha256, "Handoff differs from independently supplied pin"
+require(sha(jar) == args.framework_sha256, "Framework artifact differs from supplied pin")
+require(sha(handoff_path) == args.handoff_sha256, "Handoff differs from independently supplied pin")
 request = {
     "contract_version": "product-test-request.v1", "module_id": "product-test", "module_version": "1",
     "mission_ref": args.mission_ref or "synthetic-mission:product-module-smoke", "request_ref": args.request_ref or "synthetic-request:" + str(uuid.uuid4()),
@@ -64,12 +66,12 @@ environment = {
     "SWARM_PRODUCT_TEST_TIMEOUT_MS": "60000", "SWARM_PRODUCT_TEST_MAX_OUTPUT_BYTES": "262144",
 }
 if args.fixture_lease_sha256 is not None:
-    assert len(args.fixture_lease_sha256) == 64 and all(c in "0123456789abcdef" for c in args.fixture_lease_sha256)
+    require(len(args.fixture_lease_sha256) == 64 and all(c in "0123456789abcdef" for c in args.fixture_lease_sha256), "Invalid fixture lease SHA-256")
     environment["SWARM_PRODUCT_TEST_FIXTURE_LEASE_SHA256"] = args.fixture_lease_sha256
 if args.sut_binding_sha256 is not None:
-    assert len(args.sut_binding_sha256) == 64 and all(c in "0123456789abcdef" for c in args.sut_binding_sha256)
+    require(len(args.sut_binding_sha256) == 64 and all(c in "0123456789abcdef" for c in args.sut_binding_sha256), "Invalid SUT binding SHA-256")
     environment["SWARM_PRODUCT_TEST_SUT_BINDING_SHA256"] = args.sut_binding_sha256
-java = str(args.java_home / "bin/java")
+java = jdk_tool(args.java_home, "java")
 provider = (args.provider_jar or module / "target/swarm-product-test-1.0.0-provider.jar").resolve(strict=True)
 host = module / "target/swarm-product-test-1.0.0-host.jar"
 if args.via_host:
@@ -84,19 +86,19 @@ else:
     executed_artifacts = {"cli": {"path": str(cli), "sha256": sha(cli)}}
 stdout_file = work / "receipt.json"
 with stdout_file.open("w") as out, (work / "stderr.log").open("w") as err:
-    completed = subprocess.run([java, "-Xmx512m", "-XX:MaxMetaspaceSize=256m", *invocation, "product-test", "run", "--request", str(request_file)],
-                               env=environment, stdout=out, stderr=err, timeout=75, cwd=work)
-assert stdout_file.stat().st_size <= 4 * 1024 * 1024, "Receipt output exceeds bound"
+    completed = subprocess.run(["java", "-Xmx512m", "-XX:MaxMetaspaceSize=256m", *invocation, "product-test", "run", "--request", str(request_file)],
+                               executable=java, env=environment, stdout=out, stderr=err, timeout=75, cwd=work)
+require(stdout_file.stat().st_size <= 4 * 1024 * 1024, "Receipt output exceeds bound")
 receipt = json.loads(stdout_file.read_text())
-assert receipt["outcome"] == "COMPLETED", receipt
-assert receipt["framework_verdict"] == args.expect_verdict, receipt
-assert receipt["evidence_validation"] == "validated", receipt
-assert receipt["release_evidence_eligible"] is False
-assert receipt["evidence_classification"] == "framework_verification_only"
-assert receipt["request"] == request
-assert (completed.returncode == 0) == (args.expect_verdict == "passed")
+require(receipt["outcome"] == "COMPLETED", receipt)
+require(receipt["framework_verdict"] == args.expect_verdict, receipt)
+require(receipt["evidence_validation"] == "validated", receipt)
+require(receipt["release_evidence_eligible"] is False, "Receipt must withhold release eligibility")
+require(receipt["evidence_classification"] == "framework_verification_only", "Unexpected evidence classification")
+require(receipt["request"] == request, "Receipt does not match the submitted request")
+require((completed.returncode == 0) == (args.expect_verdict == "passed"), "Process exit code contradicts the expected verdict")
 for artifact in receipt["artifacts"].values():
-    assert sha(Path(artifact["path"])) == artifact["sha256"], artifact
+    require(sha(Path(artifact["path"])) == artifact["sha256"], artifact)
 evidence = {"status": "passed", "claim_boundary": "LOCAL_NATIVE_PROVIDER_NOT_COMPANY_ACCEPTANCE" if args.test_level == "integration" else "LOCAL_PACKAGED_FAKE_PROVIDER_NOT_COMPANY_ACCEPTANCE",
     "route": "real_FdiApplication_overlay" if args.via_host else "packaged_module_cli",
     "executed_artifacts": executed_artifacts,

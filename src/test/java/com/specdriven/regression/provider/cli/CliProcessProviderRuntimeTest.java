@@ -1,5 +1,7 @@
 package com.specdriven.regression.provider.cli;
 
+import com.specdriven.regression.testsupport.TestJvm;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -354,8 +356,7 @@ class CliProcessProviderRuntimeTest {
                 case "secret" -> System.out.print(args.length > 1 ? args[1] : "Authorization: Bearer secret-value-123");
                 case "hang" -> Thread.sleep(20000);
                 case "orphan" -> {
-                    new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin/java").toString(), "-Xmx32m", "-cp",
-                            System.getProperty("java.class.path"), Fixture.class.getName(), "hang").inheritIO().start();
+                    TestJvm.forMain(Fixture.class, List.of("-Xmx32m"), "hang").inheritIO().start();
                     Thread.sleep(300);
                 }
                 default -> throw new IllegalArgumentException("unknown fixture");

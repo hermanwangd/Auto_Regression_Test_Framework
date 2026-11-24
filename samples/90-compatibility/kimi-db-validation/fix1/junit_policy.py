@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
-import xml.etree.ElementTree as ET
+from junit_reader import JUnitElement, parse_report, read_report
 
 
-def node_identity(node: ET.Element) -> str:
+def node_identity(node: JUnitElement) -> str:
     return node.attrib.get("classname", "") + "::" + node.attrib.get("name", "")
 
 
-def direct_counts(suite: ET.Element) -> dict:
+def direct_counts(suite: JUnitElement) -> dict:
     nodes = list(suite.findall("testcase"))
     return {
         "tests": len(nodes),
@@ -32,7 +32,7 @@ def validate_junit(
     try:
         if not path.is_file() or path.stat().st_size == 0:
             raise ValueError("current-run JUnit missing or empty")
-        root = ET.parse(path).getroot()
+        root = parse_report(read_report(path))
     except Exception as exc:
         return {"pass": False, "errors": [f"JUnit parse error: {type(exc).__name__}: {exc}"], "path": str(path)}
 
@@ -57,7 +57,7 @@ def validate_junit(
 
     properties = {}
     for suite in suites:
-        for prop in suite.findall("./properties/property"):
+        for prop in (prop for group in suite.findall("properties") for prop in group.findall("property")):
             name = prop.attrib.get("name")
             value = prop.attrib.get("value")
             if name in {"run_token", "manifest_sha256", "source_digest"}:

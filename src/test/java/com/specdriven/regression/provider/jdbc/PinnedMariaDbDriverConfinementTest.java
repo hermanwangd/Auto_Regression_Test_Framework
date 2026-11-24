@@ -1,4 +1,6 @@
 package com.specdriven.regression.provider.jdbc;
+
+import com.specdriven.regression.testsupport.TestJvm;
 import static org.assertj.core.api.Assertions.*;
 import java.nio.file.*;
 import java.util.*;
@@ -8,7 +10,12 @@ import org.junit.jupiter.api.Assumptions;
 class PinnedMariaDbDriverConfinementTest {
  @Test void cachedRealDriverInitializesOnlyInOwnedShortLivedChildWithoutConnecting()throws Exception {
   String asset=System.getProperty("reviewed.mariadb.driver.test");Assumptions.assumeTrue(asset!=null,"external cached-driver path is a bounded test binding");
-  String id=UUID.randomUUID().toString();var process=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin/java").toString(),"-Xmx64m","-XX:-HeapDumpOnOutOfMemoryError","-XX:ErrorFile=/dev/null","-Dswarm.jdbc.invocation_id="+id,"-cp",System.getProperty("java.class.path"),InitChild.class.getName(),asset).start();
+  Path driver = Path.of(asset);
+  PinnedMariaDbDriver.admit(driver);
+  String id = UUID.randomUUID().toString();
+  var process = TestJvm.forMain(InitChild.class,
+    List.of("-Xmx64m", "-XX:-HeapDumpOnOutOfMemoryError", "-XX:ErrorFile=/dev/null", "-Dswarm.jdbc.invocation_id=" + id),
+    driver.toString()).start();
   long pid=process.pid();
   try {
    var read=new java.util.concurrent.FutureTask<String>(()->new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream())).readLine());

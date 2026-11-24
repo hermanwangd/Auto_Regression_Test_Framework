@@ -139,32 +139,18 @@ def test_clk_005_file_error_then_next_invocation_succeeds(record_property):
 
 def test_clk_006_real_subprocess_invocation(record_property, tmp_path):
     root = Path(__file__).resolve().parents[2]
-    env = os.environ.copy()
-    env.pop("SWARM_NAME", None)
-    env.pop("SWARM_COUNT", None)
-    env["PYTHONPATH"] = str(root / "src")
-    command = [
-        sys.executable,
-        "-m",
-        "swarm_cli01.click_app",
-        "--name",
-        "process",
-        "--count",
-        "2",
-        "process.txt",
-    ]
-    completed = subprocess.run(
-        command,
-        cwd=tmp_path,
-        env=env,
-        text=True,
-        encoding="utf-8",
-        capture_output=True,
-        timeout=20,
-        check=False,
-    )
+    assert Path(sys.executable).is_absolute()
+    env = {"PYTHONPATH": str(root / "src")}
+    module_args = ["-m", "swarm_cli01.click_app", "--name", "process", "--count", "2", "process.txt"]
+    options = dict(cwd=tmp_path, env=env, text=True, encoding="utf-8", capture_output=True,
+                   timeout=20, check=False)
+    if os.name == "nt":
+        env["SystemRoot"] = os.environ["SystemRoot"]
+        completed = subprocess.run(["python", "-s", *module_args], executable=sys.executable, **options)
+    else:
+        completed = subprocess.run(["/usr/bin/env", sys.executable, "-s", *module_args], **options)
     observed = {
-        "command": command,
+        "command": completed.args,
         "exit_code": completed.returncode,
         "stdout": completed.stdout,
         "stderr": completed.stderr,

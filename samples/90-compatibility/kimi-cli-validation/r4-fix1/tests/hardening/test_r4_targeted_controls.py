@@ -1,7 +1,7 @@
 import concurrent.futures
 import json
 from pathlib import Path
-import subprocess
+from types import SimpleNamespace
 
 import pytest
 
@@ -45,14 +45,11 @@ def assert_harness_rejection(invocation, code):
 
 
 def inject_report(monkeypatch, report_bytes, exit_code=0):
-    real_run = subprocess.run
-
     def fake_run(command, **kwargs):
-        if "--junitxml" not in command:
-            return real_run(command, **kwargs)
+        assert "--junitxml" in command
         report = Path(command[command.index("--junitxml") + 1])
         report.write_bytes(report_bytes)
-        return subprocess.CompletedProcess(command, exit_code, "injected raw JUnit control", "")
+        return SimpleNamespace(returncode=exit_code, stdout="injected raw JUnit control", stderr="")
     monkeypatch.setattr(run_suite.subprocess, "run", fake_run)
 
 
@@ -296,7 +293,7 @@ def test_r4_419_420_effective_runtime_file_mutation_rejected(record_property, ki
     )
     (control / "test_control.py").write_text(source, encoding="utf-8")
     document = json.loads(manifest.read_text(encoding="utf-8"))
-    test_relative = str((control / "test_control.py").relative_to(ROOT))
+    test_relative = (control / "test_control.py").relative_to(ROOT).as_posix()
     document["execution"]["frozen_source_sha256"][test_relative] = run_suite.sha256(control / "test_control.py")
     manifest.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     result = invoke_subprocess(manifest, label, requirements, config)
@@ -308,7 +305,7 @@ def test_r4_419_420_effective_runtime_file_mutation_rejected(record_property, ki
     assert "FROZEN_INPUTS_CHANGED" in reject_codes(metadata)
     assert metadata["summary_counts"]["passed"] == 1
     assert cases["cases"][0]["status"] == "passed"
-    effective_relative = str((control / filename).relative_to(ROOT))
+    effective_relative = (control / filename).relative_to(ROOT).as_posix()
     assert effective_relative in metadata["source_sha256_before"]
     assert effective_relative in metadata["source_sha256_after"]
     assert metadata["source_sha256_before"][effective_relative] != metadata["source_sha256_after"][effective_relative]

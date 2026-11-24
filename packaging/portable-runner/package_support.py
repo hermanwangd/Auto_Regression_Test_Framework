@@ -76,6 +76,7 @@ def verify_saved(output,complete):
 def docker_environment(build=False):
  env=dict(os.environ)
  for key in ['DOCKER_HOST','DOCKER_CONTEXT','DOCKER_TLS','DOCKER_TLS_VERIFY','DOCKER_CERT_PATH','BUILDX_BUILDER']:env.pop(key,None)
+ env['PATH']='/usr/local/bin:/usr/bin:/bin'
  if build:env['DOCKER_BUILDKIT']='0'  # Docker28 engine-local API, independent of selected Buildx builder.
  return env
 
@@ -105,13 +106,15 @@ class Commands:
  def __init__(self,evidence,scope_root,initial_free):self.evidence=Path(evidence);durable_mkdir(self.evidence);self.scope=Path(scope_root);self.initial_free=initial_free;self.records=[]
  def guard(self):
   v=os.statvfs(self.scope);free=v.f_bavail*v.f_frsize;require(free>=6*1024**3,'disk_floor_5GiB_plus1GiB_margin');require(self.initial_free-free<=6*1024**3,'incremental_6GiB_budget');return free
- def run(self,label,args,timeout=30,cap=1024**2,docker=True,allowed=(0,)):
+ def run(self,label,args,timeout=30,cap=1024**2,allowed=(0,)):
   require(re.fullmatch('[A-Za-z0-9_.-]+',label),'invalid_command_label');self.guard();out=self.evidence/(label+'.stdout.log');err=self.evidence/(label+'.stderr.log');require(not out.exists() and not err.exists(),'command_record_exists')
-  argv=(['docker','--host=unix:///var/run/docker.sock'] if docker else [])+[str(x) for x in args];env=docker_environment(build=docker and args[0]=='build')
+  require(args and args[0] in {'inspect','create','start','wait','stop','logs','rm','pull','image','buildx','build'},'unsupported_docker_operation')
+  args=[str(x) for x in args]
+  argv=['docker','--host=unix:///var/run/docker.sock',*args];env=docker_environment(build=args[0]=='build')
   start=time.monotonic();guard=None;p=None;rc=None
   try:
    with out.open('xb') as stdout,err.open('xb') as stderr:
-    p=subprocess.Popen(argv,stdout=stdout,stderr=stderr,env=env,start_new_session=True)
+    p=subprocess.Popen(['docker','--host=unix:///var/run/docker.sock',*args],stdout=stdout,stderr=stderr,env=env,start_new_session=True)
     try:
      while p.poll() is None:
       try:self.guard()

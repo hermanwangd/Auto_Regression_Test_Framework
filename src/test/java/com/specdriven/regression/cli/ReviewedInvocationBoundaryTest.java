@@ -1,5 +1,7 @@
 package com.specdriven.regression.cli;
 
+import com.specdriven.regression.provider.ProviderDataYaml;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import com.specdriven.regression.discovery.ReleasePackageService;
 import com.specdriven.regression.productrepo.ProductRepoService;
@@ -67,7 +69,7 @@ class ReviewedInvocationBoundaryTest {
             }
             String pin = Files.readString(suiteRoot.resolve("handoff/reviewed-tests.json.sha256")).trim();
             Path profile = suiteRoot.resolve("env_profiles/local_v03.yaml");
-            var yaml = new org.yaml.snakeyaml.Yaml();
+            var yaml = ProviderDataYaml.create();
             Map<String,Object> document = yaml.load(Files.readString(profile));
             if (alteration.equals("removed")) document.remove("product_test");
             if (alteration.equals("null")) document.put("product_test",null);

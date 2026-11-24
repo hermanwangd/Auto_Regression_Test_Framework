@@ -1,5 +1,6 @@
 package com.featuredeliveryintelligence.fdi.producttest.preparation;
 
+import com.featuredeliveryintelligence.fdi.producttest.JavaChildProcess;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.*;
@@ -55,10 +56,10 @@ public final class D2SourceBindingsClient {
             equal(pins.rootsSha256(),hashFile(regular(binding.trustedRootsBinding()),METADATA_LIMIT,deadline),SOURCE_BINDING_MISMATCH);
             Path parent=binding.outputParent().toRealPath();PreparationContracts.require(Files.isDirectory(parent,LinkOption.NOFOLLOW_LINKS),INVALID_INPUT);
             Path output=Files.createTempDirectory(parent,"pinned-d2-",PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
-            JsonNode observer=PreparationContracts.read(invoke(List.of("runner-observe-producer"),output,deadline),PROCESS_OUTPUT_LIMIT);
+            JsonNode observer=PreparationContracts.read(invoke(Operation.OBSERVE, output, deadline),PROCESS_OUTPUT_LIMIT);
             validateObserver(observer,pins);
             Path assembly=output.resolve("assembled");
-            byte[] stdout=invoke(List.of("runner-package","--dependencies-lock",binding.dependenciesLock().toString(),"--expected-lock-sha256",pins.lockSha256(),"--roots-binding",binding.trustedRootsBinding().toString(),"--expected-roots-sha256",pins.rootsSha256(),"--out",assembly.toString()),output,deadline);
+            byte[] stdout=invoke(Operation.PACKAGE, output, deadline);
             Map<String,String> envelope=envelope(stdout);
             equal("ADMITTED",envelope.get("runner_status"),SOURCE_BINDING_MISMATCH);
             Path metadataPath=outputFile(assembly,envelope.get("source_bindings_json"),"source-bindings.json"),manifestPath=outputFile(assembly,envelope.get("bundle_manifest"),"bundle-manifest.json");
@@ -125,9 +126,23 @@ public final class D2SourceBindingsClient {
             for(String key:List.of("bytes","sha256","source_repo","source_commit","source_path","artifact_id","role","source_id","source_testrepo_version"))equal(artifact.path(key),file.path(key),SOURCE_BINDING_MISMATCH);
         }PreparationContracts.require(expected.isEmpty(),SOURCE_BINDING_MISMATCH);
     }
-    private byte[] invoke(List<String> arguments,Path output,long deadline)throws Exception{
-        check(deadline);var command=new ArrayList<String>(List.of(binding.javaExecutable().toRealPath().toString(),"-Xmx512m","-XX:MaxMetaspaceSize=256m","-Djava.io.tmpdir="+output,"-jar",binding.producerJar().toRealPath().toString()));command.addAll(arguments);
-        var builder=new ProcessBuilder(command).directory(output.toFile());builder.environment().clear();builder.environment().putAll(Map.of("PATH","/usr/bin:/bin","LC_ALL","C"));Process process=builder.start();
+    private enum Operation { OBSERVE, PACKAGE }
+
+    private byte[] invoke(Operation operation, Path output, long deadline) throws Exception {
+        check(deadline);
+        var builder = JavaChildProcess.fromRuntime(binding.javaExecutable()).directory(output.toFile());
+        var args = builder.command();
+        args.addAll(List.of("-Xmx512m", "-XX:MaxMetaspaceSize=256m", "-Djava.io.tmpdir=" + output,
+                "-jar", binding.producerJar().toRealPath().toString()));
+        switch (operation) {
+            case OBSERVE -> args.add("runner-observe-producer");
+            case PACKAGE -> args.addAll(List.of("runner-package", "--dependencies-lock", binding.dependenciesLock().toString(),
+                    "--expected-lock-sha256", binding.expectedLockSha256(), "--roots-binding", binding.trustedRootsBinding().toString(),
+                    "--expected-roots-sha256", binding.expectedTrustedRootsSha256(), "--out", output.resolve("assembled").toString()));
+        }
+        builder.environment().clear();
+        builder.environment().putAll(Map.of("PATH", "/usr/bin:/bin", "LC_ALL", "C"));
+        Process process = builder.start();
         var io=Executors.newFixedThreadPool(2,r->{Thread t=new Thread(r,"d2-wire-capture");t.setDaemon(true);return t;});AtomicInteger received=new AtomicInteger();Future<byte[]>stdout=io.submit(()->capture(process.getInputStream(),received)),stderr=io.submit(()->capture(process.getErrorStream(),received));boolean clean=false;
         try{
             while(!process.waitFor(20,TimeUnit.MILLISECONDS)){check(deadline);PreparationContracts.require(received.get()<=PROCESS_OUTPUT_LIMIT,OUTPUT_LIMIT);}

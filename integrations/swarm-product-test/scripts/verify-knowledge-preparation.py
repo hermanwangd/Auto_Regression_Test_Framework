@@ -10,6 +10,8 @@ import re
 import subprocess
 import tempfile
 
+from harness_tools import jdk_environment, jdk_tool
+
 PINNED_HOST = {
     "src/main/java/com/featuredeliveryintelligence/fdi/application/FdiApplication.java": "1e14310d39b622d7403e827403d2d2b6f1ac320ddceae51ec0be29854edac3c4",
     "src/main/java/com/featuredeliveryintelligence/fdi/application/Dev204Cli.java": "ff0669763d5070e834ffba893a2ebe681a20e868c85fc0b9b595256e468069b8",
@@ -51,8 +53,8 @@ def main():
         classes = build / "classes"
         classes.mkdir(exist_ok=True)
         sources = sorted((module / "src/host/java").rglob("*.java")) + sorted((module / "src/host-test/java").rglob("*.java"))
-        javac = [str(args.java_home / "bin/javac"), "-J-Xmx512m", "--release", "17", "-verbose", "-classpath", cp, "-sourcepath", str(host / "src/main/java"), "-d", str(classes), *map(str,sources)]
-        compiled = subprocess.run(javac, capture_output=True, text=True, timeout=120, cwd=module)
+        compiled = subprocess.run(["javac", "-J-Xmx512m", "--release", "17", "-verbose", "-classpath", cp, "-sourcepath", str(host / "src/main/java"), "-d", str(classes), *map(str,sources)],
+                executable=jdk_tool(args.java_home, "javac"), env=jdk_environment(), capture_output=True, text=True, timeout=120, cwd=module)
         (build / "compile.log").write_text(compiled.stdout + compiled.stderr)
         if compiled.returncode:
             raise SystemExit("HOST_CONTRACT_COMPILE_FAILED: " + str(build / "compile.log"))
@@ -78,8 +80,8 @@ def main():
             print("COMPILED_NOT_EXECUTED")
             print("manifest_json: " + str(build / "compile-only-manifest.json"))
             return
-        command = [str(args.java_home / "bin/java"), "-Xmx512m", "-XX:MaxMetaspaceSize=256m", "-cp", str(classes) + os.pathsep + cp, "com.featuredeliveryintelligence.fdi.producttest.preparation.HostKnowledgeContextPortTest", str(build / "artifacts")]
-        checked = subprocess.run(command, capture_output=True, text=True, timeout=180, cwd=module)
+        checked = subprocess.run(["java", "-Xmx512m", "-XX:MaxMetaspaceSize=256m", "-cp", str(classes) + os.pathsep + cp, "com.featuredeliveryintelligence.fdi.producttest.preparation.HostKnowledgeContextPortTest", str(build / "artifacts")],
+                executable=jdk_tool(args.java_home, "java"), env=jdk_environment(), capture_output=True, text=True, timeout=180, cwd=module)
         if any(secret in checked.stdout + checked.stderr for secret in ("PRIVATE-CANARY", "SYNTHETIC-TOKEN-CANARY")):
             raise SystemExit("PRIVATE_PREPARATION_CONTENT_IN_HARNESS_OUTPUT")
         (build / "contract.stdout.log").write_text(checked.stdout)

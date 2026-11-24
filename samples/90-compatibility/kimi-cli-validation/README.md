@@ -20,7 +20,7 @@ The optional package harness requires pytest. Store generated outputs in a priva
 python -B scripts/run_suite.py --suite click --evidence-root /absolute/private/evidence
 ```
 
-Each run produces a fresh `run-<uuid>/` with input hashes, environment inventory, command and timestamps, process status, fresh JUnit when available, and case observations. Do not commit generated evidence. The received dependency lock is a version snapshot without distribution hashes. Generic optional input flags and full transitive source/dependency enforcement remain outside this narrow change.
+Each run produces a fresh `run-<uuid>/` with input hashes, environment inventory, command and timestamps, process status, fresh JUnit when available, and case observations. Do not commit generated evidence. The received dependency lock is a version snapshot without distribution hashes. The optional manifest, requirements and test-path flags accept the checked-in Click inputs. The subprocess runs the current interpreter in isolated mode, disables pytest plugin autoload and reads at most 2 MiB from a regular JUnit file. DTDs and entity declarations are rejected.
 
 The real integration route is the existing reviewed `cli_process.v0.3` provider through the packaged Swarm product-test module. Invoke the reviewed app directly with a pinned interpreter and literal argv; package pytest success cannot establish Framework or Module success. The supplemental CLK-002 contract is exit 0, stdout `wrote=default.txt;count=1;upper=false\n`, empty stderr, and file bytes `default-bot\n`, with both SWARM variables absent. A fresh reviewed handoff, concrete dependency pins and independent actual-evidence review are required for that invocation.
 

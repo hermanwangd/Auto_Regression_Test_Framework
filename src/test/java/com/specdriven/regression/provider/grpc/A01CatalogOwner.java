@@ -41,12 +41,13 @@ public final class A01CatalogOwner {
         ReviewedA01CatalogPolicy.verifyLaunch(ProcessHandle.current(),launchIdentity,runtime);
         Path root=ReviewedA01CatalogPolicy.absolute(runtime.path("owner_root").asText()).toRealPath();
         Path binary=ReviewedA01CatalogPolicy.absolute(runtime.path("binary_path").asText());
-        require(binary.equals(root.resolve("productcatalogservice"))&&binary.toRealPath().equals(binary),"binary containment");
+        require(binary.equals(root.resolve("productcatalogservice"))&&binary.toRealPath().equals(binary)
+            &&Files.isRegularFile(binary,java.nio.file.LinkOption.NOFOLLOW_LINKS)&&Files.isExecutable(binary),"binary containment/type");
         require(ReviewedA01CatalogPolicy.fileHash(binary,128*1024*1024).equals(runtime.path("binary_sha256").asText()),"binary pin");
         require(ReviewedA01CatalogPolicy.DATA_SHA.equals(ReviewedA01CatalogPolicy.hash(ReviewedA01CatalogPolicy.read(root,"products.json",16384))),"data pin");
         int port;try(ServerSocket reservation=new ServerSocket()) {reservation.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"),0));port=reservation.getLocalPort();}
         Path log=root.resolve("catalog-child.log");require(!Files.exists(log),"fresh child log required");
-        ProcessBuilder builder=new ProcessBuilder(binary.toString()).directory(root.toFile()).redirectErrorStream(true).redirectOutput(log.toFile());
+        ProcessBuilder builder=new ProcessBuilder("./productcatalogservice").directory(root.toFile()).redirectErrorStream(true).redirectOutput(log.toFile());
         builder.environment().clear();builder.environment().putAll(Map.of("PORT",Integer.toString(port),"DISABLE_PROFILER","1","ENABLE_TRACING","0","GOTRACEBACK","single"));
         Object launchLock=new Object();var active=new java.util.concurrent.atomic.AtomicReference<Lifecycle>();
         Thread shutdown=new Thread(()->{synchronized(launchLock){Lifecycle owned=active.get();if(owned!=null){owned.fail("JVM_SHUTDOWN");owned.cleanup();}}},"a01-owner-shutdown");

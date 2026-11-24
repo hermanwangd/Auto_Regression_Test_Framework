@@ -139,7 +139,7 @@
     "test_path": "tests/hardening/test_runner_fail_closed.py",
     "node_selection": null,
     "frozen_source_sha256": {
-      "tests/hardening/test_runner_fail_closed.py": "51218ba649191fb8f2a527db618379bc402d3ee50c8011a31d173069919f19a0"
+      "tests/hardening/test_runner_fail_closed.py": "4f2441c7762a2c179b00e47e032041d3648dedf99f190c0c63c4d06639032eaf"
     }
   }
 }

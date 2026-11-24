@@ -1,19 +1,21 @@
 """Bounded official metadata only; no image pull, credentials, or runtime execution."""
 from pathlib import Path
 import json,os,subprocess,time,hashlib,sys,re
-from package_support import durable_mkdir,require,save,reap_owned,persist_command,syncdir
+from package_support import durable_mkdir,require,save,reap_owned,persist_command,syncdir,docker_environment
 I=Path(__file__).resolve().parent
 BASES=[('python','docker.io/library/python:3.12-slim-bookworm','https://github.com/docker-library/python','PSF-2.0 plus Debian base notices'),('jre','docker.io/library/eclipse-temurin:17-jre-jammy','https://github.com/adoptium/containers','GPL-2.0 WITH Classpath-exception-2.0 plus Ubuntu base notices')]
 def run(label,ref):
  require(re.fullmatch('[A-Za-z0-9_.-]+',label),'invalid_command_label');evidence=I/'evidence';durable_mkdir(evidence)
  out=evidence/(label+'.stdout.json');err=evidence/(label+'.stderr.log');record=evidence/(label+'-command.json')
  require(not any(p.exists() for p in [out,err,record]),'command_record_exists')
- env=dict(os.environ)
- for key in ['DOCKER_HOST','DOCKER_CONTEXT','DOCKER_TLS','DOCKER_TLS_VERIFY','DOCKER_CERT_PATH']:env.pop(key,None)
+ tags={entry[1] for entry in BASES}
+ repository,separator,digest=ref.partition('@')
+ require(ref in tags or (separator and repository in {tag.split(':')[0] for tag in tags} and re.fullmatch(r'sha256:[a-f0-9]{64}',digest)),'unsupported_base_reference')
+ env=docker_environment()
  argv=['docker','--host=unix:///var/run/docker.sock','manifest','inspect',ref];start=time.monotonic();guard=None;p=None
  try:
   with out.open('xb') as stdout,err.open('xb') as stderr:
-   p=subprocess.Popen(argv,stdout=stdout,stderr=stderr,env=env,start_new_session=True)
+   p=subprocess.Popen(['docker','--host=unix:///var/run/docker.sock','manifest','inspect',ref],stdout=stdout,stderr=stderr,env=env,start_new_session=True)
    try:
     while p.poll() is None:
      if time.monotonic()-start>30 or out.stat().st_size>4*1024*1024 or err.stat().st_size>1024*1024:guard='metadata_deadline_or_size';break

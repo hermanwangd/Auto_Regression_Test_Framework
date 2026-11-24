@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -50,17 +51,17 @@ def stage_control(suite, test_name="test_control", source=None, classname=None,
     if source is None:
         source = "def test_control():\n    assert True\n"
     test_file.write_text(source, encoding="utf-8")
-    test_relative = str(test_file.relative_to(ROOT))
+    test_relative = test_file.relative_to(ROOT).as_posix()
     selected_path = control_dir if conftest is not None else test_file
     if conftest is not None:
         (control_dir / "conftest.py").write_text(conftest, encoding="utf-8")
-    frozen_hashes = {str(path.relative_to(ROOT)): run_suite.sha256(path)
+    frozen_hashes = {path.relative_to(ROOT).as_posix(): run_suite.sha256(path)
                      for path in sorted(control_dir.glob("*.py"))}
     expected_classname = classname or f"tests.r4_control_inputs.{directory_name}.test_control"
     manifest = {
         "source": {"component": "r4-frozen-harness-control", "package_result": False},
         "execution": {
-            "test_path": str(selected_path.relative_to(ROOT)),
+            "test_path": selected_path.relative_to(ROOT).as_posix(),
             "node_selection": node_selection,
             "frozen_source_sha256": frozen_hashes,
         },
@@ -113,15 +114,24 @@ def invoke(manifest, suite, requirements="requirements-click.lock", config="runt
 
 def invoke_subprocess(manifest, suite, requirements="requirements-click.lock", config="runtime_gate.json",
                       test_path=None, node_selection=None, timeout=20):
-    argv = [sys.executable, str(ROOT / "scripts" / "run_suite.py"), "--suite", suite,
-            "--manifest", str(manifest), "--requirements", str(requirements),
-            "--runtime-config", str(config), "--timeout-seconds", str(timeout)]
+    if not Path(sys.executable).is_absolute() or not 0 < timeout <= 3600:
+        raise ValueError("invalid interpreter or timeout for control")
+    optional = []
     if test_path is not None:
-        argv.extend(["--test-path", str(test_path)])
+        optional.append(f"--test-path={test_path}")
     if node_selection is not None:
-        argv.extend(["--node-selection", node_selection])
-    completed = subprocess.run(argv, cwd=ROOT, text=True, encoding="utf-8", capture_output=True,
-                               timeout=timeout + 10, check=False)
+        optional.append(f"--node-selection={node_selection}")
+    runner_args = ["-s", "scripts/run_suite.py", f"--suite={suite}", f"--manifest={manifest}",
+                   f"--requirements={requirements}", f"--runtime-config={config}", f"--timeout-seconds={timeout}",
+                   *optional]
+    env = {}
+    options = dict(cwd=ROOT, env=env, text=True, encoding="utf-8", capture_output=True,
+                   timeout=timeout + 10, check=False)
+    if os.name == "nt":
+        env["SystemRoot"] = os.environ["SystemRoot"]
+        completed = subprocess.run(["python", "-E", *runner_args], executable=sys.executable, **options)
+    else:
+        completed = subprocess.run(["/usr/bin/env", sys.executable, "-E", *runner_args], **options)
     return Invocation(suite, completed.returncode, completed.stdout, completed.stderr,
                       payload_from_stdout(completed.stdout))
 
@@ -147,7 +157,8 @@ def record_invocation(record_property, label, invocation, extra=None):
     _, metadata, _ = load_result(invocation)
     record = {
         "label": label,
-        "nested_runner_command": [sys.executable, str(ROOT / "scripts" / "run_suite.py")],
+        "nested_runner_command": ([sys.executable, "-E", "-s", "scripts/run_suite.py"] if os.name == "nt" else
+                                  ["/usr/bin/env", sys.executable, "-E", "-s", "scripts/run_suite.py"]),
         "nested_runner_return_code": invocation.code,
         "nested_runner_stdout": invocation.stdout,
         "nested_runner_stderr": invocation.stderr,

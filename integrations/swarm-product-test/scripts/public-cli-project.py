@@ -18,6 +18,8 @@ import sys
 import urllib.request
 import zipfile
 
+from harness_tools import compiler_tool, jdk_environment, jdk_tool, require
+
 MODULE = Path(__file__).resolve().parents[1]
 REPO = MODULE.parents[1]
 FIXTURES = MODULE / "public-projects/sqlite"
@@ -42,11 +44,6 @@ def write(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2) + "\n")
-
-
-def require(condition, message):
-    if not condition:
-        raise ValueError(message)
 
 
 def budget(*roots):
@@ -136,11 +133,14 @@ def fetch(args):
     require(lock["source_id"] in (source / "sqlite3.c").read_text(), "SQLite source identity mismatch")
     require({name: sha(source / name) for name in lock["archive"]["members"]} == lock["source_sha256"],
             "Source files differ from reviewed identities")
-    compiler = Path(shutil.which(args.cc) or args.cc).resolve(strict=True)
+    compiler = compiler_tool(args.cc)
+    flags = ["-O0", "-DSQLITE_THREADSAFE=0", "-DSQLITE_OMIT_LOAD_EXTENSION", "shell.c", "sqlite3.c", "-lm"]
+    require(lock["compile_flags"] == flags, "Unexpected flags for the reviewed SQLite compilation")
     executable = cache / "sqlite3"
-    command = [str(compiler), *lock["compile_flags"], "-o", str(executable)]
+    # The driver uses argv[0] to find its installation and infer its target on Linux/macOS.
     with (cache / "compile.log").open("w") as log:
-        completed = subprocess.run(command, cwd=source, stdout=log, stderr=subprocess.STDOUT, timeout=60)
+        completed = subprocess.run(["/usr/bin/env", str(compiler), *flags, "-o", str(executable)], cwd=source,
+                                   stdout=log, stderr=subprocess.STDOUT, timeout=60)
     require(completed.returncode == 0, "SQLite compilation failed; inspect compile.log")
     require(executable.is_file() and not executable.is_symlink(), "Compiled executable must be a regular file")
     metadata = {"project": "sqlite", "version": lock["version"], "repository": lock["repository"],
@@ -149,7 +149,7 @@ def fetch(args):
                 "archive_sha256": sha(cache / "source.zip"), "archive_sha3_256": sha(cache / "source.zip", "sha3_256"),
                 "license_sha256": sha(cache / "LICENSE.md"),
                 "source_sha256": {name: sha(source / name) for name in lock["archive"]["members"]},
-                "compiler": str(compiler), "compiler_sha256": sha(compiler), "compile_argv": command,
+                "compiler": str(compiler), "compiler_sha256": sha(compiler), "compile_argv": [str(compiler), *flags, "-o", str(executable)],
                 "platform": platform.platform(), "architecture": platform.machine(),
                 "binary": str(executable), "binary_sha256": sha(executable),
                 "product_executed": False}
@@ -222,6 +222,7 @@ def policy(args):
     require(value["actor"] == "local-ci-policy" and value["claim"] == CLAIM, "Wrong local CI policy boundary")
     required = {str(Path(__file__).resolve().relative_to(REPO)), str((FIXTURES / "asset-lock.json").relative_to(REPO)),
                 str((FIXTURES / "cases.json").relative_to(REPO)),
+                str((MODULE / "scripts/harness_tools.py").relative_to(REPO)), str((MODULE / "scripts/smoke.py").relative_to(REPO)),
                 "docs/02-architecture/contracts/provider-contracts/cli_process_v0_3.yaml",
                 "samples/41-product-testing/reviewed_local/review-input.json"}
     require(set(value["reviewed_files"]) == required, "CI policy must pin the complete harness, lock, oracle and template set")
@@ -255,10 +256,6 @@ def expected_handoff(suite, review):
     return handoff
 
 
-def java(args):
-    return str(args.java_home.resolve(strict=True) / "bin/java")
-
-
 def prepare(args):
     authority = policy(args)
     require(authority or (args.reviewed_by and args.review_ref), "Supply review identity or the approved local CI policy")
@@ -289,9 +286,9 @@ def prepare(args):
                                (now + timedelta(days=1)).isoformat().replace("+00:00", "Z"))
         write(suite / "review-input.json", review)
         handoff = suite / "handoff/reviewed-tests.json"
-        command = [java(args), "-Xmx512m", "-jar", str(jar), "prepare-product-test-handoff", "--suite", str(suite / "suite_manifest.yaml"),
-                   "--profile", "local_cli", "--review-input", str(suite / "review-input.json"), "--out", str(handoff)]
-        completed = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        completed = subprocess.run(["java", "-Xmx512m", "-jar", str(jar), "prepare-product-test-handoff", "--suite", str(suite / "suite_manifest.yaml"),
+                   "--profile", "local_cli", "--review-input", str(suite / "review-input.json"), "--out", str(handoff)],
+                   executable=jdk_tool(args.java_home, "java"), env=jdk_environment(), capture_output=True, text=True, timeout=30)
         (suite / "prepare.log").write_text(completed.stdout + completed.stderr)
         require(completed.returncode == 0, "Framework handoff preparation failed: " + case["name"])
         prepared.append({"name": case["name"], "suite": str(suite), "handoff_sha256": sha(handoff)})
@@ -299,6 +296,7 @@ def prepare(args):
             "actor": "local-ci-policy" if authority else args.reviewed_by, "claim": CLAIM,
             "cache_dir": str(cache), "build": build, "framework_jar": str(jar), "framework_sha256": args.framework_sha256,
             "module_cli_sha256": args.module_sha256, "harness_sha256": sha(Path(__file__)),
+            "runtime_scripts_sha256": {name: sha(MODULE / "scripts" / name) for name in ("harness_tools.py", "smoke.py")},
             "asset_lock_sha256": sha(FIXTURES / "asset-lock.json"), "fixtures_sha256": sha(FIXTURES / "cases.json"),
             "contract_sha256": sha(REPO / "docs/02-architecture/contracts/provider-contracts/cli_process_v0_3.yaml"),
             "policy_sha256": args.policy_sha256 if authority else None, "cases": prepared}
@@ -332,6 +330,8 @@ def verify(args):
             "Source CLI contract differs from reviewed plan")
     cache = Path(plan["cache_dir"])
     require(checked_build(cache) == plan["build"], "Build provenance changed")
+    require(plan.get("runtime_scripts_sha256") == {name: sha(MODULE / "scripts" / name) for name in ("harness_tools.py", "smoke.py")},
+            "Runtime scripts differ from the reviewed plan")
     require(sha(plan["framework_jar"]) == plan["framework_sha256"], "Framework artifact changed")
     require(sha(MODULE / "target/swarm-product-test-1.0.0-cli.jar") == plan["module_cli_sha256"], "Module artifact changed")
     cases = read(FIXTURES / "cases.json")["cases"]
@@ -363,12 +363,12 @@ def verify(args):
     for case, record in zip(cases, plan["cases"]):
         output = evidence / ("run-" + case["name"])
         require(not output.exists(), "Runtime directory must be fresh")
-        command = [sys.executable, str(MODULE / "scripts/smoke.py"), "--framework-jar", plan["framework_jar"],
+        completed = subprocess.run(["python3", "-E", "-s", "-B", str(MODULE / "scripts/smoke.py"), "--framework-jar", plan["framework_jar"],
                    "--framework-sha256", plan["framework_sha256"], "--suite-dir", record["suite"],
                    "--handoff-sha256", record["handoff_sha256"], "--expect-verdict", case.get("verdict", "passed"),
                    "--name", "sqlite-" + case["name"], "--test-level", "integration", "--output-dir", str(output),
-                   "--java-home", str(args.java_home.resolve(strict=True))]
-        completed = subprocess.run(command, capture_output=True, text=True, timeout=90)
+                   "--java-home", str(args.java_home.resolve(strict=True))],
+                   executable=sys.executable, capture_output=True, text=True, timeout=90)
         (evidence / (case["name"] + ".log")).write_text(completed.stdout + completed.stderr)
         require(completed.returncode == 0, "Packaged module check failed: " + case["name"])
         receipt = read(output / "receipt.json")

@@ -1,5 +1,7 @@
 package com.specdriven.regression.provider.grpc;
 
+import com.specdriven.regression.testsupport.TestJvm;
+
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.protobuf.DynamicMessage;
@@ -29,9 +31,8 @@ public final class P04FourCardinalityProbe {
   Path root=Path.of(args[0]).toAbsolutePath();allocationRoot=args.length>2?Path.of(args[2]).toAbsolutePath():root;Files.createDirectory(root);
   Path source=Path.of("samples/41-product-testing/grpc_descriptor_admission/fixtures").toAbsolutePath();
   Path contract=Path.of(args.length>1?args[1]:"docs/02-architecture/contracts/provider-contracts/grpc_client_v0_3.yaml").toAbsolutePath();
-  Path launch=root.resolve("owner.args");Files.writeString(launch,"-cp \""+ownerClasspath()+"\"\n"+P04StreamingOwner.class.getName()+"\n");
   byte[] raw=Base64.getDecoder().decode(Files.readAllBytes(source.resolve("service.desc.b64")));
-  try(var owner=new Owner(root.resolve("health"),source,CASES.get(2),launch)) {
+  try(var owner=new Owner(root.resolve("health"),source,CASES.get(2))) {
    var channel=ManagedChannelBuilder.forTarget(owner.endpoint.substring(7)).usePlaintext().maxInboundMessageSize(65536).build();
    try {for(Case c:CASES)health(channel,raw,c);check(owner.calls()==4,"all four handlers must receive a real call");}
    finally{channel.shutdownNow();check(channel.awaitTermination(left(2),TimeUnit.NANOSECONDS),"health channel cleanup");}
@@ -43,7 +44,7 @@ public final class P04FourCardinalityProbe {
    for(Case c:CASES) {
     if(end-System.nanoTime()<TimeUnit.SECONDS.toNanos(10))throw new IllegalStateException("insufficient absolute deadline for another owned case and cleanup");
     spy.attempts=0;spy.allowed=c.unary();
-    try(var owner=new Owner(root.resolve(c.method+"-owner"),source,c,launch)) {
+    try(var owner=new Owner(root.resolve(c.method+"-owner"),source,c)) {
      var parsed=ReviewedLoopbackGrpcPolicy.fixture(owner.root,owner.bindings(),true).method();
      check(parsed.getName().equals(c.method)&&parsed.isClientStreaming()==c.client&&parsed.isServerStreaming()==c.server,"actual pinned cardinality");
      guards(owner,c,parsed);
@@ -119,9 +120,12 @@ public final class P04FourCardinalityProbe {
  }
  static final class Owner implements AutoCloseable {
   final Path root;final String id=UUID.randomUUID().toString().replace("-","");final Process process;final String endpoint;
-  Owner(Path root,Path source,Case c,Path launch)throws Exception {
+  Owner(Path root,Path source,Case c)throws Exception {
    this.root=root;storage(root.getFileName().toString().equals("health")?5000:30000);if(end-System.nanoTime()<TimeUnit.SECONDS.toNanos(10))throw new IllegalStateException("not enough deadline for owner");
-   process=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin/java").toString(),"-Xmx128m","-XX:MaxMetaspaceSize=128m","-Dswarm.grpc.owner_nonce="+id,"@"+launch,root.toString(),source.toString(),c.profile).redirectErrorStream(true).redirectOutput(root.resolveSibling(root.getFileName()+".log").toFile()).start();
+   process = TestJvm.forMain(P04StreamingOwner.class,
+     List.of("-Xmx128m", "-XX:MaxMetaspaceSize=128m", "-Dswarm.grpc.owner_nonce=" + id),
+     root.toString(), source.toString(), c.profile)
+     .redirectErrorStream(true).redirectOutput(root.resolveSibling(root.getFileName()+".log").toFile()).start();
    long ready=System.nanoTime()+left(5);while(!Files.exists(root.resolve("owner-ready.json"))&&process.isAlive()&&System.nanoTime()<ready)Thread.sleep(10);
    if(!Files.exists(root.resolve("owner-ready.json"))||!Arrays.asList(process.info().arguments().orElse(new String[0])).contains("-Dswarm.grpc.owner_nonce="+id)){process.destroyForcibly();boolean reaped=process.waitFor(left(2),TimeUnit.NANOSECONDS);throw new IllegalStateException("owner readiness/nonce failed; reaped="+reaped);}
    endpoint=JSON.readTree(root.resolve("owner-ready.json").toFile()).path("endpoint").asText();
@@ -134,13 +138,6 @@ public final class P04FourCardinalityProbe {
    try(var socket=new java.net.Socket()){try{socket.connect(new java.net.InetSocketAddress("127.0.0.1",java.net.URI.create(endpoint).getPort()),100);throw new AssertionError("listener open");}catch(java.io.IOException expected){checks++;}}
    write(root.resolve("launcher-cleanup.json"),Map.of("pid",process.pid(),"reaped",true,"port_closed",true));
   }
- }
- static String ownerClasspath()throws Exception {
-  // Collapse a jar directory only when its exact regular-jar set equals the bound classpath set. Launcher expands it; compiler never uses this shortcut.
-  var entries=List.of(System.getProperty("java.class.path").split(java.io.File.pathSeparator));var jars=new LinkedHashMap<Path,Set<Path>>();
-  for(String s:entries){Path p=Path.of(s).toAbsolutePath();if(s.endsWith(".jar"))jars.computeIfAbsent(p.getParent(),x->new HashSet<>()).add(p);}
-  var compact=new HashSet<Path>();for(var e:jars.entrySet())try(var paths=Files.list(e.getKey())){var actual=paths.filter(p->p.toString().endsWith(".jar")&&Files.isRegularFile(p,LinkOption.NOFOLLOW_LINKS)).collect(java.util.stream.Collectors.toSet());if(actual.equals(e.getValue()))compact.add(e.getKey());}
-  var output=new LinkedHashSet<String>();for(String s:entries){Path p=Path.of(s).toAbsolutePath();output.add(s.endsWith(".jar")&&compact.contains(p.getParent())?p.getParent()+"/*":p.toString());}return String.join(java.io.File.pathSeparator,output);
  }
  static void storage(long upcoming)throws Exception {long used;try(var paths=Files.walk(allocationRoot)){used=paths.filter(Files::isRegularFile).mapToLong(p->{try{return Files.size(p);}catch(java.io.IOException e){throw new java.io.UncheckedIOException(e);}}).sum();}if(used+upcoming+8000>830000)throw new IllegalStateException("insufficient retained-output/finalization storage before spawn: used="+used+", upcoming="+upcoming);}
  static long left(int seconds){long left=end-System.nanoTime();if(left<=0)throw new IllegalStateException("absolute harness deadline exhausted");return Math.min(left,TimeUnit.SECONDS.toNanos(seconds));}

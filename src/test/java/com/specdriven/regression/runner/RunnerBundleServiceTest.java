@@ -1,4 +1,5 @@
 package com.specdriven.regression.runner;
+import com.specdriven.regression.testsupport.FixtureGit;
 import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.node.*;
@@ -15,15 +16,12 @@ class RunnerBundleServiceTest {
  static final ObjectMapper JSON=new ObjectMapper(); @TempDir Path temp;
  String mainCommit,serviceCommit;Path main,service,lock,roots;ObjectNode document,binding;
  static String sha(byte[] b)throws Exception{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(b));}
- String git(Path root,String...argv)throws Exception{
-  var cmd=new ArrayList<String>(List.of("git","-C",root.toString()));cmd.addAll(List.of(argv));var b=new ProcessBuilder(cmd);b.environment().put("GIT_CONFIG_GLOBAL","/dev/null");b.environment().put("GIT_CONFIG_NOSYSTEM","1");b.environment().put("GIT_TERMINAL_PROMPT","0");b.redirectErrorStream(true);var p=b.start();String text=new String(p.getInputStream().readAllBytes());assertThat(p.waitFor()).as(text).isZero();return text.strip();
- }
  @BeforeEach void fixture()throws Exception{
   main=Files.createDirectory(temp.resolve("main"));service=Files.createDirectory(temp.resolve("service"));
-  for(Path p:List.of(main,service)){git(p,"init","-q");Files.createDirectories(p.resolve("tests/sit/cases"));Files.createDirectories(p.resolve("tests/sit/data"));Files.writeString(p.resolve("tests/sit/cases/same.yaml"),"case: public-fixture\n");Files.writeString(p.resolve("tests/sit/data/public.json"),"{\"public\":true}\n");}
+  for(Path p:List.of(main,service)){FixtureGit.init(p);Files.createDirectories(p.resolve("tests/sit/cases"));Files.createDirectories(p.resolve("tests/sit/data"));Files.writeString(p.resolve("tests/sit/cases/same.yaml"),"case: public-fixture\n");Files.writeString(p.resolve("tests/sit/data/public.json"),"{\"public\":true}\n");}
   Files.writeString(main.resolve("tests/sit/suite.yaml"),"suite: finite-public-sources\n");
-  for(Path p:List.of(main,service)){git(p,"add",".");git(p,"-c","user.name=Public Fixture","-c","user.email=fixture@example.invalid","commit","-qm","public source fixture");}
-  mainCommit=git(main,"rev-parse","HEAD");serviceCommit=git(service,"rev-parse","HEAD");
+  for(Path p:List.of(main,service)){FixtureGit.add(p, ".");FixtureGit.commit(p, "public source fixture");}
+  mainCommit=FixtureGit.head(main);serviceCommit=FixtureGit.head(service);
   document=JSON.createObjectNode();document.put("schema_version","runner-dependencies.lock.v1");document.put("lock_id","public-two-repo");document.put("lock_version","1");
   var mf=document.putObject("main_flow");mf.put("owner_ref","public-main-owner");mf.put("source_repo",repo(main));mf.put("source_testrepo_version",mainCommit);mf.put("sit_root","tests/sit");
   var repos=document.putArray("repositories");for(Path p:List.of(main,service)){var r=repos.addObject();r.put("source_repo",repo(p));r.put("source_testrepo_version",commit(p));r.put("commit_algorithm","git-sha1");r.put("source_owner_ref","public-owner");}
@@ -38,9 +36,9 @@ class RunnerBundleServiceTest {
   var a=JSON.createObjectNode();String c=commit(p);a.put("artifact_id",repo(p)+"@"+c+":"+path+"#"+id);a.put("role",role);a.put("source_repo",repo(p));a.put("source_commit",c);a.put("source_path",path);a.put("source_id",id);a.put("source_testrepo_version",c);a.put("sha256",sha(Files.readAllBytes(p.resolve(path))));a.put("bytes",Files.size(p.resolve(path)));a.put("source_owner_ref","public-owner");a.put("cleanup_owner_ref","public-cleaner");a.put("required",true);return a;
  }
  void persist()throws Exception{
-  Files.write(lock,JSON.writeValueAsBytes(document));git(main,"add","tests/sit/dependencies.lock");
-  if(!git(main,"diff","--cached","--name-only").isBlank())git(main,"-c","user.name=Public Fixture","-c","user.email=fixture@example.invalid","commit","-qm","versioned main product SIT lock");
-  ((ObjectNode)binding.path("roots").get(0)).put("expected_commit",git(main,"rev-parse","HEAD"));
+  Files.write(lock,JSON.writeValueAsBytes(document));FixtureGit.add(main, "tests/sit/dependencies.lock");
+  if(FixtureGit.hasStagedChanges(main))FixtureGit.commit(main, "versioned main product SIT lock");
+  ((ObjectNode)binding.path("roots").get(0)).put("expected_commit",FixtureGit.head(main));
   binding.put("approved_lock_sha256",sha(Files.readAllBytes(lock)));Files.write(roots,JSON.writeValueAsBytes(binding));
  }
  record Result(int code,String out,String err,Path target){}
@@ -57,8 +55,8 @@ class RunnerBundleServiceTest {
   String name="tests/sit/data/-fixture[1].json";
   Files.writeString(service.resolve(name),"literal fixture\n");
   Files.writeString(service.resolve("tests/sit/data/-fixture1.json"),"different fixture\n");
-  git(service,"add","tests/sit/data");git(service,"-c","user.name=Public Fixture","-c","user.email=fixture@example.invalid","commit","-qm","literal fixture paths");
-  serviceVersion(git(service,"rev-parse","HEAD"));
+  FixtureGit.add(service, "tests/sit/data");FixtureGit.commit(service, "literal fixture paths");
+  serviceVersion(FixtureGit.head(service));
   ((ArrayNode)document.get("artifacts")).add(artifact(service,"sanitized_data",name,"literal"));persist();
   var result=execute("literal-path");
   assertThat(result.code()).as(result.out()+result.err()).isZero();
@@ -72,13 +70,13 @@ class RunnerBundleServiceTest {
  @Test void sourceRevisionIsNotDeployedSutRevision()throws Exception{((ObjectNode)document.path("sut_expectations").get(0)).put("expected_deployed_revision","");persist();blocked("sut");}
  @Test void traceabilityCannotReferenceAnotherQualifiedCaseAsRequiredData()throws Exception{((ObjectNode)document.path("relations").get(0)).put("to_ref","missing@qualified:id");persist();blocked("relation");}
  @Test void committedXChangedButWorktreeRevertedToAIsBlocked()throws Exception{
-  Path source=main.resolve("tests/sit/cases/same.yaml");byte[] a=Files.readAllBytes(source);Files.writeString(source,"case: changed-in-X\n");git(main,"add","tests/sit/cases/same.yaml");git(main,"-c","user.name=Public Fixture","-c","user.email=fixture@example.invalid","commit","-qm","changed committed case");
-  ((ObjectNode)binding.path("roots").get(0)).put("expected_commit",git(main,"rev-parse","HEAD"));Files.write(roots,JSON.writeValueAsBytes(binding));Files.write(source,a);blocked("X-blob");
+  Path source=main.resolve("tests/sit/cases/same.yaml");byte[] a=Files.readAllBytes(source);Files.writeString(source,"case: changed-in-X\n");FixtureGit.add(main, "tests/sit/cases/same.yaml");FixtureGit.commit(main, "changed committed case");
+  ((ObjectNode)binding.path("roots").get(0)).put("expected_commit",FixtureGit.head(main));Files.write(roots,JSON.writeValueAsBytes(binding));Files.write(source,a);blocked("X-blob");
  }
  @Test void dirtyVersionedLockIsBlockedEvenWithNewIndependentRawPin()throws Exception{document.put("lock_version","2");Files.write(lock,JSON.writeValueAsBytes(document));binding.put("approved_lock_sha256",sha(Files.readAllBytes(lock)));Files.write(roots,JSON.writeValueAsBytes(binding));blocked("dirty-lock");}
  @Test void wrongProtectedMainCheckoutNeverUsesAncestorFallback()throws Exception{((ObjectNode)binding.path("roots").get(0)).put("expected_commit",mainCommit);Files.write(roots,JSON.writeValueAsBytes(binding));blocked("wrong-X");}
  @Test void nonAncestorMainArtifactCommitIsBlocked()throws Exception{
-  String orphan=git(main,"-c","user.name=Public Fixture","-c","user.email=fixture@example.invalid","commit-tree",git(main,"rev-parse","HEAD^{tree}"),"-m","unrelated source commit");
+  String orphan=FixtureGit.orphanCommit(main);
   ((ObjectNode)document.path("main_flow")).put("source_testrepo_version",orphan);((ObjectNode)document.path("repositories").get(0)).put("source_testrepo_version",orphan);
   String oldSuite=document.path("main_flow").path("suite_artifact_id").asText();String newSuite="";
   for(JsonNode a:document.path("artifacts")){if(a.path("source_repo").asText().equals(repo(main))){ObjectNode o=(ObjectNode)a;o.put("source_commit",orphan);o.put("source_testrepo_version",orphan);o.put("artifact_id",repo(main)+"@"+orphan+":"+o.path("source_path").asText()+"#"+o.path("source_id").asText());if(o.path("role").asText().equals("suite"))newSuite=o.path("artifact_id").asText();}}
@@ -95,15 +93,15 @@ class RunnerBundleServiceTest {
   ObjectNode second=document.path("artifacts").get(1).deepCopy();second.put("source_id","second-qualified-id");second.put("artifact_id",repo(main)+"@"+mainCommit+":tests/sit/cases/same.yaml#second-qualified-id");((ArrayNode)document.path("artifacts")).add(second);persist();var result=execute("shared-physical");assertThat(result.code()).as(result.out()+result.err()).isZero();JsonNode manifest=JSON.readTree(result.target().resolve("bundle-manifest.json").toFile());assertThat(manifest.path("files")).hasSize(5);Set<String> identities=new HashSet<>();for(JsonNode entry:manifest.path("files"))identities.add(entry.path("artifact_id").asText());assertThat(identities).hasSize(5);try(var paths=Files.walk(result.target().resolve("inputs"))){assertThat(paths.filter(Files::isRegularFile).count()).isEqualTo(4);}
  }
  @Test void committedServiceSymlinkCannotMasqueradeAsRegularWorktreeFile()throws Exception{
-  Path path=service.resolve("tests/sit/cases/same.yaml");String blob=git(service,"hash-object","-w","--", "tests/sit/cases/same.yaml");git(service,"update-index","--cacheinfo","120000,"+blob+",tests/sit/cases/same.yaml");git(service,"-c","user.name=Public Fixture","-c","user.email=fixture@example.invalid","commit","-qm","public committed symlink mode with regular current bytes");serviceVersion(git(service,"rev-parse","HEAD"));blocked("service-symlink-mode");assertThat(Files.isSymbolicLink(path)).isFalse();
+  Path path=service.resolve("tests/sit/cases/same.yaml");FixtureGit.indexAsSymlink(service, "tests/sit/cases/same.yaml");FixtureGit.commit(service, "public committed symlink mode with regular current bytes");serviceVersion(FixtureGit.head(service));blocked("service-symlink-mode");assertThat(Files.isSymbolicLink(path)).isFalse();
  }
  @Test void committedMainXModeMustBeRegularEvenWhenAllBlobBytesAgree()throws Exception{
-  String blob=git(main,"hash-object","-w","--","tests/sit/cases/same.yaml");git(main,"update-index","--cacheinfo","120000,"+blob+",tests/sit/cases/same.yaml");git(main,"-c","user.name=Public Fixture","-c","user.email=fixture@example.invalid","commit","-qm","main X symlink mode");((ObjectNode)binding.path("roots").get(0)).put("expected_commit",git(main,"rev-parse","HEAD"));Files.write(roots,JSON.writeValueAsBytes(binding));blocked("main-X-mode");
+  FixtureGit.indexAsSymlink(main, "tests/sit/cases/same.yaml");FixtureGit.commit(main, "main X symlink mode");((ObjectNode)binding.path("roots").get(0)).put("expected_commit",FixtureGit.head(main));Files.write(roots,JSON.writeValueAsBytes(binding));blocked("main-X-mode");
  }
  @Test void committedLockModeMustBeRegular()throws Exception{
-  String blob=git(main,"hash-object","-w","--","tests/sit/dependencies.lock");git(main,"update-index","--cacheinfo","120000,"+blob+",tests/sit/dependencies.lock");git(main,"-c","user.name=Public Fixture","-c","user.email=fixture@example.invalid","commit","-qm","lock X symlink mode");((ObjectNode)binding.path("roots").get(0)).put("expected_commit",git(main,"rev-parse","HEAD"));Files.write(roots,JSON.writeValueAsBytes(binding));blocked("lock-mode");
+  FixtureGit.indexAsSymlink(main, "tests/sit/dependencies.lock");FixtureGit.commit(main, "lock X symlink mode");((ObjectNode)binding.path("roots").get(0)).put("expected_commit",FixtureGit.head(main));Files.write(roots,JSON.writeValueAsBytes(binding));blocked("lock-mode");
  }
- @Test void executableRegularCommittedModeRemainsSupported()throws Exception{git(service,"update-index","--chmod=+x","tests/sit/cases/same.yaml");git(service,"-c","user.name=Public Fixture","-c","user.email=fixture@example.invalid","commit","-qm","public regular executable file mode");serviceVersion(git(service,"rev-parse","HEAD"));var result=execute("regular-100755");assertThat(result.code()).as(result.out()+result.err()).isZero();}
+ @Test void executableRegularCommittedModeRemainsSupported()throws Exception{FixtureGit.indexAsExecutable(service, "tests/sit/cases/same.yaml");FixtureGit.commit(service, "public regular executable file mode");serviceVersion(FixtureGit.head(service));var result=execute("regular-100755");assertThat(result.code()).as(result.out()+result.err()).isZero();}
  @Test void rejectionDiagnosticsNeverEchoUnknownKeysOrExceedBound()throws Exception{
   for(int i=0;i<30;i++)document.put("PUBLIC_CANARY_FIELD_"+i+"_"+"x".repeat(40000),false);persist();var result=execute("bounded-diagnostics");assertThat(result.code()).isEqualTo(1);assertThat(result.err().length()).isLessThanOrEqualTo(4096);assertThat(result.err()).doesNotContain("PUBLIC_CANARY_FIELD_");
  }

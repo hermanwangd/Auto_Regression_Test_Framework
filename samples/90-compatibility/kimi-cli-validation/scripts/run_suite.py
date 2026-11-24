@@ -11,7 +11,12 @@ import platform
 import shlex
 import subprocess
 import sys
-import xml.etree.ElementTree as ET
+from types import SimpleNamespace
+
+if __package__:
+    from .junit_reader import parse_report, read_report
+else:
+    from junit_reader import parse_report, read_report
 from importlib.metadata import distributions
 import uuid
 
@@ -34,6 +39,8 @@ def source_hashes(root, suite):
         root / f"requirements-{suite}.txt",
         root / f"requirements-{suite}.lock",
         root / "pytest.ini",
+        root / "scripts/run_suite.py",
+        root / "scripts/junit_reader.py",
         root / "tests" / "conftest.py",
     ]
     candidates.extend(sorted((root / "tests" / suite).glob("*.py")))
@@ -79,7 +86,7 @@ def observed_value(testcase):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--suite", required=True)
+    parser.add_argument("--suite", required=True, choices=["click"])
     parser.add_argument("--manifest")
     parser.add_argument("--test-path")
     parser.add_argument("--requirements")
@@ -88,11 +95,20 @@ def main():
 
     root = Path(__file__).resolve().parents[1]
     suite = args.suite
-    manifest_path = root / (args.manifest or f"case_manifest.{suite}.json")
-    test_path = args.test_path or f"tests/{suite}"
-    requirements = args.requirements or f"requirements-{suite}.lock"
+    manifest_path = root / "case_manifest.click.json"
+    requirements = "requirements-click.lock"
+    for supplied, expected in ((args.manifest, manifest_path), (args.requirements, root / requirements)):
+        if supplied is not None and (root / supplied).resolve() != expected:
+            parser.error(f"expected the reviewed input {expected.name}")
+    targets = ("tests/click", "tests/click/test_click_cli.py")
+    requested = (root / (args.test_path or targets[0])).resolve()
+    test_path = next((target for target in targets if root / target == requested), None)
+    if test_path is None:
+        parser.error("expected the reviewed Click test directory or module")
+    if not Path(sys.executable).is_absolute():
+        parser.error("expected an absolute path to the current interpreter")
     run_id = "run-" + uuid.uuid4().hex
-    evidence_parent = args.evidence_root or root / "evidence" / suite / "runs"
+    evidence_parent = (args.evidence_root or root / "evidence" / suite / "runs").resolve()
     evidence = evidence_parent / run_id
     evidence.mkdir(parents=True, exist_ok=False)
     junit_path = evidence / "junit.xml"
@@ -132,30 +148,23 @@ def main():
         encoding="utf-8",
     )
 
-    command = [
-        sys.executable,
-        "-m",
-        "pytest",
-        test_path,
-        "-vv",
-        "--junitxml",
-        str(junit_path),
-    ]
+    pytest_args = ["-m", "pytest", test_path, "-vv", "--junitxml", str(junit_path)]
+    command = (["python", "-I", *pytest_args] if os.name == "nt" else
+               ["/usr/bin/env", sys.executable, "-I", *pytest_args])
     started_at = utc_now()
     execution_error = None
     try:
-        completed = subprocess.run(
-            command,
-            cwd=root,
-            text=True,
-            encoding="utf-8",
-            capture_output=True,
-            check=False,
-            timeout=60,
-        )
+        environment = {"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"}
+        options = dict(cwd=root, env=environment, text=True, encoding="utf-8",
+                       capture_output=True, timeout=60, check=False)
+        if os.name == "nt":
+            environment["SystemRoot"] = os.environ["SystemRoot"]
+            completed = subprocess.run(["python", "-I", *pytest_args], executable=sys.executable, **options)
+        else:
+            completed = subprocess.run(["/usr/bin/env", sys.executable, "-I", *pytest_args], **options)
     except (OSError, subprocess.TimeoutExpired) as error:
         execution_error = type(error).__name__ + ": " + str(error)
-        completed = subprocess.CompletedProcess(command, 2, "", execution_error)
+        completed = SimpleNamespace(returncode=2, stdout="", stderr=execution_error)
     if completed.returncode not in (0, 1):
         execution_error = execution_error or "pytest execution failed: exit " + str(completed.returncode)
     ended_at = utc_now()
@@ -167,15 +176,13 @@ def main():
         try:
             if junit_path.is_symlink() or not junit_path.is_file():
                 raise ValueError("No fresh JUnit report in this run directory")
-            if junit_path.stat().st_size > 2 * 1024 * 1024:
-                raise ValueError("JUnit report exceeds local sample bound")
-            testcases = list(ET.parse(junit_path).getroot().iter("testcase"))
+            testcases = list(parse_report(read_report(junit_path)).iter("testcase"))
             names = [case.attrib["name"] for case in testcases]
             expected_names = {case["test_name"] for case in manifest["cases"]}
             if len(names) != len(set(names)) or set(names) - expected_names:
                 raise ValueError("Ambiguous or unexpected JUnit testcase identity")
             junit_cases = dict(zip(names, testcases))
-        except (OSError, ValueError, KeyError, ET.ParseError) as error:
+        except (OSError, ValueError, KeyError) as error:
             execution_error = type(error).__name__ + ": " + str(error)
             completed.returncode = 2
     evidence_cases = []

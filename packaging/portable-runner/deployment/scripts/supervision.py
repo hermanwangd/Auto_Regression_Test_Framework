@@ -72,8 +72,8 @@ def stopped_identities(records):
         if now and now[1:3]==(row['start'],row['uid']):return False
     return True
 
-def _run_owned(argv,timeout,evidence_attempt,cleanup_seconds=2,nonce='public-unit',cwd=None):
-    """Only internally constructed fixed argv may call this private primitive."""
+def _supervise(launch,timeout,evidence_attempt,cleanup_seconds=2,nonce='public-unit',cwd=None):
+    """Supervise one operation-specific launcher with a fixed environment and I/O."""
     if os.getuid()==0 or not 0<timeout<=600 or cleanup_seconds!=2:raise StopFailure('unsupported_supervision_boundary')
     me=os.getpid();mine=_identity(me)
     if mine is None:raise StopFailure('supervisor_identity_missing')
@@ -130,7 +130,7 @@ def _run_owned(argv,timeout,evidence_attempt,cleanup_seconds=2,nonce='public-uni
                 return False
         return True
     try:
-        p=subprocess.Popen(argv,cwd=cwd,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True,env={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8','LC_ALL':'C.UTF-8','PYTHONDONTWRITEBYTECODE':'1'})
+        p=launch(cwd=cwd,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True,env={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8','LC_ALL':'C.UTF-8','PYTHONDONTWRITEBYTECODE':'1'})
         try:identity=_identity(p.pid)
         except StopFailure as exc:errors.append(str(exc));identity=None
         if identity is not None:known[p.pid]=identity

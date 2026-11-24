@@ -1,9 +1,12 @@
 package com.specdriven.regression.build;
 
+import com.specdriven.regression.testsupport.TestJvm;
+
 import static org.assertj.core.api.Assertions.*;
 import java.nio.file.*;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipFile;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -12,7 +15,7 @@ class NoIbmMqPackagedArtifactIT {
     @Test void actualPackagedDescriptorAndDependencyInventoryMatchTheChosenBuild() throws Exception {
         String expected = System.getProperty("test.expected.runner.variant", "full");
         assertThat(expected).isIn("full", "no-ibm-mq");
-        Path jar = Path.of("target/spec-driven-auto-regression-0.3.2.jar").toAbsolutePath();
+        Path jar = TestJvm.packagedJar();
         try (ZipFile zip = new ZipFile(jar.toFile())) {
             var entry = zip.getEntry("META-INF/regression/runner-build.properties");
             assertThat(entry).isNotNull(); assertThat(entry.getSize()).isLessThanOrEqualTo(4096);
@@ -24,11 +27,11 @@ class NoIbmMqPackagedArtifactIT {
         for (boolean misleadingProperty : new boolean[]{false, true}) {
             Path out = temp.resolve("build-info-" + misleadingProperty + ".json");
             Path err = temp.resolve("build-info-" + misleadingProperty + ".stderr");
-            var args = new java.util.ArrayList<String>();
-            args.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
-            if (misleadingProperty) args.add("-Drunner.build.variant=" + (expected.equals("full") ? "no-ibm-mq" : "full"));
-            args.addAll(java.util.List.of("-jar", jar.toString(), "build-info", "--format", "json"));
-            Process child = new ProcessBuilder(args).redirectOutput(out.toFile()).redirectError(err.toFile()).start();
+            List<String> vmOptions = misleadingProperty
+                    ? List.of("-Xmx192m", expected.equals("full") ? "-Drunner.build.variant=no-ibm-mq" : "-Drunner.build.variant=full")
+                    : List.of("-Xmx192m");
+            Process child = TestJvm.forPackagedJar(vmOptions, "build-info", "--format", "json")
+                    .redirectOutput(out.toFile()).redirectError(err.toFile()).start();
             try {
                 assertThat(child.waitFor(15, TimeUnit.SECONDS)).as("owned build-info JVM deadline").isTrue();
                 assertThat(child.exitValue()).as(Files.readString(err)).isZero();

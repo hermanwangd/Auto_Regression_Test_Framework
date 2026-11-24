@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import stat
+import subprocess
 import time
 import deployment as d
 import supervision as s
@@ -113,8 +114,8 @@ def stop_receipt(w):
     require(stop.get('stop_verified') is True and stop.get('unknown_children')==[] and stop.get('nonce')==w['nonce'] and s.stopped_identities(stop.get('identities')),'observed_tree_not_stopped')
     return record
 
-def _invoke(w,argv,seconds,attempt=lambda:None):
-    try:record=s._run_owned(argv,seconds,attempt,nonce=w['nonce'])
+def _invoke(w,launch,seconds,attempt=lambda:None):
+    try:record=s._supervise(launch,seconds,attempt,nonce=w['nonce'])
     except s.StopFailure as exc:raise d.Blocked(str(exc)) from exc
     output=record.pop('output');record['output_sha256']=d.digest(output)
     return record,output
@@ -127,8 +128,13 @@ def execute(w):
             try:attempts.append(collect(w,check_stop=False))
             except (d.Blocked,OSError):attempts.append({'status':'INCOMPLETE'})
     java=Path(w['tools']['java']['path']);require(java.name=='java' and java.parent.name=='bin','java_home_shape')
-    argv=[w['tools']['python']['path'],'-B',w['tools']['wrapper']['path'],'--bundle',w['bundle']['root'],'--handoff',w['bundle']['handoff'],'--expected-handoff-sha256',w['bundle']['sha256'],'--output',str(root/'produced'),'--java-home',str(java.parent.parent)]
-    stop,output=_invoke(w,argv,w['deadline_seconds'],available)
+    python=w['tools']['python']['path'];wrapper=w['tools']['wrapper']['path']
+    options=['--bundle',w['bundle']['root'],'--handoff',w['bundle']['handoff'],'--expected-handoff-sha256',w['bundle']['sha256'],'--output',str(root/'produced'),'--java-home',str(java.parent.parent)]
+    argv=[python,'-B',wrapper,*options]
+    def launch(**io):
+        # Keep the absolute, digest-checked interpreter as argv[0] for virtual environments.
+        return subprocess.Popen(['/usr/bin/env','--',*argv],**io)
+    stop,output=_invoke(w,launch,w['deadline_seconds'],available)
     d.write_durable(root/'execution.log',output)
     gate=None
     try:gate=d.strict_json(root/'produced/gate-result.json')
@@ -155,8 +161,12 @@ def collect(w,check_stop=True):
     return result
 
 def invoke_collector(w,source,saved,invocation):
-    spec=spec_document(w);argv=[w['tools']['java']['path'],'-jar',w['tools']['framework_jar']['path'],'runner-import','--collection-spec',w['collection_spec']['path'],'--expected-spec-sha256',w['collection_spec']['sha256'],'--source',str(source),'--out',str(saved)]
-    stop,output=_invoke(w,argv,30);d.write_durable(Path(invocation).with_suffix('.log'),output)
+    spec=spec_document(w);java=w['tools']['java']['path'];jar=w['tools']['framework_jar']['path']
+    options=['--collection-spec',w['collection_spec']['path'],'--expected-spec-sha256',w['collection_spec']['sha256'],'--source',str(source),'--out',str(saved)]
+    argv=[java,'-jar',jar,'runner-import',*options]
+    def launch(**io):
+        return subprocess.Popen(['/usr/bin/env','--',*argv],**io)
+    stop,output=_invoke(w,launch,30);d.write_durable(Path(invocation).with_suffix('.log'),output)
     result={'schema_version':'package-collector-invocation.v1','run_id':w['run_id'],'correlation_id':w['correlation_id'],'spec_sha256':w['collection_spec']['sha256'],'jar_sha256':JAR_SHA,'source_identity':d.directory_identity(source),'output_identity':d.directory_identity(saved) if saved.exists() else None,'argv':argv,'stop':stop}
     put(invocation,result)
     if s.successful(stop):

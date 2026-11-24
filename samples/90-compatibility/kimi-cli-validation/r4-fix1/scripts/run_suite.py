@@ -15,7 +15,10 @@ import sys
 import tempfile
 import time
 import uuid
-import xml.etree.ElementTree as ET
+if __package__:
+    from .junit_reader import parse_report, read_report
+else:
+    from junit_reader import parse_report, read_report
 from importlib.metadata import distribution, distributions, PackageNotFoundError
 
 
@@ -52,8 +55,37 @@ def root_path(root, value):
     return path
 
 
+def approved_inputs(root, suite, manifest_path, test_path, requirements, config):
+    """Bind a frozen manifest to one reviewed suite or its own staged control."""
+    targets = {
+        "click": "tests/click/test_click_cli.py",
+        "hardening": "tests/hardening",
+        "hardening-controls": "tests/hardening/test_runner_fail_closed.py",
+    }
+    locks = {root / "requirements-click.lock"}
+    configs = {root / "runtime_gate.json"}
+    if suite in targets:
+        allowed_tests = {root / targets[suite]}
+        expected_manifest = root / f"case_manifest.{suite}.json"
+    else:
+        directory = manifest_path.parent
+        label = re.escape(suite.replace("-", "_"))
+        if (not suite.startswith(("control-", "r4-"))
+                or directory.parent != root / "tests/r4_control_inputs"
+                or re.fullmatch(label + r"_[0-9a-f]{10}", directory.name) is None):
+            raise ValueError("Unapproved staged control directory")
+        expected_manifest = directory / "manifest.json"
+        allowed_tests = {directory, directory / "test_control.py"}
+        locks.update(directory / name for name in ("missing.lock", "wrong.lock", "effective.lock"))
+        configs.add(directory / "runtime.json")
+    if manifest_path != expected_manifest or test_path not in allowed_tests:
+        raise ValueError("Manifest and test target must belong to the selected suite")
+    if requirements not in locks or config not in configs:
+        raise ValueError("Unapproved requirements or runtime configuration")
+
+
 def relative_path(root, path):
-    return str(path.resolve().relative_to(root.resolve()))
+    return path.resolve().relative_to(root.resolve()).as_posix()
 
 
 def selected_source_hashes(root, test_path):
@@ -77,6 +109,7 @@ def source_hashes(root, suite, manifest_path=None, test_path=None):
         root / "runtime_gate.json",
         root / "pytest.ini",
         root / "scripts" / "run_suite.py",
+        root / "scripts" / "junit_reader.py",
         root / "tests" / "conftest.py",
     }
     candidates.update((root / "tests" / suite).glob("*.py"))
@@ -221,7 +254,10 @@ def junit_identity(testcase):
 
 
 def identity_key(identity):
-    return identity["classname"], identity["name"], identity.get("file")
+    file = identity.get("file")
+    if os.name == "nt" and file:
+        file = file.replace('\\', "/")
+    return identity["classname"], identity["name"], file
 
 
 def raw_outcome(testcase):
@@ -239,10 +275,7 @@ def raw_outcome(testcase):
 
 
 def validate_junit_bytes(report_bytes):
-    try:
-        root = ET.fromstring(report_bytes)
-    except ET.ParseError:
-        raise
+    root = parse_report(report_bytes)
     testcases = list(root.iter("testcase"))
     if not testcases:
         raise JUnitValidationError("NO_TESTCASE_NODES", "The current JUnit report has no testcase nodes.")
@@ -346,6 +379,12 @@ def main(argv=None):
 
     root = Path(__file__).resolve().parents[1]
     suite = args.suite
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}", suite):
+        parser.error("expected a simple suite name")
+    if not Path(sys.executable).is_absolute():
+        parser.error("expected an absolute path to the current interpreter")
+    if not (0 < args.timeout_seconds <= 3600 and 0 <= args.report_wait_seconds <= 60):
+        parser.error("invalid timeout or report wait interval")
     run_id = uuid.uuid4().hex
     evidence_parent = root / "evidence" / "runs" / suite
     evidence_parent.mkdir(parents=True, exist_ok=True)
@@ -393,6 +432,7 @@ def main(argv=None):
         test_path = root_path(root, execution["test_path"])
         requirements_path = root_path(root, args.requirements or f"requirements-{suite}.lock")
         runtime_config_path = root_path(root, args.runtime_config)
+        approved_inputs(root, suite, manifest_path, test_path, requirements_path, runtime_config_path)
         if args.test_path is not None:
             override = root_path(root, args.test_path)
             if override != test_path:
@@ -401,6 +441,9 @@ def main(argv=None):
         if args.node_selection is not None and args.node_selection != manifest_selection:
             raise ValueError(f"UNFROZEN_NODE_SELECTION_OVERRIDE: {args.node_selection} != {manifest_selection}")
         selection = args.node_selection if args.node_selection is not None else manifest_selection
+        if selection is not None and (not test_path.is_file() or
+                not re.fullmatch(r"test_[A-Za-z0-9_]+", selection)):
+            raise ValueError("Unapproved pytest node selection")
         selected_hashes = selected_source_hashes(root, test_path)
         expected_hashes = execution.get("frozen_source_sha256")
         if not isinstance(expected_hashes, dict) or not expected_hashes:
@@ -427,7 +470,9 @@ def main(argv=None):
                          "effective_node_selection": selection,
                          "selected_source_sha256": selected_hashes}
         command_target = relative_path(root, test_path) + (f"::{selection}" if selection else "")
-        command = [sys.executable, "-m", "pytest", command_target, "-vv", "--junitxml", str(junit_work_path)]
+        pytest_args = ["-m", "pytest", command_target, "-vv", "--junitxml", str(junit_work_path)]
+        command = (["python", "-I", *pytest_args] if os.name == "nt" else
+                   ["/usr/bin/env", sys.executable, "-I", *pytest_args])
     except Exception as exc:
         if harness_error is None:
             code = "DUPLICATE_CASE_ID" if str(exc).startswith("DUPLICATE_CASE_ID") else ("FROZEN_EXECUTION_MISMATCH" if str(exc).startswith(("UNFROZEN_TEST_PATH_OVERRIDE", "UNFROZEN_NODE_SELECTION_OVERRIDE", "Path escapes frozen source root")) else "INPUT_PREFLIGHT_ERROR")
@@ -484,8 +529,14 @@ def main(argv=None):
                          "message": "A per-run JUnit path already existed; refusing to execute or read it."}
     if harness_error is None:
         try:
-            completed = subprocess.run(command, cwd=root, text=True, encoding="utf-8", capture_output=True,
-                                       timeout=args.timeout_seconds, check=False)
+            environment = {"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"}
+            options = dict(cwd=root, env=environment, text=True, encoding="utf-8",
+                           capture_output=True, timeout=args.timeout_seconds, check=False)
+            if os.name == "nt":
+                environment["SystemRoot"] = os.environ["SystemRoot"]
+                completed = subprocess.run(["python", "-I", *pytest_args], executable=sys.executable, **options)
+            else:
+                completed = subprocess.run(["/usr/bin/env", sys.executable, "-I", *pytest_args], **options)
             stdout = output_text(completed.stdout)
             stderr = output_text(completed.stderr)
         except subprocess.TimeoutExpired as exc:
@@ -516,9 +567,9 @@ def main(argv=None):
             launch_second_floor_ns = launch_wall_ns - (launch_wall_ns % 1_000_000_000)
             if junit_work_path.stat().st_mtime_ns < launch_second_floor_ns:
                 raise ValueError("JUnit report predates this run; refusing to read it.")
-            report_bytes = junit_work_path.read_bytes()
+            report_bytes = read_report(junit_work_path)
             junit_path.write_bytes(report_bytes)
-            if junit_path.read_bytes() != report_bytes:
+            if read_report(junit_path) != report_bytes:
                 raise OSError("Current JUnit readback differs from the bytes produced by pytest.")
             junit_cases = validate_junit_bytes(report_bytes)
         except JUnitValidationError as exc:

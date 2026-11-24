@@ -1,3 +1,4 @@
+from fixture_process import run_fixture
 import sys,unittest
 from common import D,module
 s=module('supervision')
@@ -11,7 +12,7 @@ class LifecycleTest(unittest.TestCase):
   def evidence():
    attempts.append('available')
    if callback:callback()
-  result=s._run_owned([sys.executable,'-B',str(D/'fixtures/public/child.py'),mode],0.3,evidence)
+  result=run_fixture(s,mode,0.3,evidence)
   self.assertEqual(attempts,['available']);self.assertFalse(result['cleanup_eligible']);return result
  def test_success_stays_exit_zero(self):self.assertEqual(self.runmode('success')['exit_code'],0)
  def test_failure_preserved(self):self.assertEqual(self.runmode('failure')['exit_code'],7)

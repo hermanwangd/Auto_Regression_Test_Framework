@@ -27,12 +27,19 @@ jobs:
     env:
       MAVEN_OPTS: -Xmx768m -XX:MaxMetaspaceSize=320m
     steps:
+      - name: Preserve byte-pinned sample sources on checkout
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: '17'
           cache: maven
+      - name: Verify JUnit input handling on Windows
+        run: python -B samples/90-compatibility/test_junit_readers.py
+      - name: Verify Python virtual-environment launch on Windows
+        run: python -B samples/90-compatibility/test_sample_launchers.py
+
       - name: Verify Windows executable pinning and the native provider
         shell: bash
         run: ./mvnw -B -ntp "-Dtest=PinnedCliExecutableTest,CliProcessProviderRuntimeTest#suppliesImmediateEofWhenStdinIsOmitted" test
@@ -57,8 +64,16 @@ jobs:
       - name: Unit, integration, and packaged CLI verification
         run: scripts/ci/maven-verify-with-diagnostics.sh
 
-      - name: Compatibility runner command and process-tree checks
-        run: python3 -B -m unittest discover -s samples/90-compatibility/kimi-db-validation/fix1 -p test_process_policy.py
+      - name: Verify portable packaging and Linux process supervision
+        run: |
+          python3 -B -m unittest discover -s packaging/portable-runner/tests
+          python3 -B -m unittest discover -s packaging/portable-runner/deployment/tests
+
+      - name: Verify compatibility runner process and JUnit report handling
+        run: |
+          python3 -B -m unittest discover -s samples/90-compatibility/kimi-db-validation/fix1 -p test_process_policy.py
+          python3 -B samples/90-compatibility/test_junit_readers.py
+          python3 -B samples/90-compatibility/test_sample_launchers.py
 
       - name: Critical delivery coverage gate
         run: ./mvnw -B -ntp -Pv02-delivery-coverage -DskipTests jacoco:check@v02-delivery-critical-class-check
