@@ -31,6 +31,7 @@ class RestClientExternalEndpointSupportTest {
     void consumesProjectProvidedExternalBaseUrlThroughV03ExternalSuite() throws Exception {
         Path suite = mutableExternalRestSuite();
         WireMockServer externalHttpEndpoint = new WireMockServer(0);
+        String original = System.getProperty("regress.rest.allowedOrigins");
         externalHttpEndpoint.start();
         try {
             externalHttpEndpoint.stubFor(get(urlEqualTo("/ready"))
@@ -44,6 +45,7 @@ class RestClientExternalEndpointSupportTest {
             Files.writeString(envProfile, Files.readString(envProfile)
                     .replace("base_url: env://REST_BASE_URL", "base_url: " + externalHttpEndpoint.baseUrl()));
 
+            System.setProperty("regress.rest.allowedOrigins", externalHttpEndpoint.baseUrl());
             CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "external_native");
 
             assertThat(run.exit()).as(run.stderr() + run.stdout()).isZero();
@@ -67,6 +69,8 @@ class RestClientExternalEndpointSupportTest {
                     .contains("rest-client-external-v03");
             assertThat(externalHttpEndpoint.getServeEvents().getRequests()).hasSize(1);
         } finally {
+            if (original == null) System.clearProperty("regress.rest.allowedOrigins");
+            else System.setProperty("regress.rest.allowedOrigins", original);
             externalHttpEndpoint.stop();
         }
     }

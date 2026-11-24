@@ -48,7 +48,7 @@ public final class V03OutputRedactor {
                 continue;
             }
             V03OutputDefinition definition = operation.outputDefinitions().get(output.getKey());
-            result.put(output.getKey(), definition.sensitivity() == V03Sensitivity.PUBLIC
+            result.put(output.getKey(), definition.sensitivity() == V03Sensitivity.PUBLIC && !SecurityFieldNames.isCredential(output.getKey())
                     ? redactValue(output.getValue())
                     : MASKED);
         }
@@ -131,6 +131,7 @@ public final class V03OutputRedactor {
             String key = SecurityFieldNames.canonical(quoted == null ? labels.group() : quoted.substring(1, quoted.length() - 1));
             int after = labels.end();
             Span value = null;
+            String replacement = marker;
             if (labels.group("separator") != null) {
                 if (fields.matchesUnquotedSuffix(message, copied, lastSeparator, labels.start())) {
                     value = assignmentValue(message, matchEnd(SPACE, message, after), false);
@@ -138,7 +139,20 @@ public final class V03OutputRedactor {
                 lastSeparator = after;
             } else if (assignment.region(after, message.length()).lookingAt()
                     && (SecurityFieldNames.endsWithCredentialLabel(key) || fields.paths().contains(key))) {
-                value = assignmentValue(message, assignment.end(), key.endsWith("authorization"));
+                int start = assignment.end();
+                if (quoted != null && start < message.length() && (message.charAt(start) == '[' || message.charAt(start) == '{')) {
+                    value = new Span(start, endOfContainer(message, start));
+                    replacement = "\"" + marker + "\"";
+                } else if (SecurityFieldNames.isCookieLabel(key) && start < message.length()) {
+                    if (quoted != null && isQuote(message.charAt(start))) {
+                        value = rawValue(message, start);
+                    } else {
+                        // A Cookie header may contain multiple pairs, quoted values and folded lines.
+                        value = new Span(start, matchEnd(HEADER_LINES, message, start));
+                    }
+                } else {
+                    value = assignmentValue(message, start, key.endsWith("authorization"));
+                }
             } else if ("bearer".equals(key)) {
                 int token = matchEnd(SPACE, message, after);
                 if (token > after) value = rawValue(message, token);
@@ -146,7 +160,7 @@ public final class V03OutputRedactor {
                 value = addressValue(key, message, labels.start(), after + 1);
             }
             if (value == null || value.start() == value.end()) continue;
-            masked.append(message, copied, value.start()).append(marker);
+            masked.append(message, copied, value.start()).append(replacement);
             copied = value.end();
             labels.region(copied, message.length());
         }
@@ -199,6 +213,17 @@ public final class V03OutputRedactor {
         String raw = authority.group(1);
         int at = Math.max(raw.lastIndexOf('@'), raw.lastIndexOf('＠'));
         return at < 1 ? null : new Span(authority.start(1), authority.start(1) + at);
+    }
+
+    private static int endOfContainer(String text, int start) {
+        int depth = 0;
+        for (int i = start; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (isQuote(c)) i = endOfQuotedValue(text, i + 1, c);
+            else if (c == '[' || c == '{') depth++;
+            else if ((c == ']' || c == '}') && --depth == 0) return i + 1;
+        }
+        return text.length();
     }
 
     private static boolean startsWithSlashes(String text, int from) {

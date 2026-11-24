@@ -3,11 +3,31 @@ package com.specdriven.regression.contract.v03;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class V03OutputRedactorTest {
+    @Test
+    void protectsCookieHeadersAndSessionEvidenceWhileKeepingPublicContext() {
+        var redactor = new V03OutputRedactor();
+        for (String label : List.of("session", "SessionId", "session_id", "Cookie", "Ｓｅｔ－Ｃｏｏｋｉｅ")) {
+            var data = Map.of(label, List.of("sample-a", "sample-b"), "session_count", 2);
+            var expected = Map.of(label, "[MASKED]", "session_count", 2);
+            assertThat(redactor.redactValue(data)).isEqualTo(expected);
+            assertThat(redactor.redactEvidenceValue(data, Set.of())).isEqualTo(expected);
+        }
+        String header = "Ｃｏｏｋｉｅ: first=sample-a; second=sample-b\r\nTrace: ready";
+        assertThat(redactor.redactMessage(header)).isEqualTo("Ｃｏｏｋｉｅ: [MASKED]\r\nTrace: ready");
+        assertThat(com.specdriven.regression.provider.ProviderDiagnosticRedactor.maskSensitiveText(header))
+                .isEqualTo("Ｃｏｏｋｉｅ: ***MASKED***\r\nTrace: ready");
+        assertThat(redactor.redactMessage("{\"set-cookie\":[\"sample-a\",\"sample-b\"],\"ok\":true}"))
+                .isEqualTo("{\"set-cookie\":\"[MASKED]\",\"ok\":true}");
+        assertThat(redactor.redactMessage("session_id=sample-a status=ready"))
+                .isEqualTo("session_id=[MASKED] status=ready");
+    }
+
     @Test
     void masksBasicAuthorizationInDiagnosticsAndNestedTextEvidence() {
         var redactor = new V03OutputRedactor();

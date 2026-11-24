@@ -47,12 +47,7 @@ abstract class AbstractProviderRuntimeV03Adapter {
     ProviderOperationRequest request(V03ExecutionStep step, V03ExecutionContext context) {
         List<Map<String, Object>> parameters = new ArrayList<>();
         for (Map.Entry<String, Object> entry : step.inputs().entrySet()) {
-            String bindAs = mapBindAs(entry.getKey());
-            Map<String, Object> parameter = new LinkedHashMap<>();
-            parameter.put("name", bindAs);
-            parameter.put("bind_as", bindAs);
-            parameter.put("ref", resolveProviderValue(entry.getValue(), step, context));
-            parameters.add(parameter);
+            parameters.add(parameter(entry.getKey(), entry.getValue(), step, context));
         }
         Map<String, Object> outputs = new LinkedHashMap<>();
         outputs.put("_operation_id", step.id());
@@ -117,8 +112,12 @@ abstract class AbstractProviderRuntimeV03Adapter {
         return bindingName.endsWith(".secret_ref") || "secret_ref".equals(bindingName);
     }
 
-    String mapBindAs(String inputName) {
-        return inputName;
+    Map<String, Object> parameter(String name, Object value, V03ExecutionStep step, V03ExecutionContext context) {
+        Map<String,Object> parameter = new LinkedHashMap<>();
+        parameter.put("name", name);
+        parameter.put("bind_as", name);
+        parameter.put("ref", resolveProviderValue(value, step, context));
+        return parameter;
     }
 
     String stringValue(Object value) {

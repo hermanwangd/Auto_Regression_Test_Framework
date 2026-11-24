@@ -17,10 +17,23 @@ public final class SecurityFieldNames {
 
     public static boolean isCredential(String name) {
         String normalized = canonical(name);
-        return CREDENTIAL_NAMES.stream().anyMatch(normalized::contains);
+        return isSessionOrCookie(normalized) || CREDENTIAL_NAMES.stream().anyMatch(normalized::contains);
     }
 
     public static boolean endsWithCredentialLabel(String canonicalName) {
-        return CREDENTIAL_NAMES.stream().anyMatch(canonicalName::endsWith);
+        return isSessionOrCookie(canonicalName) || CREDENTIAL_NAMES.stream().anyMatch(canonicalName::endsWith);
+    }
+
+    public static boolean isCookieLabel(String canonicalName) {
+        return matchesLabel(canonicalName, "cookie") || matchesLabel(canonicalName, "set_cookie");
+    }
+
+    private static boolean isSessionOrCookie(String name) {
+        return isCookieLabel(name) || matchesLabel(name, "session") || matchesLabel(name, "sessionid")
+                || matchesLabel(name, "session_id") || matchesLabel(name, "jsessionid");
+    }
+
+    private static boolean matchesLabel(String name, String label) {
+        return name.equals(label) || name.endsWith("." + label) || name.endsWith("_" + label);
     }
 }
