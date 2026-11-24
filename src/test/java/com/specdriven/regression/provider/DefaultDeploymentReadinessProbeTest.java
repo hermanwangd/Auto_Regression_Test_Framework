@@ -7,10 +7,13 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -237,7 +240,47 @@ class DefaultDeploymentReadinessProbeTest {
         }
     }
 
-    private DeploymentReadinessProbeRequest request(
+    @Test
+    void commandProbeStreamsUseUtf8UnderAnAsciiJvm() throws Exception {
+        Path script = executableScript("""
+                case "$*" in
+                  *fixture-failure*) printf '診斷錯誤' >&2; exit 1 ;;
+                  *) printf '服務就緒' ;;
+                esac
+                """);
+        Path log = tempDir.resolve("charset-check.log");
+        Process process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-Xmx96m", "-Dfile.encoding=US-ASCII", "-cp", System.getProperty("java.class.path"),
+                AsciiProbeCheck.class.getName(), script.toString())
+                .redirectErrorStream(true).redirectOutput(log.toFile()).start();
+        try {
+            assertThat(process.waitFor(30, TimeUnit.SECONDS)).isTrue();
+            assertThat(process.exitValue()).as(Files.readString(log)).isZero();
+        } finally {
+            process.destroyForcibly();
+        }
+    }
+
+    public static class AsciiProbeCheck {
+        public static void main(String[] args) throws Exception {
+            assertThat(Charset.defaultCharset()).isEqualTo(StandardCharsets.US_ASCII);
+            var probe = new DefaultDeploymentReadinessProbe();
+            for (String provider : List.of("k8s", "vm")) {
+                boolean k8s = provider.equals("k8s");
+                String mode = k8s ? "rollout_status" : "ssh_command";
+                var contract = k8s ? Map.<String, Object>of("kubectl_ref", args[0])
+                        : Map.<String, Object>of("ssh_ref", args[0], "command_ref", "fixture");
+                var success = request(provider, mode, "", "", "fixture-success", "", "", "fixture-success", 0, contract);
+                assertThat(probe.check(success).stdout()).isEqualTo("服務就緒");
+                var failure = request(provider, mode, "", "", "fixture-failure", "", "", "fixture-failure", 0, contract);
+                String prefix = k8s ? "K8s readiness probe" : "VM " + mode + " readiness probe";
+                assertThatThrownBy(() -> probe.check(failure)).isInstanceOf(IOException.class)
+                        .hasMessage(prefix + " failed for `fixture-failure`: 診斷錯誤");
+            }
+        }
+    }
+
+    private static DeploymentReadinessProbeRequest request(
             String providerType,
             String readinessProbe,
             String kubeContextRef,

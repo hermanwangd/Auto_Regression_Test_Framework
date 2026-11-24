@@ -7,6 +7,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -61,8 +62,8 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
             process.destroyForcibly();
             throw new IOException("K8s readiness probe timed out for `" + request.deploymentRef() + "`.");
         }
-        String stdout = new String(process.getInputStream().readAllBytes());
-        String stderr = new String(process.getErrorStream().readAllBytes());
+        String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
         if (process.exitValue() != 0) {
             throw new IOException("K8s readiness probe failed for `" + request.deploymentRef()
                     + "`: " + stderr.strip());
@@ -308,8 +309,8 @@ class DefaultDeploymentReadinessProbe implements DeploymentReadinessProbe {
             throw new IOException("VM " + probeName + " readiness probe timed out for `"
                     + request.hostRef() + "`.");
         }
-        String stdout = new String(process.getInputStream().readAllBytes());
-        String stderr = new String(process.getErrorStream().readAllBytes());
+        String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
         if (process.exitValue() != 0) {
             throw new IOException("VM " + probeName + " readiness probe failed for `"
                     + request.hostRef() + "`: " + stderr.strip());

@@ -9,9 +9,13 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class GoldenE2eCommandTest {
 
@@ -520,6 +524,100 @@ class GoldenE2eCommandTest {
         assertThat(result.stdout())
                 .contains("report_status: invalid")
                 .contains("reason: missing_required_field");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"draft_skeleton", "draft_executable", "needs_update", "retired"})
+    void rejectsNonActiveCompatibilityCasesBeforeLeafOrGroupExecution(String status) throws IOException {
+        Path first = mutableGolden();
+        Path second = mutableGolden();
+        Path testCase = second.resolveSibling("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase).replace("status: active", "status: " + status));
+        Path group = compatibilityGroup(first, second);
+        for (Path suite : List.of(second, group)) {
+            for (String mode : List.of("validate", "dry-run", "run")) {
+                CommandResult result = compatibilityCommand(suite, mode);
+                assertThat(result.exit()).as("%s %s: %s", suite, mode, result.stdout()).isOne();
+                assertThat(result.stdout())
+                        .contains(mode.equals("validate") ? "validation_status: failed" : "run_status: blocked")
+                        .contains(testCase.toString(), "field_path: status", "reason: lifecycle_not_execution_eligible")
+                        .doesNotContain("fake_provider_executed: true", "result_json:", "evidence_dir:", "suite_summary_json:");
+                assertThat(tempDir.resolve("target")).doesNotExist();
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "'', missing_required_field",
+            "'status: null', missing_required_field",
+            "'status: \"  \"', missing_required_field",
+            "'status: 12', lifecycle_not_execution_eligible",
+            "'status: unknown', lifecycle_not_execution_eligible"
+    })
+    void reportsOneStatusFindingWithTheCompatibilityReason(String status, String reason) throws IOException {
+        Path suite = mutableGolden();
+        Path testCase = suite.resolveSibling("test_case.yaml");
+        Files.writeString(testCase, Files.readString(testCase).replace("status: active", status));
+        CommandResult result = compatibilityCommand(suite, "validate");
+        assertThat(result.exit()).as(result.stdout()).isOne();
+        assertThat(result.stdout()).contains(testCase.toString(), "reason: " + reason).containsOnlyOnce("field_path: status");
+    }
+
+    @Test
+    void activeCompatibilitySuitesExecuteEveryChild() throws IOException {
+        Path first = mutableGolden();
+        Path second = mutableGolden();
+        Files.writeString(second, Files.readString(second).replace("GOLDEN-E2E-v0.2", "SECOND-GOLDEN-v0.2"));
+        Path group = compatibilityGroup(first, second);
+        for (Path suite : List.of(first, group)) {
+            for (String mode : List.of("validate", "dry-run", "run")) {
+                CommandResult result = compatibilityCommand(suite, mode);
+                assertThat(result.exit()).as("%s %s: %s", suite, mode, result.stdout()).isZero();
+                if (mode.equals("run") && suite.equals(first)) {
+                    assertThat(result.stdout()).contains("run_status: passed", "fake_provider_executed: true");
+                    assertThat(extractPath(result.stdout(), "result_json")).isRegularFile();
+                } else if (mode.equals("run")) {
+                    assertThat(result.stdout()).contains("run_status: passed", "passed_count: 2");
+                    Path children = extractPath(result.stdout(), "suite_summary_json").resolveSibling("children");
+                    try (var files = Files.walk(children)) {
+                        var results = files.filter(path -> path.getFileName().toString().equals("result.json")).toList();
+                        assertThat(results).hasSize(2);
+                        for (Path childResult : results) {
+                            assertThat(Files.readString(childResult)).contains("\"status\": \"passed\"");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private Path compatibilityGroup(Path first, Path second) throws IOException {
+        Path group = tempDir.resolve("group.yaml");
+        Files.writeString(group, """
+                contract_version: v0.2
+                suite_id: COMPAT-GROUP
+                profile: local_golden
+                child_suites:
+                  - id: first
+                    ref: %s
+                    profile: local_golden
+                    expected_status: passed
+                  - id: second
+                    ref: %s
+                    profile: local_golden
+                    expected_status: passed
+                """.formatted(tempDir.relativize(first), tempDir.relativize(second)));
+        return group;
+    }
+
+    private CommandResult compatibilityCommand(Path suite, String mode) {
+        var args = new ArrayList<>(List.of(mode.equals("validate") ? "validate" : "run",
+                "--root", tempDir.toString(), "--suite", suite.toString(), "--profile", "local_golden"));
+        if (mode.equals("dry-run")) {
+            args.add("--dry-run");
+        }
+        return execute(args.toArray(String[]::new));
     }
 
     private void assertEvidenceFilesExist(Path evidenceDir) {
