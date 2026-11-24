@@ -26,6 +26,7 @@ sqlite-utils 4.2.1 的 focused integration 修正與獨立衍生 source／eviden
 - fix1 在安裝後保存並移除 target runtime 的 `.pyc`／`.pyo`；approved process 以同一個 `approved_runtime.py` 移除 `SourcelessFileLoader`，因此 `-B` 的禁寫之外，也不再從 target runtime 讀入既有 sourceless bytecode。
 - approved import 前重新掃描 target runtime 的 `.py`／`.pyc`／`.pyo`／`.so`／`.pyd`：所有 bytecode 都拒絕，其餘 importables 必須精確對應 installed distributions 的 RECORD 路徑。查驗失敗時不執行 target imports。
 - JUnit 必須有精確 testcase nodes，failure／error／skipped、missing／duplicate／unknown identity、properties 或 counters 不一致都拒絕。
+- 子程序限用目前 Python 的絕對路徑，固定使用隔離模式。只接受鎖檔指定的 pip 操作、已審核的 import／pytest 入口及兩種程序樹測試。
 - 每個 subprocess 使用獨立 session／process group；timeout 後只清理本 run 的 TERM／KILL process tree，所有 wait 都有上限，stdout／stderr 使用一般檔案避免 inherited-PIPE 無限等待。
 - 每 run 保存 controlled source 與 control-source manifest 的內容 snapshot，執行前後逐檔驗證；任何 mutation 都整批拒絕。
 

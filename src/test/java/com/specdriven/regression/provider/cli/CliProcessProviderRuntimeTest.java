@@ -261,7 +261,9 @@ class CliProcessProviderRuntimeTest {
         return new ProviderOperationRequest("run_command", parameters, Map.of("_operation_id", "command"));
     }
 
-    private Path javaBinary() throws IOException { return Path.of(System.getProperty("java.home"), "bin/java").toRealPath(); }
+    private Path javaBinary() throws IOException {
+        return Path.of(System.getProperty("java.home"), "bin", java.io.File.separatorChar == '\\' ? "java.exe" : "java").toRealPath();
+    }
 
     private List<String> args(String mode, String... extra) throws Exception {
         List<String> args = new ArrayList<>(List.of("-Xmx32m", "-XX:MaxMetaspaceSize=48m", "-cp",

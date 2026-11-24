@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import sys
 import time
 
 
@@ -93,6 +94,44 @@ def terminate_owned_group(
     return outcome
 
 
+ROOT = Path(__file__).resolve().parent
+
+
+def reviewed_python_arguments(command: list[str]) -> list[str]:
+    """Only the suite's pinned tools can select an entry point. Keep path arguments literal."""
+    if not Path(sys.executable).is_absolute() or command[:1] != [sys.executable]:
+        raise ValueError("expected the current Python interpreter")
+    args = command[1:]
+    lock = str(ROOT / "requirements.lock")
+    download = ["-m", "pip", "download", "--index-url", "https://pypi.org/simple/",
+                "--only-binary=:all:", "--no-deps", "--disable-pip-version-check",
+                "--require-hashes", "-r", lock, "-d"]
+    if args[:-1] == download and Path(args[-1]).is_absolute():
+        return ["-I", *args]
+    if (len(args) == 12 and args[:5] == ["-m", "pip", "install", "--no-index", "--find-links"]
+            and Path(args[5]).is_absolute() and args[6] == "--target" and Path(args[7]).is_absolute()
+            and args[8:] == ["--disable-pip-version-check", "--require-hashes", "-r", lock]):
+        return ["-I", *args]
+    script_args = args[1:] if args[:1] == ["-B"] else args
+    if script_args[:3] == ["-I", "-S", str(ROOT / "approved_import_probe.py")]:
+        if len(script_args) == 5 and script_args[3] == "--runtime" and Path(script_args[4]).is_absolute():
+            return ["-B", *script_args]
+    if script_args[:3] == ["-I", "-S", str(ROOT / "isolated_pytest.py")]:
+        options = script_args[3:]
+        if (len(options) >= 11 and options[:6:2] == ["--runtime", "--source-root", "--probe-output"]
+                and all(Path(path).is_absolute() for path in options[1:6:2]) and options[6:8] == ["--", "-q"]):
+            selection = options[8:]
+            if selection[:2] == ["-p", "no:cacheprovider"]:
+                selection = selection[2:]
+            if (len(selection) == 3 and selection[0] == "--junitxml" and Path(selection[1]).is_absolute()
+                    and selection[2] in {"tests", "controls/tests", "test_tiny.py", "test_sample.py"}):
+                return ["-B", *script_args]
+    if (len(args) == 3 and args[:2] == ["-u", str(ROOT / "controls/process_tree_fixture.py")]
+            and args[2] in {"timeout", "normal"}):
+        return ["-I", *args]
+    raise ValueError("unapproved Python invocation")
+
+
 def run_bounded_subprocess(
     command: list[str],
     *,
@@ -106,10 +145,11 @@ def run_bounded_subprocess(
 ) -> dict:
     if min(timeout_seconds, term_grace_seconds, kill_grace_seconds) <= 0:
         raise ValueError("all timeout and cleanup bounds must be positive")
+    python_args = reviewed_python_arguments(command)
     started_at = utcnow()
     monotonic_start = time.monotonic()
     result = {
-        "command": command, "cwd": str(cwd), "timeout_seconds": timeout_seconds,
+        "command": [sys.executable, *python_args], "cwd": str(cwd), "timeout_seconds": timeout_seconds,
         "started_at": started_at, "stdout": str(stdout_path), "stderr": str(stderr_path),
         "timed_out": False, "process_group_policy": "start_new_session; owned PGID only",
         "stdio_policy": "exclusive files; no inherited PIPE wait",
@@ -118,7 +158,8 @@ def run_bounded_subprocess(
     with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
         try:
             process = subprocess.Popen(
-                command, cwd=cwd, env=env, stdout=stdout, stderr=stderr,
+                # env execs the absolute interpreter with its real argv[0], including in a venv.
+                ["/usr/bin/env", sys.executable, *python_args], cwd=cwd, env=env, stdout=stdout, stderr=stderr,
                 start_new_session=True,
             )
         except OSError as exc:

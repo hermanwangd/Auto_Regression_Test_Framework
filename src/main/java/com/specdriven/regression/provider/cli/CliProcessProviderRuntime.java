@@ -11,8 +11,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
@@ -61,6 +59,7 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
         evidence.put("masking_applied", true);
         evidence.put("launched", false);
         Process process = null;
+        PinnedCliExecutable pinned = null;
         ExecutorService workers = null;
         List<Future<?>> pending = new ArrayList<>();
         Map<Long,ProcessHandle> descendants = new LinkedHashMap<>();
@@ -94,23 +93,13 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
             Path cwd = ownedWorkingDirectory(context.runDir(), (String) inputs.getOrDefault("process.cwd", "."));
             evidence.put("cwd", cwd.toString());
             validateLaunchDirectory(executable.getParent());
-            // The pinned program selects the executable. Every request argument remains in a later argv slot.
-            BasicFileAttributes identity = attributes(executable);
-            String observedHash = hashExecutable(executable);
+            attributes(executable);
+            pinned = PinnedCliExecutable.open(executable);
+            String observedHash = pinned.sha256();
             evidence.put("observed_executable_sha256", observedHash);
-            if (!context.bindingValues().get("executable_sha256").equals(observedHash))
-                throw new Problem("PROVIDER_UNAVAILABLE", "Pinned executable SHA-256 changed before launch.");
-            List<String> command = new ArrayList<>(argv.size() + 1);
-            command.add(executable.toString());
-            command.addAll(argv);
-            ProcessBuilder builder = new ProcessBuilder(command).directory(cwd.toFile());
-            builder.environment().clear();
-            builder.environment().put("LANG", "C");
-            builder.environment().put("LC_ALL", "C");
+            evidence.put("launch_image_policy", pinned.policy());
             long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout);
-            if (!sameFile(identity, attributes(executable)))
-                throw new Problem("PROVIDER_UNAVAILABLE", "Pinned executable identity changed before launch.");
-            process = builder.start();
+            process = pinned.start((String) context.bindingValues().get("executable_sha256"), argv, cwd);
             evidence.put("launched", true);
             evidence.put("pid", process.pid());
             final Process launched = process;
@@ -176,6 +165,9 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
             // Cleanup gets a separate finite allowance; it never converts an incomplete execution to a pass.
             interrupted |= Thread.interrupted();
             boolean clean = cleanup(process, descendants, workers, pending, problem != null);
+            if (pinned != null) {
+                try { pinned.close(); } catch (IOException error) { clean = false; }
+            }
             evidence.put("cleanup_status", clean ? "complete" : "uncertain");
             evidence.put("descendant_pids", List.copyOf(descendants.keySet()));
             if (!clean) problem = new Problem("OPERATION_FAILED", "CLI owned process or I/O cleanup is incomplete or uncertain.");
@@ -247,22 +239,6 @@ public final class CliProcessProviderRuntime implements ProviderRuntime {
             checkExecutableMode((int) Files.getAttribute(file, "unix:mode", LinkOption.NOFOLLOW_LINKS), false);
         }
         return value;
-    }
-
-    private static boolean sameFile(BasicFileAttributes first, BasicFileAttributes second) {
-        return java.util.Objects.equals(first.fileKey(), second.fileKey()) && first.size() == second.size()
-                && first.lastModifiedTime().equals(second.lastModifiedTime());
-    }
-
-    private static String hashExecutable(Path file) throws IOException {
-        MessageDigest digest = digest();
-        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
-                InputStream stream = Channels.newInputStream(channel)) {
-            byte[] buffer = new byte[8192];
-            int count;
-            while ((count = stream.read(buffer)) != -1) digest.update(buffer, 0, count);
-        }
-        return HexFormat.of().formatHex(digest.digest());
     }
 
     private static byte[] drain(InputStream stream, OutputBudget budget, AtomicReference<Problem> failure) throws IOException {
