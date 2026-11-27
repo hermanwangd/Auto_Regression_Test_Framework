@@ -101,7 +101,8 @@ verify_s3() {
   ready curl -fsS --max-time 2 "$REGRESS_S3_ENDPOINT/minio/health/ready"
   mc mb fixture/fixture-bucket
   mc version enable fixture/fixture-bucket
-  printf 'keep' | mc pipe fixture/fixture-bucket/control
+  # Bound the buffer for a stream whose total size mc cannot infer from stdin.
+  printf 'keep' | mc pipe --part-size 8MiB fixture/fixture-bucket/control
   s3_clean() {
     mc ls --versions --recursive --json fixture/fixture-bucket > objects.jsonl
     jq -se 'length == 1 and .[0].key == "control"' objects.jsonl >/dev/null
