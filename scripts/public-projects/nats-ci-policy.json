@@ -68,7 +68,7 @@
     "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/CoverageArtifacts.java": "f14b83ee2b229b6047dabc26b7755909a1901b00171b072811f8017be162a020",
     "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/FrameworkCliTransport.java": "522be16177e2a6908d09db568d6f6579dfb52699624b7148a37312a732bbb7c8",
     "integrations/swarm-product-test/src/main/java/com/featuredeliveryintelligence/fdi/producttest/Json.java": "1a0bcf2306a08fa99a5677c986327c8572d1273fbfd8180c7f0132342da968cb",
-    "pom.xml": "62d08f20f8fb36ac0b74710d785f8460b978df00ed329dd6f89b2bc4029d12dd",
+    "pom.xml": "4dd82b9954df513f6691b708c5d293e390dfac6f4c4ea9f61055b48a0eabb020",
     "scripts/public-projects/nats-cases.json": "6214de207bcfb0a2e49acfd74a26fb731a64af17abe75cdc0167e37982de6081",
     "scripts/public-projects/nats-lock.json": "dbc30fddf07c76ac6d99eb9687a4f2d9f82856f0227f6098312c45182c6e867d",
     "scripts/public-projects/nats-payload.json": "637e3485302117f4a8039145aefd2a5021620c693b43bf8fff312724620b6fd7",

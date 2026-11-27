@@ -7,10 +7,15 @@ jar="$root/target/spec-driven-auto-regression-${version}.jar"
 test -s "$jar"
 scratch=$(mktemp -d)
 server=""
+app_pid=""
 stop_server() {
   if [[ -n "$server" ]]; then docker rm -fv "$server" >/dev/null; server=""; fi
 }
-finish() { stop_server; rm -rf -- "$scratch"; }
+finish() {
+  if [[ -n "$app_pid" ]]; then kill "$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true; fi
+  stop_server
+  rm -rf -- "$scratch"
+}
 trap finish EXIT
 cd "$scratch"
 cli() { java -Xmx384m -jar "$jar" "$@"; }
@@ -111,12 +116,13 @@ verify_s3() {
 
   # A separate application uploads without framework ownership metadata.
   python3 "$root/scripts/ci/s3-export-fixture.py" app.port "$server" "$client" &
-  local app_pid=$! result
+  app_pid=$!
+  local result
   ready test -s app.port
   export REST_BASE_URL="http://127.0.0.1:$(cat app.port)"
-  cli run --suite s3/suite_manifest_app_export.yaml --profile external_export > export.log
+  cli run --suite s3/suite_manifest_app_export.yaml --profile external_export | tee export.log
   wait "$app_pid"
-  cat export.log
+  app_pid=""
   result=$(sed -n 's/^result_json: //p' export.log)
   cli validate-evidence --result "$result"
   jq -e '.status == "passed" and
