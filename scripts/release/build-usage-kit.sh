@@ -241,6 +241,30 @@ canonical_samples:
     suite_id: REST-CLIENT-EXTERNAL-v0.3
     ships_in_usage_kit: true
     public_contract: true
+  - id: mongodb
+    root_dir: samples/20-provider-capability-p0/data/mongodb
+    entrypoint_manifest: suite_manifest.yaml
+    kind: leaf
+    default_profile: external_mongodb
+    suite_id: MongoDB-Native-v03
+    ships_in_usage_kit: true
+    public_contract: true
+  - id: redis
+    root_dir: samples/20-provider-capability-p0/data/redis
+    entrypoint_manifest: suite_manifest.yaml
+    kind: leaf
+    default_profile: external_redis
+    suite_id: Redis-owned-string-v0.3
+    ships_in_usage_kit: true
+    public_contract: true
+  - id: s3
+    root_dir: samples/20-provider-capability-p0/storage/s3
+    entrypoint_manifest: suite_manifest.yaml
+    kind: leaf
+    default_profile: external_s3
+    suite_id: S3-v0.3
+    ships_in_usage_kit: true
+    public_contract: true
   - id: jdbc
     root_dir: samples/20-provider-capability-p0/data/jdbc
     entrypoint_manifest: suite_manifest.yaml

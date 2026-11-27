@@ -1,0 +1,1 @@
+Regression fixture for the S3-compatible object store.

@@ -1,0 +1,84 @@
+contract_version: v0.3
+provider_contract: redis.v0.3
+provider_type: redis
+provider_role: client
+protocol: redis
+purpose: Create, read, check TTL or absence, and remove a run-owned standalone Redis string.
+runtime_modes: [native]
+operation_defaults:
+  input:
+    value_type: string
+    reference_kinds: [literal]
+    sensitivity: public
+    required: true
+  output:
+    value_type: boolean
+    sensitivity: public
+    bindable: false
+    evidence_included: true
+binding_keys:
+  connection.secret_ref:
+    required: true
+    source: env_profile_secret_ref
+    value_type: string
+    reference_kinds: [env]
+    sensitivity: masked
+operations:
+  redis_set:
+    phases: [setup, execute]
+    inputs:
+      key: {required: true}
+      value: {required: true, sensitivity: masked}
+      ttl_seconds: {required: true, value_type: number}
+    outputs:
+      created: {value_type: boolean}
+      physical_key: {value_type: string, bindable: true}
+    allowed_inputs: [key, value, ttl_seconds]
+    required_inputs: [key, value, ttl_seconds]
+    output_refs: [created, physical_key]
+    bindable_outputs: [physical_key]
+  redis_get:
+    phases: [execute, verify]
+    inputs:
+      key: {required: true}
+      expected_value: {required: true, sensitivity: masked}
+    outputs:
+      matched: {value_type: boolean}
+    allowed_inputs: [key, expected_value]
+    required_inputs: [key, expected_value]
+    output_refs: [matched]
+  redis_ttl:
+    phases: [execute, verify]
+    inputs:
+      key: {required: true}
+      max_ttl_seconds: {required: true, value_type: number}
+    outputs:
+      remaining_ms: {value_type: number}
+      within_bound: {value_type: boolean}
+    allowed_inputs: [key, max_ttl_seconds]
+    required_inputs: [key, max_ttl_seconds]
+    output_refs: [remaining_ms, within_bound]
+  redis_absent:
+    phases: [verify]
+    inputs:
+      key: {required: true}
+    outputs:
+      absent: {value_type: boolean}
+    allowed_inputs: [key]
+    required_inputs: [key]
+    output_refs: [absent]
+  redis_delete:
+    phases: [cleanup]
+    inputs:
+      key: {required: true}
+    outputs:
+      deleted: {value_type: boolean}
+      absent: {value_type: boolean}
+    allowed_inputs: [key]
+    required_inputs: [key]
+    output_refs: [deleted, absent]
+evidence:
+  outputs: [redis_fixture]
+  redact: [connection, password, value, expected_value]
+failure_mapping:
+  allowed_codes: [REDIS_INVALID_INPUT, REDIS_CONNECTION_CONFIG, PROVIDER_UNAVAILABLE, REDIS_OPERATION_FAILED, REDIS_OWNERSHIP_CONFLICT, REDIS_KEY_MISSING, REDIS_KEY_PRESENT, REDIS_VALUE_MISMATCH, REDIS_TTL_MISMATCH, EVIDENCE_INVALID]

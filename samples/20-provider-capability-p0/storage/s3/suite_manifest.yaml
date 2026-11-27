@@ -1,0 +1,13 @@
+manifest_version: v0.3
+suite_id: S3-v0.3
+default_profile: external_s3
+artifact_roots:
+  fixtures: fixtures/
+targets:
+  object_store:
+    provider_contract: s3.v0.3
+env_profiles:
+  external_s3:
+    ref: env_profiles/external_s3.yaml
+tests:
+  - ref: test_cases/object_roundtrip.yaml

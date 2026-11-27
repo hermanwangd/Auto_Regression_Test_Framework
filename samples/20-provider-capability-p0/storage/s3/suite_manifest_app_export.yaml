@@ -1,0 +1,13 @@
+manifest_version: v0.3
+suite_id: S3-APP-EXPORT-v0.3
+default_profile: external_export
+targets:
+  object_store:
+    provider_contract: s3.v0.3
+  export_app:
+    provider_contract: rest_client.v0.3
+env_profiles:
+  external_export:
+    ref: env_profiles/external_export.yaml
+tests:
+  - ref: test_cases/app_export.yaml

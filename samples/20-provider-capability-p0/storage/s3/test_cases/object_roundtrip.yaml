@@ -1,0 +1,31 @@
+dsl_version: v0.3
+test_case_id: S3-V03-TC-001
+title: Store a fixture, inspect its metadata, verify the downloaded bytes and remove it
+setup: []
+execute:
+  - id: upload
+    target: object_store
+    op: s3_put_object
+    with:
+      name: greeting.txt
+      payload_ref: artifact://fixtures/greeting.txt
+verify:
+  - id: inspect_object
+    type: provider_check
+    target: object_store
+    op: s3_head_object
+    with:
+      name: greeting.txt
+  - id: check_download
+    type: provider_check
+    target: object_store
+    op: s3_verify_object
+    with:
+      name: greeting.txt
+      expected_sha256: step://upload/sha256
+cleanup:
+  - id: remove_object
+    target: object_store
+    op: s3_delete_object
+    with:
+      name: greeting.txt

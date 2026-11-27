@@ -1,0 +1,115 @@
+contract_version: v0.3
+provider_contract: s3.v0.3
+provider_type: s3
+provider_role: client
+protocol: s3
+purpose: Manage run-owned fixtures and verify application exports at an assigned key in an existing S3-compatible bucket.
+runtime_modes: [native]
+operation_defaults:
+  input:
+    value_type: string
+    reference_kinds: [literal]
+    sensitivity: public
+  output:
+    value_type: string
+    sensitivity: public
+    bindable: false
+    evidence_included: true
+binding_keys:
+  endpoint_ref:
+    required: true
+    source: env_profile_secret_ref
+    value_type: string
+    reference_kinds: [env]
+    sensitivity: masked
+  bucket_ref:
+    required: true
+    source: env_profile_secret_ref
+    value_type: string
+    reference_kinds: [env]
+    sensitivity: masked
+  access_key_ref:
+    required: true
+    source: env_profile_secret_ref
+    value_type: string
+    reference_kinds: [env]
+    sensitivity: masked
+  secret_key_ref:
+    required: true
+    source: env_profile_secret_ref
+    value_type: string
+    reference_kinds: [env]
+    sensitivity: masked
+operations:
+  s3_object_key:
+    phases: [setup, execute]
+    inputs:
+      name: {required: true}
+    outputs:
+      object_key: {value_type: string, bindable: true}
+    allowed_inputs: [name]
+    required_inputs: [name]
+    output_refs: [object_key]
+  s3_put_object:
+    phases: [setup, execute]
+    inputs:
+      name: {required: true}
+      payload_ref: {required: true, reference_kinds: [artifact]}
+    outputs:
+      object_key: {value_type: string, bindable: true}
+      content_length: {value_type: number}
+      sha256: {value_type: string, bindable: true}
+    allowed_inputs: [name, payload_ref]
+    required_inputs: [name, payload_ref]
+    output_refs: [object_key, content_length, sha256]
+  s3_head_object:
+    phases: [execute, verify]
+    inputs:
+      name: {required: true}
+      application_export: {required: false, value_type: boolean}
+    outputs:
+      object_key: {value_type: string}
+      exists: {value_type: boolean}
+      content_length: {value_type: number}
+    allowed_inputs: [name, application_export]
+    required_inputs: [name]
+    output_refs: [exists, content_length, object_key]
+  s3_verify_object:
+    phases: [execute, verify]
+    inputs:
+      name: {required: true}
+      expected_sha256: {required: true, reference_kinds: [literal, step]}
+      application_export: {required: false, value_type: boolean}
+    outputs:
+      object_key: {value_type: string}
+      content_length: {value_type: number}
+      sha256: {value_type: string}
+    allowed_inputs: [name, expected_sha256, application_export]
+    required_inputs: [name, expected_sha256]
+    output_refs: [content_length, sha256, object_key]
+  s3_delete_object:
+    phases: [cleanup]
+    inputs:
+      name: {required: true}
+    outputs:
+      deleted: {value_type: boolean}
+    allowed_inputs: [name]
+    required_inputs: [name]
+    output_refs: [deleted]
+evidence:
+  outputs: [s3_object]
+  redact: [endpoint_ref, bucket_ref, access_key_ref, secret_key_ref, authorization]
+failure_mapping:
+  allowed_codes:
+    - S3_INVALID_CONFIGURATION
+    - S3_FIXTURE_UNREADABLE
+    - S3_ACCESS_DENIED
+    - S3_REQUEST_FAILED
+    - S3_OBJECT_MISSING
+    - S3_CLEANUP_NOT_CONFIRMED
+    - S3_CONFLICT
+    - S3_CHECKSUM_MISMATCH
+    - S3_OWNERSHIP_MISMATCH
+    - S3_READ_TIMEOUT
+    - S3_OBJECT_TOO_LARGE
+    - S3_EVIDENCE_FAILED

@@ -34,9 +34,12 @@ ids and YAML files listed below.
 | `ibm_mq.v0.3` | `ibm_mq_v0_3.yaml` | `samples/20-provider-capability-p0/messaging/ibm_mq/` | `supported` |
 | `jdbc.v0.3` | `jdbc_v0_3.yaml` | `samples/20-provider-capability-p0/data/jdbc/` | `supported` |
 | `kafka.v0.3` | `kafka_v0_3.yaml` | `samples/20-provider-capability-p0/messaging/kafka/` | `supported` |
+| `mongodb.v0.3` | `mongodb_v0_3.yaml` | `samples/20-provider-capability-p0/data/mongodb/` | `supported` |
 | `nats.v0.3` | `nats_v0_3.yaml` | `samples/20-provider-capability-p0/messaging/nats/` | `supported` |
 | `polling_observer.v0.3` | `polling_observer_v0_3.yaml` | `samples/20-provider-capability-p0/verification/polling_observer/` | `supported` |
+| `redis.v0.3` | `redis_v0_3.yaml` | `samples/20-provider-capability-p0/data/redis/` | `supported` |
 | `rest_client.v0.3` | `rest_client_v0_3.yaml` | `samples/20-provider-capability-p0/http/rest_client_with_wiremock/` | `supported` |
+| `s3.v0.3` | `s3_v0_3.yaml` | `samples/20-provider-capability-p0/storage/s3/` | `supported` |
 | `sample_fake_provider.v0.3` | `sample_fake_provider_v0_3.yaml` | `samples/00-getting-started/golden_e2e/` | `unsupported` |
 | `soap_mock.v0.3` | `soap_mock_v0_3.yaml` | `samples/20-provider-capability-p0/rpc/soap_mock/` | `supported` |
 
