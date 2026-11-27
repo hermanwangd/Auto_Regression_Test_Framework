@@ -171,6 +171,14 @@ FRAMEWORK_REDIS_URI=validation-placeholder validate_external_profile samples/20-
 REGRESS_S3_ENDPOINT=http://contract-validation.invalid REGRESS_S3_BUCKET=validation \
   REGRESS_S3_ACCESS_KEY=validation-placeholder REGRESS_S3_SECRET_KEY=validation-placeholder \
   validate_external_profile samples/20-provider-capability-p0/storage/s3/suite_manifest.yaml external_s3
+FRAMEWORK_WEBSOCKET_URI=ws://contract-validation.invalid REST_BASE_URL=http://contract-validation.invalid \
+  validate_external_profile samples/20-provider-capability-p0/messaging/websocket/suite_manifest.yaml external_websocket
+REGRESS_SFTP_ENDPOINT=sftp://contract-validation.invalid REGRESS_SFTP_USERNAME=fixture REGRESS_SFTP_ROOT=/fixture \
+  REGRESS_SFTP_PRIVATE_KEY=validation-placeholder REGRESS_SFTP_KNOWN_HOSTS=validation-placeholder \
+  validate_external_profile samples/20-provider-capability-p0/storage/sftp/suite_manifest.yaml external_sftp
+REST_BASE_URL=http://contract-validation.invalid MAILPIT_BASE_URL=http://mailpit.invalid \
+  validate_external_profile samples/20-provider-capability-p0/http/mailpit/suite_manifest.yaml external_mailpit
+validate_external_profile samples/20-provider-capability-p0/ui/playwright/suite_manifest.yaml local_browser
 validate_external_profile samples/20-provider-capability-p0/http/rest_client_external/suite_manifest.yaml external_native
 validate_external_profile samples/20-provider-capability-p0/rpc/grpc_client_external/suite_manifest.yaml external_native
 

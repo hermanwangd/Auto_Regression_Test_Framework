@@ -1,0 +1,13 @@
+profile_id: external_mailpit
+execution_mode: ci
+isolation: per_run
+evidence_classification: framework_verification_only
+targets:
+  accounts:
+    runtime_mode: native
+    bindings:
+      base_url: env://REST_BASE_URL
+  inbox:
+    runtime_mode: native
+    bindings:
+      base_url: env://MAILPIT_BASE_URL

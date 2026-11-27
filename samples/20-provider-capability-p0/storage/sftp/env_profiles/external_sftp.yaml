@@ -1,0 +1,13 @@
+profile_id: external_sftp
+execution_mode: external
+isolation: per_run
+evidence_classification: framework_verification_only
+targets:
+  batch_exchange:
+    runtime_mode: native
+    bindings:
+      endpoint_ref: env://REGRESS_SFTP_ENDPOINT
+      username_ref: env://REGRESS_SFTP_USERNAME
+      private_key_ref: env://REGRESS_SFTP_PRIVATE_KEY
+      known_hosts_ref: env://REGRESS_SFTP_KNOWN_HOSTS
+      root_ref: env://REGRESS_SFTP_ROOT

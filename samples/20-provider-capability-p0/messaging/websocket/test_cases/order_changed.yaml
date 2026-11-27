@@ -1,0 +1,43 @@
+dsl_version: v0.3
+test_case_id: WEBSOCKET-EVENT-001
+title: Subscribe, change an order over HTTP and observe the corresponding event
+setup:
+  - id: subscribe
+    target: events
+    op: websocket_subscribe
+    with:
+      subscription_ref: artifact://fixtures/subscribe.json
+      ready_pointer: /event
+      ready_value: subscribed
+execute:
+  - id: change_order
+    target: order_app
+    op: http_request
+    with:
+      request.method: POST
+      request.path: /orders/change
+      request.headers.Content-Type: application/json
+      request.body:
+        correlation_id: step://subscribe/correlation_id
+verify:
+  - id: change_accepted
+    type: assertion
+    assert:
+      actual: step://change_order/response.status
+      operator: equals
+      expected: 202
+  - id: observe_change
+    type: provider_check
+    target: events
+    op: websocket_await_event
+    with:
+      event_pointer: /event
+      expected_event: order.changed
+      correlation_pointer: /meta/correlation_id
+      timeout_ms: 2000
+      max_events: 3
+cleanup:
+  - id: close_stream
+    target: events
+    op: websocket_close
+    with: {}

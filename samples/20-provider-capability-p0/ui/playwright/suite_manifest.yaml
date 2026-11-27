@@ -1,0 +1,11 @@
+manifest_version: v0.3
+suite_id: Playwright-Order-Confirmation
+default_profile: local_browser
+targets:
+  browser:
+    provider_contract: cli_process.v0.3
+env_profiles:
+  local_browser:
+    ref: env_profiles/local_browser.yaml
+tests:
+  - ref: test_cases/submit_order.yaml

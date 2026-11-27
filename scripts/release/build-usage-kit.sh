@@ -265,6 +265,38 @@ canonical_samples:
     suite_id: S3-v0.3
     ships_in_usage_kit: true
     public_contract: true
+  - id: sftp
+    root_dir: samples/20-provider-capability-p0/storage/sftp
+    entrypoint_manifest: suite_manifest.yaml
+    kind: leaf
+    default_profile: external_sftp
+    suite_id: SFTP-v0.3
+    ships_in_usage_kit: true
+    public_contract: true
+  - id: websocket
+    root_dir: samples/20-provider-capability-p0/messaging/websocket
+    entrypoint_manifest: suite_manifest.yaml
+    kind: leaf
+    default_profile: external_websocket
+    suite_id: WEBSOCKET-CORRELATED-EVENT-v0.3
+    ships_in_usage_kit: true
+    public_contract: true
+  - id: mailpit
+    root_dir: samples/20-provider-capability-p0/http/mailpit
+    entrypoint_manifest: suite_manifest.yaml
+    kind: leaf
+    default_profile: external_mailpit
+    suite_id: Mailpit-Recovery-v0.3
+    ships_in_usage_kit: true
+    public_contract: true
+  - id: playwright
+    root_dir: samples/20-provider-capability-p0/ui/playwright
+    entrypoint_manifest: suite_manifest.yaml
+    kind: leaf
+    default_profile: local_browser
+    suite_id: Playwright-Order-Confirmation
+    ships_in_usage_kit: true
+    public_contract: true
   - id: jdbc
     root_dir: samples/20-provider-capability-p0/data/jdbc
     entrypoint_manifest: suite_manifest.yaml

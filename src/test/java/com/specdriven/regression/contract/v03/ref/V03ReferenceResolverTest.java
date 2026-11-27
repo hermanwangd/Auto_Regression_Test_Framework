@@ -57,6 +57,21 @@ class V03ReferenceResolverTest {
     }
 
     @Test
+    void readsPointersIntoTextResponseBodiesWithoutChangingRawOutput() {
+        var resolver = new V03ReferenceResolver();
+        String body = "{\"To\":[{\"Address\":\"dev@example.test\"}]}";
+        var context = context(Map.of(), Map.of("TC-1\ncall\nresponse.body",
+                output("call", "api", "response.body", body, false)));
+        assertThat(resolver.resolveValue(parser.parse("step://call/response.body"), context)).isEqualTo(body);
+        assertThat(resolver.resolveValue(parser.parse("step://call/response.body#/To/0/Address"), context))
+                .isEqualTo("dev@example.test");
+        var invalid = context(Map.of(), Map.of("TC-1\ncall\nresponse.body",
+                output("call", "api", "response.body", "{} trailing", false)));
+        assertThatThrownBy(() -> resolver.resolveValue(parser.parse("step://call/response.body#/To"), invalid))
+                .hasMessageContaining("invalid_response_json");
+    }
+
+    @Test
     void failsClosedForMissingGeneratedAndEnvironmentValues() {
         V03ReferenceResolver resolver = new V03ReferenceResolver(ignored -> Map.of());
         V03ReferenceResolutionContext context = context(Map.of(), Map.of());

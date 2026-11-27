@@ -20,7 +20,7 @@ Server or dependency lifecycle words such as native, mock, ephemeral, framework-
 | Provider Type | support_status | external_native_evidence | Release-verifiable sample | Runtime boundary |
 | --- | --- | --- | --- | --- |
 | `artifact_compare` | `supported` | not_applicable | `samples/20-provider-capability-p0/verification/artifact_compare/` | Common artifact read/diff utility for checked-in samples. |
-| `cli_process` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/cli/cli_process/` | v0.3 only: trusted local executable/SHA, direct argv, bounded stdin/stdout/stderr, canonical exit/output assertions. Configure the sample with a reviewed binary; no shared-SIT ownership, OS sandbox or transitive dependency pinning. |
+| `cli_process` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/cli/cli_process/`, `samples/20-provider-capability-p0/ui/playwright/` | v0.3 only: trusted local executable/SHA, direct argv, bounded stdin/stdout/stderr, canonical exit/output assertions. Configure the sample with a reviewed binary; no shared-SIT ownership, OS sandbox or transitive dependency pinning. |
 | `common_verify` | `supported` | not_applicable | `samples/20-provider-capability-p0/verification/common_verify/` | JSON/schema/file assertion-only verifier contract. |
 | `external_runner` | `contract_only` | not_applicable | n/a | Contract is documented, but general command execution is not a supported public release path. |
 | `grpc_client` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/rpc/grpc_mock/` | Unary client stimulus for checked-in gRPC mock capability samples; external native evidence uses `grpc_client_external/`. |
@@ -36,18 +36,21 @@ Server or dependency lifecycle words such as native, mock, ephemeral, framework-
 | `nats` | `supported` | caller_verified | `samples/20-provider-capability-p0/messaging/nats/` | Client runtime consumes owner/project-provided NATS bindings and emits masked event evidence. |
 | `polling_observer` | `supported` | not_applicable | `samples/20-provider-capability-p0/verification/polling_observer/` | Observation polling only; it must not retry mutating execute actions. |
 | `redis` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/data/redis/` | Run-scoped string keys, value, expiry and invalidation checks, and exact-key cleanup on standalone Redis. |
-| `rest_client` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/http/rest_client_with_wiremock/`, `samples/20-provider-capability-p0/http/rest_client_external/`, and `samples/20-provider-capability-p0/rpc/soap_mock/` | HTTP request client provider with Env_Profile-supplied endpoints or generated mock endpoints. |
+| `rest_client` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/http/rest_client_with_wiremock/`, `samples/20-provider-capability-p0/http/rest_client_external/`, `samples/20-provider-capability-p0/http/mailpit/`, and `samples/20-provider-capability-p0/rpc/soap_mock/` | HTTP request client provider with Env_Profile-supplied endpoints or generated mock endpoints. |
 | `s3` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/storage/s3/` | Read and verify an application export at a run-scoped key, or write a fixture, verify SHA-256 and clean up its exact version. |
 | `sample_fake_provider` | `unsupported` | not_applicable | `samples/00-getting-started/golden_e2e/` | Framework-owned Golden E2E fake provider, not a public provider capability. |
+| `sftp` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/storage/sftp/` | Upload a run-owned batch using a pinned host key, await a return file, verify its SHA-256 and record count, and clean up. |
 | `shell_command` | `contract_only` | not_applicable | n/a | Contract vocabulary exists, but command execution requires a later safety-approved release path. |
 | `soap_mock` | `supported` | not_applicable | `samples/20-provider-capability-p0/rpc/soap_mock/` | WireMock-backed SOAP HTTP/XML behavior, not a custom SOAP server. |
 | `vm_runtime` | `contract_only` | not_applicable | n/a | Contract vocabulary is documented; no release-verifiable runtime sample is published in v0.3.0. |
+| `websocket` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/messaging/websocket/` | Subscribe before the application action, await a correlated JSON event within an event and time limit, and close the session. |
 | `wiremock_http_mock` | `deprecated` | not_applicable | n/a | v0.2 HTTP mock surface backed by WireMock. External `base_url` means an owner-provisioned WireMock-compatible Admin API endpoint, not a generic REST/SUT endpoint. Prefer `http_mock` as the v0.3 protocol capability name; generic project-provisioned HTTP endpoints are consumed through client providers such as `rest_client`. |
 
 ## Supported Mixed Suites
 
 Framework `0.3.2` supports only explicit mixed-provider suite paths:
 
+- `samples/20-provider-capability-p0/messaging/websocket/` combines `websocket` and `rest_client` to verify the event emitted by a REST action.
 - `samples/10-contract-baseline/mixed_wiremock_jdbc_nats/`: `http_mock` + `rest_client` + `jdbc` + `nats`, framework verification evidence only.
 - `samples/20-provider-capability-p0/http/rest_client_with_wiremock/`: `http_mock` + `rest_client`, framework verification evidence unless owner-provided release labels and bindings are present.
 - `samples/30-cross-provider-groups/mock_server_cross_verify/`: checked-in REST/SOAP/gRPC mock-client child suites.

@@ -1,0 +1,15 @@
+manifest_version: v0.3
+suite_id: WEBSOCKET-CORRELATED-EVENT-v0.3
+default_profile: external_websocket
+artifact_roots:
+  fixtures: fixtures/
+targets:
+  events:
+    provider_contract: websocket.v0.3
+  order_app:
+    provider_contract: rest_client.v0.3
+env_profiles:
+  external_websocket:
+    ref: env_profiles/external_websocket.yaml
+tests:
+  - ref: test_cases/order_changed.yaml

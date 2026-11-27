@@ -1,0 +1,20 @@
+{
+  "dsl_version": "v0.3",
+  "test_case_id": "TC-UI-SUBMIT-ORDER",
+  "title": "Submitting an order displays its confirmation and retains it after reload",
+  "execute": [{
+    "id": "submit_order",
+    "target": "browser",
+    "op": "run_command",
+    "with": {
+      "process.argv": ["--max-old-space-size=192", "/absolute/path/to/order-flow.cjs", "/absolute/path/to/playwright-core", "/absolute/path/to/chromium", "http://127.0.0.1:8080/", "Order UI-1042 confirmed"],
+      "process.timeout_ms": 10000,
+      "process.max_output_bytes": 8192
+    }
+  }],
+  "verify": [
+    {"id": "completed", "type": "assertion", "assert": {"actual": "step://submit_order/exit_code", "operator": "equals", "expected": 0}},
+    {"id": "observed", "type": "assertion", "assert": {"actual": "step://submit_order/stdout", "operator": "equals", "expected": "Order UI-1042 confirmed after reload\n"}},
+    {"id": "no_errors", "type": "assertion", "assert": {"actual": "step://submit_order/stderr", "operator": "equals", "expected": ""}}
+  ]
+}
