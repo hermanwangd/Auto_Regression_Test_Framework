@@ -1,0 +1,14 @@
+manifest_version: v0.3
+suite_id: MongoDB-Native-v03
+default_profile: external_mongodb
+artifact_roots:
+  fixtures: fixtures/
+  expected: expected_results/
+targets:
+  order_store:
+    provider_contract: mongodb.v0.3
+env_profiles:
+  external_mongodb:
+    ref: env_profiles/external_mongodb.yaml
+tests:
+  - ref: test_cases/owned_order.yaml

@@ -166,6 +166,11 @@ validate_external_profile samples/20-provider-capability-p0/messaging/nats/suite
 validate_external_profile samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml external_oracle
 validate_external_profile samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml external_db2
 validate_external_profile samples/20-provider-capability-p0/data/jdbc/suite_manifest_mariadb.yaml external_mariadb
+MONGODB_URI=validation-placeholder validate_external_profile samples/20-provider-capability-p0/data/mongodb/suite_manifest.yaml external_mongodb
+FRAMEWORK_REDIS_URI=validation-placeholder validate_external_profile samples/20-provider-capability-p0/data/redis/suite_manifest.yaml external_redis
+REGRESS_S3_ENDPOINT=http://contract-validation.invalid REGRESS_S3_BUCKET=validation \
+  REGRESS_S3_ACCESS_KEY=validation-placeholder REGRESS_S3_SECRET_KEY=validation-placeholder \
+  validate_external_profile samples/20-provider-capability-p0/storage/s3/suite_manifest.yaml external_s3
 validate_external_profile samples/20-provider-capability-p0/http/rest_client_external/suite_manifest.yaml external_native
 validate_external_profile samples/20-provider-capability-p0/rpc/grpc_client_external/suite_manifest.yaml external_native
 

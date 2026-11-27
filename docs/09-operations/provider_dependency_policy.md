@@ -7,7 +7,7 @@ This policy defines which provider dependencies may be bundled in the public fra
 - The core framework jar may include CI-verifiable open-source clients needed by supported provider runtimes.
 - Oracle, DB2 and MariaDB vendor JDBC drivers are not bundled in public release assets.
 - Vendor JDBC drivers must be supplied through `--driver-path`, `--driver-dir`, `REGRESS_DRIVER_PATH`, `usage-kit/drivers/`, or an approved internal provider pack.
-- Kafka, IBM MQ, NATS, REST, SOAP, gRPC, and JDBC external endpoints are owner/project-provisioned runtime dependencies unless a future framework slice explicitly adds provisioning.
+- MongoDB, Redis, S3-compatible object storage, Kafka, IBM MQ, NATS, REST, SOAP, gRPC, and JDBC external endpoints are owner/project-provisioned runtime dependencies unless a future framework slice explicitly adds provisioning.
 - The dependency scan gates numeric CVSS at its configured threshold (default 4). For a finding with only a severity label, it reports the missing score and blocks if the lower bound of that severity band meets the threshold. Unknown ratings are reported for review.
 - Dependency-Check suppressions require owner, reason, affected provider surface, expiry, and upgrade plan.
 - Future v0.3 may split provider packs. v0.2.7 remains a single framework jar with external driver loading for Oracle/DB2 JDBC.
@@ -24,6 +24,9 @@ This policy defines which provider dependencies may be bundled in the public fra
 | Apache Kafka client | `kafka` client provider | Yes | Standard OSS review | Framework maintainer | Each release |
 | IBM MQ allclient | `ibm_mq` client provider | Yes | IBM license review required before redistribution changes | Framework maintainer | Each release |
 | NATS client | `nats` provider | Yes, when present in dependency tree | Standard OSS review | Framework maintainer | Each release |
+| MongoDB Java sync driver | Native MongoDB document fixtures | Yes | Standard OSS review | Framework maintainer | Each release |
+| Jedis | Native standalone Redis fixtures | Yes | Standard OSS review | Framework maintainer | Each release |
+| AWS SDK for Java v2 S3 and URLConnection transport | Native S3-compatible object fixtures | Yes | Standard OSS review | Framework maintainer | Each release |
 | H2 Database | Local JDBC Oracle/DB2 compatibility samples | Yes | Standard OSS review | Framework maintainer | Each release |
 | Oracle JDBC driver | External Oracle JDBC native runtime | No | Owner/internal review | Environment owner | Owner controlled |
 | MariaDB Connector/J | External MariaDB native runtime | No | Owner/internal review | Environment owner | Owner controlled |

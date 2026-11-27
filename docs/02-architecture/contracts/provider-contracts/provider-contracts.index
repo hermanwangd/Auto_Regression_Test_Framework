@@ -18,12 +18,15 @@ kafka.yaml
 kafka_messaging.yaml
 kafka_v0_3.yaml
 kubernetes_runtime.yaml
+mongodb_v0_3.yaml
 nats.yaml
 nats_v0_3.yaml
 polling_observer.yaml
 polling_observer_v0_3.yaml
+redis_v0_3.yaml
 rest_client.yaml
 rest_client_v0_3.yaml
+s3_v0_3.yaml
 sample_fake_provider.yaml
 sample_fake_provider_v0_3.yaml
 shell_command.yaml

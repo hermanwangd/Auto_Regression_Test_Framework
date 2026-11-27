@@ -163,6 +163,33 @@ provider_types:
     required_binding_keys: [dialect]
     supported_operations: [db_seed, db_cleanup, db_query, db_record_exists]
     evidence_outputs: [seed_evidence, cleanup_evidence, query_evidence, error]
+  mongodb:
+    contract_ref: provider-contracts/mongodb_v0_3.yaml
+    support_status: supported
+    supported_contract_versions: [v0.3]
+    supported_runtime_modes: [native]
+    required_binding_keys: [connection.secret_ref]
+    supported_operations: [mongo_seed, mongo_read, mongo_find, mongo_exists, mongo_cleanup]
+    evidence_outputs: [mongo_document, fixture_cleanup]
+    sample_ref: samples/20-provider-capability-p0/data/mongodb/suite_manifest.yaml
+  redis:
+    contract_ref: provider-contracts/redis_v0_3.yaml
+    support_status: supported
+    supported_contract_versions: [v0.3]
+    supported_runtime_modes: [native]
+    required_binding_keys: [connection.secret_ref]
+    supported_operations: [redis_set, redis_get, redis_ttl, redis_absent, redis_delete]
+    evidence_outputs: [redis_fixture, fixture_cleanup]
+    sample_ref: samples/20-provider-capability-p0/data/redis/suite_manifest.yaml
+  s3:
+    contract_ref: provider-contracts/s3_v0_3.yaml
+    support_status: supported
+    supported_contract_versions: [v0.3]
+    supported_runtime_modes: [native]
+    required_binding_keys: [endpoint_ref, bucket_ref, access_key_ref, secret_key_ref]
+    supported_operations: [s3_object_key, s3_put_object, s3_head_object, s3_verify_object, s3_delete_object]
+    evidence_outputs: [s3_object, fixture_cleanup]
+    sample_ref: samples/20-provider-capability-p0/storage/s3/suite_manifest.yaml
   kubernetes_runtime:
     contract_ref: provider-contracts/kubernetes_runtime.yaml
     support_status: contract_only

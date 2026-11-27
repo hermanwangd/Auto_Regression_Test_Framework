@@ -1,0 +1,9 @@
+profile_id: external_mongodb
+execution_mode: external
+isolation: shared
+evidence_classification: framework_verification_only
+targets:
+  order_store:
+    runtime_mode: native
+    bindings:
+      connection.secret_ref: env://MONGODB_URI

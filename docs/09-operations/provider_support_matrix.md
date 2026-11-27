@@ -32,9 +32,12 @@ Server or dependency lifecycle words such as native, mock, ephemeral, framework-
 | `kafka` | `supported` | caller_verified | `samples/20-provider-capability-p0/messaging/kafka/` | Local mock/client sample is release-verifiable. Native external execution runs only when broker bindings are configured; the framework does not start Kafka. |
 | `kafka_messaging` | `deprecated` | n/a | Compatibility alias only; use `kafka` for new artifacts. |
 | `kubernetes_runtime` | `contract_only` | n/a | Contract vocabulary is documented; no release-verifiable runtime sample is published in v0.3.0. |
+| `mongodb` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/data/mongodb/` | Run-owned documents, exact reads and scoped equality queries in a caller-provisioned MongoDB database. |
 | `nats` | `supported` | caller_verified | `samples/20-provider-capability-p0/messaging/nats/` | Client runtime consumes owner/project-provided NATS bindings and emits masked event evidence. |
 | `polling_observer` | `supported` | not_applicable | `samples/20-provider-capability-p0/verification/polling_observer/` | Observation polling only; it must not retry mutating execute actions. |
+| `redis` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/data/redis/` | Run-scoped string keys, value, expiry and invalidation checks, and exact-key cleanup on standalone Redis. |
 | `rest_client` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/http/rest_client_with_wiremock/`, `samples/20-provider-capability-p0/http/rest_client_external/`, and `samples/20-provider-capability-p0/rpc/soap_mock/` | HTTP request client provider with Env_Profile-supplied endpoints or generated mock endpoints. |
+| `s3` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/storage/s3/` | Read and verify an application export at a run-scoped key, or write a fixture, verify SHA-256 and clean up its exact version. |
 | `sample_fake_provider` | `unsupported` | not_applicable | `samples/00-getting-started/golden_e2e/` | Framework-owned Golden E2E fake provider, not a public provider capability. |
 | `shell_command` | `contract_only` | not_applicable | n/a | Contract vocabulary exists, but command execution requires a later safety-approved release path. |
 | `soap_mock` | `supported` | not_applicable | `samples/20-provider-capability-p0/rpc/soap_mock/` | WireMock-backed SOAP HTTP/XML behavior, not a custom SOAP server. |

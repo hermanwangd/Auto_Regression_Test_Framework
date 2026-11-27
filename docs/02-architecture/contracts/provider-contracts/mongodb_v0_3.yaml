@@ -1,0 +1,81 @@
+contract_version: v0.3
+provider_contract: mongodb.v0.3
+provider_type: mongodb
+provider_role: data_store
+protocol: mongodb
+purpose: Seed, read back, query and clean up one run-owned BSON document using the native MongoDB synchronous driver.
+runtime_modes: [native]
+operation_defaults:
+  input:
+    value_type: string
+    reference_kinds: [literal]
+    sensitivity: public
+  output:
+    value_type: boolean
+    sensitivity: public
+    bindable: false
+    evidence_included: true
+  phases: [setup, execute, verify, cleanup]
+binding_keys:
+  connection.secret_ref:
+    required: true
+    source: env_profile_secret_ref
+    value_type: string
+    reference_kinds: [env]
+    sensitivity: masked
+operations:
+  mongo_seed:
+    phases: [setup]
+    inputs:
+      key: &key {required: true, value_type: string, reference_kinds: [literal]}
+      document_ref: &artifact {required: true, value_type: object, reference_kinds: [artifact]}
+    outputs:
+      acknowledged: {value_type: boolean}
+      document_id: {value_type: string, bindable: true}
+    allowed_inputs: [key, document_ref]
+    required_inputs: [key, document_ref]
+    output_refs: [acknowledged, document_id]
+  mongo_read:
+    phases: [execute, verify]
+    inputs:
+      key: *key
+      expected_ref: *artifact
+    outputs:
+      found: {value_type: boolean}
+      matched: {value_type: boolean}
+    allowed_inputs: [key, expected_ref]
+    required_inputs: [key, expected_ref]
+    output_refs: [found, matched]
+  mongo_find:
+    phases: [execute]
+    inputs:
+      key: *key
+      criteria_ref: *artifact
+    outputs:
+      matched: {value_type: boolean}
+    allowed_inputs: [key, criteria_ref]
+    required_inputs: [key, criteria_ref]
+    output_refs: [matched]
+  mongo_exists:
+    phases: [verify]
+    inputs:
+      key: *key
+    outputs:
+      found: {value_type: boolean}
+    allowed_inputs: [key]
+    required_inputs: [key]
+    output_refs: [found]
+  mongo_cleanup:
+    phases: [cleanup]
+    inputs:
+      key: *key
+    outputs:
+      deleted_count: {value_type: number}
+    allowed_inputs: [key]
+    required_inputs: [key]
+    output_refs: [deleted_count]
+evidence:
+  outputs: [mongo_document]
+  redact: [connection, document_ref, expected_ref, criteria_ref]
+failure_mapping:
+  allowed_codes: [MONGO_INPUT_INVALID, SECRET_RESOLUTION_ERROR, MONGO_CONFIGURATION_INVALID, MONGO_OPERATION_FAILED, MONGO_DOCUMENT_MISSING, MONGO_DOCUMENT_MISMATCH, EVIDENCE_INVALID]

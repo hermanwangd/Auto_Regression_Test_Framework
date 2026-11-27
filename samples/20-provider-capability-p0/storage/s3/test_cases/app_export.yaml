@@ -1,0 +1,42 @@
+dsl_version: v0.3
+test_case_id: S3-APP-EXPORT-001
+title: Verify the bytes an application exports to its assigned S3 key
+setup:
+  - id: assign_key
+    target: object_store
+    op: s3_object_key
+    with:
+      name: greeting.txt
+execute:
+  - id: request_export
+    target: export_app
+    op: http_request
+    with:
+      request.method: POST
+      request.path: /exports
+      request.headers.Content-Type: application/json
+      request.body:
+        object_key: step://assign_key/object_key
+verify:
+  - id: export_completed
+    type: assertion
+    assert:
+      actual: step://request_export/response.status
+      operator: equals
+      expected: 201
+  - id: locate_export
+    type: provider_check
+    target: object_store
+    op: s3_head_object
+    with:
+      name: greeting.txt
+      application_export: true
+  - id: verify_export
+    type: provider_check
+    target: object_store
+    op: s3_verify_object
+    with:
+      name: greeting.txt
+      application_export: true
+      expected_sha256: 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+cleanup: []

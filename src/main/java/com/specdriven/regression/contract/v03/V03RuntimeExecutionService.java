@@ -14,10 +14,13 @@ import com.specdriven.regression.contract.v03.adapter.GrpcMockV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.IbmMqV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.JdbcV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.KafkaV03Adapter;
+import com.specdriven.regression.contract.v03.adapter.MongoV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.NatsV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.PollingObserverV03Adapter;
+import com.specdriven.regression.contract.v03.adapter.RedisV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.RestClientV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.CliProcessV03Adapter;
+import com.specdriven.regression.contract.v03.adapter.S3V03Adapter;
 import com.specdriven.regression.contract.v03.adapter.SoapMockV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.SampleFakeProviderV03Adapter;
 import com.specdriven.regression.contract.v03.assertion.V03AssertionEvaluation;
@@ -81,10 +84,13 @@ public class V03RuntimeExecutionService {
                 new IbmMqV03Adapter(),
                 new JdbcV03Adapter(),
                 new KafkaV03Adapter(),
+                new MongoV03Adapter(),
                 new NatsV03Adapter(),
                 new PollingObserverV03Adapter(),
+                new RedisV03Adapter(),
                 new RestClientV03Adapter(),
                 new CliProcessV03Adapter(),
+                new S3V03Adapter(),
                 new SoapMockV03Adapter(),
                 new SampleFakeProviderV03Adapter())));
     }
@@ -1121,6 +1127,7 @@ public class V03RuntimeExecutionService {
                     stringValue(result.get("test_case_id")),
                     stringValue(result.get("target")),
                     stringValue(result.get("provider_type")),
+                    stringValue(result.get("operation")),
                     stringValue(result.get("status")),
                     stringValue(result.get("failure_code")));
             for (String evidenceRef : listOfStrings(result.get("evidence_refs"))) {
@@ -1137,6 +1144,7 @@ public class V03RuntimeExecutionService {
             if (!ref.isBlank()) {
                 refs.put(ref, new EvidenceMetadata(
                         stringValue(verifyResult.get("test_case_id")),
+                        "",
                         "",
                         "",
                         stringValue(verifyResult.get("status")),
@@ -1196,22 +1204,27 @@ public class V03RuntimeExecutionService {
         }
         String providerType = metadata == null ? "" : metadata.providerType();
         String providerId = metadata == null ? "" : metadata.target();
+        boolean cleanup = evidenceRef.contains("cleanup") || (metadata != null
+                && Set.of("mongo_cleanup", "redis_delete", "s3_delete_object").contains(metadata.operation()));
         return new EvidenceEntryDraft(
                 entryTestCaseId,
-                providerEvidenceType(evidenceRef, providerType),
+                providerEvidenceType(evidenceRef, providerType, cleanup),
                 "provider",
                 providerType,
                 providerId,
                 contentType(evidenceRef),
-                evidenceRef.contains("cleanup") ? "provider_results.cleanup_status" : "provider_results.resolved_operation_result",
+                cleanup ? "provider_results.cleanup_status" : "provider_results.resolved_operation_result",
                 status,
                 failureCode);
     }
 
-    private String providerEvidenceType(String evidenceRef, String providerType) {
-        if (evidenceRef.contains("cleanup")) {
+    private String providerEvidenceType(String evidenceRef, String providerType, boolean cleanup) {
+        if (cleanup) {
             return "jdbc".equals(providerType) ? "jdbc_cleanup" : "fixture_cleanup";
         }
+        if ("mongodb".equals(providerType)) return "mongo_document";
+        if ("redis".equals(providerType)) return "redis_fixture";
+        if ("s3".equals(providerType)) return "s3_object";
         if ("jdbc".equals(providerType) && evidenceRef.contains("seed_")) {
             return "jdbc_seed";
         }
@@ -1648,6 +1661,7 @@ public class V03RuntimeExecutionService {
             String testCaseId,
             String target,
             String providerType,
+            String operation,
             String status,
             String failureCode) {
     }

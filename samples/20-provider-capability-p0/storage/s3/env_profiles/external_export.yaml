@@ -1,0 +1,16 @@
+profile_id: external_export
+execution_mode: external
+isolation: per_run
+evidence_classification: framework_verification_only
+targets:
+  object_store:
+    runtime_mode: native
+    bindings:
+      endpoint_ref: env://REGRESS_S3_ENDPOINT
+      bucket_ref: env://REGRESS_S3_BUCKET
+      access_key_ref: env://REGRESS_S3_ACCESS_KEY
+      secret_key_ref: env://REGRESS_S3_SECRET_KEY
+  export_app:
+    runtime_mode: native
+    bindings:
+      base_url: env://REST_BASE_URL

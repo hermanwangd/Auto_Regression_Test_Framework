@@ -1,0 +1,66 @@
+dsl_version: v0.3
+test_case_id: MONGODB-V03-TC-001
+title: Verify the stored order and clean up its run-owned document
+setup:
+  - id: seed_order
+    target: order_store
+    op: mongo_seed
+    with:
+      key: order
+      document_ref: artifact://fixtures/order.json
+execute:
+  - id: read_order
+    target: order_store
+    op: mongo_read
+    with:
+      key: order
+      expected_ref: artifact://expected/confirmed_order.json
+  - id: find_confirmed_order
+    target: order_store
+    op: mongo_find
+    with:
+      key: order
+      criteria_ref: artifact://fixtures/confirmed_criteria.json
+  - id: find_cancelled_order
+    target: order_store
+    op: mongo_find
+    with:
+      key: order
+      criteria_ref: artifact://fixtures/cancelled_criteria.json
+verify:
+  - id: confirmed_criteria_match
+    type: assertion
+    assert:
+      actual: step://find_confirmed_order/matched
+      operator: equals
+      expected: true
+  - id: cancelled_criteria_miss
+    type: assertion
+    assert:
+      actual: step://find_cancelled_order/matched
+      operator: equals
+      expected: false
+  - id: application_document_id
+    type: assertion
+    assert:
+      actual: step://seed_order/document_id
+      operator: matches
+      expected: '^swarm-[a-f0-9]{64}$'
+  - id: order_exists
+    type: provider_check
+    target: order_store
+    op: mongo_exists
+    with:
+      key: order
+  - id: stored_payload_matches
+    type: assertion
+    assert:
+      actual: step://read_order/matched
+      operator: equals
+      expected: true
+cleanup:
+  - id: delete_order
+    target: order_store
+    op: mongo_cleanup
+    with:
+      key: order

@@ -1,0 +1,38 @@
+dsl_version: v0.3
+test_case_id: REDIS-V03-TC-001
+title: Verify an expiring Redis string and clean up its run-owned keys
+setup:
+  - id: create_string
+    target: cache
+    op: redis_set
+    with:
+      key: order
+      value: order-ready
+      ttl_seconds: 120
+execute:
+  - id: read_string
+    target: cache
+    op: redis_get
+    with:
+      key: order
+      expected_value: order-ready
+verify:
+  - id: check_value
+    type: assertion
+    assert:
+      actual: step://read_string/matched
+      operator: equals
+      expected: true
+  - id: check_expiry
+    type: provider_check
+    target: cache
+    op: redis_ttl
+    with:
+      key: order
+      max_ttl_seconds: 120
+cleanup:
+  - id: remove_string
+    target: cache
+    op: redis_delete
+    with:
+      key: order
