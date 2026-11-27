@@ -4,6 +4,7 @@ import com.specdriven.regression.contract.v03.V03ExecutionContext;
 import com.specdriven.regression.contract.v03.V03ExecutionStep;
 import com.specdriven.regression.contract.v03.V03ProviderRuntimeAdapter;
 import com.specdriven.regression.contract.v03.V03StepResult;
+import com.specdriven.regression.contract.v03.ref.V03ReferenceResolver;
 import com.specdriven.regression.provider.jdbc.JdbcDriverDiscovery;
 import com.specdriven.regression.provider.jdbc.JdbcProviderRuntime;
 import com.specdriven.regression.provider.jdbc.ReviewedJdbcInvocation;
@@ -51,7 +52,13 @@ public class JdbcV03Adapter extends AbstractProviderRuntimeV03Adapter implements
 
     @Override
     public V03StepResult execute(V03ExecutionStep step, V03ExecutionContext context) {
-        return stepResult(step, runtime.execute(providerContext(step, context), request(step, context)));
+        var provider = providerContext(step, context);
+        try {
+            return stepResult(step, runtime.execute(provider, request(step, context)));
+        } catch (V03ReferenceResolver.UnresolvedStepOutput missing) {
+            if (!"cleanup".equals(step.phase()) || !"db_cleanup".equals(step.operation())) throw missing;
+            return stepResult(step, runtime.unresolvedCleanup(provider, step.id()));
+        }
     }
     @Override public boolean simulated(){return false;}
     @Override public com.specdriven.regression.sit.SitOperationEffect sitEffect(String contract,String operation){return com.specdriven.regression.sit.SitOperationEffect.UNKNOWN;}

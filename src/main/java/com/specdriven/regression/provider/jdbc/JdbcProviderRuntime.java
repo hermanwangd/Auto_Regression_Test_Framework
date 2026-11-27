@@ -137,6 +137,13 @@ public final class JdbcProviderRuntime implements ProviderRuntime {
         }
     }
 
+    public ProviderOperationResult unresolvedCleanup(ProviderExecutionContext context, String stepId) {
+        var request = new ProviderOperationRequest("db_cleanup", List.of(), Map.of("_operation_id", stepId));
+        return failed(context, request, Map.of(), "DB_CLEANUP_FAILED", "DB_CLEANUP_FAILED",
+                "A prior step did not produce the output required by JDBC cleanup.",
+                "Review the failed setup step and verify whether any fixture rows were created.");
+    }
+
     /** Execute the fixed read through the protected credential carrier. */
     public ProviderOperationResult executeReviewedQuery(ProviderExecutionContext context,ProviderOperationRequest request,ReviewedJdbcInvocation invocation) {
         return ReviewedJdbcExecution.protectedChild().execute(context,request,invocation);
