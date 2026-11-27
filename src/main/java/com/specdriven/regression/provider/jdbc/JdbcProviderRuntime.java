@@ -271,9 +271,10 @@ public final class JdbcProviderRuntime implements ProviderRuntime {
             Map<String, Object> outputs = new LinkedHashMap<>();
             if (recordExists) {
                 outputs.put("matched", matched);
+            } else {
+                outputs.put("sample_rows", sampleRows.stream().map(row -> maskFields(row, false)).toList());
             }
             outputs.put("row_count", rowCount);
-            outputs.put("sample_rows", sampleRows.stream().map(row -> maskFields(row, false)).toList());
             outputs.put("duration_ms", durationMs);
             outputs.put("query_evidence_ref", evidenceRef);
             if (matched) {
