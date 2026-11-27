@@ -23,7 +23,7 @@ class ExportHandler(BaseHTTPRequestHandler):
             return
         # The fixture chooses the bucket and payload. The request can only name this run's export.
         subprocess.run(["docker", "run", "-i", "--rm", "--memory", "160m", "--network",
-                        "container:" + server_id, "-e", "MC_HOST_fixture", client_image, "pipe",
+                        "container:" + server_id, "-e", "MC_HOST_fixture", client_image, "pipe", "--part-size", "8MiB",
                         "fixture/fixture-bucket/" + key], input=b"hello", timeout=20, check=True)
         self.send_response(201)
         self.end_headers()
