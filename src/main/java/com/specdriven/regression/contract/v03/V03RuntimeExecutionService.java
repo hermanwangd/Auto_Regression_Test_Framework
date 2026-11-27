@@ -21,6 +21,8 @@ import com.specdriven.regression.contract.v03.adapter.RedisV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.RestClientV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.CliProcessV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.S3V03Adapter;
+import com.specdriven.regression.contract.v03.adapter.SftpV03Adapter;
+import com.specdriven.regression.contract.v03.adapter.WebSocketV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.SoapMockV03Adapter;
 import com.specdriven.regression.contract.v03.adapter.SampleFakeProviderV03Adapter;
 import com.specdriven.regression.contract.v03.assertion.V03AssertionEvaluation;
@@ -91,6 +93,8 @@ public class V03RuntimeExecutionService {
                 new RestClientV03Adapter(),
                 new CliProcessV03Adapter(),
                 new S3V03Adapter(),
+                new SftpV03Adapter(),
+                new WebSocketV03Adapter(),
                 new SoapMockV03Adapter(),
                 new SampleFakeProviderV03Adapter())));
     }
@@ -382,6 +386,15 @@ public class V03RuntimeExecutionService {
         }
 
         } finally {
+            for (String provider : selectedRegistry.endRun(context)) {
+                String message = "Failed to release run resources for provider " + provider + ".";
+                cleanupFailures.add(Map.of("step_id", "finalize-" + provider, "status", "failed",
+                        "failure_code", "CLEANUP_FAILED", "message", message));
+                for (String id : testStatuses.keySet()) applyCleanupOutcomeStatus(testStatuses, id, "failed");
+                if (failure.isNone()) {
+                    failure = new Failure("CLEANUP_FAILED", "CLEANUP_ERROR", message, "Check provider cleanup evidence.");
+                }
+            }
             if (scope != null && scope.token() != null) {
                 try {
                     var finalState = scope.store().finish(scope.token(), !cleanupFailures.isEmpty());
@@ -1225,6 +1238,8 @@ public class V03RuntimeExecutionService {
         if ("mongodb".equals(providerType)) return "mongo_document";
         if ("redis".equals(providerType)) return "redis_fixture";
         if ("s3".equals(providerType)) return "s3_object";
+        if ("sftp".equals(providerType)) return "sftp_batch";
+        if ("websocket".equals(providerType)) return "websocket_event";
         if ("jdbc".equals(providerType) && evidenceRef.contains("seed_")) {
             return "jdbc_seed";
         }

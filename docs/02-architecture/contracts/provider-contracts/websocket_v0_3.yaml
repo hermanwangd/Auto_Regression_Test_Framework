@@ -1,0 +1,78 @@
+contract_version: v0.3
+provider_contract: websocket.v0.3
+provider_type: websocket
+provider_role: client
+protocol: websocket
+purpose: Observe a correlated JSON event on a WebSocket stream opened before the application action.
+runtime_modes: [native]
+operation_defaults:
+  input:
+    value_type: string
+    reference_kinds: [literal]
+    sensitivity: public
+  output:
+    value_type: boolean
+    sensitivity: public
+    bindable: false
+    evidence_included: true
+binding_keys:
+  endpoint_ref:
+    required: true
+    source: env_profile_secret_ref
+    value_type: string
+    reference_kinds: [env]
+    sensitivity: masked
+operations:
+  websocket_subscribe:
+    phases: [setup]
+    inputs:
+      subscription_ref: {required: false, reference_kinds: [artifact], sensitivity: masked}
+      ready_pointer: {required: false}
+      ready_value: {required: false, sensitivity: masked}
+    outputs:
+      opened: {value_type: boolean}
+      correlation_id: {value_type: string, bindable: true}
+    allowed_inputs: [subscription_ref, ready_pointer, ready_value]
+    required_inputs: []
+    output_refs: [opened, correlation_id]
+    bindable_outputs: [correlation_id]
+  websocket_await_event:
+    phases: [verify]
+    inputs:
+      event_pointer: {required: true}
+      expected_event: {required: true, sensitivity: masked}
+      correlation_pointer: {required: true}
+      timeout_ms: {required: true, value_type: number}
+      max_events: {required: true, value_type: number}
+    outputs:
+      matched: {value_type: boolean}
+      inspected_events: {value_type: number}
+    allowed_inputs: [event_pointer, expected_event, correlation_pointer, timeout_ms, max_events]
+    required_inputs: [event_pointer, expected_event, correlation_pointer, timeout_ms, max_events]
+    output_refs: [matched, inspected_events]
+  websocket_close:
+    phases: [cleanup]
+    inputs: {}
+    outputs:
+      closed: {value_type: boolean}
+      was_open: {value_type: boolean}
+    allowed_inputs: []
+    required_inputs: []
+    output_refs: [closed, was_open]
+evidence:
+  outputs: [websocket_event]
+  redact: [endpoint_ref, subscription_ref, ready_value, expected_event, frames, close_reason]
+failure_mapping:
+  allowed_codes:
+    - WEBSOCKET_CONNECTION_CONFIG
+    - WEBSOCKET_INVALID_INPUT
+    - WEBSOCKET_SESSION_CONFLICT
+    - WEBSOCKET_SESSION_MISSING
+    - WEBSOCKET_UNAVAILABLE
+    - WEBSOCKET_MESSAGE_LIMIT
+    - WEBSOCKET_INVALID_MESSAGE
+    - WEBSOCKET_NO_MATCH
+    - WEBSOCKET_STREAM_CLOSED
+    - WEBSOCKET_CLOSE_FAILED
+    - WEBSOCKET_INTERRUPTED
+    - WEBSOCKET_EVIDENCE_FAILED

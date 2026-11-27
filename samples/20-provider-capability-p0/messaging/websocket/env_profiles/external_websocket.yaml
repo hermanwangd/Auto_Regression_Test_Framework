@@ -1,0 +1,13 @@
+profile_id: external_websocket
+execution_mode: external
+isolation: per_run
+evidence_classification: framework_verification_only
+targets:
+  events:
+    runtime_mode: native
+    bindings:
+      endpoint_ref: env://FRAMEWORK_WEBSOCKET_URI
+  order_app:
+    runtime_mode: native
+    bindings:
+      base_url: env://REST_BASE_URL

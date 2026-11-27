@@ -190,6 +190,24 @@ provider_types:
     supported_operations: [s3_object_key, s3_put_object, s3_head_object, s3_verify_object, s3_delete_object]
     evidence_outputs: [s3_object, fixture_cleanup]
     sample_ref: samples/20-provider-capability-p0/storage/s3/suite_manifest.yaml
+  sftp:
+    contract_ref: provider-contracts/sftp_v0_3.yaml
+    support_status: supported
+    supported_contract_versions: [v0.3]
+    supported_runtime_modes: [native]
+    required_binding_keys: [endpoint_ref, username_ref, private_key_ref, known_hosts_ref, root_ref]
+    supported_operations: [sftp_upload_batch, sftp_verify_return, sftp_cleanup_batch]
+    evidence_outputs: [sftp_batch, fixture_cleanup]
+    sample_ref: samples/20-provider-capability-p0/storage/sftp/suite_manifest.yaml
+  websocket:
+    contract_ref: provider-contracts/websocket_v0_3.yaml
+    support_status: supported
+    supported_contract_versions: [v0.3]
+    supported_runtime_modes: [native]
+    required_binding_keys: [endpoint_ref]
+    supported_operations: [websocket_subscribe, websocket_await_event, websocket_close]
+    evidence_outputs: [websocket_event, fixture_cleanup]
+    sample_ref: samples/20-provider-capability-p0/messaging/websocket/suite_manifest.yaml
   kubernetes_runtime:
     contract_ref: provider-contracts/kubernetes_runtime.yaml
     support_status: contract_only

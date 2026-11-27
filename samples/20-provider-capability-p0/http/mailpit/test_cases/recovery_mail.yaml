@@ -1,0 +1,69 @@
+dsl_version: v0.3
+test_case_id: MAILPIT-RECOVERY-001
+title: Verify the recovery email accepted by the isolated SMTP inbox
+setup:
+  - id: initial_inbox
+    target: inbox
+    op: http_request
+    with:
+      request.method: GET
+      request.path: /api/v1/messages?limit=1
+execute:
+  - id: request_recovery
+    target: accounts
+    op: http_request
+    with:
+      request.method: POST
+      request.path: /forgot-password
+      request.headers.Content-Type: application/json
+      request.body:
+        email: reader@example.test
+  - id: final_inbox
+    target: inbox
+    op: http_request
+    with:
+      request.method: GET
+      request.path: /api/v1/messages?limit=1
+  - id: received_mail
+    target: inbox
+    op: http_request
+    with:
+      request.method: GET
+      request.path: /api/v1/message/latest
+verify:
+  - id: inbox_started_empty
+    type: assertion
+    assert:
+      actual: step://initial_inbox/response.body#/total
+      operator: equals
+      expected: 0
+  - id: accepted
+    type: assertion
+    assert:
+      actual: step://request_recovery/response.status
+      operator: equals
+      expected: 202
+  - id: one_message
+    type: assertion
+    assert:
+      actual: step://final_inbox/response.body#/total
+      operator: equals
+      expected: 1
+  - id: recipient
+    type: assertion
+    assert:
+      actual: step://received_mail/response.body#/To
+      operator: json_match
+      expected_ref: artifact://expected_results/recipients.json
+  - id: subject
+    type: assertion
+    assert:
+      actual: step://received_mail/response.body#/Subject
+      operator: equals
+      expected: Account recovery
+  - id: recovery_link
+    type: assertion
+    assert:
+      actual: step://received_mail/response.body#/Text
+      operator: equals
+      expected: "https://accounts.example.test/reset/demo\r\n"

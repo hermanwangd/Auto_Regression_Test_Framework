@@ -29,8 +29,10 @@ rest_client_v0_3.yaml
 s3_v0_3.yaml
 sample_fake_provider.yaml
 sample_fake_provider_v0_3.yaml
+sftp_v0_3.yaml
 shell_command.yaml
 soap_mock.yaml
 soap_mock_v0_3.yaml
 vm_runtime.yaml
+websocket_v0_3.yaml
 wiremock_http_mock.yaml

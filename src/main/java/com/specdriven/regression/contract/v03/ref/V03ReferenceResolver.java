@@ -16,6 +16,9 @@ import com.specdriven.regression.contract.v03.V03StepOutputKey;
 /** Single fail-closed resolver for v0.3 artifact, step, generated, and environment references. */
 public final class V03ReferenceResolver {
 
+    private static final com.fasterxml.jackson.databind.ObjectReader JSON_BODY =
+            new com.fasterxml.jackson.databind.ObjectMapper().readerFor(Object.class)
+                    .with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     private static final int MAX_JSON_POINTER_DEPTH = 64;
     private final V03DocumentLoader documentLoader;
     private final V03OutputDefinitionResolver outputResolver = new V03OutputDefinitionResolver();
@@ -72,8 +75,15 @@ public final class V03ReferenceResolver {
             return applyJsonPointer(document, artifact.jsonPointer());
         }
         if (reference instanceof V03Reference.Step step) {
-            return applyJsonPointer(
-                    outputValue(stepOutput(context, step.stepId(), step.outputPath()), step.outputPath()), step.jsonPointer());
+            Object value = outputValue(stepOutput(context, step.stepId(), step.outputPath()), step.outputPath());
+            if (!step.jsonPointer().isBlank() && "response.body".equals(step.outputPath()) && value instanceof String body) {
+                try {
+                    value = JSON_BODY.readValue(body);
+                } catch (com.fasterxml.jackson.core.JsonProcessingException error) {
+                    throw invalid("invalid_response_json", "A response.body JSON Pointer requires a JSON document.");
+                }
+            }
+            return applyJsonPointer(value, step.jsonPointer());
         }
         if (reference instanceof V03Reference.Generated generated) {
             List<V03ProducedOutput> produced = context.generatedOutputs().entrySet().stream()

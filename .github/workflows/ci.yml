@@ -70,6 +70,45 @@ jobs:
       - name: Verify packaged MongoDB, Redis and S3 samples against native services
         run: scripts/ci/verify-native-datastores.sh
 
+      - name: Verify WebSocket subscription and correlated events
+        run: scripts/ci/verify-native-websocket.sh
+
+      - name: Verify SMTP recovery mail in Mailpit
+        run: scripts/ci/verify-mailpit-flow.sh
+
+      - name: Verify SFTP batch and reconciliation with OpenSSH
+        run: scripts/ci/verify-native-sftp.sh
+
+      - name: Verify order submission in Chromium with Playwright
+        shell: bash
+        run: |
+          node_dist=node-v24.22.3-linux-x64
+          curl -fsSL --retry 3 "https://nodejs.org/dist/v24.22.3/$node_dist.tar.xz" -o "$RUNNER_TEMP/node.tar.xz"
+          echo "4f2b175a6d53a5c617a80dba2676238a0688cef28c6da4eba35c7d844e66fcfb  $RUNNER_TEMP/node.tar.xz" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/node.tar.xz" -C "$RUNNER_TEMP"
+          export PATH="$RUNNER_TEMP/$node_dist/bin:$PATH"
+          export UI_NODE="$RUNNER_TEMP/$node_dist/bin/node"
+          UI_NODE_SHA256=$(sha256sum "$UI_NODE" | cut -d' ' -f1)
+          export UI_NODE_SHA256
+          mkdir -p target/playwright-tools
+          cp samples/20-provider-capability-p0/ui/playwright/package{,-lock}.json target/playwright-tools/
+          npm ci --ignore-scripts --prefix target/playwright-tools
+          target/playwright-tools/node_modules/.bin/playwright-core install --with-deps --no-shell chromium
+          UI_CHROMIUM=$(cd target/playwright-tools && node -p "require('playwright-core').chromium.executablePath()")
+          export UI_CHROMIUM
+          scripts/ci/verify-playwright-flow.sh
+
+      - name: Retain Playwright results and failure trace
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-flow-evidence
+          if-no-files-found: ignore
+          path: |
+            target/playwright-runs/**/result.json
+            target/playwright-runs/**/provider-evidence/cli_process/*.json
+            target/playwright-runs/**/failure-trace.zip
+
       - name: Verify portable packaging and Linux process supervision
         run: |
           python3 -B -m unittest discover -s packaging/portable-runner/tests

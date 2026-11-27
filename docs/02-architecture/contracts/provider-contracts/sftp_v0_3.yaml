@@ -1,0 +1,110 @@
+contract_version: v0.3
+provider_contract: sftp.v0.3
+provider_type: sftp
+provider_role: client
+protocol: sftp
+purpose: Publish order files to a per-run SFTP directory and verify application-generated reconciliation files.
+runtime_modes: [native]
+operation_defaults:
+  input:
+    value_type: string
+    reference_kinds: [literal]
+    sensitivity: public
+  output:
+    value_type: string
+    sensitivity: public
+    bindable: false
+    evidence_included: true
+binding_keys:
+  endpoint_ref:
+    required: true
+    source: env_profile_secret_ref
+    value_type: string
+    reference_kinds: [env]
+    sensitivity: masked
+  username_ref:
+    required: true
+    source: env_profile_secret_ref
+    value_type: string
+    reference_kinds: [env]
+    sensitivity: masked
+  private_key_ref:
+    required: true
+    source: env_profile_secret_ref
+    value_type: string
+    reference_kinds: [env]
+    sensitivity: masked
+  known_hosts_ref:
+    required: true
+    source: env_profile_secret_ref
+    value_type: string
+    reference_kinds: [env]
+    sensitivity: masked
+  root_ref:
+    required: true
+    source: env_profile_secret_ref
+    value_type: string
+    reference_kinds: [env]
+    sensitivity: masked
+operations:
+  sftp_upload_batch:
+    phases: [setup, execute]
+    inputs:
+      name: {required: true}
+      payload_ref: {required: true, reference_kinds: [artifact]}
+    outputs:
+      batch: {value_type: string}
+      filename: {value_type: string}
+      bytes: {value_type: number}
+      sha256: {value_type: string}
+    allowed_inputs: [name, payload_ref]
+    required_inputs: [name, payload_ref]
+    output_refs: [batch, filename, bytes, sha256]
+  sftp_verify_return:
+    phases: [verify]
+    inputs:
+      name: {required: true}
+      expected_records: {required: true, value_type: number}
+      expected_sha256: {required: true}
+      timeout_ms: {required: true, value_type: number}
+    outputs:
+      batch: {value_type: string}
+      filename: {value_type: string}
+      file_count: {value_type: number}
+      records: {value_type: number}
+      bytes: {value_type: number}
+      sha256: {value_type: string}
+    allowed_inputs: [name, expected_records, expected_sha256, timeout_ms]
+    required_inputs: [name, expected_records, expected_sha256, timeout_ms]
+    output_refs: [batch, filename, file_count, records, bytes, sha256]
+  sftp_cleanup_batch:
+    phases: [cleanup]
+    inputs: {}
+    outputs:
+      batch: {value_type: string}
+      deleted: {value_type: boolean}
+    allowed_inputs: []
+    required_inputs: []
+    output_refs: [batch, deleted]
+evidence:
+  outputs: [sftp_batch]
+  redact: [endpoint_ref, username_ref, private_key_ref, known_hosts_ref, root_ref]
+failure_mapping:
+  allowed_codes:
+    - SFTP_INVALID_CONFIGURATION
+    - SFTP_REQUEST_FAILED
+    - SFTP_IO_FAILED
+    - SFTP_INTERRUPTED
+    - SFTP_EVIDENCE_FAILED
+    - SFTP_BATCH_CONFLICT
+    - SFTP_BATCH_MISSING
+    - SFTP_RETURN_TIMEOUT
+    - SFTP_FILENAME_MISMATCH
+    - SFTP_FILE_COUNT_MISMATCH
+    - SFTP_RECORD_COUNT_MISMATCH
+    - SFTP_CHECKSUM_MISMATCH
+    - SFTP_RETURN_ENCODING
+    - SFTP_FILE_LIMIT
+    - SFTP_FILE_TOO_LARGE
+    - SFTP_UNSAFE_PATH
+    - SFTP_CLEANUP_UNCONFIRMED

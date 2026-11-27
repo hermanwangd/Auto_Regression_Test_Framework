@@ -1,0 +1,15 @@
+manifest_version: v0.3
+suite_id: Mailpit-Recovery-v0.3
+default_profile: external_mailpit
+artifact_roots:
+  expected_results: expected_results/
+targets:
+  accounts:
+    provider_contract: rest_client.v0.3
+  inbox:
+    provider_contract: rest_client.v0.3
+env_profiles:
+  external_mailpit:
+    ref: env_profiles/external_mailpit.yaml
+tests:
+  - ref: test_cases/recovery_mail.yaml

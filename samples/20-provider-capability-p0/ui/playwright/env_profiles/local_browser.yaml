@@ -1,0 +1,16 @@
+{
+  "profile_id": "local_browser",
+  "execution_mode": "local",
+  "isolation": "per_run",
+  "evidence_classification": "framework_verification_only",
+  "downstream_release_evidence": false,
+  "targets": {
+    "browser": {
+      "runtime_mode": "native",
+      "bindings": {
+        "executable": "/absolute/path/to/reviewed/node",
+        "executable_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  }
+}

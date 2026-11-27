@@ -1,0 +1,26 @@
+dsl_version: v0.3
+test_case_id: SFTP-V03-TC-001
+title: Reconcile two uploaded orders from the independent batch processor
+setup: []
+execute:
+  - id: upload_orders
+    target: batch_exchange
+    op: sftp_upload_batch
+    with:
+      name: orders.csv
+      payload_ref: artifact://fixtures/orders.csv
+verify:
+  - id: verify_reconciliation
+    type: provider_check
+    target: batch_exchange
+    op: sftp_verify_return
+    with:
+      name: reconciliation.csv
+      expected_records: 2
+      expected_sha256: 18e61d3380062980b9e888a1189ab907eebcd4fda73e297de0d634af942dbf86
+      timeout_ms: 5000
+cleanup:
+  - id: remove_batch
+    target: batch_exchange
+    op: sftp_cleanup_batch
+    with: {}

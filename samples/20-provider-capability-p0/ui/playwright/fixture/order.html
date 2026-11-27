@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Order desk</title>
+<h1>Order desk</h1>
+<form>
+  <label>Order number <input name="number" pattern="[A-Z0-9-]+" required></label>
+  <button>Submit order</button>
+</form>
+<p role="status"></p>
+<script>
+  const form = document.querySelector('form');
+  const status = document.querySelector('[role=status]');
+  function showConfirmation() {
+    const saved = localStorage.getItem('submitted-order');
+    status.textContent = saved ? 'Order ' + saved + ' confirmed' : '';
+  }
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    localStorage.setItem('submitted-order', form.elements.number.value);
+    showConfirmation();
+  });
+  showConfirmation();
+</script>
+</html>

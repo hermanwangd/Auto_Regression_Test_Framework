@@ -26,6 +26,18 @@ public class V03ProviderRuntimeRegistry {
         selected.removeIf(adapter->adapter.providerType().equals(replacement.providerType()));selected.add(replacement);return new V03ProviderRuntimeRegistry(selected);
     }
 
+    public List<String> endRun(V03ExecutionContext context) {
+        List<String> failed = new java.util.ArrayList<>();
+        for (var adapter : adapters.values()) {
+            try {
+                adapter.endRun(context);
+            } catch (RuntimeException error) {
+                failed.add(adapter.providerType());
+            }
+        }
+        return failed;
+    }
+
     public V03ProviderRuntimeAdapter resolve(String providerType) {
         if ("ibm_mq".equals(providerType) && !com.specdriven.regression.build.RunnerBuildVariant.ibmMqAvailable())
             throw new IllegalArgumentException(com.specdriven.regression.build.RunnerBuildVariant.mqUnsupportedReason());
