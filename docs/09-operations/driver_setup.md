@@ -1,7 +1,6 @@
 # JDBC Driver Setup
 
-Oracle and DB2 JDBC drivers are not bundled in public release assets. Supply
-approved internal driver jars at runtime.
+Supply an approved Oracle, Db2 or MariaDB JDBC driver at runtime. The runner discovers vendor jars outside the public release assets.
 
 ## Discovery Order
 
@@ -53,6 +52,27 @@ JDBC_CONNECTION='<db2-jdbc-url>' java -jar ../spec-driven-auto-regression-{{VERS
   --profile external_db2 \
   --driver-path ./drivers/db2/jcc.jar
 ```
+
+## MariaDB example
+
+Use a dedicated test schema. Supply `JDBC_CONNECTION` from your runner secret store,
+and a trusted MariaDB Connector/J jar. The first query selects a fresh UUID
+for the run. Seed, query, existence check and cleanup all bind that same key.
+The sample creates the ORDERS table if needed, or can use a compatible existing
+table. Seed, select and cleanup use the same three files listed above.
+Authorize the query file twice, for `db_query` and `db_record_exists`, in addition
+to the seed and cleanup approvals. Also approve `queries/new_mariadb_order_id.sql`
+for `db_query`. All five entries use dialect `mariadb` and
+connection name `JDBC_CONNECTION`.
+
+```bash
+java -jar ../spec-driven-auto-regression-{{VERSION}}.jar run \
+  --suite samples/20-provider-capability-p0/data/jdbc/suite_manifest_mariadb.yaml \
+  --profile external_mariadb --driver-path "$MARIADB_DRIVER_JAR"
+```
+
+The separate `owned-mariadb-readonly.v1` path authorizes its fixed read through
+the reviewed credential carrier. Use the external profile for general JDBC operations.
 
 ## Diagnostics
 

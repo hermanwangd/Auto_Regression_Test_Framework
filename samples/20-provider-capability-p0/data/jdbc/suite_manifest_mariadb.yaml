@@ -1,0 +1,18 @@
+manifest_version: v0.3
+suite_id: JDBC-MariaDB-v0.3
+default_profile: external_mariadb
+
+artifact_roots:
+  fixtures: fixtures/
+  queries: queries/
+
+targets:
+  order_db:
+    provider_contract: jdbc.v0.3
+
+env_profiles:
+  external_mariadb:
+    ref: env_profiles/external_mariadb.yaml
+
+tests:
+  - ref: test_cases/mariadb_order.yaml

@@ -64,6 +64,9 @@ jobs:
       - name: Unit, integration, and packaged CLI verification
         run: scripts/ci/maven-verify-with-diagnostics.sh
 
+      - name: Verify packaged CLI against native MariaDB
+        run: scripts/ci/verify-native-mariadb.sh
+
       - name: Verify portable packaging and Linux process supervision
         run: |
           python3 -B -m unittest discover -s packaging/portable-runner/tests

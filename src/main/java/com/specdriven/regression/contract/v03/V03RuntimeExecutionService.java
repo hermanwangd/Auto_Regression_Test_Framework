@@ -331,11 +331,21 @@ public class V03RuntimeExecutionService {
             try {
                 result = policyGuard == null ? adapter.execute(step, context) : policyGuard.execute(step, context, scope);
             } catch (IllegalArgumentException | IllegalStateException error) {
-                if (policyGuard == null) throw error;
-                result = new V03StepResult(step.id(), "blocked", Map.of(), List.of(), "FRAMEWORK_ERROR",
-                        "Reviewed policy or ownership no longer permits this phase.");
-                policyEvidence.put("status", "blocked");
-                policyEvidence.put("reason", outputRedactor.redactMessage(error.getMessage()));
+                if (policyGuard != null) {
+                    result = new V03StepResult(step.id(), "blocked", Map.of(), List.of(), "FRAMEWORK_ERROR",
+                            "Reviewed policy or ownership no longer permits this phase.");
+                    policyEvidence.put("status", "blocked");
+                    policyEvidence.put("reason", outputRedactor.redactMessage(error.getMessage()));
+                } else if (error instanceof V03ReferenceResolver.UnresolvedStepOutput
+                        && "cleanup".equals(step.phase()) && testTerminal(testStatuses, step.testCaseId())) {
+                    String ref = "diagnostics/cleanup-" + cleanupFailures.size() + ".json";
+                    String reason = "A prior step did not produce the output required by cleanup.";
+                    write(runDir.resolve(ref), toJson(Map.of("status", "blocked", "reason", reason)) + "\n");
+                    result = new V03StepResult(step.id(), "blocked", Map.of(), List.of(ref),
+                            "CLEANUP_FAILED", reason);
+                } else {
+                    throw error;
+                }
             }
             if (policyGuard != null && !result.passed() && "cleanup".equals(step.phase())) {
                 String diagnosticRef = "policy/cleanup-" + cleanupFailures.size() + ".json";

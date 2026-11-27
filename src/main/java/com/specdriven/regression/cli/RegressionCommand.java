@@ -353,13 +353,10 @@ public class RegressionCommand {
     private int doctorDrivers(Path root, Map<String, String> options, PrintStream out) {
         JdbcDriverDiscovery.DiscoveryResult discovery = jdbcDriverDiscovery(root, options);
         JdbcDriverLoader loader = new JdbcDriverLoader();
-        JdbcDriverLoader.LoadResult oracle = discovery.found()
-                ? loader.load("oracle", discovery)
-                : new JdbcDriverLoader.LoadResult(false, "JDBC_DRIVER_NOT_FOUND", "No JDBC driver jars found.", discovery.ownerAction());
-        JdbcDriverLoader.LoadResult db2 = discovery.found()
-                ? loader.load("db2", discovery)
-                : new JdbcDriverLoader.LoadResult(false, "JDBC_DRIVER_NOT_FOUND", "No JDBC driver jars found.", discovery.ownerAction());
-        boolean passed = discovery.found() && (oracle.loaded() || db2.loaded());
+        var oracle = loader.load("oracle", discovery);
+        var db2 = loader.load("db2", discovery);
+        var mariadb = loader.load("mariadb", discovery);
+        boolean passed = oracle.loaded() || db2.loaded() || mariadb.loaded();
         out.println("driver_diagnostics_status: " + (passed ? "passed" : "failed"));
         out.println("driver_source: " + discovery.driverSource());
         out.println("driver_status: " + discovery.driverStatus());
@@ -369,14 +366,18 @@ public class RegressionCommand {
         }
         out.println("oracle_driver_loadable: " + oracle.loaded());
         out.println("db2_driver_loadable: " + db2.loaded());
+        out.println("mariadb_driver_loadable: " + mariadb.loaded());
         if (!oracle.loaded()) {
             out.println("oracle_failure_code: " + oracle.failureCode());
         }
         if (!db2.loaded()) {
             out.println("db2_failure_code: " + db2.failureCode());
         }
-        String ownerAction = firstNonBlank(discovery.ownerAction(), oracle.ownerAction(), db2.ownerAction());
-        if (!ownerAction.isBlank()) {
+        if (!mariadb.loaded()) {
+            out.println("mariadb_failure_code: " + mariadb.failureCode());
+        }
+        String ownerAction = firstNonBlank(discovery.ownerAction(), oracle.ownerAction(), db2.ownerAction(), mariadb.ownerAction());
+        if (!passed && !ownerAction.isBlank()) {
             out.println("owner_action: " + ownerAction);
         }
         return passed ? 0 : 1;

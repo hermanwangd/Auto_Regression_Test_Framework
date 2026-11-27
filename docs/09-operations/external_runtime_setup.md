@@ -22,6 +22,15 @@ external systems for these samples.
 - Evidence: JDBC query, seed, cleanup, result JSON, and evidence index.
 - Common failures: `JDBC_SQL_NOT_APPROVED`, `JDBC_DRIVER_NOT_FOUND`, `DB_CONNECTION_FAILED`.
 
+## JDBC MariaDB
+
+Use the native `external_mariadb` profile with `suite_manifest_mariadb.yaml` under
+`samples/20-provider-capability-p0/data/jdbc/`. Configure Connector/J,
+`JDBC_CONNECTION`, and the five operation-specific
+SQL approvals. To exercise this sample during release verification, set
+`REQUIRE_EXTERNAL_JDBC=true` and `JDBC_EXTERNAL_DIALECT=mariadb`.
+See [driver setup](driver_setup.md#mariadb-example) for the invocation.
+
 ## Kafka
 
 - Dependency: reachable Kafka bootstrap servers.
