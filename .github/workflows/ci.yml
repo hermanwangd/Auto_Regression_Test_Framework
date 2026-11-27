@@ -94,6 +94,8 @@ jobs:
           cp samples/20-provider-capability-p0/ui/playwright/package{,-lock}.json target/playwright-tools/
           npm ci --ignore-scripts --prefix target/playwright-tools
           target/playwright-tools/node_modules/.bin/playwright-core install --with-deps --no-shell chromium
+          UI_CHROMIUM=$(cd target/playwright-tools && node -p "require('playwright-core').chromium.executablePath()")
+          export UI_CHROMIUM
           scripts/ci/verify-playwright-flow.sh
 
       - name: Retain Playwright results and failure trace

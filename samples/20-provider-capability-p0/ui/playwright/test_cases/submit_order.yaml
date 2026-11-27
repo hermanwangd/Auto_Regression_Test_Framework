@@ -7,7 +7,7 @@
     "target": "browser",
     "op": "run_command",
     "with": {
-      "process.argv": ["--max-old-space-size=192", "/absolute/path/to/order-flow.cjs", "/absolute/path/to/playwright-core", "/absolute/path/to/chromium", "http://127.0.0.1:8080/", "Order UI-1042 confirmed"],
+      "process.argv": ["--max-old-space-size=192", "/absolute/path/to/order-flow.cjs", "/absolute/path/to/playwright-core", "/absolute/path/to/chromium", "http://127.0.0.1:8080/", "Order UI-1042 confirmed", "/absolute/path/to/browser-artifacts"],
       "process.timeout_ms": 10000,
       "process.max_output_bytes": 8192
     }

@@ -1,13 +1,16 @@
 // Run one real Chromium interaction in the CLI provider's private working directory.
-const [library, browserExecutable, url, expected] = process.argv.slice(2);
+const [library, browserExecutable, url, expected, artifacts] = process.argv.slice(2);
 const { chromium } = require(library);
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 
-async function submitOrder() {
+async function submitOrder(home) {
   const browser = await chromium.launch({
     executablePath: browserExecutable,
     timeout: 3500,
-    env: { ...process.env, HOME: process.cwd() },
+    env: { ...process.env, HOME: home },
   });
   try {
     const context = await browser.newContext();
@@ -30,7 +33,9 @@ async function submitOrder() {
       await context.tracing.stop();
       process.stdout.write(confirmation + ' after reload\n');
     } catch (error) {
-      await context.tracing.stop({ path: 'failure-trace.zip' });
+      const traceDir = path.join(artifacts, path.basename(process.cwd()));
+      await fs.mkdir(traceDir, { mode: 0o700 });
+      await context.tracing.stop({ path: path.join(traceDir, 'failure-trace.zip') });
       throw error;
     }
   } finally {
@@ -38,7 +43,16 @@ async function submitOrder() {
   }
 }
 
-submitOrder().catch(error => {
+async function run() {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'order-ui-'));
+  try {
+    await submitOrder(home);
+  } finally {
+    await fs.rm(home, { recursive: true, force: true });
+  }
+}
+
+run().catch(error => {
   // Stable, bounded diagnostics. Detailed DOM and network observations stay in the trace.
   if (error instanceof assert.AssertionError) {
     process.stderr.write('Browser assertion failed: ' + error.message.split('\n')[0] + '\n');

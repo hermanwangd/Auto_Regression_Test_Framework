@@ -11,8 +11,8 @@ tools=$(realpath "$tools")
 : "${UI_NODE:?Set UI_NODE to the runner-provisioned standalone Node executable}"
 : "${UI_NODE_SHA256:?Set UI_NODE_SHA256 to its reviewed SHA-256 digest}"
 node_path=$(realpath "$UI_NODE")
-browser_args=()
-if [[ -n ${UI_CHROMIUM:-} ]]; then browser_args+=(--chromium "$(realpath "$UI_CHROMIUM")"); fi
+: "${UI_CHROMIUM:?Set UI_CHROMIUM to the provisioned Chromium executable}"
+browser=$(realpath "$UI_CHROMIUM")
 test -s "$jar"
 mkdir -p "$root/target/playwright-runs"
 work=$(mktemp -d "$root/target/playwright-runs/check.XXXXXXXX")
@@ -33,7 +33,7 @@ cli() { java -Xmx384m -jar "$jar" "$@"; }
 run_case() {
   local name=$1 expected_text=$2 expected_exit=$3 actual_exit=0 result run_dir evidence
   python3 "$sample/configure.py" --node "$node_path" --node-sha256 "$UI_NODE_SHA256" \
-    --tools "$tools" ${browser_args[@]+"${browser_args[@]}"} --url "$url" --out "$name" \
+    --tools "$tools" --chromium "$browser" --url "$url" --out "$name" \
     --expected-after-reload "$expected_text"
   local suite="$name/suite_manifest.yaml"
   cli validate --suite "$suite" --profile local_browser
@@ -54,7 +54,9 @@ run_case() {
     .operation_status == "passed" and .cleanup_status == "complete" and
     .launched == true and .executable_sha256 == $hash' "$evidence" >/dev/null
   local trace
-  trace="$(jq -er '.cwd' "$evidence")/failure-trace.zip"
+  local cwd
+  cwd=$(jq -er '.cwd' "$evidence")
+  trace="$work/$name/browser-artifacts/$(basename "$cwd")/failure-trace.zip"
   if [[ $name == positive ]]; then
     jq -e '.status == "passed" and any(.step_results[]; .id == "submit_order" and
       .outputs.exit_code == 0 and .outputs.stdout == "Order UI-1042 confirmed after reload\n")' "$result" >/dev/null

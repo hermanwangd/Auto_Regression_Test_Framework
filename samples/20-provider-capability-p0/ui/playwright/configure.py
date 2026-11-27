@@ -4,7 +4,6 @@ import hashlib
 import json
 import re
 import shutil
-import subprocess
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -24,7 +23,7 @@ def main():
     parser.add_argument("--node", type=Path, required=True)
     parser.add_argument("--node-sha256", required=True)
     parser.add_argument("--tools", type=Path, required=True, help="npm installation prefix")
-    parser.add_argument("--chromium", type=Path, help="override the Playwright Chromium binary")
+    parser.add_argument("--chromium", type=Path, required=True, help="provisioned Chromium binary")
     parser.add_argument("--url", required=True)
     parser.add_argument("--expected-after-reload", default="Order UI-1042 confirmed")
     parser.add_argument("--out", type=Path, required=True)
@@ -41,14 +40,7 @@ def main():
     version = load(SOURCE / "package.json")["dependencies"]["playwright-core"]
     if load(library / "package.json")["version"] != version:
         parser.error("Installed Playwright version differs from the sample pin")
-    browser = args.chromium
-    if browser is None:
-        probe = subprocess.check_output([
-            str(node), "-e", "process.stdout.write(require(process.argv[1]).chromium.executablePath())",
-            str(library),
-        ], text=True)
-        browser = Path(probe)
-    browser = browser.resolve(strict=True)
+    browser = args.chromium.resolve(strict=True)
     url = urlsplit(args.url)
     if url.scheme not in ("http", "https") or not url.hostname or url.username or url.password:
         parser.error("--url must be an HTTP(S) page without credentials")
@@ -60,11 +52,12 @@ def main():
     test = load(SOURCE / "test_cases/submit_order.yaml")
     test["execute"][0]["with"]["process.argv"][1:] = [
         str(SOURCE / "order-flow.cjs"), str(library), str(browser),
-        args.url, args.expected_after_reload,
+        args.url, args.expected_after_reload, str((args.out / "browser-artifacts").resolve()),
     ]
     args.out.mkdir(parents=True, exist_ok=False)
     (args.out / "env_profiles").mkdir()
     (args.out / "test_cases").mkdir()
+    (args.out / "browser-artifacts").mkdir(mode=0o700)
     shutil.copyfile(SOURCE / "suite_manifest.yaml", args.out / "suite_manifest.yaml")
     write(args.out / "env_profiles/local_browser.yaml", profile)
     write(args.out / "test_cases/submit_order.yaml", test)
