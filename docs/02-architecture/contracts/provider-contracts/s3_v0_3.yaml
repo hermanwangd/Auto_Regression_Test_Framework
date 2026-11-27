@@ -73,7 +73,7 @@ operations:
       content_length: {value_type: number}
     allowed_inputs: [name, application_export]
     required_inputs: [name]
-    output_refs: [exists, content_length, object_key]
+    output_refs: [object_key, exists, content_length]
   s3_verify_object:
     phases: [execute, verify]
     inputs:
@@ -86,7 +86,7 @@ operations:
       sha256: {value_type: string}
     allowed_inputs: [name, expected_sha256, application_export]
     required_inputs: [name, expected_sha256]
-    output_refs: [content_length, sha256, object_key]
+    output_refs: [object_key, content_length, sha256]
   s3_delete_object:
     phases: [cleanup]
     inputs:

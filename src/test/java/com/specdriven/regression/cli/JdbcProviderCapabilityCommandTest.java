@@ -241,7 +241,7 @@ class JdbcProviderCapabilityCommandTest {
     }
 
     @Test
-    void jdbcValidateRejectsMongoProviderTypeInThisPr() throws Exception {
+    void jdbcValidateRejectsJdbcOperationsOnAMongoTarget() throws Exception {
         Path suite = mutableJdbc();
         Path instance = suite.getParent().resolve("provider_instances/oracle_like.yaml");
         Files.writeString(instance, read(instance).replace("provider_type: jdbc", "provider_type: mongodb"));
@@ -250,7 +250,8 @@ class JdbcProviderCapabilityCommandTest {
 
         assertThat(result.exit()).isEqualTo(1);
         assertThat(result.stdout())
-                .contains("reason: unknown_provider_type")
+                .contains("reason: unsupported_operation")
+                .contains("operation: db_query")
                 .contains("provider_type: mongodb");
     }
 
