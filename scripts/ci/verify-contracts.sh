@@ -37,14 +37,16 @@ run_cli report --result samples/40-evidence-reporting/evidence_hardening/valid_r
   cp -R "$ROOT_DIR/samples/20-provider-capability-p0/data/jdbc" "$scratch/jdbc"
   cd "$scratch"
   unset REGRESS_JDBC_APPROVED_SQL_SHA256
-  for profile in external_oracle external_db2; do
+  for profile in external_oracle external_db2 external_mariadb; do
+    suite=jdbc/suite_manifest.yaml
     # No address or credentials are needed to verify denial before driver loading.
     case "$profile" in
       external_oracle) export JDBC_CONNECTION='jdbc:oracle:' ;;
       external_db2) export JDBC_CONNECTION='jdbc:db2:' ;;
+      external_mariadb) export JDBC_CONNECTION='jdbc:mariadb:'; suite=jdbc/suite_manifest_mariadb.yaml ;;
     esac
     status=0
-    run_cli run --suite jdbc/suite_manifest.yaml --profile "$profile" > "$profile.log" || status=$?
+    run_cli run --suite "$suite" --profile "$profile" > "$profile.log" || status=$?
     if [[ $status != 1 ]] || ! grep -Fxq 'failure_code: JDBC_SQL_NOT_APPROVED' "$profile.log"; then
       cat "$profile.log" >&2
       exit 1

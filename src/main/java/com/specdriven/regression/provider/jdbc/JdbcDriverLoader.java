@@ -21,7 +21,7 @@ public class JdbcDriverLoader {
             return LoadResult.failed(
                     "UNSUPPORTED_DIALECT",
                     "Unsupported JDBC dialect `" + dialect + "`.",
-                    "Use JDBC dialect `oracle` or `db2`.");
+                    "Use JDBC dialect `oracle`, `db2` or `mariadb`.");
         }
         if (discovery == null || !discovery.found() || discovery.driverPaths().isEmpty()) {
             return LoadResult.failed(
@@ -47,6 +47,7 @@ public class JdbcDriverLoader {
             try {
                 // Check the JDBC type before running any static initializer from a configured driver jar.
                 Class<?> driverClass = switch (driverClassName) {
+                    case "org.mariadb.jdbc.Driver" -> Class.forName("org.mariadb.jdbc.Driver", false, classLoader);
                     case "oracle.jdbc.OracleDriver" -> Class.forName("oracle.jdbc.OracleDriver", false, classLoader);
                     case "com.ibm.db2.jcc.DB2Driver" -> Class.forName("com.ibm.db2.jcc.DB2Driver", false, classLoader);
                     default -> throw new IllegalArgumentException("Unsupported JDBC driver.");
@@ -73,6 +74,7 @@ public class JdbcDriverLoader {
     public String driverClassName(String dialect) {
         return switch (dialect == null ? "" : dialect.toLowerCase(Locale.ROOT)) {
             case "oracle" -> "oracle.jdbc.OracleDriver";
+            case "mariadb" -> "org.mariadb.jdbc.Driver";
             case "db2" -> "com.ibm.db2.jcc.DB2Driver";
             default -> "";
         };

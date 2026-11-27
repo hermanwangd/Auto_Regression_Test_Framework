@@ -28,7 +28,7 @@ Server or dependency lifecycle words such as native, mock, ephemeral, framework-
 | `grpc_mock` | `supported` | not_applicable | `samples/20-provider-capability-p0/rpc/grpc_mock/` | WireMock gRPC extension, unary only. |
 | `http_mock` | `supported` | not_applicable | `samples/20-provider-capability-p0/http/rest_client_with_wiremock/` | v0.3 protocol-level HTTP mock runtime backed by WireMock internals. |
 | `ibm_mq` | `supported` | caller_verified | `samples/20-provider-capability-p0/messaging/ibm_mq/` | Local mock/client sample is release-verifiable. Native external execution runs only when queue-manager bindings are configured; the framework does not start IBM MQ. |
-| `jdbc` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/data/jdbc/` | JDBC fixture/query/cleanup with local H2 Oracle-compatible mode plus external `env://JDBC_CONNECTION` profiles. |
+| `jdbc` | `supported` | caller_acceptance_required | `samples/20-provider-capability-p0/data/jdbc/` | JDBC fixture/query/cleanup with local H2 Oracle-compatible mode plus external Oracle, Db2 and MariaDB profiles using `env://JDBC_CONNECTION`. The native MariaDB sample exercises all four JDBC operations. The owned read-only MariaDB profile has separate admission rules. |
 | `kafka` | `supported` | caller_verified | `samples/20-provider-capability-p0/messaging/kafka/` | Local mock/client sample is release-verifiable. Native external execution runs only when broker bindings are configured; the framework does not start Kafka. |
 | `kafka_messaging` | `deprecated` | n/a | Compatibility alias only; use `kafka` for new artifacts. |
 | `kubernetes_runtime` | `contract_only` | n/a | Contract vocabulary is documented; no release-verifiable runtime sample is published in v0.3.0. |

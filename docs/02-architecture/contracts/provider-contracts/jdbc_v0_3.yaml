@@ -5,7 +5,8 @@ provider_type: jdbc
 provider_role: data_store
 protocol: jdbc
 purpose: Relational database provider contract for DSL v0.3 JDBC seed, query, observation,
-  and cleanup. MariaDB is restricted to reviewed owned-mariadb-readonly.v1 db_query; general MariaDB and its writes remain unsupported.
+  and cleanup. External native MariaDB supports all four operations with runner-approved SQL.
+  The owned-mariadb-readonly.v1 profile permits only its reviewed db_query.
 runtime_modes:
 - native
 - ephemeral

@@ -136,7 +136,7 @@ public final class V03ReferenceResolver {
         try {
             return outputResolver.resolveProducedPath(outputs, outputPath).output();
         } catch (IllegalArgumentException error) {
-            throw invalid("unresolved_step_ref", "step `" + stepId
+            throw new UnresolvedStepOutput("step `" + stepId
                     + "` did not produce declared output `" + outputPath + "`.");
         }
     }
@@ -147,7 +147,7 @@ public final class V03ReferenceResolver {
         String suffix = outputPath.substring(output.outputName().length() + 1);
         for (String part : suffix.split("\\.")) {
             if (!(current instanceof Map<?, ?> map) || !map.containsKey(part)) {
-                throw invalid("unresolved_step_ref", "output path `" + outputPath + "` did not resolve.");
+                throw new UnresolvedStepOutput("output path `" + outputPath + "` did not resolve.");
             }
             current = map.get(part);
         }
@@ -203,6 +203,12 @@ public final class V03ReferenceResolver {
 
     private String scopedStepKey(String testCaseId, String stepId) {
         return testCaseId + "\n" + stepId;
+    }
+
+    public static final class UnresolvedStepOutput extends IllegalArgumentException {
+        private UnresolvedStepOutput(String detail) {
+            super("unresolved_step_ref: " + detail);
+        }
     }
 
     private IllegalArgumentException invalid(String code, String detail) {

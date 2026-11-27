@@ -49,14 +49,14 @@ public final class JdbcProviderRuntime implements ProviderRuntime {
 
     // H2 keeps each run-scoped in-memory database across provider phases in this JVM.
     private static final String LOCAL_PASSWORD = java.util.UUID.randomUUID().toString();
-    private static final Set<String> SUPPORTED_DIALECTS = Set.of("oracle", "db2");
+    private static final Set<String> SUPPORTED_DIALECTS = Set.of("oracle", "db2", "mariadb");
     private static final Pattern MEMORY_URL = Pattern.compile(
             "jdbc:h2:mem:[a-zA-Z0-9._-]+(?:;(?:MODE=(?:Oracle|DB2)|DB_CLOSE_DELAY=-1|DATABASE_TO_UPPER=true|USER=sa))*",
             Pattern.CASE_INSENSITIVE);
     private static final String SQL_APPROVALS = "REGRESS_JDBC_APPROVED_SQL_SHA256";
     private static final Pattern GENERATED_REF = Pattern.compile("generated://provider-capability/", Pattern.CASE_INSENSITIVE);
     private static final Pattern APPROVAL_ENTRY = Pattern.compile(
-            "(oracle|db2):[A-Z_][A-Z0-9_]*:(db_seed|db_cleanup|db_query|db_record_exists):[0-9a-f]{64}");
+            "(oracle|db2|mariadb):[A-Z_][A-Z0-9_]*:(db_seed|db_cleanup|db_query|db_record_exists):[0-9a-f]{64}");
 
     private final Yaml yaml = ProviderDataYaml.create();
     private final V03OutputRedactor redactor = new V03OutputRedactor();
@@ -101,8 +101,8 @@ public final class JdbcProviderRuntime implements ProviderRuntime {
                     Map.of(),
                     "UNSUPPORTED_DIALECT",
                     "TARGET_RESOLUTION_FAILED",
-                    "JDBC dialect `" + dialect + "` is not supported by PR-004.",
-                    "Use JDBC dialect `oracle` or `db2`.");
+                    "JDBC dialect `" + dialect + "` is not supported.",
+                    "Use JDBC dialect `oracle`, `db2` or `mariadb`.");
         }
         try {
             SecretConnection connection = resolveConnection(context, dialect);
@@ -137,7 +137,14 @@ public final class JdbcProviderRuntime implements ProviderRuntime {
         }
     }
 
-    /** Separate protected branch; generic Oracle/DB2 dialect and env resolution are unchanged. */
+    public ProviderOperationResult unresolvedCleanup(ProviderExecutionContext context, String stepId) {
+        var request = new ProviderOperationRequest("db_cleanup", List.of(), Map.of("_operation_id", stepId));
+        return failed(context, request, Map.of(), "DB_CLEANUP_FAILED", "DB_CLEANUP_FAILED",
+                "A prior step did not produce the output required by JDBC cleanup.",
+                "Review the failed setup step and verify whether any fixture rows were created.");
+    }
+
+    /** Execute the fixed read through the protected credential carrier. */
     public ProviderOperationResult executeReviewedQuery(ProviderExecutionContext context,ProviderOperationRequest request,ReviewedJdbcInvocation invocation) {
         return ReviewedJdbcExecution.protectedChild().execute(context,request,invocation);
     }
@@ -264,9 +271,10 @@ public final class JdbcProviderRuntime implements ProviderRuntime {
             Map<String, Object> outputs = new LinkedHashMap<>();
             if (recordExists) {
                 outputs.put("matched", matched);
+            } else {
+                outputs.put("sample_rows", sampleRows.stream().map(row -> maskFields(row, false)).toList());
             }
             outputs.put("row_count", rowCount);
-            outputs.put("sample_rows", sampleRows.stream().map(row -> maskFields(row, false)).toList());
             outputs.put("duration_ms", durationMs);
             outputs.put("query_evidence_ref", evidenceRef);
             if (matched) {
@@ -334,6 +342,13 @@ public final class JdbcProviderRuntime implements ProviderRuntime {
 
     private SecretConnection resolveConnection(ProviderExecutionContext context, String dialect) {
         String localRef = stringValue(valueAtPath(context.bindingValues(), "connection.local_ref"));
+        boolean mariaDb = "mariadb".equals(dialect);
+        if (mariaDb && (!"native".equals(context.runtimeMode()) || !localRef.isBlank()
+                || ReviewedOwnedMariaDbPolicy.PROFILE.equals(context.bindingValues().get("profile")))) {
+            return SecretConnection.failed(ProviderFailure.of("SECRET_RESOLUTION_ERROR", "SECRET_RESOLUTION_ERROR",
+                    "External MariaDB requires native execution with an environment connection reference.",
+                    "Use the external_mariadb profile and an env:// connection.secret_ref."));
+        }
         if (!localRef.isBlank()) {
             if (!approvedLocalRef(localRef, dialect)) {
                 return SecretConnection.failed(ProviderFailure.of(
@@ -352,7 +367,7 @@ public final class JdbcProviderRuntime implements ProviderRuntime {
                     "JDBC connection.secret_ref or connection.local_ref is missing.",
                     "Supply connection.secret_ref or an approved connection.local_ref in Environment Binding."));
         }
-        if (GENERATED_REF.matcher(secretRef).lookingAt()) {
+        if (!mariaDb && GENERATED_REF.matcher(secretRef).lookingAt()) {
             return localH2Connection(context, dialect);
         }
         ResolvedSecret resolvedSecret = SecretRefResolver.resolveEnvSecretRef(
@@ -364,12 +379,12 @@ public final class JdbcProviderRuntime implements ProviderRuntime {
             return SecretConnection.failed(resolvedSecret.failure());
         }
         String jdbcUrl = resolvedSecret.value();
-        if (MEMORY_URL.matcher(jdbcUrl).matches()) return new SecretConnection(jdbcUrl, "", "", "", "", null);
-        String prefix = dialect.equals("db2") ? "jdbc:db2:" : "jdbc:oracle:";
+        if (!mariaDb && MEMORY_URL.matcher(jdbcUrl).matches()) return new SecretConnection(jdbcUrl, "", "", "", "", null);
+        String prefix = "jdbc:" + dialect + ":";
         if (!jdbcUrl.startsWith(prefix)) {
             return SecretConnection.failed(ProviderFailure.of("DB_CONNECTION_FAILED", "CONFIGURATION_ERROR",
                     "JDBC driver could not open the configured connection.",
-                    "Use the JDBC URL of the selected dialect or a supported in-memory H2 profile."));
+                    "Supply the native JDBC URL of the selected dialect."));
         }
         return new SecretConnection(jdbcUrl, "", "", dialect, secretRef.substring("env://".length()), null);
     }

@@ -122,11 +122,11 @@ Mock or sample-only framework evidence must not be treated as downstream
 SIT/preprod release evidence. See \`docs/09-operations/provider_support_matrix.md\`.
 EOF_README
 
-mkdir -p "${KIT_ROOT}/drivers/oracle" "${KIT_ROOT}/drivers/db2"
+mkdir -p "${KIT_ROOT}/drivers/oracle" "${KIT_ROOT}/drivers/db2" "${KIT_ROOT}/drivers/mariadb"
 cat > "${KIT_ROOT}/drivers/README.md" <<EOF_DRIVERS
 # JDBC Driver Directory
 
-Oracle and DB2 vendor JDBC drivers are not bundled with this release.
+Supply approved Oracle, Db2 or MariaDB JDBC driver jars separately.
 
 Place approved internal driver jars here when running external JDBC suites from
 the usage kit, or pass them explicitly with \`--driver-path\`, \`--driver-dir\`,
@@ -136,6 +136,7 @@ Expected examples:
 
 - \`drivers/oracle/ojdbc11.jar\`
 - \`drivers/db2/jcc.jar\`
+- \`drivers/mariadb/mariadb-java-client.jar\`
 EOF_DRIVERS
 
 cat > "${KIT_ROOT}/drivers/oracle/put-ojdbc-here.txt" <<EOF_ORACLE
@@ -147,6 +148,8 @@ cat > "${KIT_ROOT}/drivers/db2/put-db2-jcc-here.txt" <<EOF_DB2
 Place the approved IBM DB2 JDBC driver jar here, for example jcc.jar.
 Do not commit or redistribute vendor driver binaries in this public repository.
 EOF_DB2
+
+printf '%s\n' 'Place the approved MariaDB Connector/J jar here.' > "${KIT_ROOT}/drivers/mariadb/put-connector-j-here.txt"
 
 cat > "${KIT_ROOT}/usage-kit-manifest.yaml" <<EOF_MANIFEST
 artifact: spec-driven-auto-regression-usage-kit

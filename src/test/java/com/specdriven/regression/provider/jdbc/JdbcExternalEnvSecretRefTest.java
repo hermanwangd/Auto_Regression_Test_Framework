@@ -21,6 +21,39 @@ class JdbcExternalEnvSecretRefTest {
     private static final String DIGEST = "a0a22c9dfa428cdce6fb3e58a40d4052335e17e5fbe42efc2f17f9ca813be62c";
     private static final String ORACLE_APPROVAL = "oracle:JDBC_CONNECTION:db_query:" + DIGEST;
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+            "ephemeral,env://JDBC_CONNECTION,none,none,native,SECRET_RESOLUTION_ERROR",
+            "native,env://JDBC_CONNECTION,approved_local_h2_oracle,none,native,SECRET_RESOLUTION_ERROR",
+            "native,generated://provider-capability/db,none,none,native,UNSUPPORTED_SECRET_REF_SCHEME",
+            "native,memory://owned-mariadb,none,none,native,UNSUPPORTED_SECRET_REF_SCHEME",
+            "native,env://JDBC_CONNECTION,none,owned-mariadb-readonly.v1,native,SECRET_RESOLUTION_ERROR",
+            "native,env://JDBC_CONNECTION,none,none,h2,DB_CONNECTION_FAILED",
+            "native,env://JDBC_CONNECTION,none,none,db2,DB_CONNECTION_FAILED"
+    })
+    void generalMariaDbAcceptsOnlyNativeExternalConnections(String mode, String ref, String localRef,
+            String bindingProfile, String urlKind, String code) throws Exception {
+        Path suite = approvedQuery().getParent().getParent();
+        var connection = new java.util.HashMap<String, Object>();
+        connection.put("secret_ref", ref);
+        if (!"none".equals(localRef)) connection.put("local_ref", localRef);
+        var bindings = new java.util.HashMap<String, Object>();
+        bindings.put("dialect", "mariadb");
+        bindings.put("connection", connection);
+        if (!"none".equals(bindingProfile)) bindings.put("profile", bindingProfile);
+        String url = switch (urlKind) {
+            case "h2" -> "jdbc:h2:mem:fixture";
+            case "db2" -> "jdbc:db2:";
+            default -> "jdbc:mariadb:";
+        };
+        var runtime = new JdbcProviderRuntime(Map.of("JDBC_CONNECTION", url)::get);
+        var context = new ProviderExecutionContext("db", "jdbc", "external_mariadb", mode, suite,
+                tempDir.resolve("run"), Map.of(), Map.of(), bindings);
+        var request = new ProviderOperationRequest("db_query",
+                List.of(Map.of("bind_as", "query_ref", "ref", "queries/order_exists.sql")), Map.of());
+        assertThat(runtime.execute(context, request).failure().code()).isEqualTo(code);
+    }
+
     private Path approvedQuery() throws Exception {
         Path sql = tempDir.resolve("suite/queries/order_exists.sql");
         Files.createDirectories(sql.getParent());
@@ -28,7 +61,7 @@ class JdbcExternalEnvSecretRefTest {
     }
 
     @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(strings = {"oracle", "db2"})
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"oracle", "db2", "mariadb"})
     void onlyRunnerApprovalForTheExactFileBindingAndOperationReachesTheDriver(String dialect) throws Exception {
         Path sql = approvedQuery();
         String approval = dialect + ":JDBC_CONNECTION:db_query:" + DIGEST;
@@ -70,7 +103,7 @@ class JdbcExternalEnvSecretRefTest {
     }
 
     @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(strings = {"oracle", "db2"})
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"oracle", "db2", "mariadb"})
     void executesOnlyTheApprovedSnapshotEvenIfTheFileChangesBeforeConnection(String dialect) throws Exception {
         Path file = approvedQuery();
         Files.writeString(file, "SELECT 1 AS OBSERVED\n");

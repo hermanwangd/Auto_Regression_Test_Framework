@@ -1,0 +1,49 @@
+dsl_version: v0.3
+test_case_id: MARIADB-V03-TC-001
+title: Seed, query, verify and clean up one MariaDB order
+
+setup:
+  - id: new_order_id
+    target: order_db
+    op: db_query
+    with:
+      query_ref: artifact://queries/new_mariadb_order_id.sql
+  - id: seed_order
+    target: order_db
+    op: db_seed
+    with:
+      sql_ref: artifact://fixtures/seed_order.sql
+      params.order_id: step://new_order_id/sample_rows#/0/ORDER_ID
+      params.status: CREATED
+
+execute:
+  - id: query_order
+    target: order_db
+    op: db_query
+    with:
+      query_ref: artifact://queries/find_order_by_id.sql
+      params.order_id: step://new_order_id/sample_rows#/0/ORDER_ID
+
+verify:
+  - id: order_exists
+    type: provider_check
+    target: order_db
+    op: db_record_exists
+    with:
+      query_ref: artifact://queries/find_order_by_id.sql
+      params.order_id: step://new_order_id/sample_rows#/0/ORDER_ID
+      expected.row_count: 1
+  - id: one_order_found
+    type: assertion
+    assert:
+      actual: step://query_order/row_count
+      operator: equals
+      expected: 1
+
+cleanup:
+  - id: cleanup_order
+    target: order_db
+    op: db_cleanup
+    with:
+      sql_ref: artifact://fixtures/cleanup_order.sql
+      params.order_id: step://new_order_id/sample_rows#/0/ORDER_ID

@@ -51,6 +51,9 @@ class ReleaseUsageKitVerificationTest {
 
     @ParameterizedTest
     @CsvSource({
+            "true,  complete,        jdbc:mariadb:fixture, 0, external_jdbc_runtime_verification: passed",
+            "true,  missing_exists,  jdbc:mariadb:fixture, 1, unapproved_external_jdbc_sql: db_record_exists",
+            "true,  missing_id,      jdbc:mariadb:fixture, 1, unapproved_external_jdbc_sql: db_query",
             "true,  missing,         jdbc:db2:fixture, 1, missing_external_jdbc_env: REGRESS_JDBC_APPROVED_SQL_SHA256",
             "true,  complete,        jdbc:db2:fixture, 0, external_jdbc_runtime_verification: passed",
             "true,  stale_seed,      jdbc:db2:fixture, 1, unapproved_external_jdbc_sql: db_seed",
@@ -63,8 +66,10 @@ class ReleaseUsageKitVerificationTest {
     })
     void releaseGateScopesIndependentSqlApprovalsToTheNativeSample(boolean required, String approvalCase,
             String connection, int expectedExit, String expectedStatus, @TempDir Path root) throws Exception {
+        String dialect = connection.startsWith("jdbc:mariadb:") ? "mariadb" : "db2";
         Path suiteRoot = Path.of("samples/20-provider-capability-p0/data/jdbc");
-        for (String ref : List.of("fixtures/seed_order.sql", "queries/find_order_by_id.sql", "fixtures/cleanup_order.sql")) {
+        for (String ref : List.of("fixtures/seed_order.sql", "queries/find_order_by_id.sql", "fixtures/cleanup_order.sql",
+                "queries/new_mariadb_order_id.sql")) {
             Path sql = suiteRoot.resolve(ref);
             Files.createDirectories(root.resolve(sql).getParent());
             Files.copy(sql, root.resolve(sql));
@@ -89,7 +94,7 @@ class ReleaseUsageKitVerificationTest {
                 shift 3
                 if [[ "$1" == run ]]; then
                   echo "$*" >> runs.log
-                  if [[ "${*: -1}" == external_db2 ]]; then
+                  if [[ "${*: -1}" == "external_${JDBC_EXTERNAL_DIALECT}" ]]; then
                     [[ "${REGRESS_JDBC_APPROVED_SQL_SHA256:-}" == "$EXPECTED_APPROVALS" ]]
                   else
                     [[ -z "${REGRESS_JDBC_APPROVED_SQL_SHA256:-}" ]]
@@ -107,15 +112,19 @@ class ReleaseUsageKitVerificationTest {
         env.clear();
         env.put("PATH", bin + ":" + systemPath);
         env.put("REQUIRE_EXTERNAL_JDBC", Boolean.toString(required));
-        env.put("JDBC_EXTERNAL_DIALECT", "db2");
+        env.put("JDBC_EXTERNAL_DIALECT", dialect);
         env.put("JDBC_CONNECTION", connection);
         // Fixed test approvals for the checked-in SQL bytes, independent of the files copied above.
-        String seed = "db2:JDBC_CONNECTION:db_seed:281788f4939f4845e302f3500db53c813b5da97682397d7fb0755bb61edfc37c";
-        String query = "db2:JDBC_CONNECTION:db_query:8732f08dcf92d1b1d1ea3908622ab1fa3243633ca549c1ae1dbe640b11f5a5c9";
-        String cleanup = "db2:JDBC_CONNECTION:db_cleanup:77f943082ad8e1044bcd20d270749d0ac4d5a67cac02a00ce4fd30326dec6419";
+        String seed = dialect + ":JDBC_CONNECTION:db_seed:281788f4939f4845e302f3500db53c813b5da97682397d7fb0755bb61edfc37c";
+        String query = dialect + ":JDBC_CONNECTION:db_query:8732f08dcf92d1b1d1ea3908622ab1fa3243633ca549c1ae1dbe640b11f5a5c9";
+        String cleanup = dialect + ":JDBC_CONNECTION:db_cleanup:77f943082ad8e1044bcd20d270749d0ac4d5a67cac02a00ce4fd30326dec6419";
         String complete = String.join(",", seed, query, cleanup);
+        String exists = query.replace(":db_query:", ":db_record_exists:");
+        String identity = dialect + ":JDBC_CONNECTION:db_query:b8c1bc2e41c8ef576eaa6be3977ea34b4906e15ade51e0a96c00de684a5131b1";
         String approvals = switch (approvalCase) {
-            case "complete" -> complete;
+            case "complete" -> dialect.equals("mariadb") ? String.join(",", complete, exists, identity) : complete;
+            case "missing_exists" -> String.join(",", complete, identity);
+            case "missing_id" -> String.join(",", complete, exists);
             case "missing" -> "";
             case "missing_cleanup" -> String.join(",", seed, query);
             case "stale_seed" -> String.join(",", "db2:JDBC_CONNECTION:db_seed:" + "0".repeat(64), query, cleanup);
@@ -124,7 +133,7 @@ class ReleaseUsageKitVerificationTest {
             case "malformed" -> complete + ",invalid";
             default -> throw new AssertionError(approvalCase);
         };
-        env.put("EXPECTED_APPROVALS", complete);
+        env.put("EXPECTED_APPROVALS", approvals);
         if (!approvals.isEmpty()) env.put("REGRESS_JDBC_APPROVED_SQL_SHA256", approvals);
         Process process = gate.start();
         try {
@@ -134,7 +143,7 @@ class ReleaseUsageKitVerificationTest {
             assertThat(output).contains(expectedStatus).doesNotContain(seed, query, cleanup, connection);
             Path runs = root.resolve("runs.log");
             List<String> invocations = Files.exists(runs) ? Files.readAllLines(runs) : List.of();
-            long nativeRuns = invocations.stream().filter(line -> line.endsWith("--profile external_db2")).count();
+            long nativeRuns = invocations.stream().filter(line -> line.endsWith("--profile external_" + dialect)).count();
             assertThat(nativeRuns).isEqualTo(required && expectedExit == 0 ? 1 : 0);
         } finally {
             process.destroyForcibly();
@@ -201,7 +210,7 @@ class ReleaseUsageKitVerificationTest {
                 .contains("drivers/README.md")
                 .contains("drivers/oracle/put-ojdbc-here.txt")
                 .contains("drivers/db2/put-db2-jcc-here.txt")
-                .contains("Oracle and DB2 vendor JDBC drivers are not bundled")
+                .contains("drivers/mariadb/put-connector-j-here.txt")
                 .contains("--driver-path")
                 .contains("--driver-dir")
                 .contains("REGRESS_DRIVER_PATH")

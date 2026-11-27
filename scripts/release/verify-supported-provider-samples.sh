@@ -106,10 +106,14 @@ case "$JDBC_EXTERNAL_DIALECT" in
     jdbc_external_suite="samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml"
     jdbc_external_profile="external_db2"
     ;;
+  mariadb)
+    jdbc_external_suite="samples/20-provider-capability-p0/data/jdbc/suite_manifest_mariadb.yaml"
+    jdbc_external_profile="external_mariadb"
+    ;;
   *)
     echo "external_jdbc_runtime_verification: blocked" >&2
     echo "invalid_external_jdbc_dialect: ${JDBC_EXTERNAL_DIALECT}" >&2
-    echo "owner_action: Set JDBC_EXTERNAL_DIALECT to oracle or db2." >&2
+    echo "owner_action: Set JDBC_EXTERNAL_DIALECT to oracle, db2 or mariadb." >&2
     exit 1
     ;;
 esac
@@ -161,6 +165,7 @@ validate_external_profile samples/20-provider-capability-p0/messaging/ibm_mq/sui
 validate_external_profile samples/20-provider-capability-p0/messaging/nats/suite_manifest.yaml external_nats
 validate_external_profile samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml external_oracle
 validate_external_profile samples/20-provider-capability-p0/data/jdbc/suite_manifest.yaml external_db2
+validate_external_profile samples/20-provider-capability-p0/data/jdbc/suite_manifest_mariadb.yaml external_mariadb
 validate_external_profile samples/20-provider-capability-p0/http/rest_client_external/suite_manifest.yaml external_native
 validate_external_profile samples/20-provider-capability-p0/rpc/grpc_client_external/suite_manifest.yaml external_native
 
@@ -175,15 +180,19 @@ import sys
 
 dialect, suite_root = sys.argv[1:]
 entries = {entry.strip(" \t\r\n\f\v") for entry in os.environ["REGRESS_JDBC_APPROVED_SQL_SHA256"].split(",")}
-entry_format = re.compile(r"(oracle|db2):[A-Z_][A-Z0-9_]*:(db_seed|db_query|db_record_exists|db_cleanup):[0-9a-f]{64}")
+entry_format = re.compile(r"(oracle|db2|mariadb):[A-Z_][A-Z0-9_]*:(db_seed|db_query|db_record_exists|db_cleanup):[0-9a-f]{64}")
 if not all(entry_format.fullmatch(entry) for entry in entries):
     sys.exit("invalid_external_jdbc_sql_approval_format")
 
-for operation, ref in (
+required = [
     ("db_seed", "fixtures/seed_order.sql"),
     ("db_query", "queries/find_order_by_id.sql"),
     ("db_cleanup", "fixtures/cleanup_order.sql"),
-):
+]
+if dialect == "mariadb":
+    required.extend([("db_query", "queries/new_mariadb_order_id.sql"),
+                     ("db_record_exists", "queries/find_order_by_id.sql")])
+for operation, ref in required:
     try:
         digest = hashlib.sha256()
         with (Path(suite_root) / ref).open("rb") as source:
@@ -196,14 +205,14 @@ for operation, ref in (
 PY_SQL
   then
     echo "external_jdbc_runtime_verification: blocked" >&2
-    echo "owner_action: Verify the independently supplied approvals for all three native sample SQL files." >&2
+    echo "owner_action: Verify the independently supplied approvals for every native sample operation and SQL file." >&2
     exit 1
   fi
   REGRESS_JDBC_APPROVED_SQL_SHA256="$jdbc_sql_approvals" run_suite "$jdbc_external_suite" "$jdbc_external_profile"
   echo "external_jdbc_runtime_verification: passed"
 else
   echo "external_jdbc_runtime_verification: not_configured"
-  echo "owner_action: Configure JDBC_CONNECTION and REGRESS_JDBC_APPROVED_SQL_SHA256, set JDBC_EXTERNAL_DIALECT=oracle|db2, and set REQUIRE_EXTERNAL_JDBC=true when native external JDBC runtime evidence is required."
+  echo "owner_action: Configure JDBC_CONNECTION and REGRESS_JDBC_APPROVED_SQL_SHA256, set JDBC_EXTERNAL_DIALECT=oracle|db2|mariadb, and set REQUIRE_EXTERNAL_JDBC=true when native external JDBC runtime evidence is required."
 fi
 
 external_env_state

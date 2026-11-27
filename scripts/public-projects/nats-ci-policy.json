@@ -74,7 +74,7 @@
     "scripts/public-projects/nats-payload.json": "637e3485302117f4a8039145aefd2a5021620c693b43bf8fff312724620b6fd7",
     "scripts/public-projects/nats.py": "c49dd76a7828e64d90b20c371c47ad5ecb5b41c2b6b52ac3901c57a898064a1a",
     "scripts/public-projects/test_nats.py": "d602aa63d9924b5b92459aa85adbac0a944a6e2b644b386ba5c8179d913d7cf4",
-    "src/main/java/com/specdriven/regression/cli/RegressionCommand.java": "d3c77ecef5e5dfd5a1618f82b5b00e95f76bf21bbe8a2fd9062430d8e8a3fa57",
+    "src/main/java/com/specdriven/regression/cli/RegressionCommand.java": "9b67fe396adcc009b271b6f9c287e2c96641802922b748c8ecb2b3c3aa0dd8d9",
     "src/main/java/com/specdriven/regression/contract/ContractBaselineService.java": "404991523066a2447ba25e721b67a92890d20c4037a92063a4c43e8be7d55b57",
     "src/main/java/com/specdriven/regression/contract/ResultDocumentReader.java": "ce920ae467378054d15782d1945cffa900281d3bb9d0e1370f79372620998e09",
     "src/main/java/com/specdriven/regression/contract/v03/adapter/NatsV03Adapter.java": "9f10f70d3f42db7fc11499930ff42c385e8725de8ef7618735ee14f76e09b05b",

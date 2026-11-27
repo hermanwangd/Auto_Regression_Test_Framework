@@ -57,6 +57,7 @@ class RegressionCommandDoctorCommandTest {
                 .contains("db2_driver_loadable: false")
                 .contains("oracle_failure_code: JDBC_DRIVER_NOT_FOUND")
                 .contains("db2_failure_code: JDBC_DRIVER_NOT_FOUND")
+                .contains("mariadb_failure_code: JDBC_DRIVER_NOT_FOUND")
                 .contains("owner_action: Provide JDBC driver jars");
     }
 
@@ -111,7 +112,9 @@ class RegressionCommandDoctorCommandTest {
                 .contains("  - " + driverJar.toAbsolutePath().normalize())
                 .contains("oracle_driver_loadable: true")
                 .contains("db2_driver_loadable: true")
-                .doesNotContain("failure_code")
+                .contains("mariadb_driver_loadable: false")
+                .contains("mariadb_failure_code: JDBC_DRIVER_INVALID")
+                .doesNotContain("oracle_failure_code", "db2_failure_code")
                 .doesNotContain("owner_action");
     }
 
