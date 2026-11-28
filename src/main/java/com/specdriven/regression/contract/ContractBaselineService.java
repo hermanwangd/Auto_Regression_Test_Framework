@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.specdriven.regression.contract.v03.V03ExecutionPlan;
 import com.specdriven.regression.contract.v03.V03ExecutionPlanBuilder;
 import com.specdriven.regression.contract.v03.assertion.V03AssertionValidator;
+import com.specdriven.regression.contract.v03.ref.V03JsonPointer;
 import com.specdriven.regression.contract.v03.ref.V03ReferenceParser;
 import com.specdriven.regression.report.LegacySuiteSummaryReportAdapter;
 import com.specdriven.regression.summary.SuiteSummaryDocument;
@@ -133,7 +134,6 @@ public class ContractBaselineService {
             Pattern.compile("(?i)\\b[a-z][a-z0-9+.-]*://[^\\s/@:]+:[^\\s/@]+@[^\\s\"']+");
     private static final Pattern WINDOWS_DRIVE_PATH = Pattern.compile("^[A-Za-z]:.*$");
     private static final int MAX_JSON_POINTER_DEPTH = 32;
-    private static final Object MISSING_JSON_POINTER_FRAGMENT = new Object();
 
     private final Yaml yaml = new Yaml();
     private final Path verifiedContractDirectory;
@@ -1072,6 +1072,9 @@ public class ContractBaselineService {
                         "missing_json_pointer_fragment",
                         "Use a JSON Pointer fragment that exists in artifact ref `" + ref + "`.");
             }
+        } catch (V03JsonPointer.InvalidArrayIndex error) {
+            addV03ArtifactFinding(testCasePath, operationRef, inputName, findings, targetResolution,
+                    "invalid_json_pointer", error.getMessage());
         } catch (IOException e) {
             addV03ArtifactFinding(
                     testCasePath,
@@ -1133,54 +1136,18 @@ public class ContractBaselineService {
         if (pointer.isEmpty()) {
             return true;
         }
-        try {
-            Object loaded = yaml.load(Files.readString(artifact));
-            return resolveJsonPointerFragment(loaded, pointer) != MISSING_JSON_POINTER_FRAGMENT;
+        Object loaded;
+        try (var reader = Files.newBufferedReader(artifact)) {
+            loaded = yaml.load(reader);
         } catch (IOException | RuntimeException e) {
             return false;
         }
-    }
-
-    private Object resolveJsonPointerFragment(Object value, String pointer) {
-        Object current = value;
-        String[] segments = pointer.substring(1).split("/", -1);
-        for (String rawSegment : segments) {
-            String segment = rawSegment.replace("~1", "/").replace("~0", "~");
-            if (current instanceof Map<?, ?> map) {
-                if (!map.containsKey(segment)) {
-                    return MISSING_JSON_POINTER_FRAGMENT;
-                }
-                current = map.get(segment);
-            } else if (current instanceof List<?> list) {
-                if (!isArrayIndex(segment)) {
-                    return MISSING_JSON_POINTER_FRAGMENT;
-                }
-                try {
-                    int index = Integer.parseInt(segment);
-                    if (index < 0 || index >= list.size()) {
-                        return MISSING_JSON_POINTER_FRAGMENT;
-                    }
-                    current = list.get(index);
-                } catch (NumberFormatException e) {
-                    return MISSING_JSON_POINTER_FRAGMENT;
-                }
-            } else {
-                return MISSING_JSON_POINTER_FRAGMENT;
-            }
-        }
-        return current;
-    }
-
-    private boolean isArrayIndex(String value) {
-        if (value.isBlank()) {
+        try {
+            V03JsonPointer.resolve(loaded, pointer);
+            return true;
+        } catch (V03JsonPointer.Missing missing) {
             return false;
         }
-        for (int i = 0; i < value.length(); i++) {
-            if (!Character.isDigit(value.charAt(i))) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private boolean invalidV03ArtifactPath(String relativePath) {

@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import org.yaml.snakeyaml.Yaml;
 
 public class V03ExecutionPlanBuilder {
@@ -78,9 +79,12 @@ public class V03ExecutionPlanBuilder {
                 resolvedTargets(suite, profile, envProfile), contracts);
         List<Map<String, Object>> testDocuments = testDocuments(suiteRoot, suite);
         Map<String, Path> artifactRoots = artifactRoots(suiteRoot, suite);
-        testDocuments.forEach(document -> validateReferences(document, artifactRoots));
+        testDocuments.forEach(document -> visitArtifactReferences(document,
+                artifact -> referenceResolver.artifactPath(artifact, artifactRoots)));
         List<V03ExecutionStep> steps = executionSteps(testDocuments, profile, targets);
         for (V03ExecutionStep step : steps) {
+            visitArtifactReferences(step.inputs(), artifact ->
+                    referenceResolver.validateArtifactArrayIndices(artifact, suiteRoot, artifactRoots));
             if (step.kind() == V03ExecutionStepKind.ASSERTION && "schema_match".equals(step.operation())) {
                 V03Reference schema = referenceParser.parse(step.inputs().get("schema_ref"));
                 if (schema instanceof V03Reference.Artifact artifact) {
@@ -127,18 +131,18 @@ public class V03ExecutionPlanBuilder {
                 planDigest(suiteRoot, metadata, environmentProfile, targets, contracts, artifactRoots, compiledTests, dependencies));
     }
 
-    private void validateReferences(Object value, Map<String, Path> artifactRoots) {
+    private void visitArtifactReferences(Object value, Consumer<V03Reference.Artifact> visitor) {
         if (value instanceof Map<?, ?> map) {
-            map.values().forEach(item -> validateReferences(item, artifactRoots));
+            map.values().forEach(item -> visitArtifactReferences(item, visitor));
             return;
         }
         if (value instanceof List<?> list) {
-            list.forEach(item -> validateReferences(item, artifactRoots));
+            list.forEach(item -> visitArtifactReferences(item, visitor));
             return;
         }
         V03Reference reference = referenceParser.parse(value);
         if (reference instanceof V03Reference.Artifact artifact) {
-            referenceResolver.artifactPath(artifact, artifactRoots);
+            visitor.accept(artifact);
         }
     }
 

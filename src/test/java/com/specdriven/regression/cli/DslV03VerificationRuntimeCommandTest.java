@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.specdriven.regression.discovery.ReleasePackageService;
 import com.specdriven.regression.productrepo.ProductRepoService;
 import java.io.ByteArrayOutputStream;
@@ -16,6 +17,9 @@ import java.util.Comparator;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class DslV03VerificationRuntimeCommandTest {
 
@@ -415,6 +419,158 @@ class DslV03VerificationRuntimeCommandTest {
         JsonNode assertions = OBJECT_MAPPER.readTree(extractPath(run.stdout(), "result_json").toFile()).path("verify_results");
         assertThat(assertions).extracting(row -> row.path("status").asText())
                 .containsExactly("passed", "passed", "passed", "passed", "failed");
+    }
+
+    @Test
+    void jsonMatchAcceptsNullAndNestedUnorderedArraysThroughTheCli() throws Exception {
+        Path suite = mutableSuite(COMMON_VERIFY_SUITE.getParent(), "json_match");
+        Files.writeString(suite.getParent().resolve("expected_results/data.json"), """
+                {"nil":null,"nested":[{"values":["1",1,1]},false],"01":"literal"}
+                """);
+        Files.writeString(suite.getParent().resolve("test_cases/common_verify_success.yaml"), """
+                dsl_version: v0.3
+                test_case_id: JSON-MATCH
+                title: JSON comparison
+                execute: []
+                verify:
+                  - id: explicit_null
+                    type: assertion
+                    assert:
+                      operator: json_match
+                      actual: null
+                      expected_ref: artifact://expected_results/data.json#/nil
+                  - id: referenced_null
+                    type: assertion
+                    assert:
+                      operator: json_match
+                      actual_ref: artifact://expected_results/data.json#/nil
+                      expected_ref: artifact://expected_results/data.json#/nil
+                  - id: nested_multiset
+                    type: assertion
+                    assert:
+                      operator: json_match
+                      actual: [false, {values: [1.0, "1", 1]}]
+                      expected_ref: artifact://expected_results/data.json#/nested
+                      ignore_order: true
+                  - id: literal_object_member
+                    type: assertion
+                    assert:
+                      operator: json_match
+                      actual: literal
+                      expected_ref: artifact://expected_results/data.json#/01
+                """);
+        CommandResult validate = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+        assertThat(validate.exit()).as(validate.stdout() + validate.stderr()).isZero();
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_v03");
+        assertThat(run.exit()).as(run.stdout() + run.stderr()).isZero();
+        Path result = extractPath(run.stdout(), "result_json");
+        JsonNode rows = OBJECT_MAPPER.readTree(result.toFile()).path("verify_results");
+        assertThat(rows).extracting(row -> row.path("status").asText())
+                .containsExactly("passed", "passed", "passed", "passed");
+        CommandResult evidence = execute("validate-evidence", "--result", result.toString());
+        assertThat(evidence.exit()).as(evidence.stdout() + evidence.stderr()).isZero();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(textBlock = """
+            scalar_type,   text,      number,    false
+            decimal_value, decimalA,  decimalB,  false
+            multiplicity,  repeatedA, repeatedB, true
+            ordering,      orderedA,  orderedB,  false
+            """)
+    void jsonMismatchProducesFailedAssertionEvidence(String name, String actual, String expected,
+            boolean ignoreOrder) throws Exception {
+        Path suite = mutableSuite(COMMON_VERIFY_SUITE.getParent(), name);
+        Files.writeString(suite.getParent().resolve("expected_results/data.json"), """
+                {"text":"200","number":200,"decimalA":1.000000000000000000001,"decimalB":1.000000000000000000002,
+                 "repeatedA":[1,1,"1"],"repeatedB":[1,"1","1"],"orderedA":[1,2],"orderedB":[2,1]}
+                """);
+        Files.writeString(suite.getParent().resolve("test_cases/common_verify_success.yaml"), """
+                dsl_version: v0.3
+                test_case_id: JSON-MISMATCH
+                title: JSON mismatch
+                execute: []
+                verify:
+                  - id: comparison
+                    type: assertion
+                    assert:
+                      operator: json_match
+                      actual_ref: artifact://expected_results/data.json#/%s
+                      expected_ref: artifact://expected_results/data.json#/%s
+                      ignore_order: %s
+                """.formatted(actual, expected, ignoreOrder));
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_v03");
+        assertThat(run.exit()).as(run.stdout() + run.stderr()).isOne();
+        Path result = extractPath(run.stdout(), "result_json");
+        JsonNode row = OBJECT_MAPPER.readTree(result.toFile()).path("verify_results").get(0);
+        assertThat(row.path("status").asText()).isEqualTo("failed");
+        assertThat(row.path("failure_code").asText()).isEqualTo("ASSERTION_FAILED");
+        CommandResult evidence = execute("validate-evidence", "--result", result.toString());
+        assertThat(evidence.exit()).as(evidence.stdout() + evidence.stderr()).isZero();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"01", "+1"})
+    void invalidArrayIndexOnAnArtifactFailsCliPreflightEvenForNotExists(String token) throws Exception {
+        Path suite = mutableSuite(COMMON_VERIFY_SUITE.getParent(), "artifact_index");
+        Files.writeString(suite.getParent().resolve("expected_results/items.json"), "[0,1]");
+        Files.writeString(suite.getParent().resolve("test_cases/common_verify_success.yaml"), """
+                dsl_version: v0.3
+                test_case_id: INVALID-INDEX
+                title: Invalid artifact array index
+                execute: []
+                verify:
+                  - id: malformed_index
+                    type: assertion
+                    assert:
+                      operator: not_exists
+                      actual_ref: artifact://expected_results/items.json#/%s
+                """.formatted(token));
+        CommandResult result = execute("validate", "--suite", suite.toString(), "--profile", "local_v03");
+        assertThat(result.exit()).isNotZero();
+        assertThat(result.stdout() + result.stderr()).contains("invalid_json_pointer");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"01", "+1"})
+    void stepPointerDistinguishesInvalidArrayIndexFromAbsentValue(String token) throws Exception {
+        Path suite = mutableSuite(Path.of("samples/20-provider-capability-p0/http/rest_client_with_wiremock"),
+                "pointer_index");
+        String body = """
+                {"items":["first","200"],"01":"literal","+1":"literal"}
+                """;
+        Files.writeString(suite.getParent().resolve("expected_results/payment_response.json"), body);
+        Path stubFile = suite.getParent().resolve("fixtures/wiremock/payment_success_stub.json");
+        JsonNode stub = OBJECT_MAPPER.readTree(stubFile.toFile());
+        ((ObjectNode) stub.required("response")).set("jsonBody", OBJECT_MAPPER.readTree(body));
+        OBJECT_MAPPER.writeValue(stubFile.toFile(), stub);
+        Path test = suite.getParent().resolve("test_cases/payment_success.yaml");
+        String checks = """
+                  - id: string_member
+                    type: assertion
+                    assert:
+                      operator: json_match
+                      actual_ref: step://call_payment_api/response.body#/items/1
+                      expected_ref: artifact://expected_results/payment_response.json#/items/1
+                  - id: object_member
+                    type: assertion
+                    assert: {operator: equals, actual_ref: step://call_payment_api/response.body#/%s, expected: literal}
+                  - id: absent_element
+                    type: assertion
+                    assert: {operator: not_exists, actual_ref: step://call_payment_api/response.body#/items/9}
+                  - id: malformed_index
+                    type: assertion
+                    assert: {operator: not_exists, actual_ref: step://call_payment_api/response.body#/items/%s}
+                """.formatted(token, token);
+        Files.writeString(test, Files.readString(test).replace("cleanup:", checks + "\ncleanup:"));
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_v03");
+        assertThat(run.exit()).as(run.stdout() + run.stderr()).isOne();
+        JsonNode rows = OBJECT_MAPPER.readTree(extractPath(run.stdout(), "result_json").toFile()).path("verify_results");
+        assertThat(rows).as(run.stdout() + run.stderr()).extracting(row -> row.path("status").asText())
+                .containsExactly("passed", "passed", "passed", "passed", "passed", "failed");
+        JsonNode last = rows.get(rows.size() - 1);
+        assertThat(Files.readString(extractPath(run.stdout(), "evidence_dir").resolve(last.path("evidence_ref").asText())))
+                .contains("invalid_json_pointer");
     }
 
     private CommandResult execute(String... args) {

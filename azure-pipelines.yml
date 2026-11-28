@@ -15,7 +15,7 @@ variables:
   PYTHONDONTWRITEBYTECODE: '1'
   CI_WORK: '$(Agent.TempDirectory)/public-products-$(Build.BuildId)-$(System.JobAttempt)'
   SQLITE_CI_POLICY_SHA256: d23b179e8396ecdf26720e169a79982e887a888c646f8e769bea580b1b89cf52
-  NATS_CI_POLICY_SHA256: c8508e32b02df21e02cc7ba9fefa1ab9d3205203ebed76967e0988247be8e64d
+  NATS_CI_POLICY_SHA256: 68a42f7572a0ba998c4d612cef24f3ac33cecc49d347b3b40c513ba1e7853a38
 
 stages:
 - stage: LocalTests

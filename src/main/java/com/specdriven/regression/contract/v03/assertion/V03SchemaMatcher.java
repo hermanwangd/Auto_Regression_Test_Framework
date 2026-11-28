@@ -83,8 +83,8 @@ public final class V03SchemaMatcher {
                 }
                 case "items" -> checkSchema(argument, at, budget);
                 case "enum" -> {
-                    if (!(argument instanceof List<?> list) || list.isEmpty()) {
-                        throw budget.problem(at, "expected a nonempty array of JSON values");
+                    if (!(argument instanceof List<?>)) {
+                        throw budget.problem(at, "expected an array of JSON values");
                     }
                 }
                 default -> throw budget.problem(at, "unsupported schema keyword");

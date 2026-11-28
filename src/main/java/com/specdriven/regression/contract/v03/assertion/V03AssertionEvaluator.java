@@ -80,7 +80,7 @@ public final class V03AssertionEvaluator {
         return Objects.equals(actual, expected);
     }
 
-    private static BigDecimal jsonNumber(Number value, String operand) {
+    static BigDecimal jsonNumber(Number value, String operand) {
         if (value instanceof BigDecimal decimal) {
             return decimal;
         }

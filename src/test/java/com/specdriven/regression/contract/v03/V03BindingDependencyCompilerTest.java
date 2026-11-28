@@ -36,6 +36,26 @@ class V03BindingDependencyCompilerTest {
     }
 
     @Test
+    void checksFirstPointerTokenWhenTheProviderDeclaresAnArrayOutput() {
+        var producer = step("produce", "producer", "producer.v0.3", "produce", Map.of());
+        var contracts = Map.of("producer.v0.3", contract("producer.v0.3", "produce", Map.of(), Map.of(
+                "items", new V03OutputDefinition(V03ValueType.ARRAY, V03Sensitivity.PUBLIC, false, true),
+                "document", new V03OutputDefinition(V03ValueType.OBJECT, V03Sensitivity.PUBLIC, false, true))));
+        for (String path : List.of("items#/0/01", "items#/-", "items#/99999999999999", "document#/01")) {
+            var check = existenceAssertion("step://produce/" + path);
+            assertThat(compiler.compile(List.of(producer, check), Map.of(), contracts, Map.of())).hasSize(1);
+        }
+        var invalid = existenceAssertion("step://produce/items#/01");
+        assertThatThrownBy(() -> compiler.compile(List.of(producer, invalid), Map.of(), contracts, Map.of()))
+                .hasMessageStartingWith("invalid_json_pointer:");
+    }
+
+    private V03ExecutionStep existenceAssertion(String reference) {
+        return new V03ExecutionStep("TC-1", V03ExecutionStepKind.ASSERTION, "verify", "check", "", "", "", "local", "",
+                "not_exists", Map.of("actual", reference, "operator", "not_exists"), "");
+    }
+
+    @Test
     void rejectsMissingEnvironmentValueBeforeProviderRuntime() {
         V03ExecutionStep consumer = step("consume", "consumer", "consumer.v0.3", "consume",
                 Map.of("value", "env://REQUIRED_VALUE"));

@@ -1,5 +1,6 @@
 package com.specdriven.regression.contract.v03;
 
+import com.specdriven.regression.contract.v03.ref.V03JsonPointer;
 import com.specdriven.regression.contract.v03.ref.V03Reference;
 import com.specdriven.regression.contract.v03.ref.V03ReferenceParser;
 import com.specdriven.regression.contract.v03.assertion.V03AssertionKind;
@@ -45,7 +46,7 @@ public final class V03BindingDependencyCompiler {
                             throw new IllegalArgumentException("provider_check_output_not_consumable: step `" + step.id()
                                     + "` cannot consume provider-check output `" + prior.stepId() + "`.");
                         }
-                        V03OutputDefinition output = outputDefinition(producer, prior.outputPath(), contracts);
+                        V03OutputDefinition output = outputDefinition(producer, prior.outputPath(), prior.jsonPointer(), contracts);
                         compatible(consumer, output, step, input.getKey());
                         dependencies.add(new V03BindingDependency(step.testCaseId(), step.id(), input.getKey(), V03ReferenceKind.STEP,
                                 producer.testCaseId(), "", producer.id(), prior.outputPath()));
@@ -60,7 +61,7 @@ public final class V03BindingDependencyCompiler {
                             throw new IllegalArgumentException("unknown_bindable_output: target `" + generated.target()
                                     + "` output `" + generated.output() + "` is not bindable.");
                         }
-                        V03OutputDefinition output = outputDefinition(producer, generated.output(), contracts);
+                        V03OutputDefinition output = outputDefinition(producer, generated.output(), generated.jsonPointer(), contracts);
                         compatible(consumer, output, step, input.getKey());
                         dependencies.add(new V03BindingDependency(step.testCaseId(), step.id(), input.getKey(), V03ReferenceKind.GENERATED,
                                 producer.testCaseId(), generated.target(), producer.id(), generated.output()));
@@ -106,7 +107,7 @@ public final class V03BindingDependencyCompiler {
                 throw new IllegalArgumentException("missing_or_forward_step_producer: assertion `" + assertion.id()
                         + "` references `" + prior.stepId() + "`.");
             }
-            V03OutputDefinition output = outputDefinition(producer, prior.outputPath(), contracts);
+            V03OutputDefinition output = outputDefinition(producer, prior.outputPath(), prior.jsonPointer(), contracts);
             validateAssertionOutputType(assertion, kind, key, output);
             dependencies.add(new V03BindingDependency(assertion.testCaseId(), assertion.id(), key, V03ReferenceKind.STEP,
                     producer.testCaseId(), producer.target(), producer.id(), prior.outputPath()));
@@ -159,7 +160,7 @@ public final class V03BindingDependencyCompiler {
                                 + "` binding `" + binding.getKey() + "` requires prior `" + generated.target()
                                 + "/" + generated.output() + "`.");
                     }
-                    V03OutputDefinition output = outputDefinition(producer, generated.output(), contracts);
+                    V03OutputDefinition output = outputDefinition(producer, generated.output(), generated.jsonPointer(), contracts);
                     compatible(consumer, output, consumerStep, "binding." + binding.getKey());
                     dependencies.add(new V03BindingDependency(consumerStep.testCaseId(), consumerStep.id(), "binding." + binding.getKey(),
                             V03ReferenceKind.GENERATED, producer.testCaseId(), generated.target(), producer.id(), generated.output()));
@@ -192,6 +193,13 @@ public final class V03BindingDependencyCompiler {
                 .filter(entry -> entry.getKey().endsWith(".*")
                         && input.startsWith(entry.getKey().substring(0, entry.getKey().length() - 1)))
                 .map(Map.Entry::getValue).findFirst().orElse(V03InputDefinition.legacy(false));
+    }
+
+    private V03OutputDefinition outputDefinition(V03ExecutionStep producer, String output, String pointer,
+            Map<String, V03ProviderContract> contracts) {
+        V03OutputDefinition definition = outputDefinition(producer, output, contracts);
+        if (definition.valueType() == V03ValueType.ARRAY) V03JsonPointer.validateArrayRoot(pointer);
+        return definition;
     }
 
     private V03OutputDefinition outputDefinition(
