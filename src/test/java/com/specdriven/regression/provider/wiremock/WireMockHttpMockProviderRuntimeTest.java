@@ -87,6 +87,25 @@ class WireMockHttpMockProviderRuntimeTest {
                     Map.of("http.request_body", "input.yaml", "mock.request_filter", "input.yaml")));
             assertThat(request.passed()).as("%s", request.failure()).isTrue();
             assertThat(request.outputs()).containsEntry("matched_count", 1).containsEntry("http_status", 201);
+            Files.writeString(temp.resolve("filter.json"), """
+                    {"method":"POST","url":"/ready?view=compact"}
+                    """);
+            Files.writeString(temp.resolve("body.json"), """
+                    {"label":"private-fixture-label"}
+                    """);
+            var exact = operation("verify_requests", Map.of("mock.request_filter_ref", "filter.json",
+                    "mock.body_pattern_ref", "body.json"));
+            var verified = runtime.execute(context, exact);
+            assertThat(verified.passed()).as("%s", verified.failure()).isTrue();
+            String ref = verified.outputs().get("request_journal").toString();
+            assertThat(Files.readString(context.runDir().resolve(ref))).contains("matched_count", "expected_count")
+                    .doesNotContain("private-fixture-label", "view=compact");
+            Files.writeString(temp.resolve("body.json"), "{}");
+            assertThat(runtime.execute(context, exact).failure().code()).isEqualTo("ASSERTION_FAILED");
+            assertThat(runtime.execute(context, operation("verify_requests", Map.of("mock.request_filter_ref", "filter.json",
+                    "mock.body_pattern_ref", "body.json", "mock.expected_count", "0"))).passed()).isTrue();
+            assertThat(runtime.execute(context, operation("verify_requests", Map.of("mock.request_filter_ref", "filter.json",
+                    "mock.expected_count", "-1"))).failure().code()).isEqualTo("OPERATION_FAILED");
             assertThat(runtime.observedRequestBodyMatches(temp, "input.yaml")).isTrue();
             assertThat(runtime.observedRequestBodyMatches(temp, "wrong.yaml")).isFalse();
             String journal = Files.readString(context.runDir().resolve("provider-evidence/wiremock/request_journal.json"));

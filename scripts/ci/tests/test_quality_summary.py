@@ -46,3 +46,26 @@ class QualitySummaryTest(unittest.TestCase):
         (self.root / "receipt.json").write_text(json.dumps({"run_id": None, "outcome": "BLOCKED"}))
         self.assertEqual(quality.product_cases(self.root, [])["outcomes"]["NOT_RUN"], 1)
         self.assertEqual(quality.product_cases(self.root, [])["outcomes"]["passed"], 0)
+
+    def test_native_receipt_from_previous_attempt_is_rejected(self):
+        contract = quality.document(quality.ROOT / "src/test/resources/provider-conformance.json")[0]
+        receipt = {"contract": contract["contract"], "proof": contract["proof"],
+                   "revision": COMMIT, "job_run": "5", "job_attempt": "1",
+                   "operations": contract["operations"], "scenarios": ["observed"]}
+        (self.root / "receipt.json").write_text(json.dumps(receipt))
+        with self.assertRaisesRegex(ValueError, "Mismatched conformance receipt"):
+            quality.conformance(self.root, COMMIT, {"databaseId": 5, "attempt": 2}, [])
+
+    def test_traceability_digest_changes_are_refused(self):
+        (self.root / "coverage.json").write_text("{}")
+        run = {"coverage": {"path": "coverage.json", "sha256": "0" * 64}}
+        (self.root / "index.json").write_text(json.dumps({"schema_version": "ci-run-traceability.v1", "runs": [run]}))
+        with self.assertRaisesRegex(ValueError, "artifact digest"):
+            quality.traceability(self.root, [])
+
+    def test_missing_product_family_is_reported_even_with_a_receipt(self):
+        (self.root / "receipt.json").write_text(json.dumps({"run_id": None}))
+        gaps = []
+        quality.product_cases(self.root, gaps)
+        self.assertIn("Missing or ambiguous product inventory for NATS", gaps)
+        self.assertIn("Missing or ambiguous product inventory for SQLite", gaps)

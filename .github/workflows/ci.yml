@@ -142,7 +142,7 @@ jobs:
           python3 -B samples/90-compatibility/test_sample_launchers.py
 
       - name: Critical delivery coverage gate
-        run: ./mvnw -B -ntp -Pv02-delivery-coverage -DskipTests jacoco:check@v02-delivery-critical-class-check
+        run: ./mvnw -B -ntp -Pv02-delivery-coverage -DskipTests jacoco:check@v02-delivery-critical-class-check jacoco:check@suite-cli-boundary-check
 
       - name: Schema contract drift
         run: scripts/ci/check-schema-drift.sh
