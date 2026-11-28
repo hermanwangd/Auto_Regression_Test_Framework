@@ -22,6 +22,11 @@ jobs:
         with:
           ref: ${{ env.REVISION }}
           persist-credentials: false
+      - name: Install hardened XML reader for CI evidence
+        run: |
+          python3 -m pip install --disable-pip-version-check --only-binary=:all: --no-deps --require-hashes --target "$RUNNER_TEMP/quality-python" -r scripts/ci/quality-requirements.txt
+          echo "PYTHONPATH=$RUNNER_TEMP/quality-python" >> "$GITHUB_ENV"
+
       - name: Collect evidence for this main commit
         env:
           GH_TOKEN: ${{ github.token }}

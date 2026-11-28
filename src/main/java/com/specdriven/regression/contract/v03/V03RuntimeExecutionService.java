@@ -336,10 +336,17 @@ public class V03RuntimeExecutionService {
                 policyEvidence.put("reason", "ownership unavailable");
             }
         }
+        String activeTestCaseId = null;
         try {
         for (V03ExecutionStep step : plan.steps()) {
             // No gate failure may acquire resources or enter even cleanup.
             if (preflightBlocked) break;
+            if (!step.testCaseId().equals(activeTestCaseId)) {
+                if (activeTestCaseId != null) {
+                    failure = finishCase(selectedRegistry, context, activeTestCaseId, testStatuses, cleanupFailures, failure);
+                }
+                activeTestCaseId = step.testCaseId();
+            }
             if (!"cleanup".equals(step.phase()) && testTerminal(testStatuses, step.testCaseId())) {
                 continue;
             }
@@ -411,6 +418,9 @@ public class V03RuntimeExecutionService {
         }
 
         } finally {
+            if (activeTestCaseId != null) {
+                failure = finishCase(selectedRegistry, context, activeTestCaseId, testStatuses, cleanupFailures, failure);
+            }
             for (String provider : selectedRegistry.endRun(context)) {
                 String message = "Failed to release run resources for provider " + provider + ".";
                 cleanupFailures.add(Map.of("step_id", "finalize-" + provider, "status", "failed",
@@ -560,6 +570,20 @@ public class V03RuntimeExecutionService {
             }
         }
         return List.copyOf(findings);
+    }
+
+    private Failure finishCase(V03ProviderRuntimeRegistry registry, V03ExecutionContext context, String testCaseId,
+            Map<String, String> testStatuses, List<Map<String, Object>> cleanupFailures, Failure failure) {
+        for (String provider : registry.endCase(context, testCaseId)) {
+            String message = "Failed to release case resources for provider " + provider + ".";
+            cleanupFailures.add(Map.of("test_case_id", testCaseId, "step_id", "finalize-" + provider,
+                    "status", "failed", "failure_code", "CLEANUP_FAILED", "message", message));
+            applyCleanupOutcomeStatus(testStatuses, testCaseId, "failed");
+            if (failure.isNone()) {
+                failure = new Failure("CLEANUP_FAILED", "CLEANUP_ERROR", message, "Check provider cleanup evidence.");
+            }
+        }
+        return failure;
     }
 
     private void validateRuntimeOutputs(V03ExecutionPlan plan, V03ExecutionStep step, V03StepResult result) {

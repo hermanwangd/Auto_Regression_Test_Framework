@@ -7,6 +7,7 @@ import com.specdriven.regression.contract.v03.V03StepResult;
 import com.specdriven.regression.provider.runtime.ProviderRuntime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /** Each target owns its mock for the lifetime of one case in one run. */
@@ -28,13 +29,23 @@ abstract class RunScopedMockV03Adapter<T extends ProviderRuntime & AutoCloseable
     }
 
     @Override
+    public final void endCase(V03ExecutionContext context, String testCaseId) {
+        closeTargets(runs.get(context), target -> target.testCaseId().equals(testCaseId));
+    }
+
+    @Override
     public final void endRun(V03ExecutionContext context) {
-        var targets = runs.remove(context);
+        closeTargets(runs.remove(context), target -> true);
+    }
+
+    private void closeTargets(Map<Target, T> targets, Predicate<Target> owned) {
         if (targets == null) return;
         IllegalStateException failure = null;
-        for (var runtime : targets.values()) {
+        for (var entry : targets.entrySet()) {
+            if (!owned.test(entry.getKey())) continue;
             try {
-                runtime.close();
+                entry.getValue().close();
+                targets.remove(entry.getKey(), entry.getValue());
             } catch (Exception error) {
                 if (failure == null) failure = new IllegalStateException("Could not release run-owned mock resources.");
                 failure.addSuppressed(error);

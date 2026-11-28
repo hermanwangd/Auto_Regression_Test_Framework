@@ -27,15 +27,18 @@ class S3Route(BaseHTTPRequestHandler):
         route.drops += 1
         if route.drops == 1:
             target = "fixture" + route.object_path
-            owned_bytes = subprocess.check_output(
-                [*route.mc, "cat", "--version-id", route.owned, target], timeout=10)
+            owned_bytes = self.mc("cat", "--version-id", route.owned, target, stdout=subprocess.PIPE).stdout
             if owned_bytes != Path("s3/fixtures/greeting.txt").read_bytes():
                 raise ValueError("Independent client could not read the acknowledged fixture bytes")
-            subprocess.run([*route.mc, "pipe", "--part-size", "8MiB", target],
-                           input=b"keep-foreign", check=True, timeout=10)
+            self.mc("pipe", "--part-size", "8MiB", target, input=b"keep-foreign")
             with Path("s3-before-cleanup.jsonl").open("wb") as snapshot:
-                subprocess.run([*route.mc, "ls", "--versions", "--recursive", "--json",
-                                "fixture/fixture-bucket"], stdout=snapshot, check=True, timeout=10)
+                self.mc("ls", "--versions", "--recursive", "--json", "fixture/fixture-bucket", stdout=snapshot)
+
+    def mc(self, *arguments, input=None, stdout=None):
+        route = self.server
+        return subprocess.run(["docker", "run", "-i", "--rm", "--memory", "160m", "--network",
+                               "container:" + route.server_id, "-e", "MC_HOST_fixture", route.client_image, *arguments],
+                              input=input, stdout=stdout, check=True, timeout=15)
 
     def forward(self):
         route = self.server
@@ -69,8 +72,10 @@ class S3Route(BaseHTTPRequestHandler):
 def run(jar, server_id, client_image):
     with HTTPServer(("127.0.0.1", 0), S3Route) as route:
         route.port = urlsplit(os.environ["REGRESS_S3_ENDPOINT"]).port
-        route.mc = ["docker", "run", "-i", "--rm", "--memory", "160m", "--network",
-                    "container:" + server_id, "-e", "MC_HOST_fixture", client_image]
+        if not re.fullmatch(r"[0-9a-f]{64}", server_id) or not re.fullmatch(r"[a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}", client_image):
+            raise ValueError("Expected a running container ID and digest-pinned MinIO client")
+        route.server_id = server_id
+        route.client_image = client_image
         route.owned = route.object_path = None
         route.drops = 0
         route.cleanup = []

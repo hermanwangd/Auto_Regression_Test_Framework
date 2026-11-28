@@ -4,7 +4,6 @@ import json
 import os
 import platform
 from pathlib import Path
-from xml.etree import ElementTree
 
 
 def job_identity():
@@ -97,9 +96,11 @@ BEHAVIOR = {
     "end_run": [
         "ProviderConformanceTest.releasesMocksAfterAFailedSuiteWithoutAnExplicitCleanup",
         "ProviderConformanceTest.isolatesMocksAcrossRunsCasesAndTargets",
+        "ProviderConformanceTest.reusesTheSameFixedPortAcrossSequentialCasesWithoutReset",
         "CliProcessProviderRuntimeTest.interruptionCleansUpAndAllowsASeparateRecoveryRun",
         "S3V03AdapterTest.cleanupTargetsAcknowledgedUploadEvenWhenAnotherVersionIsCurrent"],
     "primary_and_cleanup_failure": [
+        "ProviderConformanceTest.reportsFinalizationFailureOnlyForItsCaseAndPreservesPrimaryFailure",
         "V03RuntimeStatusTest.primaryFailureSurvivesBlockedCleanupAndCleanupStillExecutes",
         "DslV03JdbcRuntimeCommandTest.runV03JdbcPreservesPrimaryFailureWhenCleanupAlsoFails"],
     "public_status": [
@@ -109,11 +110,13 @@ BEHAVIOR = {
 
 
 def check_behavior_reports(reports, contracts):
+    from defusedxml import ElementTree
+
     groups = {**BEHAVIOR, **{key: [row["boundaryTest"]] for key, row in contracts.items()}}
     required = {case for cases in groups.values() for case in cases}
     observations = {key: [] for key in required}
     for path in reports.glob("TEST-*.xml"):
-        for case in ElementTree.parse(path).iter("testcase"):
+        for case in ElementTree.parse(path, forbid_dtd=True).iter("testcase"):
             key = case.attrib["classname"].rsplit(".", 1)[-1] + "." + case.attrib["name"].split("(")[0]
             if key in observations:
                 observations[key].append(all(case.find(tag) is None for tag in ("skipped", "failure", "error")))

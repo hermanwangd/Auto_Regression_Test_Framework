@@ -69,3 +69,10 @@ class QualitySummaryTest(unittest.TestCase):
         quality.product_cases(self.root, gaps)
         self.assertIn("Missing or ambiguous product inventory for NATS", gaps)
         self.assertIn("Missing or ambiguous product inventory for SQLite", gaps)
+
+    def test_junit_refuses_document_type_declarations(self):
+        from defusedxml.common import DTDForbidden
+        path = self.root / "TEST-Sample.xml"
+        path.write_text("<!DOCTYPE testsuite><testsuite><testcase/></testsuite>")
+        with self.assertRaises(DTDForbidden):
+            quality.junit([path])

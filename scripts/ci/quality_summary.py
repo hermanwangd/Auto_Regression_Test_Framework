@@ -6,7 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ("ci", "local-product-tests", "pr-sast")
@@ -38,7 +38,7 @@ def serialize(data):
 def junit(files):
     counts = Counter(passed=0, failed=0, skipped=0, errors=0)
     for path in files:
-        for test in ET.parse(path).iter("testcase"):
+        for test in ET.parse(path, forbid_dtd=True).iter("testcase"):
             if test.find("error") is not None:
                 counts["errors"] += 1
             elif test.find("failure") is not None:
@@ -52,7 +52,7 @@ def junit(files):
 
 def suppressions(policy, today):
     rules = []
-    for entry in ET.parse(policy).getroot().findall("{*}suppress"):
+    for entry in ET.parse(policy, forbid_dtd=True).getroot().findall("{*}suppress"):
         until = entry.get("until")
         expiry = date.fromisoformat(until[:10]) if until else None
         rules.append({"sha1": entry.findtext("{*}sha1"), "cves": [c.text for c in entry.findall("{*}cve")],

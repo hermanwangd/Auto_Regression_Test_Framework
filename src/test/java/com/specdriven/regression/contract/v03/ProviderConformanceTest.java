@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.yaml.snakeyaml.Yaml;
 
 /** Compares independent registrations with authored contracts, production dispatch and observed suite results. */
@@ -259,6 +260,13 @@ class ProviderConformanceTest {
             int c = open(adapter, first, setup, "case-one", secondTarget.target(), endpoint);
             int d = open(adapter, second, setup, "case-one", setup.target(), endpoint);
             assertThat(List.of(a, b, c, d)).doesNotHaveDuplicates();
+            adapter.endCase(first, "case-one");
+            adapter.endCase(first, "case-one");
+            for (int port : List.of(a, c)) {
+                assertThatThrownBy(() -> probe(port)).isInstanceOf(java.net.ConnectException.class);
+            }
+            probe(b);
+            probe(d);
             adapter.endRun(first);
             adapter.endRun(first);
             for (int port : List.of(a, b, c)) {
@@ -268,6 +276,97 @@ class ProviderConformanceTest {
         } finally {
             try { adapter.endRun(first); } finally { adapter.endRun(second); }
         }
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "http/rest_client_with_wiremock,payment_mock,base_url,true",
+        "rpc/soap_mock,payment_soap_mock,endpoint_url,false",
+        "rpc/grpc_mock,customer_grpc_mock,target_uri,false"
+    })
+    void reusesTheSameFixedPortAcrossSequentialCasesWithoutReset(
+            String suite, String target, String endpoint, boolean failFirst) throws Exception {
+        var root = copySuite(suite);
+        var manifest = root.resolve("suite_manifest.yaml");
+        var suiteDoc = yaml(manifest);
+        var firstPath = testCase(root, suiteDoc);
+        var test = yaml(firstPath);
+        test.put("cleanup", List.of());
+        var secondPath = firstPath.resolveSibling("second.yaml");
+        test.put("test_case_id", "second");
+        writeYaml(secondPath, test);
+        test.put("test_case_id", "first");
+        if (failFirst) {
+            steps(test, "verify").add(Map.of("id", "force_failure", "type", "assertion",
+                    "assert", Map.of("actual", "left", "operator", "equals", "expected", "right")));
+        }
+        writeYaml(firstPath, test);
+        steps(suiteDoc, "tests").add(Map.of("ref", "test_cases/second.yaml"));
+        writeYaml(manifest, suiteDoc);
+
+        int fixedPort;
+        try (var socket = new java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"))) {
+            fixedPort = socket.getLocalPort();
+        }
+        var envPath = root.resolve("env_profiles/local_v03.yaml");
+        var env = yaml(envPath);
+        var bindings = map(map(map(env.get("targets")).get(target)).get("bindings"));
+        bindings.put("port_strategy", "fixed");
+        bindings.put("fixed_port", String.valueOf(fixedPort));
+        writeYaml(envPath, env);
+
+        var run = new V03RuntimeExecutionService().run(manifest, "local_v03", temp.resolve("fixed"));
+        assertThat(run.resultJson()).as("%s: %s", suite, run.findings()).isNotNull();
+        var result = JSON.readTree(run.resultJson().toFile());
+        var observed = new ArrayList<String>();
+        for (var step : result.path("steps")) {
+            if (!target.equals(step.path("target").asText()) || !"setup".equals(step.path("phase").asText())) continue;
+            assertThat(step.path("status").asText()).as("%s: %s", suite, step).isEqualTo("passed");
+            assertThat(port(step.path("outputs").path(endpoint).asText())).isEqualTo(fixedPort);
+            observed.add(step.path("test_case_id").asText());
+        }
+        assertThat(observed).containsExactly("first", "second");
+        assertThat(result.at("/test_results/0/status").asText()).isEqualTo(failFirst ? "failed" : "passed");
+        assertThat(result.at("/test_results/1/status").asText()).isEqualTo("passed");
+        assertThatThrownBy(() -> probe(fixedPort)).isInstanceOf(java.net.ConnectException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void reportsFinalizationFailureOnlyForItsCaseAndPreservesPrimaryFailure(boolean failAssertion) throws Exception {
+        var root = copySuite("verification/multi_test_shared_env");
+        var manifest = root.resolve("suite_manifest.yaml");
+        var firstPath = testCase(root, yaml(manifest));
+        var first = yaml(firstPath);
+        String firstId = (String) first.get("test_case_id");
+        if (failAssertion) {
+            steps(first, "verify").add(Map.of("id", "force_failure", "type", "assertion",
+                    "assert", Map.of("actual", "left", "operator", "equals", "expected", "right")));
+            writeYaml(firstPath, first);
+        }
+        var finalized = new ArrayList<String>();
+        var adapter = new V03ProviderRuntimeAdapter() {
+            @Override public String providerType() { return "finalizer_probe"; }
+            @Override public boolean supports(String contract, String operation) { return false; }
+            @Override public V03StepResult execute(V03ExecutionStep step, V03ExecutionContext context) {
+                throw new AssertionError("Verifier-only suite should not dispatch to this provider");
+            }
+            @Override public void endCase(V03ExecutionContext context, String id) {
+                finalized.add(id);
+                if (firstId.equals(id)) throw new IllegalStateException("simulated close failure");
+            }
+            @Override public void endRun(V03ExecutionContext context) { finalized.add("run"); }
+        };
+        var service = new V03RuntimeExecutionService(new ContractBaselineService(), new V03ProviderRuntimeRegistry(List.of(adapter)));
+        var run = service.run(manifest, "local_v03", temp.resolve("runs"));
+        var result = JSON.readTree(run.resultJson().toFile());
+        assertThat(finalized).containsExactly(firstId, result.at("/test_results/1/test_case_id").asText(), "run");
+        assertThat(result.at("/test_results/0/status").asText()).isEqualTo("failed");
+        assertThat(result.at("/test_results/1/status").asText()).isEqualTo("passed");
+        assertThat(result.at("/failure/code").asText()).isEqualTo(failAssertion ? "ASSERTION_FAILED" : "CLEANUP_FAILED");
+        assertThat(result.path("cleanup_failures").size()).isEqualTo(1);
+        assertThat(result.at("/cleanup_failures/0/test_case_id").asText()).isEqualTo(firstId);
+        assertThat(result.at("/cleanup_failures/0/failure_code").asText()).isEqualTo("CLEANUP_FAILED");
     }
 
     private static int open(V03ProviderRuntimeAdapter adapter, V03ExecutionContext context, V03ExecutionStep setup,

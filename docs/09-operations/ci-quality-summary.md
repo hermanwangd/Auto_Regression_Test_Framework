@@ -18,3 +18,5 @@ python3 scripts/ci/quality_summary.py "$sha" "$inputs" target/quality
 ```
 
 [Quality workflow](../../.github/workflows/main-quality.yml) · [Provider conformance](../04-planning/provider-adapter-conformance-kit.md) · [Run traceability and coverage](../oracle-trace-coverage.md#review-a-single-invocation)
+
+Local Python runs of the conformance gate and quality summary use the hash-pinned XML parser in [quality-requirements.txt](../../scripts/ci/quality-requirements.txt). Install it in a virtual environment with `python3 -m pip install --require-hashes -r scripts/ci/quality-requirements.txt`.

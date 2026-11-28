@@ -3,6 +3,7 @@ package com.specdriven.regression.contract.v03;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 public class V03ProviderRuntimeRegistry {
 
@@ -30,11 +31,19 @@ public class V03ProviderRuntimeRegistry {
         return adapters.keySet();
     }
 
+    public List<String> endCase(V03ExecutionContext context, String testCaseId) {
+        return finalizeAdapters(adapter -> adapter.endCase(context, testCaseId));
+    }
+
     public List<String> endRun(V03ExecutionContext context) {
+        return finalizeAdapters(adapter -> adapter.endRun(context));
+    }
+
+    private List<String> finalizeAdapters(Consumer<V03ProviderRuntimeAdapter> finalizer) {
         List<String> failed = new java.util.ArrayList<>();
         for (var adapter : adapters.values()) {
             try {
-                adapter.endRun(context);
+                finalizer.accept(adapter);
             } catch (RuntimeException error) {
                 failed.add(adapter.providerType());
             }

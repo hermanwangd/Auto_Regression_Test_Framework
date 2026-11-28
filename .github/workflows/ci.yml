@@ -113,6 +113,11 @@ jobs:
           export UI_CHROMIUM
           scripts/ci/verify-playwright-flow.sh
 
+      - name: Install hardened XML reader for CI evidence
+        run: |
+          python3 -m pip install --disable-pip-version-check --only-binary=:all: --no-deps --require-hashes --target "$RUNNER_TEMP/quality-python" -r scripts/ci/quality-requirements.txt
+          echo "PYTHONPATH=$RUNNER_TEMP/quality-python" >> "$GITHUB_ENV"
+
       - name: Require all public provider conformance receipts
         run: |
           python3 -B -m unittest discover -s scripts/ci/tests -p test_provider_conformance.py -v

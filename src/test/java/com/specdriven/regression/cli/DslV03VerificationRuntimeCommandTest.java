@@ -283,7 +283,12 @@ class DslV03VerificationRuntimeCommandTest {
         assertThat(canonical.path("test_results").size()).isOne();
         assertThat(canonical.path("test_results").get(0).path("test_case_id").asText()).isEqualTo(first);
         assertThat(dry.stdout()).contains("plan_digest: " + canonical.path("plan_digest").asText());
-        assertThat(canonical.toString()).doesNotContain(second, "multi_file_matches");
+        var execution = ((com.fasterxml.jackson.databind.node.ObjectNode) canonical).deepCopy();
+        JsonNode sourceInventory = execution.remove("case_sources");
+        assertThat(sourceInventory.size()).isEqualTo(2);
+        assertThat(sourceInventory.get(1).path("test_case_id").asText()).isEqualTo(second);
+        assertThat(sourceInventory.get(1).path("selection").asText()).isEqualTo("UNSELECTED");
+        assertThat(execution.toString()).doesNotContain(second, "multi_file_matches");
         CommandResult evidence = execute("validate-evidence", "--result", result.toString());
         assertThat(evidence.exit()).as(evidence.stdout()).isZero();
         CommandResult report = execute("report", "--result", result.toString());

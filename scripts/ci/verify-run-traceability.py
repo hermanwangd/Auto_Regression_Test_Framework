@@ -26,8 +26,8 @@ def require(condition, message):
 
 def run(jar, bundle, name, selection):
     def cli(*args):
-        command = ["java", "-Xmx384m", "-jar", str(jar), *args]
-        return subprocess.run(command, cwd=bundle, check=True, text=True, stdout=subprocess.PIPE, timeout=60).stdout
+        return subprocess.run(["java", "-Xmx384m", "-jar", str(jar), *args], cwd=bundle, check=True,
+                              text=True, stdout=subprocess.PIPE, timeout=60).stdout
 
     log = cli("run", "--suite", "suite/suite_manifest.yaml", "--profile", "local_v03", *selection)
     match = re.search(r"^result_json: (.+)$", log, re.MULTILINE)
@@ -63,7 +63,7 @@ def run(jar, bundle, name, selection):
 
 
 def main():
-    version = subprocess.check_output([ROOT / "scripts/release/verify-release-version.sh"], text=True).strip()
+    version = subprocess.check_output(["bash", "scripts/release/verify-release-version.sh"], cwd=ROOT, text=True, timeout=15).strip()
     jar = ROOT / f"target/spec-driven-auto-regression-{version}.jar"
     OUTPUT.mkdir(parents=True, exist_ok=True)
     bundle = Path(tempfile.mkdtemp(prefix="bundle-", dir=OUTPUT))
