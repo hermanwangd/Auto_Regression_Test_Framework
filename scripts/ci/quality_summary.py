@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+from native_jdbc_evidence import validate as validate_native_jdbc
 from defusedxml import ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -220,8 +221,24 @@ def summarize(commit, root, today):
     producer["attempt"] = provenance.get("framework", {}).get("attempt")
     receipts = conformance(root / "framework/provider-conformance", commit, producer, gaps)
     trace = traceability(root / "framework/traceability", gaps)
+    databases = {}
+    unverified = ["macOS runner", "Company SIT"]
+    for dialect, name in (("oracle", "Oracle"), ("db2", "Db2")):
+        step = steps.get("Verify native JDBC / " + dialect, "no step evidence")
+        record = provenance.get(dialect, {})
+        ci = sources.get("ci", {})
+        if (step == "success" and record and record["run_id"] == ci.get("databaseId")
+                and 1 <= record["attempt"] <= ci.get("attempt", 0)):
+            databases[dialect] = validate_native_jdbc(root / dialect, dialect, commit, record["run_id"], record["attempt"])
+        else:
+            unverified.append(name + " native")
+            # Db2 provisioning depends on operator acceptance. A skipped invocation stays visible.
+            if dialect != "db2" or step != "skipped" or record:
+                gaps.append("Missing verified native JDBC receipt for " + name)
+        scenarios["Linux / " + name] = step
     verified = (not gaps and all(source["conclusion"] == "success" for source in sources.values())
-                and all(status == "success" for status in scenarios.values()) and sast["passed"]
+                and all(status == "success" or (name == "Linux / Db2" and status == "skipped")
+                        for name, status in scenarios.items()) and sast["passed"]
                 and all(run["review_ready"] and run["canonical_status"] == "passed" and run["evidence_state"] == "VALID" for run in trace)
                 and all(not counts["errors"] and not counts["failed"] for counts in tests.values()))
     return {"schema_version": "ci-quality.v1", "commit": commit, "sources": sources, "artifact_provenance": provenance,
@@ -229,7 +246,7 @@ def summarize(commit, root, today):
             "evidence_gaps": gaps, "junit": tests, "scenarios": scenarios, "product": product, "sast": sast,
             "dependency_scan": dependency, "suppression_rules": suppressions(ROOT / "config/dependency-check-suppressions.xml", today),
             "adapter_conformance": receipts, "trace_runs": trace,
-            "unverified": ["macOS runner", "Oracle native", "Db2 native", "Company SIT"]}
+            "native_jdbc": databases, "unverified": unverified}
 
 
 def markdown(data):
@@ -249,6 +266,8 @@ def markdown(data):
               "", "## Provider and platform evidence", "", "| Scenario | CI step |", "| --- | --- |"]
     lines += [f"| {name} | {state} |" for name, state in data["scenarios"].items()]
     lines += ["", "| Provider contract | Evidence | Platform | Observed operations |", "| --- | --- | --- | --- |"]
+    for dialect, receipt in data["native_jdbc"].items():
+        lines.append(f"| jdbc.v0.3 ({dialect}) | {receipt['engine_version']} · {receipt['driver']} | Linux | db_seed, db_query, db_record_exists, db_cleanup |")
     for r in data["adapter_conformance"]["observed"]:
         lines.append(f"| {r['contract']} | {r['proof']} | {r['platform']} | " + ", ".join(r["operations"]) + " |")
     for missing in data["adapter_conformance"]["missing"]:

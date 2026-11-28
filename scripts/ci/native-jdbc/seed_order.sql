@@ -1,0 +1,1 @@
+INSERT INTO ORDERS (ORDER_ID, STATUS) VALUES (:order_id, :status);

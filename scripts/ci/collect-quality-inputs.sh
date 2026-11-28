@@ -23,7 +23,8 @@ for workflow in ci local-product-tests pr-sast; do
   gh api "repos/{owner}/{repo}/actions/runs/$run/jobs?filter=latest&per_page=100" > "$root/$workflow-jobs.json"
   gh api "repos/{owner}/{repo}/actions/runs/$run/artifacts?per_page=100" > "$root/$workflow-artifacts.json"
   case "$workflow" in
-    ci) artifacts=("framework-verification-$run|framework|Framework Gates" "dependency-security-$run|dependency|Dependency Security Scan" "windows-junit-$run|windows|Windows native CLI");;
+    ci) artifacts=("framework-verification-$run|framework|Framework Gates" "dependency-security-$run|dependency|Dependency Security Scan" "windows-junit-$run|windows|Windows native CLI"
+                   "native-jdbc-oracle-$run|oracle|Native JDBC / oracle" "native-jdbc-db2-$run|db2|Native JDBC / db2");;
     local-product-tests) artifacts=("local-product-tests-$run|products|Framework, module and public local products");;
     pr-sast) artifacts=("full-sast-$sha|sast|SAST / full repository");;
   esac
