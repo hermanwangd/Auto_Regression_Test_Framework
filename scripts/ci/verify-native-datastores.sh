@@ -53,14 +53,14 @@ run_case() {
 verify_mongodb_outage() {
   local result id owner status=0
   # The seed uses update/upsert. Interrupt only the following read and cleanup on runner connections.
-  mongo_eval 'assert.commandWorked(db.adminCommand({configureFailPoint:"failCommand", mode:"alwaysOn",
-    data:{appName:"framework-mongo-fixture", failCommands:["find","delete"], closeConnection:true}}))' >/dev/null
+  [[ "$(mongo_eval 'db.adminCommand({configureFailPoint:"failCommand", mode:"alwaysOn",
+    data:{appName:"framework-mongo-fixture", failCommands:["find","delete"], closeConnection:true}}).ok')" == 1 ]]
   cli run --suite mongodb/suite_manifest.yaml --profile external_mongodb > mongo-outage.log || status=$?
-  mongo_eval 'assert.commandWorked(db.adminCommand({configureFailPoint:"failCommand", mode:"off"}))' >/dev/null
+  [[ "$(mongo_eval 'db.adminCommand({configureFailPoint:"failCommand", mode:"off"}).ok')" == 1 ]]
   cat mongo-outage.log
   [[ $status == 1 ]]
   # The pinned server logs 20431 when it actively closes a connection for a command.
-  mongo_eval 'const lines = assert.commandWorked(db.adminCommand({getLog:"global"})).log;
+  mongo_eval 'const lines = db.adminCommand({getLog:"global"}).log;
     print(JSON.stringify(lines.map(line => JSON.parse(line)).filter(e => e.id === 20431).map(e => e.attr.command)))' |
     jq -e 'index("find") != null and index("delete") != null' >/dev/null
   result=$(sed -n 's/^result_json: //p' mongo-outage.log)
@@ -75,7 +75,7 @@ verify_mongodb_outage() {
     .cleanup_failures[0].failure_code == "MONGO_OPERATION_FAILED" and .failure.cleanup_failures == .cleanup_failures' "$result" >/dev/null
 
   id=$(jq -er '.steps[] | select(.id == "seed_order") | .outputs.document_id | select(test("^swarm-[a-f0-9]{64}$"))' "$result")
-  mongo_eval 'print(EJSON.stringify(db.swarm_fixture_documents.find().limit(3).toArray()))' > recovered-docs.json
+  mongo_eval 'print(JSON.stringify(db.swarm_fixture_documents.find().limit(3).toArray()))' > recovered-docs.json
   owner=$(jq -er --arg id "$id" --slurpfile expected mongodb/expected_results/confirmed_order.json '
     select(length == 2 and any(.[]; . == {"_id":"control","payload":"keep"})) |
     .[] | select(._id == $id and .payload == $expected[0]) | .owner | select(test("^[a-f0-9]{64}$"))' recovered-docs.json)
