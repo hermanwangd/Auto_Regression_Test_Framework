@@ -133,6 +133,11 @@ public class V03RuntimeExecutionService {
 
     public V03RuntimeRunResult runReviewed(Path suiteManifest, String profile, SuiteExecutionContext context,
             InvocationRequirement requirement) {
+        return runReviewed(suiteManifest, profile, context, requirement, null);
+    }
+
+    public V03RuntimeRunResult runReviewed(Path suiteManifest, String profile, SuiteExecutionContext context,
+            InvocationRequirement requirement, String selectedTestCase) {
         if (requirement == null || !requirement.required()
                 || !requirement.expectedSha256().matches("[a-f0-9]{64}")) {
             return reviewedBlocked(suiteManifest, profile, "An explicit reviewed invocation needs its independent SHA-256 pin.");
@@ -141,7 +146,7 @@ public class V03RuntimeExecutionService {
         if (invocationRequirement.required() && !invocationRequirement.equals(requirement)) {
             return reviewedBlocked(suiteManifest, profile, "The explicit digest must match the captured invocation pin.");
         }
-        return runGuarded(suiteManifest, profile, context, null, requirement, null);
+        return runGuarded(suiteManifest, profile, context, null, requirement, null, selectedTestCase);
     }
 
     public V03RuntimeRunResult run(Path suiteManifest, String profile, SuiteExecutionContext executionContext) {
@@ -156,11 +161,18 @@ public class V03RuntimeExecutionService {
 
     public V03RuntimeRunResult run(Path suiteManifest, String profile, SuiteExecutionContext executionContext,
             ValidationResult validation, Supplier<DiscoveryResult> ordinaryJdbcDrivers) {
-        return runGuarded(suiteManifest, profile, executionContext, validation, invocationRequirement, ordinaryJdbcDrivers);
+        return run(suiteManifest, profile, executionContext, validation, ordinaryJdbcDrivers, null);
+    }
+
+    public V03RuntimeRunResult run(Path suiteManifest, String profile, SuiteExecutionContext executionContext,
+            ValidationResult validation, Supplier<DiscoveryResult> ordinaryJdbcDrivers, String selectedTestCase) {
+        return runGuarded(suiteManifest, profile, executionContext, validation, invocationRequirement, ordinaryJdbcDrivers,
+                selectedTestCase);
     }
 
     private V03RuntimeRunResult runGuarded(Path suiteManifest, String profile, SuiteExecutionContext executionContext,
-            ValidationResult validation, InvocationRequirement requirement, Supplier<DiscoveryResult> ordinaryJdbcDrivers) {
+            ValidationResult validation, InvocationRequirement requirement, Supplier<DiscoveryResult> ordinaryJdbcDrivers,
+            String selectedTestCase) {
         requireMatchingProfile(profile, executionContext);
         long reviewedOperationStarted=System.nanoTime();
         try {
@@ -176,7 +188,7 @@ public class V03RuntimeExecutionService {
                     var reviewedRegistry = jdbcInvocation == null ? runtimeRegistry
                             : runtimeRegistry.replacing(new JdbcV03Adapter(jdbcInvocation));
                     var result = runValidated(snapshot.suiteManifest(), profile, executionContext, checked, baseline,
-                            snapshot.contractDirectory(), snapshot.policy(), snapshot.provenance(), reviewedRegistry);
+                            snapshot.contractDirectory(), snapshot.policy(), snapshot.provenance(), reviewedRegistry, selectedTestCase);
                     if (result.resultJson() != null) {
                         new SuiteArtifactFinalizer().finalizeLeaf(snapshot.suiteManifest(), result.resultJson());
                     }
@@ -190,7 +202,7 @@ public class V03RuntimeExecutionService {
         var ordinaryRegistry = checked.valid() && checked.providerTypesUsed().contains("jdbc") && ordinaryJdbcDrivers != null
                 ? runtimeRegistry.replacing(JdbcV03Adapter.withDrivers(ordinaryJdbcDrivers.get())) : runtimeRegistry;
         return runValidated(suiteManifest, profile, executionContext, checked,
-                contractBaselineService, null, null, Map.of(), ordinaryRegistry);
+                contractBaselineService, null, null, Map.of(), ordinaryRegistry, selectedTestCase);
     }
 
     private V03RuntimeRunResult reviewedBlocked(Path suiteManifest, String profile, String reason) {
@@ -201,14 +213,15 @@ public class V03RuntimeExecutionService {
 
     private V03RuntimeRunResult runValidated(Path suiteManifest, String profile, SuiteExecutionContext executionContext,
             ValidationResult validation, ContractBaselineService baseline, Path verifiedContracts,
-            ProductTestPolicy policy, Map<String,Object> provenance, V03ProviderRuntimeRegistry selectedRegistry) {
+            ProductTestPolicy policy, Map<String,Object> provenance, V03ProviderRuntimeRegistry selectedRegistry,
+            String selectedTestCase) {
         if (!validation.valid()) {
             return V03RuntimeRunResult.blocked(validation.suiteId(), profile, validation.findings());
         }
         V03ExecutionPlan plan;
         try {
             plan = new V03ExecutionPlanBuilder(baseline, verifiedContracts)
-                    .build(suiteManifest, profile, validation);
+                    .build(suiteManifest, profile, validation, selectedTestCase);
         } catch (IllegalArgumentException | IllegalStateException error) {
             return V03RuntimeRunResult.blocked(validation.suiteId(), profile, List.of(new ContractFinding(
                     suiteManifest.toString(),
@@ -344,6 +357,7 @@ public class V03RuntimeExecutionService {
             }
             V03ProviderRuntimeAdapter adapter = selectedRegistry.resolve(step.providerType());
             V03StepResult result;
+            long providerStartedNanos = System.nanoTime();
             try {
                 result = policyGuard == null ? adapter.execute(step, context) : policyGuard.execute(step, context, scope);
             } catch (IllegalArgumentException | IllegalStateException error) {
@@ -353,6 +367,7 @@ public class V03RuntimeExecutionService {
                 policyEvidence.put("status", "blocked");
                 policyEvidence.put("reason", outputRedactor.redactMessage(error.getMessage()));
             }
+            long providerDurationMs = Duration.ofNanos(System.nanoTime() - providerStartedNanos).toMillis();
             if (policyGuard != null && !result.passed() && "cleanup".equals(step.phase())) {
                 String diagnosticRef = "policy/cleanup-" + cleanupFailures.size() + ".json";
                 write(runDir.resolve(diagnosticRef), toJson(Map.of("step_id",step.id(),"test_case_id",step.testCaseId(),
@@ -366,7 +381,7 @@ public class V03RuntimeExecutionService {
             validateRuntimeOutputs(plan, step, result);
             providerRuntimeExecuted = true;
             recordProducedOutputs(plan, step, result.outputs(), stepOutputs, generatedOutputs);
-            stepResults.add(stepResult(plan, step, result));
+            stepResults.add(stepResult(plan, step, result, providerDurationMs));
             providerResults.add(providerResult(plan, step, result));
             evidenceRefs.addAll(result.evidenceRefs());
             if (!result.passed() && "cleanup".equals(step.phase())) {
@@ -482,7 +497,7 @@ public class V03RuntimeExecutionService {
                 evidenceClassification,
                 downstreamReleaseEvidence,
                 readiness,
-                reviewedBinding);
+                reviewedBinding, selectedTestCase);
         return new V03RuntimeRunResult(
                 "passed".equals(status),
                 status,
@@ -742,7 +757,8 @@ public class V03RuntimeExecutionService {
         return targets;
     }
 
-    private Map<String, Object> stepResult(V03ExecutionPlan plan, V03ExecutionStep step, V03StepResult result) {
+    private Map<String, Object> stepResult(V03ExecutionPlan plan, V03ExecutionStep step, V03StepResult result,
+            long durationMs) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("test_case_id", step.testCaseId());
         map.put("id", step.id());
@@ -750,6 +766,7 @@ public class V03RuntimeExecutionService {
         map.put("target", step.target());
         map.put("operation", step.operation());
         map.put("status", result.status());
+        map.put("duration_ms", durationMs);
         map.put("outputs", outputRedactor.redact(plan, step, result.outputs()));
         if (!result.failureCode().isBlank()) {
             map.put("failure_code", result.failureCode());
@@ -821,7 +838,7 @@ public class V03RuntimeExecutionService {
             String evidenceClassification,
             boolean downstreamReleaseEvidence,
             SitReadinessReport readiness,
-            Map<String,Object> reviewedBinding) {
+            Map<String,Object> reviewedBinding, String selectedTestCase) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("framework_version", FRAMEWORK_VERSION);
         result.put("dsl_version", testCase == null ? "v0.3" : testCase.dslVersion());
@@ -831,6 +848,7 @@ public class V03RuntimeExecutionService {
         result.put("run_id", runId);
         result.put("test_case_id", testCaseId);
         result.put("test_count", testCases.size());
+        if (selectedTestCase != null) result.put("selected_test_case", selectedTestCase);
         result.put("profile", plan.profile());
         result.put("environment", plan.profile());
         List<Map<String, Object>> providerAggregates = providerAggregates(providerResults);

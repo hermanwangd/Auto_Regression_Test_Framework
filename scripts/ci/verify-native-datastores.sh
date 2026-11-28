@@ -7,8 +7,10 @@ jar="$root/target/spec-driven-auto-regression-${version}.jar"
 test -s "$jar"
 scratch=$(mktemp -d)
 server=""
+redis_pid=""
 app_pid=""
 stop_server() {
+  if [[ -n "$redis_pid" ]]; then kill "$redis_pid" 2>/dev/null || true; wait "$redis_pid" 2>/dev/null || true; redis_pid=""; fi
   if [[ -n "$server" ]]; then docker rm -fv "$server" >/dev/null; server=""; fi
 }
 finish() {
@@ -66,20 +68,61 @@ verify_mongodb() {
   run_case mongodb failed mongo_seed 1
   mongo_clean
 }
+verify_redis_outage() {
+  local port=$1 result key owner status=0
+  python3 "$root/scripts/ci/redis-outage-fixture.py" "$port" "$jar" > redis-outage.log || status=$?
+  cat redis-outage.log
+  [[ $status == 0 ]]
+  result=$(sed -n 's/^result_json: //p' redis-outage.log)
+  cli validate-evidence --result "$result"
+  jq -e '
+    .status == "failed" and .failure.code == "PROVIDER_UNAVAILABLE" and
+    .failure.classification == "PROVIDER_RUNTIME_ERROR" and (.failure.owner_action | contains("read_string")) and
+    any(.step_results[]; .operation == "redis_set" and .status == "passed" and .outputs.created == true) and
+    any(.step_results[]; .operation == "redis_get" and .status == "failed" and .failure_code == "PROVIDER_UNAVAILABLE") and
+    any(.step_results[]; .phase == "cleanup" and .operation == "redis_delete" and .status == "failed") and
+    (.cleanup_failures | length == 1) and .cleanup_failures[0].step_id == "remove_string" and
+    .cleanup_failures[0].failure_code == "PROVIDER_UNAVAILABLE" and .failure.cleanup_failures == .cleanup_failures' "$result" >/dev/null
+  cli report --result "$result" --format json > redis-outage-report.json
+  jq -e --slurpfile run "$result" '
+    [.step_timings[] | select(.operation == "redis_get" or .operation == "redis_delete")] as $timings |
+    ($timings | length) == 2 and all($timings[]; . as $step |
+      .duration_ms >= 1000 and any($run[0].steps[]; .id == $step.step_id and .duration_ms == $step.duration_ms))' \
+    redis-outage-report.json >/dev/null
+  jq -c '[.step_timings[] | {step_id, duration_ms}]' redis-outage-report.json
+  key=$(jq -er '.step_results[] | select(.operation == "redis_set") | .outputs.physical_key |
+    select(test("^sdr:redis:[{][a-f0-9]{64}[}]:value$"))' "$result")
+  owner="${key%:value}:owner"
+  [[ "$(redis_cmd get "$key")" == order-ready && "$(redis_cmd get "$owner")" =~ ^[0-9a-f]{64}:order-ready$ ]]
+  [[ "$(redis_cmd get control)" == keep && "$(redis_cmd dbsize)" == 3 ]]
+  [[ "$(redis_cmd del "$key" "$owner")" == 2 ]]
+  redis_clean
+  echo "Recovered Redis held both fixture keys and the control; removed the two fixture keys and verified the control."
+}
 verify_redis() {
   cp -R "$root/samples/20-provider-capability-p0/data/redis" .
-  server=$(docker run -d --memory 160m --cpus 1 -p 127.0.0.1::6379 \
-    redis:7.4.7-alpine@sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf)
-  local addr
-  addr=$(docker port "$server" 6379/tcp)
+  local addr port
+  if [[ $1 == redis-local ]]; then
+    port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+    addr="127.0.0.1:$port"
+    redis-server --bind 127.0.0.1 --port "$port" --unixsocket "$scratch/redis.sock" \
+      --save "" --appendonly no --maxmemory 32mb > redis-server.log 2>&1 &
+    redis_pid=$!
+    redis_cmd() { redis-cli --raw -s "$scratch/redis.sock" "$@"; }
+  else
+    server=$(docker run -d --memory 160m --cpus 1 -p 127.0.0.1::6379 \
+      redis:7.4.7-alpine@sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf)
+    addr=$(docker port "$server" 6379/tcp)
+    redis_cmd() { docker exec "$server" redis-cli --raw "$@"; }
+  fi
   printf -v FRAMEWORK_REDIS_URI '%s://%s/0' redis "$addr"
   export FRAMEWORK_REDIS_URI
-  redis_cmd() { docker exec "$server" redis-cli --raw "$@"; }
   ready redis_cmd ping
   redis_cmd set control keep >/dev/null
   redis_clean() { [[ "$(redis_cmd dbsize)" == 1 && "$(redis_cmd get control)" == keep ]]; }
   run_case redis passed redis_ttl 0
   redis_clean
+  verify_redis_outage "${addr##*:}"
   # Change only the independent expectation in the scratch copy.
   sed 's/expected_value: order-ready/expected_value: different/' redis/test_cases/owned_string.yaml > wrong.yaml
   mv wrong.yaml redis/test_cases/owned_string.yaml
@@ -136,7 +179,7 @@ if [[ ${#providers[@]} == 0 ]]; then providers=(mongodb redis s3); fi
 for provider in "${providers[@]}"; do
   case "$provider" in
     mongodb) verify_mongodb ;;
-    redis) verify_redis ;;
+    redis|redis-local) verify_redis "$provider" ;;
     s3) verify_s3 ;;
     *) exit 2 ;;
   esac

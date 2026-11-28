@@ -54,14 +54,15 @@ public class V03ExecutionPlanBuilder {
             Path suiteManifest,
             String requestedProfile,
             ValidationResult validation) {
-        return compilePlan(suiteManifest, requestedProfile, validation);
+        return build(suiteManifest, requestedProfile, validation, null);
     }
 
     /** Compiles one immutable plan from a command-scoped validation result. */
-    private V03ExecutionPlan compilePlan(
+    public V03ExecutionPlan build(
             Path suiteManifest,
             String requestedProfile,
-            ValidationResult validation) {
+            ValidationResult validation,
+            String selectedTestCase) {
         if (!validation.valid()) {
             throw new IllegalArgumentException("v0.3 suite is not valid: " + validation.findings());
         }
@@ -78,6 +79,20 @@ public class V03ExecutionPlanBuilder {
         Map<String, V03ResolvedTarget> targets = orderedTargets(
                 resolvedTargets(suite, profile, envProfile), contracts);
         List<Map<String, Object>> testDocuments = testDocuments(suiteRoot, suite);
+        if (selectedTestCase != null) {
+            if (envProfile.containsKey("product_test") && testDocuments.size() != 1) {
+                throw new IllegalArgumentException("A reviewed run must execute its entire approved case set.");
+            }
+            testDocuments = testDocuments.stream()
+                    .filter(document -> selectedTestCase.equals(document.get("test_case_id")))
+                    .toList();
+            if (testDocuments.isEmpty()) {
+                throw new IllegalArgumentException("unknown_test_case: " + selectedTestCase);
+            }
+            if (testDocuments.size() != 1) {
+                throw new IllegalArgumentException("ambiguous_test_case: " + selectedTestCase);
+            }
+        }
         Map<String, Path> artifactRoots = artifactRoots(suiteRoot, suite);
         testDocuments.forEach(document -> visitArtifactReferences(document,
                 artifact -> referenceResolver.artifactPath(artifact, artifactRoots)));

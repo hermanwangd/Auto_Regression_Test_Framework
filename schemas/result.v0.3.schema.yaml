@@ -30,6 +30,7 @@ required_fields:
   - termination_reason
   - suite_summary_ref
 optional_fields:
+  - selected_test_case
   - product_test
   - labels
   - source_refs
@@ -78,6 +79,15 @@ result_model:
       - A complete result uses termination_reason null.
       - A partial result uses status blocked and a non-null partial termination reason.
       - Existing provider, step, verify, failure, and evidence fields remain mandatory and are not replaced by summary fields.
+  provider_step_timing:
+    applies_to: [steps, step_results]
+    phases: [setup, execute, verify, cleanup]
+    duration_ms:
+      type: integer
+      minimum: 0
+      description: >
+        Elapsed whole milliseconds from a monotonic clock for an individual provider invocation,
+        including a verify provider_check or a returned failure. Older results can omit this field.
   aggregation_result:
     aggregate_test_case_id: <suite_id>-AGGREGATE
     test_result_required_identity_fields: [suite_path, test_result_id, test_case_id]

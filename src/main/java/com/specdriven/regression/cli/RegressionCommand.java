@@ -105,6 +105,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -289,6 +290,11 @@ public class RegressionCommand {
             return 0;
         }
 
+        if ("run".equals(command) && options.containsKey("--suite")
+                && java.util.Arrays.stream(args).filter(arg -> arg.equals("--test-case") || arg.startsWith("--test-case=")).count() > 1) {
+            err.println("Specify --test-case only once.");
+            return 2;
+        }
         return switch (command) {
             case "init-product-repo" -> initProductRepo(root, out);
             case "check-readiness" -> checkReadiness(root, options, out, err);
@@ -314,8 +320,8 @@ public class RegressionCommand {
         out.println("commands:");
         out.println("  build-info --format json");
         out.println("  validate --suite <suite_manifest> [--profile <profile>]");
-        out.println("  run --suite <suite_manifest> --profile <profile> [--driver-path <jar>] [--driver-dir <dir>]");
-        out.println("  run --suite <suite_manifest> --dry-run [--profile <profile>]");
+        out.println("  run --suite <suite_manifest> --profile <profile> [--test-case <id>] [--driver-path <jar>] [--driver-dir <dir>]");
+        out.println("  run --suite <suite_manifest> --dry-run [--profile <profile>] [--test-case <id>]");
         out.println("  report --result <result_json> [--format text|yaml|json] [--coverage-dir <dir>] [--coverage-catalog <json>] [--coverage-selection <json>] [--coverage-authority <json> --expected-coverage-authority-sha256 <sha256>]");
         out.println("  validate-evidence --result <result_json>");
         out.println("  doctor drivers [--driver-path <jar>] [--driver-dir <dir>]");
@@ -325,8 +331,8 @@ public class RegressionCommand {
     private void printCommandUsage(String command, PrintStream out) {
         switch (command) {
             case "run" -> {
-                out.println("usage: regress run --suite <suite_manifest> --profile <profile> [--driver-path <jar>] [--driver-dir <dir>]");
-                out.println("       regress run --suite <suite_manifest> --dry-run [--profile <profile>]");
+                out.println("usage: regress run --suite <suite_manifest> --profile <profile> [--test-case <id>] [--driver-path <jar>] [--driver-dir <dir>]");
+                out.println("       regress run --suite <suite_manifest> --dry-run [--profile <profile>] [--test-case <id>]");
             }
             case "validate" -> out.println("usage: regress validate --suite <suite_manifest> [--profile <profile>]");
             case "report" -> out.println("usage: regress report --result <result_json> [--format text|yaml|json] [--coverage-dir <dir>] [--coverage-catalog <json>] [--coverage-selection <json>] [--coverage-authority <json> --expected-coverage-authority-sha256 <sha256>]");
@@ -396,7 +402,7 @@ public class RegressionCommand {
         List<ContractFinding> profileFindings = suiteProfileFindings(suiteManifest, options.get("--profile"));
         List<ContractFinding> findings = new ArrayList<>(result.findings());
         findings.addAll(profileFindings);
-        V03ExecutionPlan compiled = compileV03IfReady(suiteManifest, options.get("--profile"), result, findings);
+        V03ExecutionPlan compiled = compileV03IfReady(suiteManifest, options.get("--profile"), result, findings, null);
         boolean valid = findings.isEmpty();
         out.println("validation_status: " + (valid ? "passed" : "failed"));
         out.println("suite_id: " + result.suiteId());
@@ -520,12 +526,12 @@ public class RegressionCommand {
         com.specdriven.regression.report.CanonicalCoverageReportResult coverage = null;
         boolean explicitCoverage = options.containsKey("--coverage-dir") || options.containsKey("--coverage-catalog")
                 || options.containsKey("--coverage-selection") || options.containsKey("--coverage-authority") || options.containsKey("--expected-coverage-authority-sha256");
-        Map<String, Object> coverageSource = readResultMap(resolvedResult);
-        boolean legacyMarkersAbsent = !coverageSource.containsKey("result_contract_version")
-                && !coverageSource.containsKey("product_test");
-        boolean knownLegacyCoverage = legacyMarkersAbsent && ("v0.2".equals(stringValue(coverageSource.get("dsl_version")))
-                || (!coverageSource.containsKey("dsl_version")
-                        && new com.specdriven.regression.report.LegacySuiteSummaryReportAdapter().supports(coverageSource)));
+        Map<String, Object> resultDocument = readResultMap(resolvedResult);
+        boolean legacyMarkersAbsent = !resultDocument.containsKey("result_contract_version")
+                && !resultDocument.containsKey("product_test");
+        boolean knownLegacyCoverage = legacyMarkersAbsent && ("v0.2".equals(stringValue(resultDocument.get("dsl_version")))
+                || (!resultDocument.containsKey("dsl_version")
+                        && new com.specdriven.regression.report.LegacySuiteSummaryReportAdapter().supports(resultDocument)));
         if (!result.suiteId().isBlank() && (explicitCoverage || !knownLegacyCoverage)) {
             try {
                 Path coverageDir = options.containsKey("--coverage-dir")
@@ -547,10 +553,12 @@ public class RegressionCommand {
                 return 1;
             }
         }
+        boolean evidenceInvalid = (evidenceResult != null && !evidenceResult.valid()) || (coverage != null && !coverage.valid());
+        List<Map<String, Object>> timings = evidenceInvalid ? List.of() : stepTimings(resultDocument);
         if ("json".equals(format)) {
-            int exitCode = (evidenceResult == null || evidenceResult.valid()) && (coverage == null || coverage.valid()) ? 0 : 1;
             Map<String, Object> report = jsonReport(result, evidenceResult);
             addSuiteSummaryReportFields(report, resolvedResult);
+            if (!timings.isEmpty()) report.put("step_timings", timings);
             if (coverage != null) {
                 report.put("coverage_json", coverage.json().toString());
                 report.put("coverage_md", coverage.markdown().toString());
@@ -562,7 +570,7 @@ public class RegressionCommand {
             }
             report.put("coverage_percent_metric", "test_pass_rate_percent");
             report.put("coverage_percent_deprecation", "Use typed requirement/AC metrics; the legacy field is a test pass rate.");
-            return printReportJson(out, err, report) ? exitCode : 1;
+            return printReportJson(out, err, report) && !evidenceInvalid ? 0 : 1;
         }
         if (coverage != null) {
             out.println("coverage_json: " + coverage.json());
@@ -573,7 +581,6 @@ public class RegressionCommand {
         }
         out.println("coverage_percent_metric: test_pass_rate_percent");
         out.println("coverage_percent_deprecation: Use typed requirement/AC metrics; the legacy field is a test pass rate.");
-        boolean evidenceInvalid = (evidenceResult != null && !evidenceResult.valid()) || (coverage != null && !coverage.valid());
         if (result.suiteId().isBlank()) {
             out.println("report_status: " + (evidenceInvalid ? "invalid" : result.status()));
         } else {
@@ -589,6 +596,7 @@ public class RegressionCommand {
         out.println("test_case_id: " + result.testCaseId());
         out.println("profile: " + result.profile());
         printSuiteSummaryReportSections(out, resolvedResult);
+        if (!timings.isEmpty()) out.print(new Yaml().dumpAsMap(Map.of("step_timings", timings)));
         out.println("provider_results_count: " + result.providerResultsCount());
         out.println("verify_results_count: " + result.verifyResultsCount());
         if (!result.failedVerifySummary().isEmpty()) {
@@ -606,6 +614,32 @@ public class RegressionCommand {
         }
         out.println("coverage_percent: " + ("passed".equals(result.status()) ? "100.0" : "0.0"));
         return evidenceInvalid ? 1 : 0;
+    }
+
+    private List<Map<String, Object>> stepTimings(Map<String, Object> resultDocument) {
+        List<Map<String, Object>> timings = new ArrayList<>();
+        for (Object row : objectList(resultDocument.get("steps"))) {
+            Map<String, Object> step = mapValue(row);
+            Object duration = step.get("duration_ms");
+            if (!(duration instanceof Integer || duration instanceof Long)
+                    || ((Number) duration).longValue() < 0
+                    || !(step.get("test_case_id") instanceof String testCaseId)
+                    || !(step.get("id") instanceof String stepId)
+                    || !(step.get("phase") instanceof String phase)
+                    || !(step.get("operation") instanceof String operation)) {
+                continue;
+            }
+            Map<String, Object> timing = new LinkedHashMap<>();
+            if (step.get("suite_path") instanceof String suitePath) timing.put("suite_path", suitePath);
+            timing.put("test_case_id", testCaseId);
+            timing.put("step_id", stepId);
+            timing.put("phase", phase);
+            timing.put("operation", operation);
+            timing.put("duration_ms", ((Number) duration).longValue());
+            timings.add(timing);
+        }
+        timings.sort(Comparator.comparingLong((Map<String, Object> timing) -> (long) timing.get("duration_ms")).reversed());
+        return timings;
     }
 
     private void addSuiteSummaryReportFields(Map<String, Object> report, Path resultJson) {
@@ -1244,13 +1278,27 @@ public class RegressionCommand {
             return 2;
         }
         Path suiteManifest = root.resolve(suite).normalize();
+        String selectedTestCase = options.get("--test-case");
+        if (selectedTestCase != null && selectedTestCase.isBlank()) {
+            err.println("Specify a case ID after --test-case.");
+            return 2;
+        }
+        if (options.containsKey("--tag")) {
+            err.println("run --suite supports selection by --test-case on v0.3 leaf suites.");
+            return 2;
+        }
+        boolean group = isSuiteGroupManifest(suiteManifest);
+        if (selectedTestCase != null && group) {
+            err.println("Use --test-case with a v0.3 leaf suite manifest.");
+            return 2;
+        }
         if (!options.containsKey("--dry-run")) {
             String profile = requiredOption(options, "--profile", err);
             if (profile == null) {
                 return 2;
             }
             Supplier<DiscoveryResult> jdbcDrivers = () -> jdbcDriverDiscovery(root, options);
-            if (isSuiteGroupManifest(suiteManifest)) {
+            if (group) {
                 return runSuiteGroup(
                         suiteManifest,
                         profile,
@@ -1261,24 +1309,24 @@ public class RegressionCommand {
                     suiteManifest,
                     suite,
                     profile,
-                    root.resolve("target/regression").normalize(), null, jdbcDrivers);
+                    root.resolve("target/regression").normalize(), null, jdbcDrivers, selectedTestCase);
             printSuiteRuntimeResult(out, result);
             return result.passed() ? 0 : 1;
         }
-        if (isSuiteGroupManifest(suiteManifest)) {
+        if (group) {
             return dryRunSuiteGroup(suiteManifest, options.get("--profile"), out);
         }
         ValidationResult validation = contractBaselineService.validateSuite(suiteManifest);
         List<ContractFinding> profileFindings = suiteProfileFindings(suiteManifest, options.get("--profile"));
         List<ContractFinding> findings = new ArrayList<>(validation.findings());
         findings.addAll(profileFindings);
-        V03ExecutionPlan compiled = compileV03IfReady(suiteManifest, options.get("--profile"), validation, findings);
+        V03ExecutionPlan compiled = compileV03IfReady(suiteManifest, options.get("--profile"), validation, findings, selectedTestCase);
         boolean ready = findings.isEmpty();
         out.println("provider_runtime_invoked: false");
         out.println("run_status: " + (ready ? "dry_run_ready" : "blocked"));
         if (compiled != null) {
             v03DryRunRenderer.render(out, compiled);
-        } else {
+        } else if (selectedTestCase == null) {
             DryRunResult result = contractBaselineService.dryRun(suiteManifest);
             out.println("suite_id: " + result.validation().suiteId());
             out.println("resolved_execution_plan:");
@@ -1306,9 +1354,9 @@ public class RegressionCommand {
             String profile,
             Path outputRoot,
             SuiteExecutionContext parentContext,
-            Supplier<DiscoveryResult> jdbcDrivers) {
+            Supplier<DiscoveryResult> jdbcDrivers, String selectedTestCase) {
         SuiteRuntimeResult result = dispatchSuiteRuntimeUnfinalized(
-                suiteManifest, suiteRef, profile, outputRoot, parentContext, jdbcDrivers);
+                suiteManifest, suiteRef, profile, outputRoot, parentContext, jdbcDrivers, selectedTestCase);
         if (result.resultJson() == null) {
             return result;
         }
@@ -1327,7 +1375,7 @@ public class RegressionCommand {
             String profile,
             Path outputRoot,
             SuiteExecutionContext parentContext,
-            Supplier<DiscoveryResult> jdbcDrivers) {
+            Supplier<DiscoveryResult> jdbcDrivers, String selectedTestCase) {
         if (parentContext != null && !parentContext.matchesRequestedProfile(profile)) {
             return SuiteRuntimeResult.blocked("", profile, List.of(new ContractFinding(
                     suiteManifest.toString(),
@@ -1348,7 +1396,7 @@ public class RegressionCommand {
                             "Run a reviewed v0.3 leaf separately; reviewed group execution is unsupported.")));
                 }
                 return SuiteRuntimeResult.fromV03(v03RuntimeExecutionService.runReviewed(suiteManifest, profile,
-                        runtimeContext(null, outputRoot, profile), invocationRequirement));
+                        runtimeContext(null, outputRoot, profile), invocationRequirement, selectedTestCase));
             }
         } catch (IllegalArgumentException | IllegalStateException | UncheckedIOException error) {
             return SuiteRuntimeResult.blocked("", profile, List.of(new ContractFinding(suiteManifest.toString(),
@@ -1365,7 +1413,10 @@ public class RegressionCommand {
                     suiteManifest,
                     profile,
                     runtimeContext(parentContext, outputRoot, profile),
-                    validation, jdbcDrivers));
+                    validation, jdbcDrivers, selectedTestCase));
+        }
+        if (selectedTestCase != null) {
+            return SuiteRuntimeResult.blocked(validation.suiteId(), profile, List.of(unsupportedCaseSelection(suiteManifest)));
         }
         if (supportsWireMockHttpRequestSample(providerTypes)) {
             return SuiteRuntimeResult.fromMixed(wireMockHttpRequestCapabilityService.run(
@@ -1847,7 +1898,7 @@ public class RegressionCommand {
                 child.ref(),
                 child.profile(),
                 childOutputRoot,
-                parentContext.forChildProfile(child.profile()), jdbcDrivers);
+                parentContext.forChildProfile(child.profile()), jdbcDrivers, null);
         return SuiteGroupChildResult.fromSuiteRuntime(child, result);
     }
 
@@ -2112,16 +2163,24 @@ public class RegressionCommand {
         return validation.providerContractsUsed().stream().anyMatch(contract -> contract.endsWith(".v0.3"));
     }
 
+    private ContractFinding unsupportedCaseSelection(Path manifest) {
+        return finding(manifest, "test_case_id", "unsupported_test_case_selection",
+                "Use --test-case with a v0.3 leaf suite manifest.");
+    }
+
     private V03ExecutionPlan compileV03IfReady(
             Path suiteManifest,
             String profile,
             ValidationResult validation,
-            List<ContractFinding> findings) {
+            List<ContractFinding> findings, String selectedTestCase) {
+        if (selectedTestCase != null && validation.valid() && !isV03Validation(validation)) {
+            findings.add(unsupportedCaseSelection(suiteManifest));
+        }
         if (!validation.valid() || !isV03Validation(validation) || !findings.isEmpty()) {
             return null;
         }
         try {
-            return new V03ExecutionPlanBuilder(contractBaselineService).build(suiteManifest, profile, validation);
+            return new V03ExecutionPlanBuilder(contractBaselineService).build(suiteManifest, profile, validation, selectedTestCase);
         } catch (IllegalArgumentException | IllegalStateException error) {
             findings.add(finding(
                     suiteManifest,
@@ -3834,7 +3893,9 @@ public class RegressionCommand {
     private Map<String, String> parseOptions(String[] args) {
         Map<String, String> options = new LinkedHashMap<>();
         for (int i = 1; i < args.length; i++) {
-            if (args[i].startsWith("--") && i + 1 < args.length && !args[i + 1].startsWith("--")) {
+            if (args[i].startsWith("--test-case=")) {
+                putOption(options, "--test-case", args[i].substring("--test-case=".length()));
+            } else if (args[i].startsWith("--") && i + 1 < args.length && !args[i + 1].startsWith("--")) {
                 putOption(options, args[i], args[i + 1]);
                 i++;
             } else if (args[i].startsWith("--")) {
