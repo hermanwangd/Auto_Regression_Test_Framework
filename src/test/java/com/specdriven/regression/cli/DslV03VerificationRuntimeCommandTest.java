@@ -573,6 +573,93 @@ class DslV03VerificationRuntimeCommandTest {
                 .contains("invalid_json_pointer");
     }
 
+    @ParameterizedTest(name = "{0} with fractional suffix {1}")
+    @CsvSource(textBlock = """
+            gt,  1,  false
+            gt,  20, false
+            gt,  3,  true
+            gte, 1,  false
+            gte, 20, true
+            gte, 3,  true
+            lt,  1,  true
+            lt,  20, false
+            lt,  3,  false
+            lte, 1,  true
+            lte, 20, true
+            lte, 3,  false
+            """)
+    void numericOrderingKeepsDecimalBoundariesInVerdictAndEvidence(
+            String operator, String suffix, boolean passes) throws Exception {
+        Path suite = mutableSuite(COMMON_VERIFY_SUITE.getParent(), "decimal_boundaries");
+        String prefix = "1.00000000000000000000";
+        String actual = prefix + suffix;
+        String expected = prefix + "2";
+        Path fixtures = suite.getParent().resolve("expected_results");
+        Files.writeString(fixtures.resolve("measured.json"), "{\"value\":" + actual + "}");
+        Files.writeString(fixtures.resolve("threshold.json"), expected);
+        Files.writeString(suite.getParent().resolve("test_cases/common_verify_success.yaml"), """
+                dsl_version: v0.3
+                test_case_id: DECIMAL-BOUNDARY
+                title: Compare adjacent decimal values
+                execute: []
+                verify:
+                  - id: boundary
+                    type: assertion
+                    assert:
+                      operator: %s
+                      actual_ref: artifact://expected_results/measured.json#/value
+                      expected_ref: artifact://expected_results/threshold.json
+                """.formatted(operator));
+
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_v03");
+        assertThat(run.exit()).as(run.stdout() + run.stderr()).isEqualTo(passes ? 0 : 1);
+        Path result = extractPath(run.stdout(), "result_json");
+        JsonNode row = OBJECT_MAPPER.readTree(result.toFile()).path("verify_results").get(0);
+        assertThat(row.path("status").asText()).isEqualTo(passes ? "passed" : "failed");
+        Path evidenceFile = extractPath(run.stdout(), "evidence_dir").resolve(row.required("evidence_ref").asText());
+        String evidence = Files.readString(evidenceFile);
+        assertThat(evidence.lines()).contains("actual: " + actual, "expected: " + expected);
+        CommandResult validation = execute("validate-evidence", "--result", result.toString());
+        assertThat(validation.exit()).as(validation.stdout() + validation.stderr()).isZero();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void numericOrderingChecksSelectedRestValueAgainstQuotedThreshold(boolean numeric) throws Exception {
+        Path suite = mutableSuite(Path.of("samples/20-provider-capability-p0/http/rest_client_with_wiremock"),
+                "rest_decimal");
+        String body = numeric ? "{\"measurement\":1.000000000000000000002e-100}" : "{\"measurement\":false}";
+        Files.writeString(suite.getParent().resolve("expected_results/payment_response.json"), body);
+        Path mapping = suite.getParent().resolve("fixtures/wiremock/payment_success_stub.json");
+        JsonNode stub = OBJECT_MAPPER.readTree(mapping.toFile());
+        ObjectNode response = (ObjectNode) stub.required("response");
+        response.remove("jsonBody");
+        response.put("body", body);
+        OBJECT_MAPPER.writeValue(mapping.toFile(), stub);
+        Path test = suite.getParent().resolve("test_cases/payment_success.yaml");
+        String comparison = """
+                  - id: decimal_threshold
+                    type: assertion
+                    assert:
+                      operator: gt
+                      actual_ref: step://call_payment_api/response.body#/measurement
+                      expected: '1.000000000000000000001e-100'
+                """;
+        Files.writeString(test, Files.readString(test).replace("cleanup:", comparison + "\ncleanup:"));
+
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_v03");
+        assertThat(run.exit()).as(run.stdout() + run.stderr()).isEqualTo(numeric ? 0 : 1);
+        Path result = extractPath(run.stdout(), "result_json");
+        JsonNode rows = OBJECT_MAPPER.readTree(result.toFile()).required("verify_results");
+        JsonNode last = rows.get(rows.size() - 1);
+        assertThat(last.required("id").asText()).isEqualTo("decimal_threshold");
+        assertThat(last.required("status").asText()).isEqualTo(numeric ? "passed" : "failed");
+        Path evidenceFile = extractPath(run.stdout(), "evidence_dir").resolve(last.required("evidence_ref").asText());
+        String evidence = Files.readString(evidenceFile);
+        assertThat(evidence).contains("1.000000000000000000001e-100");
+        assertThat(evidence).contains(numeric ? "1.000000000000000000002E-100" : "invalid_numeric_assertion_operand");
+    }
+
     private CommandResult execute(String... args) {
         RegressionCommand command = new RegressionCommand(new ProductRepoService(), new ReleasePackageService());
         ByteArrayOutputStream stdout = new ByteArrayOutputStream();

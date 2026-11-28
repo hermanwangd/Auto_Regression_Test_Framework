@@ -236,6 +236,20 @@ class V03BindingDependencyCompilerTest {
     }
 
     @Test
+    void numericOrderingStillRequiresANumericOutputForAWholeStepReference() {
+        V03ExecutionStep call = step("TC-1", "call", "api", "rest_client.v0.3", "http_request", Map.of());
+        V03ExecutionStep assertion = new V03ExecutionStep("TC-1", V03ExecutionStepKind.ASSERTION,
+                "verify", "threshold", "", "", "", "local", "", "gt",
+                Map.of("actual_ref", "step://call/response.body", "expected", 1), "");
+        Map<String, V03ProviderContract> contracts = Map.of("rest_client.v0.3",
+                contract("rest_client.v0.3", "http_request", Map.of(), Map.of(
+                        "response.body", new V03OutputDefinition(V03ValueType.ANY, V03Sensitivity.PUBLIC, false, true))));
+
+        assertThatThrownBy(() -> compiler.compile(List.of(call, assertion), Map.of(), contracts, Map.of()))
+                .hasMessageContaining("incompatible_assertion_type");
+    }
+
+    @Test
     void allowsAssertionToConsumeProviderCheckOutput() {
         V03ExecutionStep check = new V03ExecutionStep("TC-1", V03ExecutionStepKind.PROVIDER_CHECK,
                 "verify", "check_state", "observer", "observer.v0.3", "observer", "local", "native",

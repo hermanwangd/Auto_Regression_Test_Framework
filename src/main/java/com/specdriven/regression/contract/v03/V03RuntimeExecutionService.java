@@ -74,6 +74,7 @@ public class V03RuntimeExecutionService {
     private final LocalFakeSitOwnership ownershipStore;
     private final InvocationRequirement invocationRequirement;
     private final Yaml yaml = ProviderDataYaml.create();
+    private final Yaml assertionEvidenceYaml = ProviderDataYaml.createForAssertionEvidence();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final V03ReferenceParser referenceParser = new V03ReferenceParser();
     private final V03ReferenceResolver referenceResolver = new V03ReferenceResolver(this::readYaml);
@@ -669,10 +670,12 @@ public class V03RuntimeExecutionService {
                 }
                 return context.referenceResolver().resolveJsonMatchValue(reference, scope);
             }
-            if ("schema_match".equals(step.operation()) || Boolean.TRUE.equals(step.inputs().get("strict"))) {
-                return context.referenceResolver().resolveTypedValue(reference, scope);
-            }
-            return context.referenceResolver().resolveValue(reference, scope);
+            boolean typed = switch (step.operation()) {
+                case "gt", "gte", "lt", "lte", "schema_match" -> true;
+                default -> Boolean.TRUE.equals(step.inputs().get("strict"));
+            };
+            return typed ? context.referenceResolver().resolveTypedValue(reference, scope)
+                    : context.referenceResolver().resolveValue(reference, scope);
         } catch (IllegalArgumentException error) {
             if (allowMissing && (error.getMessage().startsWith("unresolved_step_ref")
                     || error.getMessage().startsWith("unresolved_generated_ref")
@@ -1396,7 +1399,7 @@ public class V03RuntimeExecutionService {
         if (lower.endsWith(".yaml") || lower.endsWith(".yml")) {
             Object document;
             try {
-                document = yaml.load(original);
+                document = (lower.startsWith("assertions/") ? assertionEvidenceYaml : yaml).load(original);
             } catch (org.yaml.snakeyaml.error.YAMLException malformed) {
                 return yaml.dump(V03OutputRedactor.MASKED);
             }
