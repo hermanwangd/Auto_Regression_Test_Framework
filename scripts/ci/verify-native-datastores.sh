@@ -50,18 +50,54 @@ run_case() {
     (if $expected == "passed" then ($operations - [.step_results[] | select(.status == "passed") | .operation]) == []
      else .failure.code == $mismatch end)' "$result" >/dev/null
 }
+verify_mongodb_outage() {
+  local result id owner status=0
+  # The seed uses update/upsert. Interrupt only the following read and cleanup on runner connections.
+  mongo_eval 'assert.commandWorked(db.adminCommand({configureFailPoint:"failCommand", mode:"alwaysOn",
+    data:{appName:"framework-mongo-fixture", failCommands:["find","delete"], closeConnection:true}}))' >/dev/null
+  cli run --suite mongodb/suite_manifest.yaml --profile external_mongodb > mongo-outage.log || status=$?
+  mongo_eval 'assert.commandWorked(db.adminCommand({configureFailPoint:"failCommand", mode:"off"}))' >/dev/null
+  cat mongo-outage.log
+  [[ $status == 1 ]]
+  # The pinned server logs 20431 when it actively closes a connection for a command.
+  mongo_eval 'const lines = assert.commandWorked(db.adminCommand({getLog:"global"})).log;
+    print(JSON.stringify(lines.map(line => JSON.parse(line)).filter(e => e.id === 20431).map(e => e.attr.command)))' |
+    jq -e 'index("find") != null and index("delete") != null' >/dev/null
+  result=$(sed -n 's/^result_json: //p' mongo-outage.log)
+  cli validate-evidence --result "$result"
+  jq -e '
+    .status == "failed" and .failure.code == "MONGO_OPERATION_FAILED" and
+    .failure.classification == "PROVIDER_RUNTIME_ERROR" and (.failure.owner_action | contains("read_order")) and
+    any(.steps[]; .id == "seed_order" and .status == "passed" and .outputs.acknowledged == true) and
+    any(.steps[]; .id == "read_order" and .status == "failed" and .failure_code == "MONGO_OPERATION_FAILED") and
+    any(.steps[]; .id == "delete_order" and .phase == "cleanup" and .status == "failed" and .failure_code == "MONGO_OPERATION_FAILED") and
+    (.cleanup_failures | length == 1) and .cleanup_failures[0].step_id == "delete_order" and
+    .cleanup_failures[0].failure_code == "MONGO_OPERATION_FAILED" and .failure.cleanup_failures == .cleanup_failures' "$result" >/dev/null
+
+  id=$(jq -er '.steps[] | select(.id == "seed_order") | .outputs.document_id | select(test("^swarm-[a-f0-9]{64}$"))' "$result")
+  mongo_eval 'print(EJSON.stringify(db.swarm_fixture_documents.find().limit(3).toArray()))' > recovered-docs.json
+  owner=$(jq -er --arg id "$id" --slurpfile expected mongodb/expected_results/confirmed_order.json '
+    select(length == 2 and any(.[]; . == {"_id":"control","payload":"keep"})) |
+    .[] | select(._id == $id and .payload == $expected[0]) | .owner | select(test("^[a-f0-9]{64}$"))' recovered-docs.json)
+  [[ "$(mongo_eval 'db.swarm_fixture_documents.deleteOne({_id:process.env.DOC_ID,owner:process.env.DOC_OWNER}).deletedCount' \
+    -e "DOC_ID=$id" -e "DOC_OWNER=$owner")" == 1 ]]
+  mongo_clean
+  echo "MongoDB closed find and delete connections after the acknowledged seed; recovered payload verified, owned document removed, control preserved."
+}
 verify_mongodb() {
   cp -R "$root/samples/20-provider-capability-p0/data/mongodb" .
   server=$(docker run -d --memory 768m --cpus 1 -p 127.0.0.1::27017 \
-    mongo:7.0.16@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a --wiredTigerCacheSizeGB 0.25)
+    mongo:7.0.16@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a --wiredTigerCacheSizeGB 0.25 --setParameter enableTestCommands=1)
   local addr
   addr=$(docker port "$server" 27017/tcp)
-  printf -v MONGODB_URI '%s://%s/swarm_fixture' mongodb "$addr"
+  printf -v MONGODB_URI '%s://%s/swarm_fixture?appName=framework-mongo-fixture' mongodb "$addr"
   export MONGODB_URI
-  mongo_eval() { docker exec "$server" mongosh --quiet swarm_fixture --eval "$1"; }
+  mongo_eval() { docker exec "${@:2}" "$server" mongosh --quiet swarm_fixture --eval "$1"; }
   ready mongo_eval 'db.runCommand({ping:1}).ok'
   mongo_eval 'db.swarm_fixture_documents.insertOne({_id:"control",payload:"keep"})' >/dev/null
   mongo_clean() { [[ "$(mongo_eval 'db.swarm_fixture_documents.countDocuments({}) === 1 && db.swarm_fixture_documents.findOne({_id:"control"}).payload === "keep"')" == true ]]; }
+  verify_mongodb_outage
+  # Confirm the same runner can read and clean up a fresh write after recovery.
   run_case mongodb passed mongo_read 0
   mongo_clean
   printf '%s\n' '{"status":"different"}' > mongodb/expected_results/confirmed_order.json
