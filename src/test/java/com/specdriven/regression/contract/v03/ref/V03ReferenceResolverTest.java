@@ -5,7 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
+import com.specdriven.regression.contract.v03.V03BindingDependency;
+import com.specdriven.regression.contract.v03.V03ReferenceKind;
 import com.specdriven.regression.contract.v03.V03ProducedOutput;
 import com.specdriven.regression.contract.v03.V03GeneratedOutputKey;
 import com.specdriven.regression.contract.v03.V03Sensitivity;
@@ -69,6 +72,43 @@ class V03ReferenceResolverTest {
                 output("call", "api", "response.body", "{} trailing", false)));
         assertThatThrownBy(() -> resolver.resolveValue(parser.parse("step://call/response.body#/To"), invalid))
                 .hasMessageContaining("invalid_response_json");
+    }
+
+    @Test
+    void arrayIndicesUseAsciiDecimalWithoutLeadingZeroesWhileObjectKeysAreLiteral() throws Exception {
+        var fixtures = Files.createDirectories(tempDir.resolve("fixtures"));
+        Files.writeString(fixtures.resolve("indices.json"), """
+                {"array":["zero","one"],"object":{"01":"literal"}}
+                """);
+        var document = Map.of("array", List.of("zero", "one"), "object", Map.of("01", "literal"));
+        var resolver = new V03ReferenceResolver(ignored -> document);
+        var context = context(Map.of(), Map.of("output", output("call", "api", "value", document, true)));
+        for (String source : List.of("artifact://payloads/indices.json", "step://call/value", "generated://api/value")) {
+            assertThat(resolver.resolveValue(parser.parse(source + "#/array/0"), context)).isEqualTo("zero");
+            assertThat(resolver.resolveTypedValue(parser.parse(source + "#/array/1"), context)).isEqualTo("one");
+            assertThat(resolver.resolveTypedValue(parser.parse(source + "#/object/01"), context)).isEqualTo("literal");
+            for (String token : List.of("01", "+1", "-1", "-0", "", "１", "١", " 1", "1.0")) {
+                var ref = parser.parse(source + "#/array/" + token);
+                assertThatThrownBy(() -> resolver.resolveTypedValue(ref, context))
+                        .as("%s array token '%s'", source, token).hasMessageStartingWith("invalid_json_pointer:");
+            }
+            for (String index : List.of("-", "2", "2147483648", "9999999999999999999999")) {
+                var ref = parser.parse(source + "#/array/" + index);
+                assertThatThrownBy(() -> resolver.resolveValue(ref, context))
+                        .as("%s out-of-range index %s", source, index).hasMessageStartingWith("json_pointer_missing:");
+            }
+        }
+    }
+
+    @Test
+    void compiledGeneratedPointerPreservesTheArrayIndexDiagnostic() {
+        var resolver = new V03ReferenceResolver();
+        var context = context(Map.of(), Map.of("output", output("produce", "producer", "items", List.of("zero"), true)));
+        var dependency = new V03BindingDependency("TC-1", "consume", "value", V03ReferenceKind.GENERATED,
+                "TC-1", "producer", "produce", "items");
+        var ref = (V03Reference.Generated) parser.parse("generated://producer/items#/00");
+        assertThatThrownBy(() -> resolver.resolveCompiledGenerated(ref, dependency, context))
+                .hasMessageStartingWith("invalid_json_pointer:");
     }
 
     @Test

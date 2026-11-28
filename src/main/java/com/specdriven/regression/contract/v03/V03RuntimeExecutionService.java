@@ -4,6 +4,7 @@ import com.specdriven.regression.provider.ProviderDataYaml;
 import com.specdriven.regression.provider.jdbc.JdbcDriverDiscovery.DiscoveryResult;
 import com.specdriven.regression.contract.ContractBaselineService;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.io.JsonStringEncoder;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
@@ -28,6 +29,7 @@ import com.specdriven.regression.contract.v03.adapter.SampleFakeProviderV03Adapt
 import com.specdriven.regression.contract.v03.assertion.V03AssertionEvaluation;
 import com.specdriven.regression.contract.v03.assertion.V03AssertionEvaluator;
 import com.specdriven.regression.contract.v03.assertion.V03AssertionKind;
+import com.specdriven.regression.contract.v03.assertion.V03JsonMatcher;
 import com.specdriven.regression.contract.v03.assertion.V03MissingValue;
 import com.specdriven.regression.contract.v03.assertion.V03SchemaMatcher;
 import com.specdriven.regression.contract.v03.ref.V03Reference;
@@ -572,11 +574,15 @@ public class V03RuntimeExecutionService {
         try {
             switch (kind) {
                 case JSON_MATCH -> {
-                    actual = resolveAssertionOperand(step, "actual", "actual_ref", context, false);
-                    expected = resolveRequiredReference(step.inputs().get("expected_ref"), step, context);
-                    Object normalizedExpected = comparableJson(expected, step);
-                    Object normalizedActual = comparableJson(actual, step);
-                    passed = normalizedActual.equals(normalizedExpected);
+                    var matcher = new V03JsonMatcher(boolValue(step.inputs().get("ignore_order")),
+                            listOfStrings(step.inputs().get("ignore_paths")));
+                    Object left = resolveAssertionOperand(step, "actual", "actual_ref", context, false);
+                    int leftId = matcher.valueId(left);
+                    actual = left;
+                    Object right = resolveAssertionOperand(step, "expected", "expected_ref", context, false);
+                    int rightId = matcher.valueId(right);
+                    expected = right;
+                    passed = leftId == rightId;
                 }
                 case SCHEMA_MATCH -> {
                     actual = resolveAssertionOperand(step, "actual", "actual_ref", context, false);
@@ -657,6 +663,12 @@ public class V03RuntimeExecutionService {
         try {
             V03Reference reference = referenceParser.parse(raw);
             var scope = context.referenceContext(step.testCaseId());
+            if ("json_match".equals(step.operation())) {
+                if ("expected_ref".equals(referenceKey) && reference instanceof V03Reference.Literal) {
+                    throw new IllegalArgumentException("reference_required: json_match requires an expected reference.");
+                }
+                return context.referenceResolver().resolveJsonMatchValue(reference, scope);
+            }
             if ("schema_match".equals(step.operation()) || Boolean.TRUE.equals(step.inputs().get("strict"))) {
                 return context.referenceResolver().resolveTypedValue(reference, scope);
             }
@@ -669,17 +681,6 @@ public class V03RuntimeExecutionService {
             }
             throw error;
         }
-    }
-
-    private Object resolveRequiredReference(
-            Object raw,
-            V03ExecutionStep step,
-            V03ExecutionContext context) {
-        V03Reference reference = referenceParser.parse(raw);
-        if (reference instanceof V03Reference.Literal) {
-            throw new IllegalArgumentException("reference_required: `" + raw + "`.");
-        }
-        return context.referenceResolver().resolveValue(reference, context.referenceContext(step.testCaseId()));
     }
 
     private Path requiredArtifactPath(
@@ -711,81 +712,6 @@ public class V03RuntimeExecutionService {
                 ? step.inputs().get(referenceKey)
                 : step.inputs().get(literalKey);
         return outputRedactor.redactAssertionValue(plan, step, raw, evidenceValue(value), context.stepOutputs());
-    }
-
-    private Object comparableJson(Object value, V03ExecutionStep step) {
-        Object normalized = removeIgnoredPaths(normalizeJson(value), stringList(step.inputs().get("ignore_paths")));
-        if (boolValue(step.inputs().get("ignore_order"))) {
-            return canonicalIgnoringOrder(normalized);
-        }
-        return normalized;
-    }
-
-    private Object normalizeJson(Object value) {
-        if (value instanceof String text) {
-            return readYamlText(text);
-        }
-        return value;
-    }
-
-    private Object removeIgnoredPaths(Object value, List<String> ignorePaths) {
-        Object copy = deepCopy(value);
-        for (String ignorePath : ignorePaths) {
-            removePath(copy, ignorePath);
-        }
-        return copy;
-    }
-
-    private void removePath(Object value, String path) {
-        if (!(value instanceof Map<?, ?> rawMap) || path == null || path.isBlank()) {
-            return;
-        }
-        @SuppressWarnings("unchecked")
-        Map<String, Object> map = (Map<String, Object>) rawMap;
-        String[] parts = path.split("\\.");
-        Object current = map;
-        for (int index = 0; index < parts.length - 1; index++) {
-            if (!(current instanceof Map<?, ?> currentMap)) {
-                return;
-            }
-            current = currentMap.get(parts[index]);
-        }
-        if (current instanceof Map<?, ?> currentMap) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> target = (Map<String, Object>) currentMap;
-            target.remove(parts[parts.length - 1]);
-        }
-    }
-
-    private Object deepCopy(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> copy = new LinkedHashMap<>();
-            for (Map.Entry<?, ?> entry : map.entrySet()) {
-                copy.put(String.valueOf(entry.getKey()), deepCopy(entry.getValue()));
-            }
-            return copy;
-        }
-        if (value instanceof Collection<?> collection) {
-            return collection.stream().map(this::deepCopy).toList();
-        }
-        return value;
-    }
-
-    private Object canonicalIgnoringOrder(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> canonical = new LinkedHashMap<>();
-            map.entrySet().stream()
-                    .sorted((left, right) -> String.valueOf(left.getKey()).compareTo(String.valueOf(right.getKey())))
-                    .forEach(entry -> canonical.put(String.valueOf(entry.getKey()), canonicalIgnoringOrder(entry.getValue())));
-            return canonical;
-        }
-        if (value instanceof Collection<?> collection) {
-            return collection.stream()
-                    .map(this::canonicalIgnoringOrder)
-                    .sorted((left, right) -> stringValue(left).compareTo(stringValue(right)))
-                    .toList();
-        }
-        return value;
     }
 
     private String comparableText(String value, V03ExecutionStep step) {
@@ -1364,10 +1290,6 @@ public class V03RuntimeExecutionService {
         }
     }
 
-    private Object readYamlText(String text) {
-        return yaml.load(text);
-    }
-
     @SuppressWarnings("unchecked")
     private Map<String, Object> mapValue(Object value) {
         if (value instanceof Map<?, ?> map) {
@@ -1386,10 +1308,6 @@ public class V03RuntimeExecutionService {
 
     private List<String> listOfStrings(Object value) {
         return listValue(value).stream().map(this::stringValue).filter(text -> !text.isBlank()).toList();
-    }
-
-    private List<String> stringList(Object value) {
-        return listOfStrings(value);
     }
 
     private boolean boolValue(Object value) {
@@ -1467,8 +1385,9 @@ public class V03RuntimeExecutionService {
         if (lower.endsWith(".json")) {
             Object document;
             try {
-                document = objectMapper.readerFor(Object.class).with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
-                        .readValue(original);
+                var reader = objectMapper.readerFor(Object.class).with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+                if (lower.startsWith("assertions/")) reader = reader.with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
+                document = reader.readValue(original);
             } catch (JsonProcessingException malformed) {
                 return objectMapper.writeValueAsString(V03OutputRedactor.MASKED);
             }
@@ -1541,10 +1460,7 @@ public class V03RuntimeExecutionService {
             return "null";
         }
         if (value instanceof String text) {
-            return "\"" + text.replace("\\", "\\\\")
-                    .replace("\"", "\\\"")
-                    .replace("\n", "\\n")
-                    .replace("\r", "\\r") + "\"";
+            return "\"" + new String(JsonStringEncoder.getInstance().quoteAsString(text)) + "\"";
         }
         if (value instanceof Number || value instanceof Boolean) {
             return String.valueOf(value);

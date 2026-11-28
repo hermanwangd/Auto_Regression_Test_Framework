@@ -80,13 +80,14 @@ public final class V03AssertionValidator {
                 }
             }
         }
-        boolean hasActual = assertion.containsKey("actual") && (strictEquality || assertion.get("actual") != null);
+        boolean typedActual = strictEquality || kind == V03AssertionKind.JSON_MATCH || kind == V03AssertionKind.SCHEMA_MATCH;
+        boolean hasActual = assertion.containsKey("actual") && (typedActual || assertion.get("actual") != null);
         boolean hasActualRef = hasValue(assertion, "actual_ref");
         boolean hasExpected = assertion.containsKey("expected") && (strictEquality || assertion.get("expected") != null);
         boolean hasExpectedRef = hasValue(assertion, "expected_ref");
         boolean hasSchemaRef = hasValue(assertion, "schema_ref");
 
-        if (hasActual && (strictEquality ? assertion.containsKey("actual_ref") : hasActualRef)) {
+        if (hasActual && (typedActual ? assertion.containsKey("actual_ref") : hasActualRef)) {
             issues.add(new Issue(".assert", "conflicting_assertion_actual",
                     "Declare exactly one of `actual` or `actual_ref`."));
         }

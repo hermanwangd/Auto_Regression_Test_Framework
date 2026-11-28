@@ -56,6 +56,15 @@ class V03SchemaMatcherTest {
     }
 
     @Test
+    void acceptsAnEmptyEnumAndReportsTheMismatchAtTheInstance() {
+        var schema = Map.of("properties", Map.of("status", Map.of("enum", List.of())));
+        validate(schema);
+        assertThat(mismatch(schema, Map.of())).isEmpty();
+        assertThat(mismatch(schema, Map.of("status", "private-value")))
+                .isEqualTo("instance at /status: enum mismatch");
+    }
+
+    @Test
     void recognizesEmptySchemasOptionalPropertiesAndKeywordApplicability() {
         assertThat(mismatch(Map.of(), "any")).isEmpty();
         assertThat(mismatch(Map.of("properties", Map.of("order", Map.of("type", "string"))), Map.of("extra", 2)))
@@ -89,7 +98,6 @@ class V03SchemaMatcherTest {
         assertInvalid(Map.of("properties", Map.of("a/b", "private-value")), "/properties/a~1b");
         assertInvalid(Map.of("items", List.of(Map.of())), "/items");
         assertInvalid(Map.of("enum", "private-choice"), "/enum");
-        assertInvalid(Map.of("enum", List.of()), "/enum");
         assertInvalid(Map.of("enum", List.of(Map.of(42, 10))), "/enum/0");
         assertInvalid(Map.of("enum", List.of(Double.POSITIVE_INFINITY)), "/enum/0");
     }

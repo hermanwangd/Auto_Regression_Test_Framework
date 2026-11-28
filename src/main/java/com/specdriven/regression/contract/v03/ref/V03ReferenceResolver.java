@@ -25,7 +25,6 @@ public final class V03ReferenceResolver {
                     .with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     private static final ObjectReader TYPED_JSON = JSON_BODY.with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
             .with(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
-    private static final int MAX_JSON_POINTER_DEPTH = 64;
     private final V03DocumentLoader documentLoader;
     private final V03OutputDefinitionResolver outputResolver = new V03OutputDefinitionResolver();
 
@@ -71,10 +70,32 @@ public final class V03ReferenceResolver {
         return artifactPath(reference, context.artifactRoots());
     }
 
-    /** Preserve JSON token types, including exact decimal values, for strict and schema assertions. */
+    /** Preserve JSON token types, including exact decimal values, for typed assertions. */
     public Object typedDocument(V03Reference.Artifact artifact, Path suiteRoot, Map<String, Path> roots) {
+        Object document = readTypedDocument(artifactPath(artifact, roots), suiteRoot);
+        return V03JsonPointer.resolve(document, artifact.jsonPointer());
+    }
+
+    /** Check an available document's array tokens before dispatch. Each operator still handles missing values. */
+    public void validateArtifactArrayIndices(V03Reference.Artifact artifact, Path suiteRoot, Map<String, Path> roots) {
+        if (artifact.jsonPointer().isEmpty()) return;
+        Path file = artifactPath(artifact, roots);
+        Object document;
         try {
-            Path file = artifactPath(artifact, roots);
+            document = readTypedDocument(file, suiteRoot);
+        } catch (IllegalArgumentException unavailable) {
+            // Without a readable data document, the container type is unknown.
+            return;
+        }
+        try {
+            V03JsonPointer.resolve(document, artifact.jsonPointer());
+        } catch (V03JsonPointer.Missing missing) {
+            // A valid missing location can be the subject of an existence assertion.
+        }
+    }
+
+    private Object readTypedDocument(Path file, Path suiteRoot) {
+        try {
             if (!file.startsWith(suiteRoot.toRealPath())) {
                 throw invalid("ref_outside_suite_root", "An assertion artifact must be inside its suite.");
             }
@@ -82,9 +103,8 @@ public final class V03ReferenceResolver {
                 throw invalid("assertion_artifact_too_large", "Assertion artifacts may contain at most 8 MiB.");
             }
             try (var reader = Files.newBufferedReader(file)) {
-                Object value = file.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".json")
+                return file.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".json")
                         ? TYPED_JSON.readValue(reader) : ProviderDataYaml.create().load(reader);
-                return applyJsonPointer(value, artifact.jsonPointer());
             }
         } catch (org.yaml.snakeyaml.error.YAMLException | com.fasterxml.jackson.core.JsonProcessingException error) {
             throw invalid("invalid_assertion_document", "The assertion artifact must be a valid JSON or YAML data document.");
@@ -97,32 +117,45 @@ public final class V03ReferenceResolver {
         if (reference instanceof V03Reference.Artifact artifact) {
             return typedDocument(artifact, context.suiteRoot(), context.artifactRoots());
         }
-        return resolveValue(reference, context, TYPED_JSON);
+        return resolveValue(reference, context, TYPED_JSON, false);
+    }
+
+    /** Decode provider response documents before pointer selection. Other resolved strings are JSON scalars. */
+    public Object resolveJsonMatchValue(V03Reference reference, V03ReferenceResolutionContext context) {
+        if (reference instanceof V03Reference.Step) {
+            return resolveValue(reference, context, TYPED_JSON, true);
+        }
+        return resolveTypedValue(reference, context);
     }
 
     public Object resolveValue(V03Reference reference, V03ReferenceResolutionContext context) {
-        return resolveValue(reference, context, JSON_BODY);
+        return resolveValue(reference, context, JSON_BODY, false);
     }
 
-    private Object resolveValue(V03Reference reference, V03ReferenceResolutionContext context, ObjectReader jsonBody) {
+    private Object resolveValue(V03Reference reference, V03ReferenceResolutionContext context,
+            ObjectReader jsonBody, boolean jsonMatch) {
         if(reference instanceof V03Reference.OwnedMemory)throw invalid("protected_owned_memory_unavailable","Only the independently reviewed typed JDBC carrier may provide RAM credentials.");
         if (reference instanceof V03Reference.Literal literal) {
             return literal.value();
         }
         if (reference instanceof V03Reference.Artifact artifact) {
             Object document = documentLoader.load(artifactPath(artifact, context));
-            return applyJsonPointer(document, artifact.jsonPointer());
+            return V03JsonPointer.resolve(document, artifact.jsonPointer());
         }
         if (reference instanceof V03Reference.Step step) {
-            Object value = outputValue(stepOutput(context, step.stepId(), step.outputPath()), step.outputPath());
-            if (!step.jsonPointer().isBlank() && "response.body".equals(step.outputPath()) && value instanceof String body) {
+            V03ProducedOutput output = stepOutput(context, step.stepId(), step.outputPath());
+            Object value = outputValue(output, step.outputPath());
+            boolean decode = jsonMatch ? isJsonResponse(step, output)
+                    : !step.jsonPointer().isBlank() && "response.body".equals(step.outputPath());
+            if (decode && value instanceof String body) {
                 try {
                     value = jsonBody.readValue(body);
                 } catch (com.fasterxml.jackson.core.JsonProcessingException error) {
+                    if (jsonMatch) throw invalid("invalid_response_json", "The response must contain one valid JSON document.");
                     throw invalid("invalid_response_json", "A response.body JSON Pointer requires a JSON document.");
                 }
             }
-            return applyJsonPointer(value, step.jsonPointer());
+            return V03JsonPointer.resolve(value, step.jsonPointer());
         }
         if (reference instanceof V03Reference.Generated generated) {
             List<V03ProducedOutput> produced = context.generatedOutputs().entrySet().stream()
@@ -137,14 +170,15 @@ public final class V03ReferenceResolver {
                 throw invalid("ambiguous_generated_ref", "target `" + generated.target()
                         + "` produced `" + generated.output() + "` more than once.");
             }
+            Object value;
             try {
                 V03ResolvedProducedOutput resolved = outputResolver.resolveProducedPath(produced, generated.output());
-                return applyJsonPointer(outputValue(resolved.output(), generated.output()), generated.jsonPointer());
-            } catch (IllegalArgumentException ignored) {
-                // Keep the public generated-ref failure code stable below.
+                value = outputValue(resolved.output(), generated.output());
+            } catch (IllegalArgumentException error) {
+                throw invalid("unresolved_generated_ref", "target `" + generated.target()
+                        + "` did not produce one bindable output `" + generated.output() + "`.");
             }
-            throw invalid("unresolved_generated_ref", "target `" + generated.target()
-                    + "` did not produce one bindable output `" + generated.output() + "`.");
+            return V03JsonPointer.resolve(value, generated.jsonPointer());
         }
         V03Reference.Environment environment = (V03Reference.Environment) reference;
         String value = context.environment().get(environment.name());
@@ -157,6 +191,11 @@ public final class V03ReferenceResolver {
         return value;
     }
 
+    private static boolean isJsonResponse(V03Reference.Step step, V03ProducedOutput output) {
+        return ("rest_client.v0.3".equals(output.providerContract()) && "response.body".equals(step.outputPath()))
+                || ("grpc_client.v0.3".equals(output.providerContract()) && "response.message".equals(step.outputPath()));
+    }
+
     /** Resolves a generated target binding from its compiler-selected producer step only. */
     public Object resolveCompiledGenerated(
             V03Reference.Generated generated,
@@ -167,13 +206,15 @@ public final class V03ReferenceResolver {
                 .filter(entry -> entry.getKey().target().equals(dependency.producerTarget()))
                 .filter(entry -> entry.getKey().stepId().equals(dependency.producerStepId()))
                 .map(Map.Entry::getValue).toList();
+        Object value;
         try {
             V03ResolvedProducedOutput resolved = outputResolver.resolveProducedPath(outputs, generated.output());
-            return applyJsonPointer(outputValue(resolved.output(), generated.output()), generated.jsonPointer());
+            value = outputValue(resolved.output(), generated.output());
         } catch (IllegalArgumentException error) {
             throw invalid("unresolved_generated_ref", "compiled producer step `" + dependency.producerStepId()
                     + "` did not produce `" + generated.output() + "`.");
         }
+        return V03JsonPointer.resolve(value, generated.jsonPointer());
     }
 
     private V03ProducedOutput stepOutput(
@@ -214,40 +255,6 @@ public final class V03ReferenceResolver {
             return declaredRoot.getFileName().resolve(artifact.path()).toString();
         }
         return resolveValue(reference, context);
-    }
-
-    private Object applyJsonPointer(Object value, String pointer) {
-        if (pointer == null || pointer.isBlank()) {
-            return value;
-        }
-        String[] tokens = pointer.substring(1).split("/", -1);
-        if (tokens.length > MAX_JSON_POINTER_DEPTH) {
-            throw invalid("json_pointer_too_deep", "JSON Pointer exceeds " + MAX_JSON_POINTER_DEPTH + " segments.");
-        }
-        Object current = value;
-        for (String rawToken : tokens) {
-            String token = rawToken.replace("~1", "/").replace("~0", "~");
-            if (current instanceof Map<?, ?> map) {
-                if (!map.containsKey(token)) {
-                    throw invalid("json_pointer_missing", "JSON Pointer segment `" + token + "` does not exist.");
-                }
-                current = map.get(token);
-            } else if (current instanceof List<?> list) {
-                int index;
-                try {
-                    index = Integer.parseInt(token);
-                } catch (NumberFormatException error) {
-                    throw invalid("json_pointer_missing", "JSON Pointer array segment `" + token + "` is not an index.");
-                }
-                if (index < 0 || index >= list.size()) {
-                    throw invalid("json_pointer_missing", "JSON Pointer array index `" + token + "` is out of range.");
-                }
-                current = list.get(index);
-            } else {
-                throw invalid("json_pointer_missing", "JSON Pointer cannot descend through a scalar value.");
-            }
-        }
-        return current;
     }
 
     private String scopedStepKey(String testCaseId, String stepId) {
