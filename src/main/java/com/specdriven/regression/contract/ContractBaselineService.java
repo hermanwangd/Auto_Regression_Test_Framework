@@ -1217,9 +1217,8 @@ public class ContractBaselineService {
             V03OperationRef operationRef,
             Set<String> priorSteps,
             List<ContractFinding> findings) {
-        for (String operand : List.of("actual", "actual_ref", "expected", "expected_ref")) {
-            String reference = stringValue(operationRef.inputs().get(operand));
-            if (!reference.startsWith("step://")) {
+        for (String operand : List.of("actual", "actual_ref", "expected", "expected_ref", "schema_ref")) {
+            if (!(operationRef.inputs().get(operand) instanceof String reference) || !reference.startsWith("step://")) {
                 continue;
             }
             String refBody = reference.substring("step://".length());

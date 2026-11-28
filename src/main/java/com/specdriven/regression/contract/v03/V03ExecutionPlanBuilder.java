@@ -3,6 +3,7 @@ package com.specdriven.regression.contract.v03;
 import com.specdriven.regression.contract.ContractBaselineService;
 import com.specdriven.regression.contract.ContractBaselineService.ValidationResult;
 import com.specdriven.regression.contract.v03.assertion.V03AssertionKind;
+import com.specdriven.regression.contract.v03.assertion.V03SchemaMatcher;
 import com.specdriven.regression.contract.v03.ref.V03Reference;
 import com.specdriven.regression.contract.v03.ref.V03ReferenceParser;
 import com.specdriven.regression.contract.v03.ref.V03ReferenceResolver;
@@ -79,6 +80,21 @@ public class V03ExecutionPlanBuilder {
         Map<String, Path> artifactRoots = artifactRoots(suiteRoot, suite);
         testDocuments.forEach(document -> validateReferences(document, artifactRoots));
         List<V03ExecutionStep> steps = executionSteps(testDocuments, profile, targets);
+        for (V03ExecutionStep step : steps) {
+            if (step.kind() == V03ExecutionStepKind.ASSERTION && "schema_match".equals(step.operation())) {
+                V03Reference schema = referenceParser.parse(step.inputs().get("schema_ref"));
+                if (schema instanceof V03Reference.Artifact artifact) {
+                    try {
+                        V03SchemaMatcher.validate(referenceResolver.typedDocument(artifact, suiteRoot, artifactRoots));
+                    } catch (IllegalArgumentException error) {
+                        throw new IllegalArgumentException("invalid_assertion_schema: " + step.testCaseId() + "/"
+                                + step.id() + " " + error.getMessage(), error);
+                    }
+                } else if (!(schema instanceof V03Reference.Step)) {
+                    throw new IllegalArgumentException("invalid_assertion_schema: use an artifact or prior step for schema_ref.");
+                }
+            }
+        }
         validateTypedContracts(targets, steps, contracts);
         List<V03BindingDependency> dependencies = bindingDependencyCompiler.compile(
                 steps, targets, contracts, System.getenv());

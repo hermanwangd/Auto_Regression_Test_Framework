@@ -6,10 +6,19 @@
       "type": "string"
     },
     "status": {
-      "type": "string"
+      "type": "string",
+      "enum": ["READY"]
     },
     "items": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sku", "qty"],
+        "properties": {
+          "sku": {"type": "string"},
+          "qty": {"type": "integer"}
+        }
+      }
     },
     "metadata": {
       "type": "object"
