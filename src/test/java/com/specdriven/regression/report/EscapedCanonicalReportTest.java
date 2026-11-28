@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.specdriven.regression.cli.RegressionCommand;
+import com.specdriven.regression.application.SuiteReporting;
 import com.specdriven.regression.contract.ContractBaselineService;
 import com.specdriven.regression.discovery.ReleasePackageService;
 import com.specdriven.regression.evidence.EvidenceHardeningService;
@@ -95,9 +96,7 @@ class EscapedCanonicalReportTest {
         Path result=fixture(true);ObjectNode data=(ObjectNode)JSON.readTree(result.toFile());
         data.put("result_contract_version","v0.3").put("suite_summary_ref","suite_summary.json");JSON.writeValue(result.toFile(),data);
         JSON.writeValue(result.getParent().resolve("suite_summary.json").toFile(),Map.of("suite_summary_version","v0.3","completion_status","complete","duration_ms",1000));
-        Map<String,Object> report=new java.util.LinkedHashMap<>();
-        var method=RegressionCommand.class.getDeclaredMethod("addSuiteSummaryReportFields",Map.class,Path.class);method.setAccessible(true);
-        method.invoke(new RegressionCommand(new ProductRepoService(),new ReleasePackageService()),report,result);
+        var report = new SuiteReporting(new CoverageReportService()).suiteSummaryForReport(result);
         assertThat(report).containsEntry("completion_status","complete").containsEntry("suite_summary_version","v0.3");
     }
     @Test void resultJsonFileAndProviderStringLimitsRemainBounded() throws Exception {

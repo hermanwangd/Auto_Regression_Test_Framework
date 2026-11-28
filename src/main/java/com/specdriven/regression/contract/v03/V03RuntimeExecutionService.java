@@ -82,7 +82,11 @@ public class V03RuntimeExecutionService {
     private final V03OutputRedactor outputRedactor = new V03OutputRedactor();
 
     public V03RuntimeExecutionService() {
-        this(new ContractBaselineService(), new V03ProviderRuntimeRegistry(List.of(
+        this(new ContractBaselineService(), defaultRuntimeRegistry());
+    }
+
+    static V03ProviderRuntimeRegistry defaultRuntimeRegistry() {
+        return new V03ProviderRuntimeRegistry(List.of(
                 new HttpMockV03Adapter(),
                 new GrpcClientV03Adapter(),
                 new com.specdriven.regression.contract.v03.adapter.GrpcDescriptorAdmissionV03Adapter(),
@@ -100,7 +104,7 @@ public class V03RuntimeExecutionService {
                 new SftpV03Adapter(),
                 new WebSocketV03Adapter(),
                 new SoapMockV03Adapter(),
-                new SampleFakeProviderV03Adapter())));
+                new SampleFakeProviderV03Adapter()));
     }
 
     V03RuntimeExecutionService(
@@ -863,6 +867,7 @@ public class V03RuntimeExecutionService {
                 "downstream_release_evidence", downstreamReleaseEvidence));
         if (!reviewedBinding.isEmpty()) result.put("product_test", reviewedBinding);
         result.put("source_refs", testCase == null ? Map.of() : testCase.sourceRefs());
+        result.put("case_sources", plan.metadata().caseSources());
         result.put("step_results", stepResults);
         result.put("steps", stepResults);
         result.put("verify_results", verifyResults);

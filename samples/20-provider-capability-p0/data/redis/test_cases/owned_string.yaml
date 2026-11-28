@@ -23,6 +23,12 @@ verify:
       actual: step://read_string/matched
       operator: equals
       expected: true
+  - id: check_unused_key
+    type: provider_check
+    target: cache
+    op: redis_absent
+    with:
+      key: unused
   - id: check_expiry
     type: provider_check
     target: cache

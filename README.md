@@ -1,6 +1,6 @@
 # Auto Regression Test Framework
 
-Spec Driven Auto Regression is a Spring Boot 4.0.x / Java 17+ test framework for executing regression suites from stable contract artifacts: Suite Manifest, DSL Test Case, Provider Contract, Provider Instance, Env_Profile, Result JSON, and Evidence Index.
+Spec Driven Auto Regression is a Spring Boot 4 / Java 17+ test framework. In v0.3, suite targets reference provider contracts and the selected Env_Profile supplies their bindings. The CLI writes a canonical result and evidence index for each run. [Architecture and v0.2 compatibility](docs/02-architecture/05_architecture_and_sequence.md)
 
 ## What This Framework Solves
 
@@ -11,14 +11,16 @@ The framework lets product and release-package teams define executable regressio
 ```bash
 ./mvnw test
 ./mvnw -DskipTests package
-java -jar target/spec-driven-auto-regression-0.2.7.jar validate --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml
-java -jar target/spec-driven-auto-regression-0.2.7.jar run --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml --profile local_golden
-java -jar target/spec-driven-auto-regression-0.2.7.jar report --result <generated_result_json>
+jar="target/spec-driven-auto-regression-$(scripts/release/verify-release-version.sh).jar"
+java -jar "$jar" validate --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml
+java -jar "$jar" run --suite samples/00-getting-started/golden_e2e/suite_manifest.yaml --profile local_v03
+# Pass the result_json path printed by run.
+java -jar "$jar" report --result <generated_result_json>
 ```
 
 ## Public Interface
 
-The supported runtime commands are `validate`, `run`, `report`, `validate-evidence`, and `doctor drivers`. See [test_framework_user_guide.md](docs/09-operations/test_framework_user_guide.md) and [framework_usage_interface.v0.2.md](docs/02-architecture/contracts/framework_usage_interface.v0.2.md).
+The supported runtime commands are `validate`, `run`, `report`, `validate-evidence`, and `doctor drivers`. [User guide](docs/09-operations/test_framework_user_guide.md) · [Legacy v0.2 interface](docs/02-architecture/contracts/framework_usage_interface.v0.2.md)
 
 ## Provider Support
 

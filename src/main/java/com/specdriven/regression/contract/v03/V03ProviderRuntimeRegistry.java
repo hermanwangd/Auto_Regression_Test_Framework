@@ -26,6 +26,10 @@ public class V03ProviderRuntimeRegistry {
         selected.removeIf(adapter->adapter.providerType().equals(replacement.providerType()));selected.add(replacement);return new V03ProviderRuntimeRegistry(selected);
     }
 
+    java.util.Set<String> providerTypes() {
+        return adapters.keySet();
+    }
+
     public List<String> endRun(V03ExecutionContext context) {
         List<String> failed = new java.util.ArrayList<>();
         for (var adapter : adapters.values()) {

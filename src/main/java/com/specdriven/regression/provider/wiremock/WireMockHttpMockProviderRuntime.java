@@ -42,7 +42,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.yaml.snakeyaml.Yaml;
 
-public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
+public class WireMockHttpMockProviderRuntime implements ProviderRuntime, AutoCloseable {
 
     private static final ObjectMapper JSON = new ObjectMapper()
             .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY, DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
@@ -66,6 +66,7 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
             case "connect_mock" -> connectMock(context);
             case "load_stubs" -> loadStubs(context, request);
             case "send_http_request" -> sendHttpRequest(context, request);
+            case "verify_requests" -> verifyRequests(context, request);
             case "reset_mock" -> resetMock(context);
             default -> ProviderOperationResult.failed(
                     Map.of(),
@@ -229,15 +230,63 @@ public class WireMockHttpMockProviderRuntime implements ProviderRuntime {
         }
     }
 
-    private ProviderOperationResult resetMock(ProviderExecutionContext context) {
-        observedRequests = JSON.createArrayNode();
+    private ProviderOperationResult verifyRequests(ProviderExecutionContext context, ProviderOperationRequest request) {
+        if (!"http_mock".equals(context.providerType()) || !"mock".equals(context.runtimeMode()) || !frameworkStartedWireMock()) {
+            return failure(context, "PROVIDER_UNAVAILABLE", "PROVIDER_UNAVAILABLE", "The managed HTTP mock is unavailable.",
+                    "Load the stubs for this target before checking its request journal.");
+        }
         try {
-            if (server != null && server.isRunning()) {
-                server.stop();
+            var filter = readMapText(readAsset(context, parameterValue(request, "mock.request_filter_ref", "")));
+            if (!filter.keySet().equals(Set.of("method", "url")) || !(filter.get("method") instanceof String method)
+                    || !method.matches("[A-Z]{1,16}") || !(filter.get("url") instanceof String url)) {
+                throw new IllegalArgumentException("Expected an HTTP method and application URL.");
             }
-            server = null;
-            origin = null;
-            removeManagedFiles();
+            requestUri(origin, url);
+            int expected = Integer.parseInt(parameterValue(request, "mock.expected_count", "1"));
+            if (expected < 0) throw new IllegalArgumentException("Expected a nonnegative count.");
+            String bodyRef = parameterValue(request, "mock.body_pattern_ref", "");
+            JsonNode body = bodyRef.isEmpty() ? null : JSON.readTree(readAsset(context, bodyRef));
+            if (!bodyRef.isEmpty() && (body == null || body.isMissingNode())) {
+                throw new IllegalArgumentException("Expected a JSON body.");
+            }
+            long count = server.getAllServeEvents().stream().map(event -> event.getRequest())
+                    .filter(observed -> method.equals(observed.getMethod().getName()) && url.equals(observed.getUrl()))
+                    .filter(observed -> body == null || matchesJsonBody(body, observed.getBody()))
+                    .count();
+            String ref = "provider-evidence/wiremock/request_journal-" + UUID.randomUUID() + ".json";
+            write(context.runDir().resolve(ref), JSON.writeValueAsString(Map.of("matched_count", count, "expected_count", expected)));
+            String log = "provider-evidence/wiremock/server_log.txt";
+            var outputs = Map.<String, Object>of("matched_count", count, "request_journal", ref, "server_log", log);
+            var refs = evidence("request_journal", ref, "server_log", log);
+            if (count == expected) return ProviderOperationResult.passed(outputs, refs);
+            return ProviderOperationResult.failed(outputs, refs, ProviderFailure.of("ASSERTION_FAILED", "ASSERTION_FAILED",
+                    "The observed HTTP request count differs from the expectation.", "Review the request filter and counts."));
+        } catch (IOException | URISyntaxException | IllegalArgumentException invalid) {
+            return failure(context, "OPERATION_FAILED", "FRAMEWORK_ERROR", "Invalid HTTP request journal expectation.",
+                    "Check the filter, expected count and optional JSON body fixture.");
+        }
+    }
+
+    private static boolean matchesJsonBody(JsonNode expected, byte[] actual) {
+        if (actual == null || actual.length == 0) return false;
+        try {
+            return expected.equals(JSON.readTree(actual));
+        } catch (IOException malformed) {
+            return false;
+        }
+    }
+
+    @Override public void close() throws IOException {
+        observedRequests = JSON.createArrayNode();
+        if (server != null && server.isRunning()) server.stop();
+        server = null;
+        origin = null;
+        removeManagedFiles();
+    }
+
+    private ProviderOperationResult resetMock(ProviderExecutionContext context) {
+        try {
+            close();
             write(context.runDir().resolve("provider-evidence/wiremock/cleanup.yaml"), """
                     evidence_type: cleanup
                     evidence_classification: %s

@@ -1,0 +1,43 @@
+name: Main quality summary
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  summarize:
+    if: github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      REVISION: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.REVISION }}
+          persist-credentials: false
+      - name: Collect evidence for this main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash scripts/ci/collect-quality-inputs.sh "$REVISION" "$RUNNER_TEMP/quality-inputs"
+      - name: Publish commit quality summary
+        if: always()
+        run: |
+          python3 scripts/ci/quality_summary.py "$REVISION" "$RUNNER_TEMP/quality-inputs" target/quality
+          cat target/quality/summary.md >> "$GITHUB_STEP_SUMMARY"
+          jq -e '.evidence_complete and .verification_passed' target/quality/summary.json >/dev/null
+      - name: Retain commit quality summary
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          overwrite: true
+          name: quality-summary-${{ env.REVISION }}
+          path: target/quality/
+          if-no-files-found: error

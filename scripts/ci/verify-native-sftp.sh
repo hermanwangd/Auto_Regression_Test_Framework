@@ -93,6 +93,7 @@ PY
 }
 
 run_case success 0 '' yes
+python3 "$root/scripts/ci/provider-conformance.py" sftp.v0.3 "$(sed -n 's/^result_json: //p' success.log)"
 case_file=suite/test_cases/order_reconciliation.yaml
 sed 's/expected_sha256: 18e61d/expected_sha256: 28e61d/' "$case_file" > wrong-case.yaml
 mv wrong-case.yaml "$case_file"

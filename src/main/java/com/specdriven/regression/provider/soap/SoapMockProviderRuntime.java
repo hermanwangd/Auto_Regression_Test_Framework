@@ -32,7 +32,7 @@ import java.util.List;
 import java.util.Map;
 import org.yaml.snakeyaml.Yaml;
 
-public class SoapMockProviderRuntime implements ProviderRuntime {
+public class SoapMockProviderRuntime implements ProviderRuntime, AutoCloseable {
 
     private static final String PROVIDER_TYPE = "soap_mock";
     private final Yaml yaml = new Yaml();
@@ -177,12 +177,16 @@ public class SoapMockProviderRuntime implements ProviderRuntime {
         }
     }
 
+    @Override
+    public void close() {
+        if (server != null) server.stop();
+        server = null;
+        endpointUrl = null;
+    }
+
     private ProviderOperationResult resetMock(ProviderExecutionContext context) {
         try {
-            if (server != null && server.isRunning()) {
-                server.resetAll();
-                server.stop();
-            }
+            close();
             write(context.runDir().resolve("provider-evidence/soap/cleanup.yaml"), """
                     evidence_type: fixture_cleanup
                     evidence_classification: framework_provider_capability_only

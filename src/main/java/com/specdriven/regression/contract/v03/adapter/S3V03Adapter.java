@@ -20,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
@@ -34,6 +35,9 @@ public final class S3V03Adapter extends AbstractProviderRuntimeV03Adapter implem
     private static final String OWNER = "regress-owner";
     private static final Set<String> OPERATIONS = Set.of(
             "s3_object_key", "s3_put_object", "s3_head_object", "s3_verify_object", "s3_delete_object");
+    private final Map<V03ExecutionContext, Map<String, String>> uploadedVersions = new ConcurrentHashMap<>();
+
+    @Override public void endRun(V03ExecutionContext context) { uploadedVersions.remove(context); }
 
     @Override public String providerType() { return "s3"; }
 
@@ -91,7 +95,8 @@ public final class S3V03Adapter extends AbstractProviderRuntimeV03Adapter implem
                 case "s3_put_object" -> put(step, context, connection, key, owner);
                 case "s3_head_object" -> head(step, connection, new ReadLocation(key, owner, applicationExport));
                 case "s3_verify_object" -> verify(step, context, connection, new ReadLocation(key, owner, applicationExport));
-                case "s3_delete_object" -> delete(step, connection, key, owner);
+                case "s3_delete_object" -> delete(step, connection, key, owner,
+                        uploadedVersions.getOrDefault(context, Map.of()).get(key));
                 default -> throw new IllegalArgumentException("Unsupported S3 operation.");
             };
         }
@@ -115,8 +120,14 @@ public final class S3V03Adapter extends AbstractProviderRuntimeV03Adapter implem
             bytes = input.readNBytes(MAX_BYTES + 1);
         }
         if (bytes.length > MAX_BYTES) return tooLarge(step);
-        connection.client.putObject(b -> b.bucket(connection.bucket).key(key).ifNoneMatch("*")
+        var upload = connection.client.putObject(b -> b.bucket(connection.bucket).key(key).ifNoneMatch("*")
                 .metadata(Map.of(OWNER, owner)), RequestBody.fromBytes(bytes));
+        var versions = uploadedVersions.computeIfAbsent(context, ignored -> new ConcurrentHashMap<>());
+        if (upload.versionId() == null) {
+            versions.remove(key);
+        } else {
+            versions.put(key, upload.versionId());
+        }
         return passed(step, Map.of("object_key", key, "content_length", bytes.length, "sha256", hash(bytes)));
     }
 
@@ -168,15 +179,17 @@ public final class S3V03Adapter extends AbstractProviderRuntimeV03Adapter implem
         });
     }
 
-    private V03StepResult delete(V03ExecutionStep step, S3RunnerConnection connection, String key, String owner) {
+    private V03StepResult delete(V03ExecutionStep step, S3RunnerConnection connection, String key, String owner,
+            String uploadedVersion) {
         HeadObjectResponse head;
         try {
-            head = connection.client.headObject(b -> b.bucket(connection.bucket).key(key));
+            head = connection.client.headObject(b -> b.bucket(connection.bucket).key(key).versionId(uploadedVersion));
         } catch (S3Exception error) {
             if (error.statusCode() == 404) return passed(step, Map.of("deleted", false));
             throw error;
         }
-        if (!owner.equals(head.metadata().get(OWNER)) || head.eTag() == null || head.eTag().isBlank()) {
+        if ((uploadedVersion != null && !uploadedVersion.equals(head.versionId()))
+                || !owner.equals(head.metadata().get(OWNER)) || head.eTag() == null || head.eTag().isBlank()) {
             return ownershipMismatch(step);
         }
         // Versioned buckets must remove the observed version, including the literal "null" version.

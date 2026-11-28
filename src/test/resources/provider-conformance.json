@@ -1,0 +1,202 @@
+[
+  {
+    "contract": "artifact_compare.v0.3",
+    "proof": "assertions",
+    "suite": "verification/artifact_compare",
+    "operations": [
+      "json_match",
+      "schema_match",
+      "file_diff"
+    ],
+    "boundaryTest": "V03JsonMatcherTest.rejectsNonJsonValuesAndUsesTheTypedAssertionWorkLimit"
+  },
+  {
+    "contract": "common_verify.v0.3",
+    "proof": "assertions",
+    "suite": "verification/common_verify",
+    "operations": [
+      "json_match",
+      "schema_match",
+      "file_diff"
+    ],
+    "boundaryTest": "V03SchemaMatcherTest.stopsCyclesExcessiveWorkAndOversizedDocumentPaths"
+  },
+  {
+    "contract": "cli_process.v0.3",
+    "proof": "native",
+    "suite": "cli/cli_process",
+    "operations": [
+      "run_command"
+    ],
+    "boundaryTest": "CliProcessProviderRuntimeTest.interruptionCleansUpAndAllowsASeparateRecoveryRun"
+  },
+  {
+    "contract": "grpc_client.v0.3",
+    "proof": "portable",
+    "suite": "rpc/grpc_mock",
+    "operations": [
+      "unary_call"
+    ],
+    "boundaryTest": "GrpcMetadataDeadlineContractTest.binaryMetadataRejectsBeforeAnyRpc"
+  },
+  {
+    "contract": "grpc_mock.v0.3",
+    "proof": "portable",
+    "suite": "rpc/grpc_mock",
+    "operations": [
+      "load_grpc_stub",
+      "grpc_request_received",
+      "reset_mock"
+    ],
+    "boundaryTest": "GrpcMockCapabilityCommandTest.failurePathProducesFailedResultAndAssertionEvidence"
+  },
+  {
+    "contract": "http_mock.v0.3",
+    "proof": "portable",
+    "suite": "http/rest_client_with_wiremock",
+    "operations": [
+      "load_stubs",
+      "verify_requests",
+      "reset_mock"
+    ],
+    "boundaryTest": "WireMockHttpMockProviderRuntimeTest.validatesStaticMappingsBeforeReplacingPreviouslyLoadedState"
+  },
+  {
+    "contract": "ibm_mq.v0.3",
+    "proof": "portable",
+    "suite": "messaging/ibm_mq",
+    "operations": [
+      "mq_put",
+      "mq_browse",
+      "mq_message_exists",
+      "mq_payload_match"
+    ],
+    "boundaryTest": "IbmMqProviderRuntimeTest.correlationSelectorMissDoesNotConsumeAndCorrectSelectorRecovers"
+  },
+  {
+    "contract": "jdbc.v0.3",
+    "proof": "portable",
+    "suite": "data/jdbc",
+    "operations": [
+      "db_seed",
+      "db_query",
+      "db_record_exists",
+      "db_cleanup"
+    ],
+    "boundaryTest": "JdbcExternalEnvSecretRefTest.nativeJdbcRuntimeResolvesEnvConnectionSecretRefWithoutLeakingConnectionValue"
+  },
+  {
+    "contract": "kafka.v0.3",
+    "proof": "portable",
+    "suite": "messaging/kafka",
+    "operations": [
+      "kafka_publish",
+      "kafka_observe",
+      "kafka_payload_match"
+    ],
+    "boundaryTest": "KafkaProviderRuntimeTest.kafkaObserveTimesOutWithLastObservedEvidenceShape"
+  },
+  {
+    "contract": "mongodb.v0.3",
+    "proof": "native",
+    "suite": "data/mongodb",
+    "operations": [
+      "mongo_seed",
+      "mongo_read",
+      "mongo_find",
+      "mongo_exists",
+      "mongo_cleanup"
+    ],
+    "boundaryTest": "MongoV03AdapterTest.differentiatesAbsentDocumentAndWrongBsonPayloadAndRedactsDriverErrors"
+  },
+  {
+    "contract": "nats.v0.3",
+    "proof": "portable",
+    "suite": "messaging/nats",
+    "operations": [
+      "nats_publish",
+      "event_published",
+      "event_payload_match"
+    ],
+    "boundaryTest": "NatsProviderRuntimeTest.natsObserveTimesOutWhenNoEventArrives"
+  },
+  {
+    "contract": "polling_observer.v0.3",
+    "proof": "portable",
+    "suite": "verification/polling_observer",
+    "operations": [
+      "observe_condition",
+      "event_published",
+      "db_record_exists"
+    ],
+    "boundaryTest": "DslV03VerificationRuntimeCommandTest.runV03PollingTimeoutRetriesUntilTimeoutAndKeepsLastObservedEvidence"
+  },
+  {
+    "contract": "redis.v0.3",
+    "proof": "native",
+    "suite": "data/redis",
+    "operations": [
+      "redis_set",
+      "redis_get",
+      "redis_ttl",
+      "redis_absent",
+      "redis_delete"
+    ],
+    "boundaryTest": "RedisV03AdapterTest.admitsOnlyTheFixedRunnerUriAndKeepsCredentialsOutOfFailuresAndEvidence"
+  },
+  {
+    "contract": "rest_client.v0.3",
+    "proof": "portable",
+    "suite": "http/rest_client_with_wiremock",
+    "operations": [
+      "http_request"
+    ],
+    "boundaryTest": "RestClientProviderRuntimeJsonEvidenceTest.masksAnEchoedJsonStringInBothOutputAndProviderEvidence"
+  },
+  {
+    "contract": "s3.v0.3",
+    "proof": "native",
+    "suite": "storage/s3",
+    "operations": [
+      "s3_object_key",
+      "s3_put_object",
+      "s3_head_object",
+      "s3_verify_object",
+      "s3_delete_object"
+    ],
+    "boundaryTest": "S3V03AdapterTest.detectsAcknowledgedDeleteWithAnObjectStillPresent"
+  },
+  {
+    "contract": "sftp.v0.3",
+    "proof": "native",
+    "suite": "storage/sftp",
+    "operations": [
+      "sftp_upload_batch",
+      "sftp_verify_return",
+      "sftp_cleanup_batch"
+    ],
+    "boundaryTest": "SftpV03AdapterTest.rejectsInvalidWaitsCountsAndDigestsAndDoesNotAdoptMissingBatches"
+  },
+  {
+    "contract": "soap_mock.v0.3",
+    "proof": "portable",
+    "suite": "rpc/soap_mock",
+    "operations": [
+      "load_soap_stub",
+      "soap_request_received",
+      "reset_mock"
+    ],
+    "boundaryTest": "SoapMockCapabilityCommandTest.failurePathProducesFailedResultAndAssertionEvidence"
+  },
+  {
+    "contract": "websocket.v0.3",
+    "proof": "native",
+    "suite": "messaging/websocket",
+    "operations": [
+      "websocket_subscribe",
+      "websocket_await_event",
+      "websocket_close"
+    ],
+    "boundaryTest": "WebSocketV03AdapterTest.rejectsUtf8ByteOverflowBinaryMalformedJsonAndPeerReasonsWithoutDisclosingPayloads"
+  }
+]

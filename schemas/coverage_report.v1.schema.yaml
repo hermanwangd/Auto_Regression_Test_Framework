@@ -161,3 +161,12 @@ oracle_reviewed_extension:
   independence_review_attested_qualification: accepted_reviewed_origin_statement_not_proof_of_truth_or_execution
   optional_absent: retain_existing_UNKNOWN_shape
   canonical_verdict_and_metrics: unchanged
+
+run_traceability:
+  schema_version: run-traceability.v1
+  scope: explicit_primary_canonical_invocation
+  case_source: byte_sha256_of_compiled_case_and_suite_relative_path
+  case_selection: [SELECTED, UNSELECTED, UNKNOWN]
+  case_outcome: [PASS, FAIL, BLOCKED, SKIPPED, NOT_RUN]
+  review_scope: execution_and_case_evidence_only
+  validated_evidence_paths: relative_to_canonical_result_directory

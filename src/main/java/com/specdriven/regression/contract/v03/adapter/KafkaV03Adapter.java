@@ -28,7 +28,8 @@ public class KafkaV03Adapter extends AbstractProviderRuntimeV03Adapter implement
 
     @Override
     public V03StepResult execute(V03ExecutionStep step, V03ExecutionContext context) {
-        return stepResult(step, runtime.execute(providerContext(step, context), request(step, context)));
+        V03StepResult result = stepResult(step, runtime.execute(providerContext(step, context), request(step, context)));
+        return "kafka_observe".equals(step.operation()) ? withoutLegacyOutputs(result, "matched_fields") : result;
     }
     @Override public boolean simulated(){return false;}
     @Override public com.specdriven.regression.sit.SitOperationEffect sitEffect(String contract,String op){return com.specdriven.regression.sit.SitOperationEffect.UNKNOWN;}

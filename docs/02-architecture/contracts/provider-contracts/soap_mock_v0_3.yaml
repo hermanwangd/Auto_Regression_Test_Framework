@@ -50,6 +50,8 @@ binding_keys:
     sensitivity: public
 operations:
   start_soap_mock:
+    execution_status: contract_only
+    execution_reason: The mock starts on the first load operation. Explicit startup is reserved.
     inputs:
       mock.port:
         required: false
