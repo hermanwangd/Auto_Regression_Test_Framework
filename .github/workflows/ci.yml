@@ -51,6 +51,44 @@ jobs:
           path: target/surefire-reports/TEST-*.xml
           if-no-files-found: ignore
 
+  native-jdbc:
+    name: Native JDBC / ${{ matrix.dialect }}${{ matrix.dialect == 'db2' && vars.DB2_LICENSE_ACCEPTED != 'true' && ' (NOT_RUN)' || '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        dialect: [oracle, db2]
+    env:
+      MAVEN_OPTS: -Xmx768m -XX:MaxMetaspaceSize=320m
+      DB2_LICENSE_ACCEPTED: ${{ vars.DB2_LICENSE_ACCEPTED }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        if: matrix.dialect == 'oracle' || env.DB2_LICENSE_ACCEPTED == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Build packaged CLI
+        if: matrix.dialect == 'oracle' || env.DB2_LICENSE_ACCEPTED == 'true'
+        run: ./mvnw -B -ntp -DskipTests package
+      - name: Verify native JDBC / ${{ matrix.dialect }}
+        if: matrix.dialect == 'oracle' || env.DB2_LICENSE_ACCEPTED == 'true'
+        env:
+          DIALECT: ${{ matrix.dialect }}
+        run: scripts/ci/verify-native-jdbc.sh "$DIALECT"
+      - name: Retain native JDBC receipt and canonical results
+        if: success() && (matrix.dialect == 'oracle' || env.DB2_LICENSE_ACCEPTED == 'true')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          overwrite: true
+          name: native-jdbc-${{ matrix.dialect }}-${{ github.run_id }}
+          path: target/native-jdbc/${{ matrix.dialect }}/
+          if-no-files-found: error
+
   framework-gates:
     name: Framework Gates
     runs-on: ubuntu-latest
