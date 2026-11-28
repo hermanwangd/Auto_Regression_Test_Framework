@@ -265,6 +265,70 @@ class DslV03VerificationRuntimeCommandTest {
     }
 
     @Test
+    void selectedCaseControlsCompilationVerdictAndEvidence() throws Exception {
+        Path suite = mutableSuite(MULTI_TEST_SUITE.getParent(), "selected_case");
+        Files.writeString(suite.getParent().resolve("expected_results/order_status.txt"), "unexpected value");
+        String first = "MULTI-TEST-V03-TC-001";
+        String second = "MULTI-TEST-V03-TC-002";
+        CommandResult dry = execute("run", "--suite", suite.toString(), "--profile", "local_v03",
+                "--test-case", first, "--dry-run");
+        assertThat(dry.exit()).as(dry.stdout()).isZero();
+        assertThat(dry.stdout()).contains(first).doesNotContain(second);
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_v03", "--test-case", first);
+        assertThat(run.exit()).as(run.stdout()).isZero();
+        assertThat(run.stdout()).contains("test_count: 1", "passed_count: 1", "failed_count: 0");
+        Path result = extractPath(run.stdout(), "result_json");
+        JsonNode canonical = OBJECT_MAPPER.readTree(result.toFile());
+        assertThat(canonical.path("selected_test_case").asText()).isEqualTo(first);
+        assertThat(canonical.path("test_results").size()).isOne();
+        assertThat(canonical.path("test_results").get(0).path("test_case_id").asText()).isEqualTo(first);
+        assertThat(dry.stdout()).contains("plan_digest: " + canonical.path("plan_digest").asText());
+        assertThat(canonical.toString()).doesNotContain(second, "multi_file_matches");
+        CommandResult evidence = execute("validate-evidence", "--result", result.toString());
+        assertThat(evidence.exit()).as(evidence.stdout()).isZero();
+        CommandResult report = execute("report", "--result", result.toString());
+        assertThat(report.exit()).as(report.stdout()).isZero();
+        assertThat(report.stdout()).contains("test_count: 1");
+        CommandResult failure = execute("run", "--suite", suite.toString(), "--profile", "local_v03", "--test-case=" + second);
+        assertThat(failure.exit()).isOne();
+        assertThat(failure.stdout()).contains("test_count: 1", "failed_count: 1", second).doesNotContain(first);
+        CommandResult full = execute("run", "--suite", suite.toString(), "--profile", "local_v03");
+        assertThat(full.exit()).isOne();
+        assertThat(full.stdout()).contains("test_count: 2", "failed_count: 1");
+        JsonNode fullResult = OBJECT_MAPPER.readTree(extractPath(full.stdout(), "result_json").toFile());
+        assertThat(fullResult.has("selected_test_case")).isFalse();
+        assertThat(fullResult.path("plan_digest")).isNotEqualTo(canonical.path("plan_digest"));
+    }
+
+    @Test
+    void ambiguousSelectionAndUnsupportedSuiteTypesProduceNoRun() {
+        for (List<String> args : List.of(
+                List.of(MULTI_TEST_SUITE.toString(), "--test-case="),
+                List.of(MULTI_TEST_SUITE.toString(), "--test-case", "one", "--test-case=two"),
+                List.of("samples/30-cross-provider-groups/mock_server_cross_verify/suite_manifest.yaml", "--test-case", "one"))) {
+            List<String> command = new java.util.ArrayList<>(List.of("run", "--profile", "local_v03", "--suite"));
+            command.addAll(args);
+            CommandResult run = execute(command.toArray(String[]::new));
+            assertThat(run.exit()).as(run.stdout()).isEqualTo(2);
+            assertThat(run.stderr()).contains("--test-case");
+            assertThat(run.stdout()).doesNotContain("result_json:");
+        }
+    }
+
+    @Test
+    void unknownCaseBlocksRealAndDryRunsBeforeExecution() {
+        for (boolean dry : List.of(false, true)) {
+            List<String> args = new java.util.ArrayList<>(List.of("run", "--suite", MULTI_TEST_SUITE.toString(),
+                    "--profile", "local_v03", "--test-case", "MISSING-CASE"));
+            if (dry) args.add("--dry-run");
+            CommandResult run = execute(args.toArray(String[]::new));
+            assertThat(run.exit()).as(run.stdout()).isOne();
+            assertThat(run.stdout()).contains("run_status: blocked", "unknown_test_case: MISSING-CASE")
+                    .doesNotContain("result_json:", "MULTI-TEST-V03-TC-001", "MULTI-TEST-V03-TC-002");
+        }
+    }
+
+    @Test
     void runV03MultiTestSuiteScopesAssertionEvidenceWhenAssertionIdsRepeat() throws Exception {
         Path suite = mutableSuite(Path.of("samples/20-provider-capability-p0/verification/multi_test_shared_env"), "multi_test_duplicate_assertion_ids");
         Path firstTestCase = suite.getParent().resolve("test_cases/order_payload_success.yaml");

@@ -254,18 +254,22 @@ Required public commands:
 
 ```bash
 regress validate --suite <suite_manifest> [--profile <profile>] [--contract-root <dir>]
-regress run --suite <suite_manifest> --profile <profile> --dry-run [--contract-root <dir>]
-regress run --suite <suite_manifest> --profile <profile> [--contract-root <dir>]
+regress run --suite <suite_manifest> --profile <profile> --dry-run [--test-case <id>] [--contract-root <dir>]
+regress run --suite <suite_manifest> --profile <profile> [--test-case <id>] [--contract-root <dir>]
 regress report --result <result_json>
 ```
 
 `validate` must not invoke provider runtime. `run --dry-run` must produce a resolved execution plan with `provider_runtime_invoked: false`.
+
+On a v0.3 leaf suite, `--test-case <id>` selects one exact case for planning, execution and evidence. An unknown ID blocks execution before provider dispatch. Omitting the option runs the whole suite. For a pinned, reviewed run the selection must match the entire approved case set.
 
 ## 9. Result and Evidence Contract
 
 Result JSON must include:
 
 - `suite_id`, `profile`, `batch_id`, `run_id`, `test_case_id`, and status.
+- the optional `selected_test_case` when a run explicitly selected a case.
+- `duration_ms` on each invoked provider step, including failed calls and cleanup. Reports list recorded durations from longest to shortest in `step_timings`.
 - ordered step results with phase, step ID, target, Provider Contract, operation, status, outputs, evidence refs, and failure code.
 - cleanup status and cleanup evidence refs.
 - evidence index ref.

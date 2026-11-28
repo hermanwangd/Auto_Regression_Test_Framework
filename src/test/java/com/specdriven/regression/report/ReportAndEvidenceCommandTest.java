@@ -2,6 +2,9 @@ package com.specdriven.regression.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.specdriven.regression.cli.RegressionCommand;
 import com.specdriven.regression.discovery.ReleasePackageService;
 import com.specdriven.regression.productrepo.ProductRepoService;
@@ -10,11 +13,14 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class ReportAndEvidenceCommandTest {
 
+    private static final ObjectMapper JSON = new ObjectMapper();
     private static final Path VALID_RESULT = Path.of("samples/40-evidence-reporting/evidence_hardening/valid_result.json");
 
     @TempDir
@@ -31,7 +37,8 @@ class ReportAndEvidenceCommandTest {
         assertThat(textReport.stdout())
                 .contains("report_status: review_ready")
                 .contains("missing_evidence_count: 0")
-                .contains("masking_status: passed");
+                .contains("masking_status: passed")
+                .doesNotContain("step_timings");
         assertThat(yamlReport.exit()).as(yamlReport.stderr() + yamlReport.stdout()).isZero();
         assertThat(yamlReport.stdout())
                 .contains("report_status: review_ready")
@@ -41,12 +48,59 @@ class ReportAndEvidenceCommandTest {
         assertThat(jsonReport.stdout())
                 .contains("\"report_status\":\"review_ready\"")
                 .contains("\"missing_evidence_count\":0")
-                .contains("\"masking_status\":\"passed\"");
+                .contains("\"masking_status\":\"passed\"")
+                .doesNotContain("step_timings");
         assertThat(evidence.exit()).as(evidence.stderr() + evidence.stdout()).isZero();
         assertThat(evidence.stdout())
                 .contains("evidence_validation_status: passed")
                 .contains("missing_evidence_count: 0")
                 .contains("masking_status: passed");
+    }
+
+    @Test
+    void reportShowsOnlyRecordedStepTimingsAndKeepsProviderDataOutOfAllFormats() throws Exception {
+        Path result = mutableEvidenceResult("timed").toRealPath();
+        ObjectNode document = (ObjectNode) JSON.readTree(result.toFile());
+        String testId = document.path("test_case_id").asText();
+        var steps = document.withArray("steps");
+        steps.addObject().put("test_case_id", testId).put("id", "prepare").put("phase", "setup")
+                .put("operation", "load_stubs").put("duration_ms", 0);
+        ObjectNode slow = steps.addObject().put("test_case_id", testId).put("id", "read_rows")
+                .put("phase", "execute").put("operation", "db_query").put("duration_ms", 93)
+                .put("suite_path", "billing");
+        slow.putObject("inputs").put("query", "private-query-input");
+        slow.putObject("outputs").put("rows", "private-query-output");
+        steps.addObject().put("test_case_id", testId).put("id", "untimed_step").put("phase", "cleanup")
+                .put("operation", "reset_mock");
+        JSON.writeValue(result.toFile(), document);
+
+        CommandResult json = execute("report", "--result", result.toString(), "--format", "json",
+                "--coverage-dir", tempDir.toRealPath().resolve("coverage").toString());
+        assertThat(json.exit()).as(json.stderr() + json.stdout()).isZero();
+        JsonNode report = JSON.readTree(json.stdout());
+        assertThat(report.path("step_timings")).isEqualTo(JSON.valueToTree(List.of(
+                Map.of("suite_path", "billing", "test_case_id", testId, "step_id", "read_rows", "phase", "execute",
+                        "operation", "db_query", "duration_ms", 93),
+                Map.of("test_case_id", testId, "step_id", "prepare", "phase", "setup",
+                        "operation", "load_stubs", "duration_ms", 0))));
+        assertThat(report.path("masking_status").asText()).isEqualTo("passed");
+        assertThat(Files.isRegularFile(Path.of(report.path("coverage_json").asText()))).isTrue();
+        assertThat(json.stdout()).doesNotContain("private-query-input", "private-query-output");
+
+        for (String format : List.of("text", "yaml")) {
+            CommandResult formatted = execute("report", "--result", result.toString(), "--format", format);
+            assertThat(formatted.exit()).as(formatted.stderr() + formatted.stdout()).isZero();
+            assertThat(formatted.stdout()).contains("step_timings:", "test_case_id: " + testId, "step_id: read_rows",
+                    "phase: execute", "operation: db_query", "duration_ms: 93", "duration_ms: 0", "suite_path: billing")
+                    .doesNotContain("untimed_step", "private-query-input", "private-query-output");
+        }
+
+        slow.putObject("outputs").put("password", "private-output-credential");
+        JSON.writeValue(result.toFile(), document);
+        CommandResult blocked = execute("report", "--result", result.toString(), "--format", "json");
+        assertThat(blocked.exit()).isEqualTo(1);
+        assertThat(blocked.stdout()).contains("SECRET_GUARDRAIL")
+                .doesNotContain("step_timings", "private-output-credential");
     }
 
     @Test

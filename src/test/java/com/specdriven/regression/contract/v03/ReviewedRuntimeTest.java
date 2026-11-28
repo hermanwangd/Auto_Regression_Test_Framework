@@ -50,6 +50,20 @@ class ReviewedRuntimeTest {
         var validation = new EvidenceHardeningService().validateResult(run.resultJson());
         assertThat(validation.valid()).as(validation.findings().toString()).isTrue();
     }
+    @Test void explicitCaseMustMatchPinnedReviewedSuite() throws Exception {
+        String digest = Files.readString(ROOT.resolve("handoff/reviewed-tests.json.sha256")).trim();
+        var service = new V03RuntimeExecutionService();
+        var context = SuiteExecutionContext.standalone("local_v03", temporary, "V03");
+        var pin = new InvocationRequirement(digest);
+        var mismatch = service.runReviewed(ROOT.resolve("suite_manifest.yaml"), "local_v03", context, pin, "OTHER");
+        assertThat(mismatch.status()).isEqualTo("blocked");
+        assertThat(mismatch.providerRuntimeExecuted()).isFalse();
+        assertThat(mismatch.resultJson()).isNull();
+        var match = service.runReviewed(ROOT.resolve("suite_manifest.yaml"), "local_v03", context, pin, "PRODUCT-LOCAL-TC-001");
+        assertThat(match.status()).as(match.findings().toString()).isEqualTo("passed");
+        assertThat(new EvidenceHardeningService().validateResult(match.resultJson()).valid()).isTrue();
+    }
+
     @Test void directReviewedRuntimeCannotIgnoreWrongPinOrMissingPolicy() {
         AtomicInteger calls = new AtomicInteger();
         var real = new SampleFakeProviderV03Adapter();
