@@ -108,7 +108,7 @@ public final class V03BindingDependencyCompiler {
                         + "` references `" + prior.stepId() + "`.");
             }
             V03OutputDefinition output = outputDefinition(producer, prior.outputPath(), prior.jsonPointer(), contracts);
-            validateAssertionOutputType(assertion, kind, key, output);
+            validateAssertionOutputType(assertion, kind, key, output, prior);
             dependencies.add(new V03BindingDependency(assertion.testCaseId(), assertion.id(), key, V03ReferenceKind.STEP,
                     producer.testCaseId(), producer.target(), producer.id(), prior.outputPath()));
         }
@@ -118,10 +118,14 @@ public final class V03BindingDependencyCompiler {
             V03ExecutionStep assertion,
             V03AssertionKind kind,
             String operand,
-            V03OutputDefinition output) {
+            V03OutputDefinition output,
+            V03Reference.Step reference) {
+        // The REST contract declares the body as ANY. Its selected field is checked at runtime.
+        boolean responseBodyField = output.valueType() == V03ValueType.ANY
+                && "response.body".equals(reference.outputPath()) && !reference.jsonPointer().isEmpty();
         if ((kind == V03AssertionKind.GT || kind == V03AssertionKind.GTE
                 || kind == V03AssertionKind.LT || kind == V03AssertionKind.LTE)
-                && output.valueType() != V03ValueType.NUMBER) {
+                && output.valueType() != V03ValueType.NUMBER && !responseBodyField) {
             throw new IllegalArgumentException("incompatible_assertion_type: assertion `" + assertion.id()
                     + "` " + operand + " requires NUMBER output.");
         }
