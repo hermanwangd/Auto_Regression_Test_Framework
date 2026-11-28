@@ -77,6 +77,13 @@ def gate(paths):
                               for error in errors)
         print(f"{path.name}: new Critical={counts['CRITICAL']}, High={counts['HIGH']}, "
               f"other={len(findings)-counts['CRITICAL']-counts['HIGH']}, diagnostics={len(errors)}")
+        for finding in findings:
+            level = severity(finding)
+            if level in {"HIGH", "CRITICAL"}:
+                # Print location and rule only. Source excerpts may contain sensitive data.
+                location = {"severity": level, "rule": finding.get("check_id"), "path": finding.get("path"),
+                            "line": finding.get("start", {}).get("line")}
+                print("Blocking finding", json.dumps(location, ensure_ascii=True))
         if diagnostics:
             print("Incomplete scan:", dict(diagnostics), file=sys.stderr)
         failed |= bool(diagnostics or counts["CRITICAL"] or counts["HIGH"])

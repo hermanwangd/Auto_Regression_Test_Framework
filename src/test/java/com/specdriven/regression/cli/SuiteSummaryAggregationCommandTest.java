@@ -4,14 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.specdriven.regression.application.SuiteReporting;
 import com.specdriven.regression.contract.ContractBaselineService.ReportResult;
 import com.specdriven.regression.contract.ContractBaselineService.ContractFinding;
 import com.specdriven.regression.evidence.EvidenceHardeningService.EvidenceValidationResult;
 import com.specdriven.regression.discovery.ReleasePackageService;
 import com.specdriven.regression.productrepo.ProductRepoService;
+import com.specdriven.regression.report.CoverageReportService;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -55,6 +56,16 @@ class SuiteSummaryAggregationCommandTest {
         CommandResult report = execute("report", "--result", resultPath.toString(), "--format", "json");
         assertThat(report.exit()).as(report.stderr() + report.stdout()).isZero();
         assertThat(mapper.readTree(report.stdout()).path("report_status").asText()).isEqualTo("review_ready");
+
+        Path coverage = Path.of(mapper.readTree(report.stdout()).path("coverage_json").asText());
+        var childTraces = mapper.readTree(coverage.toFile()).at("/run_traceability/child_runs");
+        assertThat(childTraces.size()).isEqualTo(3);
+        for (var child : childTraces) {
+            Path childResult = coverage.getParent().resolve(child.at("/canonical_result/path").asText()).normalize();
+            assertThat(childResult).isRegularFile();
+            assertThat(child.path("run_id").asText()).isEqualTo(mapper.readTree(childResult.toFile()).path("run_id").asText());
+            assertThat(child.at("/cases/0/source_sha256").asText()).matches("[0-9a-f]{64}");
+        }
 
         CommandResult yamlReport = execute("report", "--result", resultPath.toString());
         assertThat(yamlReport.exit()).as(yamlReport.stderr() + yamlReport.stdout()).isZero();
@@ -111,44 +122,28 @@ class SuiteSummaryAggregationCommandTest {
         return new CommandResult(exit, stdout.toString(), stderr.toString());
     }
 
-    private String renderSuiteSummarySections(Path result) throws Exception {
-        RegressionCommand command = new RegressionCommand(new ProductRepoService(), new ReleasePackageService());
-        Method method = RegressionCommand.class.getDeclaredMethod(
-                "printSuiteSummaryReportSections", PrintStream.class, Path.class);
-        method.setAccessible(true);
-        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
-        method.invoke(command, new PrintStream(stdout), result);
+    private String renderSuiteSummarySections(Path result) {
+        var reporting = new SuiteReporting(new CoverageReportService());
+        var stdout = new ByteArrayOutputStream();
+        new ReportOutput().printSuiteSummaryReportSections(new PrintStream(stdout), reporting.suiteSummaryForReport(result));
         return stdout.toString();
     }
 
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> renderJsonReportWithoutEvidence() throws Exception {
-        RegressionCommand command = new RegressionCommand(new ProductRepoService(), new ReleasePackageService());
-        Method method = RegressionCommand.class.getDeclaredMethod(
-                "jsonReport",
-                ReportResult.class,
-                EvidenceValidationResult.class);
-        method.setAccessible(true);
-        return (Map<String, Object>) method.invoke(command, new ReportResult(
+    private Map<String, Object> renderJsonReportWithoutEvidence() {
+        return new ReportOutput().jsonReport(new ReportResult(
                 true, false, "", "", "", "", "passed", "local", 0, 0, false, List.of(), List.of()), null);
     }
 
-    private String firstFailureCode() throws Exception {
-        RegressionCommand command = new RegressionCommand(new ProductRepoService(), new ReleasePackageService());
-        Method method = RegressionCommand.class.getDeclaredMethod("firstFailureCode", List.class, String.class);
-        method.setAccessible(true);
+    private String firstFailureCode() {
         ContractFinding finding = new ContractFinding(
                 "test_case.yaml", "verify[0]", "invalid_test_case", "", "", "", "", "Fix the test case.");
-        return (String) method.invoke(command, List.of(finding), "FALLBACK");
+        return new ReportOutput().firstFailureCode(List.of(finding), "FALLBACK");
     }
 
-    private String coveragePercentForEmptyEvidence() throws Exception {
-        RegressionCommand command = new RegressionCommand(new ProductRepoService(), new ReleasePackageService());
-        Method method = RegressionCommand.class.getDeclaredMethod("coveragePercent", EvidenceValidationResult.class);
-        method.setAccessible(true);
-        EvidenceValidationResult evidence = new EvidenceValidationResult(
+    private String coveragePercentForEmptyEvidence() {
+        var evidence = new EvidenceValidationResult(
                 true, "suite", "batch", "run", 0, 0, 0, 0, 0, tempDir, 0, 0, true, List.of(), List.of(), List.of());
-        return (String) method.invoke(command, evidence);
+        return new ReportOutput().coveragePercent(evidence);
     }
 
     private Path path(String stdout, String key) {

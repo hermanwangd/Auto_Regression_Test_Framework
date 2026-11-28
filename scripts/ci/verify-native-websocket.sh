@@ -46,6 +46,7 @@ run_case() {
   if grep -R -F "$FRAMEWORK_WEBSOCKET_URI" "$run_dir/provider-evidence/websocket"; then return 1; fi
 }
 run_case passed 0
+python3 "$root/scripts/ci/provider-conformance.py" websocket.v0.3 "$(sed -n 's/^result_json: //p' passed.log)"
 sed 's/expected_event: order.changed/expected_event: order.cancelled/' websocket/test_cases/order_changed.yaml > wrong.yaml
 mv wrong.yaml websocket/test_cases/order_changed.yaml
 run_case failed 1

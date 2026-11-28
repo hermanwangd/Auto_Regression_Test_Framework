@@ -78,7 +78,8 @@ public class V03ExecutionPlanBuilder {
                 ? providerContractCatalog.load(suiteRoot) : providerContractCatalog.loadDirectory(verifiedContractDirectory);
         Map<String, V03ResolvedTarget> targets = orderedTargets(
                 resolvedTargets(suite, profile, envProfile), contracts);
-        List<Map<String, Object>> testDocuments = testDocuments(suiteRoot, suite);
+        List<Map<String, Object>> caseSources = new ArrayList<>();
+        List<Map<String, Object>> testDocuments = testDocuments(suiteRoot, suite, selectedTestCase, caseSources);
         if (selectedTestCase != null) {
             if (envProfile.containsKey("product_test") && testDocuments.size() != 1) {
                 throw new IllegalArgumentException("A reviewed run must execute its entire approved case set.");
@@ -120,7 +121,7 @@ public class V03ExecutionPlanBuilder {
         V03SuiteMetadata metadata = new V03SuiteMetadata(
                 stringValue(suite.get("manifest_version")),
                 stringValue(suite.get("suite_id")),
-                stringValue(suite.get("default_profile")));
+                stringValue(suite.get("default_profile")), caseSources);
         V03EnvironmentProfile environmentProfile = compiledEnvironmentProfile(profile, envProfile);
         List<V03CompiledTestCase> compiledTests = compiledTestCases(steps, testDocuments);
         List<V03ExecutionStep> orderedSteps = new ArrayList<>();
@@ -470,10 +471,31 @@ public class V03ExecutionPlanBuilder {
         return versionDelimiter > 0 ? providerContract.substring(0, versionDelimiter) : providerContract;
     }
 
-    private List<Map<String, Object>> testDocuments(Path suiteRoot, Map<String, Object> suite) {
+    private List<Map<String, Object>> testDocuments(Path suiteRoot, Map<String, Object> suite,
+            String selectedTestCase, List<Map<String, Object>> caseSources) {
         List<Map<String, Object>> documents = new ArrayList<>();
         for (Object testRef : listValue(suite.get("tests"))) {
-            documents.add(readMap(suiteRoot.resolve(suiteTestRef(testRef)).normalize()));
+            String ref = suiteTestRef(testRef);
+            Path source = suiteRoot.resolve(ref).normalize();
+            if (!source.startsWith(suiteRoot)) throw new IllegalArgumentException("Test source escapes suite root");
+            try {
+                var digest = java.security.MessageDigest.getInstance("SHA-256");
+                try (var input = new java.security.DigestInputStream(Files.newInputStream(source), digest);
+                     var reader = new java.io.InputStreamReader(input, java.nio.charset.StandardCharsets.UTF_8.newDecoder())) {
+                    Map<String, Object> document = mapValue(yaml.load(reader));
+                    String id = stringValue(document.get("test_case_id"));
+                    documents.add(document);
+                    caseSources.add(Map.of("test_case_id", id, "source_path", suiteRoot.relativize(source).toString().replace('\\', '/'),
+                            "source_sha256", java.util.HexFormat.of().formatHex(digest.digest()),
+                            "source_refs", immutableMap(mapValue(document.get("source_refs"))),
+                            "lifecycle", firstNonBlank(stringValue(document.get("status")), "UNDECLARED"),
+                            "selection", selectedTestCase == null || selectedTestCase.equals(id) ? "SELECTED" : "UNSELECTED"));
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to read test source " + ref, e);
+            } catch (java.security.NoSuchAlgorithmException e) {
+                throw new IllegalStateException("SHA-256 is unavailable", e);
+            }
         }
         return List.copyOf(documents);
     }

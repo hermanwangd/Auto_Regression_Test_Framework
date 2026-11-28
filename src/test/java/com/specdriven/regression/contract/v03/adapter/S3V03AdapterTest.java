@@ -45,6 +45,8 @@ class S3V03AdapterTest {
     private volatile boolean signed;
     private volatile int deniedStatus;
     private volatile boolean retainOnDelete;
+    private volatile String putVersion;
+    private volatile boolean foreignVersionIsCurrent;
 
     @BeforeEach
     void start() throws IOException {
@@ -80,6 +82,22 @@ class S3V03AdapterTest {
         assertThat(deleteIfMatch).isEqualTo("\"fixture-etag\"");
         assertThat(run(context, "s3_delete_object", NAME).outputs()).containsEntry("deleted", false);
         assertThat(methods).containsExactly("PUT", "HEAD", "GET", "GET", "HEAD", "DELETE", "HEAD", "HEAD");
+    }
+
+    @Test
+    void cleanupTargetsAcknowledgedUploadEvenWhenAnotherVersionIsCurrent() {
+        var context = context("run-versioned", BINDINGS);
+        putVersion = "v1";
+        assertThat(run(context, "s3_put_object", UPLOAD).passed()).isTrue();
+        foreignVersionIsCurrent = true;
+
+        assertThat(run(context, "s3_delete_object", NAME).outputs()).containsEntry("deleted", true);
+        assertThat(deleteQuery).isEqualTo("versionId=v1");
+        assertThat(run(context, "s3_delete_object", NAME).outputs()).containsEntry("deleted", false);
+
+        adapter.endRun(context);
+        assertThat(run(context, "s3_delete_object", NAME).failureCode()).isEqualTo("S3_OWNERSHIP_MISMATCH");
+        assertThat(methods).containsExactly("PUT", "HEAD", "DELETE", "HEAD", "HEAD", "HEAD");
     }
 
     @Test
@@ -205,9 +223,16 @@ class S3V03AdapterTest {
                     putIfNoneMatch = headers.getFirst("If-None-Match");
                     String authorization = headers.getFirst("Authorization");
                     signed = authorization != null && authorization.startsWith("AWS4-HMAC-SHA256 ");
+                    if (putVersion != null) exchange.getResponseHeaders().set("x-amz-version-id", putVersion);
                     exchange.sendResponseHeaders(200, -1);
                 }
                 case "HEAD", "GET" -> {
+                    if (foreignVersionIsCurrent && exchange.getRequestURI().getQuery() == null) {
+                        exchange.getResponseHeaders().set("x-amz-version-id", "v2");
+                        exchange.getResponseHeaders().set("ETag", "\"foreign-etag\"");
+                        exchange.sendResponseHeaders(200, -1);
+                        return;
+                    }
                     if (contents == null || !exchange.getRequestURI().getPath().equals(objectPath)) {
                         exchange.sendResponseHeaders(404, -1);
                         return;

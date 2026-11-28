@@ -23,7 +23,7 @@ jobs:
       MAVEN_OPTS: -Xmx1024m -XX:MaxMetaspaceSize=384m
       PYTHONDONTWRITEBYTECODE: '1'
       SQLITE_CI_POLICY_SHA256: d23b179e8396ecdf26720e169a79982e887a888c646f8e769bea580b1b89cf52
-      NATS_CI_POLICY_SHA256: 913e1e4312f06a8b6bc45db04a510ba59abe6e1ce01c5eff943bcaa45e7c1292
+      NATS_CI_POLICY_SHA256: 0137d641f5ad4302afb3ae51b41cbc409ec7a0fe64e1e9998f94857c09c4e53b
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -98,6 +98,7 @@ jobs:
       - name: Retain the Framework JAR tested by SQLite and NATS
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
+          overwrite: true
           name: tested-framework-jar-${{ github.run_id }}
           path: ${{ env.CI_FRAMEWORK_JAR }}
           if-no-files-found: error
@@ -107,6 +108,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
+          overwrite: true
           name: local-product-tests-${{ github.run_id }}
           if-no-files-found: ignore
           path: |

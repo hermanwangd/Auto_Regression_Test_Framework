@@ -66,6 +66,14 @@ abstract class AbstractProviderRuntimeV03Adapter {
                 result.failure() == null ? "" : result.failure().reason());
     }
 
+    /** Removes only the named v0.2-only outputs. Unexpected new keys still reach v0.3 validation. */
+    V03StepResult withoutLegacyOutputs(V03StepResult result, String... names) {
+        Map<String, Object> outputs = new LinkedHashMap<>(result.outputs());
+        for (String name : names) outputs.remove(name);
+        return new V03StepResult(result.stepId(), result.status(), Map.copyOf(outputs),
+                result.evidenceRefs(), result.failureCode(), result.message());
+    }
+
     Object resolveProviderValue(Object value, V03ExecutionStep step, V03ExecutionContext context) {
         if (value instanceof Map<?, ?> map) {
             Map<String, Object> resolved = new LinkedHashMap<>();

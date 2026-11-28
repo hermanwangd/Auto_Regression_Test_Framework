@@ -26,7 +26,7 @@ import java.util.Map;
 import org.wiremock.grpc.GrpcExtensionFactory;
 import org.yaml.snakeyaml.Yaml;
 
-public class GrpcMockProviderRuntime implements ProviderRuntime {
+public class GrpcMockProviderRuntime implements ProviderRuntime, AutoCloseable {
 
     private static final String PROVIDER_TYPE = "grpc_mock";
     private final Yaml yaml = new Yaml();
@@ -160,13 +160,18 @@ public class GrpcMockProviderRuntime implements ProviderRuntime {
         }
     }
 
+    @Override
+    public void close() throws IOException {
+        if (server != null) server.stop();
+        server = null;
+        targetUri = null;
+        adminBaseUrl = null;
+        deleteRuntimeWorkDir();
+    }
+
     private ProviderOperationResult resetMock(ProviderExecutionContext context) {
         try {
-            if (server != null && server.isRunning()) {
-                server.resetAll();
-                server.stop();
-            }
-            deleteRuntimeWorkDir();
+            close();
             write(context.runDir().resolve("provider-evidence/grpc/cleanup.yaml"), """
                     evidence_type: fixture_cleanup
                     evidence_classification: framework_provider_capability_only

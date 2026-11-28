@@ -30,6 +30,7 @@ required_fields:
   - termination_reason
   - suite_summary_ref
 optional_fields:
+  - case_sources
   - selected_test_case
   - product_test
   - labels

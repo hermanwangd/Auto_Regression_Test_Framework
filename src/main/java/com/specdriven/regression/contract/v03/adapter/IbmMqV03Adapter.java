@@ -31,6 +31,11 @@ public class IbmMqV03Adapter extends AbstractProviderRuntimeV03Adapter implement
 
     @Override
     public V03StepResult execute(V03ExecutionStep step, V03ExecutionContext context) {
-        return stepResult(step, runtime.execute(providerContext(step, context), request(step, context)));
+        V03StepResult result = stepResult(step, runtime.execute(providerContext(step, context), request(step, context)));
+        return switch (step.operation()) {
+            case "mq_browse" -> withoutLegacyOutputs(result, "matched", "matched_fields");
+            case "mq_message_exists" -> withoutLegacyOutputs(result, "message_ids", "matched_fields");
+            default -> result;
+        };
     }
 }

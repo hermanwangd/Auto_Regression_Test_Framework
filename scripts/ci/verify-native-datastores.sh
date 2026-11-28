@@ -99,6 +99,7 @@ verify_mongodb() {
   verify_mongodb_outage
   # Confirm the same runner can read and clean up a fresh write after recovery.
   run_case mongodb passed mongo_read 0
+  python3 "$root/scripts/ci/provider-conformance.py" --outage-result "$(sed -n 's/^result_json: //p' mongo-outage.log)" mongodb.v0.3 "$(sed -n 's/^result_json: //p' mongodb-passed.log)"
   mongo_clean
   printf '%s\n' '{"status":"different"}' > mongodb/expected_results/confirmed_order.json
   run_case mongodb failed mongo_seed 1
@@ -159,11 +160,43 @@ verify_redis() {
   run_case redis passed redis_ttl 0
   redis_clean
   verify_redis_outage "${addr##*:}"
+  python3 "$root/scripts/ci/provider-conformance.py" --outage-result "$(sed -n 's/^result_json: //p' redis-outage.log)" redis.v0.3 "$(sed -n 's/^result_json: //p' redis-passed.log)"
   # Change only the independent expectation in the scratch copy.
   sed 's/expected_value: order-ready/expected_value: different/' redis/test_cases/owned_string.yaml > wrong.yaml
   mv wrong.yaml redis/test_cases/owned_string.yaml
   run_case redis failed redis_set 1
   redis_clean
+}
+verify_s3_outage() {
+  local result key owned foreign
+  python3 "$root/scripts/ci/s3-outage-fixture.py" "$jar" "$server" "$client" | tee s3-outage.log
+  result=$(sed -n 's/^result_json: //p' s3-outage.log)
+  cli validate-evidence --result "$result"
+  jq -e --slurpfile ack s3-ack.json '
+    .status == "failed" and .failure.code == "S3_REQUEST_FAILED" and
+    .failure.classification == "PROVIDER_RUNTIME_ERROR" and (.failure.owner_action | contains("check_download")) and
+    any(.steps[]; .id == "upload" and .status == "passed" and .outputs.object_key == $ack[0].key) and
+    any(.steps[]; .id == "inspect_object" and .status == "passed" and .outputs.exists == true) and
+    any(.steps[]; .id == "check_download" and .status == "failed" and .failure_code == "S3_REQUEST_FAILED") and
+    any(.steps[]; .id == "remove_object" and .phase == "cleanup" and .status == "passed" and .outputs.deleted == true) and
+    .cleanup_failures == []' "$result" >/dev/null
+  key=$(jq -er .key s3-ack.json)
+  owned=$(jq -er .version s3-ack.json)
+  foreign=$(jq -ser --arg key "$key" --arg owned "$owned" '
+    select(length == 3 and all(.[]; (.versionId | type == "string" and length > 0) and .isDeleteMarker != true)
+      and any(.[]; .key == "control") and any(.[]; .key == $key and .versionId == $owned)) |
+    .[] | select(.key == $key and .versionId != $owned) | .versionId' s3-before-cleanup.jsonl)
+  mc ls --versions --recursive --json fixture/fixture-bucket > s3-after-cleanup.jsonl
+  jq -se --slurpfile before s3-before-cleanup.jsonl --arg key "$key" --arg owned "$owned" '
+    def identities: map({key, versionId, isDeleteMarker}) | sort_by(.key, .versionId);
+    identities == ($before | map(select(.key != $key or .versionId != $owned)) | identities)' \
+    s3-after-cleanup.jsonl >/dev/null
+  [[ "$(mc cat --version-id "$foreign" "fixture/fixture-bucket/$key")" == keep-foreign ]]
+  [[ "$(mc cat fixture/fixture-bucket/control)" == keep ]]
+  echo "Framework cleanup removed the acknowledged S3 version; independent reads confirmed the foreign version and control."
+  # Remove the harness-created version only after verifying the framework's cleanup independently.
+  mc rm --version-id "$foreign" "fixture/fixture-bucket/$key"
+  s3_clean
 }
 verify_s3() {
   cp -R "$root/samples/20-provider-capability-p0/storage/s3" .
@@ -189,6 +222,7 @@ verify_s3() {
   }
   run_case s3 passed s3_verify_object 0
   s3_clean
+  verify_s3_outage
   sed "s@expected_sha256: step://upload/sha256@expected_sha256: 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'@" s3/test_cases/object_roundtrip.yaml > wrong.yaml
   mv wrong.yaml s3/test_cases/object_roundtrip.yaml
   run_case s3 failed s3_put_object 1
@@ -204,6 +238,7 @@ verify_s3() {
   wait "$app_pid"
   app_pid=""
   result=$(sed -n 's/^result_json: //p' export.log)
+  python3 "$root/scripts/ci/provider-conformance.py" --outage-result "$(sed -n 's/^result_json: //p' s3-outage.log)" s3.v0.3 "$(sed -n 's/^result_json: //p' s3-passed.log)" "$result"
   cli validate-evidence --result "$result"
   jq -e '.status == "passed" and
     any(.step_results[]; .operation == "s3_verify_object" and .outputs.content_length == 5)' "$result" >/dev/null

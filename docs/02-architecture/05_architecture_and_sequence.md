@@ -1,10 +1,52 @@
 # 05. Architecture Design
 
+**Current architecture — Framework 0.3.2, suite-mode DSL v0.3.** The Spring Boot 4.0.10 / Java 17 executable runs a checked-in suite against a selected environment profile. Its entry point constructs the CLI directly. The CLI parses arguments and renders results. The test author supplies the cases and expected outcomes. The framework validates the inputs, executes the requested tests and writes the verdict and evidence. [Build](../../pom.xml) · [RegressionApplication](../../src/main/java/com/specdriven/regression/RegressionApplication.java) · [CLI](../../src/main/java/com/specdriven/regression/cli/RegressionCommand.java)
+
+## gTAA mapping
+
+The 2016 ISTQB syllabus describes four layers of a generic test automation architecture (gTAA). CTAL-TAE v2.0 describes the corresponding capabilities and four interfaces to surrounding systems. The table maps those responsibilities to this repository. It is an engineering interpretation, with no certification claim. [2016 syllabus, §3.1 and Figure 1](https://istqb.org/wp-content/uploads/2024/11/ISTQB-CT-TAE_Syllabus_v1.0_2016.pdf) · [v2.0 syllabus, §3.1.1, p. 23](https://istqb.org/wp-content/uploads/2024/11/ISTQB_CTAL-TAE_Syllabus_v2.0.pdf)
+
+| gTAA capability or interface | Owner and public boundary | Where to check |
+| --- | --- | --- |
+| Test generation (optional) | Product authors can write suites directly. Swarm’s optional preparation module accepts candidate tests and source/oracle traces. Its output is a proposal for independent review. A reviewed handoff can later drive a leaf run. | [Preparation test for `PREPARED_NOT_APPROVED`](../../integrations/swarm-product-test/src/test/java/com/featuredeliveryintelligence/fdi/producttest/preparation/PreparationServiceTest.java) · [Reviewed handoff contract](contracts/product_test_reviewed_handoff.v2.schema.yaml) |
+| Test definition | Suite authors own the logical targets, DSL steps, fixture inputs and expected values. The framework owns the manifest and DSL formats. The selected Env_Profile binds each target by the same name. | [Suite manifest contract](contracts/suite_manifest.v0.3.schema.yaml) · [DSL contract](contracts/test_case_dsl.v0.3.schema.yaml) · [Golden case and its assertion](../../samples/00-getting-started/golden_e2e/test_cases/golden_success.yaml) |
+| Test execution | Framework CLI and runtime own plan construction, ordered phases, assertions, logging and the result. Callers use `validate`, `run --dry-run`, `run`, `validate-evidence` and `report`. | [Plan builder](../../src/main/java/com/specdriven/regression/contract/v03/V03ExecutionPlanBuilder.java) · [Leaf runtime](../../src/main/java/com/specdriven/regression/contract/v03/V03RuntimeExecutionService.java) · [Result schema](contracts/result.v0.3.schema.yaml) |
+| Test adaptation | The framework maintains versioned Provider Contracts and adapters. A case selects a target and operation. The registry selects an adapter by provider type and the adapter must support that contract and operation. | [Provider Contract catalog](contracts/provider-contracts/README.md) · [Adapter interface](../../src/main/java/com/specdriven/regression/contract/v03/V03ProviderRuntimeAdapter.java) · [Release support matrix](../09-operations/provider_support_matrix.md) |
+| System under test (SUT) | Product and environment owners provision external systems, grant access and identify the observable effect. The adapter communicates through the bound interface. A framework-managed mock or fake exercises only the declared fixture scope. | [External runtime setup](../09-operations/external_runtime_setup.md) · [Recorded local SQLite and NATS runs](../07-validation-evidence/public-products-ci-cd-2026-11-07.md) |
+| Test management | Test owners map requirements and acceptance criteria to cases and oracles. Reporting joins available mappings to canonical results. A missing coverage denominator stays unknown. A test pass rate measures executed outcomes. | [Coverage contract](contracts/coverage_report.v1.schema.yaml) · [Reviewed coverage authority](contracts/coverage_authority.v1.schema.yaml) · [Coverage report tests](../../src/test/java/com/specdriven/regression/report/CanonicalCoverageReportTest.java) |
+| Project management | Product and release owners track automation progress, gaps and release decisions outside the runner. The public-project inventory records planned groups and bounded acceptance by layer. CI can publish evidence for owner review. | [Project inventory and acceptance boundaries](../07-validation-evidence/public-project-test-inventory.md) · [CI/CD responsibilities](../09-operations/ci-cd-product-tests.md) |
+| Configuration management | Framework maintainers version schemas, contracts and the executable. Product and pipeline owners version testware, select profiles and supply environment values. The reviewed integration additionally pins its handoff and contracts. | [Env_Profile contract](contracts/env_profile.v0.3.schema.yaml) · [Versioned example](../../samples/00-getting-started/golden_e2e/env_profiles/local_v03.yaml) · [Reviewed invocation](../../integrations/swarm-product-test/README.md) |
+
+## Leaf execution sequence
+
+1. **Select and validate.** `RegressionCommand` routes leaf and group manifests separately. On a v0.3 leaf, `ContractBaselineService` checks the versioned manifest and cases, targets, operations and reference syntax. `V03ExecutionPlanBuilder` then reads the definitions, resolves each target’s contract and profile bindings, and compiles typed steps, reference dependencies and a plan digest. Each command builds its own plan. `run --dry-run` prints the plan without invoking providers or probing SIT. An ordinary leaf can select one case with `--test-case <id>`. [Validation](../../src/main/java/com/specdriven/regression/contract/ContractBaselineService.java) · [Plan rendering](../../src/main/java/com/specdriven/regression/contract/v03/V03DryRunRenderer.java)
+2. **Admit the run.** A real leaf run requires `--profile`. A missing adapter or unsupported operation blocks dispatch before the run directory is created. For reviewed product tests, the runner checks the pinned handoff and executes from its private snapshot. Once the run starts, configured policy, readiness and ownership checks gate entry to **all** declared phases, including cleanup. A non-ready observation produces a blocked result and indexed readiness evidence. [Reviewed integration](../09-operations/product-testing-module.md) · [Readiness behavior and fixture limits](../09-operations/sit-readiness.md)
+3. **Execute each selected case.** The plan orders setup, execute, verify and cleanup. Provider operations and verify-time `provider_check` steps dispatch to adapters. Framework `assertion` steps compare resolved operands and record their own evidence. A terminal case skips its remaining ordinary steps and may still execute declared cleanup. The registry also calls `endRun` to release adapter-owned resources. The result records cleanup failures separately from the original failure. [Runtime and finalization loop](../../src/main/java/com/specdriven/regression/contract/v03/V03RuntimeExecutionService.java) · [Readiness gate tests](../../src/test/java/com/specdriven/regression/contract/v03/SitReadinessRuntimeTest.java)
+4. **Read the evidence.** A finalized leaf writes `result.json`, `evidence_index.yaml`, `suite_manifest.yaml` and `suite_summary.json` under `target/regression/<suite_id>/<batch_id>/<run_id>/`. The index links the evidence actually produced, including provider and assertion files when those steps ran. Pass the printed `result_json` path to `validate-evidence --result` and `report --result`. A suite group aggregates child runs under its own `children/` directory. The reviewed handoff applies to a leaf. The Golden E2E sample uses a fake provider and labels its evidence `framework_verification_only`. [Leaf finalizer](../../src/main/java/com/specdriven/regression/summary/SuiteArtifactFinalizer.java) · [Summary contract](contracts/suite_summary.v0.3.schema.yaml) · [Golden sample](../../samples/00-getting-started/golden_e2e/suite_manifest.yaml)
+
+## Version and support boundaries
+
+| Topic | Current behavior |
+| --- | --- |
+| v0.3 target resolution | `manifest_version: v0.3` with `dsl_version: v0.3` cases. A step’s `target` selects `suite.targets.<name>.provider_contract` and `Env_Profile.targets.<name>`. There is no Provider Instance file in this path. The detailed design includes a planned single-pass compiler. The implemented path validates the graph and then builds a `V03ExecutionPlan`. [Detailed v0.3 design](08_dsl_v0_3_no_provider_instance_architecture.md) |
+| v0.2 compatibility | Legacy leaves resolve a `provider_id` through Provider Instances and legacy bindings. Mixing DSL versions inside one leaf is rejected. Legacy profiles reject `sit_readiness` and `product_test`. Legacy JDBC can validate but execution requires migration to v0.3. [Compatibility samples](../../samples/90-compatibility/legacy-v0.2/DEPRECATED.md) |
+| Provider support | The catalog describes vocabulary. Release support and caller-owned external acceptance are separate fields in the matrix. For example, `s3` has a supported scoped contract with caller acceptance required, `external_runner` is contract-only, and `sample_fake_provider` is reserved for framework verification. Check the listed operations, runner variant and tested combination before claiming coverage. [Provider support matrix](../09-operations/provider_support_matrix.md) |
+
+## Implementation and verification
+
+The CLI hands suite artifacts to three application use cases. `SuiteValidation` checks profiles and contracts and compiles the plan. `SuiteExecution` selects the runtime and finalizes leaf and group runs. `SuiteReporting` validates the result and evidence, then projects coverage for inspection. [SuiteValidation](../../src/main/java/com/specdriven/regression/application/SuiteValidation.java) · [SuiteExecution](../../src/main/java/com/specdriven/regression/application/SuiteExecution.java) · [SuiteReporting](../../src/main/java/com/specdriven/regression/application/SuiteReporting.java)
+
+Provider maintainers use the conformance kit to reconcile the supported catalog with adapter registrations and executable checks. To review one invocation, inspect `coverage.json` → `run_traceability` for case selection, observed outcomes and links to canonical evidence. The main-branch quality workflow collects CI evidence for the triggering commit and publishes its summary. [Provider conformance kit](../04-planning/provider-adapter-conformance-kit.md) · [Single-invocation traceability](../oracle-trace-coverage.md#review-a-single-invocation) · [Quality workflow](../../.github/workflows/main-quality.yml) · [Quality summary guide](../09-operations/ci-quality-summary.md)
+
+## Appendix A. v0.2 compatibility
+
+Sections 5.1–5.17 preserve the v0.2 pre-release design, including its proposed components, decisions and acceptance criteria. Use the current sections above for v0.3 runtime behavior and support claims.
+
 Status: v0.2 Full Pre-release Architecture Draft
 
 This design turns the Product/RP/RU baseline into an implementable architecture while keeping the framework core product-topology agnostic. Product Repo remains the source of truth, Release Package remains the release and evidence unit, and RU repos remain implementation workspaces; Agent Skills translate that context into framework-readable artifacts.
 
-## 5.1 Design Scope
+### 5.1 Design Scope
 
 v0.2 implements a product-agnostic command-line execution framework plus Agent Skill translation boundary. Product-aware commands and skills read Product Repo artifacts, but the generic execution core consumes generated DSL tests, suite manifests, Env_Profiles, Provider Instances, expected results, traceability maps, and framework-owned Provider Contracts resolved by `provider_type`.
 
@@ -26,7 +68,7 @@ Out of scope:
 - Unreviewed agent-generated expected results as regression truth.
 - Persistent dashboard or service runtime.
 
-## 5.2 Architecture Decisions
+### 5.2 Architecture Decisions
 
 | Decision | Choice | Rationale |
 |---|---|---|
@@ -41,7 +83,7 @@ Out of scope:
 | Implementation stack | Spring Boot 4.0.x on Java 17+ | Provides a modern Java runtime, dependency injection, validation, configuration binding, and CLI packaging path. |
 | Verification boundary | Separate framework verification from RP regression execution | Maven validates this framework; CLI `run` validates downstream Product/RP packages and writes RP release evidence. |
 
-### Framework Verification vs RP Regression Execution
+#### Framework Verification vs RP Regression Execution
 
 | Concern | Framework Verification | RP Regression Execution |
 |---|---|---|
@@ -54,7 +96,7 @@ Out of scope:
 
 Framework integration tests may exercise the same CLI flows used by RP Regression Execution, but the fixture scope remains framework verification. The architecture must not treat sample fixture evidence as product release evidence.
 
-## 5.3 Component Architecture
+### 5.3 Component Architecture
 
 The AP-level architecture follows the common test platform reference model: definition, discovery, planning, fixture/state, execution, oracle/assertion, and reporting. Fine-grained resolvers remain internal modules under these components; they are not separate AP-level components.
 
@@ -205,7 +247,7 @@ The architecture defines the intended verification scope for supported rows only
 
 Mock-service lifecycle is suite/batch scoped. Framework-owned mock services such as WireMock HTTP, SOAP mock, or gRPC mock may be provisioned before RU readiness and reused by multiple DSL test cases with reset operations between tests. DSL `setup` may load stubs or seed state through Provider Contract operations, but it must not define RU startup, RU restart, mock-server process startup, or endpoint binding generation. Local and CI profiles may optionally launch an RU after dependency/mock binding outputs exist; SIT and preprod normally use predeployed RUs and readiness evidence. RU configuration consumption remains outside the core DSL and is handled by the environment owner, CI/local launcher, or a future explicit provider.
 
-## 5.4 Module Boundaries
+### 5.4 Module Boundaries
 
 The implementation uses Spring Boot 4.0.x on Java 17+. Package names may be adjusted to match the final Java group ID, but these boundaries are required.
 
@@ -308,7 +350,7 @@ DSL-to-module responsibility:
 
 If a DSL section cannot be assigned to one of these modules, it is not ready for v0.2 execution and must be treated as an unsupported DSL extension.
 
-## 5.5 Extension Model for Product Variants
+### 5.5 Extension Model for Product Variants
 
 The framework must scale across different Product/RP/RU test needs by keeping the DSL semantic core stable and moving product-specific interpretation into Agent Skill translation. A new RP type should normally generate framework-readable targets, run plans, Provider Instances, and Env_Profiles that bind to existing framework-owned Provider Contracts, not change runner orchestration or provider code.
 
@@ -395,7 +437,7 @@ Extension governance rules:
 - Add or change DSL required fields only through a `dsl_version` compatibility decision.
 - A provider runtime must not silently skip unsupported DSL sections; it must fail fast with test case ID, acceptance-criteria source ref when available, section name, and owner action.
 
-## 5.6 Invocation Boundary
+### 5.6 Invocation Boundary
 
 The CLI is the invocation portion of the v0.2 framework public interface. The complete framework public interface also includes DSL/test definitions, Env_Profiles, Provider Instances, Provider Contracts, result schema, and evidence schema. Commands return non-zero exit codes when readiness, validation, or execution gates fail.
 
@@ -429,7 +471,7 @@ CLI contracts:
 - `run` reads generated suite/run/Env_Profile artifacts and checked-in package-neutral DSL tests, creates one batch ID and one run ID for the suite execution, records each selected test case in `test_results[]`, and does not regenerate tests by default.
 - `report` produces coverage, traceability, evidence index, and failure summary from batch-level evidence. Single-run reports may support debugging, but they are not RP release coverage.
 
-## 5.7 Data Ownership and Storage
+### 5.7 Data Ownership and Storage
 
 v0.2 does not require a database. The Product Repo filesystem is the durable store.
 
@@ -471,7 +513,7 @@ Consistency model:
 - Batch evidence records the batch ID, execution mode, environment reference, included run IDs, acceptance-criteria source refs, and optional report labels when provided.
 - Run evidence records source refs, optional report labels when provided, test case ID, run ID, batch ID, logical target refs, execution mode, and environment reference.
 
-## 5.8 Execution Flow
+### 5.8 Execution Flow
 
 ```text
 Select generated suite
@@ -503,7 +545,7 @@ Execution mode behavior:
 | `sit` | Run against already deployed logical targets in SIT with `runtime_mode: native` by default | Missing deployment/readiness evidence or prohibited mock substitution for release evidence |
 | `preprod` | Run against pre-production targets with native dependencies, stricter approval, and masking | Missing approval, masking policy, deployment evidence, readiness evidence, or prohibited mock substitution |
 
-## 5.9 Target Dependency Execution
+### 5.9 Target Dependency Execution
 
 The framework executes logical targets only from the generated `run_plan.yaml`, selected Env_Profile, and Provider Instances. It does not understand whether a target originated from one RU, multiple RUs, an external dependency, or a product topology node.
 
@@ -517,7 +559,7 @@ Rules:
 - Never add, remove, or reorder targets based on naming or inferred product topology.
 - Treat product-side `dependency_order` as an Agent Skill input only; it is not a framework runtime contract.
 
-## 5.10 Provider Runtime Public Interface
+### 5.10 Provider Runtime Public Interface
 
 Provider runtime configuration must use the public model from the user guide:
 
@@ -572,7 +614,7 @@ Runtime rules:
 - Provider execution must not deploy product code in v0.2.
 - Package-type behavior belongs in Provider Instances and Provider Contracts; DSL, orchestration, evidence format, and verify lifecycle stay in framework core.
 
-## 5.11 Failure Handling
+### 5.11 Failure Handling
 
 | Failure | Handling |
 |---|---|
@@ -591,7 +633,7 @@ Runtime rules:
 | Provider failure | Capture provider_id, provider_type, profile, operation, inputs, outputs, logs, and failure reason. |
 | Fixture cleanup failure | Record cleanup failure and mark run evidence incomplete. |
 
-## 5.12 Security and Data Safety
+### 5.12 Security and Data Safety
 
 - Production data is disallowed unless masked and approved.
 - Secrets must be referenced through environment variables or CI secret stores, never committed.
@@ -600,7 +642,7 @@ Runtime rules:
 - Destructive operations are blocked unless a validated Provider Contract, Provider Instance, and Env_Profile declare safe scope, cleanup behavior, and an allowed non-production execution mode.
 - Local commands should be bounded and avoid memory-heavy execution.
 
-## 5.13 Observability and Evidence
+### 5.13 Observability and Evidence
 
 Each suite execution writes a batch summary:
 
@@ -632,7 +674,7 @@ Canonical run evidence path:
 docs/08-release/release-packages/<rp_id>/evidence/runs/<run_id>/
 ```
 
-## 5.14 Architecture Alternatives
+### 5.14 Architecture Alternatives
 
 | Alternative | Decision | Reason |
 |---|---|---|
@@ -645,7 +687,7 @@ docs/08-release/release-packages/<rp_id>/evidence/runs/<run_id>/
 
 The architecture should be revisited when multiple RP types require shared service workflows, concurrent teams need a central index, or evidence volume becomes too large for repo-based storage.
 
-## 5.15 AC Coverage Matrix
+### 5.15 AC Coverage Matrix
 
 Framework acceptance criteria validate the reusable execution framework only:
 
@@ -681,7 +723,7 @@ Phase 2 Agent Skill support acceptance is separate from framework runtime AC:
 | SUP-AC-005 | AC readiness classification and DSL draft generation avoid overwriting approved tests | `readiness`, `testcase`, drafting agent skill |
 | SUP-AC-006 | Expected-result drafting preserves assumptions, source refs, and approval boundary | `expectedresult`, drafting agent skill |
 
-## 5.16 Implementation Readiness Gate
+### 5.16 Implementation Readiness Gate
 
 Architecture gate result: design target defined for staged framework implementation readiness. This is not a claim that v0.2 implementation is complete. Phase 2 Agent Skill readiness is next-stage and must not block current-stage framework maturity.
 
@@ -703,7 +745,7 @@ Ready after pilot RP artifacts and Phase 2 Agent Skill outputs exist:
 - F001 through F006 support flows for Product Repo/RP preparation, product mapping translation, test drafting, and expected-result drafting.
 - F007/F008 downstream RP execution against real owner-authored artifacts and selected environment evidence.
 
-## 5.17 Open Decisions
+### 5.17 Open Decisions
 
 Blocking for full formal F003-F008 pilot validation:
 

@@ -61,6 +61,7 @@ run_case() {
     jq -e '.status == "passed" and any(.step_results[]; .id == "submit_order" and
       .outputs.exit_code == 0 and .outputs.stdout == "Order UI-1042 confirmed after reload\n")' "$result" >/dev/null
     [[ ! -e "$trace" ]]
+    python3 "$root/scripts/ci/provider-conformance.py" cli_process.v0.3 "$result"
   else
     jq -e '.status == "failed" and .failure.code == "ASSERTION_FAILED" and
       any(.step_results[]; .id == "submit_order" and .status == "passed" and .outputs.exit_code == 1 and

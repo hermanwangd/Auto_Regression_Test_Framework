@@ -38,7 +38,7 @@ final class CanonicalCoverageReport {
     private record Metric(Integer denominator, Integer mapped, Integer executed, Integer satisfied,
                           Double mapped_percent, Double executed_percent, Double satisfied_percent) {}
     private record Candidate(Path path, JsonNode result, JsonNode provenance, ObjectNode subject,
-                             Instant start, Instant end, String evidence, boolean compatible, String digest, boolean knowledgeValid) {}
+                             Instant start, Instant end, String evidence, boolean compatible, String digest, boolean knowledgeValid, Map<String,List<JsonNode>> caseEvidence) {}
     private record Chosen(Candidate source, JsonNode test) {}
     private record CaseIdentity(String project, String workspace, JsonNode repositoryRevisions,
                                 String suite, String profile, String testCase, String qualifiedCaseRef) {}
@@ -167,6 +167,11 @@ final class CanonicalCoverageReport {
         for(JsonNode c:cases) if(!"VALID".equals(c.path("evidence_state").asText())) incomplete=true;
         String status = invalid ? "INVALID" : incomplete ? "INCOMPLETE" : "VALID";
         document.put("report_status",status); document.set("gaps",gaps); document.set("evidence_links",links);
+        document.set("run_traceability", invocationTrace(primary, output, document, new LinkedHashSet<>()));
+        if (invalid) {
+            status = "INVALID";
+            document.put("report_status", status);
+        }
         verifySnapshots();
         if(authority!=null){authority.verifyUnchanged();originalAuthority.verifyUnchanged();}
         publish(output, document);
@@ -177,6 +182,43 @@ final class CanonicalCoverageReport {
             throw changed;
         }
         return new CanonicalCoverageReportResult(output.resolve("coverage.json"),output.resolve("coverage.md"),status,document);
+    }
+
+    private ObjectNode invocationTrace(Candidate run, Path output, JsonNode coverage, Set<Path> visited) throws Exception {
+        require(visited.size() < 100 && visited.add(run.path), "Duplicate or excessive aggregate child runs");
+        String ref = Objects.equals(output.getRoot(), run.path.getRoot())
+                ? output.relativize(run.path).toString().replace('\\', '/') : run.path.toString();
+        JsonNode d = run.result;
+        if (d.has("plan_digest") || !text(d, "test_case_id").equals(text(d, "suite_id") + "-AGGREGATE")) {
+            return RunTraceabilityIndex.project(JSON, d, run.digest, ref, run.evidence, run.caseEvidence,
+                    coverage, run.path.toString());
+        }
+        ObjectNode index = RunTraceabilityIndex.header(JSON, d, run.digest, ref, run.evidence, coverage);
+        var children = index.putArray("child_runs");
+        boolean ready = "VALID".equals(run.evidence) && "complete".equals(text(d, "completion_status"));
+        try {
+            Path root = run.path.getParent();
+            JsonNode summary = read(contained(root, required(d, "suite_summary_ref")), INPUT_LIMIT);
+            for (JsonNode entry : array(summary, "children", 100)) {
+                Path summaryPath = contained(root, required(entry, "summary_ref"));
+                require(summaryPath.getParent().startsWith(root.resolve("children")), "Invalid aggregate child root");
+                Candidate child = candidate(regular(summaryPath.resolveSibling("result.json")), null, null);
+                require(required(entry, "run_id").equals(text(child.result, "run_id"))
+                        && required(d, "batch_id").equals(text(child.result, "batch_id"))
+                        && required(entry, "child_suite_id").equals(text(child.result, "suite_id"))
+                        && required(entry, "status").equals(text(child.result, "status")), "Child identity mismatch");
+                ObjectNode trace = invocationTrace(child, output, coverage, visited);
+                children.add(trace);
+                ready &= trace.path("review_ready").asBoolean();
+            }
+        } catch (IOException | IllegalArgumentException error) {
+            ready = false;
+            index.put("gap", "aggregate_child_evidence_missing_or_invalid");
+            gap("aggregate_child_evidence_missing_or_invalid", text(d, "run_id"), run.path,
+                    "Restore the child result and evidence matching the suite summary.", true);
+        }
+        index.put("review_ready", ready && !children.isEmpty());
+        return index;
     }
 
     private Candidate candidate(Path path, String expectedDigest, JsonNode selection) throws Exception {
@@ -205,6 +247,7 @@ final class CanonicalCoverageReport {
         }
         var canonical = new ContractBaselineService().report(path);
         if(!canonical.valid()) { if("VALID".equals(state)) state="INVALID"; gap("canonical_result_invalid",text(d,"run_id"),path,"Repair canonical result contract findings before claiming satisfaction.",true); }
+        Map<String,List<JsonNode>> caseEvidence = new LinkedHashMap<>();
         var service = new EvidenceHardeningService();
         if(service.hasEvidenceIndexReference(path)) {
             var evidence=service.validateResult(path);
@@ -212,7 +255,7 @@ final class CanonicalCoverageReport {
                 if("VALID".equals(state)) state=evidence.missingEvidenceCount()>0?"MISSING":"INVALID";
                 gap("canonical_evidence_invalid",text(d,"run_id"),path,"Restore valid identity-bound and masked canonical evidence before claiming satisfaction.",true);
             }
-            try { indexReferences(path,d); }
+            try { indexReferences(path,d,caseEvidence); }
             catch(Exception e) { if("VALID".equals(state)) state="MISSING"; gap("missing_or_invalid_reference",text(d,"run_id"),path,"Restore regular contained indexed evidence files: "+e.getMessage(),true); }
         } else {
             if("VALID".equals(state)) state="MISSING";
@@ -225,7 +268,7 @@ final class CanonicalCoverageReport {
         boolean knowledgeValid=false;
         if(reviewedV2(provenance))try{KnowledgeSelectionProof.validateProvenance(JSON.convertValue(provenance,Map.class),JSON.convertValue(d,Map.class));knowledgeValid=true;}
         catch(IllegalArgumentException invalidKnowledge){state="INVALID";gap("knowledge_provenance_invalid",text(d,"run_id"),path,"Restore exact recorded knowledge, source, case, oracle and invocation joins.",true);}
-        return new Candidate(path,d,provenance,subject,start,end,state,compatible,digest,knowledgeValid);
+        return new Candidate(path,d,provenance,subject,start,end,state,compatible,digest,knowledgeValid,caseEvidence);
     }
 
     private Map<CaseIdentity,Chosen> select(List<Candidate> candidates) {
@@ -400,12 +443,16 @@ final class CanonicalCoverageReport {
         ObjectNode result=(ObjectNode)scope.deepCopy();result.put("completeness","PINNED");return result;
     }
 
-    private void indexReferences(Path result,JsonNode d) throws Exception {
+    private void indexReferences(Path result,JsonNode d,Map<String,List<JsonNode>> caseEvidence) throws Exception {
         Path root=result.getParent(),index=contained(root,required(d,"evidence_index_ref"));pin(index,"evidence_index",text(d,"run_id"));
         LoaderOptions options=new LoaderOptions();options.setAllowDuplicateKeys(false);options.setMaxAliasesForCollections(0);options.setCodePointLimit(OUTPUT_LIMIT);options.setNestingDepthLimit(80);
         JsonNode idx=JSON.valueToTree(new Yaml(new SafeConstructor(options)).load(new String(bytes(index,OUTPUT_LIMIT),java.nio.charset.StandardCharsets.UTF_8)));
         for(JsonNode entry:array(idx,"entries",10000)) {
             Path path=contained(index.getParent(),required(entry,"file_path"));require(path.startsWith(root),"indexed evidence escaped run root");pin(path,"indexed_evidence",text(d,"run_id"));
+            if (Set.of("provider","assertion_engine").contains(text(entry,"produced_by"))) {
+                caseEvidence.computeIfAbsent(text(entry,"test_case_id"), ignored -> new ArrayList<>()).add(
+                        obj("path",text(entry,"file_path"),"sha256",snapshots.get(path),"type",text(entry,"evidence_type")));
+            }
         }
     }
     private ArrayNode references(Path result) {

@@ -15,7 +15,7 @@ Run these before creating or publishing a release:
 
 ```bash
 JAVA_TOOL_OPTIONS='-Xmx1024m' ./mvnw -B -ntp verify
-JAVA_TOOL_OPTIONS='-Xmx1024m' ./mvnw -B -ntp -Pv02-delivery-coverage -DskipTests jacoco:check@v02-delivery-critical-class-check
+JAVA_TOOL_OPTIONS='-Xmx1024m' ./mvnw -B -ntp -Pv02-delivery-coverage -DskipTests jacoco:check@v02-delivery-critical-class-check jacoco:check@suite-cli-boundary-check
 scripts/ci/verify-contracts.sh
 scripts/ci/secret-scan.sh
 scripts/ci/generate-sbom.sh

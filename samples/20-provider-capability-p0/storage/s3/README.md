@@ -21,7 +21,7 @@ From the framework repository root, run the suite and validate the result file p
 ./regress validate-evidence --result <result.json>
 ```
 
-The runner needs GetObject, PutObject and DeleteObject permissions under `regress/`. S3 may require ListBucket permission to distinguish a missing object from an access denial during repeated cleanup. Versioned buckets require GetObjectVersion and DeleteObjectVersion. Each generated key includes a hash of the run ID, test case and target. A PUT uses `If-None-Match: *`. Cleanup checks the run's ownership metadata, ETag and version ID before issuing an exact-key DELETE, then issues a HEAD to confirm removal.
+The runner needs GetObject, PutObject and DeleteObject permissions under `regress/`. S3 may require ListBucket permission to distinguish a missing object from an access denial during repeated cleanup. Versioned buckets require GetObjectVersion and DeleteObjectVersion. Each generated key includes a hash of the run ID, test case and target. A PUT uses `If-None-Match: *`. When S3 acknowledges a version ID, the runner retains it until the run ends. Cleanup reads that exact version, checks ownership, deletes it conditionally on its ETag and confirms removal by version. A later write to the same key survives. Without an acknowledged version ID, cleanup checks the current object's ownership and ETag.
 
 Logical names are 1–96 ASCII letters, digits, dots, underscores or hyphens, starting with a letter or digit. The fixture and downloaded object are each limited to 1 MiB. The provider records the actual digest and byte count in the run evidence.
 

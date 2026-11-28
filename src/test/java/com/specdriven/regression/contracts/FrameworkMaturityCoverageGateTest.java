@@ -57,8 +57,12 @@ class FrameworkMaturityCoverageGateTest {
                 .contains("<goal>report</goal>")
                 .contains("<id>v02-delivery-coverage</id>")
                 .contains("<id>v02-delivery-critical-class-check</id>")
-                .contains("<goal>check</goal>")
-                .doesNotContain("<element>BUNDLE</element>");
+                .contains("<goal>check</goal>");
+        String criticalClasses = pom.split("<id>v02-delivery-critical-class-check</id>", 2)[1].split("</execution>", 2)[0];
+        assertThat(criticalClasses).contains("<element>CLASS</element>").doesNotContain("<element>BUNDLE</element>");
+        String cliBoundary = pom.split("<id>suite-cli-boundary-check</id>", 2)[1].split("</execution>", 2)[0];
+        assertThat(cliBoundary).contains("<element>BUNDLE</element>", "<minimum>0.97</minimum>", "<minimum>0.88</minimum>",
+                "cli/RegressionCommand", "application/SuiteExecution", "application/SuiteValidation", "application/SuiteReporting");
         assertThat(pom)
                 .contains("<exclude>com/specdriven/regression/RegressionApplication*</exclude>");
     }

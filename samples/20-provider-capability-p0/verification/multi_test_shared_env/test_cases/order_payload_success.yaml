@@ -2,6 +2,11 @@ dsl_version: v0.3
 test_case_id: MULTI-TEST-V03-TC-001
 title: First multi-test assertion validates JSON payload
 
+status: active
+source_refs:
+  requirement: docs/01-specs/03_feature_specs.md#316-json--schema--file-diff-verification
+  acceptance_criteria: docs/03-acceptance/04_acceptance_criteria.md#ac-009-support-json-schema-file-exists-and-file-diff
+
 setup: []
 execute: []
 
