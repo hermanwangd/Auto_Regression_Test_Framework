@@ -56,17 +56,41 @@ public final class V03AssertionValidator {
             return List.copyOf(issues);
         }
 
-        boolean hasActual = assertion.containsKey("actual") && assertion.get("actual") != null;
+        boolean equality = kind == V03AssertionKind.EQUALS || kind == V03AssertionKind.NOT_EQUALS;
+        Object strict = assertion.get("strict");
+        if (assertion.containsKey("strict")) {
+            if (!(strict instanceof Boolean)) {
+                issues.add(new Issue(".assert.strict", "invalid_assertion_strict",
+                        "Set `strict` to the boolean true or false."));
+            }
+            if (!equality) {
+                issues.add(new Issue(".assert.strict", "unsupported_assertion_strict",
+                        "Use `strict` only with `equals` or `not_equals`."));
+            }
+        }
+        boolean strictEquality = equality && Boolean.TRUE.equals(strict);
+        if (strictEquality) {
+            for (String side : List.of("actual", "expected")) {
+                if (assertion.containsKey(side)) {
+                    try {
+                        V03SchemaMatcher.validateJsonValue(assertion.get(side));
+                    } catch (IllegalArgumentException invalid) {
+                        issues.add(new Issue(".assert." + side, "invalid_strict_assertion_operand", invalid.getMessage()));
+                    }
+                }
+            }
+        }
+        boolean hasActual = assertion.containsKey("actual") && (strictEquality || assertion.get("actual") != null);
         boolean hasActualRef = hasValue(assertion, "actual_ref");
-        boolean hasExpected = assertion.containsKey("expected") && assertion.get("expected") != null;
+        boolean hasExpected = assertion.containsKey("expected") && (strictEquality || assertion.get("expected") != null);
         boolean hasExpectedRef = hasValue(assertion, "expected_ref");
         boolean hasSchemaRef = hasValue(assertion, "schema_ref");
 
-        if (hasActual && hasActualRef) {
+        if (hasActual && (strictEquality ? assertion.containsKey("actual_ref") : hasActualRef)) {
             issues.add(new Issue(".assert", "conflicting_assertion_actual",
                     "Declare exactly one of `actual` or `actual_ref`."));
         }
-        if (hasExpected && hasExpectedRef) {
+        if (hasExpected && (strictEquality ? assertion.containsKey("expected_ref") : hasExpectedRef)) {
             issues.add(new Issue(".assert", "conflicting_assertion_expected",
                     "Declare exactly one of `expected` or `expected_ref`."));
         }

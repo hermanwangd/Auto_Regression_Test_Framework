@@ -29,6 +29,7 @@ import com.specdriven.regression.contract.v03.assertion.V03AssertionEvaluation;
 import com.specdriven.regression.contract.v03.assertion.V03AssertionEvaluator;
 import com.specdriven.regression.contract.v03.assertion.V03AssertionKind;
 import com.specdriven.regression.contract.v03.assertion.V03MissingValue;
+import com.specdriven.regression.contract.v03.assertion.V03SchemaMatcher;
 import com.specdriven.regression.contract.v03.ref.V03Reference;
 import com.specdriven.regression.contract.v03.ref.V03ReferenceParser;
 import com.specdriven.regression.contract.v03.ref.V03ReferenceResolver;
@@ -329,7 +330,9 @@ public class V03RuntimeExecutionService {
                 if (!assertion.passed()) {
                     markTestFailed(testStatuses, step.testCaseId());
                     Failure assertionFailure = new Failure("ASSERTION_FAILED", "VERIFICATION_FAILED",
-                            "Assertion `" + step.id() + "` failed.", "Review assertion evidence.");
+                            "Assertion `" + step.id() + "` failed."
+                                    + (assertion.diagnostic().isEmpty() ? "" : " " + assertion.diagnostic()),
+                            "Review assertion evidence.");
                     if (failure.isNone()) {
                         failure = assertionFailure;
                     }
@@ -577,8 +580,10 @@ public class V03RuntimeExecutionService {
                 }
                 case SCHEMA_MATCH -> {
                     actual = resolveAssertionOperand(step, "actual", "actual_ref", context, false);
-                    expected = resolveRequiredReference(step.inputs().get("schema_ref"), step, context);
-                    passed = schemaMatches(mapValue(expected), actual);
+                    V03Reference schema = referenceParser.parse(step.inputs().get("schema_ref"));
+                    expected = context.referenceResolver().resolveTypedValue(schema, context.referenceContext(step.testCaseId()));
+                    evaluationError = V03SchemaMatcher.mismatch(expected, actual);
+                    passed = evaluationError.isEmpty();
                 }
                 case FILE_DIFF -> {
                     Path expectedPath = requiredArtifactPath(step.inputs().get("expected_ref"), step, context);
@@ -594,7 +599,8 @@ public class V03RuntimeExecutionService {
                     if (kind != V03AssertionKind.EXISTS && kind != V03AssertionKind.NOT_EXISTS) {
                         expected = resolveAssertionOperand(step, "expected", "expected_ref", context, false);
                     }
-                    V03AssertionEvaluation evaluation = assertionEvaluator.evaluate(kind, actual, expected);
+                    V03AssertionEvaluation evaluation = assertionEvaluator.evaluate(kind, actual, expected,
+                            Boolean.TRUE.equals(step.inputs().get("strict")));
                     passed = evaluation.passed();
                 }
             }
@@ -609,44 +615,34 @@ public class V03RuntimeExecutionService {
                 + "/"
                 + safe(step.id())
                 + (operator.equals("json_match") ? ".json" : ".yaml");
-        if (operator.equals("json_match")) {
-            Map<String, Object> evidence = new LinkedHashMap<>();
-            evidence.put("test_case_id", step.testCaseId());
-            evidence.put("assertion_id", step.id());
-            evidence.put("type", operator);
-            evidence.put("status", passed ? "passed" : "failed");
-            if (!passed) {
-                evidence.put("failure_code", "ASSERTION_FAILED");
-            }
-            if (!evaluationError.isBlank()) {
-                evidence.put("evaluation_error", outputRedactor.redactMessage(evaluationError));
-            }
-            evidence.put("actual", redactAssertionValue(plan, step, "actual", "actual_ref", actual, context));
-            evidence.put("expected", redactAssertionValue(plan, step, "expected", "expected_ref", expected, context));
-            write(runDir.resolve(evidenceRef), toJson(evidence) + "\n");
-        } else {
-            StringBuilder evidence = new StringBuilder();
-            evidence.append("test_case_id: ").append(step.testCaseId()).append('\n');
-            evidence.append("assertion_id: ").append(step.id()).append('\n');
-            evidence.append("type: ").append(operator).append('\n');
-            evidence.append("status: ").append(passed ? "passed" : "failed").append('\n');
-            if (!passed) {
-                evidence.append("failure_code: ASSERTION_FAILED\n");
-            }
-            if (!evaluationError.isBlank()) {
-                evidence.append("evaluation_error: ").append(outputRedactor.redactMessage(evaluationError)).append('\n');
-            }
-            evidence.append("actual: ").append(stringValue(redactAssertionValue(plan, step, "actual", "actual_ref", actual, context))).append('\n');
-            evidence.append("expected: ").append(stringValue(redactAssertionValue(plan, step, "expected", "expected_ref", expected, context))).append('\n');
-            write(runDir.resolve(evidenceRef), evidence.toString());
+        Map<String, Object> evidence = new LinkedHashMap<>();
+        evidence.put("test_case_id", step.testCaseId());
+        evidence.put("assertion_id", step.id());
+        evidence.put("type", operator);
+        evidence.put("status", passed ? "passed" : "failed");
+        if (step.inputs().containsKey("strict")) {
+            evidence.put("strict", step.inputs().get("strict"));
         }
+        if (!passed) {
+            evidence.put("failure_code", "ASSERTION_FAILED");
+        }
+        String diagnostic = outputRedactor.redactMessage(evaluationError);
+        if (!evaluationError.isBlank()) {
+            evidence.put("evaluation_error", diagnostic);
+        }
+        evidence.put("actual", redactAssertionValue(plan, step, "actual", "actual_ref", actual, context));
+        evidence.put("expected", redactAssertionValue(plan, step, "expected",
+                kind == V03AssertionKind.SCHEMA_MATCH ? "schema_ref" : "expected_ref", expected, context));
+        write(runDir.resolve(evidenceRef), operator.equals("json_match")
+                ? toJson(evidence) + "\n" : yaml.dumpAsMap(evidence));
         return new AssertionResult(
                 step.testCaseId(),
                 step.id(),
                 operator,
                 passed ? "passed" : "failed",
                 evidenceRef,
-                passed ? "" : "ASSERTION_FAILED");
+                passed ? "" : "ASSERTION_FAILED",
+                kind == V03AssertionKind.SCHEMA_MATCH ? diagnostic : "");
     }
 
     private Object resolveAssertionOperand(
@@ -659,9 +655,12 @@ public class V03RuntimeExecutionService {
                 ? step.inputs().get(referenceKey)
                 : step.inputs().get(literalKey);
         try {
-            return context.referenceResolver().resolveValue(
-                    referenceParser.parse(raw),
-                    context.referenceContext(step.testCaseId()));
+            V03Reference reference = referenceParser.parse(raw);
+            var scope = context.referenceContext(step.testCaseId());
+            if ("schema_match".equals(step.operation()) || Boolean.TRUE.equals(step.inputs().get("strict"))) {
+                return context.referenceResolver().resolveTypedValue(reference, scope);
+            }
+            return context.referenceResolver().resolveValue(reference, scope);
         } catch (IllegalArgumentException error) {
             if (allowMissing && (error.getMessage().startsWith("unresolved_step_ref")
                     || error.getMessage().startsWith("unresolved_generated_ref")
@@ -787,43 +786,6 @@ public class V03RuntimeExecutionService {
                     .toList();
         }
         return value;
-    }
-
-    private boolean schemaMatches(Map<String, Object> schema, Object actual) {
-        String type = stringValue(schema.get("type"));
-        if (!type.isBlank() && !typeMatches(type, actual)) {
-            return false;
-        }
-        if (actual instanceof Map<?, ?> actualMap) {
-            for (String required : stringList(schema.get("required"))) {
-                if (!actualMap.containsKey(required)) {
-                    return false;
-                }
-            }
-            Map<String, Object> properties = mapValue(schema.get("properties"));
-            for (Map.Entry<String, Object> entry : properties.entrySet()) {
-                if (!actualMap.containsKey(entry.getKey())) {
-                    continue;
-                }
-                String propertyType = stringValue(mapValue(entry.getValue()).get("type"));
-                if (!propertyType.isBlank() && !typeMatches(propertyType, actualMap.get(entry.getKey()))) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    private boolean typeMatches(String type, Object value) {
-        return switch (type) {
-            case "object" -> value instanceof Map<?, ?>;
-            case "array" -> value instanceof Collection<?>;
-            case "string" -> value instanceof String;
-            case "number" -> value instanceof Number;
-            case "integer" -> value instanceof Number number && number.doubleValue() == number.longValue();
-            case "boolean" -> value instanceof Boolean;
-            default -> true;
-        };
     }
 
     private String comparableText(String value, V03ExecutionStep step) {
@@ -1633,7 +1595,8 @@ public class V03RuntimeExecutionService {
             String type,
             String status,
             String evidenceRef,
-            String failureCode) {
+            String failureCode,
+            String diagnostic) {
         boolean passed() {
             return "passed".equals(status);
         }
@@ -1645,6 +1608,9 @@ public class V03RuntimeExecutionService {
             map.put("type", type);
             map.put("status", status);
             map.put("evidence_ref", evidenceRef);
+            if (!diagnostic.isBlank()) {
+                map.put("evaluation_error", diagnostic);
+            }
             if (!failureCode.isBlank()) {
                 map.put("failure_code", failureCode);
             }

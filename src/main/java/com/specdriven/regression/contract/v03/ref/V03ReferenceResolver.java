@@ -1,5 +1,9 @@
 package com.specdriven.regression.contract.v03.ref;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectReader;
+import com.specdriven.regression.provider.ProviderDataYaml;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -19,6 +23,8 @@ public final class V03ReferenceResolver {
     private static final com.fasterxml.jackson.databind.ObjectReader JSON_BODY =
             new com.fasterxml.jackson.databind.ObjectMapper().readerFor(Object.class)
                     .with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+    private static final ObjectReader TYPED_JSON = JSON_BODY.with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+            .with(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
     private static final int MAX_JSON_POINTER_DEPTH = 64;
     private final V03DocumentLoader documentLoader;
     private final V03OutputDefinitionResolver outputResolver = new V03OutputDefinitionResolver();
@@ -65,7 +71,40 @@ public final class V03ReferenceResolver {
         return artifactPath(reference, context.artifactRoots());
     }
 
+    /** Preserve JSON token types, including exact decimal values, for strict and schema assertions. */
+    public Object typedDocument(V03Reference.Artifact artifact, Path suiteRoot, Map<String, Path> roots) {
+        try {
+            Path file = artifactPath(artifact, roots);
+            if (!file.startsWith(suiteRoot.toRealPath())) {
+                throw invalid("ref_outside_suite_root", "An assertion artifact must be inside its suite.");
+            }
+            if (Files.size(file) > 8L * 1024 * 1024) {
+                throw invalid("assertion_artifact_too_large", "Assertion artifacts may contain at most 8 MiB.");
+            }
+            try (var reader = Files.newBufferedReader(file)) {
+                Object value = file.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".json")
+                        ? TYPED_JSON.readValue(reader) : ProviderDataYaml.create().load(reader);
+                return applyJsonPointer(value, artifact.jsonPointer());
+            }
+        } catch (org.yaml.snakeyaml.error.YAMLException | com.fasterxml.jackson.core.JsonProcessingException error) {
+            throw invalid("invalid_assertion_document", "The assertion artifact must be a valid JSON or YAML data document.");
+        } catch (IOException | UncheckedIOException error) {
+            throw invalid("unreadable_assertion_document", "The assertion artifact could not be read.");
+        }
+    }
+
+    public Object resolveTypedValue(V03Reference reference, V03ReferenceResolutionContext context) {
+        if (reference instanceof V03Reference.Artifact artifact) {
+            return typedDocument(artifact, context.suiteRoot(), context.artifactRoots());
+        }
+        return resolveValue(reference, context, TYPED_JSON);
+    }
+
     public Object resolveValue(V03Reference reference, V03ReferenceResolutionContext context) {
+        return resolveValue(reference, context, JSON_BODY);
+    }
+
+    private Object resolveValue(V03Reference reference, V03ReferenceResolutionContext context, ObjectReader jsonBody) {
         if(reference instanceof V03Reference.OwnedMemory)throw invalid("protected_owned_memory_unavailable","Only the independently reviewed typed JDBC carrier may provide RAM credentials.");
         if (reference instanceof V03Reference.Literal literal) {
             return literal.value();
@@ -78,7 +117,7 @@ public final class V03ReferenceResolver {
             Object value = outputValue(stepOutput(context, step.stepId(), step.outputPath()), step.outputPath());
             if (!step.jsonPointer().isBlank() && "response.body".equals(step.outputPath()) && value instanceof String body) {
                 try {
-                    value = JSON_BODY.readValue(body);
+                    value = jsonBody.readValue(body);
                 } catch (com.fasterxml.jackson.core.JsonProcessingException error) {
                     throw invalid("invalid_response_json", "A response.body JSON Pointer requires a JSON document.");
                 }

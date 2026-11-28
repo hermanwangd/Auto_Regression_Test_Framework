@@ -1,6 +1,9 @@
 package com.specdriven.regression.contract.v03.assertion;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -9,7 +12,18 @@ import java.util.regex.PatternSyntaxException;
 public final class V03AssertionEvaluator {
 
     public V03AssertionEvaluation evaluate(V03AssertionKind kind, Object actual, Object expected) {
+        return evaluate(kind, actual, expected, false);
+    }
+
+    public V03AssertionEvaluation evaluate(V03AssertionKind kind, Object actual, Object expected, boolean strict) {
         Objects.requireNonNull(kind, "Assertion kind is required.");
+        if (strict) {
+            if (kind != V03AssertionKind.EQUALS && kind != V03AssertionKind.NOT_EQUALS) {
+                throw new IllegalArgumentException("unsupported_assertion_strict: `strict` requires `equals` or `not_equals`.");
+            }
+            boolean equal = strictEquals(actual, expected);
+            return new V03AssertionEvaluation(kind == V03AssertionKind.EQUALS ? equal : !equal, actual, expected);
+        }
         boolean passed = switch (kind) {
             case EQUALS -> equalsValue(actual, expected);
             case NOT_EQUALS -> !equalsValue(actual, expected);
@@ -24,6 +38,56 @@ public final class V03AssertionEvaluator {
                     "structured_assertion_requires_runtime_handler: `" + kind.dslValue() + "`.");
         };
         return new V03AssertionEvaluation(passed, actual, expected);
+    }
+
+    /** Compares JSON values recursively without coercion between JSON types. */
+    public static boolean strictEquals(Object actual, Object expected) {
+        requirePresent(actual, "actual");
+        requirePresent(expected, "expected");
+        V03SchemaMatcher.validateJsonValue(actual);
+        V03SchemaMatcher.validateJsonValue(expected);
+        return equalJsonValues(actual, expected);
+    }
+
+    /** Both inputs have passed JSON type, depth and size validation. */
+    static boolean equalJsonValues(Object actual, Object expected) {
+        if (actual instanceof Number left && expected instanceof Number right) {
+            return jsonNumber(left, "actual").compareTo(jsonNumber(right, "expected")) == 0;
+        }
+        if (actual instanceof Map<?, ?> left && expected instanceof Map<?, ?> right) {
+            if (!left.keySet().equals(right.keySet())) {
+                return false;
+            }
+            for (var entry : left.entrySet()) {
+                if (!equalJsonValues(entry.getValue(), right.get(entry.getKey()))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (actual instanceof List<?> left && expected instanceof List<?> right) {
+            if (left.size() != right.size()) {
+                return false;
+            }
+            var expectedElements = right.iterator();
+            for (Object element : left) {
+                if (!equalJsonValues(element, expectedElements.next())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return Objects.equals(actual, expected);
+    }
+
+    private static BigDecimal jsonNumber(Number value, String operand) {
+        if (value instanceof BigDecimal decimal) {
+            return decimal;
+        }
+        if (value instanceof BigInteger integer) {
+            return new BigDecimal(integer);
+        }
+        return decimal(value, operand);
     }
 
     private boolean exists(Object actual) {
@@ -60,7 +124,7 @@ public final class V03AssertionEvaluator {
         }
     }
 
-    private BigDecimal decimal(Object value, String operand) {
+    private static BigDecimal decimal(Object value, String operand) {
         try {
             return new BigDecimal(String.valueOf(value));
         } catch (NumberFormatException error) {
@@ -70,7 +134,7 @@ public final class V03AssertionEvaluator {
         }
     }
 
-    private void requirePresent(Object value, String operand) {
+    private static void requirePresent(Object value, String operand) {
         if (value == V03MissingValue.INSTANCE) {
             throw new IllegalArgumentException(
                     "missing_assertion_operand: `" + operand + "` reference did not resolve.");

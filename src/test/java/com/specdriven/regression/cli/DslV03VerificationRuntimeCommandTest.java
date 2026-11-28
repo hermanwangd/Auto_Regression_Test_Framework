@@ -340,6 +340,83 @@ class DslV03VerificationRuntimeCommandTest {
         assertThat(evidenceValidation.exit()).as(evidenceValidation.stderr() + evidenceValidation.stdout()).isZero();
     }
 
+    @Test
+    void schemaFragmentsAreCheckedBeforeRunAndRuntimeReportsTheEscapedInstancePath() throws Exception {
+        Path suite = mutableSuite(COMMON_VERIFY_SUITE.getParent(), "recursive_schema");
+        Path schema = suite.getParent().resolve("expected_results/expected_schema.json");
+        Path test = suite.getParent().resolve("test_cases/common_verify_success.yaml");
+        Files.writeString(test, """
+                dsl_version: v0.3
+                test_case_id: SCHEMA-CASE
+                title: Schema fragment comparison
+                execute: []
+                verify:
+                  - id: verify_schema
+                    type: assertion
+                    assert:
+                      operator: schema_match
+                      schema_ref: artifact://expected_results/expected_schema.json#/selected
+                      actual: {items: [{"a/b": "wrong"}]}
+                """);
+        Files.writeString(schema, """
+                {"selected":{"properties":{"items":{"items":{"properties":{"a/b":{"$ref":"example"}}}}}}}
+                """);
+        for (String[] args : List.of(new String[]{"validate", "--suite", suite.toString()},
+                new String[]{"run", "--suite", suite.toString(), "--profile", "local_v03", "--dry-run"},
+                new String[]{"run", "--suite", suite.toString(), "--profile", "local_v03"})) {
+            CommandResult result = execute(args);
+            assertThat(result.exit()).as(result.stdout() + result.stderr()).isNotZero();
+            assertThat(result.stdout() + result.stderr()).contains("/properties/items/items/properties/a~1b/$ref");
+        }
+        Files.writeString(schema, Files.readString(schema).replace("\"$ref\":\"example\"", "\"type\":\"integer\""));
+        CommandResult result = execute("run", "--suite", suite.toString(), "--profile", "local_v03");
+        assertThat(result.exit()).as(result.stdout()).isEqualTo(1);
+        JsonNode assertion = OBJECT_MAPPER.readTree(extractPath(result.stdout(), "result_json").toFile())
+                .path("verify_results").get(0);
+        assertThat(assertion.path("evaluation_error").asText()).contains("/items/0/a~1b").doesNotContain("wrong");
+        assertThat(Files.readString(extractPath(result.stdout(), "evidence_dir")
+                .resolve(assertion.path("evidence_ref").asText()))).contains("/items/0/a~1b");
+    }
+
+    @Test
+    void strictEqualityDistinguishesTypesAndResolvesExplicitNullThroughTheCli() throws Exception {
+        Path suite = mutableSuite(COMMON_VERIFY_SUITE.getParent(), "strict_comparison");
+        Path test = suite.getParent().resolve("test_cases/common_verify_success.yaml");
+        Files.writeString(suite.getParent().resolve("expected_results/decimals.json"),
+                "[1.000000000000000000001,1.000000000000000000002]");
+        Files.writeString(test, """
+                dsl_version: v0.3
+                test_case_id: STRICT-CASE
+                title: Strict comparison opt-in
+                execute: []
+                verify:
+                  - id: legacy_coercion
+                    type: assertion
+                    assert: {operator: equals, actual: "200", expected: 200}
+                  - id: strict_null
+                    type: assertion
+                    assert: {operator: equals, strict: true, actual: null, expected: null}
+                  - id: different_types
+                    type: assertion
+                    assert: {operator: not_equals, strict: true, actual: "true", expected: true}
+                  - id: exact_decimals
+                    type: assertion
+                    assert:
+                      operator: not_equals
+                      strict: true
+                      actual_ref: artifact://expected_results/decimals.json#/0
+                      expected_ref: artifact://expected_results/decimals.json#/1
+                  - id: wrong_type
+                    type: assertion
+                    assert: {operator: equals, strict: true, actual: "200", expected: 200}
+                """);
+        CommandResult run = execute("run", "--suite", suite.toString(), "--profile", "local_v03");
+        assertThat(run.exit()).as(run.stdout() + run.stderr()).isEqualTo(1);
+        JsonNode assertions = OBJECT_MAPPER.readTree(extractPath(run.stdout(), "result_json").toFile()).path("verify_results");
+        assertThat(assertions).extracting(row -> row.path("status").asText())
+                .containsExactly("passed", "passed", "passed", "passed", "failed");
+    }
+
     private CommandResult execute(String... args) {
         RegressionCommand command = new RegressionCommand(new ProductRepoService(), new ReleasePackageService());
         ByteArrayOutputStream stdout = new ByteArrayOutputStream();
