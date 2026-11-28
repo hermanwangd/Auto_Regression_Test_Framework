@@ -18,7 +18,7 @@ alter session set container=FREEPDB1;
 SQL
     cat
     printf '\nexit success\n'
-  } | docker exec -i "$server" sqlplus -L -s / as sysdba
+  } | docker exec -i "$server" timeout 20s sqlplus -L -s / as sysdba
 }
 
 start_database() {
@@ -29,14 +29,17 @@ start_database() {
   # prevents the image from logging an auto-generated administrator password.
   server=$(ORACLE_PASSWORD="Db7${admin_password}" APP_USER_PASSWORD="Db7${app_password}" \
     docker run -d --memory=3g --memory-swap=3g --cpus=2 --shm-size=512m \
-    --health-interval=5s --health-timeout=8s -p 127.0.0.1::1521 \
+    -p 127.0.0.1::1521 \
     -e ORACLE_PASSWORD -e APP_USER=REGRESS_FIXTURE -e APP_USER_PASSWORD "$image")
 
   deadline=$((SECONDS + 300))
   while true; do
-    state=$(docker inspect --format '{{.State.Status}} {{.State.Health.Status}}' "$server")
-    if [[ "$state" == 'running healthy' ]]; then break; fi
-    if [[ "$state" != running\ * || $SECONDS -ge $deadline ]]; then
+    state=$(docker inspect --format '{{.State.Status}}' "$server")
+    if [[ "$state" == running ]] &&
+        [[ "$(oracle_sql <<< "select username from dba_users where username = 'REGRESS_FIXTURE';" 2>/dev/null)" == REGRESS_FIXTURE ]]; then
+      break
+    fi
+    if [[ "$state" != running || $SECONDS -ge $deadline ]]; then
       printf 'Oracle FREEPDB1 did not become ready (container state %s).\n' "$state" >&2
       return 1
     fi

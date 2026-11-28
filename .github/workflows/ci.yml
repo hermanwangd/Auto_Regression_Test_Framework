@@ -52,7 +52,7 @@ jobs:
           if-no-files-found: ignore
 
   native-jdbc:
-    name: Native JDBC / ${{ matrix.dialect }}
+    name: Native JDBC / ${{ matrix.dialect }}${{ matrix.dialect == 'db2' && vars.DB2_LICENSE_ACCEPTED != 'true' && ' (NOT_RUN)' || '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:

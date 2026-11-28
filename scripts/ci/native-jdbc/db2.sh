@@ -8,7 +8,7 @@ driver_sha256=04150111a29370247d162c3f05b8e938bf1314f19a63ad9a5302d88dd478e8e8
 # Use the instance owner's CLP for provisioning and independent readback.
 # Keep one parent shell for CONNECT and the SQL so they share a CLP session.
 db2_admin() {
-  docker exec "$server" su --login --command '
+  docker exec "$server" timeout 30s su --login --command '
     db2 connect to FIXTURE >/dev/null || exit $?
     for statement do
       db2 -x "$statement" || exit $?
@@ -27,14 +27,14 @@ start_database() {
   # IBM documents privileged mode. Run on a disposable VM with no host mounts.
   server=$(DB2INST1_PASSWORD="$admin_password" docker run -d --platform=linux/amd64 \
     --privileged --memory=3g --memory-swap=3g --cpus=2 --shm-size=512m \
-    --health-interval=5s --health-timeout=15s -p 127.0.0.1::50000 \
+    -p 127.0.0.1::50000 \
     -e LICENSE=accept -e DB2INSTANCE=db2inst1 -e DB2INST1_PASSWORD -e DBNAME=FIXTURE "$image")
 
   deadline=$((SECONDS + 600))
   while true; do
-    state=$(docker inspect --format '{{.State.Status}} {{.State.Health.Status}}' "$server")
-    if [[ "$state" == 'running healthy' ]]; then break; fi
-    if [[ "$state" != running\ * || $SECONDS -ge $deadline ]]; then
+    state=$(docker inspect --format '{{.State.Status}}' "$server")
+    if [[ "$state" == running ]] && db2_admin 'VALUES 1' >/dev/null 2>&1; then break; fi
+    if [[ "$state" != running || $SECONDS -ge $deadline ]]; then
       printf 'Db2 did not become ready (container state %s).\n' "$state" >&2
       return 1
     fi
